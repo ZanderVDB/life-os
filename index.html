@@ -231,6 +231,34 @@ svg{flex-shrink:0}
 .mev.cus{background:var(--lavender-bg);color:var(--lavender)}
 .mev.more{background:transparent;color:var(--muted);font-weight:600;padding:1px 6px}
 
+/* HABIT MODE */
+.habit-dots{display:flex;gap:3px;flex-wrap:wrap;margin-top:2px}
+.habit-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+.habit-pill{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;color:#fff;line-height:1.3;margin-bottom:2px;display:inline-block}
+.habit-day-list{padding:18px 20px;display:flex;flex-direction:column;gap:10px}
+.habit-day-row{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:all .12s}
+.habit-day-row:hover{border-color:var(--border-strong)}
+.habit-day-row.done{background:var(--sage-bg);border-color:var(--sage)}
+.hdr-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.hdr-tick{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .12s}
+.habit-day-row.done .hdr-tick{background:var(--sage);border-color:var(--sage);color:#fff}
+.hdr-name{font-size:13.5px;font-weight:500;color:var(--text);flex:1;font-family:'Playfair Display',serif}
+.hdr-streak{font-size:11px;color:var(--muted);white-space:nowrap}
+.habit-day-row.done .hdr-streak{color:var(--sage)}
+
+/* STREAK TIER BADGES */
+.tier-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.02em;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.tier-1{background:var(--sage-bg);color:var(--sage)}
+.tier-2{background:var(--peach-bg);color:var(--peach)}
+.tier-3{background:var(--gold-bg);color:var(--gold)}
+.tier-4{background:var(--blue-bg);color:var(--blue)}
+.tier-5{background:var(--lavender-bg);color:var(--lavender)}
+.tier-6{background:var(--red-bg);color:var(--red)}
+.tier-7{background:linear-gradient(135deg,var(--gold-bg),var(--peach-bg));color:var(--gold)}
+.tier-8{background:linear-gradient(135deg,var(--lavender-bg),var(--peach-bg));color:var(--lavender)}
+[data-theme="studio"] .tier-7,[data-theme="studio"] .tier-8{color:var(--text)}
+.lc2-tier{display:flex;align-items:center;gap:8px;margin-top:-2px}
+
 .ts-wrap{display:flex;overflow:auto;max-height:580px}
 .ts-times{width:52px;flex-shrink:0;background:var(--surface)}
 .ts-hr-lbl{height:54px;display:flex;align-items:flex-start;padding:4px 8px 0;font-size:10px;color:var(--muted-2);font-weight:600;border-bottom:1px solid var(--border)}
@@ -663,7 +691,7 @@ svg{flex-shrink:0}
         <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
         <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
-        <a href="#learning" data-route-link="learning"><span class="ic"><svg width="17" height="17"><use href="#i-learn"/></svg></span><span class="label">Learning</span><span class="dot"></span></a>
+        <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
         <a href="#people" data-route-link="people"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span class="label">People</span><span class="dot"></span></a>
         <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
       </nav>
@@ -696,7 +724,7 @@ svg{flex-shrink:0}
       <a href="#today" data-route-link="today" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span>Today</span></a>
       <a href="#calendar" data-route-link="calendar" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span>Calendar</span></a>
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
-      <a href="#learning" data-route-link="learning" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-learn"/></svg></span><span>Learning</span></a>
+      <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
       <a href="#people" data-route-link="people" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span>People</span></a>
       <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
       <a href="#settings" data-route-link="settings" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
@@ -772,14 +800,6 @@ svg{flex-shrink:0}
 
         <section>
           <div class="section-hdr">
-            <h2>Learning</h2>
-            <div class="right"><button class="btn btn-ghost btn-sm" onclick="setRoute('learning')">Open learning ↗</button></div>
-          </div>
-          <div class="learn-snap" id="today-learn"></div>
-        </section>
-
-        <section>
-          <div class="section-hdr">
             <h2>Daily notebook</h2>
             <div class="right" style="gap:6px;flex-wrap:wrap">
               <input type="search" class="input nb-search" placeholder="Search…" oninput="searchNotebook(this.value)" style="width:160px;padding:6px 10px;font-size:12px">
@@ -813,11 +833,17 @@ svg{flex-shrink:0}
               <div class="cal-ttl" id="cal-ttl"></div>
               <button class="carr" onclick="calNav(1)">›</button>
             </div>
-            <div class="cv-row">
-              <button class="cv" onclick="setCV('day')">Day</button>
-              <button class="cv" onclick="setCV('3day')">3 Day</button>
-              <button class="cv" onclick="setCV('week')">Week</button>
-              <button class="cv" onclick="setCV('month')">Month</button>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <div class="cv-row" id="cal-mode-row">
+                <button class="cv on" data-mode="events" onclick="setCalMode('events')">Events</button>
+                <button class="cv" data-mode="habits" onclick="setCalMode('habits')">Habits</button>
+              </div>
+              <div class="cv-row">
+                <button class="cv" onclick="setCV('day')">Day</button>
+                <button class="cv" onclick="setCV('3day')">3 Day</button>
+                <button class="cv" onclick="setCV('week')">Week</button>
+                <button class="cv" onclick="setCV('month')">Month</button>
+              </div>
             </div>
           </div>
           <div id="cal"></div>
@@ -843,18 +869,19 @@ svg{flex-shrink:0}
         <div class="bg-grid" id="builds"></div>
       </div>
 
-      <!-- LEARNING -->
-      <div class="route" data-route="learning">
+      <!-- HABITS -->
+      <div class="route" data-route="habits">
         <div class="page-hdr">
-          <div class="page-title">Learning journey</div>
+          <div class="page-title">Habits</div>
+          <div class="page-sub" style="align-self:flex-end;padding-bottom:6px">Skills, routines, anything you want to show up for daily.</div>
           <div class="page-actions">
-            <button class="btn btn-primary btn-sm" onclick="toggleQA('learn-qa')">+ Add skill</button>
+            <button class="btn btn-primary btn-sm" onclick="toggleQA('habit-qa')">+ Add habit</button>
           </div>
         </div>
-        <div id="learn-qa" style="display:none">
+        <div id="habit-qa" style="display:none">
           <div class="qa">
-            <div class="qa-row"><input class="input" id="sk-name" placeholder="Skill or subject (e.g. Guitar, Spanish, Udemy course...)"></div>
-            <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddLearn()">Add skill</button><button class="btn btn-sm" onclick="toggleQA('learn-qa')">Cancel</button></div>
+            <div class="qa-row"><input class="input" id="hb-name" placeholder="e.g. Gym, Read, Guitar, Prayer, Drink water..."></div>
+            <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddHabitFull()">Add habit</button><button class="btn btn-sm" onclick="toggleQA('habit-qa')">Cancel</button></div>
           </div>
         </div>
         <div class="lg-grid" id="learn"></div>
@@ -1093,8 +1120,8 @@ function setTheme(t){
 (function(){try{setTheme(localStorage.getItem('los_theme')||'soft');}catch(e){setTheme('soft');}})();
 
 // ROUTING
-const ROUTES=['today','calendar','projects','learning','people','brain','settings'];
-const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',learning:'Learning',people:'People',brain:'Brain',settings:'Settings'};
+const ROUTES=['today','calendar','projects','habits','people','brain','settings'];
+const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',settings:'Settings'};
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
@@ -1222,6 +1249,7 @@ async function loadData(){
     const doc=await db.collection('users').doc(CU.uid).collection('data').doc('main').get();
     if(doc.exists){const d=doc.data();['tasks','builds','learning','ideas','notes','customEvents','habits','resources','people'].forEach(k=>{if(d[k])S[k]=d[k];});S.dayNotes=d.dayNotes||{};if(!getKey()&&d.ak)localStorage.setItem(AK,d.ak);}
     else seed();
+    migrateHabits();
     render();loadDailyNote();loadTip(false);
     if(!getKey())promptKey();
   }catch(e){console.error(e);}
@@ -1240,7 +1268,76 @@ const PROJ={wa:{n:'WebAnchor',h:'var(--blue)'},tf:{n:'TriFusion',h:'var(--lavend
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
 const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{}};
-const UI={calView:'week',calDate:new Date(),brainTab:'ideas'};
+const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events'};
+const HABIT_COLORS=['#c46a6a','#d9a484','#c9a94a','#7fa186','#6a8ab5','#9d8bb8','#5a8a6e','#e0b04f','#b37d6f','#7a9aa8','#d38a6f','#89a589'];
+function habitColor(h){
+  const list=S.habits||[];
+  const ix=list.findIndex(x=>x.id===h.id);
+  return HABIT_COLORS[(ix<0?0:ix)%HABIT_COLORS.length];
+}
+const TIERS=[
+  {days:1000,icon:'🌟',label:'Legendary',cls:'tier-8'},
+  {days:400,icon:'👑',label:'Master',cls:'tier-7'},
+  {days:300,icon:'⭐',label:'Unstoppable',cls:'tier-6'},
+  {days:200,icon:'🏆',label:'Relentless',cls:'tier-5'},
+  {days:100,icon:'💎',label:'Locked in',cls:'tier-4'},
+  {days:50,icon:'⚡',label:'Momentum',cls:'tier-3'},
+  {days:24,icon:'🔥',label:'Building',cls:'tier-2'},
+  {days:10,icon:'🌱',label:'Starter',cls:'tier-1'},
+];
+function tierFor(days){for(const t of TIERS){if(days>=t.days)return t;}return null;}
+function migrateHabits(){
+  // Merge learning items into habits
+  if(S.learning&&S.learning.length){
+    S.learning.forEach(l=>{
+      if(!S.habits.some(h=>h.name?.toLowerCase()===l.skill?.toLowerCase())){
+        S.habits.push({
+          id:l.id||uid(),
+          name:l.skill,
+          checkedDates:Array.from(new Set(l.checkedDates||[])),
+          createdAt:l.date||tod(),
+          notes:(l.entries||[]).map(e=>({date:e.date,content:e.content}))
+        });
+      }
+    });
+    S.learning=[];
+  }
+  // Normalize habits — ensure checkedDates exists, absorb legacy fields
+  (S.habits||[]).forEach(h=>{
+    if(!h.checkedDates)h.checkedDates=[];
+    if(h.lastDate&&!h.checkedDates.includes(h.lastDate))h.checkedDates.push(h.lastDate);
+    if(h.doneToday&&!h.checkedDates.includes(tod()))h.checkedDates.push(tod());
+  });
+}
+function habitCheckedSet(h){return new Set(h.checkedDates||[]);}
+function computeHabitStats(h){
+  const set=habitCheckedSet(h);
+  if(!set.size)return {current:0,max:0,total:0};
+  const today=new Date();const todayStr=today.toISOString().slice(0,10);
+  const y=new Date(today);y.setDate(y.getDate()-1);const yestStr=y.toISOString().slice(0,10);
+  let current=0;
+  if(set.has(todayStr)||set.has(yestStr)){
+    let cursor=new Date(today);
+    if(!set.has(todayStr))cursor.setDate(cursor.getDate()-1);
+    while(set.has(cursor.toISOString().slice(0,10))){current++;cursor.setDate(cursor.getDate()-1);}
+  }
+  const sorted=[...set].sort();let max=0;let run=0;let prev=null;
+  sorted.forEach(ds=>{const d=new Date(ds+'T12:00:00');if(prev){const diff=Math.round((d-prev)/86400000);run=diff===1?run+1:1;}else run=1;if(run>max)max=run;prev=d;});
+  return {current,max,total:set.size};
+}
+function toggleHabitDate(id,ds){
+  const h=S.habits.find(x=>x.id===id);if(!h)return;
+  if(ds>tod())return;
+  h.checkedDates=h.checkedDates||[];
+  if(h.checkedDates.includes(ds))h.checkedDates=h.checkedDates.filter(x=>x!==ds);
+  else h.checkedDates.push(ds);
+  h.doneToday=h.checkedDates.includes(tod());
+  h.lastDate=[...h.checkedDates].sort().slice(-1)[0];
+  svAll();rHabits();rCal();
+}
+function qaAddHabitFull(){const n=document.getElementById('hb-name')?.value?.trim();if(!n)return;S.habits.push({id:uid(),name:n,checkedDates:[],createdAt:tod(),notes:[]});svAll();rHabits();rCal();toggleQA('habit-qa');document.getElementById('hb-name').value='';}
+function delHabit(id){if(!confirm('Delete this habit? Streak history will be lost.'))return;S.habits=S.habits.filter(x=>x.id!==id);svAll();rHabits();rCal();}
+function setCalMode(m){UI.calMode=m;document.querySelectorAll('#cal-mode-row [data-mode]').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));rCal();}
 let ex={id:null,type:null};
 const uid=()=>Math.random().toString(36).slice(2,9);
 const tod=()=>new Date().toISOString().slice(0,10);
@@ -1512,21 +1609,6 @@ async function rTodayWeek(){
   }).join('');
 }
 
-function rTodayLearn(){
-  const el=document.getElementById('today-learn');if(!el)return;
-  if(!S.learning.length){el.innerHTML=`<div class="no-t">No skills yet — add one on the Learning tab.</div>`;return;}
-  el.innerHTML=S.learning.map(l=>{
-    const stats=computeLearnStats(l);
-    const doneToday=learnCheckedSet(l).has(tod());
-    return `<div class="learn-snap-card${doneToday?' done':''}" onclick="toggleLearnToday('${l.id}')">
-      <div class="lsc-sk">${esc(l.skill)}</div>
-      <div class="lsc-val${stats.current===0?' z':''}">${stats.current||'—'}</div>
-      <div class="lsc-unit">${stats.current?'day streak':'not yet'}</div>
-      <div class="lsc-tick">${doneToday?'✓ Done today':'Tap to mark done'}</div>
-    </div>`;
-  }).join('');
-}
-
 function rAttention(){
   const today=new Date();
   const urgent=S.tasks.filter(t=>!t.done&&t.priority==='urgent');
@@ -1677,9 +1759,11 @@ function buildWeekList(dates,gcEvs){
 async function rCal(){
   const el=document.getElementById('cal');if(!el)return;
   const ttl=document.getElementById('cal-ttl');if(ttl)ttl.textContent=getCalTitle();
-  document.querySelectorAll('.cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
+  // Highlight only view-buttons (not mode-buttons which also use .cv)
+  document.querySelectorAll('.cv-row:not(#cal-mode-row) .cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
   const today=new Date();
   const y=UI.calDate.getFullYear(),m=UI.calDate.getMonth();
+  if(UI.calMode==='habits'){return rCalHabits(el,today,y,m);}
   let gcEvs=[];try{gcEvs=await getGCForMonth(y,m);}catch(e){}
   if(UI.calView!=='month'){
     try{
@@ -1751,6 +1835,101 @@ async function rCal(){
   }
 }
 function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=UI.calDate.toISOString().slice(0,10);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
+
+// Calendar in Habits mode
+function habitsDoneOn(ds){return (S.habits||[]).filter(h=>(h.checkedDates||[]).includes(ds));}
+function rCalHabits(el,today,y,m){
+  const habits=S.habits||[];
+  const colorFor=id=>{const ix=habits.findIndex(h=>h.id===id);return HABIT_COLORS[(ix<0?0:ix)%HABIT_COLORS.length];};
+  const renderDayCellContent=(date,ds)=>{
+    const done=habitsDoneOn(ds);
+    if(!done.length)return '';
+    const maxDots=6;const shown=done.slice(0,maxDots);const extra=done.length-shown.length;
+    return `<div class="habit-dots" title="${esc(done.map(h=>h.name).join(', '))}">${shown.map(h=>`<span class="habit-dot" style="background:${colorFor(h.id)}"></span>`).join('')}${extra>0?`<span style="font-size:9px;color:var(--muted);margin-left:2px">+${extra}</span>`:''}</div>`;
+  };
+  const renderDayList=(date,ds)=>{
+    return `<div class="habit-day-list">${habits.length?habits.map(h=>{
+      const done=(h.checkedDates||[]).includes(ds);
+      const st=computeHabitStats(h);
+      return `<div class="habit-day-row${done?' done':''}" onclick="toggleHabitDate('${h.id}','${ds}')">
+        <span class="hdr-swatch" style="background:${colorFor(h.id)}"></span>
+        <span class="hdr-tick">${done?'✓':''}</span>
+        <span class="hdr-name">${esc(h.name)}</span>
+        <span class="hdr-streak">${st.current?st.current+'🔥':'—'}</span>
+      </div>`;
+    }).join(''):`<div class="no-t">Add a habit first on the Habits tab.</div>`}</div>`;
+  };
+
+  if(UI.calView==='day'){
+    const ds=UI.calDate.toISOString().slice(0,10);
+    const isToday=UI.calDate.toDateString()===today.toDateString();
+    let h=`<div style="padding:14px 20px;border-bottom:1px solid var(--border)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:4px">${DAYS[UI.calDate.getDay()]}${isToday?' · Today':''}</div><div style="font-family:'Playfair Display',serif;font-size:22px">${UI.calDate.getDate()} ${UI.calDate.toLocaleDateString('en-ZA',{month:'long'})}</div></div>`;
+    h+=renderDayList(UI.calDate,ds);
+    el.innerHTML=h;el.onclick=null;return;
+  }
+  if(UI.calView==='3day'){
+    const dates=Array.from({length:3},(_,i)=>{const d=new Date(UI.calDate);d.setDate(UI.calDate.getDate()+i);return d;});
+    let h=`<div class="threeday-list">`;
+    dates.forEach(d=>{
+      const ds=d.toISOString().slice(0,10);
+      const isToday=d.toDateString()===today.toDateString();
+      h+=`<div class="td-day-card${isToday?' today':''}">
+        <div class="td-day-hdr"><span class="td-day-name">${DAYS[d.getDay()]}${isToday?' · Today':''}</span><span class="td-day-date">${d.getDate()} ${d.toLocaleDateString('en-ZA',{month:'long'})}</span></div>
+        ${habits.length?habits.map(hb=>{
+          const done=(hb.checkedDates||[]).includes(ds);
+          return `<div class="habit-day-row${done?' done':''}" style="margin-bottom:6px" onclick="toggleHabitDate('${hb.id}','${ds}')"><span class="hdr-swatch" style="background:${colorFor(hb.id)}"></span><span class="hdr-tick">${done?'✓':''}</span><span class="hdr-name">${esc(hb.name)}</span></div>`;
+        }).join(''):`<div class="td-empty">No habits yet.</div>`}
+      </div>`;
+    });
+    h+=`</div>`;el.innerHTML=h;el.onclick=null;return;
+  }
+  if(UI.calView==='week'){
+    const s=new Date(UI.calDate);s.setDate(UI.calDate.getDate()-UI.calDate.getDay());
+    const dates=Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return d;});
+    let h=`<div class="week-list">`;
+    dates.forEach(d=>{
+      const ds=d.toISOString().slice(0,10);
+      const isToday=d.toDateString()===today.toDateString();
+      const isFuture=ds>tod();
+      const done=habitsDoneOn(ds);
+      h+=`<div class="wl-day${isToday?' today':''}">
+        <div class="wl-day-hdr"><div class="dname">${DAYS[d.getDay()]}</div><span class="dnum">${d.getDate()}</span></div>
+        <div class="wl-events">
+          ${habits.length&&!isFuture?habits.map(hb=>{
+            const marked=(hb.checkedDates||[]).includes(ds);
+            return `<div class="habit-pill" onclick="toggleHabitDate('${hb.id}','${ds}')" title="${esc(hb.name)}" style="background:${marked?colorFor(hb.id):'var(--surface-2)'};color:${marked?'#fff':'var(--muted-2)'};cursor:pointer;opacity:${marked?'1':'.5'}">${esc(hb.name.slice(0,14))}</div>`;
+          }).join(''):(isFuture?'<div class="wl-empty">—</div>':'<div class="wl-empty">No habits</div>')}
+        </div>
+      </div>`;
+    });
+    h+=`</div>`;el.innerHTML=h;el.onclick=null;return;
+  }
+  // MONTH — dots per day
+  const first=new Date(y,m,1).getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const daysInPrev=new Date(y,m,0).getDate();
+  let h='<div class="mg">'+['Su','Mo','Tu','We','Th','Fr','Sa'].map(d=>`<div class="mdow">${d}</div>`).join('');
+  const cells=[];
+  for(let i=first-1;i>=0;i--){const d=daysInPrev-i;const dt=new Date(y,m-1,d);cells.push({y:dt.getFullYear(),m:dt.getMonth(),d,faded:true});}
+  for(let d=1;d<=daysInMonth;d++)cells.push({y,m,d,faded:false});
+  while(cells.length<42){const ix=cells.length-first-daysInMonth+1;const dt=new Date(y,m+1,ix);cells.push({y:dt.getFullYear(),m:dt.getMonth(),d:ix,faded:true});}
+  cells.forEach(({y:cy,m:cm,d:cd,faded})=>{
+    const dow=new Date(cy,cm,cd).getDay();
+    const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
+    const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
+    const isW=dow===0||dow===6;
+    const done=habitsDoneOn(ds);
+    const maxDots=6;const shown=done.slice(0,maxDots);const extra=done.length-shown.length;
+    h+=`<div class="mc${isT?' today':''}${isW?' wkend':''}${faded?' faded':''}" data-cd="${cy},${cm},${cd}">
+      <div class="mn">${cd}</div>
+      <div class="mc-events">
+        ${done.length?`<div class="habit-dots" title="${esc(done.map(x=>x.name).join(', '))}">${shown.map(x=>`<span class="habit-dot" style="background:${colorFor(x.id)}"></span>`).join('')}${extra>0?`<span style="font-size:9px;color:var(--muted);margin-left:2px">+${extra}</span>`:''}</div>`:''}
+      </div>
+    </div>`;
+  });
+  el.innerHTML=h+'</div>';
+  el.onclick=e=>{const c=e.target.closest('[data-cd]');if(!c)return;const[y,m,d]=c.dataset.cd.split(',').map(Number);UI.calDate=new Date(y,m,d);UI.calView='day';rCal();};
+}
 
 // EVENT MODAL
 let editingEvent=null;
@@ -1844,19 +2023,55 @@ function qaAddPerson(){
   ['p-name','p-last','p-phone','p-email','p-work','p-met','p-ctx'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
 }
 function qaAddBuild(){const t=document.getElementById('b-title')?.value?.trim();if(!t)return;const desc=document.getElementById('b-desc')?.value?.trim()||'';const st=document.getElementById('b-status')?.value||'future';S.builds.push({id:uid(),title:t,desc,status:st,date:tod()});svAll();rBuilds();toggleQA('build-qa');['b-title','b-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
-function qaAddLearn(){const n=document.getElementById('sk-name')?.value?.trim();if(!n)return;S.learning.push({id:uid(),skill:n,streak:0,lastDate:null,total:0,note:'',entries:[]});svAll();rLearn();toggleQA('learn-qa');document.getElementById('sk-name').value='';}
 function qaAddIdea(){const t=document.getElementById('id-title')?.value?.trim();if(!t)return;S.ideas.push({id:uid(),title:t,desc:document.getElementById('id-desc')?.value?.trim()||'',date:tod()});svAll();rIdeas();toggleQA('idea-qa');['id-title','id-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
 function qaAddRes(){const t=document.getElementById('r-title')?.value?.trim();if(!t)return;S.resources.push({id:uid(),title:t,url:document.getElementById('r-url')?.value?.trim()||'',desc:document.getElementById('r-desc')?.value?.trim()||'',tag:document.getElementById('r-tag')?.value||'other',date:tod()});svAll();rResources();toggleQA('res-qa');['r-title','r-url','r-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
 function qaAddNote(){const t=document.getElementById('n-title')?.value?.trim();if(!t)return;S.notes.push({id:uid(),title:t,body:document.getElementById('n-body')?.value?.trim()||'',date:tod()});svAll();rNotes();toggleQA('note-qa');['n-title','n-body'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
 
 // HABITS
-function toggleHabit(id){const h=S.habits.find(x=>x.id===id);if(!h)return;if(h.doneToday){h.doneToday=false;if(h.lastDate===tod()){h.streak=Math.max(0,(h.streak||1)-1);h.total=Math.max(0,(h.total||1)-1);h.lastDate=yest();}}else{bumpH(h);}svAll();rHabits();}
+function toggleHabit(id){toggleHabitDate(id,tod());}
 function rHabits(){
-  const t=tod();S.habits.forEach(h=>{h.doneToday=h.lastDate===t;});
+  const t=tod();
+  S.habits.forEach(h=>{h.doneToday=(h.checkedDates||[]).includes(t);});
   const done=S.habits.filter(h=>h.doneToday).length;
   const cnt=document.getElementById('hab-cnt');if(cnt)cnt.textContent=`${done}/${S.habits.length}`;
-  const el=document.getElementById('habits');if(!el)return;
-  el.innerHTML=S.habits.length?S.habits.map(h=>`<div class="hc${h.doneToday?' done':''}" onclick="toggleHabit('${h.id}')"><div class="hc-tick">${h.doneToday?'✓':''}</div><div class="hc-name">${esc(h.name)}</div><div class="hc-streak">${h.streak>0?h.streak+'🔥':h.total?h.total:'–'}</div></div>`).join(''):`<div class="att-empty">No habits yet.</div>`;
+  // Right-rail compact list with tier badges
+  const el=document.getElementById('habits');
+  if(el){
+    el.innerHTML=S.habits.length?S.habits.map(h=>{
+      const stats=computeHabitStats(h);
+      const tier=tierFor(stats.current);
+      return `<div class="hc${h.doneToday?' done':''}" onclick="toggleHabit('${h.id}')">
+        <div class="hc-tick">${h.doneToday?'✓':''}</div>
+        <div class="hc-name">${esc(h.name)}${tier?` <span class="tier-badge ${tier.cls}" style="font-size:9px;padding:1px 6px">${tier.icon}</span>`:''}</div>
+        <div class="hc-streak">${stats.current?stats.current+'🔥':'–'}</div>
+      </div>`;
+    }).join(''):`<div class="att-empty">No habits yet.</div>`;
+  }
+  // Full habits page
+  rHabitsFull();
+}
+function rHabitsFull(){
+  const el=document.getElementById('learn');if(!el)return;
+  if(!S.habits.length){el.innerHTML=`<div class="no-t">No habits yet — add one above to start building a streak.</div>`;return;}
+  el.innerHTML=S.habits.map(h=>{
+    const stats=computeHabitStats(h);
+    const tier=tierFor(stats.current);
+    const nextTier=TIERS.slice().reverse().find(t=>t.days>stats.current);
+    const doneToday=(h.checkedDates||[]).includes(tod());
+    const lastNote=h.notes?.slice(-1)[0]?.content||'';
+    const color=habitColor(h);
+    return `<div class="lc2" style="border-left-color:${color}">
+      <div class="lc2-hdr"><div class="lc2-skill">${esc(h.name)}</div><button class="lc2-del" onclick="delHabit('${h.id}')" title="Delete">×</button></div>
+      ${tier?`<div class="lc2-tier"><span class="tier-badge ${tier.cls}">${tier.icon} ${tier.label}</span>${nextTier?`<span style="font-size:10px;color:var(--muted)">${nextTier.days-stats.current} days to ${nextTier.label}</span>`:''}</div>`:(nextTier?`<div class="lc2-tier"><span style="font-size:10px;color:var(--muted)">${nextTier.days-stats.current} days to first tier (${nextTier.label})</span></div>`:'')}
+      <div class="lc2-stats">
+        <div class="lc2-stat"><span class="s-val${stats.current===0?' z':''}">${stats.current||'—'}</span><span class="s-lbl">Current</span></div>
+        <div class="lc2-stat"><span class="s-val${stats.max===0?' z':''}">${stats.max||'—'}</span><span class="s-lbl">Max streak</span></div>
+        <div class="lc2-stat"><span class="s-val${stats.total===0?' z':''}">${stats.total||'—'}</span><span class="s-lbl">Total days</span></div>
+      </div>
+      <button class="btn btn-sm lc2-check${doneToday?' done':''}" onclick="toggleHabit('${h.id}')">${doneToday?'✓ Done today — tap to undo':'Mark today as done'}</button>
+      ${lastNote?`<div class="lc2-notes"><div class="lc2-notes-lbl">Last note</div>${esc(lastNote)}</div>`:''}
+    </div>`;
+  }).join('');
 }
 
 // TASKS
@@ -1989,102 +2204,6 @@ function rBuilds(){
   el.innerHTML=sorted.map(b=>{const isEx=ex.id===b.id&&ex.type==='build';return`<div class="bc ${b.status||'future'}" onclick="toggleEx('build','${b.id}')"><div class="bc-tag">${lbl[b.status]||'Future'}</div><div class="bc-title">${esc(b.title)}</div><div class="bc-desc">${esc(b.desc)}</div>${isEx?`<div class="bc-exp" onclick="event.stopPropagation()"><input class="inp-e" id="b-t-${b.id}" value="${esc(b.title)}" style="font-size:14px;font-weight:600"><textarea class="exp-ta xl" id="b-d-${b.id}" rows="5">${esc(b.desc)}</textarea><div class="st-row"><button class="stb st-a${b.status==='active'?' on':''}" onclick="setStatus('${b.id}','active')">Building now</button><button class="stb st-f${b.status==='future'?' on':''}" onclick="setStatus('${b.id}','future')">Future</button><button class="stb st-b${b.status==='background'?' on':''}" onclick="setStatus('${b.id}','background')">Background</button></div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveBuild('${b.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delBuild('${b.id}')">Delete</button></div></div>`:''}</div>`;}).join('');
 }
 
-// LEARNING — daily-check model
-function learnCheckedSet(l){return new Set(l.checkedDates||[]);}
-function computeLearnStats(l){
-  const set=learnCheckedSet(l);
-  if(!set.size)return {current:0,max:0,total:0};
-  const today=new Date();const todayStr=today.toISOString().slice(0,10);
-  const y=new Date(today);y.setDate(y.getDate()-1);const yestStr=y.toISOString().slice(0,10);
-  let current=0;
-  if(set.has(todayStr)||set.has(yestStr)){
-    let cursor=new Date(today);
-    if(!set.has(todayStr))cursor.setDate(cursor.getDate()-1);
-    while(set.has(cursor.toISOString().slice(0,10))){current++;cursor.setDate(cursor.getDate()-1);}
-  }
-  const sorted=[...set].sort();let max=0;let run=0;let prev=null;
-  sorted.forEach(ds=>{const d=new Date(ds+'T12:00:00');if(prev){const diff=Math.round((d-prev)/86400000);run=diff===1?run+1:1;}else run=1;if(run>max)max=run;prev=d;});
-  return {current,max,total:set.size};
-}
-function toggleLearnDate(id,ds){
-  const l=S.learning.find(x=>x.id===id);if(!l)return;
-  if(ds>tod())return; // no future checks
-  l.checkedDates=l.checkedDates||[];
-  if(l.checkedDates.includes(ds))l.checkedDates=l.checkedDates.filter(x=>x!==ds);
-  else l.checkedDates.push(ds);
-  svAll();rLearn();rTodayLearn();
-}
-function toggleLearnToday(id){toggleLearnDate(id,tod());}
-function getLearnWeekStart(id){
-  UI.learnWeek=UI.learnWeek||{};
-  if(UI.learnWeek[id])return new Date(UI.learnWeek[id]);
-  const today=new Date();const s=new Date(today);s.setDate(today.getDate()-today.getDay());s.setHours(0,0,0,0);
-  UI.learnWeek[id]=s.toISOString().slice(0,10);return s;
-}
-function navLearnWeek(id,dir){
-  const s=getLearnWeekStart(id);s.setDate(s.getDate()+dir*7);
-  UI.learnWeek=UI.learnWeek||{};UI.learnWeek[id]=s.toISOString().slice(0,10);
-  rLearn();
-}
-function resetLearnWeek(id){UI.learnWeek=UI.learnWeek||{};delete UI.learnWeek[id];rLearn();}
-function renderLearnWeek(l){
-  const start=getLearnWeekStart(l.id);
-  const set=learnCheckedSet(l);
-  const today=new Date();const todayStr=tod();
-  const end=new Date(start);end.setDate(start.getDate()+6);
-  const labelStart=start.toLocaleDateString('en-ZA',{day:'numeric',month:'short'});
-  const labelEnd=end.toLocaleDateString('en-ZA',{day:'numeric',month:'short'});
-  let h=`<div class="lc2-cal-hdr">
-    <div class="lc2-cal-nav"><button class="carr" onclick="navLearnWeek('${l.id}',-1)">‹</button></div>
-    <div class="lc2-cal-ttl">${labelStart} – ${labelEnd}</div>
-    <div class="lc2-cal-nav"><button class="carr" onclick="navLearnWeek('${l.id}',1)">›</button><button class="btn btn-ghost btn-sm" onclick="resetLearnWeek('${l.id}')" style="padding:4px 8px;font-size:10px">This week</button></div>
-  </div><div class="lc2-week">`;
-  for(let i=0;i<7;i++){
-    const d=new Date(start);d.setDate(start.getDate()+i);
-    const ds=d.toISOString().slice(0,10);
-    const done=set.has(ds);
-    const isToday=d.toDateString()===today.toDateString();
-    const isFuture=ds>todayStr;
-    h+=`<div class="lw-cell${done?' done':''}${isToday?' today':''}${isFuture?' future':''}" onclick="${isFuture?'':`toggleLearnDate('${l.id}','${ds}')`}">
-      <div class="lw-dname">${['Su','Mo','Tu','We','Th','Fr','Sa'][i]}</div>
-      <div class="lw-dnum">${d.getDate()}</div>
-    </div>`;
-  }
-  h+=`</div>`;
-  return h;
-}
-function saveLearn(id){
-  const l=S.learning.find(x=>x.id===id);if(!l)return;
-  const ta=document.getElementById('l-n-'+id);
-  if(ta?.value?.trim()){l.note=ta.value.trim();l.entries=l.entries||[];l.entries.push({date:tod(),content:ta.value.trim()});}
-  svAll();ex={id:null,type:null};rLearn();
-}
-function delLearn(id){if(!confirm('Delete this skill?'))return;S.learning=S.learning.filter(x=>x.id!==id);svAll();ex={id:null,type:null};if(UI.learnWeek)delete UI.learnWeek[id];rLearn();}
-function rLearn(){
-  const el=document.getElementById('learn');if(!el)return;
-  if(!S.learning.length){el.innerHTML=`<div class="no-t">Add a skill you'd like to build a daily habit around.</div>`;return;}
-  el.innerHTML=S.learning.map(l=>{
-    const stats=computeLearnStats(l);
-    const doneToday=learnCheckedSet(l).has(tod());
-    const isEx=ex.id===l.id&&ex.type==='learn';
-    const lastNote=l.entries?.slice(-1)[0]?.content||l.note||'';
-    return `<div class="lc2">
-      <div class="lc2-hdr"><div class="lc2-skill">${esc(l.skill)}</div><button class="lc2-del" onclick="toggleEx('learn','${l.id}')" title="${isEx?'Close notes':'Open notes'}">${isEx?'×':'✎'}</button></div>
-      <div class="lc2-stats">
-        <div class="lc2-stat"><span class="s-val${stats.current===0?' z':''}">${stats.current||'—'}</span><span class="s-lbl">Current</span></div>
-        <div class="lc2-stat"><span class="s-val${stats.max===0?' z':''}">${stats.max||'—'}</span><span class="s-lbl">Max streak</span></div>
-        <div class="lc2-stat"><span class="s-val${stats.total===0?' z':''}">${stats.total||'—'}</span><span class="s-lbl">Total days</span></div>
-      </div>
-      <button class="btn btn-sm lc2-check${doneToday?' done':''}" onclick="toggleLearnToday('${l.id}')">${doneToday?'✓ Done today — tap to undo':'Mark today as done'}</button>
-      ${renderLearnWeek(l)}
-      ${isEx?`<div class="lc2-exp">
-        <textarea class="exp-ta xl" id="l-n-${l.id}" rows="3" placeholder="What did you practice or learn today?"></textarea>
-        <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="saveLearn('${l.id}')">Add note</button><button class="btn btn-danger btn-sm" onclick="delLearn('${l.id}')">Delete skill</button></div>
-      </div>`:''}
-      ${lastNote&&!isEx?`<div class="lc2-notes"><div class="lc2-notes-lbl">Last note</div>${esc(lastNote)}</div>`:''}
-    </div>`;
-  }).join('');
-}
 
 // IDEAS
 function saveIdea(id){const i=S.ideas.find(x=>x.id===id);if(!i)return;const ti=document.getElementById('i-t-'+id),de=document.getElementById('i-d-'+id);if(ti?.value?.trim())i.title=ti.value.trim();if(de?.value?.trim())i.desc=de.value.trim();svAll();ex={id:null,type:null};rIdeas();}
@@ -2135,10 +2254,9 @@ async function doUpdate(){
   btn.disabled=true;btn.textContent='Thinking…';st.className='ai-st';st.textContent='';
   const ctx={
     tasks:S.tasks.filter(t=>!t.done).map(t=>({id:t.id,text:t.text,area:t.area,project:t.project,priority:t.priority})),
-    habits:S.habits.map(h=>({id:h.id,name:h.name,streak:h.streak,doneToday:h.doneToday})),
+    habits:S.habits.map(h=>{const s=computeHabitStats(h);return{id:h.id,name:h.name,streak:s.current,doneToday:(h.checkedDates||[]).includes(tod())};}),
     people:S.people.map(p=>({id:p.id,name:p.name,context:p.context})),
     builds:S.builds.map(b=>({id:b.id,title:b.title,status:b.status})),
-    learning:S.learning.map(l=>({id:l.id,skill:l.skill,streak:l.streak,total:l.total})),
     ideas:S.ideas.map(i=>({id:i.id,title:i.title})),
     resources:S.resources.map(r=>({id:r.id,title:r.title})),
     notes:S.notes.map(n=>({id:n.id,title:n.title}))
@@ -2165,12 +2283,12 @@ function applyChanges(ch){
   if(ch.addTasks?.length)ch.addTasks.forEach(t=>S.tasks.push({id:uid(),text:t.text,area:t.area||'personal',project:t.project||'gen',priority:t.priority||'lo',scheduledTime:t.scheduledTime||'',done:false,date:tod()}));
   if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)t.done=true;});
   if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)S.tasks=S.tasks.filter(x=>x.id!==t.id);});
-  if(ch.addHabits?.length)ch.addHabits.forEach(h=>S.habits.push({id:uid(),name:h.name,streak:0,lastDate:null,total:0,doneToday:false}));
-  if(ch.completeHabits?.length)ch.completeHabits.forEach(r=>{const h=S.habits.find(x=>x.name.toLowerCase().includes((r||'').toLowerCase()));if(h&&!h.doneToday)bumpH(h);});
+  if(ch.addHabits?.length)ch.addHabits.forEach(h=>{if(!S.habits.some(x=>x.name.toLowerCase()===h.name.toLowerCase()))S.habits.push({id:uid(),name:h.name,checkedDates:[],createdAt:tod(),notes:[]});});
+  if(ch.completeHabits?.length)ch.completeHabits.forEach(r=>{const h=S.habits.find(x=>x.name.toLowerCase().includes((r||'').toLowerCase()));if(h){h.checkedDates=h.checkedDates||[];if(!h.checkedDates.includes(tod()))h.checkedDates.push(tod());}});
   if(ch.addPerson?.length)ch.addPerson.forEach(p=>{const exists=S.people.find(x=>x.name.toLowerCase()===p.name.toLowerCase());if(exists){if(p.note)exists.notes.push({date:tod(),text:p.note});exists.lastSeen=tod();}else{S.people.push({id:uid(),name:p.name,context:p.context||'',notes:p.note?[{date:tod(),text:p.note}]:[],lastSeen:tod(),date:tod()});}});
   if(ch.updatePerson?.length)ch.updatePerson.forEach(u=>{const p=S.people.find(x=>x.name.toLowerCase().includes((u.name||'').toLowerCase()));if(p&&u.note){p.notes.push({date:tod(),text:u.note});p.lastSeen=tod();}});
   if(ch.addBuild?.length)ch.addBuild.forEach(b=>S.builds.push({id:uid(),title:b.title,desc:b.desc||'',status:b.status||'future',date:tod()}));
-  if(ch.logLearning?.length)ch.logLearning.forEach(lg=>{let l=S.learning.find(x=>x.skill.toLowerCase().includes((lg.skill||'').toLowerCase()));if(!l){l={id:uid(),skill:lg.skill,streak:0,lastDate:null,total:0,note:'',entries:[]};S.learning.push(l);}if(lg.type==='session')bump(l);l.entries=l.entries||[];if(lg.content)l.entries.push({date:tod(),content:lg.content});});
+  if(ch.logLearning?.length)ch.logLearning.forEach(lg=>{let h=S.habits.find(x=>x.name.toLowerCase().includes((lg.skill||'').toLowerCase()));if(!h){h={id:uid(),name:lg.skill,checkedDates:[],createdAt:tod(),notes:[]};S.habits.push(h);}if(lg.type==='session'||!lg.type){h.checkedDates=h.checkedDates||[];if(!h.checkedDates.includes(tod()))h.checkedDates.push(tod());}h.notes=h.notes||[];if(lg.content)h.notes.push({date:tod(),content:lg.content});});
   if(ch.addIdea?.length)ch.addIdea.forEach(i=>S.ideas.push({id:uid(),title:i.title,desc:i.desc||'',date:tod()}));
   if(ch.addResource?.length)ch.addResource.forEach(r=>S.resources.push({id:uid(),title:r.title,url:r.url||'',desc:r.desc||'',tag:r.tag||'other',date:tod()}));
   if(ch.addNote?.length)ch.addNote.forEach(n=>S.notes.push({id:uid(),title:n.title,body:n.body,date:tod()}));
@@ -2181,8 +2299,8 @@ function applyChanges(ch){
 function render(){
   const g=document.getElementById('gr'),d=document.getElementById('ds');
   if(g)g.textContent=gTxt();if(d)d.textContent=dTxt();
-  rUpcom();rCal();rFocus();rHabits();rTasks();rPeople();rBuilds();rLearn();rIdeas();rResources();rNotes();
-  rAttention();rTodayWeek();rTodayLearn();setBrainTab(UI.brainTab);
+  rUpcom();rCal();rFocus();rHabits();rTasks();rPeople();rBuilds();rIdeas();rResources();rNotes();
+  rAttention();rTodayWeek();setBrainTab(UI.brainTab);
   if(currentRoute==='settings')rSettings();
 }
 
