@@ -400,9 +400,16 @@ svg{flex-shrink:0}
 .ti input[type=checkbox]:hover{border-color:var(--text-2)}
 .ti input[type=checkbox]:checked{background:var(--sage);border-color:var(--sage)}
 .ti input[type=checkbox]:checked::after{content:'';position:absolute;left:5px;top:2px;width:5px;height:9px;border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg)}
-.ti.fading{opacity:.5;background:var(--surface-2);transition:opacity 4.6s ease, background .3s;animation:taskDone .4s ease}
+.ti.fading{overflow:hidden;pointer-events:none;animation:taskFade 5s ease-out forwards;will-change:opacity,max-height}
 .ti.fading .tit{color:var(--muted);text-decoration:line-through}
-@keyframes taskDone{0%{background:var(--sage-bg)}100%{background:var(--surface-2)}}
+.ti.fading input[type=checkbox]{pointer-events:none}
+@keyframes taskFade{
+  0%{opacity:1;background:var(--sage-bg);max-height:140px}
+  8%{opacity:1;background:var(--sage-bg)}
+  18%{opacity:.85;background:var(--surface-2)}
+  85%{opacity:.35;max-height:140px;padding-top:10px;padding-bottom:10px;border-bottom-width:1px}
+  100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0;border-bottom-width:0;margin:0}
+}
 .completed-day{margin-bottom:12px}
 .cmp-date{font-size:11px;font-weight:600;color:var(--muted);padding:4px 2px 6px;text-transform:uppercase;letter-spacing:.06em}
 .tit{font-size:13px;flex:1;line-height:1.45;word-break:break-word;color:var(--text)}
@@ -627,7 +634,7 @@ svg{flex-shrink:0}
 
 @media(max-width:1200px){
   .main-wrap{grid-template-columns:1fr;gap:20px;padding:24px 22px 140px}
-  .aside-col{order:-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .aside-col{order:-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;position:static;max-height:none;overflow-y:visible;padding-right:0}
 }
 @media(max-width:900px){
   .fw,.tgrid{grid-template-columns:1fr}
@@ -1031,6 +1038,19 @@ svg{flex-shrink:0}
         </div>
 
         <div>
+          <div class="section-hdr"><h2>Install as an app</h2></div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Add Life OS to your device</div>
+              <div class="setting-desc" id="install-desc">Install the app for a fullscreen, app-like experience on your phone, tablet, or desktop.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-primary btn-sm" id="install-btn" onclick="installPWA()">Install</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
           <div class="section-hdr"><h2>Appearance</h2></div>
           <div class="setting-row">
             <div>
@@ -1189,6 +1209,9 @@ function setRoute(r,skipHash){
   // Close any open quick-add forms so switching away and back resets state
   document.querySelectorAll('[id$="-qa"]').forEach(el=>{if(el)el.style.display='none';});
   ex={id:null,type:null};
+  // Close mobile drawer + clear search field on navigate
+  closeDrawer();
+  const bs=document.getElementById('brain-search');if(bs&&bs.value){bs.value='';UI.brainQuery='';}
   // Leave project detail mode if user navigates away from projects
   if(r!=='projects'&&UI.projectDetail){UI.projectDetail=null;const pd=document.getElementById('project-detail-view');if(pd)pd.style.display='none';const pl=document.getElementById('projects-list-view');if(pl)pl.style.display='block';}
   window.scrollTo({top:0,behavior:'instant'});
@@ -1453,6 +1476,9 @@ const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
 let recognition=null,isListening=false,voiceStartedAt=0,voiceHeardSound=false;
 function vlog(msg){try{console.log('[voice]',msg);}catch(e){}}
 function vstatus(msg,err){const st=document.getElementById('btm-st');if(!st)return;st.className='ai-st'+(err?' er':'');st.textContent=msg;}
+async function checkMicPerm(){
+  try{if(!navigator.permissions||!navigator.permissions.query)return 'unknown';const p=await navigator.permissions.query({name:'microphone'});return p.state;}catch(e){return 'unknown';}
+}
 async function toggleVoice(){
   const ta=document.getElementById('ai-ta'),btn=document.getElementById('mic-btn');
   if(!window.isSecureContext){vstatus('Voice needs HTTPS — open the deployed Netlify site.',true);return;}
@@ -1463,17 +1489,10 @@ async function toggleVoice(){
     return;
   }
   if(isListening){try{recognition?.stop();}catch(e){}return;}
-  // Explicit mic permission probe — gives a clearer error than the Web Speech API's opaque "not-allowed"
-  try{
-    vlog('requesting mic permission');
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    stream.getTracks().forEach(t=>t.stop());
-    vlog('mic permission granted');
-  }catch(e){
-    vlog('mic permission denied: '+e.name+' '+e.message);
-    vstatus('Mic permission denied. Click the 🔒 lock in the address bar → Site settings → allow Microphone.',true);
-    return;
-  }
+  // Permissions API — check without acquiring the mic so we don't race the speech service
+  const perm=await checkMicPerm();
+  vlog('permission state: '+perm);
+  if(perm==='denied'){vstatus('Mic blocked in browser. Click the 🔒 lock icon in the address bar → Site settings → allow Microphone, then reload.',true);return;}
   try{
     recognition=new SpeechRec();
     recognition.continuous=true;
@@ -1482,7 +1501,8 @@ async function toggleVoice(){
     recognition.lang='en-US';
     vlog('recognition created, lang='+recognition.lang);
     let finalText='';voiceStartedAt=Date.now();voiceHeardSound=false;
-    recognition.onstart=()=>{isListening=true;btn.classList.add('on');vlog('onstart');vstatus('🎙 Listening — speak now');};
+    let gotStart=false,autoRetried=false;
+    recognition.onstart=()=>{gotStart=true;isListening=true;btn.classList.add('on');vlog('onstart');vstatus('🎙 Listening — speak now');};
     recognition.onaudiostart=()=>vlog('onaudiostart');
     recognition.onsoundstart=()=>{voiceHeardSound=true;vlog('onsoundstart');};
     recognition.onspeechstart=()=>{voiceHeardSound=true;vlog('onspeechstart');vstatus('🎙 Hearing you…');};
@@ -1511,8 +1531,14 @@ async function toggleVoice(){
     recognition.onend=()=>{
       isListening=false;btn.classList.remove('on');
       const elapsed=Math.round((Date.now()-voiceStartedAt)/1000);
-      vlog('onend, elapsed='+elapsed+'s, heardSound='+voiceHeardSound);
-      if(!voiceHeardSound&&elapsed<2){vstatus('Stopped immediately. Check mic permission and that no other app is using it.',true);}
+      vlog('onend, elapsed='+elapsed+'s, gotStart='+gotStart+', heardSound='+voiceHeardSound);
+      if(!gotStart&&!autoRetried){
+        // Classic Chrome/Windows quirk — the first start() silently aborts. Retry once after a small delay.
+        autoRetried=true;vlog('auto-retrying after silent abort');
+        setTimeout(()=>{try{recognition.start();}catch(e){vstatus('Retry failed: '+e.message,true);}},250);
+        return;
+      }
+      if(!voiceHeardSound&&elapsed<2){vstatus('Mic stopped instantly. On Windows: Settings → Privacy → Microphone → Allow apps + allow Chrome. Or another app may be using it.',true);}
       else if(ta.value.trim())vstatus('Stopped. Review and press Enter or Update ↗.');
       else vstatus('Stopped. Tap mic to try again.');
     };
@@ -2491,6 +2517,7 @@ function rSettings(){
   if(km){const k=getKey();km.textContent=k?(k.slice(0,10)+'…'+k.slice(-4)):'Not set';}
   const gs=document.getElementById('gcal-status');
   if(gs){let tok=null;try{tok=sessionStorage.getItem('los_gat');}catch(e){}gs.textContent=tok?'Connected':'Not connected this session';}
+  updateInstallUI();
 }
 
 // AI UPDATE
@@ -2568,6 +2595,35 @@ function seed(){
 }
 
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+
+// PWA install prompt
+let deferredInstallPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;updateInstallUI();});
+window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;updateInstallUI();});
+function isStandalone(){return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;}
+function isIOS(){return /iPhone|iPad|iPod/i.test(navigator.userAgent);}
+function updateInstallUI(){
+  const btn=document.getElementById('install-btn');const desc=document.getElementById('install-desc');
+  if(!btn||!desc)return;
+  if(isStandalone()){btn.style.display='none';desc.textContent='Already installed. You\'re running Life OS as an app ✓';return;}
+  if(isIOS()){btn.textContent='How to install';desc.textContent='On iPhone/iPad: tap the Share button in Safari, then "Add to Home Screen".';}
+  else if(deferredInstallPrompt){btn.textContent='Install';desc.textContent='Install the app for a fullscreen, app-like experience. Syncs with your account.';}
+  else{btn.textContent='How to install';desc.textContent='Open this site in Chrome, Edge, or Safari, then use the browser menu → Install / Add to Home Screen.';}
+}
+async function installPWA(){
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    const choice=await deferredInstallPrompt.userChoice;
+    if(choice.outcome==='accepted')deferredInstallPrompt=null;
+    updateInstallUI();
+    return;
+  }
+  if(isIOS()){
+    alert('To install on iPhone/iPad:\n\n1. Tap the Share button in Safari (square with ↑)\n2. Scroll down and tap "Add to Home Screen"\n3. Tap Add\n\nLife OS will appear as an app icon on your home screen.');
+    return;
+  }
+  alert('To install:\n\n• Chrome / Edge (desktop): click the install icon on the right of the address bar, or use the menu → Install Life OS.\n• Android Chrome: menu (⋮) → Install app or Add to Home Screen.\n• Desktop Safari: File → Add to Dock.\n\nIf you don\'t see these options, the browser may need a few more page visits before it offers install.');
+}
 setInterval(rUpcom,60000);
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){const m=document.getElementById('event-modal');if(m&&m.style.display==='flex')closeEventModal();const d=document.getElementById('m-drawer');if(d&&d.classList.contains('open'))closeDrawer();}});
 </script>
