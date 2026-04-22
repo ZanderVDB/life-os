@@ -473,6 +473,28 @@ svg{flex-shrink:0}
 .st-f{background:var(--lavender-bg);color:var(--lavender)}
 .st-b{background:var(--surface-2);color:var(--muted)}
 
+/* PROJECT DETAIL VIEW */
+.pd-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.pd-back{background:transparent;border:1px solid var(--border);padding:6px 12px;border-radius:9px;font-size:12px;font-weight:500;color:var(--text-2)}
+.pd-back:hover{background:var(--surface-hover);color:var(--text)}
+.pd-head{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:26px 28px;margin-bottom:18px}
+.pd-title-input{font-family:'Playfair Display',serif;font-size:30px;font-weight:500;letter-spacing:-.5px;line-height:1.15;color:var(--text);border:none;outline:none;background:transparent;width:100%;margin-bottom:6px;padding:0}
+.pd-title-input:focus{border-bottom:1.5px solid var(--border-strong)}
+.pd-status-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.pd-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:14px 0 8px}
+.pd-desc{width:100%;border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:14px;resize:vertical;outline:none;background:var(--bg);color:var(--text);line-height:1.55;min-height:100px;font-family:inherit}
+.pd-desc:focus{border-color:var(--border-strong);background:var(--surface)}
+.pd-entries{display:flex;flex-direction:column;gap:10px}
+.pd-entry{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--peach);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.pd-entry-date{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.pd-entry-del{background:transparent;border:none;color:var(--muted-2);font-size:14px;cursor:pointer;padding:0 4px}
+.pd-entry-del:hover{color:var(--red)}
+.pd-entry-body{font-size:13px;line-height:1.6;color:var(--text-2);white-space:pre-wrap;word-break:break-word}
+.pd-add{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px}
+.pd-add textarea{width:100%;border:none;outline:none;background:transparent;color:var(--text);font-size:13.5px;line-height:1.55;resize:vertical;min-height:60px;font-family:inherit}
+.pd-add textarea::placeholder{color:var(--muted-2)}
+.pd-add-actions{display:flex;justify-content:flex-end;margin-top:6px}
+
 /* ━━━ LEARNING (daily-check) ━━━ */
 .lg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .lc2{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;border-left:3px solid var(--emerald);display:flex;flex-direction:column;gap:12px}
@@ -852,21 +874,24 @@ svg{flex-shrink:0}
 
       <!-- PROJECTS -->
       <div class="route" data-route="projects">
-        <div class="page-hdr">
-          <div class="page-title">Projects</div>
-          <div class="page-sub" id="bc-cnt" style="align-self:flex-end;padding-bottom:6px"></div>
-          <div class="page-actions">
-            <button class="btn btn-primary btn-sm" onclick="toggleQA('build-qa')">+ Add project</button>
+        <div id="projects-list-view">
+          <div class="page-hdr">
+            <div class="page-title">Projects</div>
+            <div class="page-sub" id="bc-cnt" style="align-self:flex-end;padding-bottom:6px"></div>
+            <div class="page-actions">
+              <button class="btn btn-primary btn-sm" onclick="toggleQA('build-qa')">+ Add project</button>
+            </div>
           </div>
-        </div>
-        <div id="build-qa" style="display:none">
-          <div class="qa">
-            <div class="qa-row"><input class="input" id="b-title" placeholder="Project name" style="flex:2"><select class="select" id="b-status"><option value="active">Building now</option><option value="future">Future</option><option value="background">Background</option></select></div>
-            <div class="qa-row"><textarea class="ta" id="b-desc" placeholder="Describe the project..."></textarea></div>
-            <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddBuild()">Add project</button><button class="btn btn-sm" onclick="toggleQA('build-qa')">Cancel</button></div>
+          <div id="build-qa" style="display:none">
+            <div class="qa">
+              <div class="qa-row"><input class="input" id="b-title" placeholder="Project name" style="flex:2"><select class="select" id="b-status"><option value="active">Building now</option><option value="future">Future</option><option value="background">Background</option></select></div>
+              <div class="qa-row"><textarea class="ta" id="b-desc" placeholder="Describe the project..."></textarea></div>
+              <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddBuild()">Add project</button><button class="btn btn-sm" onclick="toggleQA('build-qa')">Cancel</button></div>
+            </div>
           </div>
+          <div class="bg-grid" id="builds"></div>
         </div>
-        <div class="bg-grid" id="builds"></div>
+        <div id="project-detail-view" style="display:none"></div>
       </div>
 
       <!-- HABITS -->
@@ -1084,12 +1109,46 @@ svg{flex-shrink:0}
     <h3 id="em-title">Edit event</h3>
     <div class="modal-row"><label>Title</label><input class="input" id="em-t" style="width:100%"></div>
     <div class="modal-row"><label>Date</label><input class="input" id="em-d" type="date" style="width:100%"></div>
-    <div class="modal-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <label class="em-allday" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:-4px 0 12px;font-size:13px;color:var(--text-2)">
+      <input type="checkbox" id="em-allday" onchange="toggleEmAllDay()" style="width:16px;height:16px;accent-color:var(--accent)">
+      <span>All-day event</span>
+    </label>
+    <div id="em-time-row" class="modal-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div><label>Start</label><input class="input" id="em-tm" placeholder="e.g. 10am" style="width:100%;min-width:0"></div>
-      <div><label>End</label><input class="input" id="em-tm-end" placeholder="e.g. 11am (optional)" style="width:100%;min-width:0"></div>
+      <div><label>End</label><input class="input" id="em-tm-end" placeholder="e.g. 11am" style="width:100%;min-width:0"></div>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-top:-6px;margin-bottom:10px">Leave Start blank for an all-day event.</div>
-    <div class="modal-row"><label>Description</label><textarea class="ta" id="em-desc" style="width:100%;min-height:70px"></textarea></div>
+    <div class="modal-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Repeat</label><select class="select" id="em-repeat" style="width:100%">
+        <option value="none">Does not repeat</option>
+        <option value="daily">Every day</option>
+        <option value="weekly">Every week</option>
+        <option value="monthly">Every month (on this date)</option>
+        <option value="monthlyDow">Every month (on this weekday)</option>
+        <option value="yearly">Every year</option>
+      </select></div>
+      <div><label>Reminder</label><select class="select" id="em-reminder" style="width:100%">
+        <option value="none">None</option>
+        <option value="0">At time of event</option>
+        <option value="5">5 minutes before</option>
+        <option value="10">10 minutes before</option>
+        <option value="15">15 minutes before</option>
+        <option value="30">30 minutes before</option>
+        <option value="60">1 hour before</option>
+        <option value="120">2 hours before</option>
+        <option value="1440">1 day before</option>
+      </select></div>
+    </div>
+    <div class="modal-row"><label>Time zone</label><select class="select" id="em-tz" style="width:100%">
+      <option value="Africa/Johannesburg">Africa/Johannesburg (SAST)</option>
+      <option value="Europe/London">Europe/London</option>
+      <option value="Europe/Paris">Europe/Paris (CET)</option>
+      <option value="America/New_York">America/New_York (EST)</option>
+      <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+      <option value="Asia/Dubai">Asia/Dubai</option>
+      <option value="Asia/Tokyo">Asia/Tokyo</option>
+      <option value="Australia/Sydney">Australia/Sydney</option>
+    </select></div>
+    <div class="modal-row"><label>Notes</label><textarea class="ta" id="em-desc" style="width:100%;min-height:70px"></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-danger btn-sm" id="em-del" onclick="deleteCurrentEvent()">Delete</button>
       <div class="spacer"></div>
@@ -1133,6 +1192,8 @@ function setRoute(r,skipHash){
   // Close any open quick-add forms so switching away and back resets state
   document.querySelectorAll('[id$="-qa"]').forEach(el=>{if(el)el.style.display='none';});
   ex={id:null,type:null};
+  // Leave project detail mode if user navigates away from projects
+  if(r!=='projects'&&UI.projectDetail){UI.projectDetail=null;const pd=document.getElementById('project-detail-view');if(pd)pd.style.display='none';const pl=document.getElementById('projects-list-view');if(pl)pl.style.display='block';}
   window.scrollTo({top:0,behavior:'instant'});
   if(r==='settings')rSettings();
 }
@@ -1202,35 +1263,74 @@ async function getGCForMonth(y,m){
   const s=new Date(y,m,1).toISOString(),e=new Date(y,m+1,1).toISOString();
   const evs=await fetchGCal(s,e);gcCache={key,events:evs};return evs;
 }
-async function createGCEvent(title,date,time,desc='',endTime=''){
-  const tok=await ensureGTok();if(!tok)return null;
-  const tz='Africa/Johannesburg';
-  let body;
-  if(time){
-    const hh=p2hhmm(time);
-    const eh=endTime?p2hhmm(endTime):endHH(hh);
-    body={summary:title,description:desc,start:{dateTime:`${date}T${hh}:00`,timeZone:tz},end:{dateTime:`${date}T${eh}:00`,timeZone:tz}};
-  } else {
-    const nextD=new Date(date+'T00:00:00');nextD.setDate(nextD.getDate()+1);const nextStr=nextD.toISOString().slice(0,10);
-    body={summary:title,description:desc,start:{date},end:{date:nextStr}};
+function buildRRule(repeat,startDate){
+  const d=new Date(startDate+'T12:00:00');
+  switch(repeat){
+    case 'daily':return 'RRULE:FREQ=DAILY';
+    case 'weekly':return 'RRULE:FREQ=WEEKLY';
+    case 'monthly':return 'RRULE:FREQ=MONTHLY';
+    case 'monthlyDow':{
+      const DOW=['SU','MO','TU','WE','TH','FR','SA'];
+      const weekNum=Math.min(4,Math.ceil(d.getDate()/7));
+      return `RRULE:FREQ=MONTHLY;BYDAY=${weekNum}${DOW[d.getDay()]}`;
+    }
+    case 'yearly':return 'RRULE:FREQ=YEARLY';
   }
-  const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(r.ok){gcCache={key:'',events:[]};return await r.json();}
   return null;
 }
-async function updateGCEvent(id,title,date,time,desc='',endTime=''){
-  const tok=await ensureGTok();if(!tok)return false;
-  const tz='Africa/Johannesburg';
+function parseRRule(rrule){
+  if(!rrule)return 'none';
+  const freq=rrule.match(/FREQ=(\w+)/)?.[1];
+  const byday=rrule.match(/BYDAY=([^;]+)/)?.[1];
+  if(freq==='DAILY')return 'daily';
+  if(freq==='WEEKLY')return 'weekly';
+  if(freq==='YEARLY')return 'yearly';
+  if(freq==='MONTHLY')return byday?'monthlyDow':'monthly';
+  return 'none';
+}
+function applyAdvancedFields(body,opts){
+  if(opts.recurrence&&opts.recurrence!=='none'){
+    const rule=buildRRule(opts.recurrence,opts.date);
+    if(rule)body.recurrence=[rule];
+  }
+  if(opts.reminderMin!==null&&opts.reminderMin!==undefined&&opts.reminderMin!==''&&opts.reminderMin!=='none'){
+    body.reminders={useDefault:false,overrides:[{method:'popup',minutes:Number(opts.reminderMin)}]};
+  }
+}
+async function createGCEvent(title,date,time,desc='',endTime='',opts={}){
+  const tok=await ensureGTok();if(!tok)return null;
+  const tz=opts.timeZone||'Africa/Johannesburg';
+  const allDay=opts.allDay||!time;
   let body={summary:title,description:desc||''};
-  if(time){
+  if(allDay){
+    const nextD=new Date(date+'T00:00:00');nextD.setDate(nextD.getDate()+1);const nextStr=nextD.toISOString().slice(0,10);
+    body.start={date};body.end={date:nextStr};
+  } else {
     const hh=p2hhmm(time);
     const eh=endTime?p2hhmm(endTime):endHH(hh);
     body.start={dateTime:`${date}T${hh}:00`,timeZone:tz};
     body.end={dateTime:`${date}T${eh}:00`,timeZone:tz};
-  } else {
+  }
+  applyAdvancedFields(body,{...opts,date});
+  const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.ok){gcCache={key:'',events:[]};return await r.json();}
+  return null;
+}
+async function updateGCEvent(id,title,date,time,desc='',endTime='',opts={}){
+  const tok=await ensureGTok();if(!tok)return false;
+  const tz=opts.timeZone||'Africa/Johannesburg';
+  const allDay=opts.allDay||!time;
+  let body={summary:title,description:desc||''};
+  if(allDay){
     const nextD=new Date(date+'T00:00:00');nextD.setDate(nextD.getDate()+1);const nextStr=nextD.toISOString().slice(0,10);
     body.start={date};body.end={date:nextStr};
+  } else {
+    const hh=p2hhmm(time);
+    const eh=endTime?p2hhmm(endTime):endHH(hh);
+    body.start={dateTime:`${date}T${hh}:00`,timeZone:tz};
+    body.end={dateTime:`${date}T${eh}:00`,timeZone:tz};
   }
+  applyAdvancedFields(body,{...opts,date});
   const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(id)}`,{method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(r.ok)gcCache={key:'',events:[]};
   return r.ok;
@@ -1695,7 +1795,9 @@ function buildTimeSlotCols(dates,gcEvs){
       const evHere=evs.filter(e=>e.h===hr);
       const isNowRow=isToday&&nowH===hr;
       const pct=Math.round((nowM/60)*100);
-      h+=`<div class="ts-cell${isNowRow?' now-row':''}">`;
+      const hrLabel=(hr>12?hr-12:(hr===0?12:hr))+(hr>=12?'pm':'am');
+      const endHr=(hr+1>12?hr+1-12:((hr+1)===24?12:hr+1))+((hr+1)>=12&&(hr+1)<24?'pm':'am');
+      h+=`<div class="ts-cell${isNowRow?' now-row':''}" data-new-ds="${ds}" data-new-time="${hrLabel}" data-new-end="${endHr}" onclick="handleCellClick(event,this)">`;
       if(isNowRow)h+=`<div class="now-line" style="top:${pct}%"><div class="now-dot"></div></div>`;
       evHere.forEach(ev=>{
         const payload=encodeURIComponent(JSON.stringify({type:ev.type,data:ev.data,ds}));
@@ -1835,6 +1937,11 @@ async function rCal(){
   }
 }
 function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=UI.calDate.toISOString().slice(0,10);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
+function handleCellClick(e,cell){
+  if(e.target.closest('.ts-ev'))return;
+  const ds=cell.dataset.newDs;const time=cell.dataset.newTime;const endTime=cell.dataset.newEnd;
+  if(ds&&time)openNewEvent({date:ds,time,endTime});
+}
 
 // Calendar in Habits mode
 function habitsDoneOn(ds){return (S.habits||[]).filter(h=>(h.checkedDates||[]).includes(ds));}
@@ -1933,14 +2040,27 @@ function rCalHabits(el,today,y,m){
 
 // EVENT MODAL
 let editingEvent=null;
-function openNewEvent(){
+function toggleEmAllDay(){
+  const cb=document.getElementById('em-allday');
+  const row=document.getElementById('em-time-row');
+  if(row)row.style.display=cb.checked?'none':'grid';
+}
+function resetEventModal(){
+  ['em-t','em-tm','em-tm-end','em-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  const ad=document.getElementById('em-allday');if(ad)ad.checked=false;
+  const rep=document.getElementById('em-repeat');if(rep)rep.value='none';
+  const rem=document.getElementById('em-reminder');if(rem)rem.value='none';
+  const tz=document.getElementById('em-tz');if(tz)tz.value='Africa/Johannesburg';
+  toggleEmAllDay();
+}
+function openNewEvent(prefill){
+  prefill=prefill||{};
   editingEvent={mode:'new',type:'gc'};
+  resetEventModal();
   document.getElementById('em-title').textContent='New event';
-  document.getElementById('em-t').value='';
-  document.getElementById('em-d').value=UI.calDate.toISOString().slice(0,10);
-  document.getElementById('em-tm').value='';
-  document.getElementById('em-tm-end').value='';
-  document.getElementById('em-desc').value='';
+  document.getElementById('em-d').value=prefill.date||UI.calDate.toISOString().slice(0,10);
+  document.getElementById('em-tm').value=prefill.time||'';
+  document.getElementById('em-tm-end').value=prefill.endTime||'';
   document.getElementById('em-del').style.display='none';
   document.getElementById('event-modal').style.display='flex';
   setTimeout(()=>document.getElementById('em-t').focus(),50);
@@ -1951,25 +2071,40 @@ async function openEventEdit(payload){
     if(p.type==='rec'){alert('Recurring weekly item — edit in the code (SCHED constant) for now.');return;}
     editingEvent={mode:'edit',type:p.type,data:p.data,ds:p.ds};
     let d=p.data;
-    let endTime='';
-    // For GCal events, fetch full event (incl. description, end time) if missing
+    let endTime='';let allDay=false;let recurrence='none';let reminderMin='none';let timeZone='Africa/Johannesburg';
     if(p.type==='gc'){
       try{
         const tok=await ensureGTok();
         if(tok){
           const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(d.id)}`,{headers:{Authorization:'Bearer '+tok}});
-          if(r.ok){const full=await r.json();d={...d,description:full.description||d.description||''};if(full.end?.dateTime)endTime=full.end.dateTime.slice(11,16);}
+          if(r.ok){
+            const full=await r.json();
+            d={...d,description:full.description||d.description||''};
+            if(full.end?.dateTime)endTime=full.end.dateTime.slice(11,16);
+            allDay=!!full.start?.date;
+            if(full.start?.timeZone)timeZone=full.start.timeZone;
+            if(full.recurrence?.length)recurrence=parseRRule(full.recurrence[0]);
+            if(full.reminders&&full.reminders.overrides?.length){reminderMin=String(full.reminders.overrides[0].minutes);}
+          }
         }
       }catch(e){}
     } else if(p.type==='cus'){
       endTime=d.endTime||'';
+      allDay=!d.time;
     }
+    resetEventModal();
     document.getElementById('em-title').textContent=p.type==='gc'?'Edit Google event':'Edit event';
     document.getElementById('em-t').value=d.title||'';
     document.getElementById('em-d').value=d.date||p.ds;
     document.getElementById('em-tm').value=(p.type==='gc'&&d.time)?(d.time.slice(0,5)):(d.time||'');
     document.getElementById('em-tm-end').value=endTime;
     document.getElementById('em-desc').value=d.description||d.desc||'';
+    document.getElementById('em-allday').checked=allDay;
+    document.getElementById('em-repeat').value=recurrence;
+    document.getElementById('em-reminder').value=reminderMin;
+    const tzSel=document.getElementById('em-tz');
+    if(tzSel){tzSel.value=timeZone;if(tzSel.value!==timeZone){const opt=document.createElement('option');opt.value=timeZone;opt.textContent=timeZone;tzSel.appendChild(opt);tzSel.value=timeZone;}}
+    toggleEmAllDay();
     document.getElementById('em-del').style.display='inline-flex';
     document.getElementById('event-modal').style.display='flex';
     setTimeout(()=>document.getElementById('em-t').focus(),50);
@@ -1981,18 +2116,23 @@ async function saveCurrentEvent(){
   const title=document.getElementById('em-t').value.trim();
   if(!title){alert('Title required');return;}
   const date=document.getElementById('em-d').value||tod();
-  const time=document.getElementById('em-tm').value.trim();
-  const endTime=document.getElementById('em-tm-end').value.trim();
+  const allDay=document.getElementById('em-allday').checked;
+  const time=allDay?'':document.getElementById('em-tm').value.trim();
+  const endTime=allDay?'':document.getElementById('em-tm-end').value.trim();
   const desc=document.getElementById('em-desc').value.trim();
+  const recurrence=document.getElementById('em-repeat').value;
+  const reminderMin=document.getElementById('em-reminder').value;
+  const timeZone=document.getElementById('em-tz').value;
+  const opts={allDay,recurrence,reminderMin,timeZone};
   if(editingEvent.mode==='new'){
-    const res=await createGCEvent(title,date,time,desc,endTime);
-    if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date,time,endTime,title,desc});}
+    const res=await createGCEvent(title,date,time,desc,endTime,opts);
+    if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date,time,endTime,title,desc,allDay,recurrence,reminderMin,timeZone});}
   } else if(editingEvent.type==='gc'){
-    const ok=await updateGCEvent(editingEvent.data.id,title,date,time,desc,endTime);
+    const ok=await updateGCEvent(editingEvent.data.id,title,date,time,desc,endTime,opts);
     if(!ok)alert('Failed to update Google event.');
   } else if(editingEvent.type==='cus'){
     const ev=(S.customEvents||[]).find(x=>x.id===editingEvent.data.id);
-    if(ev){ev.title=title;ev.date=date;ev.time=time;ev.endTime=endTime;ev.desc=desc;}
+    if(ev){ev.title=title;ev.date=date;ev.time=time;ev.endTime=endTime;ev.desc=desc;ev.allDay=allDay;ev.recurrence=recurrence;ev.reminderMin=reminderMin;ev.timeZone=timeZone;}
   }
   svAll();closeEventModal();rCal();render();
 }
@@ -2193,15 +2333,80 @@ function rPeople(){
 }
 
 // BUILDS
-function saveBuild(id){const b=S.builds.find(x=>x.id===id);if(!b)return;const ti=document.getElementById('b-t-'+id),de=document.getElementById('b-d-'+id);if(ti?.value?.trim())b.title=ti.value.trim();if(de?.value?.trim())b.desc=de.value.trim();svAll();ex={id:null,type:null};rBuilds();}
-function setStatus(id,st){const b=S.builds.find(x=>x.id===id);if(!b)return;const ti=document.getElementById('b-t-'+id),de=document.getElementById('b-d-'+id);if(ti?.value?.trim())b.title=ti.value.trim();if(de?.value?.trim())b.desc=de.value.trim();b.status=st;svAll();rBuilds();}
-function delBuild(id){if(!confirm('Delete this project?'))return;S.builds=S.builds.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rBuilds();}
+function openProject(id){UI.projectDetail=id;document.getElementById('projects-list-view').style.display='none';document.getElementById('project-detail-view').style.display='block';renderProjectDetail();window.scrollTo({top:0,behavior:'instant'});}
+function closeProject(){UI.projectDetail=null;document.getElementById('project-detail-view').style.display='none';document.getElementById('projects-list-view').style.display='block';rBuilds();window.scrollTo({top:0,behavior:'instant'});}
+function setStatus(id,st){const b=S.builds.find(x=>x.id===id);if(!b)return;b.status=st;svAll();if(UI.projectDetail===id)renderProjectDetail();else rBuilds();}
+function saveProjectHead(id){
+  const b=S.builds.find(x=>x.id===id);if(!b)return;
+  const ti=document.getElementById('pd-title-'+id);
+  const de=document.getElementById('pd-desc-'+id);
+  if(ti&&ti.value.trim())b.title=ti.value.trim();
+  if(de!==null)b.desc=de.value;
+  svAll();
+}
+function addProjectEntry(id){
+  const b=S.builds.find(x=>x.id===id);if(!b)return;
+  const ta=document.getElementById('pd-new-'+id);
+  const v=ta?.value?.trim();if(!v)return;
+  b.entries=b.entries||[];
+  b.entries.push({id:uid(),date:tod(),content:v,createdAt:Date.now()});
+  ta.value='';
+  svAll();renderProjectDetail();
+}
+function delProjectEntry(pid,eid){
+  if(!confirm('Delete this entry?'))return;
+  const b=S.builds.find(x=>x.id===pid);if(!b)return;
+  b.entries=(b.entries||[]).filter(e=>e.id!==eid);
+  svAll();renderProjectDetail();
+}
+function delBuild(id){if(!confirm('Delete this project? All progress notes will be lost.'))return;S.builds=S.builds.filter(x=>x.id!==id);svAll();if(UI.projectDetail===id)closeProject();else rBuilds();}
+function renderProjectDetail(){
+  const el=document.getElementById('project-detail-view');if(!el)return;
+  const b=S.builds.find(x=>x.id===UI.projectDetail);
+  if(!b){closeProject();return;}
+  const lbl={active:'Building now',future:'Future project',background:'Background idea'};
+  const entries=[...(b.entries||[])].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  el.innerHTML=`
+    <div class="pd-top">
+      <button class="pd-back" onclick="closeProject()">← All projects</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="delBuild('${b.id}')">Delete project</button>
+    </div>
+    <div class="pd-head">
+      <input class="pd-title-input" id="pd-title-${b.id}" value="${esc(b.title)}" onblur="saveProjectHead('${b.id}')">
+      <div class="pd-status-row">
+        <button class="stb st-a${b.status==='active'?' on':''}" onclick="setStatus('${b.id}','active')">Building now</button>
+        <button class="stb st-f${b.status==='future'?' on':''}" onclick="setStatus('${b.id}','future')">Future</button>
+        <button class="stb st-b${b.status==='background'?' on':''}" onclick="setStatus('${b.id}','background')">Background</button>
+      </div>
+      <div class="pd-lbl">What this project does</div>
+      <textarea class="pd-desc" id="pd-desc-${b.id}" placeholder="Core idea — one or two sentences about what this builds." onblur="saveProjectHead('${b.id}')">${esc(b.desc||'')}</textarea>
+    </div>
+    <div class="pd-lbl" style="display:flex;align-items:baseline;gap:8px"><span>Progress, notes & ideas</span><span style="font-size:10px;color:var(--muted-2);font-weight:500;text-transform:none;letter-spacing:0">${entries.length} entr${entries.length===1?'y':'ies'}</span></div>
+    <div class="pd-add">
+      <textarea id="pd-new-${b.id}" placeholder="Add an idea, progress update, link, question — anything. The AI can also add here when you mention this project."></textarea>
+      <div class="pd-add-actions"><button class="btn btn-primary btn-sm" onclick="addProjectEntry('${b.id}')">+ Add entry</button></div>
+    </div>
+    <div class="pd-entries">${entries.length?entries.map(e=>`
+      <div class="pd-entry">
+        <div class="pd-entry-date"><span>${fmt(e.date)}</span><button class="pd-entry-del" onclick="delProjectEntry('${b.id}','${e.id}')" title="Delete">×</button></div>
+        <div class="pd-entry-body">${esc(e.content)}</div>
+      </div>`).join(''):`<div class="no-t">No entries yet. Drop in your first idea above.</div>`}</div>
+  `;
+}
 function rBuilds(){
   const el=document.getElementById('builds');if(!el)return;
   const order={active:0,future:1,background:2},lbl={active:'Building now',future:'Future project',background:'Background idea'};
   const sorted=[...S.builds].sort((a,b)=>(order[a.status]||1)-(order[b.status]||1));
   const cnt=document.getElementById('bc-cnt');if(cnt)cnt.textContent=S.builds.length?`${S.builds.length} in pipeline`:'';
-  el.innerHTML=sorted.map(b=>{const isEx=ex.id===b.id&&ex.type==='build';return`<div class="bc ${b.status||'future'}" onclick="toggleEx('build','${b.id}')"><div class="bc-tag">${lbl[b.status]||'Future'}</div><div class="bc-title">${esc(b.title)}</div><div class="bc-desc">${esc(b.desc)}</div>${isEx?`<div class="bc-exp" onclick="event.stopPropagation()"><input class="inp-e" id="b-t-${b.id}" value="${esc(b.title)}" style="font-size:14px;font-weight:600"><textarea class="exp-ta xl" id="b-d-${b.id}" rows="5">${esc(b.desc)}</textarea><div class="st-row"><button class="stb st-a${b.status==='active'?' on':''}" onclick="setStatus('${b.id}','active')">Building now</button><button class="stb st-f${b.status==='future'?' on':''}" onclick="setStatus('${b.id}','future')">Future</button><button class="stb st-b${b.status==='background'?' on':''}" onclick="setStatus('${b.id}','background')">Background</button></div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveBuild('${b.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delBuild('${b.id}')">Delete</button></div></div>`:''}</div>`;}).join('');
+  el.innerHTML=sorted.length?sorted.map(b=>{
+    const entries=(b.entries||[]).length;
+    return `<div class="bc ${b.status||'future'}" onclick="openProject('${b.id}')">
+      <div class="bc-tag">${lbl[b.status]||'Future'}</div>
+      <div class="bc-title">${esc(b.title)}</div>
+      <div class="bc-desc">${esc((b.desc||'').slice(0,180))}${(b.desc||'').length>180?'…':''}</div>
+      ${entries?`<div style="margin-top:10px;font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.04em">${entries} entr${entries===1?'y':'ies'} →</div>`:''}
+    </div>`;
+  }).join(''):`<div class="no-t">No projects yet — add one above.</div>`;
 }
 
 
@@ -2256,14 +2461,14 @@ async function doUpdate(){
     tasks:S.tasks.filter(t=>!t.done).map(t=>({id:t.id,text:t.text,area:t.area,project:t.project,priority:t.priority})),
     habits:S.habits.map(h=>{const s=computeHabitStats(h);return{id:h.id,name:h.name,streak:s.current,doneToday:(h.checkedDates||[]).includes(tod())};}),
     people:S.people.map(p=>({id:p.id,name:p.name,context:p.context})),
-    builds:S.builds.map(b=>({id:b.id,title:b.title,status:b.status})),
+    builds:S.builds.map(b=>({id:b.id,title:b.title,status:b.status,entries:(b.entries||[]).length})),
     ideas:S.ideas.map(i=>({id:i.id,title:i.title})),
     resources:S.resources.map(r=>({id:r.id,title:r.title})),
     notes:S.notes.map(n=>({id:n.id,title:n.title}))
   };
   const prompt=`You manage Zander's Life OS. Entrepreneur, Cape Town SA. Work > personal. Today: ${tod()}.
 Respond ONLY raw JSON:
-{"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|zm|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"logLearning":[{"skill":"...","content":"...","type":"session|note"}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","title":"..."}],"message":"1 sentence"}
+{"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|zm|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":30,"title":"..."}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 Zander:"${msg}"`;
   try{
@@ -2287,12 +2492,13 @@ function applyChanges(ch){
   if(ch.completeHabits?.length)ch.completeHabits.forEach(r=>{const h=S.habits.find(x=>x.name.toLowerCase().includes((r||'').toLowerCase()));if(h){h.checkedDates=h.checkedDates||[];if(!h.checkedDates.includes(tod()))h.checkedDates.push(tod());}});
   if(ch.addPerson?.length)ch.addPerson.forEach(p=>{const exists=S.people.find(x=>x.name.toLowerCase()===p.name.toLowerCase());if(exists){if(p.note)exists.notes.push({date:tod(),text:p.note});exists.lastSeen=tod();}else{S.people.push({id:uid(),name:p.name,context:p.context||'',notes:p.note?[{date:tod(),text:p.note}]:[],lastSeen:tod(),date:tod()});}});
   if(ch.updatePerson?.length)ch.updatePerson.forEach(u=>{const p=S.people.find(x=>x.name.toLowerCase().includes((u.name||'').toLowerCase()));if(p&&u.note){p.notes.push({date:tod(),text:u.note});p.lastSeen=tod();}});
-  if(ch.addBuild?.length)ch.addBuild.forEach(b=>S.builds.push({id:uid(),title:b.title,desc:b.desc||'',status:b.status||'future',date:tod()}));
+  if(ch.addBuild?.length)ch.addBuild.forEach(b=>S.builds.push({id:uid(),title:b.title,desc:b.desc||'',status:b.status||'future',date:tod(),entries:[]}));
+  if(ch.addBuildNote?.length)ch.addBuildNote.forEach(n=>{const b=S.builds.find(x=>x.title.toLowerCase().includes((n.project||'').toLowerCase()));if(b&&n.content){b.entries=b.entries||[];b.entries.push({id:uid(),date:tod(),content:n.content,createdAt:Date.now()});}});
   if(ch.logLearning?.length)ch.logLearning.forEach(lg=>{let h=S.habits.find(x=>x.name.toLowerCase().includes((lg.skill||'').toLowerCase()));if(!h){h={id:uid(),name:lg.skill,checkedDates:[],createdAt:tod(),notes:[]};S.habits.push(h);}if(lg.type==='session'||!lg.type){h.checkedDates=h.checkedDates||[];if(!h.checkedDates.includes(tod()))h.checkedDates.push(tod());}h.notes=h.notes||[];if(lg.content)h.notes.push({date:tod(),content:lg.content});});
   if(ch.addIdea?.length)ch.addIdea.forEach(i=>S.ideas.push({id:uid(),title:i.title,desc:i.desc||'',date:tod()}));
   if(ch.addResource?.length)ch.addResource.forEach(r=>S.resources.push({id:uid(),title:r.title,url:r.url||'',desc:r.desc||'',tag:r.tag||'other',date:tod()}));
   if(ch.addNote?.length)ch.addNote.forEach(n=>S.notes.push({id:uid(),title:n.title,body:n.body,date:tod()}));
-  if(ch.addEvent?.length){S.customEvents=S.customEvents||[];ch.addEvent.forEach(async e=>{S.customEvents.push({id:uid(),date:e.date,time:e.time||'',title:e.title});try{await createGCEvent(e.title,e.date,e.time||'');gcCache={key:'',events:[]};}catch(err){console.warn('GCal',err);}});}
+  if(ch.addEvent?.length){S.customEvents=S.customEvents||[];ch.addEvent.forEach(async e=>{const opts={allDay:e.allDay||!e.time,recurrence:e.repeat||'none',reminderMin:e.reminderMin==null?'none':e.reminderMin,timeZone:e.timeZone||'Africa/Johannesburg'};try{const res=await createGCEvent(e.title,e.date,e.time||'',e.desc||'',e.endTime||'',opts);if(!res)S.customEvents.push({id:uid(),date:e.date,time:e.time||'',endTime:e.endTime||'',title:e.title,allDay:opts.allDay,recurrence:opts.recurrence,reminderMin:opts.reminderMin,timeZone:opts.timeZone});gcCache={key:'',events:[]};}catch(err){console.warn('GCal',err);S.customEvents.push({id:uid(),date:e.date,time:e.time||'',endTime:e.endTime||'',title:e.title});}});}
   svAll();render();
 }
 
