@@ -345,22 +345,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="btm-st" id="btm-st"></div>
 </div>
 
+<script src="config.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script>
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// PASTE YOUR FIREBASE CONFIG HERE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const firebaseConfig = {
-  apiKey: "AIzaSyBd0S9QjcBigTAplgVZW-JsNdoA4h50F8M",
-  authDomain: "life-os-a25bc.firebaseapp.com",
-  projectId: "life-os-a25bc",
-  storageBucket: "life-os-a25bc.firebasestorage.app",
-  messagingSenderId: "225197303106",
-  appId: "1:225197303106:web:6cc30b302e4cf924e754db"
-};
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Firebase config loaded from config.js
 
 const AK='los_ak';
 const getKey=()=>localStorage.getItem(AK);
