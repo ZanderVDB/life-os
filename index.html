@@ -112,7 +112,7 @@ svg{flex-shrink:0}
 .theme-toggle button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06)}
 
 /* ━━━ MAIN LAYOUT ━━━ */
-.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:52px;padding:28px 36px 140px;max-width:1640px;margin:0 auto;width:100%}
+.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:80px;padding:28px 44px 140px;max-width:1680px;margin:0 auto;width:100%}
 .main-col{min-width:0;display:flex;flex-direction:column;gap:28px}
 .aside-col{display:flex;flex-direction:column;gap:14px;min-width:0;position:sticky;top:22px;align-self:start;max-height:calc(100vh - 60px);overflow-y:auto;padding-right:2px}
 .aside-col::-webkit-scrollbar{width:5px}
@@ -364,7 +364,13 @@ svg{flex-shrink:0}
 .ti.pm{border-left-color:var(--gold)}
 .ti.pl{border-left-color:var(--sage)}
 .ti.ps{border-left-color:var(--border);opacity:.55}
-.ti input[type=checkbox]{width:15px;height:15px;margin-top:1px;flex-shrink:0;accent-color:var(--accent)}
+.ti input[type=checkbox]{appearance:none;-webkit-appearance:none;width:19px;height:19px;margin-top:0;flex-shrink:0;border:1.5px solid var(--border-strong);border-radius:50%;background:var(--surface);cursor:pointer;position:relative;transition:all .15s;outline:none}
+.ti input[type=checkbox]:hover{border-color:var(--text-2)}
+.ti input[type=checkbox]:checked{background:var(--sage);border-color:var(--sage)}
+.ti input[type=checkbox]:checked::after{content:'';position:absolute;left:5px;top:2px;width:5px;height:9px;border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg)}
+.ti.fading{opacity:.55;transition:opacity .4s}
+.completed-day{margin-bottom:12px}
+.cmp-date{font-size:11px;font-weight:600;color:var(--muted);padding:4px 2px 6px;text-transform:uppercase;letter-spacing:.06em}
 .tit{font-size:13px;flex:1;line-height:1.45;word-break:break-word;color:var(--text)}
 .tit.dn{text-decoration:line-through;color:var(--muted-2)}
 .ti-time{font-size:10px;color:var(--muted);background:var(--surface-2);padding:2px 6px;border-radius:5px;flex-shrink:0;margin-top:2px}
@@ -406,6 +412,11 @@ svg{flex-shrink:0}
 .pc-name{font-size:14px;font-weight:600;color:var(--text);line-height:1.2}
 .pc-ctx{font-size:11px;color:var(--muted);margin-top:2px}
 .pc-last{font-size:11px;color:var(--muted-2);margin-top:8px}
+.pc-info{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:4px}
+.pc-row{display:flex;gap:8px;align-items:baseline;font-size:12px}
+.pc-row-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);flex-shrink:0;min-width:62px}
+.pc-row-v{color:var(--text-2);word-break:break-word}
+.pc-row-v a{color:var(--blue)}
 .pc-notes{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
 .pc-note{font-size:12px;color:var(--text-2);line-height:1.5;margin-bottom:4px;display:flex;gap:6px}
 .pc-note-date{font-size:10px;color:var(--muted-2);flex-shrink:0;margin-top:1px}
@@ -705,6 +716,14 @@ svg{flex-shrink:0}
 
         <section>
           <div class="section-hdr">
+            <h2>This week</h2>
+            <div class="right"><button class="btn btn-ghost btn-sm" onclick="setRoute('calendar')">Open calendar ↗</button></div>
+          </div>
+          <div class="week-sum" id="today-week"></div>
+        </section>
+
+        <section>
+          <div class="section-hdr">
             <h2>Growth focus</h2>
             <div class="right"><button class="btn btn-ghost btn-sm" onclick="doRefreshFocus()">↻ New focus</button></div>
           </div>
@@ -714,7 +733,10 @@ svg{flex-shrink:0}
         <section>
           <div class="section-hdr">
             <h2>Tasks</h2>
-            <div class="right"><button class="btn btn-primary btn-sm" onclick="toggleQA('task-qa')">+ Add task</button></div>
+            <div class="right">
+              <button class="btn btn-ghost btn-sm" onclick="toggleCompleted()" id="tgl-completed">Show completed</button>
+              <button class="btn btn-primary btn-sm" onclick="toggleQA('task-qa')">+ Add task</button>
+            </div>
           </div>
           <div id="task-qa" style="display:none">
             <div class="qa">
@@ -729,25 +751,7 @@ svg{flex-shrink:0}
             </div>
           </div>
           <div id="tasks-sec"></div>
-        </section>
-
-        <section>
-          <div class="section-hdr">
-            <h2>Daily notebook</h2>
-            <span class="cnt" id="dn-date"></span>
-            <div class="right"><button class="btn btn-primary btn-sm" onclick="saveDN()">Save</button></div>
-          </div>
-          <div class="notebook-wrap">
-            <textarea class="notebook-ta" id="dn-ta" placeholder="Morning brain dump, intentions for today, reflections, anything on your mind…"></textarea>
-          </div>
-        </section>
-
-        <section>
-          <div class="section-hdr">
-            <h2>This week</h2>
-            <div class="right"><button class="btn btn-ghost btn-sm" onclick="setRoute('calendar')">Open calendar ↗</button></div>
-          </div>
-          <div class="week-sum" id="today-week"></div>
+          <div id="completed-sec" style="display:none;margin-top:16px"></div>
         </section>
 
         <section>
@@ -756,6 +760,22 @@ svg{flex-shrink:0}
             <div class="right"><button class="btn btn-ghost btn-sm" onclick="setRoute('learning')">Open learning ↗</button></div>
           </div>
           <div class="learn-snap" id="today-learn"></div>
+        </section>
+
+        <section>
+          <div class="section-hdr">
+            <h2>Daily notebook</h2>
+            <div class="right" style="gap:4px">
+              <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
+              <span class="cnt" id="dn-date" style="min-width:120px;text-align:center"></span>
+              <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
+              <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
+              <button class="btn btn-primary btn-sm" onclick="saveDN()">Save</button>
+            </div>
+          </div>
+          <div class="notebook-wrap">
+            <textarea class="notebook-ta" id="dn-ta" placeholder="Morning brain dump, intentions for today, reflections, anything on your mind…"></textarea>
+          </div>
         </section>
       </div>
 
@@ -833,9 +853,18 @@ svg{flex-shrink:0}
         <div id="ppl-qa" style="display:none">
           <div class="qa">
             <div class="qa-row">
-              <input class="input" id="p-name" placeholder="Name">
-              <input class="input" id="p-ctx" placeholder="Context / relationship">
+              <input class="input" id="p-name" placeholder="First name">
+              <input class="input" id="p-last" placeholder="Last name (optional)">
             </div>
+            <div class="qa-row">
+              <input class="input" id="p-phone" placeholder="Phone (optional)">
+              <input class="input" id="p-email" placeholder="Email (optional)">
+            </div>
+            <div class="qa-row">
+              <input class="input" id="p-work" placeholder="Where they work (optional)">
+              <input class="input" id="p-met" placeholder="Where you know them from">
+            </div>
+            <div class="qa-row"><input class="input" id="p-ctx" placeholder="Relationship / short note"></div>
             <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddPerson()">Add person</button><button class="btn btn-sm" onclick="toggleQA('ppl-qa')">Cancel</button></div>
           </div>
         </div>
@@ -1183,7 +1212,7 @@ function promptKey(){const existing=getKey();const k=prompt('Enter your Anthropi
 
 // DATA
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const SCHED={0:['Church 9–11am'],1:['Bible studies 7–9pm'],2:['Community 7–9pm'],3:['Community 7–9pm'],4:['Young Adults 6–9pm'],5:['Youth @ Josh Jen 7–9pm'],6:[]};
+const SCHED={0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
 const PROJ={wa:{n:'WebAnchor',h:'var(--blue)'},tf:{n:'TriFusion',h:'var(--lavender)'},zm:{n:'Zomarka',h:'var(--emerald)'},gen:{n:'General',h:'var(--peach)'}};
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
@@ -1233,8 +1262,39 @@ async function toggleVoice(){
 }
 
 // DAILY NOTE
-function loadDailyNote(){const ds=tod();const ta=document.getElementById('dn-ta');if(ta)ta.value=(S.dayNotes||{})[ds]||'';const de=document.getElementById('dn-date');if(de)de.textContent=new Date().toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'short'});}
-function saveDN(){const ta=document.getElementById('dn-ta');if(!ta)return;S.dayNotes=S.dayNotes||{};S.dayNotes[tod()]=ta.value;svAll();}
+function currentNotebookDate(){return UI.notebookDate||tod();}
+function loadDailyNote(){UI.notebookDate=tod();renderNotebook();}
+function renderNotebook(){
+  const ds=currentNotebookDate();
+  const ta=document.getElementById('dn-ta');
+  if(ta)ta.value=(S.dayNotes||{})[ds]||'';
+  const de=document.getElementById('dn-date');
+  if(de){
+    const d=new Date(ds+'T12:00:00');
+    const isToday=ds===tod();
+    const label=d.toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short'});
+    de.textContent=isToday?`Today · ${label}`:label;
+  }
+  const next=document.getElementById('dn-next');if(next)next.disabled=ds===tod();
+  const todayBtn=document.getElementById('dn-today-btn');if(todayBtn)todayBtn.style.display=ds===tod()?'none':'inline-flex';
+}
+function navNotebook(dir){
+  const ta=document.getElementById('dn-ta');
+  if(ta){S.dayNotes=S.dayNotes||{};const curr=currentNotebookDate();if(ta.value.trim())S.dayNotes[curr]=ta.value;svAll();}
+  const curr=currentNotebookDate();
+  const d=new Date(curr+'T12:00:00');
+  d.setDate(d.getDate()+dir);
+  const next=d.toISOString().slice(0,10);
+  if(next>tod())return;
+  UI.notebookDate=next;
+  renderNotebook();
+}
+function goToTodayNotebook(){
+  const ta=document.getElementById('dn-ta');
+  if(ta){S.dayNotes=S.dayNotes||{};const curr=currentNotebookDate();if(ta.value.trim())S.dayNotes[curr]=ta.value;svAll();}
+  UI.notebookDate=tod();renderNotebook();
+}
+function saveDN(){const ta=document.getElementById('dn-ta');if(!ta)return;S.dayNotes=S.dayNotes||{};S.dayNotes[currentNotebookDate()]=ta.value;svAll();const btn=event?.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1500);}}
 
 // FOCUS
 function getDailyFocus(){const t=tod();try{const r=JSON.parse(localStorage.getItem('lf_f'));if(r&&r.date===t)return r.items;}catch(e){}return genFocus(t,0);}
@@ -1688,7 +1748,18 @@ function toggleBrainQA(){const map={ideas:'idea-qa',resources:'res-qa',notes:'no
 
 function qaAddHabit(){const n=document.getElementById('h-name')?.value?.trim();if(!n)return;S.habits.push({id:uid(),name:n,streak:0,lastDate:null,total:0,doneToday:false});svAll();rHabits();toggleQA('hab-qa');document.getElementById('h-name').value='';}
 function qaAddTask(){const t=document.getElementById('t-text')?.value?.trim();if(!t)return;S.tasks.push({id:uid(),text:t,area:document.getElementById('t-area')?.value||'personal',project:document.getElementById('t-proj')?.value||'gen',priority:document.getElementById('t-pri')?.value||'med',scheduledTime:document.getElementById('t-time')?.value||'',done:false,date:tod()});svAll();rTasks();rAttention();toggleQA('task-qa');document.getElementById('t-text').value='';}
-function qaAddPerson(){const n=document.getElementById('p-name')?.value?.trim();if(!n)return;const ctx=document.getElementById('p-ctx')?.value?.trim()||'';S.people.push({id:uid(),name:n,context:ctx,notes:[],lastSeen:tod(),date:tod()});svAll();rPeople();toggleQA('ppl-qa');document.getElementById('p-name').value='';document.getElementById('p-ctx').value='';}
+function qaAddPerson(){
+  const n=document.getElementById('p-name')?.value?.trim();if(!n)return;
+  const last=document.getElementById('p-last')?.value?.trim()||'';
+  const phone=document.getElementById('p-phone')?.value?.trim()||'';
+  const email=document.getElementById('p-email')?.value?.trim()||'';
+  const work=document.getElementById('p-work')?.value?.trim()||'';
+  const met=document.getElementById('p-met')?.value?.trim()||'';
+  const ctx=document.getElementById('p-ctx')?.value?.trim()||'';
+  S.people.push({id:uid(),name:n,lastName:last,phone,email,workplace:work,metAt:met,context:ctx,notes:[],lastSeen:tod(),date:tod()});
+  svAll();rPeople();toggleQA('ppl-qa');
+  ['p-name','p-last','p-phone','p-email','p-work','p-met','p-ctx'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+}
 function qaAddBuild(){const t=document.getElementById('b-title')?.value?.trim();if(!t)return;const desc=document.getElementById('b-desc')?.value?.trim()||'';const st=document.getElementById('b-status')?.value||'future';S.builds.push({id:uid(),title:t,desc,status:st,date:tod()});svAll();rBuilds();toggleQA('build-qa');['b-title','b-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
 function qaAddLearn(){const n=document.getElementById('sk-name')?.value?.trim();if(!n)return;S.learning.push({id:uid(),skill:n,streak:0,lastDate:null,total:0,note:'',entries:[]});svAll();rLearn();toggleQA('learn-qa');document.getElementById('sk-name').value='';}
 function qaAddIdea(){const t=document.getElementById('id-title')?.value?.trim();if(!t)return;S.ideas.push({id:uid(),title:t,desc:document.getElementById('id-desc')?.value?.trim()||'',date:tod()});svAll();rIdeas();toggleQA('idea-qa');['id-title','id-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
@@ -1706,7 +1777,30 @@ function rHabits(){
 }
 
 // TASKS
-function chk(id,e){e.stopPropagation();const t=S.tasks.find(x=>x.id===id);if(t){t.done=!t.done;svAll();rTasks();rAttention();}}
+const TASK_FADE_MS=5000;
+let _taskFadeTimer=null;
+function chk(id,e){
+  e.stopPropagation();
+  const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  t.done=!t.done;
+  if(t.done)t.doneAt=Date.now();else delete t.doneAt;
+  svAll();rTasks();rAttention();
+  if(t.done){
+    clearTimeout(_taskFadeTimer);
+    _taskFadeTimer=setTimeout(()=>{rTasks();},TASK_FADE_MS+100);
+  }
+}
+function toggleCompleted(){
+  UI.showCompleted=!UI.showCompleted;
+  document.getElementById('tgl-completed').textContent=UI.showCompleted?'Hide completed':'Show completed';
+  rTasks();
+}
+function isTaskVisible(t){
+  if(!t.done)return true;
+  if(!t.doneAt)return false;
+  return Date.now()-t.doneAt<TASK_FADE_MS;
+}
+function undoTask(id){const t=S.tasks.find(x=>x.id===id);if(!t)return;t.done=false;delete t.doneAt;svAll();rTasks();rAttention();}
 function toggleEx(type,id){ex=(ex.id===id&&ex.type===type)?{id:null,type:null}:{id,type};render();}
 function pCls(p){return p==='urgent'?'pu':p==='hi'?'ph':p==='med'?'pm':p==='lo'?'pl':'ps';}
 function setPri(id,p){const t=S.tasks.find(x=>x.id===id);if(!t)return;const ta=document.getElementById('exp-ta-'+id);if(ta)t.text=ta.value||t.text;t.priority=p;svAll();rTasks();rAttention();}
@@ -1715,25 +1809,87 @@ function delTask(id){if(!confirm('Delete this task?'))return;S.tasks=S.tasks.fil
 function mkPriRow(t){return`<div class="pri-row"><span class="pri-lbl">Priority</span>${[['urgent','Urgent','pu-b'],['hi','High','ph-b'],['med','Medium','pm-b'],['lo','Low','pl-b'],['someday','Someday','ps-b']].map(([p,l,c])=>`<button class="pb ${c}${(t.priority||'lo')===p?' on':''}" onclick="setPri('${t.id}','${p}')">${l}</button>`).join('')}</div>`;}
 function rTasks(){
   const el=document.getElementById('tasks-sec');if(!el)return;
-  const wt=S.tasks.filter(t=>t.area==='work'),pt=S.tasks.filter(t=>t.area==='personal');
+  const visible=S.tasks.filter(isTaskVisible);
+  const wt=visible.filter(t=>t.area==='work'),pt=visible.filter(t=>t.area==='personal');
   const grps={wa:[],tf:[],zm:[],gen:[]};wt.forEach(t=>{const k=grps[t.project]!==undefined?t.project:'gen';grps[k].push(t);});
   const srt=arr=>[...arr].sort((a,b)=>{if(a.done!==b.done)return a.done?1:-1;return(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3);});
-  const mkTi=t=>{const isEx=ex.id===t.id&&ex.type==='task';let h=`<div class="ti ${pCls(t.priority||'lo')}" onclick="toggleEx('task','${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;if(isEx)h+=`<div class="exp-p"><textarea class="exp-ta" id="exp-ta-${t.id}" rows="2">${esc(t.text)}</textarea><div style="display:flex;gap:8px;margin-top:8px;align-items:center"><label style="font-size:11px;color:var(--muted)">Time</label><input class="inp-e" id="exp-ti-${t.id}" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am" style="margin-bottom:0;flex:1"></div>${mkPriRow(t)}<div class="exp-dt">Added ${fmt(t.date||tod())}</div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveTask('${t.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}')">Delete</button></div></div>`;return h;};
+  const mkTi=t=>{
+    const isEx=ex.id===t.id&&ex.type==='task';
+    const fading=t.done&&t.doneAt;
+    let h=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="toggleEx('task','${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
+    if(isEx)h+=`<div class="exp-p"><textarea class="exp-ta" id="exp-ta-${t.id}" rows="2">${esc(t.text)}</textarea><div style="display:flex;gap:8px;margin-top:8px;align-items:center"><label style="font-size:11px;color:var(--muted)">Time</label><input class="inp-e" id="exp-ti-${t.id}" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am" style="margin-bottom:0;flex:1"></div>${mkPriRow(t)}<div class="exp-dt">Added ${fmt(t.date||tod())}</div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveTask('${t.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}')">Delete</button></div></div>`;
+    return h;
+  };
   let wh='<div class="col-lbl work">Work</div>',hw=false;
   Object.entries(grps).forEach(([k,ts])=>{if(!ts.length)return;hw=true;const p=PROJ[k];wh+=`<div class="proj-g"><div class="proj-hdr"><span class="pdot" style="background:${p.h}"></span><span class="pnm">${p.n}</span></div><div class="tcard">${srt(ts).map(mkTi).join('')}</div></div>`;});
   if(!hw)wh+=`<div class="no-t">Clear board.</div>`;
   const ps=srt(pt);
   el.innerHTML=`<div class="tgrid"><div>${wh}</div><div><div class="col-lbl pers">Personal</div>${ps.length?`<div class="tcard">${ps.map(mkTi).join('')}</div>`:'<div class="no-t">Nothing personal.</div>'}</div></div>`;
+  // Completed history section
+  const compEl=document.getElementById('completed-sec');
+  const completed=S.tasks.filter(t=>t.done&&!isTaskVisible(t));
+  const tgl=document.getElementById('tgl-completed');
+  if(tgl)tgl.textContent=UI.showCompleted?`Hide completed (${completed.length})`:`Show completed (${completed.length})`;
+  if(compEl){
+    if(!UI.showCompleted||!completed.length){compEl.style.display='none';}
+    else {
+      compEl.style.display='block';
+      const byDate={};
+      completed.forEach(t=>{const ds=(t.doneAt?new Date(t.doneAt).toISOString().slice(0,10):(t.date||tod()));(byDate[ds]=byDate[ds]||[]).push(t);});
+      const days=Object.keys(byDate).sort().reverse();
+      compEl.innerHTML=`<div class="col-lbl" style="color:var(--muted)">Completed</div>`+days.map(ds=>`
+        <div class="completed-day">
+          <div class="cmp-date">${fmt(ds)}</div>
+          <div class="tcard">${byDate[ds].map(t=>`<div class="ti ${pCls(t.priority||'lo')}" style="opacity:.75"><span style="width:19px;height:19px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="color:#fff;font-size:11px">✓</span></span><span class="tit dn" style="flex:1">${esc(t.text)}</span><button class="btn btn-ghost btn-sm" onclick="undoTask('${t.id}');event.stopPropagation()">Undo</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}');event.stopPropagation()">×</button></div>`).join('')}</div>
+        </div>
+      `).join('');
+    }
+  }
 }
 
 // PEOPLE
-function savePerson(id){const p=S.people.find(x=>x.id===id);if(!p)return;const n=document.getElementById('pp-n-'+id),c=document.getElementById('pp-c-'+id),nt=document.getElementById('pp-note-'+id);if(n?.value?.trim())p.name=n.value.trim();if(c?.value?.trim())p.context=c.value.trim();if(nt?.value?.trim()){p.notes=p.notes||[];p.notes.push({date:tod(),text:nt.value.trim()});p.lastSeen=tod();}svAll();ex={id:null,type:null};rPeople();}
+function savePerson(id){
+  const p=S.people.find(x=>x.id===id);if(!p)return;
+  const g=f=>document.getElementById(f+'-'+id)?.value?.trim();
+  const n=g('pp-n');if(n)p.name=n;
+  const l=g('pp-l');p.lastName=l||'';
+  const ph=g('pp-ph');p.phone=ph||'';
+  const em=g('pp-em');p.email=em||'';
+  const wk=g('pp-wk');p.workplace=wk||'';
+  const mt=g('pp-mt');p.metAt=mt||'';
+  const c=g('pp-c');if(c!==undefined)p.context=c||'';
+  const nt=g('pp-note');if(nt){p.notes=p.notes||[];p.notes.push({date:tod(),text:nt});p.lastSeen=tod();}
+  svAll();ex={id:null,type:null};rPeople();
+}
 function delPerson(id){if(!confirm('Delete this person?'))return;S.people=S.people.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rPeople();}
-function initials(name){return name.split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2);}
+function initials(first,last){const a=(first||'')[0]||'';const b=(last||'')[0]||'';return(a+b).toUpperCase()||'?';}
+function fullName(p){return[p.name,p.lastName].filter(Boolean).join(' ')||'—';}
 function rPeople(){
   const el=document.getElementById('people');if(!el)return;
   const cnt=document.getElementById('ppl-cnt');if(cnt)cnt.textContent=S.people.length?`${S.people.length} saved`:'';
-  el.innerHTML=S.people.length?S.people.map(p=>{const isEx=ex.id===p.id&&ex.type==='person';const recentNotes=(p.notes||[]).slice(-2).reverse();return`<div class="person-card" onclick="toggleEx('person','${p.id}')"><div class="pc-top"><div class="pc-avatar">${esc(initials(p.name))}</div><div><div class="pc-name">${esc(p.name)}</div><div class="pc-ctx">${esc(p.context||'')}</div></div></div>${recentNotes.length?`<div class="pc-notes">${recentNotes.map(n=>`<div class="pc-note"><span class="pc-note-date">${fmt(n.date)}</span>${esc(n.text)}</div>`).join('')}</div>`:''}${p.lastSeen?`<div class="pc-last">Last seen ${fmt(p.lastSeen)}</div>`:''}${isEx?`<div class="pc-exp" onclick="event.stopPropagation()"><input class="inp-e" id="pp-n-${p.id}" value="${esc(p.name)}" placeholder="Name"><input class="inp-e" id="pp-c-${p.id}" value="${esc(p.context||'')}" placeholder="Context / relationship"><textarea class="exp-ta" id="pp-note-${p.id}" rows="2" placeholder="Add a note about this person..."></textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="savePerson('${p.id}')">Save</button><button class="btn btn-danger btn-sm" onclick="delPerson('${p.id}')">Delete</button></div></div>`:''}</div>`;}).join(''):`<div class="no-t">No people yet — mention someone and I'll create a profile</div>`;
+  el.innerHTML=S.people.length?S.people.map(p=>{
+    const isEx=ex.id===p.id&&ex.type==='person';
+    const recentNotes=(p.notes||[]).slice(-2).reverse();
+    const info=[];
+    if(p.metAt)info.push(`<div class="pc-row"><span class="pc-row-lbl">Met at</span><span class="pc-row-v">${esc(p.metAt)}</span></div>`);
+    if(p.workplace)info.push(`<div class="pc-row"><span class="pc-row-lbl">Works at</span><span class="pc-row-v">${esc(p.workplace)}</span></div>`);
+    if(p.phone)info.push(`<div class="pc-row"><span class="pc-row-lbl">Phone</span><span class="pc-row-v"><a href="tel:${esc(p.phone)}" onclick="event.stopPropagation()">${esc(p.phone)}</a></span></div>`);
+    if(p.email)info.push(`<div class="pc-row"><span class="pc-row-lbl">Email</span><span class="pc-row-v"><a href="mailto:${esc(p.email)}" onclick="event.stopPropagation()">${esc(p.email)}</a></span></div>`);
+    return`<div class="person-card" onclick="toggleEx('person','${p.id}')">
+      <div class="pc-top"><div class="pc-avatar">${esc(initials(p.name,p.lastName))}</div><div><div class="pc-name">${esc(fullName(p))}</div><div class="pc-ctx">${esc(p.context||'')}</div></div></div>
+      ${info.length?`<div class="pc-info">${info.join('')}</div>`:''}
+      ${recentNotes.length?`<div class="pc-notes">${recentNotes.map(n=>`<div class="pc-note"><span class="pc-note-date">${fmt(n.date)}</span>${esc(n.text)}</div>`).join('')}</div>`:''}
+      ${p.lastSeen?`<div class="pc-last">Last seen ${fmt(p.lastSeen)}</div>`:''}
+      ${isEx?`<div class="pc-exp" onclick="event.stopPropagation()">
+        <div style="display:flex;gap:8px;margin-bottom:8px"><input class="inp-e" id="pp-n-${p.id}" value="${esc(p.name||'')}" placeholder="First name" style="margin-bottom:0"><input class="inp-e" id="pp-l-${p.id}" value="${esc(p.lastName||'')}" placeholder="Last name" style="margin-bottom:0"></div>
+        <div style="display:flex;gap:8px;margin-bottom:8px"><input class="inp-e" id="pp-ph-${p.id}" value="${esc(p.phone||'')}" placeholder="Phone" style="margin-bottom:0"><input class="inp-e" id="pp-em-${p.id}" value="${esc(p.email||'')}" placeholder="Email" style="margin-bottom:0"></div>
+        <div style="display:flex;gap:8px;margin-bottom:8px"><input class="inp-e" id="pp-wk-${p.id}" value="${esc(p.workplace||'')}" placeholder="Where they work" style="margin-bottom:0"><input class="inp-e" id="pp-mt-${p.id}" value="${esc(p.metAt||'')}" placeholder="Where you know them from" style="margin-bottom:0"></div>
+        <input class="inp-e" id="pp-c-${p.id}" value="${esc(p.context||'')}" placeholder="Relationship / short note">
+        <textarea class="exp-ta" id="pp-note-${p.id}" rows="2" placeholder="Add a new note about this person..."></textarea>
+        <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="savePerson('${p.id}')">Save</button><button class="btn btn-danger btn-sm" onclick="delPerson('${p.id}')">Delete</button></div>
+      </div>`:''}
+    </div>`;
+  }).join(''):`<div class="no-t">No people yet — mention someone and I'll create a profile</div>`;
 }
 
 // BUILDS
