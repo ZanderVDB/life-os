@@ -368,7 +368,9 @@ svg{flex-shrink:0}
 .ti input[type=checkbox]:hover{border-color:var(--text-2)}
 .ti input[type=checkbox]:checked{background:var(--sage);border-color:var(--sage)}
 .ti input[type=checkbox]:checked::after{content:'';position:absolute;left:5px;top:2px;width:5px;height:9px;border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg)}
-.ti.fading{opacity:.55;transition:opacity .4s}
+.ti.fading{opacity:.5;background:var(--surface-2);transition:opacity 4.6s ease, background .3s;animation:taskDone .4s ease}
+.ti.fading .tit{color:var(--muted);text-decoration:line-through}
+@keyframes taskDone{0%{background:var(--sage-bg)}100%{background:var(--surface-2)}}
 .completed-day{margin-bottom:12px}
 .cmp-date{font-size:11px;font-weight:600;color:var(--muted);padding:4px 2px 6px;text-transform:uppercase;letter-spacing:.06em}
 .tit{font-size:13px;flex:1;line-height:1.45;word-break:break-word;color:var(--text)}
@@ -668,10 +670,6 @@ svg{flex-shrink:0}
       <div class="s-sep"></div>
       <div class="s-foot">
         <a href="#settings" data-route-link="settings" class="s-nav-foot" style="display:grid;grid-template-columns:22px 1fr;gap:11px;align-items:center;padding:9px 11px;border-radius:9px;font-size:13px;color:var(--text-2);font-weight:500;text-decoration:none"><span class="ic" style="display:flex;align-items:center;justify-content:center"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
-        <div class="theme-toggle" style="margin-top:4px">
-          <button data-theme-btn="soft" onclick="setTheme('soft')">Soft</button>
-          <button data-theme-btn="studio" onclick="setTheme('studio')">Studio</button>
-        </div>
       </div>
     </div>
   </aside>
@@ -685,10 +683,7 @@ svg{flex-shrink:0}
       <svg width="22" height="22"><use href="#logo"/></svg>
       <span id="mt-title">Life OS</span>
     </div>
-    <div class="theme-toggle">
-      <button data-theme-btn="soft" onclick="setTheme('soft')">Soft</button>
-      <button data-theme-btn="studio" onclick="setTheme('studio')">Studio</button>
-    </div>
+    <div style="width:36px"></div>
   </div>
 
   <!-- MOBILE DRAWER -->
@@ -786,15 +781,18 @@ svg{flex-shrink:0}
         <section>
           <div class="section-hdr">
             <h2>Daily notebook</h2>
-            <div class="right" style="gap:4px">
+            <div class="right" style="gap:6px;flex-wrap:wrap">
+              <input type="search" class="input nb-search" placeholder="Search…" oninput="searchNotebook(this.value)" style="width:160px;padding:6px 10px;font-size:12px">
               <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
-              <span class="cnt" id="dn-date" style="min-width:120px;text-align:center"></span>
+              <span class="cnt" id="dn-date" onclick="pickNotebookDate()" title="Pick a date" style="min-width:140px;text-align:center;cursor:pointer;padding:4px 10px"></span>
+              <input type="date" id="dn-date-picker" style="position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none">
               <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
               <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
               <button class="btn btn-primary btn-sm" onclick="saveDN()">Save</button>
             </div>
           </div>
-          <div class="notebook-wrap">
+          <div id="dn-search-results" style="display:none"></div>
+          <div class="notebook-wrap" id="dn-wrap">
             <textarea class="notebook-ta" id="dn-ta" placeholder="Morning brain dump, intentions for today, reflections, anything on your mind…"></textarea>
           </div>
         </section>
@@ -898,6 +896,7 @@ svg{flex-shrink:0}
           <div class="page-title">Brain</div>
           <div class="page-sub" id="brain-cnt" style="align-self:flex-end;padding-bottom:6px"></div>
           <div class="page-actions">
+            <input type="search" id="brain-search" class="input" placeholder="Search brain…" oninput="searchBrain(this.value)" style="width:200px;padding:7px 11px;font-size:12.5px">
             <button class="btn btn-primary btn-sm" onclick="toggleBrainQA()">+ Add</button>
           </div>
         </div>
@@ -1057,10 +1056,10 @@ svg{flex-shrink:0}
   <div class="modal-body">
     <h3 id="em-title">Edit event</h3>
     <div class="modal-row"><label>Title</label><input class="input" id="em-t" style="width:100%"></div>
-    <div class="modal-row" style="display:flex;gap:10px">
-      <div style="flex:1"><label>Date</label><input class="input" id="em-d" type="date" style="width:100%"></div>
-      <div style="flex:1"><label>Start</label><input class="input" id="em-tm" placeholder="e.g. 10am" style="width:100%"></div>
-      <div style="flex:1"><label>End</label><input class="input" id="em-tm-end" placeholder="e.g. 11am (optional)" style="width:100%"></div>
+    <div class="modal-row"><label>Date</label><input class="input" id="em-d" type="date" style="width:100%"></div>
+    <div class="modal-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Start</label><input class="input" id="em-tm" placeholder="e.g. 10am" style="width:100%;min-width:0"></div>
+      <div><label>End</label><input class="input" id="em-tm-end" placeholder="e.g. 11am (optional)" style="width:100%;min-width:0"></div>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:-6px;margin-bottom:10px">Leave Start blank for an all-day event.</div>
     <div class="modal-row"><label>Description</label><textarea class="ta" id="em-desc" style="width:100%;min-height:70px"></textarea></div>
@@ -1104,6 +1103,9 @@ function setRoute(r,skipHash){
   document.querySelectorAll('[data-route]').forEach(el=>el.classList.toggle('active',el.dataset.route===r));
   document.querySelectorAll('[data-route-link]').forEach(a=>a.classList.toggle('active',a.dataset.routeLink===r));
   const mt=document.getElementById('mt-title');if(mt)mt.textContent=ROUTE_TITLES[r];
+  // Close any open quick-add forms so switching away and back resets state
+  document.querySelectorAll('[id$="-qa"]').forEach(el=>{if(el)el.style.display='none';});
+  ex={id:null,type:null};
   window.scrollTo({top:0,behavior:'instant'});
   if(r==='settings')rSettings();
 }
@@ -1253,33 +1255,54 @@ function bumpH(h){const t=tod(),y=yest();if(h.lastDate===t){h.doneToday=true;ret
 // VOICE
 const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
 let recognition=null,isListening=false;
-async function ensureMicPermission(){
-  if(!navigator.mediaDevices?.getUserMedia)return true;
-  try{const s=await navigator.mediaDevices.getUserMedia({audio:true});s.getTracks().forEach(t=>t.stop());return true;}
-  catch(e){return false;}
-}
-async function toggleVoice(){
+function toggleVoice(){
   const ta=document.getElementById('ai-ta'),btn=document.getElementById('mic-btn'),st=document.getElementById('btm-st');
-  if(!SpeechRec){st.className='ai-st er';st.textContent='Voice input isn\'t supported here. Use Chrome or Edge on desktop, or Safari on iOS.';return;}
-  if(!window.isSecureContext){st.className='ai-st er';st.textContent='Voice input requires HTTPS.';return;}
-  if(isListening){recognition?.stop();return;}
-  const ok=await ensureMicPermission();
-  if(!ok){st.className='ai-st er';st.textContent='Microphone permission denied. Allow mic access in the address-bar icon.';return;}
-  recognition=new SpeechRec();
-  recognition.continuous=false;recognition.interimResults=true;
-  recognition.lang=(navigator.language&&/^en/i.test(navigator.language))?navigator.language:'en-US';
-  recognition.onstart=()=>{isListening=true;btn.classList.add('on');st.textContent='Listening… speak now';st.className='ai-st';};
-  recognition.onresult=e=>{const t=[...e.results].map(r=>r[0].transcript).join('');ta.value=t;ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,110)+'px';};
-  recognition.onend=()=>{isListening=false;btn.classList.remove('on');st.className='ai-st';st.textContent=ta.value.trim()?'Review your message, then press Enter or Update ↗':'';};
-  recognition.onerror=e=>{
+  if(!SpeechRec){st.className='ai-st er';st.textContent='Voice input isn\'t supported here. Use Chrome, Edge, or Safari.';return;}
+  if(!window.isSecureContext){st.className='ai-st er';st.textContent='Voice input requires HTTPS. This needs to run on your Netlify URL.';return;}
+  if(isListening){try{recognition?.stop();}catch(e){}return;}
+  try{
+    recognition=new SpeechRec();
+    recognition.continuous=true;
+    recognition.interimResults=true;
+    recognition.maxAlternatives=1;
+    // en-ZA is unreliable in Chrome's speech service; prefer en-US unless user's browser lang differs
+    const prefLang=navigator.language||'en-US';
+    recognition.lang=/^en-(US|GB|AU|IN|CA|NZ)$/i.test(prefLang)?prefLang:'en-US';
+    let finalText='';
+    recognition.onstart=()=>{
+      isListening=true;btn.classList.add('on');
+      st.className='ai-st';st.textContent='Listening… start speaking';
+    };
+    recognition.onresult=e=>{
+      let interim='';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        const r=e.results[i];
+        if(r.isFinal)finalText+=r[0].transcript;
+        else interim+=r[0].transcript;
+      }
+      ta.value=(finalText+interim).trimStart();
+      ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,110)+'px';
+    };
+    recognition.onend=()=>{
+      isListening=false;btn.classList.remove('on');
+      st.className='ai-st';
+      st.textContent=ta.value.trim()?'Review your message, then press Enter or Update ↗':'Stopped. Tap the mic to try again.';
+    };
+    recognition.onerror=e=>{
+      isListening=false;btn.classList.remove('on');
+      if(e.error==='aborted')return;
+      if(e.error==='no-speech'){st.className='ai-st';st.textContent='Didn\'t catch anything — tap the mic and speak clearly.';return;}
+      if(e.error==='not-allowed'||e.error==='service-not-allowed'){st.className='ai-st er';st.textContent='Microphone blocked. Click the lock icon in the address bar → allow microphone.';return;}
+      if(e.error==='network'){st.className='ai-st er';st.textContent='Voice needs internet — your speech is sent to Google for transcription.';return;}
+      if(e.error==='language-not-supported'){try{recognition.lang='en-US';recognition.start();return;}catch(_){}}
+      if(e.error==='audio-capture'){st.className='ai-st er';st.textContent='No microphone detected.';return;}
+      st.className='ai-st er';st.textContent='Voice error: '+e.error;
+    };
+    recognition.start();
+  }catch(err){
     isListening=false;btn.classList.remove('on');
-    if(e.error==='aborted'||e.error==='no-speech')return;
-    if(e.error==='not-allowed'||e.error==='service-not-allowed'){st.className='ai-st er';st.textContent='Microphone blocked — click the mic/lock icon in the address bar and allow access.';return;}
-    if(e.error==='language-not-supported'){try{recognition.lang='en-US';recognition.start();return;}catch(_){}}
-    st.className='ai-st er';st.textContent='Voice error: '+e.error;
-  };
-  try{recognition.start();}
-  catch(err){st.className='ai-st er';st.textContent='Could not start voice: '+err.message;}
+    st.className='ai-st er';st.textContent='Could not start voice: '+err.message;
+  }
 }
 
 // DAILY NOTE
@@ -1316,6 +1339,44 @@ function goToTodayNotebook(){
   UI.notebookDate=tod();renderNotebook();
 }
 function saveDN(){const ta=document.getElementById('dn-ta');if(!ta)return;S.dayNotes=S.dayNotes||{};S.dayNotes[currentNotebookDate()]=ta.value;svAll();const btn=event?.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1500);}}
+function pickNotebookDate(){
+  const inp=document.getElementById('dn-date-picker');if(!inp)return;
+  // save current before jumping
+  const ta=document.getElementById('dn-ta');
+  if(ta){S.dayNotes=S.dayNotes||{};const curr=currentNotebookDate();if(ta.value.trim())S.dayNotes[curr]=ta.value;svAll();}
+  inp.value=currentNotebookDate();
+  inp.max=tod();
+  inp.onchange=()=>{if(inp.value){UI.notebookDate=inp.value;renderNotebook();}};
+  if(inp.showPicker){try{inp.showPicker();return;}catch(e){}}
+  inp.click();
+}
+function searchNotebook(q){
+  const wrap=document.getElementById('dn-wrap');
+  const res=document.getElementById('dn-search-results');
+  if(!res)return;
+  const query=(q||'').trim().toLowerCase();
+  if(!query){res.style.display='none';res.innerHTML='';if(wrap)wrap.style.display='block';return;}
+  const matches=Object.entries(S.dayNotes||{})
+    .filter(([ds,body])=>(body||'').toLowerCase().includes(query))
+    .sort((a,b)=>b[0].localeCompare(a[0]))
+    .slice(0,20);
+  if(wrap)wrap.style.display='none';
+  res.style.display='block';
+  if(!matches.length){res.innerHTML=`<div class="no-t">No matches.</div>`;return;}
+  res.innerHTML=matches.map(([ds,body])=>{
+    const idx=body.toLowerCase().indexOf(query);
+    const start=Math.max(0,idx-30),end=Math.min(body.length,idx+query.length+60);
+    const snippet=(start>0?'…':'')+esc(body.slice(start,end)).replace(new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'ig'),m=>`<mark style="background:var(--gold-bg);color:var(--text);padding:0 2px;border-radius:3px">${m}</mark>`)+(end<body.length?'…':'');
+    return `<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="setNotebookFromSearch('${ds}')"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px">${esc(new Date(ds+'T12:00:00').toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short',year:'numeric'}))}</div><div style="font-size:13px;line-height:1.5;color:var(--text-2)">${snippet}</div></div>`;
+  }).join('');
+}
+function setNotebookFromSearch(ds){
+  UI.notebookDate=ds;
+  const sr=document.getElementById('dn-search-results');if(sr){sr.style.display='none';sr.innerHTML='';}
+  const wrap=document.getElementById('dn-wrap');if(wrap)wrap.style.display='block';
+  const s=document.querySelector('.nb-search');if(s)s.value='';
+  renderNotebook();
+}
 
 // FOCUS
 function getDailyFocus(){const t=tod();try{const r=JSON.parse(localStorage.getItem('lf_f'));if(r&&r.date===t)return r.items;}catch(e){}return genFocus(t,0);}
@@ -1834,7 +1895,9 @@ function rTasks(){
   const visible=S.tasks.filter(isTaskVisible);
   const wt=visible.filter(t=>t.area==='work'),pt=visible.filter(t=>t.area==='personal');
   const grps={wa:[],tf:[],zm:[],gen:[]};wt.forEach(t=>{const k=grps[t.project]!==undefined?t.project:'gen';grps[k].push(t);});
-  const srt=arr=>[...arr].sort((a,b)=>{if(a.done!==b.done)return a.done?1:-1;return(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3);});
+  // Fading (done but still visible) items keep their priority slot so
+  // ticking doesn't shoot them to the bottom before they disappear.
+  const srt=arr=>[...arr].sort((a,b)=>(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3));
   const mkTi=t=>{
     const isEx=ex.id===t.id&&ex.type==='task';
     const fading=t.done&&t.doneAt;
@@ -2026,19 +2089,27 @@ function rLearn(){
 // IDEAS
 function saveIdea(id){const i=S.ideas.find(x=>x.id===id);if(!i)return;const ti=document.getElementById('i-t-'+id),de=document.getElementById('i-d-'+id);if(ti?.value?.trim())i.title=ti.value.trim();if(de?.value?.trim())i.desc=de.value.trim();svAll();ex={id:null,type:null};rIdeas();}
 function delIdea(id){if(!confirm('Delete this idea?'))return;S.ideas=S.ideas.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rIdeas();}
-function rIdeas(){const el=document.getElementById('ideas');if(!el)return;el.innerHTML=S.ideas.length?[...S.ideas].reverse().map(i=>{const isEx=ex.id===i.id&&ex.type==='idea';return`<div class="ic" onclick="toggleEx('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div>${isEx?`<div class="i-exp" onclick="event.stopPropagation()"><input class="inp-e" id="i-t-${i.id}" value="${esc(i.title)}"><textarea class="exp-ta xl" id="i-d-${i.id}" rows="4">${esc(i.desc)}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveIdea('${i.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delIdea('${i.id}')">Delete</button></div></div>`:''}</div></div>`;}).join(''):`<div class="no-t">No ideas yet — drop one in or dictate it</div>`;}
+function rIdeas(){const el=document.getElementById('ideas');if(!el)return;const list=brainFilter([...S.ideas].reverse(),['title','desc']);el.innerHTML=list.length?list.map(i=>{const isEx=ex.id===i.id&&ex.type==='idea';return`<div class="ic" onclick="toggleEx('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div>${isEx?`<div class="i-exp" onclick="event.stopPropagation()"><input class="inp-e" id="i-t-${i.id}" value="${esc(i.title)}"><textarea class="exp-ta xl" id="i-d-${i.id}" rows="4">${esc(i.desc)}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveIdea('${i.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delIdea('${i.id}')">Delete</button></div></div>`:''}</div></div>`;}).join(''):(UI.brainQuery?`<div class="no-t">No ideas match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No ideas yet — drop one in or dictate it</div>`);}
 
 // RESOURCES
 function saveRes(id){const r=S.resources.find(x=>x.id===id);if(!r)return;const ti=document.getElementById('r-t-'+id),de=document.getElementById('r-d-'+id),ur=document.getElementById('r-u-'+id);if(ti?.value?.trim())r.title=ti.value.trim();if(de?.value?.trim())r.desc=de.value.trim();if(ur)r.url=ur.value.trim();svAll();ex={id:null,type:null};rResources();}
 function delRes(id){if(!confirm('Delete this resource?'))return;S.resources=S.resources.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rResources();}
-function rResources(){const el=document.getElementById('resources');if(!el)return;el.innerHTML=S.resources.length?[...S.resources].reverse().map(r=>{const isEx=ex.id===r.id&&ex.type==='resource';return`<div class="rc" onclick="toggleEx('resource','${r.id}')"><div class="rc-top"><div class="rc-title">${esc(r.title)}</div>${r.tag?`<span class="rc-tag">${esc(r.tag)}</span>`:''}</div>${r.desc?`<div class="rc-desc">${esc(r.desc)}</div>`:''} ${r.url?`<a class="rc-url" href="${esc(r.url)}" target="_blank" onclick="event.stopPropagation()">${esc(r.url)}</a>`:''} ${isEx?`<div class="r-exp" onclick="event.stopPropagation()"><input class="inp-e" id="r-t-${r.id}" value="${esc(r.title)}"><input class="inp-e" id="r-u-${r.id}" value="${esc(r.url||'')}" placeholder="URL"><textarea class="exp-ta" id="r-d-${r.id}" rows="3">${esc(r.desc||'')}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveRes('${r.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delRes('${r.id}')">Delete</button></div></div>`:''}</div>`;}).join(''):`<div class="no-t">No resources saved</div>`;}
+function rResources(){const el=document.getElementById('resources');if(!el)return;const list=brainFilter([...S.resources].reverse(),['title','desc','url','tag']);el.innerHTML=list.length?list.map(r=>{const isEx=ex.id===r.id&&ex.type==='resource';return`<div class="rc" onclick="toggleEx('resource','${r.id}')"><div class="rc-top"><div class="rc-title">${esc(r.title)}</div>${r.tag?`<span class="rc-tag">${esc(r.tag)}</span>`:''}</div>${r.desc?`<div class="rc-desc">${esc(r.desc)}</div>`:''} ${r.url?`<a class="rc-url" href="${esc(r.url)}" target="_blank" onclick="event.stopPropagation()">${esc(r.url)}</a>`:''} ${isEx?`<div class="r-exp" onclick="event.stopPropagation()"><input class="inp-e" id="r-t-${r.id}" value="${esc(r.title)}"><input class="inp-e" id="r-u-${r.id}" value="${esc(r.url||'')}" placeholder="URL"><textarea class="exp-ta" id="r-d-${r.id}" rows="3">${esc(r.desc||'')}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveRes('${r.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delRes('${r.id}')">Delete</button></div></div>`:''}</div>`;}).join(''):(UI.brainQuery?`<div class="no-t">No resources match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No resources saved</div>`);}
 
 // NOTES
 function saveNote(id){const n=S.notes.find(x=>x.id===id);if(!n)return;const ti=document.getElementById('n-t-'+id),bo=document.getElementById('n-b-'+id);if(ti?.value?.trim())n.title=ti.value.trim();if(bo?.value?.trim())n.body=bo.value.trim();svAll();ex={id:null,type:null};rNotes();}
 function delNote(id){if(!confirm('Delete this note?'))return;S.notes=S.notes.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rNotes();}
-function rNotes(){const el=document.getElementById('notes');if(!el)return;el.innerHTML=S.notes.length?S.notes.map(n=>{const isEx=ex.id===n.id&&ex.type==='note';return`<div class="nc" onclick="toggleEx('note','${n.id}')"><div class="nct">${esc(n.title)}</div><div class="ncb">${esc(n.body)}</div>${isEx?`<div class="n-exp" onclick="event.stopPropagation()"><input class="inp-e" id="n-t-${n.id}" value="${esc(n.title)}" style="font-size:12px"><textarea class="exp-ta xl" id="n-b-${n.id}" rows="4">${esc(n.body)}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveNote('${n.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delNote('${n.id}')">Delete</button></div></div>`:''}</div>`;}).join(''):`<div class="no-t">No notes yet</div>`;}
+function rNotes(){const el=document.getElementById('notes');if(!el)return;const list=brainFilter(S.notes,['title','body']);el.innerHTML=list.length?list.map(n=>{const isEx=ex.id===n.id&&ex.type==='note';return`<div class="nc" onclick="toggleEx('note','${n.id}')"><div class="nct">${esc(n.title)}</div><div class="ncb">${esc(n.body)}</div>${isEx?`<div class="n-exp" onclick="event.stopPropagation()"><input class="inp-e" id="n-t-${n.id}" value="${esc(n.title)}" style="font-size:12px"><textarea class="exp-ta xl" id="n-b-${n.id}" rows="4">${esc(n.body)}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveNote('${n.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delNote('${n.id}')">Delete</button></div></div>`:''}</div>`;}).join(''):(UI.brainQuery?`<div class="no-t">No notes match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No notes yet</div>`);}
 
-function setBrainTab(t){UI.brainTab=t;document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['ideas','resources','notes'].forEach(x=>{const el=document.getElementById('brain-'+x+'-panel');if(el)el.style.display=x===t?'block':'none';});const brainCnt=document.getElementById('brain-cnt');if(brainCnt)brainCnt.textContent=t==='ideas'?`${S.ideas.length} ideas`:t==='resources'?`${S.resources.length} resources`:`${S.notes.length} notes`;}
+function setBrainTab(t){UI.brainTab=t;document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['ideas','resources','notes'].forEach(x=>{const el=document.getElementById('brain-'+x+'-panel');if(el)el.style.display=x===t?'block':'none';});const brainCnt=document.getElementById('brain-cnt');if(brainCnt)brainCnt.textContent=t==='ideas'?`${S.ideas.length} ideas`:t==='resources'?`${S.resources.length} resources`:`${S.notes.length} notes`;const s=document.getElementById('brain-search');if(s&&s.value)searchBrain(s.value);}
+function searchBrain(q){
+  UI.brainQuery=(q||'').trim().toLowerCase();
+  rIdeas();rResources();rNotes();
+}
+function brainFilter(items,fields){
+  if(!UI.brainQuery)return items;
+  return items.filter(it=>fields.some(f=>((it[f]||'')+'').toLowerCase().includes(UI.brainQuery)));
+}
 
 // SETTINGS render
 function rSettings(){
