@@ -1195,7 +1195,11 @@ const auth=firebase.auth(),db=firebase.firestore();
 // Persist the Firebase session in IndexedDB so closing and reopening the app
 // (phone, tablet, PWA, desktop) keeps you signed in. Must be set before any
 // auth operation so it applies to the initial state check.
-auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e=>console.warn('[auth] persistence:',e));
+const persistenceReady=auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+  .then(()=>console.log('[auth] persistence=LOCAL set'))
+  .catch(e=>console.warn('[auth] persistence failed:',e));
+// Firestore offline cache so data loads even with flaky network
+try{db.enablePersistence({synchronizeTabs:true}).catch(e=>console.warn('[db] persistence:',e.code||e.message));}catch(e){}
 let CU=null,ST=null,SP=null,authResolved=false;
 
 // THEME
@@ -1272,19 +1276,27 @@ setTimeout(()=>{if(!authResolved){console.warn('[auth] timeout — showing login
 let gTok=null;let gcCache={key:'',events:[]};
 function makeGProvider(){const p=new firebase.auth.GoogleAuthProvider();p.addScope('https://www.googleapis.com/auth/calendar');return p;}
 function isPopupIssue(err){const c=err&&err.code||'';return c==='auth/popup-blocked'||c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request'||c==='auth/operation-not-supported-in-this-environment';}
-function signInGoogle(){
+async function signInGoogle(){
+  try{await persistenceReady;}catch(e){}
   const p=makeGProvider();
-  auth.signInWithPopup(p)
-    .then(r=>{if(r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);}catch(e){}}})
-    .catch(e=>{
-      if(isPopupIssue(e)){try{sessionStorage.setItem('los_redirect','1');}catch(_){}auth.signInWithRedirect(p).catch(e2=>alert('Sign in failed: '+e2.message));}
-      else alert('Sign in failed: '+e.message);
-    });
+  try{
+    const r=await auth.signInWithPopup(p);
+    if(r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);}catch(e){}}
+  }catch(e){
+    if(isPopupIssue(e)){
+      try{sessionStorage.setItem('los_redirect','1');}catch(_){}
+      try{await auth.signInWithRedirect(p);}catch(e2){alert('Sign in failed: '+e2.message);}
+    } else {
+      alert('Sign in failed: '+e.message);
+    }
+  }
 }
 function doSignOut(){if(confirm('Sign out?'))auth.signOut();}
 async function ensureGTok(){
   if(gTok)return gTok;
   try{const s=localStorage.getItem('los_gat');if(s){gTok=s;return gTok;}}catch(e){}
+  try{await persistenceReady;}catch(e){}
+  if(!auth.currentUser){console.warn('[auth] ensureGTok called with no user');return null;}
   const p=makeGProvider();
   try{const r=await auth.currentUser.reauthenticateWithPopup(p);if(r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);}catch(e){}return gTok;}}
   catch(e){if(isPopupIssue(e)){try{await auth.currentUser.reauthenticateWithRedirect(p);}catch(_){}}else console.warn('GCal token',e);}
