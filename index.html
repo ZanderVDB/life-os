@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f4eee5">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Life OS">
 <link rel="manifest" href="manifest.json">
@@ -867,6 +868,10 @@ svg{flex-shrink:0}
             <button class="btn btn-primary btn-sm" onclick="openNewEvent()">+ New event</button>
           </div>
         </div>
+        <div id="gcal-notice" style="display:none;background:var(--peach-bg);border:1px solid var(--border);border-left:3px solid var(--peach);border-radius:10px;padding:11px 14px;font-size:12.5px;line-height:1.5;color:var(--text-2);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="flex:1;min-width:200px"><strong style="color:var(--peach)">Google Calendar not connected.</strong> Your events won't show here until you connect.</span>
+          <button class="btn btn-primary btn-sm" onclick="reconnectGCalAndRefresh()">Connect Google Calendar</button>
+        </div>
         <div class="cal-card">
           <div class="cal-hdr">
             <div class="cal-nav">
@@ -1049,6 +1054,7 @@ svg{flex-shrink:0}
             </div>
             <div class="setting-right">
               <span class="key-mask" id="gcal-status">—</span>
+              <button class="btn btn-sm" id="gcal-connect-btn" onclick="reconnectGCalAndRefresh()">Connect</button>
             </div>
           </div>
         </div>
@@ -1310,27 +1316,59 @@ async function signInGoogle(){
   }
 }
 function doSignOut(){if(confirm('Sign out?'))auth.signOut();}
-async function ensureGTok(){
+// Silent token lookup — never prompts. Safe to call during render.
+function getGCalToken(){
   if(gTok)return gTok;
   try{const s=localStorage.getItem('los_gat');if(s){gTok=s;return gTok;}}catch(e){}
-  try{await persistenceReady;}catch(e){}
-  if(!auth.currentUser){console.warn('[auth] ensureGTok called with no user');return null;}
-  const p=makeGProvider();
-  try{const r=await auth.currentUser.reauthenticateWithPopup(p);if(r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);}catch(e){}return gTok;}}
-  catch(e){if(isPopupIssue(e)){try{await auth.currentUser.reauthenticateWithRedirect(p);}catch(_){}}else console.warn('GCal token',e);}
   return null;
 }
+// Back-compat shim: ensureGTok is still called from several places.
+// It no longer triggers popups on its own — callers that want the popup
+// must call connectGoogleCalendar() from a user gesture.
+async function ensureGTok(){return getGCalToken();}
+// User-initiated re-auth. Deduped so parallel clicks share one popup.
+let _connectingGCal=null;
+async function connectGoogleCalendar(){
+  if(_connectingGCal)return _connectingGCal;
+  _connectingGCal=(async()=>{
+    try{
+      try{await persistenceReady;}catch(e){}
+      if(!auth.currentUser){alert('Sign in first, then Connect Google Calendar.');return null;}
+      const p=makeGProvider();
+      try{
+        const r=await auth.currentUser.reauthenticateWithPopup(p);
+        if(r.credential?.accessToken){
+          gTok=r.credential.accessToken;
+          try{localStorage.setItem('los_gat',gTok);}catch(e){}
+          return gTok;
+        }
+      }catch(e){
+        if(isPopupIssue(e)){
+          try{await auth.currentUser.reauthenticateWithRedirect(p);}catch(_){}
+        } else {
+          console.warn('[gcal] connect failed:',e.code||e.message);
+          alert('Calendar connection failed: '+(e.message||e.code));
+        }
+      }
+    }finally{setTimeout(()=>{_connectingGCal=null;},100);}
+    return null;
+  })();
+  return _connectingGCal;
+}
+async function reconnectGCalAndRefresh(){const t=await connectGoogleCalendar();if(t){gcCache={key:'',events:[]};render();rSettings();}}
 auth.getRedirectResult().then(r=>{
   if(r&&r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);sessionStorage.removeItem('los_redirect');}catch(e){}}
 }).catch(e=>{if(e&&e.code)console.warn('Redirect result:',e.code,e.message);});
 
 async function fetchGCal(start,end){
-  const tok=await ensureGTok();if(!tok)return[];
-  const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime&maxResults=100`,{headers:{Authorization:'Bearer '+tok}});
-  if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}return fetchGCal(start,end);}
-  if(!r.ok)return[];
-  const d=await r.json();
-  return(d.items||[]).map(ev=>({id:ev.id,title:ev.summary||'(No title)',description:ev.description||'',date:(ev.start.dateTime||ev.start.date||'').slice(0,10),time:ev.start.dateTime?ev.start.dateTime.slice(11,16):'',allDay:!!ev.start.date,gcal:true}));
+  const tok=getGCalToken();if(!tok)return[];
+  try{
+    const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime&maxResults=100`,{headers:{Authorization:'Bearer '+tok}});
+    if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}return[];}
+    if(!r.ok)return[];
+    const d=await r.json();
+    return(d.items||[]).map(ev=>({id:ev.id,title:ev.summary||'(No title)',description:ev.description||'',date:(ev.start.dateTime||ev.start.date||'').slice(0,10),time:ev.start.dateTime?ev.start.dateTime.slice(11,16):'',allDay:!!ev.start.date,gcal:true}));
+  }catch(e){console.warn('[gcal] fetch failed:',e.message);return[];}
 }
 async function getGCForMonth(y,m){
   const key=`${y}-${m}`;if(gcCache.key===key)return gcCache.events;
@@ -1372,7 +1410,7 @@ function applyAdvancedFields(body,opts){
   }
 }
 async function createGCEvent(title,date,time,desc='',endTime='',opts={}){
-  const tok=await ensureGTok();if(!tok)return null;
+  const tok=getGCalToken();if(!tok)return null;
   const tz=opts.timeZone||'Africa/Johannesburg';
   const allDay=opts.allDay||!time;
   let body={summary:title,description:desc||''};
@@ -1391,7 +1429,7 @@ async function createGCEvent(title,date,time,desc='',endTime='',opts={}){
   return null;
 }
 async function updateGCEvent(id,title,date,time,desc='',endTime='',opts={}){
-  const tok=await ensureGTok();if(!tok)return false;
+  const tok=getGCalToken();if(!tok)return false;
   const tz=opts.timeZone||'Africa/Johannesburg';
   const allDay=opts.allDay||!time;
   let body={summary:title,description:desc||''};
@@ -1410,7 +1448,7 @@ async function updateGCEvent(id,title,date,time,desc='',endTime='',opts={}){
   return r.ok;
 }
 async function deleteGCEvent(id){
-  const tok=await ensureGTok();if(!tok)return false;
+  const tok=getGCalToken();if(!tok)return false;
   const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(id)}`,{method:'DELETE',headers:{Authorization:'Bearer '+tok}});
   if(r.ok||r.status===410)gcCache={key:'',events:[]};
   return r.ok||r.status===410;
@@ -1966,6 +2004,9 @@ async function rCal(){
   const ttl=document.getElementById('cal-ttl');if(ttl)ttl.textContent=getCalTitle();
   // Highlight only view-buttons (not mode-buttons which also use .cv)
   document.querySelectorAll('.cv-row:not(#cal-mode-row) .cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
+  // Show/hide the "connect calendar" banner based on token state
+  const notice=document.getElementById('gcal-notice');
+  if(notice)notice.style.display=getGCalToken()?'none':'flex';
   const today=new Date();
   const y=UI.calDate.getFullYear(),m=UI.calDate.getMonth();
   if(UI.calMode==='habits'){return rCalHabits(el,today,y,m);}
@@ -2177,7 +2218,7 @@ async function openEventEdit(payload){
     let endTime='';let allDay=false;let recurrence='none';let reminderMin='none';let timeZone='Africa/Johannesburg';
     if(p.type==='gc'){
       try{
-        const tok=await ensureGTok();
+        const tok=getGCalToken();
         if(tok){
           const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(d.id)}`,{headers:{Authorization:'Bearer '+tok}});
           if(r.ok){
@@ -2570,7 +2611,10 @@ function rSettings(){
   const km=document.getElementById('key-mask');
   if(km){const k=getKey();km.textContent=k?(k.slice(0,10)+'…'+k.slice(-4)):'Not set';}
   const gs=document.getElementById('gcal-status');
-  if(gs){let tok=null;try{tok=localStorage.getItem('los_gat');}catch(e){}gs.textContent=tok?'Connected':'Not connected';}
+  const cb=document.getElementById('gcal-connect-btn');
+  let tok=null;try{tok=localStorage.getItem('los_gat');}catch(e){}
+  if(gs)gs.textContent=tok?'Connected':'Not connected';
+  if(cb)cb.textContent=tok?'Reconnect':'Connect';
   updateInstallUI();
 }
 
