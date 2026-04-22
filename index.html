@@ -1593,7 +1593,7 @@ async function toggleVoice(){
     recognition.lang='en-US';
     vlog('recognition created, lang='+recognition.lang);
     let finalText='';voiceStartedAt=Date.now();voiceHeardSound=false;
-    let gotStart=false,autoRetried=false;
+    let gotStart=false;
     recognition.onstart=()=>{gotStart=true;isListening=true;btn.classList.add('on');vlog('onstart');vstatus('🎙 Listening — speak now');};
     recognition.onaudiostart=()=>vlog('onaudiostart');
     recognition.onsoundstart=()=>{voiceHeardSound=true;vlog('onsoundstart');};
@@ -1624,18 +1624,27 @@ async function toggleVoice(){
       isListening=false;btn.classList.remove('on');
       const elapsed=Math.round((Date.now()-voiceStartedAt)/1000);
       vlog('onend, elapsed='+elapsed+'s, gotStart='+gotStart+', heardSound='+voiceHeardSound);
-      if(!gotStart&&!autoRetried){
-        // Classic Chrome/Windows quirk — the first start() silently aborts. Retry once after a small delay.
-        autoRetried=true;vlog('auto-retrying after silent abort');
-        setTimeout(()=>{try{recognition.start();}catch(e){vstatus('Retry failed: '+e.message,true);}},250);
+      if(!gotStart&&elapsed<2){
+        // Silent abort. Usually means Windows/OS mic privacy is blocking, or
+        // another app has the mic, or the speech-service endpoint is blocked.
+        vstatus('Mic stopped instantly. Windows: Start → Settings → Privacy & Security → Microphone → turn on "Let apps access your microphone" AND "Let desktop apps access your microphone". Close any other app using the mic (Zoom, Teams, Discord). Then tap the mic again.',true);
         return;
       }
-      if(!voiceHeardSound&&elapsed<2){vstatus('Mic stopped instantly. On Windows: Settings → Privacy → Microphone → Allow apps + allow Chrome. Or another app may be using it.',true);}
-      else if(ta.value.trim())vstatus('Stopped. Review and press Enter or Update ↗.');
+      if(!voiceHeardSound&&elapsed<2){vstatus('Mic stopped instantly with no audio. Check mic is plugged in and not muted.',true);return;}
+      if(ta.value.trim())vstatus('Stopped. Review and press Enter or Update ↗.');
       else vstatus('Stopped. Tap mic to try again.');
     };
-    recognition.start();
-    vlog('start() called');
+    try{recognition.start();vlog('start() called');}
+    catch(e){
+      // "already started" means a previous recognition is still running — stop it and let the user retry
+      vlog('start() threw: '+e.message);
+      if(/already started/i.test(e.message||'')){
+        try{recognition.stop();}catch(_){}
+        vstatus('Previous voice session still active — tap the mic again.');
+      } else {
+        vstatus('Could not start voice: '+e.message,true);
+      }
+    }
   }catch(err){
     isListening=false;btn.classList.remove('on');
     vlog('start failed: '+err.name+' '+err.message);
