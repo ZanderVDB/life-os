@@ -443,20 +443,41 @@ svg{flex-shrink:0}
 .st-f{background:var(--lavender-bg);color:var(--lavender)}
 .st-b{background:var(--surface-2);color:var(--muted)}
 
-/* ━━━ LEARNING ━━━ */
-.lg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px}
-.lc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 15px;border-left:3px solid var(--emerald);cursor:pointer;transition:border-color .15s}
-.lc:hover{border-color:var(--border-strong)}
-.lsk{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--emerald);margin-bottom:8px}
-.lnum{font-size:30px;font-weight:600;line-height:1;margin-bottom:3px;color:var(--text);font-family:'Playfair Display',serif}
-.lnum.z{font-size:18px;color:var(--muted-2)}
-.lunit{font-size:11px;color:var(--muted);margin-bottom:8px}
-.lnote{font-size:12px;color:var(--text-2);line-height:1.55;border-top:1px solid var(--border);padding-top:8px}
-.l-exp{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-.l-ctr{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.l-adj{width:28px;height:28px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
-.l-adj:hover{background:var(--surface-hover);color:var(--text)}
-.l-val{font-size:18px;font-weight:600;color:var(--text);min-width:32px;text-align:center;font-family:'Playfair Display',serif}
+/* ━━━ LEARNING (daily-check) ━━━ */
+.lg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.lc2{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;border-left:3px solid var(--emerald);display:flex;flex-direction:column;gap:12px}
+.lc2-hdr{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.lc2-skill{font-family:'Playfair Display',serif;font-size:17px;font-weight:500;color:var(--text);line-height:1.2}
+.lc2-del{background:transparent;border:none;color:var(--muted-2);font-size:16px;cursor:pointer;padding:2px 6px;border-radius:6px}
+.lc2-del:hover{background:var(--red-bg);color:var(--red)}
+.lc2-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.lc2-stat{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 8px;text-align:center}
+.lc2-stat .s-val{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;color:var(--text);line-height:1;display:block}
+.lc2-stat .s-val.z{color:var(--muted-2)}
+.lc2-stat .s-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:4px;display:block}
+.lc2-check{width:100%;padding:10px 14px;font-size:13px;border-radius:10px;font-weight:600}
+.lc2-check.done{background:var(--sage);color:#fff;border-color:var(--sage)}
+.lc2-check.done:hover{opacity:.9;background:var(--sage)}
+.lc2-cal-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px}
+.lc2-cal-ttl{font-size:11px;font-weight:600;color:var(--text);letter-spacing:.02em}
+.lc2-cal-nav{display:flex;gap:4px}
+.lc2-week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.lw-cell{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;transition:all .12s;display:flex;flex-direction:column;gap:2px;min-height:52px;justify-content:center}
+.lw-cell:hover{border-color:var(--border-strong)}
+.lw-cell.done{background:var(--sage-bg);border-color:var(--sage)}
+.lw-cell.done .lw-dnum{color:var(--sage)}
+.lw-cell.today{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.lw-cell.future{opacity:.35;pointer-events:none}
+.lw-dname{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.05em}
+.lw-dnum{font-size:13px;font-weight:600;color:var(--text);font-family:'Playfair Display',serif}
+.lc2-notes{font-size:12px;color:var(--text-2);line-height:1.5;border-top:1px solid var(--border);padding-top:10px;margin-top:2px}
+.lc2-notes-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:5px}
+.lc2-exp{display:flex;flex-direction:column;gap:8px}
+/* compact Today snapshot */
+.learn-snap-card.done{background:var(--sage-bg);border-color:var(--sage)}
+.learn-snap-card.done .lsc-sk{color:var(--sage)}
+.lsc-tick{font-size:10px;color:var(--muted);margin-top:6px;font-weight:600}
+.learn-snap-card.done .lsc-tick{color:var(--sage)}
 
 /* ━━━ BRAIN ━━━ */
 .tabs{display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:3px;margin-bottom:16px;width:fit-content}
@@ -1434,12 +1455,13 @@ function rTodayLearn(){
   const el=document.getElementById('today-learn');if(!el)return;
   if(!S.learning.length){el.innerHTML=`<div class="no-t">No skills yet — add one on the Learning tab.</div>`;return;}
   el.innerHTML=S.learning.map(l=>{
-    const n=l.streak>0?l.streak:l.total||null;
-    const u=n!==null?(l.streak>=1?'day streak':'sessions'):'not started';
-    return `<div class="learn-snap-card" onclick="setRoute('learning')">
+    const stats=computeLearnStats(l);
+    const doneToday=learnCheckedSet(l).has(tod());
+    return `<div class="learn-snap-card${doneToday?' done':''}" onclick="toggleLearnToday('${l.id}')">
       <div class="lsc-sk">${esc(l.skill)}</div>
-      <div class="lsc-val${n===null?' z':''}">${n!==null?n:'—'}</div>
-      <div class="lsc-unit">${u}</div>
+      <div class="lsc-val${stats.current===0?' z':''}">${stats.current||'—'}</div>
+      <div class="lsc-unit">${stats.current?'day streak':'not yet'}</div>
+      <div class="lsc-tick">${doneToday?'✓ Done today':'Tap to mark done'}</div>
     </div>`;
   }).join('');
 }
@@ -1904,11 +1926,102 @@ function rBuilds(){
   el.innerHTML=sorted.map(b=>{const isEx=ex.id===b.id&&ex.type==='build';return`<div class="bc ${b.status||'future'}" onclick="toggleEx('build','${b.id}')"><div class="bc-tag">${lbl[b.status]||'Future'}</div><div class="bc-title">${esc(b.title)}</div><div class="bc-desc">${esc(b.desc)}</div>${isEx?`<div class="bc-exp" onclick="event.stopPropagation()"><input class="inp-e" id="b-t-${b.id}" value="${esc(b.title)}" style="font-size:14px;font-weight:600"><textarea class="exp-ta xl" id="b-d-${b.id}" rows="5">${esc(b.desc)}</textarea><div class="st-row"><button class="stb st-a${b.status==='active'?' on':''}" onclick="setStatus('${b.id}','active')">Building now</button><button class="stb st-f${b.status==='future'?' on':''}" onclick="setStatus('${b.id}','future')">Future</button><button class="stb st-b${b.status==='background'?' on':''}" onclick="setStatus('${b.id}','background')">Background</button></div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveBuild('${b.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delBuild('${b.id}')">Delete</button></div></div>`:''}</div>`;}).join('');
 }
 
-// LEARNING
-function adjLearn(id,dir){const l=S.learning.find(x=>x.id===id);if(!l)return;if(dir>0){bump(l);}else{l.total=Math.max(0,(l.total||1)-1);l.streak=Math.max(0,(l.streak||0)-(l.lastDate===tod()?1:0));if(l.lastDate===tod())l.lastDate=yest();}svAll();rLearn();}
-function saveLearn(id){const l=S.learning.find(x=>x.id===id);if(!l)return;const ta=document.getElementById('l-n-'+id);if(ta?.value?.trim()){l.note=ta.value.trim();l.entries=l.entries||[];l.entries.push({date:tod(),content:ta.value.trim()});}svAll();ex={id:null,type:null};rLearn();}
-function delLearn(id){if(!confirm('Delete this skill?'))return;S.learning=S.learning.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rLearn();}
-function rLearn(){const el=document.getElementById('learn');if(!el)return;el.innerHTML=S.learning.map(l=>{const isEx=ex.id===l.id&&ex.type==='learn';const n=l.streak>0?l.streak:l.total||null,u=n!==null?(l.streak>=1?'day streak':'total sessions'):'';const note=l.entries?.slice(-1)[0]?.content||l.note||'';return`<div class="lc" onclick="toggleEx('learn','${l.id}')"><div class="lsk">${esc(l.skill)}</div><div class="lnum${n===null?' z':''}">${n!==null?n:'—'}</div><div class="lunit">${u||'Not started yet'}</div><div class="lnote">${esc(note||'Click to update')}</div>${isEx?`<div class="l-exp" onclick="event.stopPropagation()"><div class="l-ctr"><button class="l-adj" onclick="adjLearn('${l.id}',-1)">−</button><span class="l-val">${l.total||0}</span><button class="l-adj" onclick="adjLearn('${l.id}',1)">+</button><span style="font-size:11px;color:var(--muted);margin-left:4px">sessions</span></div><textarea class="exp-ta xl" id="l-n-${l.id}" rows="4" placeholder="What did you practice or learn?">${esc(note)}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveLearn('${l.id}')">Save note</button><button class="btn btn-danger btn-sm" onclick="delLearn('${l.id}')">Delete</button></div></div>`:''}</div>`;}).join('');}
+// LEARNING — daily-check model
+function learnCheckedSet(l){return new Set(l.checkedDates||[]);}
+function computeLearnStats(l){
+  const set=learnCheckedSet(l);
+  if(!set.size)return {current:0,max:0,total:0};
+  const today=new Date();const todayStr=today.toISOString().slice(0,10);
+  const y=new Date(today);y.setDate(y.getDate()-1);const yestStr=y.toISOString().slice(0,10);
+  let current=0;
+  if(set.has(todayStr)||set.has(yestStr)){
+    let cursor=new Date(today);
+    if(!set.has(todayStr))cursor.setDate(cursor.getDate()-1);
+    while(set.has(cursor.toISOString().slice(0,10))){current++;cursor.setDate(cursor.getDate()-1);}
+  }
+  const sorted=[...set].sort();let max=0;let run=0;let prev=null;
+  sorted.forEach(ds=>{const d=new Date(ds+'T12:00:00');if(prev){const diff=Math.round((d-prev)/86400000);run=diff===1?run+1:1;}else run=1;if(run>max)max=run;prev=d;});
+  return {current,max,total:set.size};
+}
+function toggleLearnDate(id,ds){
+  const l=S.learning.find(x=>x.id===id);if(!l)return;
+  if(ds>tod())return; // no future checks
+  l.checkedDates=l.checkedDates||[];
+  if(l.checkedDates.includes(ds))l.checkedDates=l.checkedDates.filter(x=>x!==ds);
+  else l.checkedDates.push(ds);
+  svAll();rLearn();rTodayLearn();
+}
+function toggleLearnToday(id){toggleLearnDate(id,tod());}
+function getLearnWeekStart(id){
+  UI.learnWeek=UI.learnWeek||{};
+  if(UI.learnWeek[id])return new Date(UI.learnWeek[id]);
+  const today=new Date();const s=new Date(today);s.setDate(today.getDate()-today.getDay());s.setHours(0,0,0,0);
+  UI.learnWeek[id]=s.toISOString().slice(0,10);return s;
+}
+function navLearnWeek(id,dir){
+  const s=getLearnWeekStart(id);s.setDate(s.getDate()+dir*7);
+  UI.learnWeek=UI.learnWeek||{};UI.learnWeek[id]=s.toISOString().slice(0,10);
+  rLearn();
+}
+function resetLearnWeek(id){UI.learnWeek=UI.learnWeek||{};delete UI.learnWeek[id];rLearn();}
+function renderLearnWeek(l){
+  const start=getLearnWeekStart(l.id);
+  const set=learnCheckedSet(l);
+  const today=new Date();const todayStr=tod();
+  const end=new Date(start);end.setDate(start.getDate()+6);
+  const labelStart=start.toLocaleDateString('en-ZA',{day:'numeric',month:'short'});
+  const labelEnd=end.toLocaleDateString('en-ZA',{day:'numeric',month:'short'});
+  let h=`<div class="lc2-cal-hdr">
+    <div class="lc2-cal-nav"><button class="carr" onclick="navLearnWeek('${l.id}',-1)">‹</button></div>
+    <div class="lc2-cal-ttl">${labelStart} – ${labelEnd}</div>
+    <div class="lc2-cal-nav"><button class="carr" onclick="navLearnWeek('${l.id}',1)">›</button><button class="btn btn-ghost btn-sm" onclick="resetLearnWeek('${l.id}')" style="padding:4px 8px;font-size:10px">This week</button></div>
+  </div><div class="lc2-week">`;
+  for(let i=0;i<7;i++){
+    const d=new Date(start);d.setDate(start.getDate()+i);
+    const ds=d.toISOString().slice(0,10);
+    const done=set.has(ds);
+    const isToday=d.toDateString()===today.toDateString();
+    const isFuture=ds>todayStr;
+    h+=`<div class="lw-cell${done?' done':''}${isToday?' today':''}${isFuture?' future':''}" onclick="${isFuture?'':`toggleLearnDate('${l.id}','${ds}')`}">
+      <div class="lw-dname">${['Su','Mo','Tu','We','Th','Fr','Sa'][i]}</div>
+      <div class="lw-dnum">${d.getDate()}</div>
+    </div>`;
+  }
+  h+=`</div>`;
+  return h;
+}
+function saveLearn(id){
+  const l=S.learning.find(x=>x.id===id);if(!l)return;
+  const ta=document.getElementById('l-n-'+id);
+  if(ta?.value?.trim()){l.note=ta.value.trim();l.entries=l.entries||[];l.entries.push({date:tod(),content:ta.value.trim()});}
+  svAll();ex={id:null,type:null};rLearn();
+}
+function delLearn(id){if(!confirm('Delete this skill?'))return;S.learning=S.learning.filter(x=>x.id!==id);svAll();ex={id:null,type:null};if(UI.learnWeek)delete UI.learnWeek[id];rLearn();}
+function rLearn(){
+  const el=document.getElementById('learn');if(!el)return;
+  if(!S.learning.length){el.innerHTML=`<div class="no-t">Add a skill you'd like to build a daily habit around.</div>`;return;}
+  el.innerHTML=S.learning.map(l=>{
+    const stats=computeLearnStats(l);
+    const doneToday=learnCheckedSet(l).has(tod());
+    const isEx=ex.id===l.id&&ex.type==='learn';
+    const lastNote=l.entries?.slice(-1)[0]?.content||l.note||'';
+    return `<div class="lc2">
+      <div class="lc2-hdr"><div class="lc2-skill">${esc(l.skill)}</div><button class="lc2-del" onclick="toggleEx('learn','${l.id}')" title="${isEx?'Close notes':'Open notes'}">${isEx?'×':'✎'}</button></div>
+      <div class="lc2-stats">
+        <div class="lc2-stat"><span class="s-val${stats.current===0?' z':''}">${stats.current||'—'}</span><span class="s-lbl">Current</span></div>
+        <div class="lc2-stat"><span class="s-val${stats.max===0?' z':''}">${stats.max||'—'}</span><span class="s-lbl">Max streak</span></div>
+        <div class="lc2-stat"><span class="s-val${stats.total===0?' z':''}">${stats.total||'—'}</span><span class="s-lbl">Total days</span></div>
+      </div>
+      <button class="btn btn-sm lc2-check${doneToday?' done':''}" onclick="toggleLearnToday('${l.id}')">${doneToday?'✓ Done today — tap to undo':'Mark today as done'}</button>
+      ${renderLearnWeek(l)}
+      ${isEx?`<div class="lc2-exp">
+        <textarea class="exp-ta xl" id="l-n-${l.id}" rows="3" placeholder="What did you practice or learn today?"></textarea>
+        <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="saveLearn('${l.id}')">Add note</button><button class="btn btn-danger btn-sm" onclick="delLearn('${l.id}')">Delete skill</button></div>
+      </div>`:''}
+      ${lastNote&&!isEx?`<div class="lc2-notes"><div class="lc2-notes-lbl">Last note</div>${esc(lastNote)}</div>`:''}
+    </div>`;
+  }).join('');
+}
 
 // IDEAS
 function saveIdea(id){const i=S.ideas.find(x=>x.id===id);if(!i)return;const ti=document.getElementById('i-t-'+id),de=document.getElementById('i-d-'+id);if(ti?.value?.trim())i.title=ti.value.trim();if(de?.value?.trim())i.desc=de.value.trim();svAll();ex={id:null,type:null};rIdeas();}
