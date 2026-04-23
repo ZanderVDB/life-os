@@ -690,18 +690,19 @@ svg{flex-shrink:0}
 @media(max-width:768px){
   .cv-week-row.cv-week-hdr .cv-week-dayname{font-size:9px}
 }
-/* Mobile Expand-all tweaks: tiny text, minimal padding so event titles fill
-   the full width of each ~52px-wide cell instead of being cut off to one
-   letter. Grid layout stays — just squeeze the bars harder. */
+/* Mobile Expand-all tweaks: tiny text, edge-to-edge bars so event titles fill
+   the full width of each ~52px-wide cell. The inline padding-left:8px and
+   3px border-left that evInlineStyle applies are overridden here with
+   !important so text can start right at the coloured border. */
 @media(max-width:700px){
   .cv-weeks{padding:4px 3px}
   .mcw-cell{padding:2px 0}
-  .cv-weeks.detail .cv-week-row.mv-wk{grid-template-rows:24px repeat(var(--wk-rows,4),16px);row-gap:2px}
-  .cv-weeks.detail .mv-bar-txt{font-size:8.5px;padding:0 1px;letter-spacing:-0.3px;font-weight:500}
-  .cv-weeks.detail .mv-bar{margin:1px 0}
-  .cv-weeks.detail .mv-bar.left{margin-left:0;border-top-left-radius:2px;border-bottom-left-radius:2px}
-  .cv-weeks.detail .mv-bar.right{margin-right:0;border-top-right-radius:2px;border-bottom-right-radius:2px}
-  .cv-weeks.detail .mv-bar.both{margin:1px 0;border-radius:2px}
+  .cv-weeks.detail .cv-week-row.mv-wk{grid-template-rows:22px repeat(var(--wk-rows,4),14px);row-gap:1px}
+  .cv-weeks.detail .mv-bar-exp{padding-left:2px !important;border-left-width:2px !important;margin:0 !important}
+  .cv-weeks.detail .mv-bar-txt{font-size:8.5px;padding:0;letter-spacing:-0.3px;font-weight:500;line-height:1.1}
+  .cv-weeks.detail .mv-bar.left{border-top-left-radius:2px;border-bottom-left-radius:2px}
+  .cv-weeks.detail .mv-bar.right{border-top-right-radius:2px;border-bottom-right-radius:2px}
+  .cv-weeks.detail .mv-bar.both{border-radius:2px}
 }
 .mcw{background:var(--surface);border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:5px 4px 6px;min-height:82px;height:82px;cursor:pointer;display:flex;flex-direction:column;gap:3px;transition:all .15s;position:relative;overflow:hidden}
 .mcw:hover:not(.faded){background:var(--surface-hover)}
@@ -1430,7 +1431,7 @@ svg{flex-shrink:0}
             <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddPerson()">Add person</button><button class="btn btn-sm" onclick="toggleQA('ppl-qa')">Cancel</button></div>
           </div>
         </div>
-        <div class="people-grid" id="people"></div>
+        <div class="people-grid" id="people-list"></div>
       </div>
 
       <!-- BRAIN -->
@@ -1620,7 +1621,7 @@ svg{flex-shrink:0}
             <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddHabit()">Add</button><button class="btn btn-sm" onclick="toggleQA('hab-qa')">Cancel</button></div>
           </div>
         </div>
-        <div class="hab-list" id="habits"></div>
+        <div class="hab-list" id="habits-list"></div>
       </div>
     </aside>
 
@@ -1735,6 +1736,12 @@ function setTheme(t){
 (function(){try{setTheme(localStorage.getItem('los_theme')||'soft');}catch(e){setTheme('soft');}})();
 
 // ROUTING
+// Tell the browser to stop auto-restoring scroll position on navigation.
+// Combined with the scrollTo(0,0) in setRoute this ensures every route
+// change starts at the top of the page — fixes the "People / Brain start
+// one-third down the screen" symptom caused by browser auto-scroll to
+// elements whose id happened to match the route hash.
+try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}
 const ROUTES=['today','calendar','projects','habits','people','brain','settings'];
 const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',settings:'Settings'};
 let currentRoute='today';
@@ -3990,7 +3997,7 @@ function rHabits(){
   const done=S.habits.filter(h=>h.doneToday).length;
   const cnt=document.getElementById('hab-cnt');if(cnt)cnt.textContent=`${done}/${S.habits.length}`;
   // Right-rail compact list with tier badges
-  const el=document.getElementById('habits');
+  const el=document.getElementById('habits-list');
   if(el){
     el.innerHTML=S.habits.length?S.habits.map(h=>{
       const stats=computeHabitStats(h);
@@ -4122,7 +4129,7 @@ function delPerson(id){if(!confirm('Delete this person?'))return;S.people=S.peop
 function initials(first,last){const a=(first||'')[0]||'';const b=(last||'')[0]||'';return(a+b).toUpperCase()||'?';}
 function fullName(p){return[p.name,p.lastName].filter(Boolean).join(' ')||'—';}
 function rPeople(){
-  const el=document.getElementById('people');if(!el)return;
+  const el=document.getElementById('people-list');if(!el)return;
   const cnt=document.getElementById('ppl-cnt');if(cnt)cnt.textContent=S.people.length?`${S.people.length} saved`:'';
   el.innerHTML=S.people.length?S.people.map(p=>{
     const isEx=ex.id===p.id&&ex.type==='person';
