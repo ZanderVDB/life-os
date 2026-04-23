@@ -73,6 +73,12 @@ body.no-scroll{overflow:hidden;touch-action:none}
 /* Never let horizontal overflow make the page wider than the viewport */
 html,body{max-width:100%;overflow-x:hidden}
 .main-wrap,.app,.main-col,.route,section{max-width:100%;min-width:0}
+/* Stop the browser from re-anchoring scroll when content above changes.
+   Without this, when #ppl-cnt or #brain-cnt populates with a count AFTER
+   the route becomes visible, the browser "helpfully" scrolls down to keep
+   the previously-visible position stable — making People / Brain start
+   below the top. */
+html,body,.main-col,.route{overflow-anchor:none}
 button{font-family:inherit;cursor:pointer;color:inherit;border:none;background:none}
 input,textarea,select{font-family:inherit;color:inherit}
 a{color:var(--blue);text-decoration:none}
@@ -700,7 +706,7 @@ svg{flex-shrink:0}
   .cv-weeks{padding:4px 3px}
   .mcw-cell{padding:2px 0}
   .cv-weeks.detail .cv-week-row.mv-wk{grid-template-rows:22px repeat(var(--wk-rows,4),13px);row-gap:2px}
-  .cv-weeks.detail .mv-bar-exp{padding-left:2px !important;border-left-width:2px !important;margin:0 1px !important}
+  .cv-weeks.detail .mv-bar-exp{padding-left:2px !important;border-left-width:2px !important;margin:0 2px !important}
   .cv-weeks.detail .mv-bar-txt{font-size:8.5px;padding:0;letter-spacing:-0.3px;font-weight:500;line-height:1.1;text-overflow:clip}
   .cv-weeks.detail .mv-bar.left{border-top-left-radius:2px;border-bottom-left-radius:2px}
   .cv-weeks.detail .mv-bar.right{border-top-right-radius:2px;border-bottom-right-radius:2px}
@@ -1761,19 +1767,25 @@ function setRoute(r,skipHash){
   ex={id:null,type:null};
   // Close mobile drawer + right-rail + clear search field on navigate
   closeDrawer();closeRail();
-  // Reset scroll to the top AFTER the DOM has been rewritten and the drawer
-  // closed — earlier attempts scrolled before the layout changed, and Mobile
-  // Safari kept undoing the scroll as things settled. Fires multiple times
-  // (synchronous, next frame, + 80ms later) to beat every timing race.
+  // Reset scroll AFTER the DOM has been rewritten and the drawer closed.
+  // Fires at every timing point we can think of — mobile Safari keeps
+  // quietly undoing the scroll to "restore" a remembered position as the
+  // page reflows. Synchronous, next frame, and at 50/150/300ms.
   if(routeChanged){
+    const activeEl=document.querySelector(`.route[data-route="${r}"]`);
     const goTop=()=>{
       try{window.scrollTo(0,0);}catch(_){}
       try{document.documentElement.scrollTop=0;}catch(_){}
       try{document.body.scrollTop=0;}catch(_){}
+      // As an extra guarantee, align the active route's top with the
+      // viewport top — helps when a preceding layout shift pushed it down.
+      if(activeEl){try{activeEl.scrollIntoView({block:'start',inline:'nearest'});}catch(_){}}
     };
     goTop();
     requestAnimationFrame(goTop);
-    setTimeout(goTop,80);
+    setTimeout(goTop,50);
+    setTimeout(goTop,150);
+    setTimeout(goTop,300);
   }
   // Reset This week centering so it re-centers today when you return
   const wk=document.getElementById('today-week');if(wk)delete wk.dataset.centered;
