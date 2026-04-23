@@ -604,6 +604,8 @@ svg{flex-shrink:0}
 .modal-row label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
 .modal-actions .spacer{flex:1}
+.modal-body ol{padding-left:22px;margin:10px 0;display:flex;flex-direction:column;gap:9px}
+.modal-body ol li{padding-left:4px;line-height:1.55}
 
 /* ━━━ AI BAR ━━━ */
 .ai-bar{position:fixed;bottom:0;left:232px;right:0;padding:12px 28px env(safe-area-inset-bottom,14px);background:linear-gradient(to top,var(--bg) 72%,transparent);z-index:8}
@@ -612,8 +614,8 @@ svg{flex-shrink:0}
 .mic-btn:hover{background:var(--surface-hover);color:var(--text)}
 .mic-btn.on{background:var(--red);border-color:var(--red);color:#fff;animation:pulse-mic .9s infinite}
 @keyframes pulse-mic{0%,100%{box-shadow:0 0 0 0 rgba(196,106,106,.4)}50%{box-shadow:0 0 0 8px rgba(196,106,106,0)}}
-.ai-ta{flex:1;border:none;padding:10px 2px;font-size:14px;outline:none;resize:none;min-height:38px;max-height:110px;overflow-y:auto;color:var(--text);background:transparent;line-height:1.5}
-.ai-ta::placeholder{color:var(--muted-2)}
+.ai-ta{flex:1;min-width:0;border:none;padding:10px 2px;font-size:14px;outline:none;resize:none;min-height:38px;max-height:140px;overflow-y:auto;color:var(--text);background:transparent;line-height:1.5}
+.ai-ta::placeholder{color:var(--muted-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ai-btn{background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;white-space:nowrap;flex-shrink:0;border:none}
 .ai-btn:hover{opacity:.85}
 .ai-btn:disabled{opacity:.35;cursor:not-allowed}
@@ -637,6 +639,25 @@ svg{flex-shrink:0}
   .main-wrap{grid-template-columns:1fr;gap:20px;padding:24px 22px 140px}
   .aside-col{order:-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;position:static;max-height:none;overflow-y:visible;padding-right:0}
 }
+@media(max-width:768px){
+  /* Aside becomes a right-hand slide-in drawer */
+  .aside-col{
+    position:fixed;top:0;right:0;bottom:0;left:auto;
+    width:86%;max-width:340px;
+    display:flex !important;flex-direction:column;gap:14px;
+    background:var(--surface);border-left:1px solid var(--border);
+    padding:18px 16px calc(env(safe-area-inset-bottom,0) + 120px);
+    transform:translateX(100%);transition:transform .24s ease;
+    z-index:30;overflow-y:auto;box-shadow:none;
+  }
+  .aside-col.open{transform:translateX(0);box-shadow:-8px 0 28px rgba(0,0,0,.18)}
+  .aside-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:29;opacity:0;pointer-events:none;transition:opacity .2s}
+  .aside-backdrop.open{opacity:1;pointer-events:auto}
+  .aside-pull{position:fixed;right:0;top:50%;transform:translateY(-50%);background:var(--accent);color:var(--accent-ink);border:none;width:28px;height:56px;border-radius:14px 0 0 14px;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:12;box-shadow:-2px 2px 10px rgba(0,0,0,.15);writing-mode:vertical-rl;letter-spacing:.04em;font-weight:600;padding:0}
+  .aside-pull .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--red);position:absolute;top:6px;right:6px;opacity:0;transition:opacity .1s}
+  .aside-pull .dot.on{opacity:1}
+}
+@media(min-width:769px){.aside-pull,.aside-backdrop{display:none !important}}
 @media(max-width:900px){
   .fw,.tgrid{grid-template-columns:1fr}
 }
@@ -646,7 +667,11 @@ svg{flex-shrink:0}
   .mobile-top{display:flex}
   .main-wrap{padding:14px 14px 140px;gap:14px}
   .page-title{font-size:26px}
-  .ai-bar{left:0;padding:10px 14px env(safe-area-inset-bottom,12px)}
+  .ai-bar{left:0;padding:10px 12px env(safe-area-inset-bottom,12px)}
+  .ai-inner{padding:6px 6px 6px 10px;gap:8px}
+  .ai-ta{font-size:13.5px}
+  .ai-btn{padding:9px 12px;font-size:12.5px}
+  .mic-btn{width:34px;height:34px;font-size:14px}
   .cal-hdr{padding:10px 12px;gap:8px}
   .cal-ttl{font-size:13px;min-width:110px}
   .ts-wrap{max-height:440px}
@@ -1129,12 +1154,16 @@ svg{flex-shrink:0}
   </div>
 </div>
 
+<!-- ASIDE MOBILE CONTROLS -->
+<div class="aside-backdrop" id="aside-bd" onclick="closeRail()"></div>
+<button class="aside-pull" id="aside-pull" onclick="toggleRail()" title="Open habits & attention">Tap<span class="dot" id="aside-pull-dot"></span></button>
+
 <!-- AI BAR -->
 <div class="ai-bar" id="btm" style="display:none">
   <div class="ai-inner">
     <button class="mic-btn" id="mic-btn" onclick="toggleVoice()" title="Voice input">🎙</button>
-    <textarea class="ai-ta" id="ai-ta" rows="1" placeholder="Tell me what's going on, or tap the mic to speak..."
-      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,110)+'px'"
+    <textarea class="ai-ta" id="ai-ta" rows="1" placeholder="Tell me what's going on…"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();doUpdate()}"></textarea>
     <button class="ai-btn" id="btm-btn" onclick="doUpdate()">Update ↗</button>
   </div>
@@ -1239,8 +1268,8 @@ function setRoute(r,skipHash){
   // Close any open quick-add forms so switching away and back resets state
   document.querySelectorAll('[id$="-qa"]').forEach(el=>{if(el)el.style.display='none';});
   ex={id:null,type:null};
-  // Close mobile drawer + clear search field on navigate
-  closeDrawer();
+  // Close mobile drawer + right-rail + clear search field on navigate
+  closeDrawer();closeRail();
   const bs=document.getElementById('brain-search');if(bs&&bs.value){bs.value='';UI.brainQuery='';}
   // Leave project detail mode if user navigates away from projects
   if(r!=='projects'&&UI.projectDetail){UI.projectDetail=null;const pd=document.getElementById('project-detail-view');if(pd)pd.style.display='none';const pl=document.getElementById('projects-list-view');if(pl)pl.style.display='block';}
@@ -1256,6 +1285,17 @@ function initRouter(){
 }
 function toggleDrawer(){document.getElementById('m-drawer').classList.toggle('open');}
 function closeDrawer(){document.getElementById('m-drawer').classList.remove('open');}
+function toggleRail(){
+  const a=document.querySelector('.aside-col');const bd=document.getElementById('aside-bd');
+  if(!a)return;
+  const open=!a.classList.contains('open');
+  a.classList.toggle('open',open);
+  if(bd)bd.classList.toggle('open',open);
+}
+function closeRail(){
+  const a=document.querySelector('.aside-col');const bd=document.getElementById('aside-bd');
+  if(a)a.classList.remove('open');if(bd)bd.classList.remove('open');
+}
 
 function hideSplash(){
   const s=document.getElementById('splash');if(!s)return;
@@ -1470,9 +1510,27 @@ async function loadData(){
 function svAll(){
   if(!CU)return;clearTimeout(ST);
   ST=setTimeout(async()=>{
-    try{await db.collection('users').doc(CU.uid).collection('data').doc('main').set({tasks:S.tasks,builds:S.builds,learning:S.learning,ideas:S.ideas,notes:S.notes,customEvents:S.customEvents||[],habits:S.habits||[],resources:S.resources||[],people:S.people||[],dayNotes:S.dayNotes||{},updatedAt:firebase.firestore.FieldValue.serverTimestamp()});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error(e);}},1200);
+    try{
+      // Use merge:true so fields we don't write (like ak / future config) are preserved
+      await db.collection('users').doc(CU.uid).collection('data').doc('main').set({tasks:S.tasks,builds:S.builds,learning:S.learning,ideas:S.ideas,notes:S.notes,customEvents:S.customEvents||[],habits:S.habits||[],resources:S.resources||[],people:S.people||[],dayNotes:S.dayNotes||{},updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}
+    }catch(e){console.error(e);}
+  },1200);
 }
-function promptKey(){const existing=getKey();const k=prompt('Enter your Anthropic API key (starts with sk-ant-...)\nGet one at console.anthropic.com → API Keys',existing||'');if(k&&k.trim()){localStorage.setItem(AK,k.trim());if(CU)db.collection('users').doc(CU.uid).collection('data').doc('main').update({ak:k.trim()}).catch(()=>{});rSettings();}}
+function promptKey(){
+  const existing=getKey();
+  const k=prompt('Enter your Anthropic API key (starts with sk-ant-...)\nGet one at console.anthropic.com → API Keys',existing||'');
+  if(k&&k.trim()){
+    const key=k.trim();
+    localStorage.setItem(AK,key);
+    if(CU){
+      // set({merge:true}) works whether the doc exists or not; .update() silently failed for new users
+      db.collection('users').doc(CU.uid).collection('data').doc('main').set({ak:key},{merge:true}).catch(e=>console.warn('[ak save]',e.message));
+    }
+    loadTip(true);
+    if(currentRoute==='settings')rSettings();
+  }
+}
 
 // DATA
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1587,11 +1645,12 @@ async function toggleVoice(){
   if(perm==='denied'){vstatus('Mic blocked in browser. Click the 🔒 lock icon in the address bar → Site settings → allow Microphone, then reload.',true);return;}
   try{
     recognition=new SpeechRec();
-    recognition.continuous=true;
+    recognition.continuous=false;
     recognition.interimResults=true;
     recognition.maxAlternatives=1;
-    recognition.lang='en-US';
-    vlog('recognition created, lang='+recognition.lang);
+    // Intentionally not setting .lang — let the browser pick the default, which is
+    // more reliable across browsers/networks (some blockers reject explicit lang)
+    vlog('recognition created (default lang)');
     let finalText='';voiceStartedAt=Date.now();voiceHeardSound=false;
     let gotStart=false;
     recognition.onstart=()=>{gotStart=true;isListening=true;btn.classList.add('on');vlog('onstart');vstatus('🎙 Listening — speak now');};
@@ -1625,9 +1684,9 @@ async function toggleVoice(){
       const elapsed=Math.round((Date.now()-voiceStartedAt)/1000);
       vlog('onend, elapsed='+elapsed+'s, gotStart='+gotStart+', heardSound='+voiceHeardSound);
       if(!gotStart&&elapsed<2){
-        // Silent abort. Usually means Windows/OS mic privacy is blocking, or
-        // another app has the mic, or the speech-service endpoint is blocked.
-        vstatus('Mic stopped instantly. Windows: Start → Settings → Privacy & Security → Microphone → turn on "Let apps access your microphone" AND "Let desktop apps access your microphone". Close any other app using the mic (Zoom, Teams, Discord). Then tap the mic again.',true);
+        // Silent abort. If mic works on other sites in the same browser, this is
+        // almost always a blocker intercepting Google's speech endpoint.
+        vstatus('Speech service didn\'t respond. If your mic works elsewhere, this is your browser\'s ad/tracker blocker. Opera GX: disable the built-in ad/tracker blocker for this site (shield icon in address bar → off). Or try the same URL in Chrome / Edge.',true);
         return;
       }
       if(!voiceHeardSound&&elapsed<2){vstatus('Mic stopped instantly with no audio. Check mic is plugged in and not muted.',true);return;}
@@ -1874,6 +1933,8 @@ function rAttention(){
   ];
   const el=document.getElementById('attention-list');if(!el)return;
   el.innerHTML=items.length?items.slice(0,8).map(({t,badge,cls})=>`<div class="att-item ${cls}" onclick="jumpToTask('${t.id}')"><span class="att-badge">${badge}</span><span class="att-text">${esc(t.text)}</span></div>`).join(''):`<div class="att-empty">Nothing urgent. ✓</div>`;
+  // Flash the mobile pull-tab dot when there's anything urgent
+  const dot=document.getElementById('aside-pull-dot');if(dot)dot.classList.toggle('on',items.length>0);
 }
 function jumpToTask(id){ex={id,type:'task'};setRoute('today');rTasks();setTimeout(()=>{const el=document.getElementById('tasks-sec');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},120);}
 
@@ -2725,12 +2786,41 @@ async function installPWA(){
     updateInstallUI();
     return;
   }
-  if(isIOS()){
-    alert('To install on iPhone/iPad:\n\n1. Tap the Share button in Safari (square with ↑)\n2. Scroll down and tap "Add to Home Screen"\n3. Tap Add\n\nLife OS will appear as an app icon on your home screen.');
-    return;
-  }
-  alert('To install:\n\n• Chrome / Edge (desktop): click the install icon on the right of the address bar, or use the menu → Install Life OS.\n• Android Chrome: menu (⋮) → Install app or Add to Home Screen.\n• Desktop Safari: File → Add to Dock.\n\nIf you don\'t see these options, the browser may need a few more page visits before it offers install.');
+  showInstallModal();
 }
+function showInstallModal(){
+  const ua=navigator.userAgent;
+  const ios=isIOS();
+  const android=/Android/i.test(ua);
+  const chromium=/Chrome|Edg|OPR/i.test(ua);
+  let steps;
+  if(ios){
+    steps=`<ol>
+      <li>At the bottom of Safari, tap the <strong>Share</strong> button <span style="display:inline-block;padding:0 4px">(square with ↑ arrow)</span></li>
+      <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+      <li>Tap <strong>Add</strong> in the top-right corner</li>
+    </ol>
+    <div style="font-size:12px;color:var(--muted);margin-top:10px">Only works in Safari, not Chrome on iOS.</div>`;
+  } else if(android){
+    steps=`<ol>
+      <li>Tap the <strong>⋮ menu</strong> (top-right of Chrome)</li>
+      <li>Tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong></li>
+      <li>Tap <strong>Install</strong> / <strong>Add</strong> to confirm</li>
+    </ol>`;
+  } else {
+    steps=`<ol>
+      <li>Look at the <strong>right edge of the address bar</strong> for a small install icon <span style="color:var(--muted)">(monitor with ↓ arrow, or a "+" inside a circle)</span></li>
+      <li>If you don't see it: click the browser <strong>⋮ menu</strong> → <strong>"Install Life OS"</strong> or <strong>Apps → Install this site as an app</strong></li>
+      <li>Click <strong>Install</strong> in the popup</li>
+    </ol>
+    <div style="font-size:12px;color:var(--muted);margin-top:10px">Chrome, Edge, Brave work. Opera GX, Firefox and Safari on desktop don't support one-click PWA install — use Chrome/Edge if the options don't appear.</div>`;
+  }
+  const modal=document.createElement('div');
+  modal.className='modal';modal.id='install-modal';
+  modal.innerHTML=`<div class="modal-bd" onclick="closeInstallModal()"></div><div class="modal-body"><h3>Install Life OS</h3><div style="font-size:13.5px;line-height:1.7;color:var(--text-2)">${steps}</div><div class="modal-actions"><button class="btn btn-primary btn-sm" onclick="closeInstallModal()">Got it</button></div></div>`;
+  document.body.appendChild(modal);modal.style.display='flex';
+}
+function closeInstallModal(){const m=document.getElementById('install-modal');if(m)m.remove();}
 setInterval(rUpcom,60000);
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){const m=document.getElementById('event-modal');if(m&&m.style.display==='flex')closeEventModal();const d=document.getElementById('m-drawer');if(d&&d.classList.contains('open'))closeDrawer();}});
 </script>
