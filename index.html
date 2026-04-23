@@ -2193,13 +2193,13 @@ function habitCheckedSet(h){return new Set(h.checkedDates||[]);}
 function computeHabitStats(h){
   const set=habitCheckedSet(h);
   if(!set.size)return {current:0,max:0,total:0};
-  const today=new Date();const todayStr=today.toISOString().slice(0,10);
-  const y=new Date(today);y.setDate(y.getDate()-1);const yestStr=y.toISOString().slice(0,10);
+  const today=new Date();const todayStr=localDs(today);
+  const y=new Date(today);y.setDate(y.getDate()-1);const yestStr=localDs(y);
   let current=0;
   if(set.has(todayStr)||set.has(yestStr)){
     let cursor=new Date(today);
     if(!set.has(todayStr))cursor.setDate(cursor.getDate()-1);
-    while(set.has(cursor.toISOString().slice(0,10))){current++;cursor.setDate(cursor.getDate()-1);}
+    while(set.has(localDs(cursor))){current++;cursor.setDate(cursor.getDate()-1);}
   }
   const sorted=[...set].sort();let max=0;let run=0;let prev=null;
   sorted.forEach(ds=>{const d=new Date(ds+'T12:00:00');if(prev){const diff=Math.round((d-prev)/86400000);run=diff===1?run+1:1;}else run=1;if(run>max)max=run;prev=d;});
@@ -2351,7 +2351,7 @@ function navNotebook(dir){
   const curr=currentNotebookDate();
   const d=new Date(curr+'T12:00:00');
   d.setDate(d.getDate()+dir);
-  const next=d.toISOString().slice(0,10);
+  const next=localDs(d);
   if(next>tod())return;
   UI.notebookDate=next;
   renderNotebook();
@@ -2541,7 +2541,7 @@ async function rUpcom(){
   // Custom events next 14 days
   for(let i=0;i<14;i++){
     const d=new Date(now.getTime()+i*86400000);
-    const ds=d.toISOString().slice(0,10);
+    const ds=localDs(d);
     getCusDate(ds).forEach(e=>{
       const h=parseH(e.time);
       const dt=new Date(d.getFullYear(),d.getMonth(),d.getDate(),h==null?0:h,0,0);
@@ -2576,7 +2576,10 @@ async function rUpcom(){
 async function rTodayWeek(){
   const el=document.getElementById('today-week');if(!el)return;
   const today=new Date();
-  const start=new Date(today);start.setHours(0,0,0,0);start.setDate(today.getDate()-today.getDay());
+  const start=new Date(today);start.setHours(0,0,0,0);
+  // Monday-first week to match the Calendar's week view
+  const dow=today.getDay();
+  start.setDate(today.getDate()+(dow===0?-6:1-dow));
   const days=Array.from({length:7},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);return d;});
   let gc=[];
   try{
@@ -2584,7 +2587,7 @@ async function rTodayWeek(){
     gc=await fetchGCal(a.toISOString(),b.toISOString());
   }catch(e){}
   el.innerHTML=days.map(d=>{
-    const ds=d.toISOString().slice(0,10);
+    const ds=localDs(d);
     const isT=d.toDateString()===today.toDateString();
     const re=(SCHED[d.getDay()]||[]).map(x=>({title:x.replace(/\s+\d+.*$/,'').trim(),cls:'rec'}));
     const gd=gc.filter(e=>e.date===ds).map(e=>({title:e.title,cls:'gc',time:e.time}));
@@ -2808,7 +2811,7 @@ async function rCal(){
     el.innerHTML=buildMonthView(y,m,today,allGc);
     el.onclick=null;
   }
-  renderComingUp(gcEvs);
+  renderComingUp();
 }
 function localDs(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function goToCalToday(){UI.calDate=new Date();UI.monthExpandedDs=null;rCal();}
@@ -2826,7 +2829,7 @@ function pickCalDate(){
   if(typeof inp.showPicker==='function'){try{inp.showPicker();return;}catch(e){console.warn('showPicker',e.message);}}
   inp.focus();inp.click();
 }
-function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=UI.calDate.toISOString().slice(0,10);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
+function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=localDs(UI.calDate);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
 
 // ━━━━━━━━━━━━━━━ CALENDAR ━━━━━━━━━━━━━━━
 // Shared helpers
@@ -3238,11 +3241,15 @@ function renderMarkdownMini(src){
 function renderInline(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/`(.+?)`/g,'<code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:.9em">$1</code>');}
 
 // ─────── COMING UP (categorized panels below calendar) ───────
-function renderComingUp(gcEvs){
+async function renderComingUp(){
   const el=document.getElementById('cal-coming-up');if(!el)return;
   const today=new Date();const todayDs=localDs(today);
   const horizonEnd=new Date(today);horizonEnd.setDate(today.getDate()+60);
   const horizonDs=localDs(horizonEnd);
+  // Fetch its own 60-day window so the panel doesn't depend on which
+  // calendar view is currently rendered (day/3-day/week only fetch a
+  // small window — that's why panels were disappearing on view switch)
+  const gcEvs=await fetchGCal(today.toISOString(),horizonEnd.toISOString()).catch(()=>[]);
   const upcoming=(gcEvs||[]).filter(e=>{
     const start=e.date;if(!start)return false;
     if(start<todayDs){if(e.allDay&&e.endDate&&e.endDate>todayDs)return true;return false;}
@@ -3305,7 +3312,7 @@ function rCalHabits(el,today,y,m){
   };
 
   if(UI.calView==='day'){
-    const ds=UI.calDate.toISOString().slice(0,10);
+    const ds=localDs(UI.calDate);
     const isToday=UI.calDate.toDateString()===today.toDateString();
     let h=`<div style="padding:14px 20px;border-bottom:1px solid var(--border)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:4px">${DAYS[UI.calDate.getDay()]}${isToday?' · Today':''}</div><div style="font-family:'Playfair Display',serif;font-size:22px">${UI.calDate.getDate()} ${UI.calDate.toLocaleDateString('en-ZA',{month:'long'})}</div></div>`;
     h+=renderDayList(UI.calDate,ds);
@@ -3315,7 +3322,7 @@ function rCalHabits(el,today,y,m){
     const dates=Array.from({length:3},(_,i)=>{const d=new Date(UI.calDate);d.setDate(UI.calDate.getDate()+i);return d;});
     let h=`<div class="threeday-list">`;
     dates.forEach(d=>{
-      const ds=d.toISOString().slice(0,10);
+      const ds=localDs(d);
       const isToday=d.toDateString()===today.toDateString();
       h+=`<div class="td-day-card${isToday?' today':''}">
         <div class="td-day-hdr"><span class="td-day-name">${DAYS[d.getDay()]}${isToday?' · Today':''}</span><span class="td-day-date">${d.getDate()} ${d.toLocaleDateString('en-ZA',{month:'long'})}</span></div>
@@ -3332,7 +3339,7 @@ function rCalHabits(el,today,y,m){
     const dates=Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return d;});
     let h=`<div class="week-list">`;
     dates.forEach(d=>{
-      const ds=d.toISOString().slice(0,10);
+      const ds=localDs(d);
       const isToday=d.toDateString()===today.toDateString();
       const isFuture=ds>tod();
       const done=habitsDoneOn(ds);
@@ -3395,7 +3402,7 @@ function openNewEvent(prefill){
   editingEvent={mode:'new',type:'gc'};
   resetEventModal();
   document.getElementById('em-title').textContent='New event';
-  document.getElementById('em-d').value=prefill.date||UI.calDate.toISOString().slice(0,10);
+  document.getElementById('em-d').value=prefill.date||localDs(UI.calDate);
   document.getElementById('em-tm').value=prefill.time||'';
   document.getElementById('em-tm-end').value=prefill.endTime||'';
   document.getElementById('em-del').style.display='none';
@@ -3620,7 +3627,7 @@ function rTasks(){
     else {
       compEl.style.display='block';
       const byDate={};
-      completed.forEach(t=>{const ds=(t.doneAt?new Date(t.doneAt).toISOString().slice(0,10):(t.date||tod()));(byDate[ds]=byDate[ds]||[]).push(t);});
+      completed.forEach(t=>{const ds=(t.doneAt?localDs(new Date(t.doneAt)):(t.date||tod()));(byDate[ds]=byDate[ds]||[]).push(t);});
       const days=Object.keys(byDate).sort().reverse();
       compEl.innerHTML=`<div class="col-lbl" style="color:var(--muted)">Completed</div>`+days.map(ds=>`
         <div class="completed-day">
