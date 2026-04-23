@@ -798,6 +798,7 @@ svg{flex-shrink:0}
 .tit{font-size:13px;flex:1;line-height:1.45;word-break:break-word;color:var(--text)}
 .tit.dn{text-decoration:line-through;color:var(--muted-2)}
 .ti-time{font-size:10px;color:var(--muted);background:var(--surface-2);padding:2px 6px;border-radius:5px;flex-shrink:0;margin-top:2px}
+.ti-proj{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:6px;box-shadow:0 0 0 2px var(--surface)}
 .exp-p{padding:13px 15px;background:var(--surface-2);border-bottom:1px solid var(--border)}
 .exp-ta{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:13px;resize:vertical;outline:none;background:var(--bg);color:var(--text);line-height:1.55;min-height:70px;font-family:inherit}
 .exp-ta:focus{border-color:var(--border-strong);background:var(--surface)}
@@ -3692,22 +3693,24 @@ function rTasks(){
   const el=document.getElementById('tasks-sec');if(!el)return;
   const visible=S.tasks.filter(isTaskVisible);
   const wt=visible.filter(t=>t.area==='work'),pt=visible.filter(t=>t.area==='personal');
-  const grps={wa:[],tf:[],zm:[],gen:[]};wt.forEach(t=>{const k=grps[t.project]!==undefined?t.project:'gen';grps[k].push(t);});
   // Fading (done but still visible) items keep their priority slot so
   // ticking doesn't shoot them to the bottom before they disappear.
   const srt=arr=>[...arr].sort((a,b)=>(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3));
-  const mkTi=t=>{
+  const mkTi=(t,showProj)=>{
     const isEx=ex.id===t.id&&ex.type==='task';
     const fading=t.done&&t.doneAt;
-    let h=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="toggleEx('task','${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
+    const p=showProj?PROJ[t.project]||PROJ.gen:null;
+    const projTag=p?`<span class="ti-proj" style="background:${p.h}" title="${esc(p.n)}"></span>`:'';
+    let h=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="toggleEx('task','${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)">${projTag}<span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
     if(isEx)h+=`<div class="exp-p"><textarea class="exp-ta" id="exp-ta-${t.id}" rows="2">${esc(t.text)}</textarea><div style="display:flex;gap:8px;margin-top:8px;align-items:center"><label style="font-size:11px;color:var(--muted)">Time</label><input class="inp-e" id="exp-ti-${t.id}" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am" style="margin-bottom:0;flex:1"></div>${mkPriRow(t)}<div class="exp-dt">Added ${fmt(t.date||tod())}</div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveTask('${t.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}')">Delete</button></div></div>`;
     return h;
   };
-  let wh='<div class="col-lbl work">Work</div>',hw=false;
-  Object.entries(grps).forEach(([k,ts])=>{if(!ts.length)return;hw=true;const p=PROJ[k];wh+=`<div class="proj-g"><div class="proj-hdr"><span class="pdot" style="background:${p.h}"></span><span class="pnm">${p.n}</span></div><div class="tcard">${srt(ts).map(mkTi).join('')}</div></div>`;});
-  if(!hw)wh+=`<div class="no-t">Clear board.</div>`;
+  // Work tasks: flat urgency-sorted list (same as Personal). Each row shows a
+  // small project dot so you still know which business it belongs to.
+  const ws=srt(wt);
+  const wh=`<div class="col-lbl work">Work</div>${ws.length?`<div class="tcard">${ws.map(t=>mkTi(t,true)).join('')}</div>`:'<div class="no-t">Clear board.</div>'}`;
   const ps=srt(pt);
-  el.innerHTML=`<div class="tgrid"><div>${wh}</div><div><div class="col-lbl pers">Personal</div>${ps.length?`<div class="tcard">${ps.map(mkTi).join('')}</div>`:'<div class="no-t">Nothing personal.</div>'}</div></div>`;
+  el.innerHTML=`<div class="tgrid"><div>${wh}</div><div><div class="col-lbl pers">Personal</div>${ps.length?`<div class="tcard">${ps.map(t=>mkTi(t,false)).join('')}</div>`:'<div class="no-t">Nothing personal.</div>'}</div></div>`;
   // Completed history section
   const compEl=document.getElementById('completed-sec');
   const completed=S.tasks.filter(t=>t.done&&!isTaskVisible(t));
