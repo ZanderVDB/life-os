@@ -730,6 +730,10 @@ svg{flex-shrink:0}
 .cu-card-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:6px}
 .cu-item{display:flex;gap:10px;align-items:baseline;padding:7px 6px;border-radius:6px;cursor:pointer;font-size:12.5px}
 .cu-item:hover{background:var(--surface-hover)}
+/* Dimmed — used for birthdays past the 60-day horizon so they're visible and
+   scrollable without competing with the "coming soon" ones. */
+.cu-item.dim{opacity:.45}
+.cu-item.dim:hover{opacity:.8}
 .cu-item-date{font-size:10px;font-weight:700;color:var(--muted);min-width:56px;text-transform:uppercase;letter-spacing:.04em}
 .cu-item-title{color:var(--text-2);line-height:1.4;flex:1}
 .cu-item:hover .cu-item-title{color:var(--text)}
@@ -3523,6 +3527,21 @@ async function renderComingUp(){
   upcoming.forEach(e=>{const cat=eventCategory(e);(byCat[cat.cat]||byCat.event).push(e);});
   (tasks||[]).forEach(t=>{if(t.date>=todayDs&&t.date<=horizonDs)byCat.reminder.push(t);});
   (S.customEvents||[]).forEach(e=>{if(e.date>=todayDs&&e.date<=horizonDs){const cat=eventCategory({title:e.title,type:'cus'});(byCat[cat.cat]||byCat.event).push({...e,type:'cus',data:e,cls:'cus',allDay:!e.time});}});
+  // Extend birthdays to a full 365-day window so Zander can scroll through
+  // every birthday in the year, not just the ones in the next 60 days. Any
+  // birthday beyond the 60-day horizon is marked _beyond60 and rendered
+  // dimmed (~40% opacity) so the "up next" ones still pop visually.
+  try{
+    const yearEnd=new Date(today);yearEnd.setDate(today.getDate()+365);
+    const yearEvs=await fetchGCal(today.toISOString(),yearEnd.toISOString());
+    const existingIds=new Set((byCat.birthday||[]).map(b=>b.id));
+    const yearEndDs=localDs(yearEnd);
+    (yearEvs||[]).forEach(e=>{
+      if(!isBirthdayEv(e))return;
+      if(existingIds.has(e.id))return;
+      if(e.date>horizonDs&&e.date<=yearEndDs)byCat.birthday.push({...e,_beyond60:true});
+    });
+  }catch(_){}
   const panels=[];
   const catOrder=[{key:'reminder',label:'Reminders',icon:'🔔'},{key:'birthday',label:'Birthdays',icon:'🎂'},{key:'holiday',label:'Holidays',icon:'⭐'},{key:'meeting',label:'Meetings',icon:'◉'},{key:'business',label:'Business',icon:'◆'},{key:'faith',label:'Faith',icon:'✦'},{key:'movie',label:'Movie nights',icon:'🎬'},{key:'event',label:'Other events',icon:'◐'}];
   catOrder.forEach(({key,label,icon})=>{
@@ -3535,9 +3554,12 @@ async function renderComingUp(){
     h+=`<div class="cu-card" style="border-left:3px solid ${p.color}"><div class="cu-card-hdr" style="background:${p.bg};color:${p.color}"><span class="cu-card-ic">${p.icon}</span>${esc(p.label)}<span class="cu-card-cnt">${p.items.length}</span></div><div class="cu-card-body">`;
     p.items.forEach(ev=>{
       const dt=new Date(ev.date+'T12:00:00');
-      const dayLbl=ev.date===todayDs?'Today':dt.toLocaleDateString('en-ZA',{day:'numeric',month:'short'});
+      // Include the year for items past the 60-day window so Zander can tell
+      // "Jan 5" this year vs. next year at a glance.
+      const dayLbl=ev.date===todayDs?'Today':dt.toLocaleDateString('en-ZA',ev._beyond60?{day:'numeric',month:'short',year:'2-digit'}:{day:'numeric',month:'short'});
       const payload=encodeURIComponent(JSON.stringify({type:ev.type||'gc',data:ev.data||ev,ds:ev.date}));
-      h+=`<div class="cu-item" onclick="openEventEdit('${payload}')"><span class="cu-item-date">${esc(dayLbl)}</span><span class="cu-item-title">${esc(ev.title)}</span></div>`;
+      const cls=ev._beyond60?' dim':'';
+      h+=`<div class="cu-item${cls}" data-ev-payload="${payload}"><span class="cu-item-date">${esc(dayLbl)}</span><span class="cu-item-title">${esc(ev.title)}</span></div>`;
     });
     h+=`</div></div>`;
   });
