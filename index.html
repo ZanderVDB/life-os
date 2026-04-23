@@ -1597,6 +1597,19 @@ svg{flex-shrink:0}
         </div>
 
         <div>
+          <div class="section-hdr"><h2>AI behaviour</h2></div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Confirm all AI changes</div>
+              <div class="setting-desc">When on, the AI shows a summary of everything it plans to do (tasks, habits, notes, people, ideas — not just calendar) and waits for your OK. When off, only calendar edits need approval.</div>
+            </div>
+            <div class="setting-right">
+              <label class="switch"><input type="checkbox" id="confirm-ai-toggle" onchange="toggleConfirmAllAI(this.checked)"><span class="slider"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div>
           <div class="section-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
             <h2>AI history</h2>
             <button class="btn btn-ghost btn-sm" onclick="clearAIHistory()">Clear</button>
@@ -2344,6 +2357,7 @@ function handleSnapshot(snap){
     S.lifeRhythm=d.lifeRhythm||'';
     S.disabledCalendars=Array.isArray(d.disabledCalendars)?d.disabledCalendars:[];
     S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
+    if(typeof d.confirmAllAI==='boolean')S.confirmAllAI=d.confirmAllAI;
     if(!getKey()&&d.ak)localStorage.setItem(AK,d.ak);
     migrateHabits();
     migrateProjects();
@@ -2370,6 +2384,7 @@ function _buildSavePayload(){
   if(S.lifeRhythm!==undefined)payload.lifeRhythm=S.lifeRhythm||'';
   if(S.disabledCalendars!==undefined)payload.disabledCalendars=Array.isArray(S.disabledCalendars)?S.disabledCalendars:[];
   if(S.aiHistory!==undefined)payload.aiHistory=Array.isArray(S.aiHistory)?S.aiHistory:[];
+  if(S.confirmAllAI!==undefined)payload.confirmAllAI=!!S.confirmAllAI;
   return payload;
 }
 function svAll(){
@@ -2407,9 +2422,10 @@ const SCHED={0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
 const PROJ={wa:{n:'WebAnchor',h:'var(--blue)'},tf:{n:'TriFusion',h:'var(--lavender)'},zm:{n:'Zomarka',h:'var(--emerald)'},gen:{n:'General',h:'var(--peach)'}};
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false};
-// Sounds preference is mirrored to localStorage so it applies before Firestore sync
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,confirmAllAI:false};
+// Preferences mirrored to localStorage so they apply before Firestore sync
 try{S.soundsEnabled=localStorage.getItem('los_sounds')==='1';}catch(e){}
+try{S.confirmAllAI=localStorage.getItem('los_confirm_ai')==='1';}catch(e){}
 const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false};
 try{UI.monthDetail=localStorage.getItem('los_month_detail')==='1';}catch(e){}
 const HABIT_COLORS=['#c46a6a','#d9a484','#c9a94a','#7fa186','#6a8ab5','#9d8bb8','#5a8a6e','#e0b04f','#b37d6f','#7a9aa8','#d38a6f','#89a589'];
@@ -4306,6 +4322,7 @@ function rSettings(){
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
+  const caiTog=document.getElementById('confirm-ai-toggle');if(caiTog)caiTog.checked=!!S.confirmAllAI;
   updateInstallUI();
   renderCalendarList();
   rAIHistory();
@@ -4335,6 +4352,12 @@ async function renderCalendarList(){
 function toggleSounds(on){
   S.soundsEnabled=!!on;
   try{localStorage.setItem('los_sounds',on?'1':'0');}catch(e){}
+  svAll();
+  if(on)playSound('confirm');
+}
+function toggleConfirmAllAI(on){
+  S.confirmAllAI=!!on;
+  try{localStorage.setItem('los_confirm_ai',on?'1':'0');}catch(e){}
   svAll();
   if(on)playSound('confirm');
 }
@@ -4497,6 +4520,23 @@ function playSound(kind){
 }
 
 function applyChanges(ch){
+  // If the global "Confirm all AI changes" toggle is on, the AI can't touch
+  // anything without explicit approval. Show the full summary, then bail if
+  // the user cancels. If they approve, apply everything — calendar included,
+  // without the usual second per-calendar confirm.
+  const calOps=[];
+  (ch.addEvent||[]).forEach(e=>calOps.push({kind:'add',ev:e}));
+  (ch.removeEvent||[]).forEach(e=>calOps.push({kind:'remove',ev:e}));
+  (ch.updateEvent||[]).forEach(e=>calOps.push({kind:'update',ev:e}));
+  const summary=summariseAIChanges(ch);
+  if(S.confirmAllAI&&summary!=='no changes'){
+    const ok=confirm(`The AI wants to:\n\n${summary.replace(/ · /g,'\n• ').replace(/^/,'• ')}\n\nApply?`);
+    if(!ok){
+      const st=document.getElementById('btm-st');
+      if(st){st.className='ai-st';st.textContent='Changes cancelled.';setTimeout(()=>{st.textContent='';st.className='ai-st';},5000);}
+      return;
+    }
+  }
   if(ch.addTasks?.length)ch.addTasks.forEach(t=>S.tasks.push({id:uid(),text:t.text,area:t.area||'personal',project:t.project||'gen',priority:t.priority||'lo',scheduledTime:t.scheduledTime||'',done:false,date:tod()}));
   if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)t.done=true;});
   if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)S.tasks=S.tasks.filter(x=>x.id!==t.id);});
@@ -4510,21 +4550,21 @@ function applyChanges(ch){
   if(ch.addIdea?.length)ch.addIdea.forEach(i=>S.ideas.push({id:uid(),title:i.title,desc:i.desc||'',date:tod()}));
   if(ch.addResource?.length)ch.addResource.forEach(r=>S.resources.push({id:uid(),title:r.title,url:r.url||'',desc:r.desc||'',tag:r.tag||'other',date:tod()}));
   if(ch.addNote?.length)ch.addNote.forEach(n=>S.notes.push({id:uid(),title:n.title,body:n.body,date:tod()}));
-  // Calendar ops (add / remove / update) are SENSITIVE — the AI shouldn't
-  // silently rewrite Zander's schedule. Collect all requested calendar
-  // changes and prompt for explicit approval before executing any of them.
-  const calOps=[];
-  (ch.addEvent||[]).forEach(e=>calOps.push({kind:'add',ev:e}));
-  (ch.removeEvent||[]).forEach(e=>calOps.push({kind:'remove',ev:e}));
-  (ch.updateEvent||[]).forEach(e=>calOps.push({kind:'update',ev:e}));
   svAll();render();
-  if(calOps.length)confirmCalendarOps(calOps);
+  // Calendar: if we already confirmed everything above (confirmAllAI), just
+  // execute directly — no second popup. Otherwise show the per-calendar
+  // confirm as before.
+  if(calOps.length){
+    if(S.confirmAllAI)confirmCalendarOps(calOps,true);
+    else confirmCalendarOps(calOps);
+  }
 }
 
 // Ask the user before the AI touches the calendar. Every calendar change
-// (add / remove / update) goes through here. Non-calendar changes above
-// apply immediately — calendar is the only area the AI is gated on.
-async function confirmCalendarOps(ops){
+// (add / remove / update) goes through here. The `preConfirmed` flag is set
+// by applyChanges when the "Confirm all AI changes" setting is on — we've
+// already shown a combined summary, no need for a second popup.
+async function confirmCalendarOps(ops,preConfirmed){
   const fmtOp=op=>{
     if(op.kind==='add'){
       const when=op.ev.date?` on ${op.ev.date}`:'';
@@ -4546,9 +4586,11 @@ async function confirmCalendarOps(ops){
     }
     return '?';
   };
-  const summary=ops.map(fmtOp).join('\n');
-  const ok=confirm(`The AI wants to make ${ops.length} calendar change${ops.length===1?'':'s'}:\n\n${summary}\n\nApply?`);
-  if(!ok){const st=document.getElementById('btm-st');if(st){st.className='ai-st';st.textContent='Calendar changes cancelled.';setTimeout(()=>{st.textContent='';},5000);}return;}
+  if(!preConfirmed){
+    const summary=ops.map(fmtOp).join('\n');
+    const ok=confirm(`The AI wants to make ${ops.length} calendar change${ops.length===1?'':'s'}:\n\n${summary}\n\nApply?`);
+    if(!ok){const st=document.getElementById('btm-st');if(st){st.className='ai-st';st.textContent='Calendar changes cancelled.';setTimeout(()=>{st.textContent='';},5000);}return;}
+  }
   // Apply in order
   for(const op of ops){
     try{
