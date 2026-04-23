@@ -1666,18 +1666,21 @@ async function toggleVoice(){
   if(perm==='denied'){vstatus('Mic blocked in browser. Click the 🔒 lock icon in the address bar → Site settings → allow Microphone, then reload.',true);return;}
   try{
     recognition=new SpeechRec();
-    recognition.continuous=false;
+    recognition.continuous=true;
     recognition.interimResults=true;
     recognition.maxAlternatives=1;
     // Intentionally not setting .lang — let the browser pick the default, which is
     // more reliable across browsers/networks (some blockers reject explicit lang)
-    vlog('recognition created (default lang)');
+    vlog('recognition created (default lang, continuous=true)');
     let finalText='';voiceStartedAt=Date.now();voiceHeardSound=false;
     let gotStart=false;
-    recognition.onstart=()=>{gotStart=true;isListening=true;btn.classList.add('on');vlog('onstart');vstatus('🎙 Listening — speak now');};
+    // Preserve whatever's already in the textarea so new speech appends to it
+    let baseText=ta.value||'';
+    if(baseText&&!/\s$/.test(baseText))baseText+=' ';
+    recognition.onstart=()=>{gotStart=true;isListening=true;btn.classList.add('on');vlog('onstart');vstatus('🎙 Listening — tap the mic to stop');};
     recognition.onaudiostart=()=>vlog('onaudiostart');
     recognition.onsoundstart=()=>{voiceHeardSound=true;vlog('onsoundstart');};
-    recognition.onspeechstart=()=>{voiceHeardSound=true;vlog('onspeechstart');vstatus('🎙 Hearing you…');};
+    recognition.onspeechstart=()=>{voiceHeardSound=true;vlog('onspeechstart');vstatus('🎙 Hearing you… tap mic to stop');};
     recognition.onresult=e=>{
       vlog('onresult results='+e.results.length+' resultIndex='+e.resultIndex);
       let interim='';
@@ -1686,8 +1689,8 @@ async function toggleVoice(){
         if(r.isFinal)finalText+=r[0].transcript+' ';
         else interim+=r[0].transcript;
       }
-      ta.value=(finalText+interim).trim();
-      ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,110)+'px';
+      ta.value=(baseText+finalText+interim).replace(/\s+$/,'')+(interim?' ':'');
+      ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,140)+'px';
     };
     recognition.onerror=e=>{
       isListening=false;btn.classList.remove('on');
@@ -1848,10 +1851,15 @@ Return ONLY raw JSON:
   }catch(e){
     console.warn('[tip] fetch failed:',e.message);
     const keyNow=getKey();
-    const body=keyNow
-      ? `Couldn't reach Claude: ${e.message}. Check your API key in Settings, or tap ↻ to retry.`
-      : "Add your Anthropic API key in Settings → AI & integrations to unlock personalized daily reads.";
-    renderTip({body,action:""});
+    const isAuthErr=/401|invalid.*api.{0,3}key|authentication|unauthorized/i.test(e.message);
+    const el=document.getElementById('tip-card');if(!el)return;
+    if(!keyNow){
+      el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's read</div><div class="tip-body">Add your Anthropic API key to unlock personalized daily reads.</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="promptKey()">Add API key</button></div>`;
+    } else if(isAuthErr){
+      el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's read</div><div class="tip-body">Your Anthropic API key isn't working. It may have been revoked or mistyped — update it and try again.</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="promptKey()">Update API key</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Retry</button></div>`;
+    } else {
+      renderTip({body:`Couldn't reach Claude: ${e.message}. Tap ↻ to retry.`,action:""});
+    }
   }
 }
 function renderTip(tip){
@@ -2742,14 +2750,26 @@ State:${JSON.stringify(ctx)}
 Zander:"${msg}"`;
   try{
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    if(!r.ok){
+      let errMsg='HTTP '+r.status;
+      try{const errData=await r.json();if(errData.error?.message)errMsg=errData.error.message;}catch(_){}
+      throw new Error(errMsg);
+    }
     const data=await r.json();
     const ch=JSON.parse((data.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim());
     applyChanges(ch);
     st.className='ai-st ok';st.textContent=ch.message||'Done!';
     ta.value='';ta.style.height='auto';
     setTimeout(()=>{st.textContent='';st.className='ai-st';},7000);
-  }catch(e){st.className='ai-st er';st.textContent='Error: '+e.message;}
+  }catch(e){
+    const isAuthErr=/401|invalid.*api.{0,3}key|authentication|unauthorized/i.test(e.message);
+    st.className='ai-st er';
+    if(isAuthErr){
+      st.innerHTML='API key invalid. <a href="#" onclick="event.preventDefault();promptKey()" style="color:var(--red);text-decoration:underline;font-weight:600">Update key</a>';
+    } else {
+      st.textContent='Error: '+e.message;
+    }
+  }
   btn.disabled=false;btn.textContent='Update ↗';
 }
 
