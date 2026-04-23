@@ -375,10 +375,12 @@ svg{flex-shrink:0}
 }
 /* TODAY – "This week" on mobile: normal-size day boxes, horizontal-scroll */
 @media(max-width:700px){
-  .week-sum{display:flex;flex-direction:row;overflow-x:auto;gap:16px;padding:4px 4px 8px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .week-sum{display:flex !important;flex-direction:row !important;overflow-x:auto;gap:0;padding:6px 0 12px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .week-sum::-webkit-scrollbar{display:none}
-  .week-sum .day-card{flex:0 0 152px;min-width:152px;min-height:156px;scroll-snap-align:start;box-shadow:0 1px 4px rgba(0,0,0,.04)}
-  .week-sum .dc-ev{font-size:10.5px;padding:3px 7px}
+  .week-sum .day-card{flex:0 0 150px;min-width:150px;min-height:170px;scroll-snap-align:start;margin-right:14px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.05);border-radius:12px}
+  .week-sum .day-card:first-child{margin-left:2px}
+  .week-sum .day-card:last-child{margin-right:18px}
+  .week-sum .dc-ev{font-size:11px;padding:3px 8px}
 }
 .wl-day:last-child{border-right:none}
 .wl-day.today{background:var(--bg-2)}
@@ -597,8 +599,8 @@ svg{flex-shrink:0}
 /* Month view — unified CSS grid, cells + spanning bars, no week-label column */
 .cv-weeks{padding:10px 12px;display:flex;flex-direction:column;gap:2px}
 .cv-week-row{display:grid;grid-template-columns:repeat(7,1fr);gap:0;align-items:stretch}
-.cv-week-row.mv-wk{grid-template-rows:26px repeat(var(--wk-rows,4),9px) auto;padding-bottom:4px;border-bottom:1px solid var(--border);row-gap:2px}
-.cv-weeks.detail .cv-week-row.mv-wk{grid-template-rows:26px repeat(var(--wk-rows,4),22px) auto}
+.cv-week-row.mv-wk{grid-template-rows:26px repeat(var(--wk-rows,4),9px);padding-bottom:4px;border-bottom:1px solid var(--border);row-gap:2px}
+.cv-weeks.detail .cv-week-row.mv-wk{grid-template-rows:26px repeat(var(--wk-rows,4),22px)}
 .cv-week-row.cv-week-hdr .cv-week-dayname{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:center;padding:6px 0;border-bottom:1px solid var(--border)}
 .mcw-cell{grid-row:1/-1;padding:4px 4px 2px;cursor:pointer;position:relative}
 .mcw-cell:hover:not(.faded){background:color-mix(in srgb,var(--surface-hover) 60%,transparent)}
@@ -1125,12 +1127,15 @@ svg{flex-shrink:0}
       <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
       <a href="#people" data-route-link="people" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span>People</span></a>
       <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
-      <a href="#settings" data-route-link="settings" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
+      <div class="m-drawer-foot">
+        <a href="#settings" data-route-link="settings" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
+      </div>
     </div>
   </div>
 
   <style>
     .mobile-drawer-panel .s-logo-row{padding:4px 6px 22px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+    .m-drawer-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
     .mobile-drawer-panel .s-nav-a{display:grid;grid-template-columns:24px 1fr;gap:14px;align-items:center;padding:13px 14px;border-radius:11px;font-size:15px;color:var(--text-2);font-weight:500;text-decoration:none;letter-spacing:-.1px}
     .mobile-drawer-panel .s-nav-a:hover,.mobile-drawer-panel .s-nav-a:active,.mobile-drawer-panel .s-nav-a.active{background:var(--bg-2);color:var(--text)}
     .mobile-drawer-panel .s-nav-a .ic{display:flex;align-items:center;justify-content:center;color:var(--muted)}
@@ -1457,6 +1462,15 @@ svg{flex-shrink:0}
 
         <div>
           <div class="section-hdr"><h2>Account</h2></div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Restore starter data</div>
+              <div class="setting-desc">Re-populates tasks, habits, people, projects, ideas and notes with your original starter set (same as the first time we built it). Use this if data got wiped. Does not touch calendar events.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-sm" onclick="restoreStarterData()">Restore</button>
+            </div>
+          </div>
           <div class="setting-row">
             <div>
               <div class="setting-label">Sign out</div>
@@ -2961,16 +2975,12 @@ function buildMonthView(y,m,today,allGc){
       return{ev,type,startCol:diffDaysDs(wkStartDs,startDs),endCol:diffDaysDs(wkStartDs,endDs),title:ev.title};
     });
     layoutWeekEvents(weekEvs);
-    // Compute per-cell extras count (events that got row >= MAX_ROWS)
-    const perCellHidden=[0,0,0,0,0,0,0];
-    weekEvs.forEach(e=>{if(e.row>=MAX_ROWS){for(let c=e.startCol;c<=e.endCol;c++)perCellHidden[c]++;}});
     h+=`<div class="cv-week-row mv-wk" style="--wk-rows:${MAX_ROWS}">`;
     weekCells.forEach(({y:cy,m:cm,d:cd,faded},idx)=>{
       const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
       const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
       const habitsDone=(S.habits||[]).filter(hb=>(hb.checkedDates||[]).includes(ds));
       h+=`<div class="mcw-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}" style="grid-column:${idx+1};grid-row:1/-1"><div class="mcw-top"><div class="mcw-num">${cd}</div>${habitsDone.length?`<div class="mcw-habits">${habitsDone.slice(0,5).map(hb=>`<span class="mcw-habit-dot" style="background:${habitColor(hb)}" title="${esc(hb.name)}"></span>`).join('')}</div>`:''}</div></div>`;
-      if(perCellHidden[idx]>0){h+=`<div class="mcw-more-note" style="grid-column:${idx+1};grid-row:${MAX_ROWS+2}">+${perCellHidden[idx]}</div>`;}
     });
     // Event bars as grid items that span columns — connect fully across cells
     weekEvs.forEach(e=>{
@@ -3750,6 +3760,63 @@ function render(){
   if(currentRoute==='settings')rSettings();
 }
 
+// Restore Zander's original data (tasks/habits/people/projects/ideas/notes).
+// Used after accidental data loss. Overwrites current state in those
+// sections; calendar events are intentionally excluded — those live in GCal.
+function restoreStarterData(){
+  if(!confirm('Restore the starter tasks / habits / people / projects / ideas / notes?\n\nThis OVERWRITES whatever is currently in those sections. Calendar events are not touched.'))return;
+  const d=tod();
+  S.tasks=[
+    {id:uid(),text:'Message Jenna — start WebAnchor company registration',area:'work',project:'wa',priority:'urgent',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Railway subscription expires in ~3 days — renew or cancel',area:'work',project:'gen',priority:'urgent',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Create and finish WebAnchor website',area:'work',project:'wa',priority:'hi',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Talk to accountant — register WebAnchor as a legal company',area:'work',project:'wa',priority:'hi',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Set up Sage accounting for WebAnchor',area:'work',project:'wa',priority:'hi',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Get WebAnchor logo designed',area:'work',project:'wa',priority:'med',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Evaluate hiring an employee',area:'work',project:'wa',priority:'med',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Get Claude Max subscription this week',area:'work',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Start Udemy course: using Claude effectively',area:'work',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Update and finish TriFusion website',area:'work',project:'tf',priority:'med',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Update Zomarka website',area:'work',project:'zm',priority:'lo',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Send two boxes to mom — waiting for her to add items first',area:'personal',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Find and book a therapist',area:'personal',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Find acting and public speaking classes',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Update financial spreadsheet — all current subscriptions',area:'personal',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Get food and gym tracking app subscriptions',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Check Cash Converters for a cheap drum kit',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Research upcoming business events in Cape Town',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Teshpo sleeping over this week — night TBD',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Learn how taxes and financial planning work in SA',area:'personal',project:'gen',priority:'someday',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Play paddle with Nina',area:'personal',project:'gen',priority:'someday',scheduledTime:'',done:false,date:d}
+  ];
+  S.habits=[
+    {id:uid(),name:'Prayer / quiet time',description:'',checkedDates:[],createdAt:d,notes:[]},
+    {id:uid(),name:'Read Bible',description:'',checkedDates:[],createdAt:d,notes:[]},
+    {id:uid(),name:'Gym',description:'',checkedDates:[],createdAt:d,notes:[]},
+    {id:uid(),name:'1hr meaningful content',description:'Podcasts, audiobooks, or deep-focus reading — no brain rot.',checkedDates:[],createdAt:d,notes:[]},
+    {id:uid(),name:'No mindless scrolling',description:'',checkedDates:[],createdAt:d,notes:[]}
+  ];
+  S.people=[
+    {id:uid(),name:'Teshpo',lastName:'',phone:'',email:'',workplace:'',metAt:'',context:'Friend, staying over this week',notes:[{date:d,text:'Coming to stay for an undisclosed amount of time'}],lastSeen:d,date:d},
+    {id:uid(),name:'Jenna',lastName:'',phone:'',email:'',workplace:'',metAt:'',context:'Company registration / legal contact',notes:[{date:d,text:'Need to contact about WebAnchor registration process'}],lastSeen:null,date:d}
+  ];
+  S.builds=[
+    {id:uid(),title:'Biblical knowledge quiz app',desc:'Bible verse hints or full verse — guess the book, chapter, character, location. Tests the whole Bible. Top priority.',status:'active',date:d,notes:''},
+    {id:uid(),title:'Social media auto-posting app',desc:'Every morning logs into LinkedIn and posts automatically. Instagram to follow. Best built as a Claude Code Routine.',status:'future',date:d,notes:''},
+    {id:uid(),title:'Business events finder',desc:'Curates local business events with pricing and booking links.',status:'future',date:d,notes:''},
+    {id:uid(),title:'Property investment checker',desc:'Compares listings against recent surrounding sales. Surfaces only undervalued properties.',status:'future',date:d,notes:''},
+    {id:uid(),title:'Investment portfolio advisor',desc:'Daily briefing: hold, sell, or rotate based on live global news.',status:'future',date:d,notes:''}
+  ];
+  S.ideas=[
+    {id:uid(),title:'Self-help content curation system',desc:'Filters and surfaces only genuinely useful content automatically.',date:d}
+  ];
+  S.resources=[];
+  S.notes=[
+    {id:uid(),title:'Cockroach remedy — boric acid',body:'Small bottle from Clicks. Mix with boiled mashed potatoes, place in problem areas. Very effective.',date:d}
+  ];
+  svAllNow();render();
+  alert('Restored. Data will sync to your other device within a second.');
+}
 function seed(){
   // Belt-and-braces: never overwrite real data. seed() should only run on a
   // truly fresh account. If any state is populated, bail out.
