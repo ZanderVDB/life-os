@@ -26,6 +26,7 @@
   --gold:#c9a94a; --gold-bg:#f4ecd0;
   --blue:#6a8ab5; --blue-bg:#dbe5f0;
   --red:#c46a6a; --red-bg:#f5dcd8;
+  --pink:#d98ba0; --pink-bg:#f3d5dd;
   --emerald:#5a8a6e; --emerald-bg:#d8e8dc;
   --paper:#fdf9ee; --paper-line:rgba(180,160,120,.22); --paper-margin:rgba(180,90,90,.3);
   --radius:14px; --radius-sm:10px; --radius-lg:20px;
@@ -44,6 +45,7 @@
   --gold:#d9b968; --gold-bg:#3a3222;
   --blue:#8badd8; --blue-bg:#22303f;
   --red:#dc8686; --red-bg:#3b2626;
+  --pink:#e5a3b5; --pink-bg:#3a2a30;
   --emerald:#7fbd95; --emerald-bg:#233028;
   --paper:#22252e; --paper-line:rgba(255,255,255,.06); --paper-margin:rgba(220,134,134,.35);
   --shadow:0 1px 3px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
@@ -3066,17 +3068,23 @@ function textOn(hex){
   const L=(0.299*r+0.587*g+0.114*b)/255;
   return L>0.62?'#2a2018':'#fff';
 }
-// Rendering color for a single event. Prefers Google's actual colorId,
-// then the calendar's default color, then our keyword-based category color.
+// Rendering color for a single event.
+// BIRTHDAYS always render pink, regardless of what Google has coloured them —
+// Zander wants them visually distinct from every other event/reminder type.
+// After that: prefer Google's colorId, then the calendar's default colour,
+// then the keyword-based category fallback.
 // Returns {color, bg, text} — color=primary hue, bg=soft tint, text=readable on `color`.
 function eventColor(e){
+  if(isBirthdayEv(e))return{color:'var(--pink)',bg:'var(--pink-bg)',text:'#fff'};
   if(e.colorId&&GCAL_COLORS[String(e.colorId)]){const c=GCAL_COLORS[String(e.colorId)];return{color:c.fg,bg:c.bg,text:textOn(c.fg)};}
   if(e.calendarColor){return{color:e.calendarColor,bg:hexToRgba(e.calendarColor,0.2),text:textOn(e.calendarColor)};}
   const cat=eventCategory(e);return {color:cat.color,bg:cat.bg,text:'#fff'};
 }
 function eventCategory(e){
+  // Birthdays come FIRST so a birthday reminder (Google Task titled "Mom's
+  // birthday") gets the pink cake colour, not the generic gold reminder one.
+  if(isBirthdayEv(e))return{cat:'birthday',color:'var(--pink)',bg:'var(--pink-bg)',label:'Birthday',icon:'🎂'};
   if(e.task||e.type==='task'||e.cls==='task')return{cat:'reminder',color:'var(--gold)',bg:'var(--gold-bg)',label:'Reminder',icon:'🔔'};
-  if(isBirthdayEv(e))return{cat:'birthday',color:'var(--sage)',bg:'var(--sage-bg)',label:'Birthday',icon:'🎂'};
   if(isHolidayEv(e))return{cat:'holiday',color:'var(--gold)',bg:'var(--gold-bg)',label:'Holiday',icon:'⭐'};
   if(isFaithEv(e))return{cat:'faith',color:'var(--emerald)',bg:'var(--emerald-bg)',label:'Faith',icon:'✦'};
   if(isMovieEv(e))return{cat:'movie',color:'var(--lavender)',bg:'var(--lavender-bg)',label:'Movie',icon:'🎬'};
