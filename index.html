@@ -4162,7 +4162,19 @@ async function renderCalendarList(){
         const tasks=await fetchGTasks();
         tasksStatus=`<div style="margin-top:8px;padding:6px 10px;background:var(--sage-bg);color:var(--sage);border-radius:6px;font-size:11px">🔔 Reminders connected · ${lists.length} task list${lists.length===1?'':'s'} · ${tasks.length} reminder${tasks.length===1?'':'s'} with due dates</div>`;
       } else if(r.status===403||r.status===401){
-        tasksStatus=`<div style="margin-top:8px;padding:8px 10px;background:var(--peach-bg);color:var(--peach);border-radius:6px;font-size:11px;line-height:1.5">⚠️ Tasks API returned ${r.status} even though scope is granted. Try <button class="btn btn-sm" onclick="revokeAndReconnect()">↻ Revoke & reconnect fresh</button></div>`;
+        // Parse Google's error body — when the issue is "API not enabled for
+        // this project" (the common case even WITH scope granted), Google
+        // returns a descriptive message with a direct enable-link.
+        let errMsg='',projectId='';
+        try{
+          const body=await r.json();
+          errMsg=body?.error?.message||'';
+          // Project IDs are numeric in Google Cloud; extract from typical message
+          const m=errMsg.match(/project[=\s](\d+)/i);if(m)projectId=m[1];
+          if(!projectId){const m2=errMsg.match(/project\s+(\S+)/i);if(m2)projectId=m2[1];}
+        }catch(_){}
+        const fallback=`Tasks API returned ${r.status} for your Google Cloud project. Most likely cause: the <strong>Tasks API isn't enabled</strong> in the Firebase project backing this app. Open <a href="https://console.cloud.google.com/apis/library/tasks.googleapis.com${projectId?'?project='+projectId:''}" target="_blank" style="color:var(--peach);text-decoration:underline">Google Cloud Console → Tasks API</a>, click <strong>Enable</strong>, wait ~1 minute, then click Refresh below.`;
+        tasksStatus=`<div style="margin-top:8px;padding:10px 12px;background:var(--peach-bg);color:var(--peach);border-radius:6px;font-size:11px;line-height:1.5">⚠️ <strong>Tasks API returned ${r.status} even though scope is granted.</strong><br>${errMsg?`<span style="display:block;margin:6px 0;padding:6px 8px;background:rgba(0,0,0,.06);border-radius:4px;font-family:monospace;font-size:10.5px">${esc(errMsg)}</span>`:''}${fallback}<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm" onclick="refreshCalendarList()">↻ Refresh</button><button class="btn btn-sm" onclick="revokeAndReconnect()">↻ Revoke & reconnect</button></div></div>`;
       } else {
         tasksStatus=`<div style="margin-top:8px;padding:6px 10px;background:var(--surface-2);color:var(--muted);border-radius:6px;font-size:11px">Reminders API returned HTTP ${r.status}</div>`;
       }
