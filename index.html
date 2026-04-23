@@ -639,11 +639,11 @@ svg{flex-shrink:0}
   align-items:center;
   padding:0;
   border-radius:0;
-  cursor:pointer;
   transition:filter .1s;
   z-index:1;
   overflow:hidden;
   color:#fff;
+  pointer-events:none;         /* bars are decorative — click bubbles to cell (day preview / modal) */
 }
 .mv-bar:hover{filter:brightness(.9)}
 [data-theme="studio"] .mv-bar:hover{filter:brightness(1.15)}
@@ -721,7 +721,9 @@ svg{flex-shrink:0}
 .cu-card-cnt{margin-left:auto;background:rgba(255,255,255,.2);border-radius:10px;padding:1px 9px;font-size:10px;font-weight:700;letter-spacing:0}
 [data-theme="studio"] .cu-card-hdr{color:var(--text)}
 [data-theme="studio"] .cu-card-cnt{background:rgba(255,255,255,.08)}
-.cu-card-body{display:flex;flex-direction:column;gap:2px;padding:10px 12px}
+.cu-card-body{display:flex;flex-direction:column;gap:2px;padding:10px 12px;max-height:320px;overflow-y:auto}
+.cu-card-body::-webkit-scrollbar{width:6px}
+.cu-card-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:6px}
 .cu-item{display:flex;gap:10px;align-items:baseline;padding:7px 6px;border-radius:6px;cursor:pointer;font-size:12.5px}
 .cu-item:hover{background:var(--surface-hover)}
 .cu-item-date{font-size:10px;font-weight:700;color:var(--muted);min-width:56px;text-transform:uppercase;letter-spacing:.04em}
@@ -2839,6 +2841,30 @@ function isMeetingEv(e){return/\b(meeting|mtg|call|catch[- ]?up|sync|stand[- ]?u
 function isMovieEv(e){return/\b(movie|film|cinema|netflix night)\b/i.test(e.title||'');}
 function isFaithEv(e){return/\b(church|bible|prayer|worship|sermon|youth|young adults)\b/i.test(e.title||'');}
 function isBusinessEv(e){return/\b(pitch|investor|client|meetup|conference|networking)\b/i.test(e.title||'');}
+// Google Calendar's official colorId → color mapping (same hex values as
+// Google Calendar web/mobile show, so the colour Zander sees in his phone's
+// Calendar app matches what Life OS shows)
+const GCAL_COLORS={
+  '1':{fg:'#7986cb',bg:'#d7dbec'}, '2':{fg:'#33b679',bg:'#cce9d8'},
+  '3':{fg:'#8e24aa',bg:'#e0c3eb'}, '4':{fg:'#e67c73',bg:'#f6d4d0'},
+  '5':{fg:'#f6bf26',bg:'#fbeaae'}, '6':{fg:'#f4511e',bg:'#fbcfbc'},
+  '7':{fg:'#039be5',bg:'#bee1f4'}, '8':{fg:'#616161',bg:'#d6d6d6'},
+  '9':{fg:'#3f51b5',bg:'#cbd0e9'}, '10':{fg:'#0b8043',bg:'#a9d6bb'},
+  '11':{fg:'#d50000',bg:'#f4bcbc'}
+};
+function hexToRgba(hex,alpha){
+  if(!hex||hex[0]!=='#')return hex;
+  const h=hex.slice(1);const full=h.length===3?h.split('').map(c=>c+c).join(''):h;
+  const r=parseInt(full.slice(0,2),16),g=parseInt(full.slice(2,4),16),b=parseInt(full.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+// Rendering color for a single event. Prefers Google's actual colorId,
+// then the calendar's default color, then our keyword-based category color.
+function eventColor(e){
+  if(e.colorId&&GCAL_COLORS[String(e.colorId)]){const c=GCAL_COLORS[String(e.colorId)];return{color:c.fg,bg:c.bg};}
+  if(e.calendarColor){return{color:e.calendarColor,bg:hexToRgba(e.calendarColor,0.2)};}
+  return {color:eventCategory(e).color,bg:eventCategory(e).bg};
+}
 function eventCategory(e){
   if(isBirthdayEv(e))return{cat:'birthday',color:'var(--sage)',bg:'var(--sage-bg)',label:'Birthday',icon:'🎂'};
   if(isHolidayEv(e))return{cat:'holiday',color:'var(--gold)',bg:'var(--gold-bg)',label:'Holiday',icon:'⭐'};
@@ -3063,12 +3089,13 @@ function buildMonthView(y,m,today,allGc){
     // Event bars as grid items that span columns — connect fully across cells
     weekEvs.forEach(e=>{
       if(e.row>=MAX_ROWS)return;
-      const cat=eventCategory(e.ev);
-      const p=evPayload(e.type==='gc'?{type:'gc',data:e.ev}:{type:'cus',data:e.ev},e.ev.date);
+      const col=eventColor(e.ev);
       const roundLeft=e.startCol===diffDaysDs(wkStartDs,e.ev.date);
       const roundRight=e.endCol===diffDaysDs(wkStartDs,evSpanEndDs(e.ev));
       const radiusCls=roundLeft&&roundRight?' both':roundLeft?' left':roundRight?' right':'';
-      h+=`<div class="mv-bar${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};background:${cat.color}" onclick="event.stopPropagation();openEventEdit('${p}')" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
+      // No onclick on the bar — clicks bubble to the cell's day-modal handler
+      // so every click on a day (bar or empty space) opens the full day view
+      h+=`<div class="mv-bar${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};background:${col.color}" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
     });
     h+=`</div>`;
   }
@@ -3076,7 +3103,7 @@ function buildMonthView(y,m,today,allGc){
   setTimeout(()=>{
     const cal=document.getElementById('cal');
     if(!cal)return;
-    cal.onclick=e=>{if(e.target.closest('.mv-bar')||e.target.closest('.cv-ev-chip'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openDayModal(cy,cm,cd,allGc);};
+    cal.onclick=e=>{if(e.target.closest('.cv-ev-chip'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openDayModal(cy,cm,cd,allGc);};
     attachMonthHover(cal);
   },0);
   return h;
@@ -3268,13 +3295,12 @@ async function renderComingUp(){
   let h=`<div class="cu-wrap"><div class="cu-lbl">Coming up · next 60 days</div><div class="cu-grid">`;
   panels.forEach(p=>{
     h+=`<div class="cu-card" style="border-top:3px solid ${p.color}"><div class="cu-card-hdr" style="background:${p.color}"><span class="cu-card-ic">${p.icon}</span>${esc(p.label)}<span class="cu-card-cnt">${p.items.length}</span></div><div class="cu-card-body">`;
-    p.items.slice(0,6).forEach(ev=>{
+    p.items.forEach(ev=>{
       const dt=new Date(ev.date+'T12:00:00');
       const dayLbl=ev.date===todayDs?'Today':dt.toLocaleDateString('en-ZA',{day:'numeric',month:'short'});
       const payload=encodeURIComponent(JSON.stringify({type:ev.type||'gc',data:ev.data||ev,ds:ev.date}));
       h+=`<div class="cu-item" onclick="openEventEdit('${payload}')"><span class="cu-item-date">${esc(dayLbl)}</span><span class="cu-item-title">${esc(ev.title)}</span></div>`;
     });
-    if(p.items.length>6)h+=`<div class="cu-item-more">+${p.items.length-6} more</div>`;
     h+=`</div></div>`;
   });
   h+=`</div></div>`;
