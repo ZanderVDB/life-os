@@ -650,17 +650,10 @@ svg{flex-shrink:0}
 .mv-bar.left{border-top-left-radius:3px;border-bottom-left-radius:3px;margin-left:2px}
 .mv-bar.right{border-top-right-radius:3px;border-bottom-right-radius:3px;margin-right:2px}
 .mv-bar.both{border-radius:3px;margin:0 2px}
-/* Expanded / "Expand all" month view: drop the coloured Google palette and
-   revert to the old neutral-blue pill styling. Bars are CLICKABLE in this mode
-   (the cell's day-modal handler is disabled when detail is on). */
-.mv-bar-exp{
-  background:var(--blue-bg) !important;
-  color:var(--blue) !important;
-  border-left:3px solid var(--blue);
-  pointer-events:auto !important;
-  cursor:pointer;
-}
-.mv-bar-exp .mv-bar-txt{color:var(--blue);font-weight:600}
+/* Expanded / "Expand all" month view: same Google-palette colours as the
+   collapsed bars, but bars ARE clickable (the cell's day-modal handler is
+   disabled when detail is on so there's no redundant popup). */
+.mv-bar-exp{pointer-events:auto !important;cursor:pointer}
 .mv-bar-txt{
   display:none;                /* bars-only default mode */
   overflow:hidden;
@@ -975,6 +968,17 @@ svg{flex-shrink:0}
 .profile-email{font-size:13px;color:var(--muted);margin-top:3px}
 .setting-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
 .setting-row+.setting-row{margin-top:10px}
+/* iOS-style on/off switch for calendar toggles + anywhere else we want it */
+.switch{position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0;position:absolute}
+.switch .slider{position:absolute;inset:0;background:var(--border-strong);border-radius:22px;cursor:pointer;transition:background .2s}
+.switch .slider::before{content:'';position:absolute;height:16px;width:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.switch input:checked + .slider{background:var(--accent)}
+.switch input:checked + .slider::before{transform:translateX(16px)}
+.switch input:focus-visible + .slider{box-shadow:0 0 0 2px var(--accent-bg,var(--border))}
+/* Event/Reminder type toggle at top of event modal */
+.em-type-btn{background:var(--surface-2);color:var(--text-2);border:1px solid var(--border);font-weight:500}
+.em-type-btn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .setting-label{font-size:13px;font-weight:500;color:var(--text)}
 .setting-desc{font-size:12px;color:var(--muted);margin-top:2px}
 .setting-right{flex-shrink:0;display:flex;align-items:center;gap:8px}
@@ -1589,6 +1593,10 @@ svg{flex-shrink:0}
   <div class="modal-bd" onclick="closeEventModal()"></div>
   <div class="modal-body">
     <h3 id="em-title">Edit event</h3>
+    <div class="modal-row" id="em-type-row" style="display:flex;gap:6px">
+      <button type="button" class="btn btn-sm em-type-btn on" data-emt="event" onclick="setEmType('event')" style="flex:1">📅 Event</button>
+      <button type="button" class="btn btn-sm em-type-btn" data-emt="task" onclick="setEmType('task')" style="flex:1">🔔 Reminder</button>
+    </div>
     <div class="modal-row"><label>Title</label><input class="input" id="em-t" style="width:100%"></div>
     <div class="modal-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div><label>Start date</label><input class="input" id="em-d" type="date" style="width:100%"></div>
@@ -1799,7 +1807,14 @@ setTimeout(()=>{if(!authResolved){console.warn('[auth] timeout — showing login
 
 // GOOGLE CALENDAR
 let gTok=null;let gcCache={key:'',events:[]};
-function makeGProvider(){const p=new firebase.auth.GoogleAuthProvider();p.addScope('https://www.googleapis.com/auth/calendar');return p;}
+function makeGProvider(){
+  const p=new firebase.auth.GoogleAuthProvider();
+  p.addScope('https://www.googleapis.com/auth/calendar');
+  // Tasks API — so Google "Reminders" (which are stored as Tasks) appear on
+  // the calendar. Date-only; the Tasks API doesn't round-trip a time of day.
+  p.addScope('https://www.googleapis.com/auth/tasks');
+  return p;
+}
 function isPopupIssue(err){const c=err&&err.code||'';return c==='auth/popup-blocked'||c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request'||c==='auth/operation-not-supported-in-this-environment';}
 async function signInGoogle(){
   try{await persistenceReady;}catch(e){}
@@ -1856,7 +1871,7 @@ async function connectGoogleCalendar(){
   })();
   return _connectingGCal;
 }
-async function reconnectGCalAndRefresh(){const t=await connectGoogleCalendar();if(t){gcCache={key:'',events:[]};_calListCache={ts:0,cals:[]};render();rSettings();}}
+async function reconnectGCalAndRefresh(){const t=await connectGoogleCalendar();if(t){gcCache={key:'',events:[]};_calListCache={ts:0,cals:[]};_gtasksCache={ts:0,items:[]};render();rSettings();}}
 auth.getRedirectResult().then(r=>{
   if(r&&r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);sessionStorage.removeItem('los_redirect');}catch(e){}}
 }).catch(e=>{if(e&&e.code)console.warn('Redirect result:',e.code,e.message);});
@@ -1911,7 +1926,83 @@ async function fetchGCal(start,end){
 async function getGCForMonth(y,m){
   const key=`${y}-${m}`;if(gcCache.key===key)return gcCache.events;
   const s=new Date(y,m,1).toISOString(),e=new Date(y,m+1,1).toISOString();
-  const evs=await fetchGCal(s,e);gcCache={key,events:evs};return evs;
+  const evs=await fetchGCal(s,e);
+  const tsks=await fetchGTasks();
+  // Merge: tasks that fall inside the month become calendar items too. Pre-
+  // compute year-month boundaries.
+  const monthTasks=tsks.filter(t=>t.date&&t.date>=s.slice(0,10)&&t.date<=new Date(y,m+1,0).toISOString().slice(0,10));
+  const all=[...evs,...monthTasks];
+  gcCache={key,events:all};return all;
+}
+
+// ───────── GOOGLE TASKS (Reminders) ─────────
+// Google moved "Reminders" into Google Tasks a couple of years ago. We fetch
+// every task from every tasklist, treat date-only tasks as all-day calendar
+// items, and tag them type:'task' so UI can render a 🔔 icon. The Tasks API
+// DOES NOT round-trip a time of day — due is a date only.
+let _gtasksCache={ts:0,items:[]};
+async function fetchTaskLists(){
+  const tok=getGCalToken();if(!tok)return[];
+  try{
+    const r=await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists',{headers:{Authorization:'Bearer '+tok}});
+    if(!r.ok)return[];
+    const d=await r.json();
+    return (d.items||[]).map(l=>({id:l.id,title:l.title}));
+  }catch(e){console.warn('[tasks] list fetch',e.message);return[];}
+}
+async function fetchGTasks(){
+  const tok=getGCalToken();if(!tok)return[];
+  // 5 minute client cache — Tasks don't change as often as events
+  if(Date.now()-_gtasksCache.ts<5*60000&&_gtasksCache.items.length)return _gtasksCache.items;
+  const lists=await fetchTaskLists();
+  if(!lists.length){_gtasksCache={ts:Date.now(),items:[]};return[];}
+  const results=await Promise.all(lists.map(l=>(async()=>{
+    try{
+      // showCompleted=false hides ticked-off reminders so the calendar stays clean
+      const r=await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(l.id)}/tasks?showCompleted=false&maxResults=100`,{headers:{Authorization:'Bearer '+tok}});
+      if(!r.ok)return[];
+      const d=await r.json();
+      return (d.items||[]).filter(t=>t.due).map(t=>({
+        id:t.id,
+        title:t.title||'(No title)',
+        description:t.notes||'',
+        date:t.due.slice(0,10),  // Tasks API returns RFC 3339 date, we keep just the date
+        endDate:null,
+        time:'',
+        endTime:'',
+        allDay:true,
+        task:true,              // flag: this is a Reminder, not an event
+        status:t.status,        // needsAction | completed
+        tasklistId:l.id,
+        type:'task',
+        cls:'task'
+      }));
+    }catch(e){console.warn('[tasks] fetch',l.id,e.message);return[];}
+  })()));
+  const items=results.flat();
+  _gtasksCache={ts:Date.now(),items};
+  return items;
+}
+async function createGTask(title,date){
+  const tok=getGCalToken();if(!tok){alert('Google Tasks requires Google sign-in.');return null;}
+  const lists=await fetchTaskLists();
+  const listId=lists[0]?.id||'@default';
+  try{
+    const body={title,due:new Date(date+'T00:00:00.000Z').toISOString()};
+    const r=await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},body:JSON.stringify(body)});
+    if(!r.ok){const t=await r.text();console.error('[tasks] create',r.status,t);return null;}
+    _gtasksCache={ts:0,items:[]};  // bust
+    return await r.json();
+  }catch(e){console.error('[tasks] create',e.message);return null;}
+}
+async function deleteGTask(id,tasklistId){
+  const tok=getGCalToken();if(!tok)return false;
+  const listId=tasklistId||'@default';
+  try{
+    const r=await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(id)}`,{method:'DELETE',headers:{Authorization:'Bearer '+tok}});
+    _gtasksCache={ts:0,items:[]};
+    return r.ok||r.status===204;
+  }catch(e){console.error('[tasks] delete',e.message);return false;}
 }
 function buildRRule(repeat,startDate){
   const d=new Date(startDate+'T12:00:00');
@@ -2615,6 +2706,9 @@ async function rTodayWeek(){
   try{
     const a=new Date(start);const b=new Date(start);b.setDate(start.getDate()+7);
     gc=await fetchGCal(a.toISOString(),b.toISOString());
+    const tsks=await fetchGTasks();
+    const seen=new Set();
+    tsks.forEach(t=>{if(!seen.has(t.id)){seen.add(t.id);gc.push(t);}});
   }catch(e){}
   el.innerHTML=days.map(d=>{
     const ds=localDs(d);
@@ -2819,6 +2913,13 @@ async function rCal(){
       const ids=new Set(gcEvs.map(e=>e.id));more.forEach(e=>{if(!ids.has(e.id))gcEvs.push(e);});
     }catch(e){}
   }
+  // Always merge in all active Google Tasks (reminders) — cached for 5min so
+  // this is effectively free after the first hit.
+  try{
+    const tsks=await fetchGTasks();
+    const seen=new Set(gcEvs.filter(e=>e.task).map(e=>e.id));
+    tsks.forEach(t=>{if(!seen.has(t.id))gcEvs.push(t);});
+  }catch(e){}
   const gcForDate=ds=>(gcEvs||[]).filter(e=>e.date===ds);
   if(UI.calView==='day'){
     const ds=localDs(UI.calDate);
@@ -2910,6 +3011,7 @@ function eventColor(e){
   const cat=eventCategory(e);return {color:cat.color,bg:cat.bg,text:'#fff'};
 }
 function eventCategory(e){
+  if(e.task||e.type==='task'||e.cls==='task')return{cat:'reminder',color:'var(--gold)',bg:'var(--gold-bg)',label:'Reminder',icon:'🔔'};
   if(isBirthdayEv(e))return{cat:'birthday',color:'var(--sage)',bg:'var(--sage-bg)',label:'Birthday',icon:'🎂'};
   if(isHolidayEv(e))return{cat:'holiday',color:'var(--gold)',bg:'var(--gold-bg)',label:'Holiday',icon:'⭐'};
   if(isFaithEv(e))return{cat:'faith',color:'var(--emerald)',bg:'var(--emerald-bg)',label:'Faith',icon:'✦'};
@@ -2919,31 +3021,36 @@ function eventCategory(e){
   if(e.cls==='cus'||e.type==='cus')return{cat:'custom',color:'var(--lavender)',bg:'var(--lavender-bg)',label:'Event',icon:'◐'};
   return{cat:'event',color:'var(--blue)',bg:'var(--blue-bg)',label:'Event',icon:'◉'};
 }
-function evClass(e){return isBirthdayEv(e)?'bday':e.cls||e.type||'gc';}
+function evClass(e){if(e.task||e.type==='task')return'task';return isBirthdayEv(e)?'bday':e.cls||e.type||'gc';}
 function evPayload(e,ds){return encodeURIComponent(JSON.stringify({type:e.type||'gc',data:e.data||e,ds}));}
 function fmtTimeShort(e){if(e.allDay||!e.time)return 'All day';const h=parseHfromHHMM(e.time);if(h===null)return e.time||'';const hm=e.time.slice(0,5);const[hh,mm]=hm.split(':').map(Number);const a=hh>=12?'pm':'am';const dh=hh>12?hh-12:(hh===0?12:hh);return`${dh}${mm?':'+String(mm).padStart(2,'0'):''}${a}`;}
 function gatherDay(date,ds,gcEvs){
   const ceSource=getGCalToken()?[]:(S.customEvents||[]);
   const ce=ceSource.filter(e=>{const end=e.endDate||e.date;return ds>=e.date&&ds<=end;}).map(e=>({title:e.title,time:e.time?(p2hhmm(e.time).slice(0,5)):null,endTime:e.endTime?p2hhmm(e.endTime).slice(0,5):null,allDay:!e.time,cls:'cus',type:'cus',data:e,h:parseH(e.time),isMulti:(e.endDate||e.date)!==e.date,isSpanStart:ds===e.date,spanEndDs:e.endDate||e.date}));
-  const gc=(gcEvs||[]).filter(e=>{const end=evSpanEndDs(e);return ds>=e.date&&ds<=end;}).map(e=>{const end=evSpanEndDs(e);return{title:e.title,time:e.time?e.time.slice(0,5):null,endTime:e.endTime?e.endTime.slice(0,5):null,allDay:e.allDay,cls:isBirthdayEv(e)?'bday':'gc',type:'gc',data:e,h:parseHfromHHMM(e.time),isMulti:end!==e.date,isSpanStart:ds===e.date,spanEndDs:end};});
+  const gc=(gcEvs||[]).filter(e=>{const end=evSpanEndDs(e);return ds>=e.date&&ds<=end;}).map(e=>{const end=evSpanEndDs(e);const isTask=!!(e.task||e.type==='task');return{title:e.title,time:e.time?e.time.slice(0,5):null,endTime:e.endTime?e.endTime.slice(0,5):null,allDay:e.allDay,cls:isTask?'task':(isBirthdayEv(e)?'bday':'gc'),type:isTask?'task':'gc',task:isTask,data:e,h:parseHfromHHMM(e.time),isMulti:end!==e.date,isSpanStart:ds===e.date,spanEndDs:end};});
   const all=[...gc,...ce];all.sort((a,b)=>{if(a.allDay&&!b.allDay)return-1;if(!a.allDay&&b.allDay)return 1;return(a.h??99)-(b.h??99);});
   return all;
 }
 // Inline style string for any event chip/pill/bar in Day/3-Day/Week/Today's
-// week views. Returns background (low-alpha tint), text colour, and a 3px
-// coloured left border — same hue as the Month-view bar, so an event is the
-// SAME colour everywhere it appears. Used by allday-ev, ts-ev, dv-ev, dc-ev,
-// td-event, and cv-ev-chip.
+// week views. Picks up the SAME hue as the Month-view bar so events look
+// identical across every view. Used by allday-ev, ts-ev, dv-ev, dc-ev,
+// td-event, cv-ev-chip.
+//
+// For hex palette colours we use a 32% alpha tint (visible in both Soft and
+// Studio themes without clobbering readability). For CSS-var fallback
+// categories we use the paired var(--xxx-bg) that already works in both.
 function evInlineStyle(ev){
   const col=eventColor(ev);
   const isHex=typeof col.color==='string'&&col.color[0]==='#';
-  const bg=isHex?hexToRgba(col.color,0.16):col.bg;
+  const bg=isHex?hexToRgba(col.color,0.32):col.bg;
   return`background:${bg};color:${col.color};border-left:3px solid ${col.color};padding-left:8px`;
 }
 function evChip(ev,ds){
   const cls=evClass(ev);const p=evPayload(ev,ds);
+  const isTask=!!(ev.task||ev.type==='task');
+  const timeLbl=isTask?'🔔':(ev.allDay?'All':esc(fmtTimeShort(ev)));
   // Click closes any open day modal / hover popover, then opens the editor.
-  return`<div class="cv-ev-chip ${cls}" style="${evInlineStyle(ev)}" onclick="event.stopPropagation();closeDayModal();hideMcwPopover();openEventEdit('${p}')"><span class="t">${ev.allDay?'All':esc(fmtTimeShort(ev))}</span><span class="n">${esc(ev.title)}</span></div>`;
+  return`<div class="cv-ev-chip ${cls}" style="${evInlineStyle(ev)}" onclick="event.stopPropagation();closeDayModal();hideMcwPopover();openEventEdit('${p}')"><span class="t">${timeLbl}</span><span class="n">${esc(ev.title)}</span></div>`;
 }
 
 // ─────── MONTH HELPERS ───────
@@ -3151,15 +3258,14 @@ function buildMonthView(y,m,today,allGc){
       const roundLeft=e.startCol===diffDaysDs(wkStartDs,e.ev.date);
       const roundRight=e.endCol===diffDaysDs(wkStartDs,evSpanEndDs(e.ev));
       const radiusCls=roundLeft&&roundRight?' both':roundLeft?' left':roundRight?' right':'';
-      // In COLLAPSED (bars) mode: bars are coloured per Google Calendar, decorative
-      // (pointer-events:none) — clicks bubble to the cell → opens day modal.
-      // In EXPANDED (all-events) mode: bars use the neutral old-blue style and
-      // ARE clickable, since the cell click is disabled (everything is visible).
+      // Both modes use the SAME colour from eventColor(). Difference is behaviour:
+      //   - COLLAPSED: pointer-events:none, clicks bubble to cell → day modal
+      //   - EXPANDED:  bars are directly clickable (cell click is disabled)
+      const col=eventColor(e.ev);
       if(detail){
         const payload=evPayload(e.ev,e.ev.date);
-        h+=`<div class="mv-bar mv-bar-exp${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2}" onclick="event.stopPropagation();openEventEdit('${payload}')" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
+        h+=`<div class="mv-bar mv-bar-exp${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};background:${col.color};color:${col.text}" onclick="event.stopPropagation();openEventEdit('${payload}')" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
       } else {
-        const col=eventColor(e.ev);
         h+=`<div class="mv-bar${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};background:${col.color};color:${col.text}" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
       }
     });
@@ -3175,7 +3281,13 @@ function buildMonthView(y,m,today,allGc){
       cal.onclick=e=>{if(e.target.closest('.cv-ev-chip')||e.target.closest('.mv-bar-exp'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openDayModal(cy,cm,cd,allGc);};
       attachMonthHover(cal);
     } else {
+      // Expanded view — clear ALL listeners from a previous collapsed render.
+      // Without this the hover popover keeps firing from the last attached
+      // onmouseover handler, even though click & day modal are off.
       cal.onclick=null;
+      cal.onmouseover=null;
+      cal.onmouseout=null;
+      hideMcwPopover();
     }
   },0);
   return h;
@@ -3353,16 +3465,18 @@ async function renderComingUp(){
   // calendar view is currently rendered (day/3-day/week only fetch a
   // small window — that's why panels were disappearing on view switch)
   const gcEvs=await fetchGCal(today.toISOString(),horizonEnd.toISOString()).catch(()=>[]);
+  const tasks=await fetchGTasks().catch(()=>[]);
   const upcoming=(gcEvs||[]).filter(e=>{
     const start=e.date;if(!start)return false;
     if(start<todayDs){if(e.allDay&&e.endDate&&e.endDate>todayDs)return true;return false;}
     return start<=horizonDs;
   });
-  const byCat={birthday:[],holiday:[],meeting:[],movie:[],business:[],faith:[],event:[]};
+  const byCat={reminder:[],birthday:[],holiday:[],meeting:[],movie:[],business:[],faith:[],event:[]};
   upcoming.forEach(e=>{const cat=eventCategory(e);(byCat[cat.cat]||byCat.event).push(e);});
+  (tasks||[]).forEach(t=>{if(t.date>=todayDs&&t.date<=horizonDs)byCat.reminder.push(t);});
   (S.customEvents||[]).forEach(e=>{if(e.date>=todayDs&&e.date<=horizonDs){const cat=eventCategory({title:e.title,type:'cus'});(byCat[cat.cat]||byCat.event).push({...e,type:'cus',data:e,cls:'cus',allDay:!e.time});}});
   const panels=[];
-  const catOrder=[{key:'birthday',label:'Birthdays',icon:'🎂'},{key:'holiday',label:'Holidays',icon:'⭐'},{key:'meeting',label:'Meetings',icon:'◉'},{key:'business',label:'Business',icon:'◆'},{key:'faith',label:'Faith',icon:'✦'},{key:'movie',label:'Movie nights',icon:'🎬'},{key:'event',label:'Other events',icon:'◐'}];
+  const catOrder=[{key:'reminder',label:'Reminders',icon:'🔔'},{key:'birthday',label:'Birthdays',icon:'🎂'},{key:'holiday',label:'Holidays',icon:'⭐'},{key:'meeting',label:'Meetings',icon:'◉'},{key:'business',label:'Business',icon:'◆'},{key:'faith',label:'Faith',icon:'✦'},{key:'movie',label:'Movie nights',icon:'🎬'},{key:'event',label:'Other events',icon:'◐'}];
   catOrder.forEach(({key,label,icon})=>{
     const items=(byCat[key]||[]).sort((a,b)=>a.date.localeCompare(b.date));
     if(items.length){const cat=eventCategory({title:items[0].title||'',type:items[0].type||'gc'});panels.push({label,icon,items,cat:key,color:cat.color,bg:cat.bg});}
@@ -3491,6 +3605,36 @@ function toggleEmAllDay(){
   const row=document.getElementById('em-time-row');
   if(row)row.style.display=cb.checked?'none':'grid';
 }
+// Switch the event modal between "Event" (full calendar event, saved to GCal)
+// and "Reminder" (Google Task with due date only — no time, no repeat).
+let _emType='event';
+function setEmType(t){
+  _emType=t==='task'?'task':'event';
+  document.querySelectorAll('.em-type-btn').forEach(b=>b.classList.toggle('on',b.dataset.emt===_emType));
+  const hideForTask=['em-d-end-row','em-allday-row','em-time-row','em-repeat-row','em-tz-row','em-desc-row'];
+  const isTask=_emType==='task';
+  // Hide fields that Google Tasks API doesn't support (time/end/repeat/tz/notes).
+  // We toggle parent rows by ID so the layout stays clean.
+  document.querySelectorAll('#event-modal .modal-row').forEach(row=>{
+    if(row.id==='em-type-row')return;
+    const labels=row.querySelectorAll('label');
+    const txt=[...labels].map(l=>l.textContent).join(' ').toLowerCase();
+    const isTitle=row.querySelector('#em-t');
+    const isDate=row.querySelector('#em-d')||row.querySelector('#em-d-end');
+    if(isTitle||isDate)return;          // always shown
+    row.style.display=isTask?'none':'';
+  });
+  // All-day & time also hidden for tasks
+  const allday=document.querySelector('.em-allday');if(allday)allday.style.display=isTask?'none':'flex';
+  const delBtn=document.getElementById('em-del');
+  if(isTask){
+    // Reminder always has allDay=true implicit
+    const ad=document.getElementById('em-allday');if(ad){ad.checked=true;toggleEmAllDay();}
+    document.getElementById('em-title').textContent=editingEvent&&editingEvent.mode==='new'?'New reminder':'Edit reminder';
+  } else {
+    document.getElementById('em-title').textContent=editingEvent&&editingEvent.mode==='new'?'New event':(editingEvent&&editingEvent.type==='gc'?'Edit Google event':'Edit event');
+  }
+}
 function resetEventModal(){
   ['em-t','em-tm','em-tm-end','em-desc','em-d-end'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
   const ad=document.getElementById('em-allday');if(ad)ad.checked=false;
@@ -3503,12 +3647,14 @@ function openNewEvent(prefill){
   prefill=prefill||{};
   editingEvent={mode:'new',type:'gc'};
   resetEventModal();
-  document.getElementById('em-title').textContent='New event';
+  setEmType(prefill.kind==='task'?'task':'event');
+  document.getElementById('em-title').textContent=_emType==='task'?'New reminder':'New event';
   document.getElementById('em-d').value=prefill.date||localDs(UI.calDate);
   document.getElementById('em-tm').value=prefill.time||'';
   document.getElementById('em-tm-end').value=prefill.endTime||'';
   document.getElementById('em-del').style.display='none';
   document.getElementById('event-modal').style.display='flex';
+  _syncBodyLock();
   setTimeout(()=>document.getElementById('em-t').focus(),50);
 }
 async function openEventEdit(payload){
@@ -3529,7 +3675,9 @@ async function openEventEdit(payload){
   // always visible feedback — even for events we can't enrich.
   try{
     resetEventModal();
-    document.getElementById('em-title').textContent=p.type==='gc'?'Edit Google event':'Edit event';
+    setEmType(p.type==='task'?'task':'event');
+    if(p.type==='task')document.getElementById('em-title').textContent='Edit reminder';
+    else document.getElementById('em-title').textContent=p.type==='gc'?'Edit Google event':'Edit event';
     document.getElementById('em-t').value=d.title||'';
     document.getElementById('em-d').value=d.date||p.ds||'';
     document.getElementById('em-d-end').value=endDate&&endDate!==(d.date||p.ds)?endDate:'';
@@ -3577,6 +3725,18 @@ async function saveCurrentEvent(){
   const title=document.getElementById('em-t').value.trim();
   if(!title){alert('Title required');return;}
   const date=document.getElementById('em-d').value||tod();
+  // REMINDER path — Google Task (date only, no time/end/repeat/notes)
+  if(_emType==='task'||editingEvent.type==='task'){
+    if(editingEvent.mode==='new'){
+      const res=await createGTask(title,date);
+      if(!res)alert('Failed to create reminder.');
+    } else if(editingEvent.type==='task'){
+      // Simplest: delete + recreate (Tasks PATCH is finicky with due-date round-trips)
+      await deleteGTask(editingEvent.data.id,editingEvent.data.tasklistId);
+      await createGTask(title,date);
+    }
+    closeEventModal();rCal();render();return;
+  }
   const endDateInput=document.getElementById('em-d-end').value||'';
   const endDate=endDateInput&&endDateInput!==date?endDateInput:date;
   if(endDate<date){alert('End date must be the same day or later.');return;}
@@ -3602,8 +3762,9 @@ async function saveCurrentEvent(){
 }
 async function deleteCurrentEvent(){
   if(!editingEvent||editingEvent.mode==='new')return closeEventModal();
-  if(!confirm('Delete this event?'))return;
-  if(editingEvent.type==='gc'){const ok=await deleteGCEvent(editingEvent.data.id,editingEvent.data.calendarId);if(!ok)alert('Failed to delete Google event.');}
+  if(!confirm(editingEvent.type==='task'?'Delete this reminder?':'Delete this event?'))return;
+  if(editingEvent.type==='task'){const ok=await deleteGTask(editingEvent.data.id,editingEvent.data.tasklistId);if(!ok)alert('Failed to delete reminder.');}
+  else if(editingEvent.type==='gc'){const ok=await deleteGCEvent(editingEvent.data.id,editingEvent.data.calendarId);if(!ok)alert('Failed to delete Google event.');}
   else if(editingEvent.type==='cus'){S.customEvents=(S.customEvents||[]).filter(x=>x.id!==editingEvent.data.id);}
   svAll();closeEventModal();rCal();render();
 }
@@ -3955,8 +4116,8 @@ async function renderCalendarList(){
     const on=c.primary||!disabled.has(c.id);
     const toggle=c.primary
       ? `<span style="font-size:10px;color:var(--muted);margin-left:auto">always on</span>`
-      : `<label class="cal-tog" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--muted)"><input type="checkbox" ${on?'checked':''} onchange="toggleCalendar('${id}',this.checked)" style="cursor:pointer"><span>${on?'On':'Off'}</span></label>`;
-    return `<div style="padding:4px 0;display:flex;align-items:center;min-width:0">${dot}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}${badge}</span>${toggle}</div>`;
+      : `<label class="switch" style="margin-left:auto"><input type="checkbox" ${on?'checked':''} onchange="toggleCalendar('${id}',this.checked)"><span class="slider"></span></label>`;
+    return `<div style="padding:6px 0;display:flex;align-items:center;min-width:0;gap:4px">${dot}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${name}${badge}</span>${toggle}</div>`;
   }).join('');
 }
 async function toggleCalendar(id,on){
