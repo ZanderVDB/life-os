@@ -1913,6 +1913,20 @@ async function fetchCalendarList(){
     // but still syncs from the phone. The Settings UI tags hidden ones so
     // the user can flip them on/off themselves.
     const cals=(d.items||[]).map(c=>({id:c.id,summary:c.summary,backgroundColor:c.backgroundColor||null,primary:!!c.primary,hidden:c.hidden===true,selected:c.selected!==false}));
+    // Google's Contacts Birthdays calendar isn't always returned by
+    // calendarList — it's a synthesized calendar backed by People API data
+    // that some accounts can query directly by its well-known ID. Probe for
+    // it, and if the events endpoint responds, surface it in the list so the
+    // user can toggle it on just like any other calendar.
+    const CONTACTS_BDAY_ID='addressbook#contacts@group.v.calendar.google.com';
+    if(!cals.some(c=>c.id===CONTACTS_BDAY_ID)){
+      try{
+        const probe=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CONTACTS_BDAY_ID)}/events?maxResults=1`,{headers:{Authorization:'Bearer '+tok}});
+        if(probe.ok){
+          cals.push({id:CONTACTS_BDAY_ID,summary:'Birthdays (from Contacts)',backgroundColor:'#b89b52',primary:false,hidden:false,selected:true});
+        }
+      }catch(_){}
+    }
     _calListCache={ts:Date.now(),cals};
     return _calListCache.cals;
   }catch(e){console.warn('[gcal] calList failed:',e.message);return[];}
@@ -2173,6 +2187,15 @@ document.addEventListener('visibilitychange',()=>{
     // sees us back. If another device is currently "primary", it'll see our
     // claim and their listener will yield
     claimPresence();
+  }
+  // Bust GCal caches when returning to the tab so deletes/edits made on the
+  // phone propagate without a manual refresh. Events, calendar list, and
+  // Tasks all get refreshed.
+  if(document.visibilityState==='visible'&&getGCalToken()){
+    gcCache={key:'',events:[]};
+    _gtasksCache={ts:0,items:[]};
+    if(currentRoute==='calendar')rCal();
+    if(currentRoute==='today')rTodayWeek();
   }
 });
 function stopPresence(){
