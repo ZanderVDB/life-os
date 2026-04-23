@@ -650,6 +650,17 @@ svg{flex-shrink:0}
 .mv-bar.left{border-top-left-radius:3px;border-bottom-left-radius:3px;margin-left:2px}
 .mv-bar.right{border-top-right-radius:3px;border-bottom-right-radius:3px;margin-right:2px}
 .mv-bar.both{border-radius:3px;margin:0 2px}
+/* Expanded / "Expand all" month view: drop the coloured Google palette and
+   revert to the old neutral-blue pill styling. Bars are CLICKABLE in this mode
+   (the cell's day-modal handler is disabled when detail is on). */
+.mv-bar-exp{
+  background:var(--blue-bg) !important;
+  color:var(--blue) !important;
+  border-left:3px solid var(--blue);
+  pointer-events:auto !important;
+  cursor:pointer;
+}
+.mv-bar-exp .mv-bar-txt{color:var(--blue);font-weight:600}
 .mv-bar-txt{
   display:none;                /* bars-only default mode */
   overflow:hidden;
@@ -1461,12 +1472,19 @@ svg{flex-shrink:0}
           <div class="setting-row">
             <div>
               <div class="setting-label">Google Calendar</div>
-              <div class="setting-desc">Read & edit events on your primary calendar.</div>
+              <div class="setting-desc">Reads events from <strong>every</strong> calendar on your account (your own, shared, birthdays, subscribed). Google <em>Reminders</em> and <em>Tasks</em> are a separate API — they aren't pulled in yet.</div>
             </div>
             <div class="setting-right">
               <span class="key-mask" id="gcal-status">—</span>
               <button class="btn btn-sm" id="gcal-connect-btn" onclick="reconnectGCalAndRefresh()">Connect</button>
             </div>
+          </div>
+          <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:8px" id="gcal-cal-row">
+            <div style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px">
+              <div class="setting-label" style="font-size:12px">Connected calendars</div>
+              <button class="btn btn-ghost btn-sm" onclick="refreshCalendarList()">↻ Refresh</button>
+            </div>
+            <div id="gcal-cal-list" style="font-size:12px;color:var(--text-2);line-height:1.5">—</div>
           </div>
         </div>
 
@@ -2845,16 +2863,21 @@ function isMeetingEv(e){return/\b(meeting|mtg|call|catch[- ]?up|sync|stand[- ]?u
 function isMovieEv(e){return/\b(movie|film|cinema|netflix night)\b/i.test(e.title||'');}
 function isFaithEv(e){return/\b(church|bible|prayer|worship|sermon|youth|young adults)\b/i.test(e.title||'');}
 function isBusinessEv(e){return/\b(pitch|investor|client|meetup|conference|networking)\b/i.test(e.title||'');}
-// Google Calendar's official colorId → color mapping (same hex values as
-// Google Calendar web/mobile show, so the colour Zander sees in his phone's
-// Calendar app matches what Life OS shows)
+// Google Calendar's colorId → color mapping. Slightly desaturated vs Google's
+// raw palette to fit Life OS's Soft/Studio aesthetic while still being
+// recognisably the same hues Zander sees in the phone Calendar app.
 const GCAL_COLORS={
-  '1':{fg:'#7986cb',bg:'#d7dbec'}, '2':{fg:'#33b679',bg:'#cce9d8'},
-  '3':{fg:'#8e24aa',bg:'#e0c3eb'}, '4':{fg:'#e67c73',bg:'#f6d4d0'},
-  '5':{fg:'#f6bf26',bg:'#fbeaae'}, '6':{fg:'#f4511e',bg:'#fbcfbc'},
-  '7':{fg:'#039be5',bg:'#bee1f4'}, '8':{fg:'#616161',bg:'#d6d6d6'},
-  '9':{fg:'#3f51b5',bg:'#cbd0e9'}, '10':{fg:'#0b8043',bg:'#a9d6bb'},
-  '11':{fg:'#d50000',bg:'#f4bcbc'}
+  '1':{fg:'#8b95c5',bg:'#dfe3ef'}, // Lavender
+  '2':{fg:'#4ca773',bg:'#d2e6d9'}, // Sage
+  '3':{fg:'#9e5cb0',bg:'#e1cde7'}, // Grape
+  '4':{fg:'#db7d73',bg:'#f4d5d1'}, // Flamingo
+  '5':{fg:'#d9a93d',bg:'#f3e3b2'}, // Banana (deeper than neon #f6bf26)
+  '6':{fg:'#d9693c',bg:'#f3cfc0'}, // Tangerine (less fire-engine)
+  '7':{fg:'#4a9ec7',bg:'#c5deee'}, // Peacock
+  '8':{fg:'#7a7a7a',bg:'#d8d8d8'}, // Graphite
+  '9':{fg:'#5a6bba',bg:'#cdd2ea'}, // Blueberry
+  '10':{fg:'#3e8a5c',bg:'#b6d7c1'}, // Basil
+  '11':{fg:'#c24a44',bg:'#efc4c0'}  // Tomato
 };
 function hexToRgba(hex,alpha){
   if(!hex||hex[0]!=='#')return hex;
@@ -2862,12 +2885,21 @@ function hexToRgba(hex,alpha){
   const r=parseInt(full.slice(0,2),16),g=parseInt(full.slice(2,4),16),b=parseInt(full.slice(4,6),16);
   return `rgba(${r},${g},${b},${alpha})`;
 }
+// Pick a readable text colour (white or near-black) for a given bg hex.
+function textOn(hex){
+  if(!hex||hex[0]!=='#')return '#fff';
+  const h=hex.slice(1);const full=h.length===3?h.split('').map(c=>c+c).join(''):h;
+  const r=parseInt(full.slice(0,2),16),g=parseInt(full.slice(2,4),16),b=parseInt(full.slice(4,6),16);
+  const L=(0.299*r+0.587*g+0.114*b)/255;
+  return L>0.62?'#2a2018':'#fff';
+}
 // Rendering color for a single event. Prefers Google's actual colorId,
 // then the calendar's default color, then our keyword-based category color.
+// Returns {color, bg, text} — color=primary hue, bg=soft tint, text=readable on `color`.
 function eventColor(e){
-  if(e.colorId&&GCAL_COLORS[String(e.colorId)]){const c=GCAL_COLORS[String(e.colorId)];return{color:c.fg,bg:c.bg};}
-  if(e.calendarColor){return{color:e.calendarColor,bg:hexToRgba(e.calendarColor,0.2)};}
-  return {color:eventCategory(e).color,bg:eventCategory(e).bg};
+  if(e.colorId&&GCAL_COLORS[String(e.colorId)]){const c=GCAL_COLORS[String(e.colorId)];return{color:c.fg,bg:c.bg,text:textOn(c.fg)};}
+  if(e.calendarColor){return{color:e.calendarColor,bg:hexToRgba(e.calendarColor,0.2),text:textOn(e.calendarColor)};}
+  const cat=eventCategory(e);return {color:cat.color,bg:cat.bg,text:'#fff'};
 }
 function eventCategory(e){
   if(isBirthdayEv(e))return{cat:'birthday',color:'var(--sage)',bg:'var(--sage-bg)',label:'Birthday',icon:'🎂'};
@@ -2889,7 +2921,19 @@ function gatherDay(date,ds,gcEvs){
   const all=[...gc,...ce];all.sort((a,b)=>{if(a.allDay&&!b.allDay)return-1;if(!a.allDay&&b.allDay)return 1;return(a.h??99)-(b.h??99);});
   return all;
 }
-function evChip(ev,ds){const cls=evClass(ev);const p=evPayload(ev,ds);return`<div class="cv-ev-chip ${cls}" onclick="event.stopPropagation();openEventEdit('${p}')"><span class="t">${ev.allDay?'All':esc(fmtTimeShort(ev))}</span><span class="n">${esc(ev.title)}</span></div>`;}
+function evChip(ev,ds){
+  const cls=evClass(ev);const p=evPayload(ev,ds);const col=eventColor(ev);
+  // Colour the chip with the SAME hue as the month-view bar so they always
+  // agree. A low-alpha tint works across both Soft & Studio themes; the left
+  // border carries the colour signal even when the tint is near-invisible.
+  // Click closes any open day modal / hover popover, then opens the editor.
+  // When col.color is a CSS variable (fallback category), use the paired
+  // var(--xxx-bg) so dark/light themes still look right. For hex palette
+  // colours, compute a low-alpha tint that works on any background.
+  const isHex=typeof col.color==='string'&&col.color[0]==='#';
+  const bg=isHex?hexToRgba(col.color,0.16):col.bg;
+  return`<div class="cv-ev-chip ${cls}" style="background:${bg};color:${col.color};border-left:3px solid ${col.color};padding-left:8px" onclick="event.stopPropagation();closeDayModal();hideMcwPopover();openEventEdit('${p}')"><span class="t">${ev.allDay?'All':esc(fmtTimeShort(ev))}</span><span class="n">${esc(ev.title)}</span></div>`;
+}
 
 // ─────── MONTH HELPERS ───────
 function _monthCells(y,m){
@@ -3093,13 +3137,20 @@ function buildMonthView(y,m,today,allGc){
     // Event bars as grid items that span columns — connect fully across cells
     weekEvs.forEach(e=>{
       if(e.row>=MAX_ROWS)return;
-      const col=eventColor(e.ev);
       const roundLeft=e.startCol===diffDaysDs(wkStartDs,e.ev.date);
       const roundRight=e.endCol===diffDaysDs(wkStartDs,evSpanEndDs(e.ev));
       const radiusCls=roundLeft&&roundRight?' both':roundLeft?' left':roundRight?' right':'';
-      // No onclick on the bar — clicks bubble to the cell's day-modal handler
-      // so every click on a day (bar or empty space) opens the full day view
-      h+=`<div class="mv-bar${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};background:${col.color}" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
+      // In COLLAPSED (bars) mode: bars are coloured per Google Calendar, decorative
+      // (pointer-events:none) — clicks bubble to the cell → opens day modal.
+      // In EXPANDED (all-events) mode: bars use the neutral old-blue style and
+      // ARE clickable, since the cell click is disabled (everything is visible).
+      if(detail){
+        const payload=evPayload(e.ev,e.ev.date);
+        h+=`<div class="mv-bar mv-bar-exp${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2}" onclick="event.stopPropagation();openEventEdit('${payload}')" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
+      } else {
+        const col=eventColor(e.ev);
+        h+=`<div class="mv-bar${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};background:${col.color};color:${col.text}" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
+      }
     });
     h+=`</div>`;
   }
@@ -3107,8 +3158,14 @@ function buildMonthView(y,m,today,allGc){
   setTimeout(()=>{
     const cal=document.getElementById('cal');
     if(!cal)return;
-    cal.onclick=e=>{if(e.target.closest('.cv-ev-chip'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openDayModal(cy,cm,cd,allGc);};
-    attachMonthHover(cal);
+    // In expanded view everything is already visible — don't pop the day modal
+    // on cell clicks (bars there are directly clickable to open each event).
+    if(!detail){
+      cal.onclick=e=>{if(e.target.closest('.cv-ev-chip')||e.target.closest('.mv-bar-exp'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openDayModal(cy,cm,cd,allGc);};
+      attachMonthHover(cal);
+    } else {
+      cal.onclick=null;
+    }
   },0);
   return h;
 }
@@ -3858,6 +3915,25 @@ function rSettings(){
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   updateInstallUI();
+  renderCalendarList();
+}
+async function renderCalendarList(){
+  const el=document.getElementById('gcal-cal-list');if(!el)return;
+  let tok=null;try{tok=localStorage.getItem('los_gat');}catch(e){}
+  if(!tok){el.innerHTML='<span style="color:var(--muted)">Connect Google Calendar to see your calendars.</span>';return;}
+  const cals=await fetchCalendarList();
+  if(!cals.length){el.innerHTML='<span style="color:var(--muted)">Couldn\'t fetch calendars. Try reconnecting.</span>';return;}
+  el.innerHTML=cals.map(c=>{
+    const dot=c.backgroundColor?`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${esc(c.backgroundColor)};margin-right:6px;vertical-align:middle"></span>`:'';
+    const badge=c.primary?'<span style="font-size:10px;color:var(--muted);margin-left:4px">(primary)</span>':'';
+    return `<div style="padding:2px 0">${dot}${esc(c.summary||c.id)}${badge}</div>`;
+  }).join('');
+}
+async function refreshCalendarList(){
+  _calListCache={ts:0,cals:[]};gcCache={key:'',events:[]};
+  const el=document.getElementById('gcal-cal-list');if(el)el.innerHTML='<span style="color:var(--muted)">Refreshing…</span>';
+  await renderCalendarList();
+  if(currentRoute==='calendar')rCal();
 }
 
 // AI UPDATE
