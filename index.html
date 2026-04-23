@@ -598,8 +598,16 @@ svg{flex-shrink:0}
 .mcw-expanded{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:4px;display:flex;flex-direction:column;gap:4px}
 .mcw-actions{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
 
-/* Coming-up panels (2×2 grid with category color accents) */
-.cu-wrap{padding:22px 24px 28px;border-top:1px solid var(--border);background:var(--surface-2)}
+/* Month view: "Expand all" toolbar + detail-mode cells */
+.mv-toolbar{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end;background:var(--surface-2)}
+.mcw.detail{height:auto;min-height:110px;overflow:hidden}
+.mcw-detail-evs{display:flex;flex-direction:column;gap:2px;padding:0 2px}
+.mcw-det-ev{font-size:10px;line-height:1.3;padding:3px 5px;border-radius:3px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;transition:filter .1s}
+.mcw-det-ev:hover{filter:brightness(.96)}
+[data-theme="studio"] .mcw-det-ev:hover{filter:brightness(1.12)}
+
+/* Coming-up panels — separate card below the calendar */
+.cu-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px 24px;margin-top:22px}
 .cu-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:16px}
 .cu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
 @media(max-width:700px){.cu-grid{grid-template-columns:1fr}}
@@ -1184,8 +1192,8 @@ svg{flex-shrink:0}
             </div>
           </div>
           <div id="cal"></div>
-          <div id="cal-coming-up"></div>
         </div>
+        <div id="cal-coming-up"></div>
       </div>
 
       <!-- PROJECTS -->
@@ -1443,7 +1451,10 @@ svg{flex-shrink:0}
   <div class="modal-body">
     <h3 id="em-title">Edit event</h3>
     <div class="modal-row"><label>Title</label><input class="input" id="em-t" style="width:100%"></div>
-    <div class="modal-row"><label>Date</label><input class="input" id="em-d" type="date" style="width:100%"></div>
+    <div class="modal-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label>Start date</label><input class="input" id="em-d" type="date" style="width:100%"></div>
+      <div><label>End date</label><input class="input" id="em-d-end" type="date" style="width:100%" title="Leave blank for same day"></div>
+    </div>
     <label class="em-allday" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:-4px 0 12px;font-size:13px;color:var(--text-2)">
       <input type="checkbox" id="em-allday" onchange="toggleEmAllDay()" style="width:16px;height:16px;accent-color:var(--accent)">
       <span>All-day event</span>
@@ -1704,7 +1715,7 @@ async function connectGoogleCalendar(){
   })();
   return _connectingGCal;
 }
-async function reconnectGCalAndRefresh(){const t=await connectGoogleCalendar();if(t){gcCache={key:'',events:[]};render();rSettings();}}
+async function reconnectGCalAndRefresh(){const t=await connectGoogleCalendar();if(t){gcCache={key:'',events:[]};_calListCache={ts:0,cals:[]};render();rSettings();}}
 auth.getRedirectResult().then(r=>{
   if(r&&r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);sessionStorage.removeItem('los_redirect');}catch(e){}}
 }).catch(e=>{if(e&&e.code)console.warn('Redirect result:',e.code,e.message);});
@@ -1718,9 +1729,12 @@ async function fetchCalendarList(){
     if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}return[];}
     if(!r.ok)return[];
     const d=await r.json();
-    const cals=(d.items||[]).filter(c=>c.selected!==false).map(c=>({id:c.id,summary:c.summary,backgroundColor:c.backgroundColor||null,primary:!!c.primary}));
-    _calListCache={ts:Date.now(),cals};
-    return cals;
+    // Include every readable calendar — filtering by selected:true was hiding
+    // calendars like Contacts Birthdays that may not have `selected` set in
+    // the calendarList payload
+    const cals=(d.items||[]).map(c=>({id:c.id,summary:c.summary,backgroundColor:c.backgroundColor||null,primary:!!c.primary,hidden:c.hidden===true}));
+    _calListCache={ts:Date.now(),cals:cals.filter(c=>!c.hidden)};
+    return _calListCache.cals;
   }catch(e){console.warn('[gcal] calList failed:',e.message);return[];}
 }
 async function fetchGCal(start,end){
@@ -1781,15 +1795,16 @@ async function createGCEvent(title,date,time,desc='',endTime='',opts={}){
   const tok=getGCalToken();if(!tok)return null;
   const tz=opts.timeZone||'Africa/Johannesburg';
   const allDay=opts.allDay||!time;
+  const endDate=opts.endDate||date;
   let body={summary:title,description:desc||''};
   if(allDay){
-    const nextStr=addDaysToDateStr(date,1);
-    body.start={date};body.end={date:nextStr};
+    // GCal end.date is exclusive — add one day past the last "included" day
+    body.start={date};body.end={date:addDaysToDateStr(endDate,1)};
   } else {
     const hh=p2hhmm(time);
     const eh=endTime?p2hhmm(endTime):endHH(hh);
     body.start={dateTime:`${date}T${hh}:00`,timeZone:tz};
-    body.end={dateTime:`${date}T${eh}:00`,timeZone:tz};
+    body.end={dateTime:`${endDate}T${eh}:00`,timeZone:tz};
   }
   applyAdvancedFields(body,{...opts,date});
   const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -1800,24 +1815,25 @@ async function updateGCEvent(id,title,date,time,desc='',endTime='',opts={}){
   const tok=getGCalToken();if(!tok)return false;
   const tz=opts.timeZone||'Africa/Johannesburg';
   const allDay=opts.allDay||!time;
+  const endDate=opts.endDate||date;
+  const calId=opts.calendarId||'primary';
   let body={summary:title,description:desc||''};
   if(allDay){
-    const nextStr=addDaysToDateStr(date,1);
-    body.start={date};body.end={date:nextStr};
+    body.start={date};body.end={date:addDaysToDateStr(endDate,1)};
   } else {
     const hh=p2hhmm(time);
     const eh=endTime?p2hhmm(endTime):endHH(hh);
     body.start={dateTime:`${date}T${hh}:00`,timeZone:tz};
-    body.end={dateTime:`${date}T${eh}:00`,timeZone:tz};
+    body.end={dateTime:`${endDate}T${eh}:00`,timeZone:tz};
   }
   applyAdvancedFields(body,{...opts,date});
-  const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(id)}`,{method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(id)}`,{method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(r.ok)gcCache={key:'',events:[]};
   return r.ok;
 }
-async function deleteGCEvent(id){
+async function deleteGCEvent(id,calId){
   const tok=getGCalToken();if(!tok)return false;
-  const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(id)}`,{method:'DELETE',headers:{Authorization:'Bearer '+tok}});
+  const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId||'primary')}/events/${encodeURIComponent(id)}`,{method:'DELETE',headers:{Authorization:'Bearer '+tok}});
   if(r.ok||r.status===410)gcCache={key:'',events:[]};
   return r.ok||r.status===410;
 }
@@ -1905,9 +1921,8 @@ const PROJ={wa:{n:'WebAnchor',h:'var(--blue)'},tf:{n:'TriFusion',h:'var(--lavend
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
 const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{}};
-const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',calVariant:{day:1,'3day':1,week:1,month:1}};
-try{const sv=JSON.parse(localStorage.getItem('los_cal_variants'));if(sv)Object.assign(UI.calVariant,sv);}catch(e){}
-function setCalVariant(view,n){UI.calVariant[view]=n;try{localStorage.setItem('los_cal_variants',JSON.stringify(UI.calVariant));}catch(e){}rCal();}
+const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false};
+try{UI.monthDetail=localStorage.getItem('los_month_detail')==='1';}catch(e){}
 const HABIT_COLORS=['#c46a6a','#d9a484','#c9a94a','#7fa186','#6a8ab5','#9d8bb8','#5a8a6e','#e0b04f','#b37d6f','#7a9aa8','#d38a6f','#89a589'];
 function habitColor(h){
   const list=S.habits||[];
@@ -2373,7 +2388,7 @@ function calNav(dir){
   else UI.calDate=new Date(UI.calDate.getTime()+dir*86400000);
   rCal();
 }
-function setCV(v){UI.calView=v;UI.monthExpandedDs=null;if(v==='day')UI.calDate=new Date();rCal();}
+function setCV(v){UI.calView=v;UI.monthExpandedDs=null;UI.calDate=new Date();rCal();}
 
 function fmtEvTime(e){
   if(e.allDay)return'All day';
@@ -2595,21 +2610,38 @@ function _monthCells(y,m){
   while(cells.length<42){const ix=cells.length-first-daysInMonth+1;const dt=new Date(y,m+1,ix);cells.push({y:dt.getFullYear(),m:dt.getMonth(),d:ix,faded:true});}
   return cells;
 }
+function evSpanEndDs(e){
+  // Returns the last date (inclusive) on which the event still shows.
+  if(e.allDay){return e.endDate?addDaysToDateStr(e.endDate,-1):e.date;}
+  // Timed events: endDateTime is the stop instant. If it's midnight or
+  // carries over to a later day, include that day.
+  if(e.endDateTime&&e.endDateTime>e.date)return e.endDateTime;
+  return e.date;
+}
+function evCoversDay(e,ds){
+  const endDs=evSpanEndDs(e);
+  return ds>=e.date&&ds<=endDs;
+}
 function _monthEvsForDay(cy,cm,cd,allGc){
   const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
-  const ce=(S.customEvents||[]).filter(e=>e.date===ds);
-  const gcs=(allGc||[]).filter(e=>{
-    if(!e.allDay)return e.date===ds;
-    const endDs=e.endDate||addDaysToDateStr(e.date,1);
-    return ds>=e.date&&ds<endDs;
+  const ceAll=(S.customEvents||[]);
+  const ce=ceAll.filter(e=>{
+    const endDs=e.endDate||e.date;
+    return ds>=e.date&&ds<=endDs;
   });
+  const gcs=(allGc||[]).filter(e=>evCoversDay(e,ds));
   const evs=[];
   gcs.forEach(e=>{
-    const isMulti=e.allDay&&e.endDate&&addDaysToDateStr(e.date,1)!==e.endDate;
-    evs.push({cls:isBirthdayEv(e)?'bday':'gc',title:e.title,type:'gc',data:e,ds,allDay:e.allDay,isMulti,isSpanStart:!isMulti||ds===e.date,spanEndDs:e.endDate?addDaysToDateStr(e.endDate,-1):null});
+    const endDs=evSpanEndDs(e);
+    const isMulti=endDs!==e.date;
+    evs.push({cls:isBirthdayEv(e)?'bday':'gc',title:e.title,type:'gc',data:e,ds,allDay:e.allDay,isMulti,isSpanStart:ds===e.date,spanEndDs:endDs});
   });
-  ce.forEach(e=>evs.push({cls:'cus',title:e.title,type:'cus',data:e,ds,allDay:!e.time}));
-  // Multi-day events go first
+  ce.forEach(e=>{
+    const endDs=e.endDate||e.date;
+    const isMulti=endDs!==e.date;
+    evs.push({cls:'cus',title:e.title,type:'cus',data:e,ds,allDay:!e.time,isMulti,isSpanStart:ds===e.date,spanEndDs:endDs});
+  });
+  // Multi-day events go first so they sit at the top of the stripe stack
   evs.sort((a,b)=>{if(a.isMulti&&!b.isMulti)return -1;if(!a.isMulti&&b.isMulti)return 1;return 0;});
   return{evs,ds};
 }
@@ -2673,14 +2705,14 @@ function buildWeekView(dates,gcEvs){
   h+=`</div>`;return h;
 }
 
-// ─────── MONTH VIEW (week-by-week, colored stripes per event, multi-day spans,
-// habit dots, inline expand on click) ───────
+// ─────── MONTH VIEW (week-by-week, bars-only default; Expand all toggle) ───────
 function buildMonthView(y,m,today,allGc){
   const cells=_monthCells(y,m);
-  // Only render weeks that contain at least one current-month day
   let lastWeek=0;for(let i=0;i<cells.length;i++)if(!cells[i].faded)lastWeek=Math.floor(i/7);
   const showWeeks=lastWeek+1;
-  let h=`<div class="cv-weeks">`;
+  const detail=!!UI.monthDetail;
+  let h=`<div class="mv-toolbar"><button class="btn btn-ghost btn-sm" onclick="toggleMonthDetail()" title="${detail?'Collapse to bars':'Show event titles for every day'}">${detail?'▦ Bars':'☰ Expand all'}</button></div>`;
+  h+=`<div class="cv-weeks${detail?' detail':''}">`;
   h+=`<div class="cv-week-row cv-week-hdr"><div class="cv-week-lbl"></div>${['Mo','Tu','We','Th','Fr','Sa','Su'].map(d=>`<div class="cv-week-dayname">${d}</div>`).join('')}</div>`;
   for(let wk=0;wk<showWeeks;wk++){
     const weekCells=cells.slice(wk*7,wk*7+7);
@@ -2689,41 +2721,65 @@ function buildMonthView(y,m,today,allGc){
       const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
       const {evs}=_monthEvsForDay(cy,cm,cd,allGc);
       const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
-      const isExpanded=UI.monthExpandedDs===ds;
-      const maxStripes=isExpanded?12:4;
-      const shown=evs.slice(0,maxStripes);
-      const extra=Math.max(0,evs.length-maxStripes);
       const habitsDone=(S.habits||[]).filter(hb=>(hb.checkedDates||[]).includes(ds));
       const habitColor=hb=>{const ix=S.habits.findIndex(x=>x.id===hb.id);return HABIT_COLORS[(ix<0?0:ix)%HABIT_COLORS.length];};
-      h+=`<div class="mcw${faded?' faded':''}${isT?' today':''}${isExpanded?' expanded':''}" data-cd="${cy},${cm},${cd}"><div class="mcw-top"><div class="mcw-num">${cd}</div>${habitsDone.length?`<div class="mcw-habits">${habitsDone.slice(0,5).map(hb=>`<span class="mcw-habit-dot" style="background:${habitColor(hb)}" title="${esc(hb.name)}"></span>`).join('')}</div>`:''}</div><div class="mcw-stripes">`;
-      shown.forEach(ev=>{
-        const cat=eventCategory(ev);
-        const p=evPayload(ev,ds);
-        let multiCls='';
-        if(ev.isMulti){
-          if(ev.isSpanStart)multiCls=' multi-start';
-          else if(ds===ev.spanEndDs)multiCls=' multi-end';
-          else multiCls=' multi-mid';
-        }
-        h+=`<div class="mcw-stripe${multiCls}" style="background:${cat.color}" onclick="event.stopPropagation();openEventEdit('${p}')" title="${esc(ev.title)}"></div>`;
-      });
-      if(extra>0)h+=`<div class="mcw-stripe more">+${extra}</div>`;
-      h+=`</div>`;
-      if(isExpanded){
-        h+=`<div class="mcw-expanded" onclick="event.stopPropagation()">`;
-        if(evs.length)evs.forEach(ev=>{h+=evChip(ev,ds);});
-        else h+=`<div class="cv-empty" style="font-size:11px;padding:4px 0">Nothing scheduled.</div>`;
-        h+=`<div class="mcw-actions"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Event</button><button class="cv-add-btn" onclick="UI.calDate=new Date(${cy},${cm},${cd});UI.calView='day';UI.monthExpandedDs=null;rCal()">Open day ↗</button></div></div>`;
+      h+=`<div class="mcw${faded?' faded':''}${isT?' today':''}${detail?' detail':''}" data-cd="${cy},${cm},${cd}"><div class="mcw-top"><div class="mcw-num">${cd}</div>${habitsDone.length?`<div class="mcw-habits">${habitsDone.slice(0,5).map(hb=>`<span class="mcw-habit-dot" style="background:${habitColor(hb)}" title="${esc(hb.name)}"></span>`).join('')}</div>`:''}</div>`;
+      if(detail){
+        // Full event titles as small pill chips
+        h+=`<div class="mcw-detail-evs">`;
+        evs.slice(0,5).forEach(ev=>{
+          const cat=eventCategory(ev);
+          const p=evPayload(ev,ds);
+          h+=`<div class="mcw-det-ev" style="background:${cat.bg};color:${cat.color};border-left:3px solid ${cat.color}" onclick="event.stopPropagation();openEventEdit('${p}')" title="${esc(ev.title)}">${esc(ev.title)}</div>`;
+        });
+        if(evs.length>5)h+=`<div class="mcw-stripe more">+${evs.length-5}</div>`;
+        h+=`</div>`;
+      } else {
+        // Bars-only default
+        const maxStripes=4;const shown=evs.slice(0,maxStripes);const extra=Math.max(0,evs.length-maxStripes);
+        h+=`<div class="mcw-stripes">`;
+        shown.forEach(ev=>{
+          const cat=eventCategory(ev);
+          const p=evPayload(ev,ds);
+          let multiCls='';
+          if(ev.isMulti){
+            if(ev.isSpanStart)multiCls=' multi-start';
+            else if(ds===ev.spanEndDs)multiCls=' multi-end';
+            else multiCls=' multi-mid';
+          }
+          h+=`<div class="mcw-stripe${multiCls}" style="background:${cat.color}" onclick="event.stopPropagation();openEventEdit('${p}')" title="${esc(ev.title)}"></div>`;
+        });
+        if(extra>0)h+=`<div class="mcw-stripe more">+${extra}</div>`;
+        h+=`</div>`;
       }
       h+=`</div>`;
     });
     h+=`</div>`;
   }
   h+=`</div>`;
-  // Attach click handler after render via setTimeout so onclick on cal element gets the data-cd click
-  setTimeout(()=>{const cal=document.getElementById('cal');if(cal){cal.onclick=e=>{if(e.target.closest('.mcw-stripe')||e.target.closest('.cv-ev-chip')||e.target.closest('.cv-add-btn')||e.target.closest('.mcw-expanded'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;if(UI.monthExpandedDs===ds){UI.calDate=new Date(cy,cm,cd);UI.calView='day';UI.monthExpandedDs=null;rCal();}else{UI.monthExpandedDs=ds;rCal();}};}},0);
+  // Click a day → modal showing that day's events (instead of inline expand)
+  setTimeout(()=>{const cal=document.getElementById('cal');if(cal){cal.onclick=e=>{if(e.target.closest('.mcw-stripe')||e.target.closest('.mcw-det-ev')||e.target.closest('.cv-ev-chip'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openDayModal(cy,cm,cd,allGc);};}},0);
   return h;
 }
+function toggleMonthDetail(){UI.monthDetail=!UI.monthDetail;try{localStorage.setItem('los_month_detail',UI.monthDetail?'1':'0');}catch(e){}rCal();}
+
+// Day preview modal — opened by clicking a day in the month view
+function openDayModal(cy,cm,cd,allGc){
+  const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
+  const {evs}=_monthEvsForDay(cy,cm,cd,allGc);
+  const d=new Date(cy,cm,cd);
+  closeDayModal();
+  const modal=document.createElement('div');
+  modal.className='modal';modal.id='day-modal';
+  const title=d.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  let body=`<div class="modal-bd" onclick="closeDayModal()"></div><div class="modal-body" style="max-width:480px">
+    <h3>${esc(title)}</h3>`;
+  if(evs.length){body+=`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">`;evs.forEach(ev=>{body+=evChip(ev,ds);});body+=`</div>`;}
+  else body+=`<div class="cv-empty" style="padding:6px 0 16px">Nothing scheduled on this day.</div>`;
+  body+=`<div class="modal-actions" style="flex-wrap:wrap"><button class="btn btn-sm" onclick="closeDayModal();openNewEvent({date:'${ds}'})">+ Add event</button><button class="btn btn-sm" onclick="closeDayModal();UI.calDate=new Date(${cy},${cm},${cd});UI.calView='day';rCal()">Open Day view ↗</button><div class="spacer"></div><button class="btn btn-primary btn-sm" onclick="closeDayModal()">Close</button></div></div>`;
+  modal.innerHTML=body;modal.style.display='flex';document.body.appendChild(modal);_syncBodyLock();
+}
+function closeDayModal(){const m=document.getElementById('day-modal');if(m)m.remove();_syncBodyLock();}
 
 // ─────── COMING UP (categorized panels below calendar) ───────
 function renderComingUp(gcEvs){
@@ -2871,7 +2927,7 @@ function toggleEmAllDay(){
   if(row)row.style.display=cb.checked?'none':'grid';
 }
 function resetEventModal(){
-  ['em-t','em-tm','em-tm-end','em-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  ['em-t','em-tm','em-tm-end','em-desc','em-d-end'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
   const ad=document.getElementById('em-allday');if(ad)ad.checked=false;
   const rep=document.getElementById('em-repeat');if(rep)rep.value='none';
   const rem=document.getElementById('em-reminder');if(rem)rem.value='none';
@@ -2896,16 +2952,18 @@ async function openEventEdit(payload){
     if(p.type==='rec'){alert('Recurring weekly item — edit in the code (SCHED constant) for now.');return;}
     editingEvent={mode:'edit',type:p.type,data:p.data,ds:p.ds};
     let d=p.data;
-    let endTime='';let allDay=false;let recurrence='none';let reminderMin='none';let timeZone='Africa/Johannesburg';
+    let endTime='';let endDate='';let allDay=false;let recurrence='none';let reminderMin='none';let timeZone='Africa/Johannesburg';
     if(p.type==='gc'){
       try{
         const tok=getGCalToken();
+        const calId=d.calendarId||'primary';
         if(tok){
-          const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(d.id)}`,{headers:{Authorization:'Bearer '+tok}});
+          const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(d.id)}`,{headers:{Authorization:'Bearer '+tok}});
           if(r.ok){
             const full=await r.json();
             d={...d,description:full.description||d.description||''};
-            if(full.end?.dateTime)endTime=full.end.dateTime.slice(11,16);
+            if(full.end?.dateTime){endTime=full.end.dateTime.slice(11,16);endDate=full.end.dateTime.slice(0,10);}
+            if(full.end?.date){endDate=addDaysToDateStr(full.end.date,-1);} // GCal end.date is exclusive; show inclusive end
             allDay=!!full.start?.date;
             if(full.start?.timeZone)timeZone=full.start.timeZone;
             if(full.recurrence?.length)recurrence=parseRRule(full.recurrence[0]);
@@ -2915,12 +2973,14 @@ async function openEventEdit(payload){
       }catch(e){}
     } else if(p.type==='cus'){
       endTime=d.endTime||'';
+      endDate=d.endDate||'';
       allDay=!d.time;
     }
     resetEventModal();
     document.getElementById('em-title').textContent=p.type==='gc'?'Edit Google event':'Edit event';
     document.getElementById('em-t').value=d.title||'';
     document.getElementById('em-d').value=d.date||p.ds;
+    document.getElementById('em-d-end').value=endDate&&endDate!==(d.date||p.ds)?endDate:'';
     document.getElementById('em-tm').value=(p.type==='gc'&&d.time)?(d.time.slice(0,5)):(d.time||'');
     document.getElementById('em-tm-end').value=endTime;
     document.getElementById('em-desc').value=d.description||d.desc||'';
@@ -2941,6 +3001,9 @@ async function saveCurrentEvent(){
   const title=document.getElementById('em-t').value.trim();
   if(!title){alert('Title required');return;}
   const date=document.getElementById('em-d').value||tod();
+  const endDateInput=document.getElementById('em-d-end').value||'';
+  const endDate=endDateInput&&endDateInput!==date?endDateInput:date;
+  if(endDate<date){alert('End date must be the same day or later.');return;}
   const allDay=document.getElementById('em-allday').checked;
   const time=allDay?'':document.getElementById('em-tm').value.trim();
   const endTime=allDay?'':document.getElementById('em-tm-end').value.trim();
@@ -2948,23 +3011,23 @@ async function saveCurrentEvent(){
   const recurrence=document.getElementById('em-repeat').value;
   const reminderMin=document.getElementById('em-reminder').value;
   const timeZone=document.getElementById('em-tz').value;
-  const opts={allDay,recurrence,reminderMin,timeZone};
+  const opts={allDay,recurrence,reminderMin,timeZone,endDate};
   if(editingEvent.mode==='new'){
     const res=await createGCEvent(title,date,time,desc,endTime,opts);
-    if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date,time,endTime,title,desc,allDay,recurrence,reminderMin,timeZone});}
+    if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date,endDate:endDate!==date?endDate:null,time,endTime,title,desc,allDay,recurrence,reminderMin,timeZone});}
   } else if(editingEvent.type==='gc'){
-    const ok=await updateGCEvent(editingEvent.data.id,title,date,time,desc,endTime,opts);
+    const ok=await updateGCEvent(editingEvent.data.id,title,date,time,desc,endTime,{...opts,calendarId:editingEvent.data.calendarId});
     if(!ok)alert('Failed to update Google event.');
   } else if(editingEvent.type==='cus'){
     const ev=(S.customEvents||[]).find(x=>x.id===editingEvent.data.id);
-    if(ev){ev.title=title;ev.date=date;ev.time=time;ev.endTime=endTime;ev.desc=desc;ev.allDay=allDay;ev.recurrence=recurrence;ev.reminderMin=reminderMin;ev.timeZone=timeZone;}
+    if(ev){ev.title=title;ev.date=date;ev.endDate=endDate!==date?endDate:null;ev.time=time;ev.endTime=endTime;ev.desc=desc;ev.allDay=allDay;ev.recurrence=recurrence;ev.reminderMin=reminderMin;ev.timeZone=timeZone;}
   }
   svAll();closeEventModal();rCal();render();
 }
 async function deleteCurrentEvent(){
   if(!editingEvent||editingEvent.mode==='new')return closeEventModal();
   if(!confirm('Delete this event?'))return;
-  if(editingEvent.type==='gc'){const ok=await deleteGCEvent(editingEvent.data.id);if(!ok)alert('Failed to delete Google event.');}
+  if(editingEvent.type==='gc'){const ok=await deleteGCEvent(editingEvent.data.id,editingEvent.data.calendarId);if(!ok)alert('Failed to delete Google event.');}
   else if(editingEvent.type==='cus'){S.customEvents=(S.customEvents||[]).filter(x=>x.id!==editingEvent.data.id);}
   svAll();closeEventModal();rCal();render();
 }
