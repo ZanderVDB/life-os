@@ -798,7 +798,6 @@ svg{flex-shrink:0}
 .tit{font-size:13px;flex:1;line-height:1.45;word-break:break-word;color:var(--text)}
 .tit.dn{text-decoration:line-through;color:var(--muted-2)}
 .ti-time{font-size:10px;color:var(--muted);background:var(--surface-2);padding:2px 6px;border-radius:5px;flex-shrink:0;margin-top:2px}
-.ti-proj{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:6px;box-shadow:0 0 0 2px var(--surface)}
 .exp-p{padding:13px 15px;background:var(--surface-2);border-bottom:1px solid var(--border)}
 .exp-ta{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:13px;resize:vertical;outline:none;background:var(--bg);color:var(--text);line-height:1.55;min-height:70px;font-family:inherit}
 .exp-ta:focus{border-color:var(--border-strong);background:var(--surface)}
@@ -1883,7 +1882,11 @@ async function fetchGCal(start,end){
   const tok=getGCalToken();if(!tok)return[];
   const cals=await fetchCalendarList();
   if(!cals.length)return[];
-  const results=await Promise.all(cals.map(cal=>(async()=>{
+  // Honour per-calendar toggles from Settings. The primary calendar is always
+  // on (can't be disabled in the UI).
+  const disabled=new Set(Array.isArray(S.disabledCalendars)?S.disabledCalendars:[]);
+  const activeCals=cals.filter(c=>c.primary||!disabled.has(c.id));
+  const results=await Promise.all(activeCals.map(cal=>(async()=>{
     try{
       const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime&maxResults=250`,{headers:{Authorization:'Bearer '+tok}});
       if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}return[];}
@@ -2100,6 +2103,7 @@ function handleSnapshot(snap){
     S.todaysTip=d.todaysTip||null;
     S.growthFocus=d.growthFocus||null;
     S.lifeRhythm=d.lifeRhythm||'';
+    S.disabledCalendars=Array.isArray(d.disabledCalendars)?d.disabledCalendars:[];
     if(!getKey()&&d.ak)localStorage.setItem(AK,d.ak);
     migrateHabits();
     migrateProjects();
@@ -2124,6 +2128,7 @@ function _buildSavePayload(){
   if(S.todaysTip!==undefined)payload.todaysTip=S.todaysTip||null;
   if(S.growthFocus!==undefined)payload.growthFocus=S.growthFocus||null;
   if(S.lifeRhythm!==undefined)payload.lifeRhythm=S.lifeRhythm||'';
+  if(S.disabledCalendars!==undefined)payload.disabledCalendars=Array.isArray(S.disabledCalendars)?S.disabledCalendars:[];
   return payload;
 }
 function svAll(){
@@ -2161,7 +2166,7 @@ const SCHED={0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
 const PROJ={wa:{n:'WebAnchor',h:'var(--blue)'},tf:{n:'TriFusion',h:'var(--lavender)'},zm:{n:'Zomarka',h:'var(--emerald)'},gen:{n:'General',h:'var(--peach)'}};
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{}};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[]};
 const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false};
 try{UI.monthDetail=localStorage.getItem('los_month_detail')==='1';}catch(e){}
 const HABIT_COLORS=['#c46a6a','#d9a484','#c9a94a','#7fa186','#6a8ab5','#9d8bb8','#5a8a6e','#e0b04f','#b37d6f','#7a9aa8','#d38a6f','#89a589'];
@@ -2477,7 +2482,7 @@ async function generatePlan(mode){
     const endIso=new Date(refDate.getFullYear(),refDate.getMonth(),refDate.getDate(),23,59,59).toISOString();
     const gc=await fetchGCal(startIso,endIso).catch(()=>[]);
     const evs=gc.filter(e=>evCoversDay(e,refDs)).map(e=>({title:e.title,time:e.time||null,endTime:e.endTime||null,allDay:e.allDay}));
-    const openTasks=S.tasks.filter(t=>!t.done).sort((a,b)=>(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3)).slice(0,20).map(t=>({text:t.text,area:t.area,project:t.project,priority:t.priority}));
+    const openTasks=S.tasks.filter(t=>!t.done).sort((a,b)=>(PO[a.priority]??99)-(PO[b.priority]??99)).slice(0,20).map(t=>({text:t.text,area:t.area,project:t.project,priority:t.priority}));
     const activeBuilds=S.builds.filter(b=>b.status==='active').slice(0,3).map(b=>({title:b.title,desc:(b.desc||'').slice(0,120)}));
     const habits=S.habits.map(h=>({name:h.name,doneToday:(h.checkedDates||[]).includes(tod())}));
     const rhythm=S.lifeRhythm||'(none provided)';
@@ -2614,16 +2619,18 @@ async function rTodayWeek(){
   el.innerHTML=days.map(d=>{
     const ds=localDs(d);
     const isT=d.toDateString()===today.toDateString();
-    const re=(SCHED[d.getDay()]||[]).map(x=>({title:x.replace(/\s+\d+.*$/,'').trim(),cls:'rec'}));
-    const gd=gc.filter(e=>e.date===ds).map(e=>({title:e.title,cls:'gc',time:e.time}));
-    const cd=getCusDate(ds).map(e=>({title:e.title,cls:'cus',time:e.time}));
+    const re=(SCHED[d.getDay()]||[]).map(x=>({title:x.replace(/\s+\d+.*$/,'').trim(),cls:'rec',type:'rec'}));
+    // Keep the full GCal event (and colorId/calendarColor) so evInlineStyle
+    // picks up the SAME hue we show in Day/Week/Month views.
+    const gd=gc.filter(e=>e.date===ds).map(e=>({...e,cls:isBirthdayEv(e)?'bday':'gc',type:'gc'}));
+    const cd=getCusDate(ds).map(e=>({title:e.title,cls:'cus',type:'cus',time:e.time}));
     const all=[...gd,...cd,...re];
     const shown=all.slice(0,3);
     const extra=all.length-shown.length;
     return `<div class="day-card${isT?' today':''}" data-today="${isT?'1':'0'}" onclick="UI.calDate=new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()});UI.calView='day';setRoute('calendar');rCal()">
       <div class="day-card-hdr"><div class="dc-day">${DAYS[d.getDay()]}</div><span class="dc-num">${d.getDate()}</span></div>
       <div class="dc-events">
-        ${shown.length?shown.map(e=>`<div class="dc-ev ${e.cls}">${esc(e.title)}</div>`).join(''):`<div class="dc-empty">—</div>`}
+        ${shown.length?shown.map(e=>`<div class="dc-ev ${e.cls}" style="${evInlineStyle(e)}">${esc(e.title)}</div>`).join(''):`<div class="dc-empty">—</div>`}
         ${extra>0?`<div class="dc-more">+${extra} more</div>`:''}
       </div>
     </div>`;
@@ -2711,7 +2718,7 @@ function buildTimeSlotCols(dates,gcEvs){
       (evsByDate[ds]||[]).filter(e=>e.allDay).forEach(ev=>{
         const payload=encodeURIComponent(JSON.stringify({type:ev.type,data:ev.data,ds}));
         const prefix=dates.length>1?`${DAYS[new Date(ds+'T12:00:00').getDay()]} · `:'';
-        h+=`<div class="allday-ev ${ev.cls}" onclick="openEventEdit('${payload}')">${esc(prefix+ev.title)}</div>`;
+        h+=`<div class="allday-ev ${ev.cls}" style="${evInlineStyle(ev)}" onclick="openEventEdit('${payload}')">${esc(prefix+ev.title)}</div>`;
       });
     });
     h+=`</div></div>`;
@@ -2736,7 +2743,7 @@ function buildTimeSlotCols(dates,gcEvs){
       evHere.forEach(ev=>{
         const payload=encodeURIComponent(JSON.stringify({type:ev.type,data:ev.data,ds}));
         const label=(ev.time?ev.time+' ':'')+ev.title;
-        h+=`<div class="ts-ev ${ev.cls}" onclick="event.stopPropagation();openEventEdit('${payload}')">${esc(label)}</div>`;
+        h+=`<div class="ts-ev ${ev.cls}" style="${evInlineStyle(ev)}" onclick="event.stopPropagation();openEventEdit('${payload}')">${esc(label)}</div>`;
       });
       h+=`</div>`;
     });
@@ -2864,21 +2871,21 @@ function isMeetingEv(e){return/\b(meeting|mtg|call|catch[- ]?up|sync|stand[- ]?u
 function isMovieEv(e){return/\b(movie|film|cinema|netflix night)\b/i.test(e.title||'');}
 function isFaithEv(e){return/\b(church|bible|prayer|worship|sermon|youth|young adults)\b/i.test(e.title||'');}
 function isBusinessEv(e){return/\b(pitch|investor|client|meetup|conference|networking)\b/i.test(e.title||'');}
-// Google Calendar's colorId → color mapping. Slightly desaturated vs Google's
-// raw palette to fit Life OS's Soft/Studio aesthetic while still being
-// recognisably the same hues Zander sees in the phone Calendar app.
+// Google Calendar's colorId → color mapping. Heavily desaturated from Google's
+// vivid palette to fit Life OS's muted Soft-theme aesthetic — same HUES (blue
+// stays blue, pink stays pink) but dimmer/calmer shades.
 const GCAL_COLORS={
-  '1':{fg:'#8b95c5',bg:'#dfe3ef'}, // Lavender
-  '2':{fg:'#4ca773',bg:'#d2e6d9'}, // Sage
-  '3':{fg:'#9e5cb0',bg:'#e1cde7'}, // Grape
-  '4':{fg:'#db7d73',bg:'#f4d5d1'}, // Flamingo
-  '5':{fg:'#d9a93d',bg:'#f3e3b2'}, // Banana (deeper than neon #f6bf26)
-  '6':{fg:'#d9693c',bg:'#f3cfc0'}, // Tangerine (less fire-engine)
-  '7':{fg:'#4a9ec7',bg:'#c5deee'}, // Peacock
-  '8':{fg:'#7a7a7a',bg:'#d8d8d8'}, // Graphite
-  '9':{fg:'#5a6bba',bg:'#cdd2ea'}, // Blueberry
-  '10':{fg:'#3e8a5c',bg:'#b6d7c1'}, // Basil
-  '11':{fg:'#c24a44',bg:'#efc4c0'}  // Tomato
+  '1':{fg:'#7c85b0',bg:'#d9dde8'}, // Lavender
+  '2':{fg:'#5e9875',bg:'#cde0d3'}, // Sage
+  '3':{fg:'#8e6aa0',bg:'#ddd0e0'}, // Grape
+  '4':{fg:'#bd7f7a',bg:'#eccfcc'}, // Flamingo
+  '5':{fg:'#b89b52',bg:'#e8dcb3'}, // Banana (deeper, less neon)
+  '6':{fg:'#c17654',bg:'#ecd2c1'}, // Tangerine
+  '7':{fg:'#6390a9',bg:'#cdd9e2'}, // Peacock
+  '8':{fg:'#808080',bg:'#d8d8d8'}, // Graphite
+  '9':{fg:'#6874a0',bg:'#d2d5e4'}, // Blueberry
+  '10':{fg:'#568270',bg:'#c4d4cc'}, // Basil
+  '11':{fg:'#af615c',bg:'#e5cac6'}  // Tomato
 };
 function hexToRgba(hex,alpha){
   if(!hex||hex[0]!=='#')return hex;
@@ -2922,18 +2929,21 @@ function gatherDay(date,ds,gcEvs){
   const all=[...gc,...ce];all.sort((a,b)=>{if(a.allDay&&!b.allDay)return-1;if(!a.allDay&&b.allDay)return 1;return(a.h??99)-(b.h??99);});
   return all;
 }
-function evChip(ev,ds){
-  const cls=evClass(ev);const p=evPayload(ev,ds);const col=eventColor(ev);
-  // Colour the chip with the SAME hue as the month-view bar so they always
-  // agree. A low-alpha tint works across both Soft & Studio themes; the left
-  // border carries the colour signal even when the tint is near-invisible.
-  // Click closes any open day modal / hover popover, then opens the editor.
-  // When col.color is a CSS variable (fallback category), use the paired
-  // var(--xxx-bg) so dark/light themes still look right. For hex palette
-  // colours, compute a low-alpha tint that works on any background.
+// Inline style string for any event chip/pill/bar in Day/3-Day/Week/Today's
+// week views. Returns background (low-alpha tint), text colour, and a 3px
+// coloured left border — same hue as the Month-view bar, so an event is the
+// SAME colour everywhere it appears. Used by allday-ev, ts-ev, dv-ev, dc-ev,
+// td-event, and cv-ev-chip.
+function evInlineStyle(ev){
+  const col=eventColor(ev);
   const isHex=typeof col.color==='string'&&col.color[0]==='#';
   const bg=isHex?hexToRgba(col.color,0.16):col.bg;
-  return`<div class="cv-ev-chip ${cls}" style="background:${bg};color:${col.color};border-left:3px solid ${col.color};padding-left:8px" onclick="event.stopPropagation();closeDayModal();hideMcwPopover();openEventEdit('${p}')"><span class="t">${ev.allDay?'All':esc(fmtTimeShort(ev))}</span><span class="n">${esc(ev.title)}</span></div>`;
+  return`background:${bg};color:${col.color};border-left:3px solid ${col.color};padding-left:8px`;
+}
+function evChip(ev,ds){
+  const cls=evClass(ev);const p=evPayload(ev,ds);
+  // Click closes any open day modal / hover popover, then opens the editor.
+  return`<div class="cv-ev-chip ${cls}" style="${evInlineStyle(ev)}" onclick="event.stopPropagation();closeDayModal();hideMcwPopover();openEventEdit('${p}')"><span class="t">${ev.allDay?'All':esc(fmtTimeShort(ev))}</span><span class="n">${esc(ev.title)}</span></div>`;
 }
 
 // ─────── MONTH HELPERS ───────
@@ -2993,7 +3003,7 @@ function buildDayView(dates,gcEvs){
   const HOURS=Array.from({length:24},(_,i)=>i);
   const now=new Date();const nh=now.getHours(),nm=now.getMinutes();
   let h='';
-  if(allDay.length)h+=`<div class="allday-strip"><div class="allday-strip-lbl">All-day</div><div class="allday-events">${allDay.map(e=>{const p=evPayload(e,ds);return`<div class="allday-ev ${evClass(e)}" onclick="openEventEdit('${p}')">${esc(e.title)}</div>`;}).join('')}</div></div>`;
+  if(allDay.length)h+=`<div class="allday-strip"><div class="allday-strip-lbl">All-day</div><div class="allday-events">${allDay.map(e=>{const p=evPayload(e,ds);return`<div class="allday-ev ${evClass(e)}" style="${evInlineStyle(e)}" onclick="openEventEdit('${p}')">${esc(e.title)}</div>`;}).join('')}</div></div>`;
   const totalH=24*DAY_HOUR_HEIGHT;
   h+=`<div class="dv-scroll"><div class="dv-grid" style="height:${totalH}px">`;
   // Hour lines
@@ -3044,7 +3054,7 @@ function buildDayView(dates,gcEvs){
     const leftPct=p.col*widthPct;
     const pp=evPayload(p.ev,ds);
     const timeLabel=p.ev.isMulti?(p.ev.isSpanStart?fmtTimeShort({time:p.ev.time,allDay:false})+' →':(p.ev.spanEndDs===ds?'→ '+(p.ev.endTime?fmtTimeShort({time:p.ev.endTime,allDay:false}):''):'all day')):(fmtTimeShort({time:p.ev.time,allDay:false})+(p.ev.endTime?'–'+fmtTimeShort({time:p.ev.endTime,allDay:false}):''));
-    h+=`<div class="dv-ev ${p.ev.cls}" style="top:${top}px;height:${height}px;left:${leftPct}%;width:calc(${widthPct}% - 4px)" onclick="event.stopPropagation();openEventEdit('${pp}')"><div class="dv-ev-title">${esc(p.ev.title)}</div><div class="dv-ev-time">${esc(timeLabel)}</div></div>`;
+    h+=`<div class="dv-ev ${p.ev.cls}" style="top:${top}px;height:${height}px;left:${leftPct}%;width:calc(${widthPct}% - 4px);${evInlineStyle(p.ev)}" onclick="event.stopPropagation();openEventEdit('${pp}')"><div class="dv-ev-title">${esc(p.ev.title)}</div><div class="dv-ev-time">${esc(timeLabel)}</div></div>`;
   });
   h+=`</div></div></div>`;
   // Auto-scroll to 6am-ish on first render
@@ -3066,7 +3076,7 @@ function buildThreeDayView(dates,gcEvs){
         <button class="td-add-btn" onclick="event.stopPropagation();openNewEvent({date:'${ds}'})">+ Add event</button>
       </div>`;
     if(!evs.length)h+=`<div class="td-empty">No events scheduled.</div>`;
-    else evs.forEach(ev=>{const payload=evPayload(ev,ds);const timeLabel=ev.allDay?'All day':fmtEndRange(ev);h+=`<div class="td-event" onclick="event.stopPropagation();openEventEdit('${payload}')"><span class="td-ev-time${ev.allDay?' allday':''}">${esc(timeLabel)}</span><span class="td-ev-title">${esc(ev.title)}</span></div>`;});
+    else evs.forEach(ev=>{const payload=evPayload(ev,ds);const timeLabel=ev.allDay?'All day':fmtEndRange(ev);const col=eventColor(ev);h+=`<div class="td-event" style="border-left:3px solid ${col.color};padding-left:10px" onclick="event.stopPropagation();openEventEdit('${payload}')"><span class="td-ev-time${ev.allDay?' allday':''}" style="color:${col.color}">${esc(timeLabel)}</span><span class="td-ev-title">${esc(ev.title)}</span></div>`;});
     h+=`</div>`;
   });
   h+=`</div>`;
@@ -3274,7 +3284,7 @@ async function runPlanMyDay(){
     const gc=await fetchGCal(startIso,endIso).catch(()=>[]);
     const todayDs=tod();
     const todayEvs=gc.filter(e=>evCoversDay(e,todayDs)).map(e=>({title:e.title,time:e.time||null,endTime:e.endTime||null,allDay:e.allDay}));
-    const openTasks=S.tasks.filter(t=>!t.done).sort((a,b)=>(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3)).slice(0,30).map(t=>({text:t.text,area:t.area,project:t.project,priority:t.priority,scheduledTime:t.scheduledTime}));
+    const openTasks=S.tasks.filter(t=>!t.done).sort((a,b)=>(PO[a.priority]??99)-(PO[b.priority]??99)).slice(0,30).map(t=>({text:t.text,area:t.area,project:t.project,priority:t.priority,scheduledTime:t.scheduledTime}));
     const activeBuilds=S.builds.filter(b=>b.status==='active').slice(0,5).map(b=>({title:b.title,desc:(b.desc||'').slice(0,160)}));
     const habits=S.habits.map(h=>({name:h.name,description:h.description||'',doneToday:(h.checkedDates||[]).includes(todayDs)}));
     const hr=new Date().getHours();
@@ -3502,41 +3512,28 @@ function openNewEvent(prefill){
   setTimeout(()=>document.getElementById('em-t').focus(),50);
 }
 async function openEventEdit(payload){
+  let p;
+  try{p=JSON.parse(decodeURIComponent(payload));}
+  catch(e){console.error('[openEventEdit] payload parse failed:',e);alert('Sorry — couldn\'t open that event (bad payload).');return;}
+  if(p.type==='rec'){alert('Recurring weekly item — edit in the code (SCHED constant) for now.');return;}
+  editingEvent={mode:'edit',type:p.type,data:p.data,ds:p.ds};
+  let d=p.data||{};
+  // Sensible defaults in case the GCal fetch fails (e.g. read-only Contacts
+  // Birthdays calendar returns 403/404 on GET /events/{id}). We always display
+  // the modal with whatever data we already have, then enrich in place.
+  let endTime='',endDate='',allDay=!!d.allDay,recurrence='none',reminderMin='none',timeZone='Africa/Johannesburg';
+  if(d.endTime)endTime=String(d.endTime).slice(0,5);
+  if(d.endDate&&d.endDate!==d.date)endDate=d.endDate;
+  if(p.type==='cus'){allDay=!d.time;endTime=d.endTime||'';endDate=d.endDate||'';}
+  // Populate and display the modal IMMEDIATELY with basic info so there's
+  // always visible feedback — even for events we can't enrich.
   try{
-    const p=JSON.parse(decodeURIComponent(payload));
-    if(p.type==='rec'){alert('Recurring weekly item — edit in the code (SCHED constant) for now.');return;}
-    editingEvent={mode:'edit',type:p.type,data:p.data,ds:p.ds};
-    let d=p.data;
-    let endTime='';let endDate='';let allDay=false;let recurrence='none';let reminderMin='none';let timeZone='Africa/Johannesburg';
-    if(p.type==='gc'){
-      try{
-        const tok=getGCalToken();
-        const calId=d.calendarId||'primary';
-        if(tok){
-          const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(d.id)}`,{headers:{Authorization:'Bearer '+tok}});
-          if(r.ok){
-            const full=await r.json();
-            d={...d,description:full.description||d.description||''};
-            if(full.end?.dateTime){endTime=full.end.dateTime.slice(11,16);endDate=full.end.dateTime.slice(0,10);}
-            else if(full.end?.date){endDate=addDaysToDateStr(full.end.date,-1);}
-            allDay=!!full.start?.date;
-            if(full.start?.timeZone)timeZone=full.start.timeZone;
-            if(full.recurrence?.length)recurrence=parseRRule(full.recurrence[0]);
-            if(full.reminders&&full.reminders.overrides?.length){reminderMin=String(full.reminders.overrides[0].minutes);}
-          }
-        }
-      }catch(e){}
-    } else if(p.type==='cus'){
-      endTime=d.endTime||'';
-      endDate=d.endDate||'';
-      allDay=!d.time;
-    }
     resetEventModal();
     document.getElementById('em-title').textContent=p.type==='gc'?'Edit Google event':'Edit event';
     document.getElementById('em-t').value=d.title||'';
-    document.getElementById('em-d').value=d.date||p.ds;
+    document.getElementById('em-d').value=d.date||p.ds||'';
     document.getElementById('em-d-end').value=endDate&&endDate!==(d.date||p.ds)?endDate:'';
-    document.getElementById('em-tm').value=(p.type==='gc'&&d.time)?(d.time.slice(0,5)):(d.time||'');
+    document.getElementById('em-tm').value=d.time?String(d.time).slice(0,5):'';
     document.getElementById('em-tm-end').value=endTime;
     document.getElementById('em-desc').value=d.description||d.desc||'';
     document.getElementById('em-allday').checked=allDay;
@@ -3547,8 +3544,32 @@ async function openEventEdit(payload){
     toggleEmAllDay();
     document.getElementById('em-del').style.display='inline-flex';
     document.getElementById('event-modal').style.display='flex';_syncBodyLock();
-    setTimeout(()=>document.getElementById('em-t').focus(),50);
-  }catch(e){console.error(e);}
+    setTimeout(()=>{const el=document.getElementById('em-t');if(el)el.focus();},50);
+  }catch(e){console.error('[openEventEdit] modal populate failed:',e);alert('Sorry — couldn\'t open that event.');return;}
+  // Enrich from GCal (best-effort). If this fails, the modal is already open.
+  if(p.type==='gc'){
+    try{
+      const tok=getGCalToken();
+      const calId=d.calendarId||'primary';
+      if(!tok)return;
+      const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(d.id)}`,{headers:{Authorization:'Bearer '+tok}});
+      if(!r.ok){console.warn('[openEventEdit] GCal GET',r.status,'— using cached data');return;}
+      const full=await r.json();
+      if(full.description)document.getElementById('em-desc').value=full.description;
+      if(full.end?.dateTime){
+        document.getElementById('em-tm-end').value=full.end.dateTime.slice(11,16);
+        const fullEndD=full.end.dateTime.slice(0,10);
+        if(fullEndD!==(d.date||p.ds))document.getElementById('em-d-end').value=fullEndD;
+      } else if(full.end?.date){
+        const fullEndD=addDaysToDateStr(full.end.date,-1);
+        if(fullEndD!==(d.date||p.ds))document.getElementById('em-d-end').value=fullEndD;
+      }
+      if(full.start?.date){document.getElementById('em-allday').checked=true;toggleEmAllDay();}
+      if(full.start?.timeZone){const ts=document.getElementById('em-tz');if(ts){ts.value=full.start.timeZone;if(ts.value!==full.start.timeZone){const opt=document.createElement('option');opt.value=full.start.timeZone;opt.textContent=full.start.timeZone;ts.appendChild(opt);ts.value=full.start.timeZone;}}}
+      if(full.recurrence?.length)document.getElementById('em-repeat').value=parseRRule(full.recurrence[0]);
+      if(full.reminders&&full.reminders.overrides?.length)document.getElementById('em-reminder').value=String(full.reminders.overrides[0].minutes);
+    }catch(e){console.warn('[openEventEdit] GCal enrich failed:',e.message);}
+  }
 }
 function closeEventModal(){document.getElementById('event-modal').style.display='none';editingEvent=null;_syncBodyLock();}
 async function saveCurrentEvent(){
@@ -3693,24 +3714,23 @@ function rTasks(){
   const el=document.getElementById('tasks-sec');if(!el)return;
   const visible=S.tasks.filter(isTaskVisible);
   const wt=visible.filter(t=>t.area==='work'),pt=visible.filter(t=>t.area==='personal');
-  // Fading (done but still visible) items keep their priority slot so
-  // ticking doesn't shoot them to the bottom before they disappear.
-  const srt=arr=>[...arr].sort((a,b)=>(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3));
-  const mkTi=(t,showProj)=>{
+  const grps={wa:[],tf:[],zm:[],gen:[]};wt.forEach(t=>{const k=grps[t.project]!==undefined?t.project:'gen';grps[k].push(t);});
+  // Priority sort. IMPORTANT: PO['urgent'] is 0, and `0||fallback` evaluates
+  // to the fallback in JS — that bug used to push urgent tasks to the
+  // position of "lo" (3). We use ?? so 0 stays 0.
+  const srt=arr=>[...arr].sort((a,b)=>(PO[a.priority]??99)-(PO[b.priority]??99));
+  const mkTi=t=>{
     const isEx=ex.id===t.id&&ex.type==='task';
     const fading=t.done&&t.doneAt;
-    const p=showProj?PROJ[t.project]||PROJ.gen:null;
-    const projTag=p?`<span class="ti-proj" style="background:${p.h}" title="${esc(p.n)}"></span>`:'';
-    let h=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="toggleEx('task','${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)">${projTag}<span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
+    let h=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="toggleEx('task','${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
     if(isEx)h+=`<div class="exp-p"><textarea class="exp-ta" id="exp-ta-${t.id}" rows="2">${esc(t.text)}</textarea><div style="display:flex;gap:8px;margin-top:8px;align-items:center"><label style="font-size:11px;color:var(--muted)">Time</label><input class="inp-e" id="exp-ti-${t.id}" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am" style="margin-bottom:0;flex:1"></div>${mkPriRow(t)}<div class="exp-dt">Added ${fmt(t.date||tod())}</div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveTask('${t.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}')">Delete</button></div></div>`;
     return h;
   };
-  // Work tasks: flat urgency-sorted list (same as Personal). Each row shows a
-  // small project dot so you still know which business it belongs to.
-  const ws=srt(wt);
-  const wh=`<div class="col-lbl work">Work</div>${ws.length?`<div class="tcard">${ws.map(t=>mkTi(t,true)).join('')}</div>`:'<div class="no-t">Clear board.</div>'}`;
+  let wh='<div class="col-lbl work">Work</div>',hw=false;
+  Object.entries(grps).forEach(([k,ts])=>{if(!ts.length)return;hw=true;const p=PROJ[k];wh+=`<div class="proj-g"><div class="proj-hdr"><span class="pdot" style="background:${p.h}"></span><span class="pnm">${p.n}</span></div><div class="tcard">${srt(ts).map(mkTi).join('')}</div></div>`;});
+  if(!hw)wh+=`<div class="no-t">Clear board.</div>`;
   const ps=srt(pt);
-  el.innerHTML=`<div class="tgrid"><div>${wh}</div><div><div class="col-lbl pers">Personal</div>${ps.length?`<div class="tcard">${ps.map(t=>mkTi(t,false)).join('')}</div>`:'<div class="no-t">Nothing personal.</div>'}</div></div>`;
+  el.innerHTML=`<div class="tgrid"><div>${wh}</div><div><div class="col-lbl pers">Personal</div>${ps.length?`<div class="tcard">${ps.map(mkTi).join('')}</div>`:'<div class="no-t">Nothing personal.</div>'}</div></div>`;
   // Completed history section
   const compEl=document.getElementById('completed-sec');
   const completed=S.tasks.filter(t=>t.done&&!isTaskVisible(t));
@@ -3926,11 +3946,30 @@ async function renderCalendarList(){
   if(!tok){el.innerHTML='<span style="color:var(--muted)">Connect Google Calendar to see your calendars.</span>';return;}
   const cals=await fetchCalendarList();
   if(!cals.length){el.innerHTML='<span style="color:var(--muted)">Couldn\'t fetch calendars. Try reconnecting.</span>';return;}
+  const disabled=new Set(Array.isArray(S.disabledCalendars)?S.disabledCalendars:[]);
   el.innerHTML=cals.map(c=>{
-    const dot=c.backgroundColor?`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${esc(c.backgroundColor)};margin-right:6px;vertical-align:middle"></span>`:'';
-    const badge=c.primary?'<span style="font-size:10px;color:var(--muted);margin-left:4px">(primary)</span>':'';
-    return `<div style="padding:2px 0">${dot}${esc(c.summary||c.id)}${badge}</div>`;
+    const dot=c.backgroundColor?`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${esc(c.backgroundColor)};margin-right:8px;vertical-align:middle;flex-shrink:0"></span>`:'';
+    const badge=c.primary?'<span style="font-size:10px;color:var(--muted);margin-left:6px">(primary)</span>':'';
+    const id=esc(c.id);const name=esc(c.summary||c.id);
+    // Primary calendar can't be switched off — it's the user's own calendar.
+    const on=c.primary||!disabled.has(c.id);
+    const toggle=c.primary
+      ? `<span style="font-size:10px;color:var(--muted);margin-left:auto">always on</span>`
+      : `<label class="cal-tog" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--muted)"><input type="checkbox" ${on?'checked':''} onchange="toggleCalendar('${id}',this.checked)" style="cursor:pointer"><span>${on?'On':'Off'}</span></label>`;
+    return `<div style="padding:4px 0;display:flex;align-items:center;min-width:0">${dot}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}${badge}</span>${toggle}</div>`;
   }).join('');
+}
+async function toggleCalendar(id,on){
+  S.disabledCalendars=Array.isArray(S.disabledCalendars)?S.disabledCalendars:[];
+  const set=new Set(S.disabledCalendars);
+  if(on)set.delete(id);else set.add(id);
+  S.disabledCalendars=[...set];
+  svAll();
+  // Bust the month event cache so the calendar view re-fetches
+  gcCache={key:'',events:[]};
+  renderCalendarList();
+  if(currentRoute==='calendar')rCal();
+  if(currentRoute==='today')rTodayWeek();
 }
 async function refreshCalendarList(){
   _calListCache={ts:0,cals:[]};gcCache={key:'',events:[]};
