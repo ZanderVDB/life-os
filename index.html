@@ -326,7 +326,11 @@ svg{flex-shrink:0}
 .dv-hour-row:hover{background:var(--peach-bg)}
 .dv-hour-lbl{position:absolute;left:6px;top:2px;font-size:10px;color:var(--muted-2);font-weight:600}
 .dv-hour-line{position:absolute;left:52px;right:0;top:0;height:1px;background:var(--border)}
-.dv-ev-area{position:absolute;top:0;bottom:0;left:52px;right:4px}
+/* Event layer sits over the hour-rows — let hover/click pass through the
+   empty space (so the hour row highlights across the whole width) and only
+   the individual .dv-ev pills catch pointer events. */
+.dv-ev-area{position:absolute;top:0;bottom:0;left:52px;right:4px;pointer-events:none}
+.dv-ev{pointer-events:auto}
 .dv-ev{position:absolute;background:var(--blue-bg);color:var(--blue);border-left:3px solid var(--blue);border-radius:6px;padding:5px 8px;font-size:11.5px;line-height:1.3;overflow:hidden;cursor:pointer;transition:filter .1s;z-index:2;box-shadow:0 1px 2px rgba(0,0,0,.06)}
 .dv-ev:hover{filter:brightness(.96)}
 [data-theme="studio"] .dv-ev:hover{filter:brightness(1.15)}
@@ -3302,7 +3306,10 @@ function buildWeekView(dates,gcEvs){
   let h=`<div class="cv-grid-7">`;
   dates.forEach(({date,ds,isToday})=>{
     const evs=gatherDay(date,ds,gcEvs);
-    h+=`<div class="cv-gcol${isToday?' today':''}"><div class="cv-gcol-hdr" style="cursor:pointer" onclick="UI.calDate=new Date(${date.getFullYear()},${date.getMonth()},${date.getDate()});UI.calView='day';rCal()" title="Open day"><span><span class="cv-gcol-dname">${DAYS[date.getDay()]}</span><span class="cv-gcol-dnum" style="margin-left:6px">${date.getDate()}</span></span><button class="cv-add-btn" style="padding:2px 6px;font-size:10px" onclick="event.stopPropagation();openNewEvent({date:'${ds}'})">+</button></div>${evs.length?evs.map(e=>evChip(e,ds)).join(''):'<div class="cv-empty" style="font-size:11px">—</div>'}</div>`;
+    // Whole column is now clickable — header, body, empty area all jump to
+    // Day view. Chips (data-ev-payload) and the + button stop propagation
+    // so they don't trigger navigation on top of their own action.
+    h+=`<div class="cv-gcol${isToday?' today':''}" style="cursor:pointer" onclick="UI.calDate=new Date(${date.getFullYear()},${date.getMonth()},${date.getDate()});UI.calView='day';rCal()" title="Open day"><div class="cv-gcol-hdr"><span><span class="cv-gcol-dname">${DAYS[date.getDay()]}</span><span class="cv-gcol-dnum" style="margin-left:6px">${date.getDate()}</span></span><button class="cv-add-btn" style="padding:2px 6px;font-size:10px" onclick="event.stopPropagation();openNewEvent({date:'${ds}'})">+</button></div>${evs.length?evs.map(e=>evChip(e,ds)).join(''):'<div class="cv-empty" style="font-size:11px">—</div>'}</div>`;
   });
   h+=`</div>`;return h;
 }
@@ -3396,10 +3403,18 @@ function buildMonthView(y,m,today,allGc){
       cal.onclick=e=>{if(e.target.closest('.cv-ev-chip')||e.target.closest('.mv-bar-exp'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openDayModal(cy,cm,cd,allGc);};
       attachMonthHover(cal);
     } else {
-      // Expanded view — clear ALL listeners from a previous collapsed render.
-      // Without this the hover popover keeps firing from the last attached
-      // onmouseover handler, even though click & day modal are off.
-      cal.onclick=null;
+      // Expanded view — bars open events via the data-ev-payload delegate.
+      // Clicks on the rest of a day cell should jump straight to Day view
+      // for that date (no popup, since everything's already visible).
+      cal.onclick=e=>{
+        if(e.target.closest('[data-ev-payload]'))return;
+        const c=e.target.closest('[data-cd]');
+        if(!c)return;
+        const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);
+        UI.calDate=new Date(cy,cm,cd);
+        UI.calView='day';
+        rCal();
+      };
       cal.onmouseover=null;
       cal.onmouseout=null;
       hideMcwPopover();
