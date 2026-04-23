@@ -689,23 +689,20 @@ svg{flex-shrink:0}
 
 @media(max-width:768px){
   .cv-week-row.cv-week-hdr .cv-week-dayname{font-size:9px}
-  .cv-weeks.detail .mv-bar-txt{font-size:10px;padding:0 5px}
 }
-/* Mobile Expand-all: stacked day-by-day list. Only shown on narrow screens;
-   the regular 7-col grid is used everywhere wider. */
-.mv-md-list{display:flex;flex-direction:column;gap:8px;padding:6px 10px 10px}
-.mv-md-day{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;cursor:pointer;transition:background .12s}
-.mv-md-day:hover{background:var(--surface-hover)}
-.mv-md-day.today{border-color:var(--peach);background:var(--bg-2)}
-.mv-md-hdr{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.mv-md-daynum{font-family:'Playfair Display',serif;font-size:20px;font-weight:500;line-height:1;color:var(--text);min-width:28px}
-.mv-md-day.today .mv-md-daynum{color:var(--peach);font-weight:700}
-.mv-md-dayname{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600;flex:1}
-.mv-md-habits{display:flex;gap:3px;align-items:center}
-.mv-md-evs{display:flex;flex-direction:column;gap:4px;padding-left:38px}
-.mv-md-ev{display:flex;gap:8px;align-items:baseline;padding:5px 9px;border-radius:6px;font-size:12px;line-height:1.3}
-.mv-md-ev-t{font-weight:700;font-size:10.5px;flex-shrink:0;opacity:.85}
-.mv-md-ev-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Mobile Expand-all tweaks: tiny text, minimal padding so event titles fill
+   the full width of each ~52px-wide cell instead of being cut off to one
+   letter. Grid layout stays — just squeeze the bars harder. */
+@media(max-width:700px){
+  .cv-weeks{padding:6px 6px}
+  .mcw-cell{padding:2px 1px}
+  .cv-weeks.detail .cv-week-row.mv-wk{grid-template-rows:26px repeat(var(--wk-rows,4),17px);row-gap:2px}
+  .cv-weeks.detail .mv-bar-txt{font-size:9px;padding:0 2px;letter-spacing:-0.2px;font-weight:500}
+  .cv-weeks.detail .mv-bar{margin:1px 0}
+  .cv-weeks.detail .mv-bar.left{margin-left:0;border-top-left-radius:2px;border-bottom-left-radius:2px}
+  .cv-weeks.detail .mv-bar.right{margin-right:0;border-top-right-radius:2px;border-bottom-right-radius:2px}
+  .cv-weeks.detail .mv-bar.both{margin:1px 0;border-radius:2px}
+}
 .mcw{background:var(--surface);border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:5px 4px 6px;min-height:82px;height:82px;cursor:pointer;display:flex;flex-direction:column;gap:3px;transition:all .15s;position:relative;overflow:hidden}
 .mcw:hover:not(.faded){background:var(--surface-hover)}
 .mcw.today{background:var(--bg-2)}
@@ -1093,9 +1090,13 @@ svg{flex-shrink:0}
   .page-title{font-size:22px;letter-spacing:-.3px;line-height:1.1;flex:0 1 auto}
   .page-sub{font-size:11.5px;flex:1 1 100%;order:10;padding-bottom:0 !important;margin:-2px 0 0}
   .page-actions{margin-left:auto;flex:0 1 auto;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-  /* Brain's 200px-fixed search input is the one control that doesn't fit on
-     the title line — force it full-width so it wraps below the + Add button. */
-  #brain-search{width:100% !important;flex:1 1 100%;order:20;font-size:13px;padding:7px 10px}
+  /* For Brain specifically, pull the search input + add button out of the
+     page-actions wrapper so they flow as siblings of page-title. That lets
+     the search wrap to its own full-width line BELOW the title+button row.
+     display:contents makes the wrapper "invisible" — its children are
+     treated as direct children of the flex parent. */
+  .route[data-route="brain"] .page-hdr .page-actions{display:contents}
+  .route[data-route="brain"] #brain-search{width:100% !important;flex:1 1 100%;order:20;font-size:13px;padding:7px 10px;min-width:0}
   .section-hdr{margin-bottom:8px}
   .tabs{margin-bottom:10px}
   .ai-bar{left:0;padding:10px 12px env(safe-area-inset-bottom,12px)}
@@ -1735,8 +1736,13 @@ const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
-  if(r!==currentRoute)playSound('tab');
+  const routeChanged=r!==currentRoute;
+  if(routeChanged)playSound('tab');
   currentRoute=r;
+  // Reset scroll to the top when switching routes — otherwise if you were
+  // scrolled halfway through Calendar and jumped to People, People appeared
+  // to "start halfway down the screen" because the scroll carried over.
+  if(routeChanged){try{window.scrollTo({top:0,behavior:'instant'});}catch(_){window.scrollTo(0,0);}}
   if(!skipHash){try{history.replaceState(null,'','#'+r);}catch(e){location.hash=r;}}
   document.querySelectorAll('[data-route]').forEach(el=>el.classList.toggle('active',el.dataset.route===r));
   document.querySelectorAll('[data-route-link]').forEach(a=>a.classList.toggle('active',a.dataset.routeLink===r));
@@ -3354,47 +3360,12 @@ function layoutWeekEvents(evs){
   return evs;
 }
 let _lastMonthGcEvs=[];
-// Mobile-only alternate render for the Expand-all month view. The 7-column
-// grid doesn't work below ~500px — each column is ~55px and event text
-// collapses to one letter per bar. This version stacks every day of the
-// month as a full-width row with events listed under it — infinitely more
-// readable on a phone.
-function buildMonthDetailMobile(y,m,today,allGc){
-  const daysInMonth=new Date(y,m+1,0).getDate();
-  const habitColor=hb=>{const ix=S.habits.findIndex(x=>x.id===hb.id);return HABIT_COLORS[(ix<0?0:ix)%HABIT_COLORS.length];};
-  let h=`<div class="mv-toolbar"><button class="btn btn-ghost btn-sm" onclick="toggleMonthDetail()">▦ Bars</button></div>`;
-  h+=`<div class="mv-md-list">`;
-  for(let d=1;d<=daysInMonth;d++){
-    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const date=new Date(y,m,d);
-    const isT=today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===d;
-    const evs=gatherDay(date,ds,allGc||[]);
-    const habits=(S.habits||[]).filter(hb=>(hb.checkedDates||[]).includes(ds));
-    const dayName=DAYS[date.getDay()];
-    const habitsHtml=habits.length?`<span class="mv-md-habits">${habits.slice(0,4).map(hb=>`<span class="mcw-habit-dot" style="background:${habitColor(hb)}" title="${esc(hb.name)}"></span>`).join('')}${habits.length>4?`<span class="mcw-habit-more">+${habits.length-4}</span>`:''}</span>`:'';
-    const evsHtml=evs.length?`<div class="mv-md-evs">${evs.map(ev=>{const payload=evPayload(ev,ds);const isTask=!!(ev.task||ev.type==='task');const timeLbl=isTask?'🔔':(ev.allDay?'All':esc(fmtTimeShort(ev)));return`<div class="mv-md-ev" style="${evInlineStyle(ev)}" data-ev-payload="${payload}"><span class="mv-md-ev-t">${timeLbl}</span><span class="mv-md-ev-n">${esc(ev.title)}</span></div>`;}).join('')}</div>`:'';
-    h+=`<div class="mv-md-day${isT?' today':''}" onclick="UI.calDate=new Date(${y},${m},${d});UI.calView='day';rCal()">
-      <div class="mv-md-hdr">
-        <span class="mv-md-daynum">${d}</span>
-        <span class="mv-md-dayname">${dayName}</span>
-        ${habitsHtml}
-      </div>
-      ${evsHtml}
-    </div>`;
-  }
-  h+=`</div>`;
-  setTimeout(()=>{const cal=document.getElementById('cal');if(!cal)return;cal.onclick=null;cal.onmouseover=null;cal.onmouseout=null;hideMcwPopover();},0);
-  return h;
-}
 function buildMonthView(y,m,today,allGc){
   _lastMonthGcEvs=allGc||[];
-  const detail=!!UI.monthDetail;
-  // On phones the 7-column grid breaks down in expanded mode — switch to a
-  // stacked day-by-day list that's actually readable.
-  if(detail&&window.innerWidth<=700)return buildMonthDetailMobile(y,m,today,allGc);
   const cells=_monthCells(y,m);
   let lastWeek=0;for(let i=0;i<cells.length;i++)if(!cells[i].faded)lastWeek=Math.floor(i/7);
   const showWeeks=lastWeek+1;
+  const detail=!!UI.monthDetail;
   const MAX_ROWS=detail?6:4;
   let h=`<div class="mv-toolbar"><button class="btn btn-ghost btn-sm" onclick="toggleMonthDetail()">${detail?'▦ Bars':'☰ Expand all'}</button></div>`;
   h+=`<div class="cv-weeks${detail?' detail':''}">`;
