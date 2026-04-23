@@ -176,6 +176,13 @@ svg{flex-shrink:0}
 [data-theme="studio"] .tip-card{background:linear-gradient(135deg,var(--surface-2) 0%,var(--surface) 100%)}
 .tip-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px}
 .tip-body{font-family:'Playfair Display','Georgia',serif;font-size:19px;line-height:1.45;color:var(--text);margin-bottom:14px;font-weight:400}
+.tip-plan-body{font-size:13.5px;line-height:1.65;color:var(--text-2);margin-bottom:14px;max-height:380px;overflow-y:auto}
+.tip-plan-body h3,.tip-plan-body h4{font-family:'Playfair Display',serif;font-size:15px;font-weight:500;margin:12px 0 6px;color:var(--text)}
+.tip-plan-body h4:first-child,.tip-plan-body h3:first-child{margin-top:0}
+.tip-plan-body ul{margin:4px 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+.tip-plan-body li{line-height:1.55}
+.tip-plan-body p{margin:4px 0}
+.tip-plan-body strong{font-weight:600;color:var(--text)}
 .tip-actions{display:flex;gap:8px;flex-wrap:wrap}
 .tip-loading{font-size:13px;color:var(--muted);padding:6px 0}
 
@@ -377,9 +384,9 @@ svg{flex-shrink:0}
 @media(max-width:700px){
   .week-sum{display:flex !important;flex-direction:row !important;overflow-x:auto;gap:0;padding:6px 0 12px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .week-sum::-webkit-scrollbar{display:none}
-  .week-sum .day-card{flex:0 0 150px;min-width:150px;min-height:170px;scroll-snap-align:start;margin-right:14px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.05);border-radius:12px}
+  .week-sum .day-card{flex:0 0 142px;min-width:142px;min-height:170px;scroll-snap-align:center;margin-right:8px;border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.04);border-radius:10px}
   .week-sum .day-card:first-child{margin-left:2px}
-  .week-sum .day-card:last-child{margin-right:18px}
+  .week-sum .day-card:last-child{margin-right:14px}
   .week-sum .dc-ev{font-size:11px;padding:3px 8px}
 }
 .wl-day:last-child{border-right:none}
@@ -602,15 +609,16 @@ svg{flex-shrink:0}
 .cv-week-row.mv-wk{grid-template-rows:26px repeat(var(--wk-rows,4),9px);padding-bottom:4px;border-bottom:1px solid var(--border);row-gap:2px}
 .cv-weeks.detail .cv-week-row.mv-wk{grid-template-rows:26px repeat(var(--wk-rows,4),22px)}
 .cv-week-row.cv-week-hdr .cv-week-dayname{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:center;padding:6px 0;border-bottom:1px solid var(--border)}
-.mcw-cell{grid-row:1/-1;padding:4px 4px 2px;cursor:pointer;position:relative}
+.mcw-cell{grid-row:1/-1;padding:4px 4px 2px;cursor:pointer;position:relative;overflow:hidden;min-height:0;min-width:0}
 .mcw-cell:hover:not(.faded){background:color-mix(in srgb,var(--surface-hover) 60%,transparent)}
 .mcw-cell.today{background:var(--bg-2)}
 .mcw-cell.faded{opacity:.32}
-.mcw-top{display:flex;align-items:center;justify-content:space-between;padding:0 2px;pointer-events:none}
-.mcw-num{font-size:12px;font-weight:600;color:var(--text);font-family:'Playfair Display',serif;line-height:1.2}
+.mcw-top{display:flex;align-items:center;justify-content:space-between;padding:0 2px;pointer-events:none;gap:4px;min-width:0;overflow:hidden}
+.mcw-num{font-size:12px;font-weight:600;color:var(--text);font-family:'Playfair Display',serif;line-height:1.2;flex-shrink:0}
 .mcw-cell.today .mcw-num{color:var(--peach);font-weight:700}
-.mcw-habits{display:flex;gap:2px;flex-wrap:wrap;justify-content:flex-end}
-.mcw-habit-dot{width:5px;height:5px;border-radius:50%}
+.mcw-habits{display:flex;gap:2px;flex-wrap:nowrap;justify-content:flex-end;align-items:center;min-width:0;overflow:hidden}
+.mcw-habit-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.mcw-habit-more{font-size:8px;font-weight:700;color:var(--muted);flex-shrink:0;margin-left:1px}
 .mcw-more-note{font-size:9px;color:var(--muted);font-weight:600;text-align:center;padding:1px 2px;pointer-events:none;align-self:end}
 
 /* Spanning bars */
@@ -1158,8 +1166,8 @@ svg{flex-shrink:0}
         </div>
 
         <div class="tip-card" id="tip-card">
-          <div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's read</div>
-          <div class="tip-loading">Loading your daily read…</div>
+          <div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div>
+          <div class="tip-loading">Drafting your plan for today…</div>
         </div>
 
         <section>
@@ -1227,7 +1235,6 @@ svg{flex-shrink:0}
         <div class="page-hdr">
           <div class="page-title">Calendar</div>
           <div class="page-actions">
-            <button class="btn btn-sm" onclick="openPlanMyDay()" title="Let Claude build today's schedule from your events, tasks, and life rhythm">✨ Plan my day</button>
             <button class="btn btn-primary btn-sm" onclick="openNewEvent()">+ New event</button>
           </div>
         </div>
@@ -1464,15 +1471,6 @@ svg{flex-shrink:0}
           <div class="section-hdr"><h2>Account</h2></div>
           <div class="setting-row">
             <div>
-              <div class="setting-label">Restore starter data</div>
-              <div class="setting-desc">Re-populates tasks, habits, people, projects, ideas and notes with your original starter set (same as the first time we built it). Use this if data got wiped. Does not touch calendar events.</div>
-            </div>
-            <div class="setting-right">
-              <button class="btn btn-sm" onclick="restoreStarterData()">Restore</button>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div>
               <div class="setting-label">Sign out</div>
               <div class="setting-desc">Disconnects your Google account from this device.</div>
             </div>
@@ -1629,6 +1627,8 @@ function setRoute(r,skipHash){
   ex={id:null,type:null};
   // Close mobile drawer + right-rail + clear search field on navigate
   closeDrawer();closeRail();
+  // Reset This week centering so it re-centers today when you return
+  const wk=document.getElementById('today-week');if(wk)delete wk.dataset.centered;
   const bs=document.getElementById('brain-search');if(bs&&bs.value){bs.value='';UI.brainQuery='';}
   // Leave project detail mode if user navigates away from projects
   if(r!=='projects'&&UI.projectDetail){UI.projectDetail=null;const pd=document.getElementById('project-detail-view');if(pd)pd.style.display='none';const pl=document.getElementById('projects-list-view');if(pl)pl.style.display='block';}
@@ -2393,63 +2393,71 @@ function rFocus(){const el=document.getElementById('fw');if(!el)return;const f=g
 // TIP
 async function loadTip(force){
   const t=tod();
-  // Prefer the synced copy in S — same tip across all devices for today
+  // Prefer the synced copy in S — same plan across devices for today
   if(!force&&S.todaysTip&&S.todaysTip.date===t&&S.todaysTip.tip){renderTip(S.todaysTip.tip);return;}
-  // Fall back to legacy per-device cache, then promote it to S for syncing
-  const cached=force?null:localStorage.getItem('los_tip');
-  if(cached){try{const p=JSON.parse(cached);if(p.date===t){renderTip(p.tip);S.todaysTip={date:t,tip:p.tip};svAll();return;}}catch(e){}}
-  const key=getKey();if(!key){renderTip({body:"Add your Anthropic API key (Settings → AI & integrations) to get personalized daily reads.",action:""});return;}
+  const key=getKey();if(!key){renderTip({body:"Add your Anthropic API key in Settings to get your AI-generated daily plan.",markdown:false,fromHour:null});return;}
+  await generateTodaysPlan(false);
+}
+async function generateTodaysPlan(fromNow){
+  const key=getKey();if(!key){renderTip({body:"Add your Anthropic API key in Settings to unlock your daily plan.",markdown:false,fromHour:null});return;}
   const el=document.getElementById('tip-card');
-  if(el)el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's read</div><div class="tip-loading">Reading your day…</div>`;
+  if(el)el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div><div class="tip-loading">${fromNow?'Re-planning the rest of today…':'Drafting your plan…'}</div>`;
   try{
-    const h=new Date().getHours();const day=new Date().toLocaleDateString('en-ZA',{weekday:'long'});
-    const openTasks=S.tasks.filter(x=>!x.done);
-    const gc=await fetchGCal(new Date(new Date().setHours(0,0,0,0)).toISOString(),new Date(new Date().setHours(23,59,59,999)).toISOString()).catch(()=>[]);
-    const ctx={hour:h,day,eventsToday:gc.length,nextEvents:gc.slice(0,3).map(e=>({t:e.title,time:e.time||'all-day'})),urgentTasks:openTasks.filter(t=>t.priority==='urgent').map(t=>t.text).slice(0,3),totalOpen:openTasks.length,activeBuild:S.builds.find(b=>b.status==='active')?.title||null,futureBuilds:S.builds.filter(b=>b.status==='future').map(b=>b.title).slice(0,3),habitsDone:S.habits.filter(x=>x.doneToday).length,habitsTotal:S.habits.length,habitsMissed:S.habits.filter(x=>!x.doneToday).map(h=>h.name).slice(0,3),weeklyRhythm:S.lifeRhythm||null};
-    const p=`You are Zander's Life OS coach. He is a Cape Town entrepreneur (WebAnchor, TriFusion, Zomarka). Write ONE short, specific, warm daily read based on his state. Tone: direct, no fluff, grounded. 1–2 sentences, ideally under 35 words.
+    const now=new Date();const hr=now.getHours();const dayName=now.toLocaleDateString('en-ZA',{weekday:'long'});const todayDs=tod();
+    const startIso=new Date(now.getFullYear(),now.getMonth(),now.getDate(),0,0,0).toISOString();
+    const endIso=new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59).toISOString();
+    const gc=await fetchGCal(startIso,endIso).catch(()=>[]);
+    const todayEvs=gc.filter(e=>evCoversDay(e,todayDs)).map(e=>({title:e.title,time:e.time||null,endTime:e.endTime||null,allDay:e.allDay}));
+    const openTasks=S.tasks.filter(t=>!t.done).sort((a,b)=>(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3)).slice(0,20).map(t=>({text:t.text,area:t.area,project:t.project,priority:t.priority}));
+    const activeBuilds=S.builds.filter(b=>b.status==='active').slice(0,3).map(b=>({title:b.title,desc:(b.desc||'').slice(0,120)}));
+    const habits=S.habits.map(h=>({name:h.name,doneToday:(h.checkedDates||[]).includes(todayDs)}));
+    const rhythm=S.lifeRhythm||'(none provided)';
+    const nowLabel=now.toLocaleTimeString('en-ZA',{hour:'numeric',minute:'2-digit',hour12:true});
+    const ctx={now:`${dayName}, ${now.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})} at ${nowLabel}`,hour:hr,fromNow:!!fromNow,todayEvents:todayEvs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
+    const prompt=`You are Zander's Life OS coach. Cape Town entrepreneur (WebAnchor / TriFusion / Zomarka). Draft a realistic, focused plan for ${fromNow?'the REST of today (starting from now)':'today'}. Ground it in his actual state.
 
 Rules:
-- If morning and calendar is open, suggest pushing a specific project he has.
-- If urgent tasks exist, nudge the most important one by name.
-- If habits undone by afternoon, mention one.
-- Avoid clichés. No "remember to" or "don't forget". Speak like a thoughtful friend.
+- Respect fixed events (meetings, all-day items) — schedule around them, never suggest moving them.
+- Respect his weekly rhythm (regular commitments, fasting window, gym time). If today falls on one of those days, bake it in.
+- Prioritise urgent tasks first, then high. One or two personal items are fine.
+- Realistic durations with small buffers — don't pack every minute.
+- Use Cape Town local clock times (e.g. "2:00–3:00 pm"). Keep to 5–8 time blocks max.
+- End with ONE short "North star" line — the single outcome that would make today count.
+- Concise. Skip filler like "wake up" / "brush teeth".
 
-State:${JSON.stringify(ctx)}
+Format as markdown:
+## Plan
+- HH:MM–HH:MM · Block name · (short why)
+- …
+## North star
+One sentence.
 
-Return ONLY raw JSON:
-{"body":"...","action":"one short question he could ask Claude for deeper help"}`;
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:p}]})});
-    if(!r.ok){
-      let errMsg='HTTP '+r.status;
-      try{const errData=await r.json();if(errData.error?.message)errMsg=errData.error.message;}catch(_){}
-      throw new Error(errMsg);
-    }
+STATE:
+${JSON.stringify(ctx,null,2)}`;
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:900,messages:[{role:'user',content:prompt}]})});
+    if(!r.ok){let m='HTTP '+r.status;try{const j=await r.json();if(j.error?.message)m=j.error.message;}catch(_){}throw new Error(m);}
     const d=await r.json();
-    const tip=JSON.parse((d.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim());
-    S.todaysTip={date:t,tip};svAll();
-    try{localStorage.setItem('los_tip',JSON.stringify({date:t,tip}));}catch(e){}
+    const text=(d.content?.[0]?.text||'').trim();
+    const tip={markdown:true,body:text,fromHour:fromNow?hr:null};
+    S.todaysTip={date:tod(),tip};svAll();
     renderTip(tip);
   }catch(e){
-    console.warn('[tip] fetch failed:',e.message);
-    const keyNow=getKey();
+    console.warn('[plan] fetch failed:',e.message);
     const isAuthErr=/401|invalid.*api.{0,3}key|authentication|unauthorized/i.test(e.message);
     const el=document.getElementById('tip-card');if(!el)return;
-    if(!keyNow){
-      el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's read</div><div class="tip-body">Add your Anthropic API key to unlock personalized daily reads.</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="promptKey()">Add API key</button></div>`;
-    } else if(isAuthErr){
-      el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's read</div><div class="tip-body">Your Anthropic API key isn't working. It may have been revoked or mistyped — update it and try again.</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="promptKey()">Update API key</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Retry</button></div>`;
+    if(isAuthErr){
+      el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div><div class="tip-body">Your Anthropic API key isn't working. Update it to get your plan.</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="promptKey()">Update API key</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Retry</button></div>`;
     } else {
-      renderTip({body:`Couldn't reach Claude: ${e.message}. Tap ↻ to retry.`,action:""});
+      renderTip({body:`Couldn't reach Claude: ${esc(e.message)}.`,markdown:false,fromHour:null});
     }
   }
 }
 function renderTip(tip){
   const el=document.getElementById('tip-card');if(!el)return;
-  const body=esc(tip.body||'');
-  const action=tip.action||'';
-  el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's read</div><div class="tip-body">${body}</div><div class="tip-actions">${action?`<button class="btn btn-sm" onclick="discussWithClaude(${JSON.stringify(action).replace(/"/g,'&quot;')})">Discuss with Claude ↗</button>`:''}<button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ New read</button></div>`;
+  const body=tip.markdown?renderMarkdownMini(tip.body||''):`<div class="tip-body">${esc(tip.body||'')}</div>`;
+  const fromLbl=tip.fromHour!=null?` <span style="font-size:10px;color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none">· from ${tip.fromHour>12?tip.fromHour-12:(tip.fromHour===0?12:tip.fromHour)}${tip.fromHour>=12?'pm':'am'}</span>`:'';
+  el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan${fromLbl}</div><div class="tip-plan-body">${body}</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="generateTodaysPlan(true)">✨ Plan the rest of the day</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Full day</button></div>`;
 }
-function discussWithClaude(q){const url='https://claude.ai/new?q='+encodeURIComponent(q||'');window.open(url,'_blank');}
 
 // CALENDAR HELPERS
 function getCusDate(ds){return(S.customEvents||[]).filter(e=>e.date===ds);}
@@ -2529,7 +2537,7 @@ async function rTodayWeek(){
     const all=[...gd,...cd,...re];
     const shown=all.slice(0,3);
     const extra=all.length-shown.length;
-    return `<div class="day-card${isT?' today':''}" onclick="UI.calDate=new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()});UI.calView='day';setRoute('calendar');rCal()">
+    return `<div class="day-card${isT?' today':''}" data-today="${isT?'1':'0'}" onclick="UI.calDate=new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()});UI.calView='day';setRoute('calendar');rCal()">
       <div class="day-card-hdr"><div class="dc-day">${DAYS[d.getDay()]}</div><span class="dc-num">${d.getDate()}</span></div>
       <div class="dc-events">
         ${shown.length?shown.map(e=>`<div class="dc-ev ${e.cls}">${esc(e.title)}</div>`).join(''):`<div class="dc-empty">—</div>`}
@@ -2537,6 +2545,15 @@ async function rTodayWeek(){
       </div>
     </div>`;
   }).join('');
+  // On mobile, center today's card on first render so Zander doesn't see
+  // Sunday/Monday when today is Thursday
+  if(window.innerWidth<=700){
+    const todayCard=el.querySelector('[data-today="1"]');
+    if(todayCard&&!el.dataset.centered){
+      el.dataset.centered='1';
+      setTimeout(()=>{try{todayCard.scrollIntoView({behavior:'auto',inline:'center',block:'nearest'});}catch(e){}},30);
+    }
+  }
 }
 
 function rAttention(){
@@ -2956,7 +2973,7 @@ function buildMonthView(y,m,today,allGc){
   let lastWeek=0;for(let i=0;i<cells.length;i++)if(!cells[i].faded)lastWeek=Math.floor(i/7);
   const showWeeks=lastWeek+1;
   const detail=!!UI.monthDetail;
-  const MAX_ROWS=detail?12:4;
+  const MAX_ROWS=detail?6:4;
   let h=`<div class="mv-toolbar"><button class="btn btn-ghost btn-sm" onclick="toggleMonthDetail()">${detail?'▦ Bars':'☰ Expand all'}</button></div>`;
   h+=`<div class="cv-weeks${detail?' detail':''}">`;
   h+=`<div class="cv-week-row cv-week-hdr">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="cv-week-dayname">${d}</div>`).join('')}</div>`;
@@ -2980,7 +2997,8 @@ function buildMonthView(y,m,today,allGc){
       const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
       const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
       const habitsDone=(S.habits||[]).filter(hb=>(hb.checkedDates||[]).includes(ds));
-      h+=`<div class="mcw-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}" style="grid-column:${idx+1};grid-row:1/-1"><div class="mcw-top"><div class="mcw-num">${cd}</div>${habitsDone.length?`<div class="mcw-habits">${habitsDone.slice(0,5).map(hb=>`<span class="mcw-habit-dot" style="background:${habitColor(hb)}" title="${esc(hb.name)}"></span>`).join('')}</div>`:''}</div></div>`;
+      const maxDots=3;const dotList=habitsDone.slice(0,maxDots);const dotExtra=habitsDone.length-maxDots;
+      h+=`<div class="mcw-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}" style="grid-column:${idx+1};grid-row:1/-1"><div class="mcw-top"><div class="mcw-num">${cd}</div>${habitsDone.length?`<div class="mcw-habits">${dotList.map(hb=>`<span class="mcw-habit-dot" style="background:${habitColor(hb)}" title="${esc(hb.name)}"></span>`).join('')}${dotExtra>0?`<span class="mcw-habit-more" title="+${dotExtra} more habits">+${dotExtra}</span>`:''}</div>`:''}</div></div>`;
     });
     // Event bars as grid items that span columns — connect fully across cells
     weekEvs.forEach(e=>{
