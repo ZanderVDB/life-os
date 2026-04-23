@@ -169,11 +169,14 @@ svg{flex-shrink:0}
 
 /* ━━━ TIP CARD ━━━ */
 .tip-card{
-  background:linear-gradient(135deg,var(--peach-bg) 0%,var(--lavender-bg) 100%);
+  background:linear-gradient(135deg,var(--peach-bg) 0%,var(--gold-bg) 42%,var(--lavender-bg) 100%);
   border:1px solid var(--border);border-radius:var(--radius-lg);
   padding:22px 24px;position:relative;overflow:hidden;
 }
-[data-theme="studio"] .tip-card{background:linear-gradient(135deg,var(--surface-2) 0%,var(--surface) 100%)}
+.tip-card::before{content:'';position:absolute;top:-30%;right:-10%;width:60%;height:180%;background:radial-gradient(circle at center,var(--sage-bg) 0%,transparent 60%);opacity:.55;pointer-events:none;z-index:0}
+.tip-card > *{position:relative;z-index:1}
+[data-theme="studio"] .tip-card{background:linear-gradient(135deg,var(--surface-2) 0%,#2a2530 42%,var(--surface) 100%)}
+[data-theme="studio"] .tip-card::before{background:radial-gradient(circle at center,rgba(159,181,165,.15) 0%,transparent 60%);opacity:.5}
 .tip-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px}
 .tip-body{font-family:'Playfair Display','Georgia',serif;font-size:19px;line-height:1.45;color:var(--text);margin-bottom:14px;font-weight:400}
 .tip-plan-body{font-size:13.5px;line-height:1.65;color:var(--text-2);margin-bottom:14px;max-height:380px;overflow-y:auto}
@@ -2427,36 +2430,44 @@ function rFocus(){const el=document.getElementById('fw');if(!el)return;const f=g
 // TIP
 async function loadTip(force){
   const t=tod();
-  // Prefer the synced copy in S — same plan across devices for today
   if(!force&&S.todaysTip&&S.todaysTip.date===t&&S.todaysTip.tip){renderTip(S.todaysTip.tip);return;}
-  const key=getKey();if(!key){renderTip({body:"Add your Anthropic API key in Settings to get your AI-generated daily plan.",markdown:false,fromHour:null});return;}
-  await generateTodaysPlan(false);
+  const key=getKey();if(!key){renderTip({body:"Add your Anthropic API key in Settings to get your AI-generated daily plan.",markdown:false,mode:'today'});return;}
+  await generatePlan('today');
 }
-async function generateTodaysPlan(fromNow){
-  const key=getKey();if(!key){renderTip({body:"Add your Anthropic API key in Settings to unlock your daily plan.",markdown:false,fromHour:null});return;}
+// mode: 'today' (whole day) | 'now' (from current hour to end of day) |
+//       'tomorrow' (whole of tomorrow)
+async function generatePlan(mode){
+  const key=getKey();if(!key){renderTip({body:"Add your Anthropic API key in Settings to unlock your daily plan.",markdown:false,mode});return;}
   const el=document.getElementById('tip-card');
-  if(el)el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div><div class="tip-loading">${fromNow?'Re-planning the rest of today…':'Drafting your plan…'}</div>`;
+  const loadingTxt=mode==='now'?'Re-planning from now…':mode==='tomorrow'?'Drafting tomorrow…':'Drafting your plan…';
+  const titleTxt=mode==='tomorrow'?"Tomorrow's plan":"Today's plan";
+  if(el)el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> ${titleTxt}</div><div class="tip-loading">${loadingTxt}</div>`;
   try{
-    const now=new Date();const hr=now.getHours();const dayName=now.toLocaleDateString('en-ZA',{weekday:'long'});const todayDs=tod();
-    const startIso=new Date(now.getFullYear(),now.getMonth(),now.getDate(),0,0,0).toISOString();
-    const endIso=new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59).toISOString();
+    const now=new Date();const hr=now.getHours();
+    const isTomorrow=mode==='tomorrow';
+    const refDate=new Date(now);if(isTomorrow)refDate.setDate(refDate.getDate()+1);
+    const refDs=localDs(refDate);
+    const dayName=refDate.toLocaleDateString('en-ZA',{weekday:'long'});
+    const startIso=new Date(refDate.getFullYear(),refDate.getMonth(),refDate.getDate(),0,0,0).toISOString();
+    const endIso=new Date(refDate.getFullYear(),refDate.getMonth(),refDate.getDate(),23,59,59).toISOString();
     const gc=await fetchGCal(startIso,endIso).catch(()=>[]);
-    const todayEvs=gc.filter(e=>evCoversDay(e,todayDs)).map(e=>({title:e.title,time:e.time||null,endTime:e.endTime||null,allDay:e.allDay}));
+    const evs=gc.filter(e=>evCoversDay(e,refDs)).map(e=>({title:e.title,time:e.time||null,endTime:e.endTime||null,allDay:e.allDay}));
     const openTasks=S.tasks.filter(t=>!t.done).sort((a,b)=>(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3)).slice(0,20).map(t=>({text:t.text,area:t.area,project:t.project,priority:t.priority}));
     const activeBuilds=S.builds.filter(b=>b.status==='active').slice(0,3).map(b=>({title:b.title,desc:(b.desc||'').slice(0,120)}));
-    const habits=S.habits.map(h=>({name:h.name,doneToday:(h.checkedDates||[]).includes(todayDs)}));
+    const habits=S.habits.map(h=>({name:h.name,doneToday:(h.checkedDates||[]).includes(tod())}));
     const rhythm=S.lifeRhythm||'(none provided)';
     const nowLabel=now.toLocaleTimeString('en-ZA',{hour:'numeric',minute:'2-digit',hour12:true});
-    const ctx={now:`${dayName}, ${now.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})} at ${nowLabel}`,hour:hr,fromNow:!!fromNow,todayEvents:todayEvs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
-    const prompt=`You are Zander's Life OS coach. Cape Town entrepreneur (WebAnchor / TriFusion / Zomarka). Draft a realistic, focused plan for ${fromNow?'the REST of today (starting from now)':'today'}. Ground it in his actual state.
+    const scope=mode==='now'?`the REST of today (starting from ${nowLabel})`:mode==='tomorrow'?`tomorrow (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`:`today (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`;
+    const ctx={now:`${now.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})} at ${nowLabel}`,hour:hr,mode,planDay:dayName,planDate:refDs,scheduledEvents:evs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
+    const prompt=`You are Zander's Life OS coach. Cape Town entrepreneur (WebAnchor / TriFusion / Zomarka). Draft a realistic, focused plan for ${scope}. Ground it in his actual state.
 
 Rules:
 - Respect fixed events (meetings, all-day items) — schedule around them, never suggest moving them.
-- Respect his weekly rhythm (regular commitments, fasting window, gym time). If today falls on one of those days, bake it in.
+- Respect his weekly rhythm (regular commitments, fasting window, gym time). If the day falls on one of those days, bake it in.
 - Prioritise urgent tasks first, then high. One or two personal items are fine.
 - Realistic durations with small buffers — don't pack every minute.
 - Use Cape Town local clock times (e.g. "2:00–3:00 pm"). Keep to 5–8 time blocks max.
-- End with ONE short "North star" line — the single outcome that would make today count.
+- End with ONE short "North star" line — the single outcome that would make the day count.
 - Concise. Skip filler like "wake up" / "brush teeth".
 
 Format as markdown:
@@ -2472,25 +2483,31 @@ ${JSON.stringify(ctx,null,2)}`;
     if(!r.ok){let m='HTTP '+r.status;try{const j=await r.json();if(j.error?.message)m=j.error.message;}catch(_){}throw new Error(m);}
     const d=await r.json();
     const text=(d.content?.[0]?.text||'').trim();
-    const tip={markdown:true,body:text,fromHour:fromNow?hr:null};
-    S.todaysTip={date:tod(),tip};svAll();
+    const tip={markdown:true,body:text,mode,fromHour:mode==='now'?hr:null};
+    // Only cache the "today full" version — "now" and "tomorrow" are on-demand
+    if(mode==='today'){S.todaysTip={date:tod(),tip};svAll();}
     renderTip(tip);
   }catch(e){
     console.warn('[plan] fetch failed:',e.message);
     const isAuthErr=/401|invalid.*api.{0,3}key|authentication|unauthorized/i.test(e.message);
     const el=document.getElementById('tip-card');if(!el)return;
+    const titleTxt=mode==='tomorrow'?"Tomorrow's plan":"Today's plan";
     if(isAuthErr){
-      el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div><div class="tip-body">Your Anthropic API key isn't working. Update it to get your plan.</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="promptKey()">Update API key</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Retry</button></div>`;
+      el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> ${titleTxt}</div><div class="tip-body">Your Anthropic API key isn't working. Update it to get your plan.</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="promptKey()">Update API key</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Retry</button></div>`;
     } else {
-      renderTip({body:`Couldn't reach Claude: ${esc(e.message)}.`,markdown:false,fromHour:null});
+      renderTip({body:`Couldn't reach Claude: ${esc(e.message)}.`,markdown:false,mode});
     }
   }
 }
+// Back-compat alias (used elsewhere in older code paths)
+function generateTodaysPlan(fromNow){return generatePlan(fromNow?'now':'today');}
 function renderTip(tip){
   const el=document.getElementById('tip-card');if(!el)return;
+  const mode=tip.mode||'today';
+  const title=mode==='tomorrow'?"Tomorrow's plan":"Today's plan";
+  const fromLbl=mode==='now'&&tip.fromHour!=null?` <span style="font-size:10px;color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none">· from ${tip.fromHour>12?tip.fromHour-12:(tip.fromHour===0?12:tip.fromHour)}${tip.fromHour>=12?'pm':'am'}</span>`:'';
   const body=tip.markdown?renderMarkdownMini(tip.body||''):`<div class="tip-body">${esc(tip.body||'')}</div>`;
-  const fromLbl=tip.fromHour!=null?` <span style="font-size:10px;color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none">· from ${tip.fromHour>12?tip.fromHour-12:(tip.fromHour===0?12:tip.fromHour)}${tip.fromHour>=12?'pm':'am'}</span>`:'';
-  el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan${fromLbl}</div><div class="tip-plan-body">${body}</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="generateTodaysPlan(true)">✨ Plan the rest of the day</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Full day</button></div>`;
+  el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> ${title}${fromLbl}</div><div class="tip-plan-body">${body}</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="generatePlan('now')">✨ From now</button><button class="btn btn-sm" onclick="generatePlan('tomorrow')">Plan tomorrow</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Reset</button></div>`;
 }
 
 // CALENDAR HELPERS
