@@ -618,7 +618,7 @@ svg{flex-shrink:0}
 .mcw-cell{grid-row:1/-1;padding:4px 4px 2px;cursor:pointer;position:relative;overflow:hidden;min-height:0;min-width:0}
 .mcw-cell:hover:not(.faded){background:color-mix(in srgb,var(--surface-hover) 60%,transparent)}
 .mcw-cell.today{background:var(--bg-2)}
-.mcw-cell.faded{opacity:.32}
+.mcw-cell.faded{opacity:.22}
 .mcw-top{display:flex;align-items:center;justify-content:space-between;padding:0 2px;pointer-events:none;gap:4px;min-width:0;overflow:hidden}
 .mcw-num{font-size:12px;font-weight:600;color:var(--text);font-family:'Playfair Display',serif;line-height:1.2;flex-shrink:0}
 .mcw-cell.today .mcw-num{color:var(--peach);font-weight:700}
@@ -650,6 +650,10 @@ svg{flex-shrink:0}
 .mv-bar.left{border-top-left-radius:3px;border-bottom-left-radius:3px;margin-left:2px}
 .mv-bar.right{border-top-right-radius:3px;border-bottom-right-radius:3px;margin-right:2px}
 .mv-bar.both{border-radius:3px;margin:0 2px}
+/* Bars that sit entirely on previous/next-month cells — dimmed to match
+   their underlying cells so only the current month's events stand out. */
+.mv-bar.mv-bar-faded{opacity:.28}
+.mv-bar.mv-bar-faded:hover{opacity:.6}
 /* Expanded / "Expand all" month view: same Google-palette colours as the
    collapsed bars, but bars ARE clickable (the cell's day-modal handler is
    disabled when detail is on so there's no redundant popup). */
@@ -1466,11 +1470,11 @@ svg{flex-shrink:0}
         </div>
 
         <div>
-          <div class="section-hdr"><h2>AI & integrations</h2></div>
+          <div class="section-hdr"><h2>Integrations</h2></div>
           <div class="setting-row">
             <div>
               <div class="setting-label">Anthropic API key</div>
-              <div class="setting-desc">Powers the AI update bar and daily reads. Stored locally + synced to your account.</div>
+              <div class="setting-desc">For the AI planner and update bar.</div>
             </div>
             <div class="setting-right">
               <span class="key-mask" id="key-mask">—</span>
@@ -1480,7 +1484,7 @@ svg{flex-shrink:0}
           <div class="setting-row">
             <div>
               <div class="setting-label">Google Calendar</div>
-              <div class="setting-desc">Reads events from <strong>every</strong> calendar on your account (your own, shared, birthdays, subscribed). Google <em>Reminders</em> and <em>Tasks</em> are a separate API — they aren't pulled in yet.</div>
+              <div class="setting-desc">Events + reminders (Google Tasks) across all your calendars.</div>
             </div>
             <div class="setting-right">
               <span class="key-mask" id="gcal-status">—</span>
@@ -1489,7 +1493,7 @@ svg{flex-shrink:0}
           </div>
           <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:8px" id="gcal-cal-row">
             <div style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px">
-              <div class="setting-label" style="font-size:12px">Connected calendars</div>
+              <div class="setting-label" style="font-size:12px">Calendars</div>
               <button class="btn btn-ghost btn-sm" onclick="refreshCalendarList()">↻ Refresh</button>
             </div>
             <div id="gcal-cal-list" style="font-size:12px;color:var(--text-2);line-height:1.5">—</div>
@@ -1497,26 +1501,13 @@ svg{flex-shrink:0}
         </div>
 
         <div>
-          <div class="section-hdr"><h2>Life rhythm & commitments</h2></div>
+          <div class="section-hdr"><h2>Weekly rhythm</h2></div>
           <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:10px">
             <div style="width:100%">
-              <div class="setting-label">What's a normal week look like for you?</div>
-              <div class="setting-desc">The AI reads this when it plans your day. Include regular commitments, wake/sleep boundaries, work-start time, and any windows (gym, fasting, etc). Be explicit about what windows MEAN — e.g. "Eating window 12–6pm (normal work continues)" reads better than "Fasting 12–6pm". Example: "Wake 6am weekdays / 7am weekends. Start work 9am. Gym Mon–Fri ~1hr. Bible study Mon 7–9pm. Off all screens by 10pm."</div>
+              <div class="setting-label">What does a normal week look like?</div>
+              <div class="setting-desc">Context for the AI planner — wake/sleep times, work-start, standing commitments, etc.</div>
             </div>
-            <textarea id="life-rhythm-ta" class="exp-ta xl" style="width:100%;min-height:120px" placeholder="Describe your typical week, routines, fasting windows, non-negotiables…" onblur="saveLifeRhythm()"></textarea>
-          </div>
-        </div>
-
-        <div>
-          <div class="section-hdr"><h2>Install as an app</h2></div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Add Life OS to your device</div>
-              <div class="setting-desc" id="install-desc">Install the app for a fullscreen, app-like experience on your phone, tablet, or desktop.</div>
-            </div>
-            <div class="setting-right">
-              <button class="btn btn-primary btn-sm" id="install-btn" onclick="installPWA()">Install</button>
-            </div>
+            <textarea id="life-rhythm-ta" class="exp-ta xl" style="width:100%;min-height:120px" placeholder="Wake 6am weekdays / 7am weekends. Work 9am. Gym Mon–Fri ~1hr. Bible study Mon 7–9pm. Off screens by 10pm…" onblur="saveLifeRhythm()"></textarea>
           </div>
         </div>
 
@@ -1525,13 +1516,21 @@ svg{flex-shrink:0}
           <div class="setting-row">
             <div>
               <div class="setting-label">Theme</div>
-              <div class="setting-desc">Soft is a warm, lighter palette. Studio is a darker, more app-like feel.</div>
             </div>
             <div class="setting-right">
               <div class="theme-toggle">
                 <button data-theme-btn="soft" onclick="setTheme('soft')">Soft</button>
                 <button data-theme-btn="studio" onclick="setTheme('studio')">Studio</button>
               </div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Install app</div>
+              <div class="setting-desc" id="install-desc">Fullscreen, app-like.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-primary btn-sm" id="install-btn" onclick="installPWA()">Install</button>
             </div>
           </div>
         </div>
@@ -1541,7 +1540,6 @@ svg{flex-shrink:0}
           <div class="setting-row">
             <div>
               <div class="setting-label">Sign out</div>
-              <div class="setting-desc">Disconnects your Google account from this device.</div>
             </div>
             <div class="setting-right">
               <button class="btn btn-danger btn-sm" onclick="doSignOut()">Sign out</button>
@@ -1910,8 +1908,12 @@ async function fetchCalendarList(){
     // Include every readable calendar — filtering by selected:true was hiding
     // calendars like Contacts Birthdays that may not have `selected` set in
     // the calendarList payload
-    const cals=(d.items||[]).map(c=>({id:c.id,summary:c.summary,backgroundColor:c.backgroundColor||null,primary:!!c.primary,hidden:c.hidden===true}));
-    _calListCache={ts:Date.now(),cals:cals.filter(c=>!c.hidden)};
+    // Include EVERY calendar (including ones Google marks hidden) so users
+    // can find e.g. a "Birthdays" calendar that's hidden on the Google side
+    // but still syncs from the phone. The Settings UI tags hidden ones so
+    // the user can flip them on/off themselves.
+    const cals=(d.items||[]).map(c=>({id:c.id,summary:c.summary,backgroundColor:c.backgroundColor||null,primary:!!c.primary,hidden:c.hidden===true,selected:c.selected!==false}));
+    _calListCache={ts:Date.now(),cals};
     return _calListCache.cals;
   }catch(e){console.warn('[gcal] calList failed:',e.message);return[];}
 }
@@ -3309,6 +3311,13 @@ function buildMonthView(y,m,today,allGc){
       const roundLeft=e.startCol===diffDaysDs(wkStartDs,e.ev.date);
       const roundRight=e.endCol===diffDaysDs(wkStartDs,evSpanEndDs(e.ev));
       const radiusCls=roundLeft&&roundRight?' both':roundLeft?' left':roundRight?' right':'';
+      // Dim the bar if every cell it covers belongs to the PREVIOUS or NEXT
+      // month (the "faded" trailing/leading days at the edge of the grid) —
+      // matches how those cells themselves are already rendered dimmer, so
+      // events on days outside the visible month don't compete with the
+      // current month's events.
+      const allFaded=weekCells.slice(e.startCol,e.endCol+1).every(c=>c.faded);
+      const fadedCls=allFaded?' mv-bar-faded':'';
       // COLLAPSED bars: solid-fill coloured bars (decorative, click bubbles to
       //   cell → day modal).
       // EXPANDED bars: tinted-bg + coloured left-border style — same look as
@@ -3316,9 +3325,9 @@ function buildMonthView(y,m,today,allGc){
       const col=eventColor(e.ev);
       if(detail){
         const payload=evPayload(e.ev,e.ev.date);
-        h+=`<div class="mv-bar mv-bar-exp${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};${evInlineStyle(e.ev)}" data-ev-payload="${payload}" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
+        h+=`<div class="mv-bar mv-bar-exp${radiusCls}${fadedCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};${evInlineStyle(e.ev)}" data-ev-payload="${payload}" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
       } else {
-        h+=`<div class="mv-bar${radiusCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};background:${col.color};color:${col.text}" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
+        h+=`<div class="mv-bar${radiusCls}${fadedCls}" style="grid-column:${e.startCol+1}/${e.endCol+2};grid-row:${e.row+2};background:${col.color};color:${col.text}" title="${esc(e.title)}"><span class="mv-bar-txt">${esc(e.title)}</span></div>`;
       }
     });
     h+=`</div>`;
@@ -4178,57 +4187,20 @@ async function renderCalendarList(){
   const cals=await fetchCalendarList();
   if(!cals.length){el.innerHTML='<span style="color:var(--muted)">Couldn\'t fetch calendars. Try reconnecting.</span>';return;}
   const disabled=new Set(Array.isArray(S.disabledCalendars)?S.disabledCalendars:[]);
-  // Tasks API diagnostic — plus a scope check via tokeninfo. If Firebase is
-  // silently not granting the new scope, tokeninfo will reveal it directly.
-  let tasksStatus='';
-  try{
-    // First check what scopes the current token actually has
-    let grantedScopes='';
-    try{
-      const ti=await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token='+encodeURIComponent(tok));
-      if(ti.ok){const tid=await ti.json();grantedScopes=tid.scope||'';}
-    }catch(_){}
-    const hasTasks=grantedScopes.includes('/auth/tasks');
-    const hasCalendar=grantedScopes.includes('/auth/calendar');
-    if(!hasTasks&&grantedScopes){
-      tasksStatus=`<div style="margin-top:8px;padding:10px 12px;background:var(--peach-bg);color:var(--peach);border-radius:6px;font-size:11px;line-height:1.5">⚠️ <strong>Token is missing the Tasks scope</strong> (has: ${esc(grantedScopes.replace(/https:\/\/www\.googleapis\.com\/auth\//g,''))}).<br>Firebase sometimes silently reuses an old grant. Fix:<br>1. Open <a href="https://myaccount.google.com/permissions" target="_blank" style="color:var(--peach);text-decoration:underline">myaccount.google.com/permissions</a><br>2. Find "Life OS" (or this site), click it, then <strong>Remove access</strong><br>3. Come back here and click <strong>Reconnect</strong> — you'll get a fresh consent prompt that includes Tasks.<br>Or click the button below to revoke + reconnect in one step.<div style="margin-top:8px"><button class="btn btn-sm" onclick="revokeAndReconnect()">↻ Revoke & reconnect fresh</button></div></div>`;
-    } else {
-      const r=await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists',{headers:{Authorization:'Bearer '+tok}});
-      if(r.ok){const d=await r.json();const lists=d.items||[];
-        const tasks=await fetchGTasks();
-        const breakdown=(_gtasksStats||[]).map(s=>`<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10.5px"><span>${esc(s.title)}</span><span style="color:var(--muted)">${s.total} total · <strong style="color:var(--sage)">${s.withDue} with date</strong></span></div>`).join('');
-        const note=tasks.length<=1?`<div style="margin-top:6px;font-size:10.5px;color:var(--muted);line-height:1.5">Only seeing a few? Check: (1) are your birthday reminders actually stored as <em>Tasks</em> on your phone, or as events in the Contacts Birthdays calendar? Open <strong>Tasks</strong> on your phone to see — if they're there with due dates, they'll sync here. If they're in "Contacts birthdays" they're already on the calendar as events.</div>`:'';
-        tasksStatus=`<div style="margin-top:8px;padding:8px 10px;background:var(--sage-bg);color:var(--sage);border-radius:6px;font-size:11px"><div style="font-weight:600;margin-bottom:4px">🔔 Reminders connected · ${lists.length} list${lists.length===1?'':'s'} · ${tasks.length} with due dates</div>${breakdown}${note}</div>`;
-      } else if(r.status===403||r.status===401){
-        // Parse Google's error body — when the issue is "API not enabled for
-        // this project" (the common case even WITH scope granted), Google
-        // returns a descriptive message with a direct enable-link.
-        let errMsg='',projectId='';
-        try{
-          const body=await r.json();
-          errMsg=body?.error?.message||'';
-          // Project IDs are numeric in Google Cloud; extract from typical message
-          const m=errMsg.match(/project[=\s](\d+)/i);if(m)projectId=m[1];
-          if(!projectId){const m2=errMsg.match(/project\s+(\S+)/i);if(m2)projectId=m2[1];}
-        }catch(_){}
-        const fallback=`Tasks API returned ${r.status} for your Google Cloud project. Most likely cause: the <strong>Tasks API isn't enabled</strong> in the Firebase project backing this app. Open <a href="https://console.cloud.google.com/apis/library/tasks.googleapis.com${projectId?'?project='+projectId:''}" target="_blank" style="color:var(--peach);text-decoration:underline">Google Cloud Console → Tasks API</a>, click <strong>Enable</strong>, wait ~1 minute, then click Refresh below.`;
-        tasksStatus=`<div style="margin-top:8px;padding:10px 12px;background:var(--peach-bg);color:var(--peach);border-radius:6px;font-size:11px;line-height:1.5">⚠️ <strong>Tasks API returned ${r.status} even though scope is granted.</strong><br>${errMsg?`<span style="display:block;margin:6px 0;padding:6px 8px;background:rgba(0,0,0,.06);border-radius:4px;font-family:monospace;font-size:10.5px">${esc(errMsg)}</span>`:''}${fallback}<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm" onclick="refreshCalendarList()">↻ Refresh</button><button class="btn btn-sm" onclick="revokeAndReconnect()">↻ Revoke & reconnect</button></div></div>`;
-      } else {
-        tasksStatus=`<div style="margin-top:8px;padding:6px 10px;background:var(--surface-2);color:var(--muted);border-radius:6px;font-size:11px">Reminders API returned HTTP ${r.status}</div>`;
-      }
-    }
-  }catch(e){tasksStatus=`<div style="margin-top:8px;padding:6px 10px;color:var(--muted);font-size:11px">Couldn't check Reminders status: ${esc(e.message)}</div>`;}
   el.innerHTML=cals.map(c=>{
     const dot=c.backgroundColor?`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${esc(c.backgroundColor)};margin-right:8px;vertical-align:middle;flex-shrink:0"></span>`:'';
-    const badge=c.primary?'<span style="font-size:10px;color:var(--muted);margin-left:6px">(primary)</span>':'';
+    const tags=[];
+    if(c.primary)tags.push('primary');
+    if(c.hidden)tags.push('hidden in Google');
+    else if(!c.selected)tags.push('not shown in Google');
+    const badge=tags.length?`<span style="font-size:10px;color:var(--muted);margin-left:6px">(${tags.join(' · ')})</span>`:'';
     const id=esc(c.id);const name=esc(c.summary||c.id);
-    // Primary calendar can't be switched off — it's the user's own calendar.
     const on=c.primary||!disabled.has(c.id);
     const toggle=c.primary
       ? `<span style="font-size:10px;color:var(--muted);margin-left:auto">always on</span>`
       : `<label class="switch" style="margin-left:auto"><input type="checkbox" ${on?'checked':''} onchange="toggleCalendar('${id}',this.checked)"><span class="slider"></span></label>`;
     return `<div style="padding:6px 0;display:flex;align-items:center;min-width:0;gap:4px">${dot}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${name}${badge}</span>${toggle}</div>`;
-  }).join('')+tasksStatus;
+  }).join('');
 }
 async function toggleCalendar(id,on){
   S.disabledCalendars=Array.isArray(S.disabledCalendars)?S.disabledCalendars:[];
