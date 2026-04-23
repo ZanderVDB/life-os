@@ -79,6 +79,17 @@ html,body{max-width:100%;overflow-x:hidden}
    the previously-visible position stable — making People / Brain start
    below the top. */
 html,body,.main-col,.route{overflow-anchor:none}
+/* Force the active route to always be at least viewport-height tall, so
+   content is anchored to the top of the page even when the route has very
+   few items. Without this, a short People or Brain page appeared to float
+   in the middle of the scrollable area because the parent flex column was
+   shorter than the viewport — the browser was effectively centering it
+   vertically relative to the grid cell. */
+.route.active{align-self:flex-start;width:100%}
+@media(max-width:768px){
+  .main-col{align-self:flex-start;align-items:stretch;justify-content:flex-start;width:100%}
+  .route.active{min-height:calc(100vh - 200px)}
+}
 button{font-family:inherit;cursor:pointer;color:inherit;border:none;background:none}
 input,textarea,select{font-family:inherit;color:inherit}
 a{color:var(--blue);text-decoration:none}
@@ -1767,25 +1778,11 @@ function setRoute(r,skipHash){
   ex={id:null,type:null};
   // Close mobile drawer + right-rail + clear search field on navigate
   closeDrawer();closeRail();
-  // Reset scroll AFTER the DOM has been rewritten and the drawer closed.
-  // Fires at every timing point we can think of — mobile Safari keeps
-  // quietly undoing the scroll to "restore" a remembered position as the
-  // page reflows. Synchronous, next frame, and at 50/150/300ms.
+  // Reset scroll to top on route change. Just one clean scroll — no
+  // aggressive multi-timing that was causing visible jumps on the routes
+  // that were already working fine (calendar / projects / habits).
   if(routeChanged){
-    const activeEl=document.querySelector(`.route[data-route="${r}"]`);
-    const goTop=()=>{
-      try{window.scrollTo(0,0);}catch(_){}
-      try{document.documentElement.scrollTop=0;}catch(_){}
-      try{document.body.scrollTop=0;}catch(_){}
-      // As an extra guarantee, align the active route's top with the
-      // viewport top — helps when a preceding layout shift pushed it down.
-      if(activeEl){try{activeEl.scrollIntoView({block:'start',inline:'nearest'});}catch(_){}}
-    };
-    goTop();
-    requestAnimationFrame(goTop);
-    setTimeout(goTop,50);
-    setTimeout(goTop,150);
-    setTimeout(goTop,300);
+    try{window.scrollTo(0,0);}catch(_){}
   }
   // Reset This week centering so it re-centers today when you return
   const wk=document.getElementById('today-week');if(wk)delete wk.dataset.centered;
