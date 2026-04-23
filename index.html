@@ -694,10 +694,10 @@ svg{flex-shrink:0}
    the full width of each ~52px-wide cell instead of being cut off to one
    letter. Grid layout stays — just squeeze the bars harder. */
 @media(max-width:700px){
-  .cv-weeks{padding:6px 6px}
-  .mcw-cell{padding:2px 1px}
-  .cv-weeks.detail .cv-week-row.mv-wk{grid-template-rows:26px repeat(var(--wk-rows,4),17px);row-gap:2px}
-  .cv-weeks.detail .mv-bar-txt{font-size:9px;padding:0 2px;letter-spacing:-0.2px;font-weight:500}
+  .cv-weeks{padding:4px 3px}
+  .mcw-cell{padding:2px 0}
+  .cv-weeks.detail .cv-week-row.mv-wk{grid-template-rows:24px repeat(var(--wk-rows,4),16px);row-gap:2px}
+  .cv-weeks.detail .mv-bar-txt{font-size:8.5px;padding:0 1px;letter-spacing:-0.3px;font-weight:500}
   .cv-weeks.detail .mv-bar{margin:1px 0}
   .cv-weeks.detail .mv-bar.left{margin-left:0;border-top-left-radius:2px;border-bottom-left-radius:2px}
   .cv-weeks.detail .mv-bar.right{margin-right:0;border-top-right-radius:2px;border-bottom-right-radius:2px}
@@ -1096,6 +1096,10 @@ svg{flex-shrink:0}
      display:contents makes the wrapper "invisible" — its children are
      treated as direct children of the flex parent. */
   .route[data-route="brain"] .page-hdr .page-actions{display:contents}
+  /* Once page-actions is "invisible" its children are direct flex items of
+     page-hdr — the + Add button then sits next to the title instead of
+     floating to the right. Push it right with margin-left:auto. */
+  .route[data-route="brain"] .page-hdr > button{margin-left:auto}
   .route[data-route="brain"] #brain-search{width:100% !important;flex:1 1 100%;order:20;font-size:13px;padding:7px 10px;min-width:0}
   .section-hdr{margin-bottom:8px}
   .tabs{margin-bottom:10px}
@@ -1742,7 +1746,18 @@ function setRoute(r,skipHash){
   // Reset scroll to the top when switching routes — otherwise if you were
   // scrolled halfway through Calendar and jumped to People, People appeared
   // to "start halfway down the screen" because the scroll carried over.
-  if(routeChanged){try{window.scrollTo({top:0,behavior:'instant'});}catch(_){window.scrollTo(0,0);}}
+  // We scroll BOTH window and documentElement/body (mobile Safari weirdness),
+  // and also after the DOM actually changes on the next frame — because
+  // scrolling before the route classes swap doesn't always stick.
+  if(routeChanged){
+    const goTop=()=>{
+      try{window.scrollTo(0,0);}catch(_){}
+      try{document.documentElement.scrollTop=0;}catch(_){}
+      try{document.body.scrollTop=0;}catch(_){}
+    };
+    goTop();
+    requestAnimationFrame(goTop);
+  }
   if(!skipHash){try{history.replaceState(null,'','#'+r);}catch(e){location.hash=r;}}
   document.querySelectorAll('[data-route]').forEach(el=>el.classList.toggle('active',el.dataset.route===r));
   document.querySelectorAll('[data-route-link]').forEach(a=>a.classList.toggle('active',a.dataset.routeLink===r));
