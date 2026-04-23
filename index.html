@@ -59,6 +59,7 @@ body{
   font-size:14px;line-height:1.55;
   transition:background .3s, color .3s;
 }
+body.no-scroll{overflow:hidden;touch-action:none}
 button{font-family:inherit;cursor:pointer;color:inherit;border:none;background:none}
 input,textarea,select{font-family:inherit;color:inherit}
 a{color:var(--blue);text-decoration:none}
@@ -90,13 +91,13 @@ svg{flex-shrink:0}
 .s-logo-row{display:flex;align-items:center;gap:10px;padding:4px 10px 22px}
 .s-logo-row svg{color:var(--text)}
 .s-logo{font-family:'Playfair Display','Georgia',serif;font-size:20px;font-weight:500;letter-spacing:-.3px;color:var(--text);line-height:1}
-.s-nav{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;padding-right:2px}
+.s-nav{display:flex;flex-direction:column;gap:5px;flex:1;overflow-y:auto;padding-right:2px}
 .s-nav::-webkit-scrollbar{width:4px}
 .s-nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 .s-nav a{
-  display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:11px;
-  padding:9px 11px;border-radius:9px;
-  font-size:13px;color:var(--text-2);font-weight:500;text-decoration:none;
+  display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:12px;
+  padding:11px 12px;border-radius:10px;
+  font-size:13.5px;color:var(--text-2);font-weight:500;text-decoration:none;
   transition:background .1s,color .1s;
 }
 .s-nav a:hover{background:var(--surface-2);color:var(--text);text-decoration:none}
@@ -113,7 +114,7 @@ svg{flex-shrink:0}
 .theme-toggle button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06)}
 
 /* ━━━ MAIN LAYOUT ━━━ */
-.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:80px;padding:28px 44px 140px;max-width:1680px;margin:0 auto;width:100%}
+.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:72px;padding:32px 80px 140px 44px;max-width:1720px;margin:0 auto;width:100%}
 .main-col{min-width:0;display:flex;flex-direction:column;gap:28px}
 .aside-col{display:flex;flex-direction:column;gap:14px;min-width:0;position:sticky;top:22px;align-self:start;max-height:calc(100vh - 60px);overflow-y:auto;padding-right:2px}
 .aside-col::-webkit-scrollbar{width:5px}
@@ -317,6 +318,17 @@ svg{flex-shrink:0}
 /* WEEK LIST VIEW (calendar tab) */
 .week-list{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0}
 .wl-day{border-right:1px solid var(--border);padding:12px 8px;min-height:320px;display:flex;flex-direction:column;min-width:0}
+@media(max-width:900px){
+  .week-list{display:flex;flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .wl-day{flex:0 0 150px;min-width:150px;scroll-snap-align:start}
+  .wl-day.today{scroll-snap-align:center}
+  .wl-ev-t{white-space:normal;word-break:break-word}
+}
+/* TODAY – WEEK SUMMARY on mobile also scrolls */
+@media(max-width:900px){
+  .week-sum{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:8px;padding-bottom:6px}
+  .week-sum .day-card{flex:0 0 120px;min-width:120px;scroll-snap-align:start}
+}
 .wl-day:last-child{border-right:none}
 .wl-day.today{background:var(--bg-2)}
 .wl-day-hdr{text-align:center;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:10px}
@@ -632,7 +644,7 @@ svg{flex-shrink:0}
 .hamburger{width:36px;height:36px;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);display:flex;align-items:center;justify-content:center}
 .mobile-drawer{display:none;position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 .mobile-drawer.open{display:block}
-.mobile-drawer-panel{position:absolute;top:0;left:0;bottom:0;width:260px;background:var(--surface);border-right:1px solid var(--border);padding:18px 14px;display:flex;flex-direction:column;gap:3px;animation:slideIn .2s ease;overflow-y:auto}
+.mobile-drawer-panel{position:absolute;top:0;left:0;bottom:0;width:280px;background:var(--surface);border-right:1px solid var(--border);padding:22px 16px calc(env(safe-area-inset-bottom,0) + 22px);display:flex;flex-direction:column;gap:6px;animation:slideIn .2s ease;overflow-y:auto}
 @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
 
 @media(max-width:1200px){
@@ -764,7 +776,7 @@ svg{flex-shrink:0}
       </nav>
       <div class="s-sep"></div>
       <div class="s-foot">
-        <a href="#settings" data-route-link="settings" class="s-nav-foot" style="display:grid;grid-template-columns:22px 1fr;gap:11px;align-items:center;padding:9px 11px;border-radius:9px;font-size:13px;color:var(--text-2);font-weight:500;text-decoration:none"><span class="ic" style="display:flex;align-items:center;justify-content:center"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
+        <a href="#settings" data-route-link="settings" class="s-nav-foot" style="display:grid;grid-template-columns:22px 1fr;gap:12px;align-items:center;padding:11px 12px;border-radius:10px;font-size:13.5px;color:var(--text-2);font-weight:500;text-decoration:none"><span class="ic" style="display:flex;align-items:center;justify-content:center"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
       </div>
     </div>
   </aside>
@@ -799,8 +811,9 @@ svg{flex-shrink:0}
   </div>
 
   <style>
-    .mobile-drawer-panel .s-nav-a{display:grid;grid-template-columns:22px 1fr;gap:11px;align-items:center;padding:10px 11px;border-radius:9px;font-size:14px;color:var(--text-2);font-weight:500;text-decoration:none}
-    .mobile-drawer-panel .s-nav-a:hover,.mobile-drawer-panel .s-nav-a.active{background:var(--bg-2);color:var(--text)}
+    .mobile-drawer-panel .s-logo-row{padding:4px 6px 22px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+    .mobile-drawer-panel .s-nav-a{display:grid;grid-template-columns:24px 1fr;gap:14px;align-items:center;padding:13px 14px;border-radius:11px;font-size:15px;color:var(--text-2);font-weight:500;text-decoration:none;letter-spacing:-.1px}
+    .mobile-drawer-panel .s-nav-a:hover,.mobile-drawer-panel .s-nav-a:active,.mobile-drawer-panel .s-nav-a.active{background:var(--bg-2);color:var(--text)}
     .mobile-drawer-panel .s-nav-a .ic{display:flex;align-items:center;justify-content:center;color:var(--muted)}
     .mobile-drawer-panel .s-nav-a.active .ic{color:var(--text)}
     .s-nav-foot:hover,.s-nav-foot.active{background:var(--bg-2);color:var(--text) !important}
@@ -1283,18 +1296,26 @@ function initRouter(){
   window.addEventListener('hashchange',()=>{const r=location.hash.replace('#','')||'today';setRoute(r,true);});
   const initial=location.hash.replace('#','')||'today';setRoute(initial,true);
 }
-function toggleDrawer(){document.getElementById('m-drawer').classList.toggle('open');}
-function closeDrawer(){document.getElementById('m-drawer').classList.remove('open');}
+function _syncBodyLock(){
+  const drawerOpen=document.getElementById('m-drawer')?.classList.contains('open');
+  const railOpen=document.querySelector('.aside-col')?.classList.contains('open');
+  const anyModalOpen=document.querySelector('.modal')&&[...document.querySelectorAll('.modal')].some(m=>m.style.display==='flex');
+  document.body.classList.toggle('no-scroll',!!(drawerOpen||railOpen||anyModalOpen));
+}
+function toggleDrawer(){document.getElementById('m-drawer').classList.toggle('open');_syncBodyLock();}
+function closeDrawer(){document.getElementById('m-drawer').classList.remove('open');_syncBodyLock();}
 function toggleRail(){
   const a=document.querySelector('.aside-col');const bd=document.getElementById('aside-bd');
   if(!a)return;
   const open=!a.classList.contains('open');
   a.classList.toggle('open',open);
   if(bd)bd.classList.toggle('open',open);
+  _syncBodyLock();
 }
 function closeRail(){
   const a=document.querySelector('.aside-col');const bd=document.getElementById('aside-bd');
   if(a)a.classList.remove('open');if(bd)bd.classList.remove('open');
+  _syncBodyLock();
 }
 
 function hideSplash(){
@@ -1815,12 +1836,23 @@ State:${JSON.stringify(ctx)}
 Return ONLY raw JSON:
 {"body":"...","action":"one short question he could ask Claude for deeper help"}`;
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:p}]})});
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    if(!r.ok){
+      let errMsg='HTTP '+r.status;
+      try{const errData=await r.json();if(errData.error?.message)errMsg=errData.error.message;}catch(_){}
+      throw new Error(errMsg);
+    }
     const d=await r.json();
     const tip=JSON.parse((d.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim());
     try{localStorage.setItem('los_tip',JSON.stringify({date:t,tip}));}catch(e){}
     renderTip(tip);
-  }catch(e){renderTip({body:"Good "+(new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening')+", Zander. Your AI read will show here once the API key's set.",action:""});}
+  }catch(e){
+    console.warn('[tip] fetch failed:',e.message);
+    const keyNow=getKey();
+    const body=keyNow
+      ? `Couldn't reach Claude: ${e.message}. Check your API key in Settings, or tap ↻ to retry.`
+      : "Add your Anthropic API key in Settings → AI & integrations to unlock personalized daily reads.";
+    renderTip({body,action:""});
+  }
 }
 function renderTip(tip){
   const el=document.getElementById('tip-card');if(!el)return;
@@ -2320,11 +2352,11 @@ async function openEventEdit(payload){
     if(tzSel){tzSel.value=timeZone;if(tzSel.value!==timeZone){const opt=document.createElement('option');opt.value=timeZone;opt.textContent=timeZone;tzSel.appendChild(opt);tzSel.value=timeZone;}}
     toggleEmAllDay();
     document.getElementById('em-del').style.display='inline-flex';
-    document.getElementById('event-modal').style.display='flex';
+    document.getElementById('event-modal').style.display='flex';_syncBodyLock();
     setTimeout(()=>document.getElementById('em-t').focus(),50);
   }catch(e){console.error(e);}
 }
-function closeEventModal(){document.getElementById('event-modal').style.display='none';editingEvent=null;}
+function closeEventModal(){document.getElementById('event-modal').style.display='none';editingEvent=null;_syncBodyLock();}
 async function saveCurrentEvent(){
   if(!editingEvent)return;
   const title=document.getElementById('em-t').value.trim();
@@ -2817,10 +2849,31 @@ function showInstallModal(){
   }
   const modal=document.createElement('div');
   modal.className='modal';modal.id='install-modal';
-  modal.innerHTML=`<div class="modal-bd" onclick="closeInstallModal()"></div><div class="modal-body"><h3>Install Life OS</h3><div style="font-size:13.5px;line-height:1.7;color:var(--text-2)">${steps}</div><div class="modal-actions"><button class="btn btn-primary btn-sm" onclick="closeInstallModal()">Got it</button></div></div>`;
-  document.body.appendChild(modal);modal.style.display='flex';
+  const url=location.origin+'/';
+  modal.innerHTML=`<div class="modal-bd" onclick="closeInstallModal()"></div>
+    <div class="modal-body">
+      <h3>Install Life OS</h3>
+      <div style="font-size:13.5px;line-height:1.7;color:var(--text-2)">${steps}</div>
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Share with someone else</div>
+        <div style="display:flex;gap:6px;align-items:center;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:8px 10px">
+          <span style="flex:1;font-family:monospace;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(url)}</span>
+          <button class="btn btn-sm" id="copy-link-btn" onclick="copyInstallLink('${url}')">Copy</button>
+          ${navigator.share?`<button class="btn btn-sm" onclick="shareInstallLink('${url}')">Share</button>`:''}
+        </div>
+      </div>
+      <div class="modal-actions"><button class="btn btn-primary btn-sm" onclick="closeInstallModal()">Got it</button></div>
+    </div>`;
+  document.body.appendChild(modal);modal.style.display='flex';_syncBodyLock();
 }
-function closeInstallModal(){const m=document.getElementById('install-modal');if(m)m.remove();}
+function closeInstallModal(){const m=document.getElementById('install-modal');if(m)m.remove();_syncBodyLock();}
+async function copyInstallLink(url){
+  try{await navigator.clipboard.writeText(url);const b=document.getElementById('copy-link-btn');if(b){const orig=b.textContent;b.textContent='Copied ✓';setTimeout(()=>{if(b)b.textContent=orig;},1600);}}
+  catch(e){prompt('Copy this link:',url);}
+}
+async function shareInstallLink(url){
+  try{await navigator.share({title:'Life OS',text:'A personal command centre — try it',url});}catch(e){}
+}
 setInterval(rUpcom,60000);
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){const m=document.getElementById('event-modal');if(m&&m.style.display==='flex')closeEventModal();const d=document.getElementById('m-drawer');if(d&&d.classList.contains('open'))closeDrawer();}});
 </script>
