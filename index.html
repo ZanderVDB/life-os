@@ -1915,20 +1915,13 @@ async function fetchCalendarList(){
     // but still syncs from the phone. The Settings UI tags hidden ones so
     // the user can flip them on/off themselves.
     const cals=(d.items||[]).map(c=>({id:c.id,summary:c.summary,backgroundColor:c.backgroundColor||null,primary:!!c.primary,hidden:c.hidden===true,selected:c.selected!==false}));
-    // Google's Contacts Birthdays calendar isn't always returned by
-    // calendarList — it's a synthesized calendar backed by People API data
-    // that some accounts can query directly by its well-known ID. Probe for
-    // it, and if the events endpoint responds, surface it in the list so the
-    // user can toggle it on just like any other calendar.
-    const CONTACTS_BDAY_ID='addressbook#contacts@group.v.calendar.google.com';
-    if(!cals.some(c=>c.id===CONTACTS_BDAY_ID)){
-      try{
-        const probe=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CONTACTS_BDAY_ID)}/events?maxResults=1`,{headers:{Authorization:'Bearer '+tok}});
-        if(probe.ok){
-          cals.push({id:CONTACTS_BDAY_ID,summary:'Birthdays (from Contacts)',backgroundColor:'#b89b52',primary:false,hidden:false,selected:true});
-        }
-      }catch(_){}
-    }
+    // Sort: primary calendar first, then alphabetically by name. Makes it
+    // obvious which one is "yours" in the Settings list.
+    cals.sort((a,b)=>{
+      if(a.primary&&!b.primary)return -1;
+      if(!a.primary&&b.primary)return 1;
+      return (a.summary||'').localeCompare(b.summary||'');
+    });
     _calListCache={ts:Date.now(),cals};
     return _calListCache.cals;
   }catch(e){console.warn('[gcal] calList failed:',e.message);return[];}
@@ -4270,7 +4263,7 @@ async function doUpdate(){
   const rhythm=S.lifeRhythm?`\nZander's weekly rhythm / regular commitments (use as soft context, don't duplicate as tasks):\n${S.lifeRhythm}\n`:'';
   const prompt=`You manage Zander's Life OS. Entrepreneur, Cape Town SA. Work > personal. Today: ${tod()}.${rhythm}
 Respond ONLY raw JSON:
-{"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|zm|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":30,"title":"..."}],"message":"1 sentence"}
+{"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|zm|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":30,"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 Zander:"${msg}"`;
   try{
@@ -4312,8 +4305,76 @@ function applyChanges(ch){
   if(ch.addIdea?.length)ch.addIdea.forEach(i=>S.ideas.push({id:uid(),title:i.title,desc:i.desc||'',date:tod()}));
   if(ch.addResource?.length)ch.addResource.forEach(r=>S.resources.push({id:uid(),title:r.title,url:r.url||'',desc:r.desc||'',tag:r.tag||'other',date:tod()}));
   if(ch.addNote?.length)ch.addNote.forEach(n=>S.notes.push({id:uid(),title:n.title,body:n.body,date:tod()}));
-  if(ch.addEvent?.length){S.customEvents=S.customEvents||[];ch.addEvent.forEach(async e=>{const opts={allDay:e.allDay||!e.time,recurrence:e.repeat||'none',reminderMin:e.reminderMin==null?'none':e.reminderMin,timeZone:e.timeZone||'Africa/Johannesburg'};try{const res=await createGCEvent(e.title,e.date,e.time||'',e.desc||'',e.endTime||'',opts);if(!res)S.customEvents.push({id:uid(),date:e.date,time:e.time||'',endTime:e.endTime||'',title:e.title,allDay:opts.allDay,recurrence:opts.recurrence,reminderMin:opts.reminderMin,timeZone:opts.timeZone});gcCache={key:'',events:[]};}catch(err){console.warn('GCal',err);S.customEvents.push({id:uid(),date:e.date,time:e.time||'',endTime:e.endTime||'',title:e.title});}});}
+  // Calendar ops (add / remove / update) are SENSITIVE — the AI shouldn't
+  // silently rewrite Zander's schedule. Collect all requested calendar
+  // changes and prompt for explicit approval before executing any of them.
+  const calOps=[];
+  (ch.addEvent||[]).forEach(e=>calOps.push({kind:'add',ev:e}));
+  (ch.removeEvent||[]).forEach(e=>calOps.push({kind:'remove',ev:e}));
+  (ch.updateEvent||[]).forEach(e=>calOps.push({kind:'update',ev:e}));
   svAll();render();
+  if(calOps.length)confirmCalendarOps(calOps);
+}
+
+// Ask the user before the AI touches the calendar. Every calendar change
+// (add / remove / update) goes through here. Non-calendar changes above
+// apply immediately — calendar is the only area the AI is gated on.
+async function confirmCalendarOps(ops){
+  const fmtOp=op=>{
+    if(op.kind==='add'){
+      const when=op.ev.date?` on ${op.ev.date}`:'';
+      const at=op.ev.time?` at ${op.ev.time}`:'';
+      const rep=op.ev.repeat&&op.ev.repeat!=='none'?` · repeats ${op.ev.repeat}`:'';
+      return `➕ Add "${op.ev.title}"${when}${at}${rep}`;
+    }
+    if(op.kind==='remove'){
+      const d=op.ev.date?` on ${op.ev.date}`:'';
+      return `✖ Remove events matching "${op.ev.match||op.ev.title||'?'}"${d}`;
+    }
+    if(op.kind==='update'){
+      const m=op.ev.match||op.ev.title||'?';
+      const changes=[];
+      if(op.ev.newTitle)changes.push('title → '+op.ev.newTitle);
+      if(op.ev.newDate)changes.push('date → '+op.ev.newDate);
+      if(op.ev.newTime)changes.push('time → '+op.ev.newTime);
+      return `✎ Update "${m}" · ${changes.join(', ')||'(no changes specified)'}`;
+    }
+    return '?';
+  };
+  const summary=ops.map(fmtOp).join('\n');
+  const ok=confirm(`The AI wants to make ${ops.length} calendar change${ops.length===1?'':'s'}:\n\n${summary}\n\nApply?`);
+  if(!ok){const st=document.getElementById('btm-st');if(st){st.className='ai-st';st.textContent='Calendar changes cancelled.';setTimeout(()=>{st.textContent='';},5000);}return;}
+  // Apply in order
+  for(const op of ops){
+    try{
+      if(op.kind==='add'){
+        const e=op.ev;
+        const opts={allDay:e.allDay||!e.time,recurrence:e.repeat||'none',reminderMin:e.reminderMin==null?'none':e.reminderMin,timeZone:e.timeZone||'Africa/Johannesburg'};
+        const res=await createGCEvent(e.title,e.date,e.time||'',e.desc||'',e.endTime||'',opts);
+        if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date:e.date,time:e.time||'',endTime:e.endTime||'',title:e.title,allDay:opts.allDay,recurrence:opts.recurrence,reminderMin:opts.reminderMin,timeZone:opts.timeZone});}
+      } else if(op.kind==='remove'){
+        // Look up the event(s) via current month cache first, then widen
+        const needle=(op.ev.match||op.ev.title||'').toLowerCase();
+        if(!needle)continue;
+        let pool=(gcCache.events||[]);
+        if(!pool.length){const now=new Date();pool=await fetchGCal(new Date(now.getFullYear(),now.getMonth()-1,1).toISOString(),new Date(now.getFullYear(),now.getMonth()+3,0).toISOString());}
+        const matches=pool.filter(e=>(e.title||'').toLowerCase().includes(needle)&&(!op.ev.date||e.date===op.ev.date));
+        for(const m of matches){await deleteGCEvent(m.id,m.calendarId);}
+      } else if(op.kind==='update'){
+        const needle=(op.ev.match||'').toLowerCase();
+        if(!needle)continue;
+        let pool=(gcCache.events||[]);
+        if(!pool.length){const now=new Date();pool=await fetchGCal(new Date(now.getFullYear(),now.getMonth()-1,1).toISOString(),new Date(now.getFullYear(),now.getMonth()+3,0).toISOString());}
+        const target=pool.find(e=>(e.title||'').toLowerCase().includes(needle)&&(!op.ev.date||e.date===op.ev.date));
+        if(target){
+          await updateGCEvent(target.id,op.ev.newTitle||target.title,op.ev.newDate||target.date,op.ev.newTime||target.time||'',target.description||'',target.endTime||'',{allDay:target.allDay,calendarId:target.calendarId});
+        }
+      }
+    }catch(err){console.warn('[ai-calendar]',op.kind,err.message);}
+  }
+  gcCache={key:'',events:[]};
+  render();
+  const st=document.getElementById('btm-st');if(st){st.className='ai-st ok';st.textContent='Calendar updated.';setTimeout(()=>{st.textContent='';st.className='ai-st';},4000);}
 }
 
 function render(){
