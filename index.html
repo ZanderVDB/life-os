@@ -59,6 +59,14 @@ body{
   font-size:14px;line-height:1.55;
   transition:background .3s, color .3s;
 }
+/* Match scrollbars to theme — fixes white scrollbars in Studio (dark) mode */
+html{color-scheme:light}
+[data-theme="studio"]{color-scheme:dark}
+*{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:6px}
+*::-webkit-scrollbar-thumb:hover{background:var(--muted)}
 body.no-scroll{overflow:hidden;touch-action:none}
 button{font-family:inherit;cursor:pointer;color:inherit;border:none;background:none}
 input,textarea,select{font-family:inherit;color:inherit}
@@ -215,7 +223,8 @@ svg{flex-shrink:0}
 .cv{padding:5px 11px;font-size:11px;font-weight:600;color:var(--muted);border-radius:7px;letter-spacing:.02em}
 .cv.on{background:var(--accent);color:var(--accent-ink)}
 
-.mg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:108px}
+.mg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:minmax(108px,14vh)}
+@media(max-width:768px){.mg{grid-auto-rows:minmax(64px,10vh)}}
 .mdow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-align:center;padding:10px 0 8px;border-bottom:1px solid var(--border)}
 .mc{border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:5px 6px;cursor:pointer;transition:background .1s;display:flex;flex-direction:column;overflow:hidden;min-width:0;height:108px}
 .mc:hover{background:var(--surface-hover)}
@@ -303,9 +312,11 @@ svg{flex-shrink:0}
 .threeday-list{display:flex;flex-direction:column;gap:14px;padding:18px 20px}
 .td-day-card{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
 .td-day-card.today{background:var(--bg-2);border-color:var(--border-strong)}
-.td-day-hdr{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.td-day-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)}
 .td-day-name{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
 .td-day-date{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;color:var(--text);line-height:1}
+.td-add-btn{margin-left:auto;background:transparent;border:1px dashed var(--border-strong);border-radius:8px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-weight:500;transition:all .1s;white-space:nowrap}
+.td-add-btn:hover{background:var(--surface);color:var(--text);border-style:solid}
 .td-day-card.today .td-day-name{color:var(--peach)}
 .td-event{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer}
 .td-event:last-child{border-bottom:none}
@@ -319,10 +330,19 @@ svg{flex-shrink:0}
 .week-list{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0}
 .wl-day{border-right:1px solid var(--border);padding:12px 8px;min-height:320px;display:flex;flex-direction:column;min-width:0}
 @media(max-width:900px){
-  .week-list{display:flex;flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
-  .wl-day{flex:0 0 150px;min-width:150px;scroll-snap-align:start}
-  .wl-day.today{scroll-snap-align:center}
-  .wl-ev-t{white-space:normal;word-break:break-word}
+  /* Vertical day-by-day list like 3-Day view */
+  .week-list{display:flex;flex-direction:column;gap:12px;padding:16px}
+  .wl-day{min-width:0;min-height:0;padding:14px 16px;border:1px solid var(--border);border-right:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2)}
+  .wl-day.today{background:var(--bg-2);border-color:var(--border-strong)}
+  .wl-day-hdr{display:flex;align-items:baseline;gap:12px;text-align:left;padding-bottom:10px;margin-bottom:10px}
+  .wl-day-hdr .dname{font-size:11px}
+  .wl-day-hdr .dnum{margin-top:0;font-size:22px;display:inline}
+  .wl-day.today .dnum{background:transparent !important;color:var(--peach) !important;width:auto;height:auto;border-radius:0;font-size:22px}
+  .wl-events{gap:6px}
+  .wl-event{padding:8px 11px;border-radius:8px}
+  .wl-ev-time{font-size:10px}
+  .wl-ev-t{font-size:13px;white-space:normal;word-break:break-word}
+  .wl-empty{text-align:left;font-size:12px}
 }
 /* TODAY – WEEK SUMMARY on mobile also scrolls */
 @media(max-width:900px){
@@ -665,8 +685,9 @@ svg{flex-shrink:0}
   .aside-col.open{transform:translateX(0);box-shadow:-8px 0 28px rgba(0,0,0,.18)}
   .aside-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:29;opacity:0;pointer-events:none;transition:opacity .2s}
   .aside-backdrop.open{opacity:1;pointer-events:auto}
-  .aside-pull{position:fixed;right:0;top:50%;transform:translateY(-50%);background:var(--accent);color:var(--accent-ink);border:none;width:28px;height:56px;border-radius:14px 0 0 14px;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:12;box-shadow:-2px 2px 10px rgba(0,0,0,.15);writing-mode:vertical-rl;letter-spacing:.04em;font-weight:600;padding:0}
-  .aside-pull .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--red);position:absolute;top:6px;right:6px;opacity:0;transition:opacity .1s}
+  .aside-pull{position:fixed;right:0;top:50%;transform:translateY(-50%);background:var(--border-strong);border:none;width:5px;height:52px;border-radius:4px 0 0 4px;cursor:pointer;z-index:12;padding:0;opacity:.45;transition:opacity .15s, width .15s, background .15s;font-size:0;color:transparent}
+  .aside-pull:active,.aside-pull:hover{opacity:1;width:9px;background:var(--muted)}
+  .aside-pull .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--red);position:absolute;top:-4px;right:-3px;opacity:0;transition:opacity .1s;border:1.5px solid var(--bg)}
   .aside-pull .dot.on{opacity:1}
 }
 @media(min-width:769px){.aside-pull,.aside-backdrop{display:none !important}}
@@ -678,7 +699,14 @@ svg{flex-shrink:0}
   .sidebar{display:none}
   .mobile-top{display:flex}
   .main-wrap{padding:14px 14px 140px;gap:14px}
-  .page-title{font-size:26px}
+  .main-col{gap:18px}
+  .route{gap:18px}
+  .page-hdr{gap:8px 10px}
+  .page-title{font-size:24px;letter-spacing:-.4px}
+  .page-sub{font-size:12px}
+  .page-actions{margin-left:0;flex:1 1 100%;justify-content:flex-end}
+  .section-hdr{margin-bottom:8px}
+  .tabs{margin-bottom:10px}
   .ai-bar{left:0;padding:10px 12px env(safe-area-inset-bottom,12px)}
   .ai-inner{padding:6px 6px 6px 10px;gap:8px}
   .ai-ta{font-size:13.5px}
@@ -1292,7 +1320,13 @@ function setRoute(r,skipHash){
 }
 function initRouter(){
   document.querySelectorAll('[data-route-link]').forEach(a=>{
-    a.addEventListener('click',e=>{e.preventDefault();const r=a.dataset.routeLink;setRoute(r);});
+    a.addEventListener('click',e=>{
+      e.preventDefault();
+      const r=a.dataset.routeLink;
+      // Tapping the already-active tab takes you back to Today (like a toggle)
+      if(r===currentRoute&&r!=='today')setRoute('today');
+      else setRoute(r);
+    });
   });
   window.addEventListener('hashchange',()=>{const r=location.hash.replace('#','')||'today';setRoute(r,true);});
   const initial=location.hash.replace('#','')||'today';setRoute(initial,true);
@@ -1318,6 +1352,32 @@ function closeRail(){
   if(a)a.classList.remove('open');if(bd)bd.classList.remove('open');
   _syncBodyLock();
 }
+// Swipe-from-right-edge opens the rail on touch devices
+(function(){
+  let startX=0,startY=0,startTime=0;
+  document.addEventListener('touchstart',e=>{
+    if(window.innerWidth>768)return;
+    const t=e.touches[0];if(!t)return;
+    if(t.clientX>window.innerWidth-22){startX=t.clientX;startY=t.clientY;startTime=Date.now();}
+    else startX=0;
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!startX)return;
+    const t=e.touches[0];if(!t)return;
+    const dx=startX-t.clientX;const dy=Math.abs(startY-t.clientY);
+    if(dx>48&&dy<40&&Date.now()-startTime<600){
+      const a=document.querySelector('.aside-col');
+      if(a&&!a.classList.contains('open'))toggleRail();
+      startX=0;
+    }
+  },{passive:true});
+  // Swipe right on an open drawer closes it
+  document.addEventListener('touchstart',e=>{
+    const a=document.querySelector('.aside-col');if(!a||!a.classList.contains('open'))return;
+    const t=e.touches[0];if(!t)return;
+    startY=t.clientY;startX=-t.clientX;startTime=Date.now();
+  },{passive:true});
+})();
 
 function hideSplash(){
   const s=document.getElementById('splash');if(!s)return;
@@ -2138,6 +2198,7 @@ function buildThreeDayList(dates,gcEvs){
       <div class="td-day-hdr">
         <span class="td-day-name">${DAYS[date.getDay()]}${isToday?' · Today':''}</span>
         <span class="td-day-date">${date.getDate()} ${date.toLocaleDateString('en-ZA',{month:'long'})}</span>
+        <button class="td-add-btn" onclick="event.stopPropagation();openNewEvent({date:'${ds}'})">+ Add event</button>
       </div>`;
     if(!evs.length){h+=`<div class="td-empty">No events scheduled.</div>`;}
     else {
@@ -2880,6 +2941,30 @@ function seed(){
 }
 
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+
+// Detect multiple concurrent Life OS windows and warn. Realtime sync means
+// both can technically co-exist, but simultaneous writes on the same field
+// race — so best to have just one active.
+const _bc=('BroadcastChannel' in window)?new BroadcastChannel('lifeos-instances'):null;
+if(_bc){
+  _bc.onmessage=e=>{
+    if(e.data==='ping'){try{_bc.postMessage('pong');}catch(_){}showDupInstanceOverlay();}
+    else if(e.data==='pong')showDupInstanceOverlay();
+  };
+  setTimeout(()=>{try{_bc.postMessage('ping');}catch(e){}},250);
+}
+function showDupInstanceOverlay(){
+  if(document.getElementById('dup-overlay'))return;
+  const d=document.createElement('div');
+  d.id='dup-overlay';
+  d.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:1rem';
+  d.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:26px 28px;max-width:380px;width:100%;text-align:center;box-shadow:var(--shadow-lift)">
+    <h3 style="font-family:'Playfair Display',serif;font-size:22px;font-weight:500;margin-bottom:10px;color:var(--text)">Life OS is open elsewhere</h3>
+    <p style="font-size:13.5px;color:var(--text-2);line-height:1.6;margin-bottom:20px">You have another Life OS window or tab open. Close this one, or close the other — keeping only one open avoids sync conflicts on quick edits.</p>
+    <button class="btn btn-primary btn-sm" onclick="document.getElementById('dup-overlay').remove()">Continue here anyway</button>
+  </div>`;
+  document.body.appendChild(d);
+}
 
 // PWA install prompt
 let deferredInstallPrompt=null;
