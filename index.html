@@ -1008,7 +1008,7 @@ svg{flex-shrink:0}
 
 /* ━━━ AI BAR ━━━ */
 .ai-bar{position:fixed;bottom:0;left:232px;right:0;padding:12px 28px env(safe-area-inset-bottom,14px);background:linear-gradient(to top,var(--bg) 72%,transparent);z-index:8}
-.ai-inner{max-width:1544px;margin:0 auto;display:flex;gap:10px;align-items:flex-end;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 8px 8px 12px;box-shadow:var(--shadow-lift)}
+.ai-inner{max-width:1544px;margin:0 auto;display:flex;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 8px 8px 12px;box-shadow:var(--shadow-lift)}
 .mic-btn{width:38px;height:38px;border-radius:50%;border:1px solid var(--border);background:var(--surface-2);font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted)}
 .mic-btn:hover{background:var(--surface-hover);color:var(--text)}
 .mic-btn.on{background:var(--red);border-color:var(--red);color:#fff;animation:pulse-mic .9s infinite}
@@ -1528,12 +1528,32 @@ svg{flex-shrink:0}
           </div>
           <div class="setting-row">
             <div>
+              <div class="setting-label">Sounds</div>
+              <div class="setting-desc">Subtle login chord + tab-change clicks.</div>
+            </div>
+            <div class="setting-right">
+              <label class="switch"><input type="checkbox" id="sounds-toggle" onchange="toggleSounds(this.checked)"><span class="slider"></span></label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
               <div class="setting-label">Install app</div>
               <div class="setting-desc" id="install-desc">Fullscreen, app-like.</div>
             </div>
             <div class="setting-right">
               <button class="btn btn-primary btn-sm" id="install-btn" onclick="installPWA()">Install</button>
             </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <h2>AI history</h2>
+            <button class="btn btn-ghost btn-sm" onclick="clearAIHistory()">Clear</button>
+          </div>
+          <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:10px;padding:12px">
+            <input class="input" id="ai-history-search" placeholder="Search prompts or changes…" oninput="rAIHistory()" style="width:100%">
+            <div id="ai-history-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)"></div>
           </div>
         </div>
 
@@ -1690,6 +1710,7 @@ const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
+  if(r!==currentRoute)playSound('tab');
   currentRoute=r;
   if(!skipHash){try{history.replaceState(null,'','#'+r);}catch(e){location.hash=r;}}
   document.querySelectorAll('[data-route]').forEach(el=>el.classList.toggle('active',el.dataset.route===r));
@@ -1781,11 +1802,16 @@ auth.onAuthStateChanged(u=>{
   lastAuthFlip=now;
   console.log('[auth] state:',u?('signed in as '+u.email):'signed out','(flip #'+authFlipCount+')');
   if(u){
+    const wasSignedOut=!CU;
     CU=u;
     document.getElementById('login').style.display='none';
     document.getElementById('app').style.display='grid';
     document.getElementById('btm').style.display='block';
     SP=document.getElementById('sp');
+    // Fresh sign-in → welcome chord. onAuthStateChanged also fires on session
+    // restore (page refresh), so gate on wasSignedOut to avoid a chord every
+    // single page load.
+    if(wasSignedOut)setTimeout(()=>playSound('login'),250);
     loadData();
     initRouter();
   } else {
@@ -2254,6 +2280,7 @@ function handleSnapshot(snap){
     S.growthFocus=d.growthFocus||null;
     S.lifeRhythm=d.lifeRhythm||'';
     S.disabledCalendars=Array.isArray(d.disabledCalendars)?d.disabledCalendars:[];
+    S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
     if(!getKey()&&d.ak)localStorage.setItem(AK,d.ak);
     migrateHabits();
     migrateProjects();
@@ -2279,6 +2306,7 @@ function _buildSavePayload(){
   if(S.growthFocus!==undefined)payload.growthFocus=S.growthFocus||null;
   if(S.lifeRhythm!==undefined)payload.lifeRhythm=S.lifeRhythm||'';
   if(S.disabledCalendars!==undefined)payload.disabledCalendars=Array.isArray(S.disabledCalendars)?S.disabledCalendars:[];
+  if(S.aiHistory!==undefined)payload.aiHistory=Array.isArray(S.aiHistory)?S.aiHistory:[];
   return payload;
 }
 function svAll(){
@@ -2316,7 +2344,9 @@ const SCHED={0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
 const PROJ={wa:{n:'WebAnchor',h:'var(--blue)'},tf:{n:'TriFusion',h:'var(--lavender)'},zm:{n:'Zomarka',h:'var(--emerald)'},gen:{n:'General',h:'var(--peach)'}};
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[]};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false};
+// Sounds preference is mirrored to localStorage so it applies before Firestore sync
+try{S.soundsEnabled=localStorage.getItem('los_sounds')==='1';}catch(e){}
 const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false};
 try{UI.monthDetail=localStorage.getItem('los_month_detail')==='1';}catch(e){}
 const HABIT_COLORS=['#c46a6a','#d9a484','#c9a94a','#7fa186','#6a8ab5','#9d8bb8','#5a8a6e','#e0b04f','#b37d6f','#7a9aa8','#d38a6f','#89a589'];
@@ -4201,8 +4231,10 @@ function rSettings(){
   if(gs)gs.textContent=tok?'Connected':'Not connected';
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
+  const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
   updateInstallUI();
   renderCalendarList();
+  rAIHistory();
 }
 async function renderCalendarList(){
   const el=document.getElementById('gcal-cal-list');if(!el)return;
@@ -4225,6 +4257,12 @@ async function renderCalendarList(){
       : `<label class="switch" style="margin-left:auto"><input type="checkbox" ${on?'checked':''} onchange="toggleCalendar('${id}',this.checked)"><span class="slider"></span></label>`;
     return `<div style="padding:6px 0;display:flex;align-items:center;min-width:0;gap:4px">${dot}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${name}${badge}</span>${toggle}</div>`;
   }).join('');
+}
+function toggleSounds(on){
+  S.soundsEnabled=!!on;
+  try{localStorage.setItem('los_sounds',on?'1':'0');}catch(e){}
+  svAll();
+  if(on)playSound('confirm');
 }
 async function toggleCalendar(id,on){
   S.disabledCalendars=Array.isArray(S.disabledCalendars)?S.disabledCalendars:[];
@@ -4275,6 +4313,7 @@ Zander:"${msg}"`;
     }
     const data=await r.json();
     const ch=JSON.parse((data.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim());
+    recordAIHistory(msg,ch);
     applyChanges(ch);
     st.className='ai-st ok';st.textContent=ch.message||'Done!';
     ta.value='';ta.style.height='auto';
@@ -4289,6 +4328,98 @@ Zander:"${msg}"`;
     }
   }
   btn.disabled=false;btn.textContent='Update ↗';
+}
+
+// Short human-readable bullets summarising what the AI changed in one update.
+// Stored in S.aiHistory so Zander can scroll back through edits later and
+// confirm what actually happened.
+function summariseAIChanges(ch){
+  const bits=[];
+  const countFmt=(arr,verb,noun)=>{if(arr?.length)bits.push(`${verb} ${arr.length} ${noun}${arr.length===1?'':'s'}${arr.length<=3?': '+arr.map(x=>x.text||x.name||x.title||x.match||'').filter(Boolean).join(', '):''}`);};
+  countFmt(ch.addTasks,'added','task');
+  if(ch.completeTasks?.length)bits.push(`ticked ${ch.completeTasks.length} task${ch.completeTasks.length===1?'':'s'}${ch.completeTasks.length<=3?': '+ch.completeTasks.join(', '):''}`);
+  if(ch.removeTasks?.length)bits.push(`removed ${ch.removeTasks.length} task${ch.removeTasks.length===1?'':'s'}${ch.removeTasks.length<=3?': '+ch.removeTasks.join(', '):''}`);
+  countFmt(ch.addHabits,'added','habit');
+  if(ch.completeHabits?.length)bits.push(`ticked habit${ch.completeHabits.length===1?'':'s'}: ${ch.completeHabits.join(', ')}`);
+  countFmt(ch.addPerson,'added','person');
+  countFmt(ch.updatePerson,'noted','person');
+  countFmt(ch.addBuild,'added','project');
+  countFmt(ch.addBuildNote,'added note to','project');
+  countFmt(ch.addIdea,'added','idea');
+  countFmt(ch.addResource,'added','resource');
+  countFmt(ch.addNote,'added','note');
+  countFmt(ch.addEvent,'added','event');
+  countFmt(ch.removeEvent,'removed','event');
+  countFmt(ch.updateEvent,'updated','event');
+  return bits.length?bits.join(' · '):'no changes';
+}
+function recordAIHistory(prompt,ch){
+  S.aiHistory=S.aiHistory||[];
+  S.aiHistory.unshift({
+    at:Date.now(),
+    prompt:(prompt||'').slice(0,500),
+    summary:summariseAIChanges(ch),
+    message:(ch.message||'').slice(0,200)
+  });
+  // Cap at 200 entries — enough to scroll back weeks, small enough to ship
+  // cheaply with every Firestore save.
+  if(S.aiHistory.length>200)S.aiHistory.length=200;
+}
+
+// ─────── AI HISTORY UI (Settings) ───────
+function rAIHistory(){
+  const el=document.getElementById('ai-history-list');if(!el)return;
+  const q=(document.getElementById('ai-history-search')?.value||'').toLowerCase().trim();
+  const items=(S.aiHistory||[]).filter(h=>!q||h.prompt.toLowerCase().includes(q)||h.summary.toLowerCase().includes(q)||h.message.toLowerCase().includes(q));
+  if(!items.length){el.innerHTML=`<div style="padding:14px;color:var(--muted);font-size:12px">${q?'No matches.':'Nothing here yet — AI updates will show up once you start using the bar.'}</div>`;return;}
+  el.innerHTML=items.slice(0,100).map(h=>{
+    const d=new Date(h.at);
+    const when=d.toLocaleDateString('en-ZA',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-ZA',{hour:'numeric',minute:'2-digit',hour12:true});
+    return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12.5px;line-height:1.45">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:3px">
+        <span style="color:var(--text);font-style:italic">"${esc(h.prompt)}"</span>
+        <span style="color:var(--muted);font-size:10px;flex-shrink:0;white-space:nowrap">${esc(when)}</span>
+      </div>
+      <div style="color:var(--text-2);font-size:11.5px">${esc(h.summary)}</div>
+    </div>`;
+  }).join('');
+}
+function clearAIHistory(){
+  if(!confirm('Clear all AI history? This can\'t be undone.'))return;
+  S.aiHistory=[];svAll();rAIHistory();
+}
+
+// ─────── SOUND SYSTEM ───────
+// Tiny programmatic sounds — synthesised via Web Audio API so no asset files
+// to load. Gated behind a Settings toggle (default off). Browsers won't play
+// audio until there's been a user gesture, so the very first sound of a
+// session is a no-op; everything after that works.
+let _audioCtx=null;
+function _getAudio(){
+  if(!_audioCtx){try{_audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return null;}}
+  return _audioCtx;
+}
+function playSound(kind){
+  if(!S.soundsEnabled)return;
+  const ac=_getAudio();if(!ac)return;
+  // Resume if suspended (autoplay policy)
+  if(ac.state==='suspended'){try{ac.resume();}catch(_){}}
+  const now=ac.currentTime;
+  const tone=(freq,start,dur,vol=0.08,type='sine')=>{
+    const osc=ac.createOscillator();const gain=ac.createGain();
+    osc.connect(gain);gain.connect(ac.destination);
+    osc.type=type;osc.frequency.value=freq;
+    gain.gain.setValueAtTime(0,now+start);
+    gain.gain.linearRampToValueAtTime(vol,now+start+0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001,now+start+dur);
+    osc.start(now+start);osc.stop(now+start+dur+0.01);
+  };
+  if(kind==='click'){tone(880,0,0.08,0.05);}
+  else if(kind==='tab'){tone(660,0,0.1,0.05);tone(880,0.04,0.1,0.04);}
+  else if(kind==='save'){tone(784,0,0.12,0.07);tone(1175,0.06,0.15,0.06);}
+  else if(kind==='login'){tone(523.25,0,0.22,0.08);tone(659.25,0.08,0.22,0.08);tone(783.99,0.16,0.3,0.08);}
+  else if(kind==='error'){tone(330,0,0.18,0.09,'triangle');tone(247,0.1,0.22,0.08,'triangle');}
+  else if(kind==='confirm'){tone(1047,0,0.1,0.06);}
 }
 
 function applyChanges(ch){
