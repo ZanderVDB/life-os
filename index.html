@@ -375,9 +375,9 @@ svg{flex-shrink:0}
 }
 /* TODAY – "This week" on mobile: normal-size day boxes, horizontal-scroll */
 @media(max-width:700px){
-  .week-sum{display:flex;flex-direction:row;overflow-x:auto;gap:10px;padding-bottom:6px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .week-sum{display:flex;flex-direction:row;overflow-x:auto;gap:16px;padding:4px 4px 8px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .week-sum::-webkit-scrollbar{display:none}
-  .week-sum .day-card{flex:0 0 150px;min-width:150px;min-height:150px;scroll-snap-align:start}
+  .week-sum .day-card{flex:0 0 152px;min-width:152px;min-height:156px;scroll-snap-align:start;box-shadow:0 1px 4px rgba(0,0,0,.04)}
   .week-sum .dc-ev{font-size:10.5px;padding:3px 7px}
 }
 .wl-day:last-child{border-right:none}
@@ -1932,29 +1932,38 @@ function startPresence(){
   if(!CU)return;
   stopPresence();
   _presenceMe=true;
+  console.log('[presence] starting, deviceId=',DEVICE_ID,'label=',DEVICE_LABEL);
   _presenceUnsub=presenceRef().onSnapshot(snap=>{
     if(!snap.exists){if(_presenceMe)claimPresence();return;}
     const d=snap.data();const ts=d.lastActive?.toMillis?.()||0;const age=Date.now()-ts;
-    if(d.deviceId===DEVICE_ID){
-      // Our own claim confirmed — hide any stale overlay, but DON'T re-claim
-      // (heartbeat handles that). Re-claiming here created a ping-pong loop
-      hideOtherDeviceOverlay();
-      return;
-    }
+    console.log('[presence] snap: deviceId='+d.deviceId+' (me='+(d.deviceId===DEVICE_ID)+') age='+age+'ms');
+    if(d.deviceId===DEVICE_ID){hideOtherDeviceOverlay();return;}
     if(age>=45000){
-      // Another device's claim is stale — safe to take over if we're meant to be active
       if(_presenceMe)claimPresence();
       hideOtherDeviceOverlay();
       return;
     }
-    // Another device is actively heart-beating — step aside
     _presenceMe=false;
+    console.log('[presence] yielding to',d.deviceLabel);
     showOtherDeviceOverlay(d.deviceLabel||'another device');
-  },err=>console.warn('[presence] listen:',err.message));
-  // Initial claim + heartbeat
+  },err=>console.warn('[presence] listen error:',err.code||err.message));
   claimPresence();
-  _presenceHeart=setInterval(()=>{if(_presenceMe&&document.visibilityState!=='hidden')claimPresence();},15000);
+  _presenceHeart=setInterval(()=>{if(_presenceMe&&document.visibilityState!=='hidden')claimPresence();},10000);
 }
+// When a PC tab wakes from sleep, Firestore listeners sometimes stay
+// dormant. Re-kick presence on visibility change so a returning device
+// sees other devices' claims immediately.
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&CU&&!_presenceUnsub){
+    console.log('[presence] visibility → visible, restarting presence');
+    startPresence();
+  } else if(document.visibilityState==='visible'&&CU&&_presenceMe){
+    // Force an immediate claim to be a fresh heartbeat so the other device
+    // sees us back. If another device is currently "primary", it'll see our
+    // claim and their listener will yield
+    claimPresence();
+  }
+});
 function stopPresence(){
   if(_presenceUnsub){try{_presenceUnsub();}catch(e){}_presenceUnsub=null;}
   if(_presenceHeart){clearInterval(_presenceHeart);_presenceHeart=null;}
@@ -1978,11 +1987,17 @@ function loadData(){
   stopSync();
   try{startPresence();}catch(e){console.warn('[presence]',e.message);}
   const docRef=db.collection('users').doc(CU.uid).collection('data').doc('main');
-  // Safety net: if no snapshot has arrived in 6s, seed + render so the UI
-  // isn't stuck on the splash
+  // Safety net: if no snapshot has arrived in 8s, render empty-state. NEVER
+  // call seed() here — that would write default data to Firestore and wipe
+  // the user's real state if the snapshot is just slow (this is the bug
+  // that lost Zander's tasks on his PC).
   setTimeout(()=>{
-    if(!_initialSyncDone){console.warn('[sync] no snapshot in 6s — using local defaults');_initialSyncDone=true;try{seed();render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}catch(e){console.error('[sync] fallback render failed:',e);}}
-  },6000);
+    if(!_initialSyncDone){
+      console.warn('[sync] no snapshot after 8s — rendering with empty state, will update once snapshot arrives');
+      _initialSyncDone=true;
+      try{render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}catch(e){console.error('[sync] fallback render failed:',e);}
+    }
+  },8000);
   _unsubscribeDoc=docRef.onSnapshot(snap=>{try{handleSnapshot(snap);}catch(e){console.error('[sync] snapshot handler error:',e);if(!_initialSyncDone){_initialSyncDone=true;try{seed();render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}catch(e2){}}}},err=>console.warn('[sync] snapshot:',err.code||err.message));
 }
 function handleSnapshot(snap){
@@ -2949,7 +2964,7 @@ function buildMonthView(y,m,today,allGc){
     // Compute per-cell extras count (events that got row >= MAX_ROWS)
     const perCellHidden=[0,0,0,0,0,0,0];
     weekEvs.forEach(e=>{if(e.row>=MAX_ROWS){for(let c=e.startCol;c<=e.endCol;c++)perCellHidden[c]++;}});
-    h+=`<div class="cv-week-row mv-wk" style="--wk-rows:${Math.min(MAX_ROWS,Math.max(1,Math.max(...weekEvs.map(e=>e.row+1),0)))}">`;
+    h+=`<div class="cv-week-row mv-wk" style="--wk-rows:${MAX_ROWS}">`;
     weekCells.forEach(({y:cy,m:cm,d:cd,faded},idx)=>{
       const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
       const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
@@ -3736,6 +3751,12 @@ function render(){
 }
 
 function seed(){
+  // Belt-and-braces: never overwrite real data. seed() should only run on a
+  // truly fresh account. If any state is populated, bail out.
+  if((S.tasks&&S.tasks.length)||(S.habits&&S.habits.length)||(S.builds&&S.builds.length)||(S.people&&S.people.length)||(S.ideas&&S.ideas.length)||(S.notes&&S.notes.length)){
+    console.warn('[seed] skipped — state already populated');
+    return;
+  }
   const d=tod();
   S.tasks=[
     {id:uid(),text:'Message Jenna — start WebAnchor company registration',area:'work',project:'wa',priority:'urgent',scheduledTime:'',done:false,date:d},
