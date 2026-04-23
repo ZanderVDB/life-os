@@ -570,16 +570,54 @@ svg{flex-shrink:0}
 .cv-mdot-cell .dots{display:flex;gap:2px}
 .cv-mdot-cell .dot{width:5px;height:5px;border-radius:50%}
 
-/* mini weeks */
-.cv-weeks{padding:14px 18px;display:flex;flex-direction:column;gap:10px}
-.cv-week-row{display:grid;grid-template-columns:40px repeat(7,1fr);gap:6px;align-items:center}
-.cv-week-lbl{font-size:10px;font-weight:700;color:var(--muted);text-align:center}
-.cv-week-cell{background:var(--surface-2);border-radius:6px;padding:6px;min-height:44px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
-.cv-week-cell:hover{background:var(--surface-hover)}
-.cv-week-cell.today{background:var(--bg-2);outline:1px solid var(--accent)}
-.cv-week-cell.faded{opacity:.35}
-.cv-week-cell .n{font-size:10px;font-weight:600;color:var(--text)}
-.cv-week-cell .c{font-size:9px;color:var(--muted)}
+/* mini weeks with stripes + multi-day spans + inline expand */
+.cv-weeks{padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.cv-week-row{display:grid;grid-template-columns:40px repeat(7,1fr);gap:0;align-items:stretch}
+.cv-week-row.cv-week-hdr{gap:0}
+.cv-week-row.cv-week-hdr .cv-week-dayname{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:center;padding:6px 0;border-bottom:1px solid var(--border)}
+.cv-week-lbl{font-size:9px;font-weight:700;color:var(--muted);text-align:center;display:flex;align-items:flex-start;justify-content:center;padding-top:8px}
+.mcw{background:var(--surface);border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:4px 3px 4px;min-height:82px;cursor:pointer;display:flex;flex-direction:column;gap:3px;transition:background .1s;position:relative}
+.mcw:hover:not(.faded){background:var(--surface-hover)}
+.mcw.today{background:var(--bg-2)}
+.mcw.faded{opacity:.32}
+.mcw.expanded{background:var(--surface-2);z-index:2;min-height:140px;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+.cv-week-row > .mcw:last-child{border-right:none}
+.mcw-top{display:flex;align-items:center;justify-content:space-between;padding:0 4px 1px}
+.mcw-num{font-size:12px;font-weight:600;color:var(--text);font-family:'Playfair Display',serif;line-height:1.2}
+.mcw.today .mcw-num{color:var(--peach);font-weight:700}
+.mcw-habits{display:flex;gap:2px;flex-wrap:wrap;justify-content:flex-end}
+.mcw-habit-dot{width:5px;height:5px;border-radius:50%}
+.mcw-stripes{display:flex;flex-direction:column;gap:1.5px}
+.mcw-stripe{display:flex;align-items:center;gap:3px;padding:1.5px 4px;border-radius:3px;font-size:9.5px;font-weight:500;overflow:hidden;cursor:pointer;line-height:1.3;min-height:14px}
+.mcw-stripe:hover{filter:brightness(.96)}
+[data-theme="studio"] .mcw-stripe:hover{filter:brightness(1.12)}
+.mcw-stripe-bar{width:3px;height:9px;border-radius:2px;flex-shrink:0}
+.mcw-stripe-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.mcw-stripe.multi{padding-left:6px;padding-right:6px}
+.mcw-stripe.multi .mcw-stripe-bar{display:none}
+.mcw-stripe.multi-start{border-radius:3px 0 0 3px;margin-right:-1px}
+.mcw-stripe.multi-end{border-radius:0 3px 3px 0;margin-left:-1px}
+.mcw-stripe.multi-mid{border-radius:0;margin-left:-1px;margin-right:-1px}
+.mcw-stripe.more{background:transparent;color:var(--muted);font-weight:600;padding:0 4px}
+.mcw-expanded{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:4px;display:flex;flex-direction:column;gap:4px}
+.mcw-actions{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+
+/* Coming-up panels */
+.cu-wrap{padding:20px 24px 26px;border-top:1px solid var(--border);background:var(--surface-2)}
+.cu-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:14px}
+.cu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.cu-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.cu-card-hdr{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.cu-card-ic{font-size:14px}
+.cu-card-cnt{margin-left:auto;background:var(--surface-2);border-radius:10px;padding:1px 8px;font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0}
+.cu-card-body{display:flex;flex-direction:column;gap:4px}
+.cu-item{display:flex;gap:10px;align-items:baseline;padding:6px 4px;border-radius:6px;cursor:pointer;font-size:12.5px}
+.cu-item:hover{background:var(--surface-hover)}
+.cu-item-date{font-size:10px;font-weight:700;color:var(--muted);min-width:52px;text-transform:uppercase;letter-spacing:.04em}
+.cu-item-title{color:var(--text-2);line-height:1.4;flex:1}
+.cu-item:hover .cu-item-title{color:var(--text)}
+.cu-item-more{font-size:10px;color:var(--muted);padding:4px;text-align:center}
+.cu-empty{font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:16px 0}
 
 /* three-lane (morning/afternoon/evening per day) */
 .cv-lanes{padding:14px}
@@ -1134,10 +1172,7 @@ svg{flex-shrink:0}
               <button class="carr" onclick="calNav(1)">›</button>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <div class="cv-row" id="cal-mode-row">
-                <button class="cv on" data-mode="events" onclick="setCalMode('events')">Events</button>
-                <button class="cv" data-mode="habits" onclick="setCalMode('habits')">Habits</button>
-              </div>
+              <button class="btn btn-ghost btn-sm" onclick="goToCalToday()" id="cal-today-btn" style="display:none">Today</button>
               <div class="cv-row">
                 <button class="cv" onclick="setCV('day')">Day</button>
                 <button class="cv" onclick="setCV('3day')">3 Day</button>
@@ -1146,11 +1181,8 @@ svg{flex-shrink:0}
               </div>
             </div>
           </div>
-          <div class="variant-bar" id="variant-bar">
-            <span class="variant-lbl">Design</span>
-            <div class="variant-nums" id="variant-nums"></div>
-          </div>
           <div id="cal"></div>
+          <div id="cal-coming-up"></div>
         </div>
       </div>
 
@@ -1682,7 +1714,7 @@ async function fetchGCal(start,end){
     if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}return[];}
     if(!r.ok)return[];
     const d=await r.json();
-    return(d.items||[]).map(ev=>({id:ev.id,title:ev.summary||'(No title)',description:ev.description||'',date:(ev.start.dateTime||ev.start.date||'').slice(0,10),time:ev.start.dateTime?ev.start.dateTime.slice(11,16):'',allDay:!!ev.start.date,gcal:true}));
+    return(d.items||[]).map(ev=>({id:ev.id,title:ev.summary||'(No title)',description:ev.description||'',date:(ev.start.dateTime||ev.start.date||'').slice(0,10),endDate:ev.end?.date||null,endDateTime:ev.end?.dateTime?ev.end.dateTime.slice(0,10):null,time:ev.start.dateTime?ev.start.dateTime.slice(11,16):'',allDay:!!ev.start.date,gcal:true,colorId:ev.colorId||null}));
   }catch(e){console.warn('[gcal] fetch failed:',e.message);return[];}
 }
 async function getGCForMonth(y,m){
@@ -1730,7 +1762,7 @@ async function createGCEvent(title,date,time,desc='',endTime='',opts={}){
   const allDay=opts.allDay||!time;
   let body={summary:title,description:desc||''};
   if(allDay){
-    const nextD=new Date(date+'T00:00:00');nextD.setDate(nextD.getDate()+1);const nextStr=nextD.toISOString().slice(0,10);
+    const nextStr=addDaysToDateStr(date,1);
     body.start={date};body.end={date:nextStr};
   } else {
     const hh=p2hhmm(time);
@@ -1749,7 +1781,7 @@ async function updateGCEvent(id,title,date,time,desc='',endTime='',opts={}){
   const allDay=opts.allDay||!time;
   let body={summary:title,description:desc||''};
   if(allDay){
-    const nextD=new Date(date+'T00:00:00');nextD.setDate(nextD.getDate()+1);const nextStr=nextD.toISOString().slice(0,10);
+    const nextStr=addDaysToDateStr(date,1);
     body.start={date};body.end={date:nextStr};
   } else {
     const hh=p2hhmm(time);
@@ -1924,11 +1956,15 @@ function toggleHabitDate(id,ds){
 function qaAddHabitFull(){const n=document.getElementById('hb-name')?.value?.trim();if(!n)return;const d=document.getElementById('hb-desc')?.value?.trim()||'';S.habits.push({id:uid(),name:n,description:d,checkedDates:[],createdAt:tod(),notes:[]});svAll();rHabits();rCal();toggleQA('habit-qa');document.getElementById('hb-name').value='';document.getElementById('hb-desc').value='';}
 function saveHabitDesc(id){const h=S.habits.find(x=>x.id===id);if(!h)return;const inp=document.getElementById('hb-desc-'+id);if(inp)h.description=inp.value;svAll();}
 function delHabit(id){if(!confirm('Delete this habit? Streak history will be lost.'))return;S.habits=S.habits.filter(x=>x.id!==id);svAll();rHabits();rCal();}
-function setCalMode(m){UI.calMode=m;document.querySelectorAll('#cal-mode-row [data-mode]').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));rCal();}
+function setCalMode(){/* removed — habits now merged into main calendar as dots */}
 let ex={id:null,type:null};
 const uid=()=>Math.random().toString(36).slice(2,9);
-const tod=()=>new Date().toISOString().slice(0,10);
-const yest=()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);};
+// Use local date, not UTC — avoids off-by-one when the local time zone is
+// ahead of UTC (Cape Town is UTC+2). This was silently putting "today" events
+// on tomorrow's date in the AI flow.
+const tod=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const yest=()=>{const d=new Date();d.setDate(d.getDate()-1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+function addDaysToDateStr(ds,n){const [y,m,d]=ds.split('-').map(Number);const dt=new Date(Date.UTC(y,m-1,d));dt.setUTCDate(dt.getUTCDate()+n);return dt.toISOString().slice(0,10);}
 const fmt=d=>{try{return new Date(d+'T12:00:00').toLocaleDateString('en-ZA',{day:'numeric',month:'short'});}catch(e){return d;}};
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const gTxt=()=>{const h=new Date().getHours();return h<12?'Good morning, Zander.':h<17?'Good afternoon, Zander.':'Good evening, Zander.';};
@@ -2305,13 +2341,14 @@ function getCalTitle(){
   const s=new Date(d);s.setDate(d.getDate()-d.getDay());const e=new Date(s);e.setDate(s.getDate()+6);return`${s.getDate()} ${s.toLocaleDateString('en-ZA',{month:'short'})} – ${e.getDate()} ${e.toLocaleDateString('en-ZA',{month:'short'})}`;
 }
 function calNav(dir){
+  UI.monthExpandedDs=null;
   if(UI.calView==='month')UI.calDate=new Date(UI.calDate.getFullYear(),UI.calDate.getMonth()+dir,1);
   else if(UI.calView==='3day')UI.calDate=new Date(UI.calDate.getTime()+dir*3*86400000);
   else if(UI.calView==='week')UI.calDate=new Date(UI.calDate.getTime()+dir*7*86400000);
   else UI.calDate=new Date(UI.calDate.getTime()+dir*86400000);
   rCal();
 }
-function setCV(v){UI.calView=v;if(v==='day')UI.calDate=new Date();rCal();}
+function setCV(v){UI.calView=v;UI.monthExpandedDs=null;if(v==='day')UI.calDate=new Date();rCal();}
 
 function fmtEvTime(e){
   if(e.allDay)return'All day';
@@ -2429,27 +2466,16 @@ function buildWeekList(dates,gcEvs){
   return h;
 }
 
-function renderVariantBar(){
-  const bar=document.getElementById('variant-bar');const nums=document.getElementById('variant-nums');
-  if(!bar||!nums)return;
-  if(UI.calMode==='habits'){bar.style.display='none';return;}
-  bar.style.display='flex';
-  const current=UI.calVariant[UI.calView]||1;
-  let h='';for(let i=1;i<=10;i++)h+=`<button class="variant-btn${i===current?' on':''}" onclick="setCalVariant('${UI.calView}',${i})" title="Design ${i}">${i}</button>`;
-  nums.innerHTML=h;
-}
 async function rCal(){
   const el=document.getElementById('cal');if(!el)return;
-  const ttl=document.getElementById('cal-ttl');if(ttl)ttl.textContent=getCalTitle();
-  // Highlight only view-buttons (not mode-buttons which also use .cv)
-  document.querySelectorAll('.cv-row:not(#cal-mode-row) .cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
-  // Show/hide the "connect calendar" banner based on token state
+  const ttl=document.getElementById('cal-ttl');if(ttl){ttl.textContent=getCalTitle();ttl.onclick=pickCalDate;ttl.style.cursor='pointer';ttl.title='Pick a date';}
+  document.querySelectorAll('.cv-row .cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
   const notice=document.getElementById('gcal-notice');
   if(notice)notice.style.display=getGCalToken()?'none':'flex';
-  renderVariantBar();
+  const todayBtn=document.getElementById('cal-today-btn');
+  if(todayBtn){const isToday=UI.calDate.toDateString()===new Date().toDateString();todayBtn.style.display=isToday?'none':'inline-flex';}
   const today=new Date();
   const y=UI.calDate.getFullYear(),m=UI.calDate.getMonth();
-  if(UI.calMode==='habits'){return rCalHabits(el,today,y,m);}
   let gcEvs=[];try{gcEvs=await getGCForMonth(y,m);}catch(e){}
   if(UI.calView!=='month'){
     try{
@@ -2461,38 +2487,60 @@ async function rCal(){
   }
   const gcForDate=ds=>(gcEvs||[]).filter(e=>e.date===ds);
   if(UI.calView==='day'){
-    const ds=UI.calDate.toISOString().slice(0,10);
+    const ds=localDs(UI.calDate);
     const isToday=UI.calDate.toDateString()===today.toDateString();
     const dates=[{date:UI.calDate,ds,isToday}];
-    const v=UI.calVariant.day||1;
-    el.innerHTML=dayVariants[v]?dayVariants[v](dates,gcEvs):dayVariants[1](dates,gcEvs);
+    el.innerHTML=buildDayView(dates,gcEvs);
     el.onclick=null;
   } else if(UI.calView==='3day'){
-    const dates=Array.from({length:3},(_,i)=>{const d=new Date(UI.calDate);d.setDate(UI.calDate.getDate()+i);return{date:d,ds:d.toISOString().slice(0,10),isToday:d.toDateString()===today.toDateString()};});
-    const v=UI.calVariant['3day']||1;
-    el.innerHTML=threeDayVariants[v]?threeDayVariants[v](dates,gcEvs):threeDayVariants[1](dates,gcEvs);
+    const dates=Array.from({length:3},(_,i)=>{const d=new Date(UI.calDate);d.setDate(UI.calDate.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
+    el.innerHTML=buildThreeDayView(dates,gcEvs);
     el.onclick=null;
   } else if(UI.calView==='week'){
     const s=new Date(UI.calDate);const dow=UI.calDate.getDay();s.setDate(UI.calDate.getDate()+(dow===0?-6:1-dow));
-    const dates=Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return{date:d,ds:d.toISOString().slice(0,10),isToday:d.toDateString()===today.toDateString()};});
-    const v=UI.calVariant.week||1;
-    el.innerHTML=weekVariants[v]?weekVariants[v](dates,gcEvs):weekVariants[1](dates,gcEvs);
+    const dates=Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
+    el.innerHTML=buildWeekView(dates,gcEvs);
     el.onclick=null;
   } else {
     // MONTH
     let gcExtra=[];try{gcExtra=await getGCForMonth(y,m+1);}catch(e){}
     let gcPrev=[];try{gcPrev=await getGCForMonth(y,m-1);}catch(e){}
     const allGc=[...gcEvs,...gcExtra,...gcPrev];
-    const v=UI.calVariant.month||1;
-    el.innerHTML=monthVariants[v]?monthVariants[v](y,m,today,allGc):monthVariants[1](y,m,today,allGc);
-    el.onclick=e=>{if(e.target.closest('.mev')||e.target.closest('.cv-ev-chip'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[yy,mm,dd]=c.dataset.cd.split(',').map(Number);UI.calDate=new Date(yy,mm,dd);UI.calView='day';rCal();};
+    el.innerHTML=buildMonthView(y,m,today,allGc);
+    el.onclick=null;
   }
+  renderComingUp(gcEvs);
+}
+function localDs(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function goToCalToday(){UI.calDate=new Date();UI.monthExpandedDs=null;rCal();}
+function pickCalDate(){
+  let inp=document.getElementById('cal-date-picker');
+  if(!inp){inp=document.createElement('input');inp.type='date';inp.id='cal-date-picker';inp.style.cssText='position:absolute;left:-9999px;opacity:0;width:0;height:0;pointer-events:none';document.body.appendChild(inp);}
+  inp.value=localDs(UI.calDate);
+  inp.onchange=()=>{if(!inp.value)return;const [y,mm,d]=inp.value.split('-').map(Number);UI.calDate=new Date(y,mm-1,d);UI.monthExpandedDs=null;rCal();};
+  if(typeof inp.showPicker==='function'){try{inp.showPicker();return;}catch(e){}}
+  inp.focus();inp.click();
 }
 function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=UI.calDate.toISOString().slice(0,10);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
 
-// ━━━━━━━━━━━━━━━ CALENDAR VARIANTS ━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━ CALENDAR ━━━━━━━━━━━━━━━
 // Shared helpers
 function isBirthdayEv(e){return/birthday|bday|🎂/i.test(e.title||'');}
+function isHolidayEv(e){return/\b(holiday|public holiday)\b/i.test(e.title||'');}
+function isMeetingEv(e){return/\b(meeting|mtg|call|catch[- ]?up|sync|stand[- ]?up|zoom|teams)\b/i.test(e.title||'');}
+function isMovieEv(e){return/\b(movie|film|cinema|netflix night)\b/i.test(e.title||'');}
+function isFaithEv(e){return/\b(church|bible|prayer|worship|sermon|youth|young adults)\b/i.test(e.title||'');}
+function isBusinessEv(e){return/\b(pitch|investor|client|meetup|conference|networking)\b/i.test(e.title||'');}
+function eventCategory(e){
+  if(isBirthdayEv(e))return{cat:'birthday',color:'var(--sage)',bg:'var(--sage-bg)',label:'Birthday',icon:'🎂'};
+  if(isHolidayEv(e))return{cat:'holiday',color:'var(--gold)',bg:'var(--gold-bg)',label:'Holiday',icon:'⭐'};
+  if(isFaithEv(e))return{cat:'faith',color:'var(--emerald)',bg:'var(--emerald-bg)',label:'Faith',icon:'✦'};
+  if(isMovieEv(e))return{cat:'movie',color:'var(--lavender)',bg:'var(--lavender-bg)',label:'Movie',icon:'🎬'};
+  if(isBusinessEv(e))return{cat:'business',color:'var(--peach)',bg:'var(--peach-bg)',label:'Business',icon:'◆'};
+  if(isMeetingEv(e))return{cat:'meeting',color:'var(--blue)',bg:'var(--blue-bg)',label:'Meeting',icon:'◉'};
+  if(e.cls==='cus'||e.type==='cus')return{cat:'custom',color:'var(--lavender)',bg:'var(--lavender-bg)',label:'Event',icon:'◐'};
+  return{cat:'event',color:'var(--blue)',bg:'var(--blue-bg)',label:'Event',icon:'◉'};
+}
 function evClass(e){return isBirthdayEv(e)?'bday':e.cls||e.type||'gc';}
 function evPayload(e,ds){return encodeURIComponent(JSON.stringify({type:e.type||'gc',data:e.data||e,ds}));}
 function fmtTimeShort(e){if(e.allDay||!e.time)return 'All day';const h=parseHfromHHMM(e.time);if(h===null)return e.time||'';const hm=e.time.slice(0,5);const[hh,mm]=hm.split(':').map(Number);const a=hh>=12?'pm':'am';const dh=hh>12?hh-12:(hh===0?12:hh);return`${dh}${mm?':'+String(mm).padStart(2,'0'):''}${a}`;}
@@ -2504,304 +2552,10 @@ function gatherDay(date,ds,gcEvs){
 }
 function evChip(ev,ds){const cls=evClass(ev);const p=evPayload(ev,ds);return`<div class="cv-ev-chip ${cls}" onclick="event.stopPropagation();openEventEdit('${p}')"><span class="t">${ev.allDay?'All':esc(fmtTimeShort(ev))}</span><span class="n">${esc(ev.title)}</span></div>`;}
 
-// ─────── DAY VARIANTS ───────
-const dayVariants={};
-// v1 — classic timeline (24h), with notes below
-dayVariants[1]=(dates,gcEvs)=>{
-  const {ds,isToday}=dates[0];
-  const evs=gatherDay(dates[0].date,ds,gcEvs);
-  const allDay=evs.filter(e=>e.allDay);
-  const timed=evs.filter(e=>!e.allDay);
-  const HOURS=Array.from({length:24},(_,i)=>i);
-  const now=new Date();const nh=now.getHours(),nm=now.getMinutes();
-  let h=`<div class="ts-wrap"><div class="ts-times"><div class="ts-times-hdr"></div>`;
-  HOURS.forEach(hr=>h+=`<div class="ts-hr-lbl">${hr>12?hr-12:(hr===0?12:hr)}${hr>=12?'pm':'am'}</div>`);
-  h+=`</div><div class="ts-cols" style="grid-template-columns:1fr"><div class="ts-col"><div class="ts-col-hdr${isToday?' today-hdr':''}"><div class="ts-dname">${DAYS[dates[0].date.getDay()]}</div><div class="ts-dn">${dates[0].date.getDate()}</div></div>`;
-  HOURS.forEach(hr=>{
-    const eh=timed.filter(x=>x.h===hr);const isNow=isToday&&nh===hr;const pct=Math.round((nm/60)*100);
-    const hrLabel=(hr>12?hr-12:(hr===0?12:hr))+(hr>=12?'pm':'am');
-    const endHr=((hr+1)%24>12?(hr+1)%24-12:((hr+1)%24===0?12:(hr+1)%24))+((hr+1)%24>=12&&(hr+1)%24<24?'pm':'am');
-    h+=`<div class="ts-cell${isNow?' now-row':''}${eh.length?' has-events':''}" data-new-ds="${ds}" data-new-time="${hrLabel}" data-new-end="${endHr}" onclick="handleCellClick(event,this)">`;
-    if(isNow)h+=`<div class="now-line" style="top:${pct}%"><div class="now-dot"></div></div>`;
-    eh.forEach(ev=>{const p=evPayload(ev,ds);h+=`<div class="ts-ev ${ev.cls}" onclick="event.stopPropagation();openEventEdit('${p}')">${esc((ev.time?ev.time+' ':'')+ev.title)}</div>`;});
-    h+=`</div>`;
-  });
-  h+=`</div></div></div>`;
-  if(allDay.length)h=`<div class="allday-strip"><div class="allday-strip-lbl">All-day</div><div class="allday-events">${allDay.map(e=>{const p=evPayload(e,ds);return`<div class="allday-ev ${evClass(e)}" onclick="openEventEdit('${p}')">${esc(e.title)}</div>`;}).join('')}</div></div>`+h;
-  const note=(S.dayNotes||{})[ds]||'';
-  h+=`<div class="dv-note"><div class="dv-note-lbl">Today's events</div>${evs.length?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">${evs.map(e=>evChip(e,ds)).join('')}</div>`:`<div class="cv-empty" style="margin-bottom:14px">Nothing scheduled.</div>`}<div class="dv-note-lbl">Notes for ${fmt(ds)}</div><textarea class="exp-ta xl" id="dv-ta" placeholder="Notes, intentions...">${esc(note)}</textarea><div style="margin-top:8px;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="saveDvNote()">Save note</button></div></div>`;
-  return h;
-};
-// v2 — agenda (chronological list)
-dayVariants[2]=(dates,gcEvs)=>{
-  const {ds,date}=dates[0];const evs=gatherDay(date,ds,gcEvs);
-  let h=`<div class="cv-wrap"><div class="cv-title">${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</div>`;
-  if(!evs.length){h+=`<div class="cv-empty">Nothing scheduled. <button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div>`;return h;}
-  h+=`<div class="cv-agenda">`;
-  evs.forEach(ev=>{
-    const col=ev.cls==='bday'?'var(--sage)':ev.cls==='cus'?'var(--lavender)':'var(--blue)';
-    const timeStr=ev.allDay?'All day':fmtTimeShort(ev);
-    const p=evPayload(ev,ds);
-    h+=`<div class="cv-agenda-row" onclick="openEventEdit('${p}')"><div class="cv-agenda-time">${esc(timeStr.replace(/(am|pm)/,''))}${timeStr.match(/am|pm/)?`<small>${timeStr.match(/am|pm/)[0]}</small>`:''}</div><span class="cv-agenda-dot" style="background:${col}"></span><div class="cv-agenda-name">${esc(ev.title)}</div></div>`;
-  });
-  h+=`</div><div style="text-align:center;margin-top:16px"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v3 — time blocks (4 quadrants)
-dayVariants[3]=(dates,gcEvs)=>{
-  const {ds,date}=dates[0];const evs=gatherDay(date,ds,gcEvs);
-  const blocks=[{lbl:'Early',ic:'🌙',range:[0,6]},{lbl:'Morning',ic:'🌅',range:[6,12]},{lbl:'Afternoon',ic:'☀️',range:[12,18]},{lbl:'Evening',ic:'🌆',range:[18,24]}];
-  let h=`<div class="cv-wrap"><div class="cv-title">${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</div><div class="cv-blocks">`;
-  blocks.forEach(b=>{
-    const evsInBlock=evs.filter(e=>!e.allDay&&e.h!==null&&e.h>=b.range[0]&&e.h<b.range[1]);
-    h+=`<div class="cv-block"><div class="cv-block-label"><span class="cv-block-icon">${b.ic}</span>${b.lbl}</div><div class="cv-block-events">${evsInBlock.length?evsInBlock.map(e=>evChip(e,ds)).join(''):'<div class="cv-block-empty">No events.</div>'}</div></div>`;
-  });
-  const allDay=evs.filter(e=>e.allDay);
-  if(allDay.length)h+=`<div class="cv-block"><div class="cv-block-label"><span class="cv-block-icon">⭐</span>All day</div><div class="cv-block-events">${allDay.map(e=>evChip(e,ds)).join('')}</div></div>`;
-  h+=`</div><div style="text-align:center;margin-top:16px"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v4 — compact pills (minimal vertical list, bar + time + name)
-dayVariants[4]=(dates,gcEvs)=>{
-  const {ds,date}=dates[0];const evs=gatherDay(date,ds,gcEvs);
-  let h=`<div class="cv-wrap" style="padding:16px 20px"><div class="cv-title">${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'short'})}</div><div class="cv-compact">`;
-  if(!evs.length)h+=`<div class="cv-empty">Nothing scheduled.</div>`;
-  else evs.forEach(ev=>{const cls=evClass(ev);const p=evPayload(ev,ds);h+=`<div class="cv-compact-row" onclick="openEventEdit('${p}')"><span class="cv-compact-time">${esc(ev.allDay?'all-day':fmtTimeShort(ev))}</span><span class="cv-compact-bar ${cls}"></span><span class="cv-compact-name">${esc(ev.title)}</span></div>`;});
-  h+=`</div><div style="margin-top:14px"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v5 — AM / PM two-column
-dayVariants[5]=(dates,gcEvs)=>{
-  const {ds,date}=dates[0];const evs=gatherDay(date,ds,gcEvs);
-  const am=evs.filter(e=>!e.allDay&&e.h!==null&&e.h<12);
-  const pm=evs.filter(e=>!e.allDay&&e.h!==null&&e.h>=12);
-  const ad=evs.filter(e=>e.allDay);
-  let h=`<div class="cv-wrap"><div class="cv-title">${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</div>`;
-  if(ad.length)h+=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${ad.map(e=>evChip(e,ds)).join('')}</div>`;
-  h+=`<div class="cv-ampm"><div class="cv-ampm-col"><div class="cv-ampm-hdr">AM</div><div class="cv-ampm-events">${am.length?am.map(e=>evChip(e,ds)).join(''):'<div class="cv-empty">—</div>'}</div></div><div class="cv-ampm-col"><div class="cv-ampm-hdr">PM</div><div class="cv-ampm-events">${pm.length?pm.map(e=>evChip(e,ds)).join(''):'<div class="cv-empty">—</div>'}</div></div></div>`;
-  h+=`<div style="text-align:center;margin-top:16px"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v6 — narrative prose
-dayVariants[6]=(dates,gcEvs)=>{
-  const {ds,date}=dates[0];const evs=gatherDay(date,ds,gcEvs);
-  let h=`<div class="cv-narrative"><p class="lead">${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}.</p>`;
-  if(!evs.length)h+=`<p>A clean slate. Nothing on the calendar.</p>`;
-  else{
-    const lines=evs.map(e=>{const t=e.allDay?'all day':fmtTimeShort(e);return`<strong>${esc(t)}</strong> · ${esc(e.title)}`;});
-    h+=`<p>${lines.join('. ')}.</p>`;
-  }
-  h+=`<div><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v7 — big event cards
-dayVariants[7]=(dates,gcEvs)=>{
-  const {ds,date}=dates[0];const evs=gatherDay(date,ds,gcEvs);
-  let h=`<div class="cv-wrap"><div class="cv-title">${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</div>`;
-  if(!evs.length)h+=`<div class="cv-empty">Nothing scheduled.</div>`;
-  else {
-    h+=`<div class="cv-cards">`;
-    evs.forEach(e=>{const t=e.allDay?'All day':fmtTimeShort(e);const p=evPayload(e,ds);h+=`<div class="cv-card-big ${evClass(e)}" onclick="openEventEdit('${p}')"><div class="t">${esc(t)}</div><div class="n">${esc(e.title)}</div>${e.endTime?`<div class="d">Until ${esc(fmtTimeShort({time:e.endTime,allDay:false}))}</div>`:''}</div>`;});
-    h+=`</div>`;
-  }
-  h+=`<div style="text-align:center;margin-top:16px"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v8 — minimalist
-dayVariants[8]=(dates,gcEvs)=>{
-  const {ds,date}=dates[0];const evs=gatherDay(date,ds,gcEvs);
-  let h=`<div class="cv-min"><div class="cv-title" style="margin-bottom:4px">${date.toLocaleDateString('en-ZA',{weekday:'long'})}</div><div style="font-size:13px;color:var(--muted);margin-bottom:18px">${date.toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'})}</div>`;
-  if(!evs.length)h+=`<div class="cv-empty">—</div>`;
-  else evs.forEach(e=>{const p=evPayload(e,ds);h+=`<div class="cv-min-row" onclick="openEventEdit('${p}')"><span class="cv-min-name">${esc(e.title)}</span><span class="cv-min-time">${esc(e.allDay?'all-day':fmtTimeShort(e))}</span></div>`;});
-  h+=`<div style="margin-top:16px"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v9 — radial clock
-dayVariants[9]=(dates,gcEvs)=>{
-  const {ds,date}=dates[0];const evs=gatherDay(date,ds,gcEvs);
-  const timed=evs.filter(e=>!e.allDay&&e.h!==null);
-  const now=new Date();const isToday=dates[0].isToday;
-  const handAngle=(now.getHours()%12)*30+(now.getMinutes()/2);
-  let h=`<div class="cv-radial"><div class="cv-title">${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</div><div class="cv-clock">`;
-  // 12 hour markers
-  for(let i=0;i<12;i++){const ang=i*30;const r=44;const x=50+r*Math.sin(ang*Math.PI/180);const y=50-r*Math.cos(ang*Math.PI/180);h+=`<div class="cv-clock-label" style="left:${x}%;top:${y}%">${i===0?12:i}</div>`;}
-  timed.forEach(e=>{const ang=((e.h%12)+(e.h>=12?0:0))*30;const r=38;const x=50+r*Math.sin(ang*Math.PI/180);const y=50-r*Math.cos(ang*Math.PI/180);const p=evPayload(e,ds);h+=`<div class="cv-clock-ev ${evClass(e)}" style="left:${x}%;top:${y}%" title="${esc(e.title)}" onclick="openEventEdit('${p}')"></div>`;});
-  if(isToday)h+=`<div class="cv-clock-hand" style="height:34%;transform:translateX(-50%) rotate(${handAngle}deg)"></div>`;
-  h+=`</div><div class="cv-clock-legend">`;
-  evs.forEach(e=>h+=evChip(e,ds));
-  if(!evs.length)h+=`<div class="cv-empty">Nothing scheduled.</div>`;
-  h+=`<button class="cv-add-btn" style="align-self:center" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v10 — dashboard
-dayVariants[10]=(dates,gcEvs)=>{
-  const {ds,date}=dates[0];const evs=gatherDay(date,ds,gcEvs);
-  const tasks=S.tasks.filter(t=>!t.done).slice(0,4);
-  const habits=S.habits.filter(h=>(h.checkedDates||[]).includes(ds)).length;
-  let h=`<div class="cv-wrap" style="padding:16px"><div class="cv-title">${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</div><div class="cv-dash"><div class="cv-dash-main"><div class="dv-note-lbl">Events</div>${evs.length?`<div style="display:flex;flex-direction:column;gap:6px">${evs.map(e=>evChip(e,ds)).join('')}</div>`:'<div class="cv-empty">Nothing scheduled.</div>'}<div style="margin-top:12px"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add event</button></div></div><div class="cv-dash-side"><div class="cv-dash-stat"><span class="n">${evs.length}</span><span class="l">Events</span></div><div class="cv-dash-stat"><span class="n">${habits}/${S.habits.length}</span><span class="l">Habits done</span></div><div class="cv-dash-stat"><span class="n">${tasks.length}</span><span class="l">Open tasks</span></div></div></div></div>`;
-  return h;
-};
-
-// ─────── 3-DAY VARIANTS ───────
-const threeDayVariants={};
-threeDayVariants[1]=buildThreeDayList;
-// v2 — 3 columns side-by-side
-threeDayVariants[2]=(dates,gcEvs)=>{
-  let h=`<div class="cv-grid-3">`;
-  dates.forEach(({date,ds,isToday})=>{
-    const evs=gatherDay(date,ds,gcEvs);
-    h+=`<div class="cv-gcol${isToday?' today':''}"><div class="cv-gcol-hdr"><span><span class="cv-gcol-dname">${DAYS[date.getDay()]}</span><span class="cv-gcol-dnum" style="margin-left:8px">${date.getDate()}</span></span><button class="cv-add-btn" style="padding:2px 8px;font-size:10px" onclick="openNewEvent({date:'${ds}'})">+</button></div>${evs.length?evs.map(e=>evChip(e,ds)).join(''):'<div class="cv-empty">—</div>'}</div>`;
-  });
-  h+=`</div>`;return h;
-};
-// v3 — horizontal timeline
-threeDayVariants[3]=(dates,gcEvs)=>{
-  let h=`<div class="cv-swim">`;
-  dates.forEach(({date,ds,isToday})=>{
-    const evs=gatherDay(date,ds,gcEvs);
-    h+=`<div class="cv-swim-row${isToday?' today':''}" style="${isToday?'background:var(--bg-2);border-radius:8px;padding:8px':''}"><div class="cv-swim-day">${DAYS[date.getDay()]}${isToday?' · Today':''}<span class="d">${date.getDate()}</span></div><div class="cv-swim-evs">${evs.length?evs.map(e=>evChip(e,ds)).join(''):`<button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add</button>`}</div></div>`;
-  });
-  h+=`</div>`;return h;
-};
-// v4 — summary cards with counts
-threeDayVariants[4]=(dates,gcEvs)=>{
-  let h=`<div class="cv-cards">`;
-  dates.forEach(({date,ds,isToday})=>{
-    const evs=gatherDay(date,ds,gcEvs);
-    h+=`<div class="cv-card-big${isToday?' today':''}" style="cursor:default"><div class="t">${DAYS[date.getDay()]} · ${date.getDate()}</div><div class="n">${evs.length} event${evs.length===1?'':'s'}</div><div class="d" style="display:flex;flex-direction:column;gap:4px;margin-top:8px">${evs.slice(0,4).map(e=>evChip(e,ds)).join('')}${evs.length>4?`<span style="font-size:11px;color:var(--muted)">+${evs.length-4} more</span>`:''}${!evs.length?'<span class="cv-empty">Nothing scheduled</span>':''}<button class="cv-add-btn" style="align-self:flex-start;margin-top:6px" onclick="openNewEvent({date:'${ds}'})">+ Add</button></div></div>`;
-  });
-  h+=`</div>`;return h;
-};
-// v5 — chronological merge (like a 3-day agenda list)
-threeDayVariants[5]=(dates,gcEvs)=>{
-  let all=[];dates.forEach(({date,ds,isToday})=>{gatherDay(date,ds,gcEvs).forEach(e=>all.push({...e,ds,date,isToday}));});
-  let h=`<div class="cv-agenda">`;
-  let lastDs=null;
-  if(!all.length)h+=`<div class="cv-empty">Nothing scheduled in the next 3 days.</div>`;
-  all.forEach(ev=>{
-    if(ev.ds!==lastDs){lastDs=ev.ds;h+=`<div style="margin-top:6px;padding:6px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:${ev.isToday?'var(--peach)':'var(--muted)'}">${DAYS[ev.date.getDay()]} · ${ev.date.getDate()} ${ev.date.toLocaleDateString('en-ZA',{month:'short'})}${ev.isToday?' · Today':''}</div>`;}
-    const p=evPayload(ev,ev.ds);const timeStr=ev.allDay?'All day':fmtTimeShort(ev);
-    h+=`<div class="cv-agenda-row" onclick="openEventEdit('${p}')"><div class="cv-agenda-time">${esc(timeStr)}</div><span class="cv-agenda-dot" style="background:var(--${ev.cls==='bday'?'sage':ev.cls==='cus'?'lavender':'blue'})"></span><div class="cv-agenda-name">${esc(ev.title)}</div></div>`;
-  });
-  h+=`</div><div style="text-align:center;padding:12px"><button class="cv-add-btn" onclick="openNewEvent({date:'${dates[0].ds}'})">+ Add event</button></div>`;
-  return h;
-};
-// v6 — morning/afternoon/evening per day (lanes)
-threeDayVariants[6]=(dates,gcEvs)=>{
-  const lanes=[{lbl:'Morning',ic:'🌅',rng:[5,12]},{lbl:'Afternoon',ic:'☀️',rng:[12,18]},{lbl:'Evening',ic:'🌆',rng:[18,24]}];
-  let h=`<div class="cv-lanes" style="--n:${dates.length}"><div class="cv-lanes-hdr"><div></div>`;
-  dates.forEach(({date,isToday})=>h+=`<div style="${isToday?'color:var(--peach)':''}">${DAYS[date.getDay()]} ${date.getDate()}</div>`);
-  h+=`</div><div class="cv-lanes-body">`;
-  lanes.forEach(ln=>{
-    h+=`<div class="cv-lane-row"><div class="cv-lane-lbl"><span>${ln.ic}</span>${ln.lbl}</div>`;
-    dates.forEach(({date,ds,isToday})=>{
-      const evs=gatherDay(date,ds,gcEvs).filter(e=>!e.allDay&&e.h>=ln.rng[0]&&e.h<ln.rng[1]);
-      h+=`<div class="cv-lane-cell${isToday?' today':''}" onclick="event.target.closest('.cv-ev-chip')||openNewEvent({date:'${ds}'})">${evs.map(e=>evChip(e,ds)).join('')}</div>`;
-    });
-    h+=`</div>`;
-  });
-  h+=`</div></div>`;return h;
-};
-// v7 — narrative briefing
-threeDayVariants[7]=(dates,gcEvs)=>{
-  let h=`<div class="cv-narrative"><p class="lead">The next three days.</p>`;
-  dates.forEach(({date,ds,isToday})=>{
-    const evs=gatherDay(date,ds,gcEvs);
-    const name=isToday?'Today':date.toLocaleDateString('en-ZA',{weekday:'long'})+' ('+date.getDate()+' '+date.toLocaleDateString('en-ZA',{month:'short'})+')';
-    h+=`<p><strong>${esc(name)}:</strong> `;
-    if(!evs.length)h+=`clear diary.`;
-    else h+=evs.map(e=>`${esc(e.allDay?'all day':fmtTimeShort(e))} ${esc(e.title)}`).join('; ')+`.`;
-    h+=`</p>`;
-  });
-  h+=`<div><button class="cv-add-btn" onclick="openNewEvent({date:'${dates[0].ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v8 — minimal three-column with event counts
-threeDayVariants[8]=(dates,gcEvs)=>{
-  let h=`<div class="cv-grid-3">`;
-  dates.forEach(({date,ds,isToday})=>{
-    const evs=gatherDay(date,ds,gcEvs);
-    h+=`<div class="cv-gcol${isToday?' today':''}" style="text-align:center;padding:22px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">${DAYS[date.getDay()]}${isToday?' · TODAY':''}</div><div style="font-family:'Playfair Display',serif;font-size:38px;color:var(--text);line-height:1;margin-bottom:8px">${date.getDate()}</div><div style="font-size:12px;color:var(--muted);margin-bottom:14px">${date.toLocaleDateString('en-ZA',{month:'long'})}</div><div style="font-size:20px;font-family:'Playfair Display',serif;color:var(--text)">${evs.length}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">event${evs.length===1?'':'s'}</div><div style="margin-top:14px"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Add</button></div></div>`;
-  });
-  h+=`</div>`;return h;
-};
-// v9 — rows with event pills
-threeDayVariants[9]=(dates,gcEvs)=>{
-  let h=`<div class="cv-strip">`;
-  dates.forEach(({date,ds,isToday})=>{
-    const evs=gatherDay(date,ds,gcEvs);
-    h+=`<div class="cv-strip-day${isToday?' today':''}"><div class="cv-strip-daycol"><span class="dn">${DAYS[date.getDay()]}${isToday?' · Today':''}</span><br><span class="dd">${date.getDate()}</span></div><div class="cv-strip-evcol">${evs.length?evs.map(e=>evChip(e,ds)).join(''):`<span class="cv-empty">Nothing scheduled</span>`}<button class="cv-add-btn" style="align-self:flex-start;margin-top:4px" onclick="openNewEvent({date:'${ds}'})">+ Add</button></div></div>`;
-  });
-  h+=`</div>`;return h;
-};
-// v10 — tabular
-threeDayVariants[10]=(dates,gcEvs)=>{
-  let h=`<div class="cv-table-wrap"><table class="cv-table" style="width:100%"><thead><tr><th style="width:160px">Day</th><th>Events</th><th style="width:60px"></th></tr></thead><tbody>`;
-  dates.forEach(({date,ds,isToday})=>{
-    const evs=gatherDay(date,ds,gcEvs);
-    h+=`<tr class="${isToday?'today':''}"><td><strong>${DAYS[date.getDay()]}</strong><br><span style="font-size:11px;color:var(--muted)">${date.getDate()} ${date.toLocaleDateString('en-ZA',{month:'short'})}</span></td><td>${evs.length?evs.map(e=>evChip(e,ds)).join(' '):'<span class="cv-empty">—</span>'}</td><td><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+</button></td></tr>`;
-  });
-  h+=`</tbody></table></div>`;return h;
-};
-
-// ─────── WEEK VARIANTS ───────
-const weekVariants={};
-weekVariants[1]=buildWeekList;
-// v2 — 7 columns side-by-side (like 3-day col style but 7)
-weekVariants[2]=(dates,gcEvs)=>{
-  let h=`<div class="cv-grid-7">`;
-  dates.forEach(({date,ds,isToday})=>{
-    const evs=gatherDay(date,ds,gcEvs);
-    h+=`<div class="cv-gcol${isToday?' today':''}"><div class="cv-gcol-hdr"><span><span class="cv-gcol-dname">${DAYS[date.getDay()]}</span><span class="cv-gcol-dnum" style="margin-left:6px">${date.getDate()}</span></span><button class="cv-add-btn" style="padding:2px 6px;font-size:10px" onclick="openNewEvent({date:'${ds}'})">+</button></div>${evs.length?evs.map(e=>evChip(e,ds)).join(''):'<div class="cv-empty" style="font-size:11px">—</div>'}</div>`;
-  });
-  h+=`</div>`;return h;
-};
-// v3 — chronological merge
-weekVariants[3]=(dates,gcEvs)=>threeDayVariants[5](dates,gcEvs);
-// v4 — lanes (morning/afternoon/evening per day, 7 cols)
-weekVariants[4]=(dates,gcEvs)=>threeDayVariants[6](dates,gcEvs);
-// v5 — vertical strip per day
-weekVariants[5]=(dates,gcEvs)=>threeDayVariants[9](dates,gcEvs);
-// v6 — summary cards
-weekVariants[6]=(dates,gcEvs)=>threeDayVariants[4](dates,gcEvs);
-// v7 — narrative week summary
-weekVariants[7]=(dates,gcEvs)=>{
-  let total=0;dates.forEach(({date,ds})=>{total+=gatherDay(date,ds,gcEvs).length;});
-  let h=`<div class="cv-narrative"><p class="lead">This week — ${total} event${total===1?'':'s'}.</p>`;
-  dates.forEach(({date,ds,isToday})=>{
-    const evs=gatherDay(date,ds,gcEvs);
-    const name=isToday?'Today':DAYS[date.getDay()]+' '+date.getDate();
-    h+=`<p><strong>${esc(name)}:</strong> ${evs.length?evs.map(e=>esc(e.allDay?'all day':fmtTimeShort(e))+' '+esc(e.title)).join('; ')+'.':'clear.'}</p>`;
-  });
-  h+=`<div><button class="cv-add-btn" onclick="openNewEvent({date:'${dates[0].ds}'})">+ Add event</button></div></div>`;
-  return h;
-};
-// v8 — heatmap (days coloured by busyness)
-weekVariants[8]=(dates,gcEvs)=>{
-  let h=`<div class="cv-wrap"><div class="cv-title">Week overview</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:18px">`;
-  dates.forEach(({date,ds,isToday})=>{
-    const n=gatherDay(date,ds,gcEvs).length;
-    const l=n>=5?'l4':n>=3?'l3':n>=1?'l2':'l1';
-    h+=`<div class="cv-heat-day ${l}${isToday?' today':''}" onclick="UI.calDate=new Date(${date.getFullYear()},${date.getMonth()},${date.getDate()});UI.calView='day';rCal()" style="aspect-ratio:auto;min-height:84px;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.06em">${DAYS[date.getDay()]}</div><div style="font-family:'Playfair Display',serif;font-size:22px;color:var(--text)">${date.getDate()}</div><div style="font-size:10px;color:var(--muted)">${n||'—'}</div></div>`;
-  });
-  h+=`</div><div class="cv-agenda">`;
-  let allEvs=[];dates.forEach(({date,ds,isToday})=>{gatherDay(date,ds,gcEvs).forEach(e=>allEvs.push({...e,date,ds,isToday}));});
-  if(!allEvs.length)h+=`<div class="cv-empty">No events this week.</div>`;
-  else {
-    let lastDs=null;allEvs.forEach(ev=>{if(ev.ds!==lastDs){lastDs=ev.ds;h+=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);padding:6px 0">${DAYS[ev.date.getDay()]} ${ev.date.getDate()}</div>`;}const p=evPayload(ev,ev.ds);h+=`<div class="cv-agenda-row" onclick="openEventEdit('${p}')"><div class="cv-agenda-time">${esc(ev.allDay?'All day':fmtTimeShort(ev))}</div><div class="cv-agenda-name">${esc(ev.title)}</div></div>`;});
-  }
-  h+=`</div></div>`;return h;
-};
-// v9 — table
-weekVariants[9]=(dates,gcEvs)=>threeDayVariants[10](dates,gcEvs);
-// v10 — minimal big-numbers
-weekVariants[10]=(dates,gcEvs)=>threeDayVariants[8](dates,gcEvs);
-
-// ─────── MONTH VARIANTS ───────
-const monthVariants={};
+// ─────── MONTH HELPERS ───────
 function _monthCells(y,m){
   const firstDow=new Date(y,m,1).getDay();
-  const first=firstDow===0?6:firstDow-1; // Monday-first
+  const first=firstDow===0?6:firstDow-1;
   const daysInMonth=new Date(y,m+1,0).getDate();
   const daysInPrev=new Date(y,m,0).getDate();
   const cells=[];
@@ -2813,145 +2567,167 @@ function _monthCells(y,m){
 function _monthEvsForDay(cy,cm,cd,allGc){
   const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
   const ce=(S.customEvents||[]).filter(e=>e.date===ds);
-  const gcs=(allGc||[]).filter(e=>e.date===ds);
+  const gcs=(allGc||[]).filter(e=>{
+    if(!e.allDay)return e.date===ds;
+    const endDs=e.endDate||addDaysToDateStr(e.date,1);
+    return ds>=e.date&&ds<endDs;
+  });
   const evs=[];
-  gcs.forEach(e=>evs.push({cls:isBirthdayEv(e)?'bday':'gc',title:e.title,type:'gc',data:e,ds}));
-  ce.forEach(e=>evs.push({cls:'cus',title:e.title,type:'cus',data:e,ds}));
-  return {evs,ds};
+  gcs.forEach(e=>{
+    const isMulti=e.allDay&&e.endDate&&addDaysToDateStr(e.date,1)!==e.endDate;
+    evs.push({cls:isBirthdayEv(e)?'bday':'gc',title:e.title,type:'gc',data:e,ds,allDay:e.allDay,isMulti,isSpanStart:!isMulti||ds===e.date,spanEndDs:e.endDate?addDaysToDateStr(e.endDate,-1):null});
+  });
+  ce.forEach(e=>evs.push({cls:'cus',title:e.title,type:'cus',data:e,ds,allDay:!e.time}));
+  // Multi-day events go first
+  evs.sort((a,b)=>{if(a.isMulti&&!b.isMulti)return -1;if(!a.isMulti&&b.isMulti)return 1;return 0;});
+  return{evs,ds};
 }
-// v1 — classic grid (original)
-monthVariants[1]=(y,m,today,allGc)=>{
-  let h='<div class="mg">'+['Mo','Tu','We','Th','Fr','Sa','Su'].map(d=>`<div class="mdow">${d}</div>`).join('');
-  _monthCells(y,m).forEach(({y:cy,m:cm,d:cd,faded})=>{
-    const dow=new Date(cy,cm,cd).getDay();
-    const {evs,ds}=_monthEvsForDay(cy,cm,cd,allGc);
-    const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
-    const isW=dow===0||dow===6;
-    const max=3;const shown=evs.slice(0,max);const extra=evs.length-shown.length;
-    h+=`<div class="mc${isT?' today':''}${isW?' wkend':''}${faded?' faded':''}" data-cd="${cy},${cm},${cd}"><div class="mn">${cd}</div><div class="mc-events">${shown.map(e=>`<div class="mev ${e.cls}" onclick="event.stopPropagation();openEventEdit('${evPayload(e,ds)}')">${esc(e.title)}</div>`).join('')}${extra>0?`<div class="mev more">+${extra}</div>`:''}</div></div>`;
+
+// ─────── DAY VIEW (timeline, full 24h) ───────
+function buildDayView(dates,gcEvs){
+  const {ds,isToday}=dates[0];
+  const evs=gatherDay(dates[0].date,ds,gcEvs);
+  const allDay=evs.filter(e=>e.allDay);
+  const timed=evs.filter(e=>!e.allDay);
+  const HOURS=Array.from({length:24},(_,i)=>i);
+  const now=new Date();const nh=now.getHours(),nm=now.getMinutes();
+  let h='';
+  if(allDay.length)h+=`<div class="allday-strip"><div class="allday-strip-lbl">All-day</div><div class="allday-events">${allDay.map(e=>{const p=evPayload(e,ds);return`<div class="allday-ev ${evClass(e)}" onclick="openEventEdit('${p}')">${esc(e.title)}</div>`;}).join('')}</div></div>`;
+  h+=`<div class="ts-wrap"><div class="ts-times"><div class="ts-times-hdr"></div>`;
+  HOURS.forEach(hr=>h+=`<div class="ts-hr-lbl">${hr>12?hr-12:(hr===0?12:hr)}${hr>=12?'pm':'am'}</div>`);
+  h+=`</div><div class="ts-cols" style="grid-template-columns:1fr"><div class="ts-col"><div class="ts-col-hdr${isToday?' today-hdr':''}"><div class="ts-dname">${DAYS[dates[0].date.getDay()]}</div><div class="ts-dn">${dates[0].date.getDate()}</div></div>`;
+  HOURS.forEach(hr=>{
+    const eh=timed.filter(x=>x.h===hr);const isNow=isToday&&nh===hr;const pct=Math.round((nm/60)*100);
+    const hrLabel=(hr>12?hr-12:(hr===0?12:hr))+(hr>=12?'pm':'am');
+    const nextHr=(hr+1)%24;const endHr=(nextHr>12?nextHr-12:(nextHr===0?12:nextHr))+(nextHr>=12?'pm':'am');
+    h+=`<div class="ts-cell${isNow?' now-row':''}${eh.length?' has-events':''}" data-new-ds="${ds}" data-new-time="${hrLabel}" data-new-end="${endHr}" onclick="handleCellClick(event,this)">`;
+    if(isNow)h+=`<div class="now-line" style="top:${pct}%"><div class="now-dot"></div></div>`;
+    eh.forEach(ev=>{const p=evPayload(ev,ds);h+=`<div class="ts-ev ${ev.cls}" onclick="event.stopPropagation();openEventEdit('${p}')">${esc((ev.time?ev.time+' ':'')+ev.title)}</div>`;});
+    h+=`</div>`;
   });
-  return h+'</div>';
-};
-// v2 — list of days with events
-monthVariants[2]=(y,m,today,allGc)=>{
-  let h=`<div class="cv-mlist">`;
-  const daysInMonth=new Date(y,m+1,0).getDate();
-  for(let d=1;d<=daysInMonth;d++){
-    const dt=new Date(y,m,d);const dow=dt.getDay();
-    const {evs,ds}=_monthEvsForDay(y,m,d,allGc);
-    const isT=today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===d;
-    const isW=dow===0||dow===6;
-    h+=`<div class="cv-mlist-row${isT?' today':''}${isW?' weekend':''}" onclick="UI.calDate=new Date(${y},${m},${d});UI.calView='day';rCal()"><div class="cv-mlist-date">${d}<small>${DAYS[dow]}</small></div><div class="cv-mlist-evs">${evs.length?evs.map(e=>evChip(e,ds)).join(''):'<span class="cv-empty" style="font-size:11.5px;padding:0">—</span>'}</div></div>`;
-  }
+  h+=`</div></div></div>`;
+  const note=(S.dayNotes||{})[ds]||'';
+  h+=`<div class="dv-note"><div class="dv-note-lbl">Today's events</div>${evs.length?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">${evs.map(e=>evChip(e,ds)).join('')}</div>`:`<div class="cv-empty" style="margin-bottom:14px">Nothing scheduled.</div>`}<div class="dv-note-lbl">Notes for ${fmt(ds)}</div><textarea class="exp-ta xl" id="dv-ta" placeholder="Notes, intentions...">${esc(note)}</textarea><div style="margin-top:8px;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="saveDvNote()">Save note</button></div></div>`;
+  return h;
+}
+
+// ─────── 3-DAY VIEW (stacked cards, clickable day headers + add btn) ───────
+function buildThreeDayView(dates,gcEvs){
+  const today=new Date();
+  let h=`<div class="threeday-list">`;
+  dates.forEach(({date,ds})=>{
+    const isToday=date.toDateString()===today.toDateString();
+    const evs=gatherDay(date,ds,gcEvs);
+    h+=`<div class="td-day-card${isToday?' today':''}">
+      <div class="td-day-hdr" style="cursor:pointer" onclick="event.stopPropagation();UI.calDate=new Date(${date.getFullYear()},${date.getMonth()},${date.getDate()});UI.calView='day';rCal()" title="Open day">
+        <span class="td-day-name">${DAYS[date.getDay()]}${isToday?' · Today':''}</span>
+        <span class="td-day-date">${date.getDate()} ${date.toLocaleDateString('en-ZA',{month:'long'})}</span>
+        <button class="td-add-btn" onclick="event.stopPropagation();openNewEvent({date:'${ds}'})">+ Add event</button>
+      </div>`;
+    if(!evs.length)h+=`<div class="td-empty">No events scheduled.</div>`;
+    else evs.forEach(ev=>{const payload=evPayload(ev,ds);const timeLabel=ev.allDay?'All day':fmtEndRange(ev);h+=`<div class="td-event" onclick="event.stopPropagation();openEventEdit('${payload}')"><span class="td-ev-time${ev.allDay?' allday':''}">${esc(timeLabel)}</span><span class="td-ev-title">${esc(ev.title)}</span></div>`;});
+    h+=`</div>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+
+// ─────── WEEK VIEW (7 columns, clickable day headers) ───────
+function buildWeekView(dates,gcEvs){
+  let h=`<div class="cv-grid-7">`;
+  dates.forEach(({date,ds,isToday})=>{
+    const evs=gatherDay(date,ds,gcEvs);
+    h+=`<div class="cv-gcol${isToday?' today':''}"><div class="cv-gcol-hdr" style="cursor:pointer" onclick="UI.calDate=new Date(${date.getFullYear()},${date.getMonth()},${date.getDate()});UI.calView='day';rCal()" title="Open day"><span><span class="cv-gcol-dname">${DAYS[date.getDay()]}</span><span class="cv-gcol-dnum" style="margin-left:6px">${date.getDate()}</span></span><button class="cv-add-btn" style="padding:2px 6px;font-size:10px" onclick="event.stopPropagation();openNewEvent({date:'${ds}'})">+</button></div>${evs.length?evs.map(e=>evChip(e,ds)).join(''):'<div class="cv-empty" style="font-size:11px">—</div>'}</div>`;
+  });
   h+=`</div>`;return h;
-};
-// v3 — heat grid
-monthVariants[3]=(y,m,today,allGc)=>{
-  let h=`<div class="cv-wrap"><div class="cv-heat-grid">`;
-  ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(d=>h+=`<div class="mdow" style="aspect-ratio:auto">${d}</div>`);
-  _monthCells(y,m).forEach(({y:cy,m:cm,d:cd,faded})=>{
-    const {evs}=_monthEvsForDay(cy,cm,cd,allGc);
-    const n=evs.length;const lvl=n>=5?'l4':n>=3?'l3':n>=1?'l2':'l1';
-    const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
-    h+=`<div class="cv-heat-day ${lvl}${isT?' today':''}${faded?' faded':''}" data-cd="${cy},${cm},${cd}"><span class="hd-num">${cd}</span></div>`;
-  });
-  h+=`</div></div>`;return h;
-};
-// v4 — dot calendar (day + dots)
-monthVariants[4]=(y,m,today,allGc)=>{
-  let h=`<div class="cv-mdots">`;
-  ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(d=>h+=`<div class="mdow">${d}</div>`);
-  _monthCells(y,m).forEach(({y:cy,m:cm,d:cd,faded})=>{
-    const {evs}=_monthEvsForDay(cy,cm,cd,allGc);
-    const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
-    const max=4;const shown=evs.slice(0,max);
-    h+=`<div class="cv-mdot-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}"><div class="n">${cd}</div><div class="dots">${shown.map(e=>`<span class="dot" style="background:var(--${e.cls==='bday'?'sage':e.cls==='cus'?'lavender':'blue'})"></span>`).join('')}</div></div>`;
-  });
-  h+=`</div>`;return h;
-};
-// v5 — week-by-week breakdown
-monthVariants[5]=(y,m,today,allGc)=>{
+}
+
+// ─────── MONTH VIEW (week-by-week, colored stripes per event, multi-day spans,
+// habit dots, inline expand on click) ───────
+function buildMonthView(y,m,today,allGc){
   const cells=_monthCells(y,m);
+  // Only render weeks that contain at least one current-month day
+  let lastWeek=0;for(let i=0;i<cells.length;i++)if(!cells[i].faded)lastWeek=Math.floor(i/7);
+  const showWeeks=lastWeek+1;
   let h=`<div class="cv-weeks">`;
-  for(let wk=0;wk<6;wk++){
+  h+=`<div class="cv-week-row cv-week-hdr"><div class="cv-week-lbl"></div>${['Mo','Tu','We','Th','Fr','Sa','Su'].map(d=>`<div class="cv-week-dayname">${d}</div>`).join('')}</div>`;
+  for(let wk=0;wk<showWeeks;wk++){
     const weekCells=cells.slice(wk*7,wk*7+7);
     h+=`<div class="cv-week-row"><div class="cv-week-lbl">W${wk+1}</div>`;
     weekCells.forEach(({y:cy,m:cm,d:cd,faded})=>{
+      const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
       const {evs}=_monthEvsForDay(cy,cm,cd,allGc);
       const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
-      h+=`<div class="cv-week-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}"><div class="n">${cd}</div>${evs.length?`<div class="c">${evs.length} ev</div>`:''}</div>`;
+      const isExpanded=UI.monthExpandedDs===ds;
+      const maxStripes=isExpanded?12:4;
+      const shown=evs.slice(0,maxStripes);
+      const extra=Math.max(0,evs.length-maxStripes);
+      const habitsDone=(S.habits||[]).filter(hb=>(hb.checkedDates||[]).includes(ds));
+      const habitColor=hb=>{const ix=S.habits.findIndex(x=>x.id===hb.id);return HABIT_COLORS[(ix<0?0:ix)%HABIT_COLORS.length];};
+      h+=`<div class="mcw${faded?' faded':''}${isT?' today':''}${isExpanded?' expanded':''}" data-cd="${cy},${cm},${cd}"><div class="mcw-top"><div class="mcw-num">${cd}</div>${habitsDone.length?`<div class="mcw-habits">${habitsDone.slice(0,5).map(hb=>`<span class="mcw-habit-dot" style="background:${habitColor(hb)}" title="${esc(hb.name)}"></span>`).join('')}</div>`:''}</div><div class="mcw-stripes">`;
+      shown.forEach(ev=>{
+        const cat=eventCategory(ev);
+        const p=evPayload(ev,ds);
+        const showTitle=!ev.isMulti||ev.isSpanStart;
+        const multiCls=ev.isMulti?' multi'+(ev.isSpanStart?' multi-start':'')+(ds===ev.spanEndDs?' multi-end':'')+(!ev.isSpanStart&&ds!==ev.spanEndDs?' multi-mid':''):'';
+        h+=`<div class="mcw-stripe${multiCls}" style="background:${cat.bg};color:${cat.color}" onclick="event.stopPropagation();openEventEdit('${p}')" title="${esc(ev.title)}"><span class="mcw-stripe-bar" style="background:${cat.color}"></span>${showTitle?`<span class="mcw-stripe-txt">${esc(ev.title)}</span>`:'<span class="mcw-stripe-txt">&nbsp;</span>'}</div>`;
+      });
+      if(extra>0)h+=`<div class="mcw-stripe more">+${extra} more</div>`;
+      h+=`</div>`;
+      if(isExpanded){
+        h+=`<div class="mcw-expanded" onclick="event.stopPropagation()">`;
+        if(evs.length)evs.forEach(ev=>{h+=evChip(ev,ds);});
+        else h+=`<div class="cv-empty" style="font-size:11px;padding:4px 0">Nothing scheduled.</div>`;
+        h+=`<div class="mcw-actions"><button class="cv-add-btn" onclick="openNewEvent({date:'${ds}'})">+ Event</button><button class="cv-add-btn" onclick="UI.calDate=new Date(${cy},${cm},${cd});UI.calView='day';UI.monthExpandedDs=null;rCal()">Open day ↗</button></div></div>`;
+      }
+      h+=`</div>`;
     });
     h+=`</div>`;
   }
-  h+=`</div>`;return h;
-};
-// v6 — compact month + side agenda for selected day
-monthVariants[6]=(y,m,today,allGc)=>{
-  let h=`<div style="display:grid;grid-template-columns:1fr 280px;gap:14px;padding:14px" class="cv-dash">`;
-  h+=`<div><div class="cv-mdots">`;
-  ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(d=>h+=`<div class="mdow">${d}</div>`);
-  _monthCells(y,m).forEach(({y:cy,m:cm,d:cd,faded})=>{
-    const {evs}=_monthEvsForDay(cy,cm,cd,allGc);
-    const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
-    const shown=evs.slice(0,3);
-    h+=`<div class="cv-mdot-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}"><div class="n">${cd}</div><div class="dots">${shown.map(e=>`<span class="dot" style="background:var(--${e.cls==='bday'?'sage':e.cls==='cus'?'lavender':'blue'})"></span>`).join('')}</div></div>`;
-  });
-  h+=`</div></div><div><div class="dv-note-lbl">Today's events</div>`;
-  const {evs:todayEvs,ds:todayDs}=_monthEvsForDay(today.getFullYear(),today.getMonth(),today.getDate(),allGc);
-  h+=todayEvs.length?`<div style="display:flex;flex-direction:column;gap:6px">${todayEvs.map(e=>evChip(e,todayDs)).join('')}</div>`:'<div class="cv-empty">Nothing scheduled.</div>';
-  h+=`<div style="margin-top:12px"><button class="cv-add-btn" onclick="openNewEvent({date:'${todayDs}'})">+ Add event</button></div></div></div>`;
+  h+=`</div>`;
+  // Attach click handler after render via setTimeout so onclick on cal element gets the data-cd click
+  setTimeout(()=>{const cal=document.getElementById('cal');if(cal){cal.onclick=e=>{if(e.target.closest('.mcw-stripe')||e.target.closest('.cv-ev-chip')||e.target.closest('.cv-add-btn')||e.target.closest('.mcw-expanded'))return;const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;if(UI.monthExpandedDs===ds){UI.calDate=new Date(cy,cm,cd);UI.calView='day';UI.monthExpandedDs=null;rCal();}else{UI.monthExpandedDs=ds;rCal();}};}},0);
   return h;
-};
-// v7 — chronological agenda for entire month
-monthVariants[7]=(y,m,today,allGc)=>{
-  const daysInMonth=new Date(y,m+1,0).getDate();
-  let all=[];for(let d=1;d<=daysInMonth;d++){const {evs,ds}=_monthEvsForDay(y,m,d,allGc);evs.forEach(e=>all.push({...e,d,ds}));}
-  let h=`<div class="cv-agenda" style="padding:16px 20px">`;
-  if(!all.length)h+=`<div class="cv-empty">No events this month.</div>`;
-  else {let lastD=null;all.forEach(ev=>{if(ev.d!==lastD){lastD=ev.d;const isT=today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===ev.d;h+=`<div style="font-size:12px;font-weight:700;text-transform:uppercase;color:${isT?'var(--peach)':'var(--muted)'};padding:10px 0 4px;letter-spacing:.08em">${ev.d} ${DAYS[new Date(y,m,ev.d).getDay()]}${isT?' · Today':''}</div>`;}h+=`<div class="cv-agenda-row" onclick="openEventEdit('${evPayload(ev,ev.ds)}')"><div class="cv-agenda-time">${ev.cls==='bday'?'🎂':ev.cls==='cus'?'◐':'◉'}</div><div class="cv-agenda-name">${esc(ev.title)}</div></div>`;});}
-  h+=`</div>`;return h;
-};
-// v8 — tabular by date
-monthVariants[8]=(y,m,today,allGc)=>{
-  const daysInMonth=new Date(y,m+1,0).getDate();
-  let h=`<div class="cv-table-wrap"><table class="cv-table" style="width:100%"><thead><tr><th>Date</th><th>Day</th><th>Events</th></tr></thead><tbody>`;
-  for(let d=1;d<=daysInMonth;d++){
-    const dt=new Date(y,m,d);const dow=dt.getDay();
-    const {evs,ds}=_monthEvsForDay(y,m,d,allGc);
-    const isT=today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===d;
-    h+=`<tr class="${isT?'today':''}" style="cursor:pointer" onclick="UI.calDate=new Date(${y},${m},${d});UI.calView='day';rCal()"><td><strong>${d}</strong></td><td>${DAYS[dow]}</td><td>${evs.length?evs.map(e=>evChip(e,ds)).join(' '):'<span class="cv-empty">—</span>'}</td></tr>`;
-  }
-  h+=`</tbody></table></div>`;return h;
-};
-// v9 — card stack per week
-monthVariants[9]=(y,m,today,allGc)=>{
-  const cells=_monthCells(y,m);
-  let h=`<div style="padding:14px;display:flex;flex-direction:column;gap:14px">`;
-  for(let wk=0;wk<6;wk++){
-    const weekCells=cells.slice(wk*7,wk*7+7);
-    h+=`<div class="card" style="padding:12px 14px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.08em;margin-bottom:10px">Week ${wk+1}</div><div class="cv-grid-7">`;
-    weekCells.forEach(({y:cy,m:cm,d:cd,faded})=>{
-      const {evs,ds}=_monthEvsForDay(cy,cm,cd,allGc);
-      const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
-      h+=`<div class="cv-gcol${isT?' today':''}" style="${faded?'opacity:.35':''}" data-cd="${cy},${cm},${cd}"><div class="cv-gcol-hdr"><span class="cv-gcol-dnum" style="font-size:15px">${cd}</span></div>${evs.slice(0,3).map(e=>evChip(e,ds)).join('')}${evs.length>3?`<span style="font-size:10px;color:var(--muted)">+${evs.length-3}</span>`:''}</div>`;
-    });
-    h+=`</div></div>`;
-  }
-  h+=`</div>`;return h;
-};
-// v10 — minimal grid (bigger numbers, no event text, just coloured bars)
-monthVariants[10]=(y,m,today,allGc)=>{
-  let h=`<div class="mg" style="grid-auto-rows:minmax(96px,12vh)">`;
-  ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(d=>h+=`<div class="mdow">${d}</div>`);
-  _monthCells(y,m).forEach(({y:cy,m:cm,d:cd,faded})=>{
-    const dow=new Date(cy,cm,cd).getDay();
-    const {evs}=_monthEvsForDay(cy,cm,cd,allGc);
-    const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
-    const isW=dow===0||dow===6;
-    h+=`<div class="mc${isT?' today':''}${isW?' wkend':''}${faded?' faded':''}" data-cd="${cy},${cm},${cd}" style="justify-content:center;align-items:center;gap:6px"><div class="mn" style="width:auto;height:auto;font-size:22px;font-family:'Playfair Display',serif;font-weight:500">${cd}</div><div style="display:flex;gap:3px">${evs.slice(0,5).map(e=>`<span style="width:5px;height:5px;border-radius:50%;background:var(--${e.cls==='bday'?'sage':e.cls==='cus'?'lavender':'blue'})"></span>`).join('')}</div></div>`;
+}
+
+// ─────── COMING UP (categorized panels below calendar) ───────
+function renderComingUp(gcEvs){
+  const el=document.getElementById('cal-coming-up');if(!el)return;
+  if(UI.calView==='day'){el.innerHTML='';return;}
+  const today=new Date();const todayDs=localDs(today);
+  const horizonEnd=new Date(today);horizonEnd.setDate(today.getDate()+60);
+  const upcoming=(gcEvs||[]).filter(e=>{
+    const start=e.date;if(!start)return false;
+    if(start<todayDs){if(e.allDay&&e.endDate&&e.endDate>todayDs)return true;return false;}
+    return start<=localDs(horizonEnd);
   });
-  return h+'</div>';
-};
+  const byCat={birthday:[],holiday:[],meeting:[],movie:[],business:[],faith:[],event:[]};
+  upcoming.forEach(e=>{const cat=eventCategory(e);(byCat[cat.cat]||byCat.event).push(e);});
+  (S.customEvents||[]).forEach(e=>{if(e.date>=todayDs&&e.date<=localDs(horizonEnd)){const cat=eventCategory({title:e.title,type:'cus'});(byCat[cat.cat]||byCat.event).push({...e,type:'cus',data:e,cls:'cus',allDay:!e.time});}});
+  // Keep only categories with items, sort events within each by date
+  const panels=[];
+  const catOrder=[{key:'birthday',label:'Birthdays',icon:'🎂'},{key:'holiday',label:'Holidays',icon:'⭐'},{key:'meeting',label:'Meetings',icon:'◉'},{key:'business',label:'Business',icon:'◆'},{key:'faith',label:'Faith',icon:'✦'},{key:'movie',label:'Movie nights',icon:'🎬'},{key:'event',label:'Other events',icon:'◐'}];
+  catOrder.forEach(({key,label,icon})=>{
+    const items=(byCat[key]||[]).sort((a,b)=>a.date.localeCompare(b.date));
+    if(items.length)panels.push({label,icon,items,cat:key});
+  });
+  if(!panels.length){el.innerHTML=`<div class="cu-wrap"><div class="cu-empty">Nothing coming up in the next 60 days.</div></div>`;return;}
+  let h=`<div class="cu-wrap"><div class="cu-lbl">Coming up · next 60 days</div><div class="cu-grid">`;
+  panels.forEach(p=>{
+    h+=`<div class="cu-card"><div class="cu-card-hdr"><span class="cu-card-ic">${p.icon}</span>${esc(p.label)}<span class="cu-card-cnt">${p.items.length}</span></div><div class="cu-card-body">`;
+    p.items.slice(0,6).forEach(ev=>{
+      const dt=new Date(ev.date+'T12:00:00');
+      const dayLbl=ev.date===todayDs?'Today':dt.toLocaleDateString('en-ZA',{day:'numeric',month:'short'});
+      const payload=encodeURIComponent(JSON.stringify({type:ev.type||'gc',data:ev.data||ev,ds:ev.date}));
+      h+=`<div class="cu-item" onclick="openEventEdit('${payload}')"><span class="cu-item-date">${esc(dayLbl)}</span><span class="cu-item-title">${esc(ev.title)}</span></div>`;
+    });
+    if(p.items.length>6)h+=`<div class="cu-item-more">+${p.items.length-6} more</div>`;
+    h+=`</div></div>`;
+  });
+  h+=`</div></div>`;
+  el.innerHTML=h;
+}
+
 function handleCellClick(e,cell){
   if(e.target.closest('.ts-ev'))return;
   const ds=cell.dataset.newDs;const time=cell.dataset.newTime;const endTime=cell.dataset.newEnd;
