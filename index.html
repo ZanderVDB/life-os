@@ -370,10 +370,18 @@ svg{flex-shrink:0}
   .wl-ev-t{font-size:13px;white-space:normal;word-break:break-word}
   .wl-empty{text-align:left;font-size:12px}
 }
-/* TODAY – WEEK SUMMARY on mobile also scrolls */
-@media(max-width:900px){
-  .week-sum{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:8px;padding-bottom:6px}
-  .week-sum .day-card{flex:0 0 120px;min-width:120px;scroll-snap-align:start}
+/* TODAY – WEEK SUMMARY on mobile: vertical stack, horizontal cards */
+@media(max-width:700px){
+  .week-sum{display:flex;flex-direction:column;gap:8px;overflow:visible}
+  .week-sum .day-card{flex:0 0 auto;width:100%;min-width:0;min-height:0;flex-direction:row;align-items:center;gap:14px;padding:12px 14px;scroll-snap-align:none}
+  .week-sum .day-card-hdr{text-align:left;padding:0;border:none;margin:0;display:flex;align-items:baseline;gap:8px;flex:0 0 72px}
+  .week-sum .dc-day{font-size:10px}
+  .week-sum .dc-num{display:inline;font-size:18px;margin-top:0;background:transparent !important;width:auto;height:auto;border-radius:0;color:var(--text) !important}
+  .week-sum .day-card.today .dc-num{color:var(--peach) !important}
+  .week-sum .dc-events{flex:1;flex-direction:row;flex-wrap:wrap;gap:4px}
+  .week-sum .dc-ev{font-size:10px;padding:2px 7px;border-radius:10px}
+  .week-sum .dc-empty{font-size:11px}
+  .week-sum .dc-more{padding:2px 6px;font-size:9px}
 }
 .wl-day:last-child{border-right:none}
 .wl-day.today{background:var(--bg-2)}
@@ -1218,6 +1226,7 @@ svg{flex-shrink:0}
         <div class="page-hdr">
           <div class="page-title">Calendar</div>
           <div class="page-actions">
+            <button class="btn btn-sm" onclick="openPlanMyDay()" title="Let Claude build today's schedule from your events, tasks, and life rhythm">✨ Plan my day</button>
             <button class="btn btn-primary btn-sm" onclick="openNewEvent()">+ New event</button>
           </div>
         </div>
@@ -1407,6 +1416,17 @@ svg{flex-shrink:0}
               <span class="key-mask" id="gcal-status">—</span>
               <button class="btn btn-sm" id="gcal-connect-btn" onclick="reconnectGCalAndRefresh()">Connect</button>
             </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-hdr"><h2>Life rhythm & commitments</h2></div>
+          <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:10px">
+            <div style="width:100%">
+              <div class="setting-label">What's a normal week look like for you?</div>
+              <div class="setting-desc">The AI reads this when it plans your day or writes the morning read. List your regular commitments — e.g. "Bible studies Mon 7-9pm, Community Tue/Wed 7-9pm, Young Adults Thu 6-9pm, Youth Fri 7-9pm, Church Sun 9-11am. Gym Mon-Fri 1hr. Fast 12-6pm daily." It's not a rigid calendar — just context so the AI knows your rhythms.</div>
+            </div>
+            <textarea id="life-rhythm-ta" class="exp-ta xl" style="width:100%;min-height:120px" placeholder="Describe your typical week, routines, fasting windows, non-negotiables…" onblur="saveLifeRhythm()"></textarea>
           </div>
         </div>
 
@@ -1901,9 +1921,57 @@ async function deleteGCEvent(id,calId){
 function p2hhmm(s){const m=(s||'').match(/(\d+)(?::(\d+))?\s*(am|pm)/i);if(!m){const m2=(s||'').match(/^(\d{1,2}):(\d{2})$/);if(m2)return`${m2[1].padStart(2,'0')}:${m2[2]}`;return'10:00';}let h=parseInt(m[1]),min=parseInt(m[2]||'0');if(m[3].toLowerCase()==='pm'&&h!==12)h+=12;if(m[3].toLowerCase()==='am'&&h===12)h=0;return`${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`;}
 function endHH(hh){const[h,m]=hh.split(':').map(Number);const eh=(h+1)%24;return`${String(eh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;}
 
-function stopSync(){if(_unsubscribeDoc){try{_unsubscribeDoc();}catch(e){}_unsubscribeDoc=null;}_initialSyncDone=false;}
+function stopSync(){if(_unsubscribeDoc){try{_unsubscribeDoc();}catch(e){}_unsubscribeDoc=null;}_initialSyncDone=false;stopPresence();}
+// ─────── CROSS-DEVICE PRESENCE ───────
+const DEVICE_ID=(()=>{try{let id=localStorage.getItem('los_device_id');if(!id){id=Math.random().toString(36).slice(2,10);localStorage.setItem('los_device_id',id);}return id;}catch(e){return 'anon-'+Math.random().toString(36).slice(2,8);}})();
+const DEVICE_LABEL=(()=>{const ua=navigator.userAgent;if(/iPhone/i.test(ua))return 'iPhone';if(/iPad/i.test(ua))return 'iPad';if(/Android/i.test(ua))return /Mobile/i.test(ua)?'Android phone':'Android tablet';if(/Mac/i.test(ua))return 'Mac';if(/Windows/i.test(ua))return 'Windows PC';if(/Linux/i.test(ua))return 'Linux';return 'Web';})();
+let _presenceUnsub=null;let _presenceHeart=null;let _presenceMe=true;
+function presenceRef(){return db.collection('users').doc(CU.uid).collection('data').doc('presence');}
+function claimPresence(){
+  if(!CU)return;
+  presenceRef().set({deviceId:DEVICE_ID,deviceLabel:DEVICE_LABEL,lastActive:firebase.firestore.FieldValue.serverTimestamp()}).catch(e=>console.warn('[presence] claim:',e.message));
+  _presenceMe=true;
+}
+function startPresence(){
+  if(!CU)return;
+  stopPresence();
+  _presenceUnsub=presenceRef().onSnapshot(snap=>{
+    if(!snap.exists){claimPresence();return;}
+    const d=snap.data();const ts=d.lastActive?.toMillis?.()||0;const age=Date.now()-ts;
+    if(d.deviceId!==DEVICE_ID&&age<45000){
+      // Another device is currently active
+      _presenceMe=false;
+      showOtherDeviceOverlay(d.deviceLabel||'another device');
+    } else {
+      hideOtherDeviceOverlay();
+      if(!_presenceMe){_presenceMe=true;}
+      if(document.visibilityState!=='hidden')claimPresence();
+    }
+  },err=>console.warn('[presence] listen:',err.message));
+  _presenceHeart=setInterval(()=>{if(_presenceMe&&document.visibilityState!=='hidden')claimPresence();},15000);
+}
+function stopPresence(){
+  if(_presenceUnsub){try{_presenceUnsub();}catch(e){}_presenceUnsub=null;}
+  if(_presenceHeart){clearInterval(_presenceHeart);_presenceHeart=null;}
+  hideOtherDeviceOverlay();
+}
+function showOtherDeviceOverlay(label){
+  if(document.getElementById('other-dev-overlay'))return;
+  const d=document.createElement('div');
+  d.id='other-dev-overlay';
+  d.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:1rem';
+  d.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:26px 28px;max-width:380px;text-align:center;box-shadow:var(--shadow-lift)">
+    <h3 style="font-family:'Playfair Display',serif;font-size:22px;font-weight:500;margin-bottom:10px;color:var(--text)">Active on another device</h3>
+    <p style="font-size:13.5px;color:var(--text-2);line-height:1.6;margin-bottom:20px">Life OS is currently open on <strong>${esc(label)}</strong>. To avoid sync conflicts, only one device should be active at a time. Take over here to use this one.</p>
+    <button class="btn btn-primary btn-sm" onclick="takeOverDevice()">Use this device</button>
+  </div>`;
+  document.body.appendChild(d);
+}
+function hideOtherDeviceOverlay(){const d=document.getElementById('other-dev-overlay');if(d)d.remove();}
+function takeOverDevice(){claimPresence();hideOtherDeviceOverlay();}
 function loadData(){
   stopSync();
+  startPresence();
   const docRef=db.collection('users').doc(CU.uid).collection('data').doc('main');
   _unsubscribeDoc=docRef.onSnapshot(snap=>{
     // Ignore snapshots generated by our own uncommitted writes — we already
@@ -1927,6 +1995,7 @@ function loadData(){
     S.dayNotes=d.dayNotes||{};
     S.todaysTip=d.todaysTip||null;
     S.growthFocus=d.growthFocus||null;
+    S.lifeRhythm=d.lifeRhythm||'';
     if(!getKey()&&d.ak)localStorage.setItem(AK,d.ak);
     migrateHabits();
     migrateProjects();
@@ -1955,11 +2024,13 @@ function svAll(){
       const payload={tasks:S.tasks,builds:S.builds,learning:S.learning,ideas:S.ideas,notes:S.notes,customEvents:S.customEvents||[],habits:S.habits||[],resources:S.resources||[],people:S.people||[],dayNotes:S.dayNotes||{},updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
       if(S.todaysTip!==undefined)payload.todaysTip=S.todaysTip||null;
       if(S.growthFocus!==undefined)payload.growthFocus=S.growthFocus||null;
+      if(S.lifeRhythm!==undefined)payload.lifeRhythm=S.lifeRhythm||'';
       await db.collection('users').doc(CU.uid).collection('data').doc('main').set(payload,{merge:true});
       if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}
     }catch(e){console.error(e);}
   },300);
 }
+function saveLifeRhythm(){const ta=document.getElementById('life-rhythm-ta');if(!ta)return;const v=ta.value;if(v===S.lifeRhythm)return;S.lifeRhythm=v;svAll();}
 function promptKey(){
   const existing=getKey();
   const k=prompt('Enter your Anthropic API key (starts with sk-ant-...)\nGet one at console.anthropic.com → API Keys',existing||'');
@@ -2280,7 +2351,7 @@ async function loadTip(force){
     const h=new Date().getHours();const day=new Date().toLocaleDateString('en-ZA',{weekday:'long'});
     const openTasks=S.tasks.filter(x=>!x.done);
     const gc=await fetchGCal(new Date(new Date().setHours(0,0,0,0)).toISOString(),new Date(new Date().setHours(23,59,59,999)).toISOString()).catch(()=>[]);
-    const ctx={hour:h,day,eventsToday:gc.length,nextEvents:gc.slice(0,3).map(e=>({t:e.title,time:e.time||'all-day'})),urgentTasks:openTasks.filter(t=>t.priority==='urgent').map(t=>t.text).slice(0,3),totalOpen:openTasks.length,activeBuild:S.builds.find(b=>b.status==='active')?.title||null,futureBuilds:S.builds.filter(b=>b.status==='future').map(b=>b.title).slice(0,3),habitsDone:S.habits.filter(x=>x.doneToday).length,habitsTotal:S.habits.length,habitsMissed:S.habits.filter(x=>!x.doneToday).map(h=>h.name).slice(0,3)};
+    const ctx={hour:h,day,eventsToday:gc.length,nextEvents:gc.slice(0,3).map(e=>({t:e.title,time:e.time||'all-day'})),urgentTasks:openTasks.filter(t=>t.priority==='urgent').map(t=>t.text).slice(0,3),totalOpen:openTasks.length,activeBuild:S.builds.find(b=>b.status==='active')?.title||null,futureBuilds:S.builds.filter(b=>b.status==='future').map(b=>b.title).slice(0,3),habitsDone:S.habits.filter(x=>x.doneToday).length,habitsTotal:S.habits.length,habitsMissed:S.habits.filter(x=>!x.doneToday).map(h=>h.name).slice(0,3),weeklyRhythm:S.lifeRhythm||null};
     const p=`You are Zander's Life OS coach. He is a Cape Town entrepreneur (WebAnchor, TriFusion, Zomarka). Write ONE short, specific, warm daily read based on his state. Tone: direct, no fluff, grounded. 1–2 sentences, ideally under 35 words.
 
 Rules:
@@ -2893,6 +2964,94 @@ function openDayModal(cy,cm,cd,allGc){
 }
 function closeDayModal(){const m=document.getElementById('day-modal');if(m)m.remove();_syncBodyLock();}
 
+// ─────── PLAN MY DAY (AI) ───────
+async function openPlanMyDay(){
+  const key=getKey();if(!key){promptKey();return;}
+  closePlanModal();
+  const modal=document.createElement('div');
+  modal.className='modal';modal.id='plan-modal';
+  modal.innerHTML=`<div class="modal-bd" onclick="closePlanModal()"></div>
+    <div class="modal-body" style="max-width:560px">
+      <h3>✨ Plan my day</h3>
+      <div id="plan-body" style="font-size:14px;line-height:1.7;color:var(--text-2);min-height:120px;padding:6px 0">
+        <div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px"><svg width="18" height="18" style="animation:spinLogo 1.4s linear infinite"><use href="#logo"/></svg>Gathering your state and calling Claude…</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-sm" id="plan-refresh-btn" onclick="runPlanMyDay()" style="display:none">↻ Regenerate</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary btn-sm" onclick="closePlanModal()">Close</button>
+      </div>
+    </div>`;
+  modal.style.display='flex';document.body.appendChild(modal);_syncBodyLock();
+  runPlanMyDay();
+}
+function closePlanModal(){const m=document.getElementById('plan-modal');if(m)m.remove();_syncBodyLock();}
+async function runPlanMyDay(){
+  const body=document.getElementById('plan-body');if(!body)return;
+  body.innerHTML=`<div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px"><svg width="18" height="18" style="animation:spinLogo 1.4s linear infinite"><use href="#logo"/></svg>Thinking through your day…</div>`;
+  const refBtn=document.getElementById('plan-refresh-btn');if(refBtn)refBtn.style.display='none';
+  const key=getKey();if(!key){body.innerHTML='<div class="cv-empty">API key required. Add it in Settings.</div>';return;}
+  try{
+    // Today's events
+    const now=new Date();const startIso=new Date(now.getFullYear(),now.getMonth(),now.getDate(),0,0,0).toISOString();const endIso=new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59).toISOString();
+    const gc=await fetchGCal(startIso,endIso).catch(()=>[]);
+    const todayDs=tod();
+    const todayEvs=gc.filter(e=>evCoversDay(e,todayDs)).map(e=>({title:e.title,time:e.time||null,endTime:e.endTime||null,allDay:e.allDay}));
+    const openTasks=S.tasks.filter(t=>!t.done).sort((a,b)=>(PO[a.priority||'lo']||3)-(PO[b.priority||'lo']||3)).slice(0,30).map(t=>({text:t.text,area:t.area,project:t.project,priority:t.priority,scheduledTime:t.scheduledTime}));
+    const activeBuilds=S.builds.filter(b=>b.status==='active').slice(0,5).map(b=>({title:b.title,desc:(b.desc||'').slice(0,160)}));
+    const habits=S.habits.map(h=>({name:h.name,description:h.description||'',doneToday:(h.checkedDates||[]).includes(todayDs)}));
+    const hr=new Date().getHours();
+    const rhythm=S.lifeRhythm||'(none provided)';
+    const ctx={now:new Date().toLocaleString('en-ZA',{weekday:'long',day:'numeric',month:'long',hour:'numeric',minute:'2-digit',hour12:true}),hour:hr,todayEvents:todayEvs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
+    const prompt=`You are Zander's Life OS coach. He's a Cape Town-based entrepreneur running WebAnchor / TriFusion / Zomarka. Build him a realistic, focused plan for the REMAINDER of today.
+
+Rules:
+- Respect fixed events (meetings, all-day items) — schedule around them, don't move them.
+- Respect his weekly rhythm (regular commitments, fasting window, gym time). If today is one of those days, bake it in.
+- Prioritise urgent tasks first, then high, then work-related. One or two personal items are fine.
+- Be realistic about time: estimate durations, leave small buffers. Don't pack every minute.
+- Give actual clock times (e.g. "2:00–3:00 pm"). Use Cape Town local time.
+- Keep the schedule concise: 5–10 time blocks max. Skip padding like "wake up" / "brush teeth".
+- End with a 1-line "north star" for the day — the single outcome that would make today count.
+
+Format the response as MARKDOWN with:
+## Plan
+- HH:MM–HH:MM · Block name · (why / context in parens)
+- …
+## North star
+One sentence.
+
+STATE:
+${JSON.stringify(ctx,null,2)}`;
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1200,messages:[{role:'user',content:prompt}]})});
+    if(!r.ok){let m='HTTP '+r.status;try{const j=await r.json();if(j.error?.message)m=j.error.message;}catch(_){}throw new Error(m);}
+    const d=await r.json();
+    const text=(d.content?.[0]?.text||'').trim();
+    body.innerHTML=renderMarkdownMini(text);
+    if(refBtn)refBtn.style.display='inline-flex';
+  }catch(e){
+    const isAuth=/401|invalid.*api.{0,3}key|unauthorized/i.test(e.message);
+    if(isAuth)body.innerHTML=`<div class="cv-empty">API key invalid. <button class="btn btn-sm" onclick="promptKey()">Update key</button></div>`;
+    else body.innerHTML=`<div class="cv-empty">Couldn't reach Claude: ${esc(e.message)}. <button class="btn btn-sm" onclick="runPlanMyDay()">Retry</button></div>`;
+  }
+}
+// Minimal markdown renderer for the plan: headings + bullets + bold
+function renderMarkdownMini(src){
+  const lines=(src||'').split('\n');
+  let h='';let inList=false;
+  for(const ln of lines){
+    if(/^## /.test(ln)){if(inList){h+='</ul>';inList=false;}h+=`<h4 style="font-family:'Playfair Display',serif;font-size:16px;margin:14px 0 6px;font-weight:500;color:var(--text)">${esc(ln.replace(/^## /,''))}</h4>`;continue;}
+    if(/^# /.test(ln)){if(inList){h+='</ul>';inList=false;}h+=`<h3 style="font-family:'Playfair Display',serif;font-size:18px;margin:10px 0 8px;color:var(--text)">${esc(ln.replace(/^# /,''))}</h3>`;continue;}
+    if(/^[-*] /.test(ln)){if(!inList){h+='<ul style="padding-left:20px;margin:4px 0;display:flex;flex-direction:column;gap:6px">';inList=true;}h+=`<li style="line-height:1.55">${renderInline(ln.replace(/^[-*] /,''))}</li>`;continue;}
+    if(ln.trim()===''){if(inList){h+='</ul>';inList=false;}continue;}
+    if(inList){h+='</ul>';inList=false;}
+    h+=`<p style="margin:6px 0;line-height:1.6">${renderInline(ln)}</p>`;
+  }
+  if(inList)h+='</ul>';
+  return h;
+}
+function renderInline(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/`(.+?)`/g,'<code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:.9em">$1</code>');}
+
 // ─────── COMING UP (categorized panels below calendar) ───────
 function renderComingUp(gcEvs){
   const el=document.getElementById('cal-coming-up');if(!el)return;
@@ -3471,6 +3630,7 @@ function rSettings(){
   let tok=null;try{tok=localStorage.getItem('los_gat');}catch(e){}
   if(gs)gs.textContent=tok?'Connected':'Not connected';
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
+  const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   updateInstallUI();
 }
 
@@ -3489,7 +3649,8 @@ async function doUpdate(){
     resources:S.resources.map(r=>({id:r.id,title:r.title})),
     notes:S.notes.map(n=>({id:n.id,title:n.title}))
   };
-  const prompt=`You manage Zander's Life OS. Entrepreneur, Cape Town SA. Work > personal. Today: ${tod()}.
+  const rhythm=S.lifeRhythm?`\nZander's weekly rhythm / regular commitments (use as soft context, don't duplicate as tasks):\n${S.lifeRhythm}\n`:'';
+  const prompt=`You manage Zander's Life OS. Entrepreneur, Cape Town SA. Work > personal. Today: ${tod()}.${rhythm}
 Respond ONLY raw JSON:
 {"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|zm|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":30,"title":"..."}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
