@@ -1475,7 +1475,7 @@ svg{flex-shrink:0}
           <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:10px">
             <div style="width:100%">
               <div class="setting-label">What's a normal week look like for you?</div>
-              <div class="setting-desc">The AI reads this when it plans your day or writes the morning read. List your regular commitments — e.g. "Team standup Mon/Wed/Fri 9am. Piano lesson Tue 4pm. Run 3x/week before work. Shabbat dinner Fri sunset. No meetings on Thursdays." It's not a rigid calendar — just context so the AI knows your rhythms.</div>
+              <div class="setting-desc">The AI reads this when it plans your day. Include regular commitments, wake/sleep boundaries, work-start time, and any windows (gym, fasting, etc). Be explicit about what windows MEAN — e.g. "Eating window 12–6pm (normal work continues)" reads better than "Fasting 12–6pm". Example: "Wake 6am weekdays / 7am weekends. Start work 9am. Gym Mon–Fri ~1hr. Bible study Mon 7–9pm. Off all screens by 10pm."</div>
             </div>
             <textarea id="life-rhythm-ta" class="exp-ta xl" style="width:100%;min-height:120px" placeholder="Describe your typical week, routines, fasting windows, non-negotiables…" onblur="saveLifeRhythm()"></textarea>
           </div>
@@ -2469,7 +2469,11 @@ async function generatePlan(mode){
 
 Rules:
 - Respect fixed events (meetings, all-day items) — schedule around them, never suggest moving them.
-- Respect his weekly rhythm (regular commitments, fasting window, gym time). If the day falls on one of those days, bake it in.
+- Treat the weekly rhythm carefully:
+  · Wake / screens-off times are BOUNDARIES — don't schedule blocks outside them.
+  · "Start work by Xam" means deep work begins then — before that is personal/routine, not dead time.
+  · Intermittent fasting windows describe WHEN eating is allowed — they are NOT a dedicated "eating block." Schedule normal work/tasks during that window; do not leave it empty or label it as "eating."
+  · Gym slots, Bible studies, meetings etc. are real commitments — bake them in on the right day.
 - Prioritise urgent tasks first, then high. One or two personal items are fine.
 - Realistic durations with small buffers — don't pack every minute.
 - Use Cape Town local clock times (e.g. "2:00–3:00 pm"). Keep to 5–8 time blocks max.
@@ -3222,7 +3226,11 @@ async function runPlanMyDay(){
 
 Rules:
 - Respect fixed events (meetings, all-day items) — schedule around them, don't move them.
-- Respect his weekly rhythm (regular commitments, fasting window, gym time). If today is one of those days, bake it in.
+- Treat the weekly rhythm carefully:
+  · Wake / screens-off times are BOUNDARIES — don't schedule blocks outside them.
+  · "Start work by Xam" means deep work begins then — before that is personal/routine, not dead time.
+  · Intermittent fasting windows describe WHEN eating is allowed — they are NOT a dedicated "eating block." Schedule normal work/tasks during that window; do not leave it empty or label it as "eating."
+  · Gym slots, Bible studies, meetings etc. are real commitments — bake them in on the right day.
 - Prioritise urgent tasks first, then high, then work-related. One or two personal items are fine.
 - Be realistic about time: estimate durations, leave small buffers. Don't pack every minute.
 - Give actual clock times (e.g. "2:00–3:00 pm"). Use Cape Town local time.
