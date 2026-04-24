@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
 <title>Life OS</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600&family=Kalam:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 /* ━━━ THEMES ━━━ */
 :root,[data-theme="soft"]{
@@ -1186,6 +1186,171 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .update-toast{top:auto;bottom:calc(100px + env(safe-area-inset-bottom,0));font-size:11.5px}
 }
 
+/* ━━━ NOTEBOOK ━━━ */
+/* A4-proportioned sheet in the centre of the route. Horizontal paging —
+   scrolling *through* the book, not down. Each page holds 1, 2, or 4
+   cells depending on layout. */
+.nb-search-wrap{position:relative;display:flex;align-items:center;gap:4px}
+.nb-search-input{width:220px;padding:7px 11px;font-size:12.5px}
+.nb-search-count{font-size:11px;color:var(--muted);min-width:54px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.nb-search-nav{padding:4px 8px;font-size:13px;line-height:1;width:28px;height:28px;min-width:28px}
+.nb-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:4px 2px 14px;border-bottom:1px dashed var(--border);margin-bottom:22px;overflow-x:auto;scrollbar-width:thin}
+.nb-tabs::-webkit-scrollbar{height:4px}
+.nb-tabs::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+.nb-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--border);border-radius:20px 20px 4px 4px;background:var(--surface);font-size:12px;font-weight:600;color:var(--text-2);cursor:pointer;white-space:nowrap;position:relative;transition:background .12s,color .12s,border-color .12s;font-family:'Playfair Display','Georgia',serif}
+.nb-tab:hover{background:var(--surface-hover);color:var(--text)}
+.nb-tab.on{color:var(--text);border-bottom-color:transparent;padding-bottom:9px;margin-bottom:-1px}
+.nb-tab .nb-tab-count{font-size:9.5px;font-weight:700;opacity:.6;letter-spacing:.03em;font-family:inherit}
+.nb-tab-empty{padding:7px 14px;font-size:12px;color:var(--muted);font-style:italic}
+/* Section colour accents — soft washes, high-contrast ink. Matches the
+   category tag palette used elsewhere (peach/sage/lavender/gold/blue/rose). */
+.nb-tab[data-col="peach"]{background:var(--peach-bg);border-color:var(--peach-bg)}
+.nb-tab[data-col="peach"].on{background:var(--peach-bg);color:var(--peach);border-color:var(--peach-bg)}
+.nb-tab[data-col="sage"]{background:var(--sage-bg);border-color:var(--sage-bg)}
+.nb-tab[data-col="sage"].on{background:var(--sage-bg);color:var(--sage);border-color:var(--sage-bg)}
+.nb-tab[data-col="lavender"]{background:var(--lavender-bg);border-color:var(--lavender-bg)}
+.nb-tab[data-col="lavender"].on{background:var(--lavender-bg);color:var(--lavender);border-color:var(--lavender-bg)}
+.nb-tab[data-col="gold"]{background:var(--gold-bg);border-color:var(--gold-bg)}
+.nb-tab[data-col="gold"].on{background:var(--gold-bg);color:var(--gold);border-color:var(--gold-bg)}
+.nb-tab[data-col="blue"]{background:var(--blue-bg);border-color:var(--blue-bg)}
+.nb-tab[data-col="blue"].on{background:var(--blue-bg);color:var(--blue);border-color:var(--blue-bg)}
+.nb-tab[data-col="rose"]{background:var(--red-bg,var(--peach-bg));border-color:var(--red-bg,var(--peach-bg))}
+.nb-tab[data-col="rose"].on{background:var(--red-bg,var(--peach-bg));color:var(--red);border-color:var(--red-bg,var(--peach-bg))}
+
+.nb-book-wrap{display:flex;align-items:center;justify-content:center;gap:14px;padding:4px 0 40px;position:relative}
+.nb-arrow{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:28px;line-height:1;font-family:'Playfair Display',serif;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;padding-bottom:4px;transition:background .12s,color .12s,border-color .12s;box-shadow:var(--shadow)}
+.nb-arrow:hover:not(:disabled){background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
+.nb-arrow:disabled{opacity:.3;cursor:not-allowed}
+.nb-book{
+  flex:1;max-width:780px;aspect-ratio:210/297;
+  position:relative;perspective:1600px;min-width:0;
+}
+.nb-page{
+  position:absolute;inset:0;
+  background:var(--paper);
+  border:1px solid var(--border);
+  border-radius:3px 10px 10px 3px;
+  box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--paper-margin);
+  padding:34px 32px 20px 58px;
+  display:flex;flex-direction:column;gap:16px;
+  overflow:hidden;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 29px,
+      var(--paper-line) 29px,
+      var(--paper-line) 30px
+    );
+  background-position:0 56px;
+}
+/* The thin vertical margin stripe like a real exercise book */
+.nb-page::before{content:'';position:absolute;left:46px;top:0;bottom:0;width:1px;background:var(--paper-margin);opacity:.55;pointer-events:none}
+.nb-page.flipping-left{animation:nbFlipLeft .28s cubic-bezier(.4,0,.2,1) forwards}
+.nb-page.flipping-right{animation:nbFlipRight .28s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes nbFlipLeft{from{transform:translateX(0);opacity:1}to{transform:translateX(-12%);opacity:0}}
+@keyframes nbFlipRight{from{transform:translateX(0);opacity:1}to{transform:translateX(12%);opacity:0}}
+.nb-page.entering-left{animation:nbEnterLeft .28s cubic-bezier(.4,0,.2,1) backwards}
+.nb-page.entering-right{animation:nbEnterRight .28s cubic-bezier(.4,0,.2,1) backwards}
+@keyframes nbEnterLeft{from{transform:translateX(12%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes nbEnterRight{from{transform:translateX(-12%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+.nb-page-hdr{display:flex;align-items:baseline;gap:10px;margin-left:-8px;flex-shrink:0;position:relative;z-index:1}
+.nb-page-sec{font-family:'Playfair Display',serif;font-size:18px;color:var(--text);font-weight:500;letter-spacing:-.3px}
+.nb-page-meta{font-family:'Playfair Display',serif;font-size:13px;color:var(--muted);font-style:italic}
+.nb-page-hdr-right{margin-left:auto;display:flex;gap:4px}
+.nb-page-hdr .iconbtn{width:28px;height:28px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);font-size:13px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:all .12s}
+.nb-page-hdr .iconbtn:hover{background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
+.nb-page-hdr .iconbtn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+.nb-cells{flex:1;display:grid;gap:12px;min-height:0;position:relative;z-index:1}
+.nb-cells[data-layout="single"]{grid-template-columns:1fr;grid-template-rows:1fr}
+.nb-cells[data-layout="half"]{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+.nb-cells[data-layout="quad"]{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+.nb-cell{
+  background:transparent;border:1px dashed transparent;border-radius:6px;
+  padding:4px 6px;min-height:0;display:flex;flex-direction:column;
+  transition:border-color .12s;position:relative;
+}
+.nb-cell:focus-within{border-color:var(--border-strong)}
+.nb-cell-ta{
+  flex:1;border:none;background:transparent;outline:none;resize:none;
+  font-family:'Kalam','Playfair Display',serif;font-size:15px;line-height:30px;
+  color:var(--text);width:100%;min-height:0;
+  padding:0;
+}
+.nb-cell-ta::placeholder{color:var(--muted-2);font-style:italic}
+.nb-cell-ta.hl{background:linear-gradient(transparent 60%,var(--gold-bg) 60%)}
+/* Subtle corner marker so users know each cell is a distinct writing space */
+.nb-cell[data-hint="true"]::after{content:attr(data-hint-label);position:absolute;top:4px;right:8px;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);pointer-events:none;font-family:'Inter',system-ui,sans-serif}
+
+.nb-page-foot{flex-shrink:0;display:flex;align-items:center;gap:8px;padding-top:10px;border-top:1px dashed var(--border);margin-left:-8px;position:relative;z-index:1;font-family:'Inter',system-ui,sans-serif;flex-wrap:wrap}
+.nb-layout-toggle{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:2px;gap:2px}
+.nb-layout-toggle button{padding:4px 9px;font-size:11px;font-weight:600;border:none;background:transparent;border-radius:6px;color:var(--muted);cursor:pointer;transition:all .12s;letter-spacing:.02em}
+.nb-layout-toggle button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.nb-page-foot-spacer{flex:1}
+.nb-mic-btn{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);font-size:13px;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;flex-shrink:0;transition:all .12s;font-family:inherit}
+.nb-mic-btn:hover{background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
+.nb-mic-btn.on{background:var(--red);color:#fff;border-color:var(--red);animation:pulse-mic .9s infinite}
+.nb-refine-btn{background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.nb-refine-btn:hover{opacity:.88}
+.nb-refine-btn:disabled{opacity:.5;cursor:wait}
+.nb-page-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-style:italic;font-size:13px;position:relative;z-index:1}
+
+/* Section edit popover (rename + colour + delete) */
+.nb-sec-pop{position:absolute;z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lift);padding:10px 12px;min-width:240px;display:flex;flex-direction:column;gap:8px;font-family:'Inter',system-ui,sans-serif}
+.nb-sec-pop input{width:100%;border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-size:12.5px;background:var(--bg);color:var(--text);outline:none}
+.nb-sec-pop input:focus{border-color:var(--border-strong);background:var(--surface)}
+.nb-sec-pop .row{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.nb-sec-pop .row label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);min-width:48px}
+.nb-col-swatch{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);cursor:pointer;transition:transform .1s}
+.nb-col-swatch.on{border-color:var(--text);transform:scale(1.12)}
+.nb-col-swatch[data-col="peach"]{background:var(--peach-bg)}
+.nb-col-swatch[data-col="sage"]{background:var(--sage-bg)}
+.nb-col-swatch[data-col="lavender"]{background:var(--lavender-bg)}
+.nb-col-swatch[data-col="gold"]{background:var(--gold-bg)}
+.nb-col-swatch[data-col="blue"]{background:var(--blue-bg)}
+.nb-col-swatch[data-col="rose"]{background:var(--red-bg,var(--peach-bg))}
+
+/* Refine preview modal body — a faded side-by-side look */
+.nb-refine-preview{font-family:'Kalam','Playfair Display',serif;font-size:14px;line-height:1.7;color:var(--text);white-space:pre-wrap;background:var(--paper);padding:16px 18px;border:1px solid var(--border);border-radius:8px;max-height:44vh;overflow-y:auto}
+.nb-refine-note{font-size:11.5px;color:var(--muted);margin-bottom:10px}
+
+/* Kalam: a friendly handwriting-y font, used for notebook writing only.
+   Fallback to Playfair if not available. Loaded via Google Fonts link above. */
+
+/* Desktop: bigger arrow buttons sitting outside the page */
+@media(min-width:900px){
+  .nb-arrow{width:48px;height:48px;font-size:30px}
+  .nb-book{max-width:820px}
+}
+
+/* Tablet */
+@media(max-width:900px){
+  .nb-book{max-width:560px}
+  .nb-page{padding:26px 22px 16px 50px}
+  .nb-cell-ta{font-size:14px;line-height:28px}
+}
+
+/* Mobile — keep A4 ratio but let the page scale. Arrows shrink and sit on
+   the page edges. Search bar wraps to its own line. */
+@media(max-width:768px){
+  .nb-tabs{padding:2px 2px 10px;margin-bottom:14px;gap:4px}
+  .nb-tab{padding:6px 10px;font-size:11.5px}
+  .nb-book-wrap{gap:4px;padding:4px 0 30px}
+  .nb-arrow{width:34px;height:34px;font-size:22px;padding-bottom:2px;box-shadow:none}
+  .nb-page{padding:22px 18px 14px 38px;background-position:0 48px;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 25px,var(--paper-line) 25px,var(--paper-line) 26px)}
+  .nb-page::before{left:28px}
+  .nb-cell-ta{font-size:13.5px;line-height:26px}
+  .nb-page-hdr{margin-left:-4px;flex-wrap:wrap;gap:6px}
+  .nb-page-sec{font-size:16px}
+  .nb-page-meta{font-size:11.5px}
+  .nb-page-foot{margin-left:-4px;gap:6px;padding-top:8px;font-size:11px}
+  .nb-refine-btn{padding:4px 9px;font-size:11.5px}
+  .nb-search-wrap{flex:1 1 100%;order:20}
+  .nb-search-input{width:100%;flex:1}
+}
+
 /* ━━━ MOBILE ━━━ */
 .mobile-top{display:none;align-items:center;justify-content:space-between;padding:0 16px;height:54px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:9;gap:12px}
 .mt-logo{display:flex;align-items:center;gap:8px;font-family:'Playfair Display',serif;font-size:18px;font-weight:500;color:var(--text)}
@@ -1311,6 +1476,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
     <symbol id="i-learn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2V5Z"/><path d="M4 18h16"/></symbol>
     <symbol id="i-ppl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15 20c0-2.2 1.3-4 4-4"/></symbol>
     <symbol id="i-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-2 0-3.5 1.5-3.5 3.5 0 .4-.3.8-.7.9A3 3 0 0 0 6 10c0 .6.2 1.2.6 1.6-.4.5-.6 1-.6 1.7a3 3 0 0 0 2.4 3c.2 1.6 1.5 2.7 3.1 2.7s2.9-1.1 3.1-2.7a3 3 0 0 0 2.4-3c0-.7-.2-1.2-.6-1.7.4-.4.6-1 .6-1.6a3 3 0 0 0-1.8-2.6c-.4-.1-.7-.5-.7-.9C15.5 4.5 14 3 12 3Z"/><path d="M12 3v16"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5v-17Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v5H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M8 7h8M8 11h6"/></symbol>
     <symbol id="i-set" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></symbol>
     <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
@@ -1370,6 +1536,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
         <a href="#people" data-route-link="people"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span class="label">People</span><span class="dot"></span></a>
         <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
+        <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
       </nav>
       <div class="s-sep"></div>
       <div class="s-foot">
@@ -1406,6 +1573,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
       <a href="#people" data-route-link="people" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span>People</span></a>
       <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
+      <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
       <div class="m-drawer-foot">
         <a href="#settings" data-route-link="settings" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
       </div>
@@ -1663,6 +1831,38 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             </div>
           </div>
           <div class="nl-grid" id="notes"></div>
+        </div>
+      </div>
+
+      <!-- NOTEBOOK -->
+      <!-- Chaos-space: user-defined sections with A4 pages that flip
+           horizontally. The main AI bar is explicitly walled off from this
+           route (see buildAIContext) — only the per-page ✨ Refine button
+           ever sends any of this content to Claude. -->
+      <div class="route" data-route="notebook">
+        <div class="page-hdr">
+          <div class="page-title">Notebook</div>
+          <div class="page-sub" id="nb-sub"></div>
+          <div class="page-actions">
+            <div class="nb-search-wrap">
+              <input type="search" id="nb-search" class="input nb-search-input" placeholder="Search notebook…" oninput="nbSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();nbFindNext(event.shiftKey?-1:1);}">
+              <span class="nb-search-count" id="nb-search-count"></span>
+              <button class="btn btn-ghost btn-sm nb-search-nav" onclick="nbFindNext(-1)" title="Previous match (Shift+Enter)" aria-label="Previous match">↑</button>
+              <button class="btn btn-ghost btn-sm nb-search-nav" onclick="nbFindNext(1)" title="Next match (Enter)" aria-label="Next match">↓</button>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="nbAddSection()">+ New section</button>
+          </div>
+        </div>
+        <!-- Section tabs: soft-coloured pills, click flips to section.
+             Active tab highlights based on the page you're currently on. -->
+        <div class="nb-tabs" id="nb-tabs"></div>
+        <!-- The book itself — a single A4-proportioned sheet, horizontally
+             paged. Content is rebuilt by renderNotebookPage() whenever the
+             user flips, adds, deletes or refines. -->
+        <div class="nb-book-wrap">
+          <button class="nb-arrow nb-prev" onclick="nbPrevPage()" aria-label="Previous page" title="Previous page (← arrow)">‹</button>
+          <div class="nb-book" id="nb-book"></div>
+          <button class="nb-arrow nb-next" onclick="nbNextPage()" aria-label="Next page" title="Next page (→ arrow)">›</button>
         </div>
       </div>
 
@@ -1967,7 +2167,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v89';
+const APP_VERSION='v90';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2024,8 +2224,8 @@ function setTheme(t){
 // one-third down the screen" symptom caused by browser auto-scroll to
 // elements whose id happened to match the route hash.
 try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}
-const ROUTES=['today','calendar','projects','habits','people','brain','settings'];
-const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',settings:'Settings'};
+const ROUTES=['today','calendar','projects','habits','people','brain','notebook','settings'];
+const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',notebook:'Notebook',settings:'Settings'};
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
@@ -2054,6 +2254,9 @@ function setRoute(r,skipHash){
   if(r!=='projects'&&UI.projectDetail){UI.projectDetail=null;const pd=document.getElementById('project-detail-view');if(pd)pd.style.display='none';const pl=document.getElementById('projects-list-view');if(pl)pl.style.display='block';}
   window.scrollTo({top:0,behavior:'instant'});
   if(r==='settings')rSettings();
+  // Stop any live notebook voice recording when navigating away
+  if(r!=='notebook'&&NB&&NB.voiceActive)nbStopVoice();
+  if(r==='notebook')rNotebook();
 }
 function initRouter(){
   document.querySelectorAll('[data-route-link]').forEach(a=>{
@@ -2529,6 +2732,7 @@ function resetStateForNewUser(){
     S.workProjects=[];
     S.todaysTip=null;S.growthFocus=null;S.lifeRhythm='';
     S.calendarDefaults={timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]};
+    S.notebook={sections:[]};
     // Wipe Google Calendar caches too — they were fetched with the previous
     // user's session and will be re-fetched for the new user on demand.
     try{gcCache={key:'',events:[]};}catch(e){}
@@ -2692,6 +2896,14 @@ function handleSnapshot(snap){
     S.disabledCalendars=Array.isArray(d.disabledCalendars)?d.disabledCalendars:[];
     S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
     S.workProjects=Array.isArray(d.workProjects)?d.workProjects:[];
+    // Notebook: free-form chaos space. Deliberately NOT included in the AI
+    // bot's context (see buildAIContext / doUpdate) — the only code path
+    // that sends notebook content to Claude is the per-page Refine button.
+    if(d.notebook&&typeof d.notebook==='object'&&Array.isArray(d.notebook.sections)){
+      S.notebook={sections:d.notebook.sections};
+    } else if(!S.notebook){
+      S.notebook={sections:[]};
+    }
     if(d.calendarDefaults&&typeof d.calendarDefaults==='object'){
       // Migrate legacy all-day reminder minutes to the current 5pm set.
       // Current scheme: 1 day before at 5pm, everything else at 9am. Maps
@@ -2744,6 +2956,7 @@ function _buildSavePayload(){
   if(S.aiConfirmMode!==undefined)payload.aiConfirmMode=S.aiConfirmMode;
   if(S.workProjects!==undefined)payload.workProjects=Array.isArray(S.workProjects)?S.workProjects:[];
   if(S.calendarDefaults!==undefined)payload.calendarDefaults=S.calendarDefaults;
+  if(S.notebook!==undefined)payload.notebook=S.notebook||{sections:[]};
   return payload;
 }
 function svAll(){
@@ -2793,7 +3006,7 @@ function rebuildPROJ(){
 }
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]}};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'off' (nothing needs OK), 'calendar' (default — only
 // calendar edits need OK), 'all' (every AI change needs OK).
@@ -5424,6 +5637,12 @@ async function doUpdate(){
       upcomingEvents=gc.filter(e=>{const k=e.recurringEventId||e.id;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,40).map(e=>({title:e.title,date:e.date,time:e.time||null,recurring:!!e.recurringEventId}));
     }
   }catch(_){}
+  // IMPORTANT: S.notebook is deliberately EXCLUDED from this context. The
+  // notebook route is user-declared chaos-space and the main AI bot must
+  // never read or write to it. The only code path that sends notebook
+  // content to Claude is the per-page Refine button (nbRefine), which
+  // scopes the payload to a single page and shows a preview modal before
+  // overwriting anything.
   const ctx={
     tasks:S.tasks.filter(t=>!t.done).map(t=>({id:t.id,text:t.text,area:t.area,project:t.project,priority:t.priority})),
     habits:S.habits.map(h=>{const s=computeHabitStats(h);return{id:h.id,name:h.name,streak:s.current,doneToday:(h.checkedDates||[]).includes(tod())};}),
@@ -6041,6 +6260,464 @@ async function confirmCalendarOps(ops,preConfirmed){
   return true;
 }
 
+// ━━━━━━━━━━ NOTEBOOK ━━━━━━━━━━
+// Chaos-space route: user creates sections (Finance / Poems / Work...),
+// each containing A4 pages with 1, 2, or 4 writing cells. Pages flip
+// horizontally like a real book. The main AI bar (doUpdate) is walled off
+// from this data — the ONLY code path that sends notebook content to
+// Claude is the per-page Refine button (nbRefine).
+const NB_COLORS=['peach','sage','lavender','gold','blue','rose'];
+const NB_LAYOUT_CELLS={single:1,half:2,quad:4};
+// In-memory navigation + search state. Not persisted — the sections/pages
+// themselves are. Lost on reload, which is fine (you always start at the
+// first page of the first section).
+const NB={sectionIdx:0,pageIdx:0,lastFocused:null,searchQuery:'',matches:[],matchIdx:-1,voiceActive:false,_voiceRec:null,_voiceTarget:null};
+function nbEnsureShape(){
+  if(!S.notebook||typeof S.notebook!=='object'||!Array.isArray(S.notebook.sections))S.notebook={sections:[]};
+  S.notebook.sections.forEach(sec=>{
+    if(!Array.isArray(sec.pages)||!sec.pages.length)sec.pages=[nbBlankPage()];
+    sec.pages.forEach(p=>{
+      if(!p.layout||!(p.layout in NB_LAYOUT_CELLS))p.layout='single';
+      const need=NB_LAYOUT_CELLS[p.layout];
+      if(!Array.isArray(p.cells))p.cells=[''];
+      while(p.cells.length<need)p.cells.push('');
+      if(p.cells.length>need)p.cells.length=need;
+    });
+  });
+}
+function nbBlankPage(){return {id:uid(),layout:'single',cells:[''],updatedAt:Date.now()};}
+function nbCurrentSection(){nbEnsureShape();return S.notebook.sections[NB.sectionIdx]||null;}
+function nbCurrentPage(){const s=nbCurrentSection();return s?s.pages[NB.pageIdx]:null;}
+function nbClampPosition(){
+  nbEnsureShape();
+  const secs=S.notebook.sections;
+  if(!secs.length){NB.sectionIdx=0;NB.pageIdx=0;return;}
+  if(NB.sectionIdx<0)NB.sectionIdx=0;
+  if(NB.sectionIdx>=secs.length)NB.sectionIdx=secs.length-1;
+  const pages=secs[NB.sectionIdx].pages;
+  if(NB.pageIdx<0)NB.pageIdx=0;
+  if(NB.pageIdx>=pages.length)NB.pageIdx=pages.length-1;
+}
+
+// Top-level render — called by setRoute when landing on notebook, and by
+// individual mutation helpers below.
+function rNotebook(){
+  nbEnsureShape();nbClampPosition();
+  renderNotebookTabs();
+  renderNotebookPage('none');
+  renderNotebookSub();
+}
+function renderNotebookSub(){
+  const sub=document.getElementById('nb-sub');if(!sub)return;
+  const secs=S.notebook.sections;
+  if(!secs.length){sub.textContent='';return;}
+  const sec=nbCurrentSection();const pages=sec?sec.pages.length:0;
+  sub.textContent=`${sec?.title||'—'} · Page ${NB.pageIdx+1} of ${pages}`;
+}
+function renderNotebookTabs(){
+  const el=document.getElementById('nb-tabs');if(!el)return;
+  const secs=S.notebook.sections;
+  if(!secs.length){el.innerHTML=`<span class="nb-tab-empty">No sections yet — create one on the right →</span>`;return;}
+  el.innerHTML=secs.map((s,i)=>`<button class="nb-tab${i===NB.sectionIdx?' on':''}" data-col="${esc(s.color||'peach')}" onclick="nbGoSection(${i})" ondblclick="nbOpenSectionPopover(${i},event)" oncontextmenu="event.preventDefault();nbOpenSectionPopover(${i},event)" title="${esc(s.title||'Untitled')} — double-click to rename / recolour / delete"><span>${esc(s.title||'Untitled')}</span><span class="nb-tab-count">${s.pages.length}</span></button>`).join('');
+}
+function renderNotebookPage(flipDir){
+  const book=document.getElementById('nb-book');if(!book)return;
+  const secs=S.notebook.sections;
+  if(!secs.length){
+    book.innerHTML=`<div class="nb-page"><div class="nb-page-empty">
+      Your notebook is empty.<br>
+      Tap <strong>+ New section</strong> in the top-right to create your first chapter — Finance, Poems, Random — whatever's on your mind.
+    </div></div>`;
+    return;
+  }
+  const sec=nbCurrentSection();const page=nbCurrentPage();
+  if(!sec||!page){book.innerHTML='';return;}
+  const cellCount=NB_LAYOUT_CELLS[page.layout]||1;
+  const layoutBtns=[['single','▭','One cell'],['half','▯▯','Split in half'],['quad','⊞','Four cells']]
+    .map(([k,lbl,ttl])=>`<button type="button" onclick="nbSetLayout('${k}')" class="${page.layout===k?'on':''}" title="${ttl}">${lbl}</button>`).join('');
+  const updatedLbl=page.updatedAt?new Date(page.updatedAt).toLocaleDateString('en-ZA',{day:'numeric',month:'short'}):'new';
+  const cells=Array.from({length:cellCount}).map((_,i)=>{
+    const val=page.cells[i]||'';
+    const hint=cellCount>1?` data-hint="true" data-hint-label="${['Top','Bottom','Top-L','Top-R','Bot-L','Bot-R'][cellCount===2?i:i+2]||''}"`:'';
+    return `<div class="nb-cell"${hint}><textarea class="nb-cell-ta" data-nb-cell="${i}" placeholder="${i===0?'Start writing…':'…'}" oninput="nbOnCellInput(${i},this)" onfocus="nbOnCellFocus(${i})">${esc(val)}</textarea></div>`;
+  }).join('');
+  const html=`<div class="nb-page">
+    <div class="nb-page-hdr">
+      <span class="nb-page-sec">${esc(sec.title||'Untitled')}</span>
+      <span class="nb-page-meta">· Page ${NB.pageIdx+1} of ${sec.pages.length} · ${esc(updatedLbl)}</span>
+      <div class="nb-page-hdr-right">
+        <button class="iconbtn" onclick="nbAddPage()" title="Add page after this one" aria-label="Add page">＋</button>
+        <button class="iconbtn" onclick="nbDeletePage()" title="Delete this page" aria-label="Delete page">🗑</button>
+      </div>
+    </div>
+    <div class="nb-cells" data-layout="${page.layout}">${cells}</div>
+    <div class="nb-page-foot">
+      <div class="nb-layout-toggle">${layoutBtns}</div>
+      <div class="nb-page-foot-spacer"></div>
+      <button class="nb-mic-btn${NB.voiceActive?' on':''}" onclick="nbToggleVoice()" title="Record into the focused cell" aria-label="Voice record into focused cell">🎙</button>
+      <button class="nb-refine-btn" onclick="nbRefine()" title="Use AI to restructure this page cleanly">✨ Refine</button>
+    </div>
+  </div>`;
+  // Apply flip-out then flip-in animation when navigating between pages so
+  // it feels like turning a physical page. 'none' skips animation for the
+  // initial render / edits that don't change the page number.
+  if(flipDir==='left'||flipDir==='right'){
+    const cur=book.querySelector('.nb-page');
+    if(cur){
+      cur.classList.add(flipDir==='left'?'flipping-left':'flipping-right');
+      setTimeout(()=>{
+        book.innerHTML=html;
+        const np=book.querySelector('.nb-page');
+        if(np)np.classList.add(flipDir==='left'?'entering-left':'entering-right');
+      },240);
+      return;
+    }
+  }
+  book.innerHTML=html;
+  // Restore focus to the previously-focused cell if we stayed on the same
+  // page (e.g. after a re-render from save / voice dictation).
+  if(NB.lastFocused&&NB.lastFocused.sectionIdx===NB.sectionIdx&&NB.lastFocused.pageIdx===NB.pageIdx){
+    const ta=book.querySelector(`[data-nb-cell="${NB.lastFocused.cellIdx}"]`);
+    if(ta){try{ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}catch(_){}}
+  }
+  // Re-apply search highlight if a query is active
+  if(NB.searchQuery)nbApplySearchHighlight();
+}
+// Section nav — click a tab, hop there with the appropriate flip direction.
+function nbGoSection(i){
+  if(i===NB.sectionIdx)return;
+  const dir=i>NB.sectionIdx?'left':'right';
+  NB.sectionIdx=i;NB.pageIdx=0;nbStopVoice();
+  renderNotebookTabs();renderNotebookPage(dir);renderNotebookSub();
+}
+// Continuous flow: past the last page of a section, roll into the first
+// page of the next. Past the first, back into the previous.
+function nbNextPage(){
+  const secs=S.notebook.sections;if(!secs.length)return;
+  const sec=nbCurrentSection();nbStopVoice();
+  if(NB.pageIdx<sec.pages.length-1){NB.pageIdx++;}
+  else if(NB.sectionIdx<secs.length-1){NB.sectionIdx++;NB.pageIdx=0;renderNotebookTabs();}
+  else return;
+  renderNotebookPage('left');renderNotebookSub();
+}
+function nbPrevPage(){
+  const secs=S.notebook.sections;if(!secs.length)return;
+  nbStopVoice();
+  if(NB.pageIdx>0){NB.pageIdx--;}
+  else if(NB.sectionIdx>0){NB.sectionIdx--;NB.pageIdx=S.notebook.sections[NB.sectionIdx].pages.length-1;renderNotebookTabs();}
+  else return;
+  renderNotebookPage('right');renderNotebookSub();
+}
+function nbAddSection(){
+  const name=prompt('Section title:','');if(!name||!name.trim())return;
+  nbEnsureShape();
+  const color=NB_COLORS[S.notebook.sections.length%NB_COLORS.length];
+  S.notebook.sections.push({id:uid(),title:name.trim(),color,pages:[nbBlankPage()]});
+  NB.sectionIdx=S.notebook.sections.length-1;NB.pageIdx=0;
+  svAll();rNotebook();
+}
+function nbOpenSectionPopover(i,ev){
+  if(ev){ev.preventDefault();ev.stopPropagation();}
+  document.querySelectorAll('.nb-sec-pop').forEach(x=>x.remove());
+  const sec=S.notebook.sections[i];if(!sec)return;
+  const pop=document.createElement('div');pop.className='nb-sec-pop';
+  pop.innerHTML=`
+    <input type="text" id="nb-sec-pop-title" value="${esc(sec.title||'')}" placeholder="Section title" spellcheck="false">
+    <div class="row"><label>Colour</label>${NB_COLORS.map(c=>`<span class="nb-col-swatch${sec.color===c?' on':''}" data-col="${c}" onclick="nbSetColor(${i},'${c}');this.parentElement.querySelectorAll('.nb-col-swatch').forEach(s=>s.classList.remove('on'));this.classList.add('on')"></span>`).join('')}</div>
+    <div class="row" style="justify-content:space-between;margin-top:4px">
+      <button class="btn btn-danger btn-sm" onclick="nbDeleteSection(${i});this.closest('.nb-sec-pop').remove()">Delete section</button>
+      <button class="btn btn-primary btn-sm" onclick="nbSaveSectionPopover(${i},this.closest('.nb-sec-pop'))">Save</button>
+    </div>`;
+  // Position near the tab that was clicked
+  const tab=document.querySelectorAll('.nb-tab')[i];
+  const r=tab?tab.getBoundingClientRect():{left:80,bottom:120};
+  pop.style.top=(r.bottom+window.scrollY+6)+'px';
+  pop.style.left=Math.max(12,r.left+window.scrollX)+'px';
+  document.body.appendChild(pop);
+  setTimeout(()=>{
+    document.addEventListener('mousedown',function h(e){
+      if(!pop.contains(e.target)){pop.remove();document.removeEventListener('mousedown',h);}
+    },{once:false});
+  },50);
+  const inp=pop.querySelector('#nb-sec-pop-title');if(inp){inp.focus();inp.select();
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nbSaveSectionPopover(i,pop);}});
+  }
+}
+function nbSaveSectionPopover(i,pop){
+  const sec=S.notebook.sections[i];if(!sec){pop.remove();return;}
+  const inp=pop.querySelector('#nb-sec-pop-title');
+  const newTitle=(inp&&inp.value.trim())||sec.title||'Untitled';
+  sec.title=newTitle;
+  pop.remove();svAll();rNotebook();
+}
+function nbSetColor(i,c){
+  const sec=S.notebook.sections[i];if(!sec)return;
+  sec.color=c;svAll();renderNotebookTabs();
+}
+function nbDeleteSection(i){
+  const sec=S.notebook.sections[i];if(!sec)return;
+  const hasContent=sec.pages.some(p=>p.cells.some(c=>(c||'').trim()));
+  if(hasContent&&!confirm(`Delete section "${sec.title}" and all ${sec.pages.length} page(s)?`))return;
+  if(!hasContent&&!confirm(`Delete empty section "${sec.title}"?`))return;
+  S.notebook.sections.splice(i,1);
+  if(NB.sectionIdx>=S.notebook.sections.length)NB.sectionIdx=Math.max(0,S.notebook.sections.length-1);
+  NB.pageIdx=0;
+  svAll();rNotebook();
+}
+function nbAddPage(){
+  const sec=nbCurrentSection();if(!sec)return;
+  sec.pages.splice(NB.pageIdx+1,0,nbBlankPage());
+  NB.pageIdx++;
+  svAll();rNotebook();
+}
+function nbDeletePage(){
+  const sec=nbCurrentSection();if(!sec)return;
+  const page=nbCurrentPage();if(!page)return;
+  const hasContent=page.cells.some(c=>(c||'').trim());
+  if(sec.pages.length===1){
+    if(hasContent&&!confirm('This is the only page in this section. Clear it?'))return;
+    sec.pages[0]=nbBlankPage();
+  } else {
+    if(hasContent&&!confirm('Delete this page? Content will be lost.'))return;
+    sec.pages.splice(NB.pageIdx,1);
+    if(NB.pageIdx>=sec.pages.length)NB.pageIdx=sec.pages.length-1;
+  }
+  svAll();rNotebook();
+}
+function nbSetLayout(layout){
+  const page=nbCurrentPage();if(!page||!(layout in NB_LAYOUT_CELLS))return;
+  const need=NB_LAYOUT_CELLS[layout];
+  // Preserve existing content; pad or trim the cell array.
+  if(page.cells.length<need)while(page.cells.length<need)page.cells.push('');
+  else if(page.cells.length>need){
+    // Merge overflowing cells into the LAST kept cell so nothing is lost
+    const tail=page.cells.slice(need).filter(c=>(c||'').trim()).join('\n\n');
+    page.cells.length=need;
+    if(tail){page.cells[need-1]=((page.cells[need-1]||'')+'\n\n'+tail).trim();}
+  }
+  page.layout=layout;page.updatedAt=Date.now();
+  svAll();rNotebook();
+}
+// Debounced save for textarea typing — prevents a Firestore write on every
+// keystroke while still syncing quickly across devices.
+let _nbSaveTimer=null;
+function nbOnCellInput(cellIdx,ta){
+  const page=nbCurrentPage();if(!page)return;
+  page.cells[cellIdx]=ta.value;
+  page.updatedAt=Date.now();
+  NB.lastFocused={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,cellIdx};
+  clearTimeout(_nbSaveTimer);
+  _nbSaveTimer=setTimeout(()=>svAll(),500);
+}
+function nbOnCellFocus(cellIdx){
+  NB.lastFocused={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,cellIdx};
+}
+// Search: walk every section → page → cell once to build an ordered list
+// of match positions. nbFindNext rotates through them.
+function nbSearchInput(q){
+  NB.searchQuery=(q||'').trim();
+  if(!NB.searchQuery){NB.matches=[];NB.matchIdx=-1;nbUpdateSearchUI();nbApplySearchHighlight();return;}
+  const needle=NB.searchQuery.toLowerCase();
+  const out=[];
+  S.notebook.sections.forEach((sec,si)=>{
+    sec.pages.forEach((p,pi)=>{
+      p.cells.forEach((c,ci)=>{
+        const hay=(c||'').toLowerCase();
+        let idx=0,pos;
+        while((pos=hay.indexOf(needle,idx))!==-1){
+          out.push({sectionIdx:si,pageIdx:pi,cellIdx:ci,start:pos,end:pos+needle.length});
+          idx=pos+needle.length;
+        }
+      });
+    });
+  });
+  NB.matches=out;NB.matchIdx=out.length?0:-1;
+  nbUpdateSearchUI();
+  if(out.length)nbJumpToMatch(0);else nbApplySearchHighlight();
+}
+function nbFindNext(dir){
+  if(!NB.matches.length)return;
+  NB.matchIdx=(NB.matchIdx+dir+NB.matches.length)%NB.matches.length;
+  nbUpdateSearchUI();
+  nbJumpToMatch(NB.matchIdx);
+}
+function nbUpdateSearchUI(){
+  const cnt=document.getElementById('nb-search-count');if(!cnt)return;
+  if(!NB.searchQuery){cnt.textContent='';return;}
+  if(!NB.matches.length){cnt.textContent='0 matches';return;}
+  cnt.textContent=`${NB.matchIdx+1} / ${NB.matches.length}`;
+}
+function nbJumpToMatch(idx){
+  const m=NB.matches[idx];if(!m)return;
+  const needRender=NB.sectionIdx!==m.sectionIdx||NB.pageIdx!==m.pageIdx;
+  const dir=(m.sectionIdx>NB.sectionIdx||(m.sectionIdx===NB.sectionIdx&&m.pageIdx>NB.pageIdx))?'left':'right';
+  NB.sectionIdx=m.sectionIdx;NB.pageIdx=m.pageIdx;
+  if(needRender){renderNotebookTabs();renderNotebookPage(dir);renderNotebookSub();
+    // Wait for flip-out + render before selecting the match
+    setTimeout(()=>nbSelectMatch(m),300);
+  } else {
+    nbSelectMatch(m);
+  }
+}
+function nbSelectMatch(m){
+  const ta=document.querySelector(`#nb-book [data-nb-cell="${m.cellIdx}"]`);
+  if(!ta)return;
+  try{ta.focus();ta.setSelectionRange(m.start,m.end);}catch(_){}
+  nbApplySearchHighlight();
+}
+function nbApplySearchHighlight(){
+  // Textareas can't render inline highlights. Visual cue is the selection
+  // itself (handled by nbSelectMatch) plus a subtle background on the cell
+  // containing the current match.
+  const book=document.getElementById('nb-book');if(!book)return;
+  book.querySelectorAll('.nb-cell-ta').forEach(t=>t.classList.remove('hl'));
+  const m=NB.matches[NB.matchIdx];if(!m)return;
+  const ta=book.querySelector(`[data-nb-cell="${m.cellIdx}"]`);
+  if(ta)ta.classList.add('hl');
+}
+
+// ✨ Refine — sends the current page's cells to Claude with a restructure
+// prompt, then shows a preview modal. User picks Keep or Discard.
+async function nbRefine(){
+  const page=nbCurrentPage();const sec=nbCurrentSection();
+  if(!page||!sec)return;
+  const key=getKey();
+  if(!key){alert('Add your Anthropic API key in Settings first.');return;}
+  const hasContent=page.cells.some(c=>(c||'').trim());
+  if(!hasContent){alert('Nothing on this page to refine yet — write something first.');return;}
+  const btn=document.querySelector('.nb-refine-btn');
+  if(btn){btn.disabled=true;btn.textContent='✨ Refining…';}
+  try{
+    const currentCells=page.cells.map((c,i)=>({cellIndex:i,content:c||''}));
+    const prompt=`You're helping tidy up a page in someone's personal notebook titled "${sec.title}". The page currently uses a "${page.layout}" layout (single / half = 2 cells / quad = 4 cells).
+
+Given the current cell contents below, produce a cleaner version. You MAY:
+- Suggest a different layout ("single" / "half" / "quad") if the content splits naturally into distinct pieces (e.g. multiple poems → quad).
+- Add short titles/headings at the top of cells where helpful.
+- Reorganise the content into the cells for clarity.
+- Fix obvious typos. DO NOT change the meaning, paraphrase, or add content that wasn't there.
+
+If the content is already well-organised, return it almost as-is with minimal changes.
+
+Current cells (JSON):
+${JSON.stringify(currentCells,null,2)}
+
+Respond with ONLY a JSON object:
+{"layout":"single|half|quad","cells":["cell 0 text","cell 1 text",...]}
+The cells array length MUST match the layout (1 / 2 / 4).`;
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:prompt}]})});
+    if(!r.ok){let m='HTTP '+r.status;try{const j=await r.json();if(j.error?.message)m=j.error.message;}catch(_){}throw new Error(m);}
+    const d=await r.json();
+    const text=(d.content?.[0]?.text||'').trim();
+    // Strip ```json fences if the model included them
+    const jsonMatch=text.match(/\{[\s\S]*\}/);
+    if(!jsonMatch)throw new Error('Couldn\'t parse AI response as JSON.');
+    const refined=JSON.parse(jsonMatch[0]);
+    if(!refined.layout||!(refined.layout in NB_LAYOUT_CELLS))refined.layout=page.layout;
+    if(!Array.isArray(refined.cells))throw new Error('Invalid cells array.');
+    const need=NB_LAYOUT_CELLS[refined.layout];
+    while(refined.cells.length<need)refined.cells.push('');
+    refined.cells.length=need;
+    nbShowRefinePreview(page,refined);
+  }catch(e){
+    console.warn('[nb refine]',e);
+    alert('Refine failed: '+e.message);
+  }finally{
+    const b2=document.querySelector('.nb-refine-btn');if(b2){b2.disabled=false;b2.textContent='✨ Refine';}
+  }
+}
+function nbShowRefinePreview(page,refined){
+  const overlay=document.createElement('div');
+  overlay.className='modal';overlay.style.display='flex';overlay.id='nb-refine-modal';
+  const cellLbls={single:['Page'],half:['Top','Bottom'],quad:['Top-left','Top-right','Bottom-left','Bottom-right']};
+  const lbls=cellLbls[refined.layout]||[];
+  const preview=refined.cells.map((c,i)=>`<div style="margin-bottom:14px"><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:5px">${esc(lbls[i]||('Cell '+(i+1)))}</div><div class="nb-refine-preview">${esc(c||'(empty)')}</div></div>`).join('');
+  overlay.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:620px">
+      <h3 style="margin-bottom:6px">Refine preview</h3>
+      <div class="nb-refine-note">Layout: <strong>${esc(refined.layout)}</strong>. Keep replaces this page with the refined version. Discard leaves your original untouched.</div>
+      ${preview}
+      <div class="modal-actions" style="margin-top:14px">
+        <button class="btn btn-sm" data-action="discard">Discard</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary btn-sm" data-action="keep">Keep refined version</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);_syncBodyLock();
+  overlay.addEventListener('click',e=>{
+    const act=e.target.dataset?.action;
+    if(act==='keep'){
+      page.layout=refined.layout;
+      page.cells=refined.cells.slice();
+      page.updatedAt=Date.now();
+      overlay.remove();_syncBodyLock();
+      svAll();rNotebook();
+    } else if(act==='discard'||e.target.closest('.modal-bd')){
+      overlay.remove();_syncBodyLock();
+    }
+  });
+}
+
+// Voice-to-cell: reuses the same SpeechRecognition setup as the AI bar
+// but writes directly into the last-focused cell. Desktop gets a mic button
+// in the page footer; mobile users can use their keyboard's built-in
+// dictation instead, which is why this is opt-in rather than default.
+function nbToggleVoice(){
+  if(NB.voiceActive){nbStopVoice();return;}
+  const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRec){alert('Voice recording isn\'t supported in this browser. Try Chrome, Edge, or Safari.');return;}
+  if(!NB.lastFocused||NB.lastFocused.sectionIdx!==NB.sectionIdx||NB.lastFocused.pageIdx!==NB.pageIdx){
+    alert('Click into a cell first, then tap the mic to record into it.');
+    return;
+  }
+  const ta=document.querySelector(`#nb-book [data-nb-cell="${NB.lastFocused.cellIdx}"]`);
+  if(!ta){alert('Couldn\'t find the focused cell — click into one and try again.');return;}
+  const rec=new SpeechRec();
+  rec.continuous=true;rec.interimResults=true;rec.maxAlternatives=1;
+  NB._voiceRec=rec;NB._voiceTarget={ta,cellIdx:NB.lastFocused.cellIdx,sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx};
+  let baseText=ta.value||'';if(baseText&&!/\s$/.test(baseText))baseText+=' ';
+  let finalText='';
+  const normTxt=s=>(s||'').trim().toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
+  rec.onstart=()=>{NB.voiceActive=true;const btn=document.querySelector('.nb-mic-btn');if(btn)btn.classList.add('on');};
+  rec.onresult=e=>{
+    let interim='';const finals=[];
+    for(let i=0;i<e.results.length;i++){const r=e.results[i];
+      if(r.isFinal){const raw=(r[0].transcript||'').trim();if(raw)finals.push(raw);}
+      else{interim+=r[0].transcript;}
+    }
+    // Prefix-dedup (same fix as the AI bar voice input)
+    const keys=finals.map(normTxt);
+    const kept=finals.filter((f,i)=>{const ki=keys[i];if(!ki)return false;for(let j=0;j<finals.length;j++){if(j===i)continue;const kj=keys[j];if(kj.length>ki.length&&kj.startsWith(ki))return false;if(kj===ki&&j<i)return false;}return true;});
+    finalText=kept.length?kept.join(' ')+' ':'';
+    const v=(baseText+finalText+interim).replace(/\s+$/,'')+(interim?' ':'');
+    ta.value=v;
+    // Push live value into state so it persists even if user navigates away
+    const page=nbCurrentPage();if(page)page.cells[NB._voiceTarget.cellIdx]=v;
+    clearTimeout(_nbSaveTimer);_nbSaveTimer=setTimeout(()=>svAll(),600);
+  };
+  rec.onerror=e=>{console.warn('[nb voice]',e.error);nbStopVoice();};
+  rec.onend=()=>{NB.voiceActive=false;NB._voiceRec=null;const btn=document.querySelector('.nb-mic-btn');if(btn)btn.classList.remove('on');svAll();};
+  try{rec.start();}catch(e){NB.voiceActive=false;alert('Couldn\'t start voice: '+e.message);}
+}
+function nbStopVoice(){
+  if(NB._voiceRec){try{NB._voiceRec.stop();}catch(_){}NB._voiceRec=null;}
+  NB.voiceActive=false;
+  const btn=document.querySelector('.nb-mic-btn');if(btn)btn.classList.remove('on');
+}
+// Keyboard shortcuts: arrows flip pages when notebook is active and no
+// input is focused; Ctrl/Cmd+F focuses the search bar.
+window.addEventListener('keydown',e=>{
+  if(currentRoute!=='notebook')return;
+  const t=e.target;const inEditor=t&&(t.tagName==='TEXTAREA'||t.tagName==='INPUT'||t.isContentEditable);
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='f'){
+    const sb=document.getElementById('nb-search');if(sb){e.preventDefault();sb.focus();sb.select();}
+    return;
+  }
+  if(inEditor)return;
+  if(e.key==='ArrowLeft'){e.preventDefault();nbPrevPage();}
+  else if(e.key==='ArrowRight'){e.preventDefault();nbNextPage();}
+});
+
 function render(){
   const g=document.getElementById('gr'),d=document.getElementById('ds');
   if(g)g.textContent=gTxt();if(d)d.textContent=dTxt();
@@ -6048,6 +6725,7 @@ function render(){
   rAttention();rTodayWeek();setBrainTab(UI.brainTab);
   refreshTipCard();
   if(currentRoute==='settings')rSettings();
+  if(currentRoute==='notebook')rNotebook();
 }
 // Pull the tip card from current S state. Runs on every render — so when a
 // Firestore snapshot delivers a newer plan generated on another device, the
