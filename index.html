@@ -1376,12 +1376,22 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 /* Soft pale-yellow highlight — kept airy enough that the text underneath
    is still readable. Earlier #fff3a8 washed out the words. */
 .nb-cell-ta mark{background:#fff5c8;padding:0 2px;border-radius:2px;color:#1a1a1a !important}
-/* execCommand('hiliteColor') wraps selected text in <span style="background-
-   color:...">. In dark (studio) theme the cell's default text colour is
-   near-white, which made highlighted text unreadable on yellow. Force a
-   dark ink colour wherever a background-color inline style is set inside
-   a cell — works regardless of theme. */
-.nb-cell-ta [style*="background-color"]{color:#1a1a1a !important}
+/* Dark ink override for HIGHLIGHTED text only. Previously this matched
+   any element whose inline style contained the substring "background-
+   color" — but execCommand('insertOrderedList') attaches
+   `background-color: transparent` to the new <ol>, which the broad
+   selector also matched, forcing the entire list's text to #1a1a1a.
+   In dark theme that read as black on dark and looked like the list
+   went invisible. Match only the actual highlight colour values
+   (rgb-normalised + a couple of hex variants browsers may emit). */
+.nb-cell-ta [style*="background-color: rgb(255, 245, 200)"],
+.nb-cell-ta [style*="background-color:rgb(255, 245, 200)"],
+.nb-cell-ta [style*="background-color: #fff5c8"],
+.nb-cell-ta [style*="background-color:#fff5c8"]{color:#1a1a1a !important}
+/* List markers (the "1." / "•") inherit their colour through ::marker,
+   which doesn't always pick up cell colour reliably across browsers
+   and themes. Pin it to the theme's text colour explicitly. */
+.nb-cell-ta li::marker{color:var(--text)}
 /* Clean font variant: Inter, no ruled lines, normal block text. */
 .nb-book.font-clean .nb-cell-ta{
   font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:22px;
@@ -2398,7 +2408,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v101';
+const APP_VERSION='v102';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
