@@ -69,7 +69,14 @@ html{color-scheme:light}
 *::-webkit-scrollbar-track{background:transparent}
 *::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:6px}
 *::-webkit-scrollbar-thumb:hover{background:var(--muted)}
-body.no-scroll{overflow:hidden;touch-action:none}
+/* Scroll lock. Previously also set `touch-action:none` — that inherits to
+   every descendant on iOS/Chrome Android and silently breaks tap-to-focus
+   on contenteditable elements and tap-to-click on small buttons, which was
+   exactly what stopped the AI confirm modal's × buttons and editable
+   titles from working on phones. overscroll-behavior:none on html/body
+   (line below) already kills the rubber-band effect, so touch-action:none
+   wasn't pulling its weight. */
+body.no-scroll{overflow:hidden}
 /* Never let horizontal overflow make the page wider than the viewport */
 html,body{max-width:100%;overflow-x:hidden}
 .main-wrap,.app,.main-col,.route,section{max-width:100%;min-width:0}
@@ -877,20 +884,19 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ti input[type=checkbox]:hover{border-color:var(--text-2)}
 .ti input[type=checkbox]:checked{background:var(--sage);border-color:var(--sage)}
 .ti input[type=checkbox]:checked::after{content:'';position:absolute;left:5px;top:2px;width:5px;height:9px;border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg)}
-/* Completion animation: collapse height smoothly throughout (not in a rushed
-   burst at the end) and add a slight upward translate so the row feels like
-   it's being lifted out, while the items BELOW slide up to close the gap.
-   Previously max-height held steady for 85% of the run then collapsed in a
-   jerky finish, which made the top of the list feel like it was dropping
-   down to fill the space rather than the bottom pulling up. */
-.ti.fading{overflow:hidden;pointer-events:none;animation:taskFade 1.4s cubic-bezier(.4,0,.2,1) forwards;will-change:opacity,max-height,transform;transform-origin:top}
-.ti.fading .tit{color:var(--muted);text-decoration:line-through}
+/* Completion animation. Tuned for a gentle, continuous glide: hold the
+   row fully visible briefly so the user sees "that ticked," then blend
+   opacity and height together on a smooth ease curve so the collapse
+   feels organic rather than stepped. No jerky height changes — every
+   property interpolates with the same bezier across the full runtime. */
+.ti.fading{overflow:hidden;pointer-events:none;animation:taskFade 1.6s cubic-bezier(.25,.8,.25,1) forwards;will-change:opacity,max-height,transform,padding,margin;transform-origin:top}
+.ti.fading .tit{color:var(--muted);text-decoration:line-through;transition:color .3s ease}
 .ti.fading input[type=checkbox]{pointer-events:none}
 @keyframes taskFade{
-  0%{opacity:1;background:var(--sage-bg);max-height:140px;transform:translateY(0)}
-  20%{opacity:1;background:var(--sage-bg);max-height:140px}
-  55%{opacity:.55;max-height:70px;background:var(--surface-2)}
-  100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0;border-bottom-width:0;margin:0;transform:translateY(-6px)}
+  0%{opacity:1;background:var(--sage-bg);max-height:140px;transform:translateY(0);padding-top:10px;padding-bottom:10px;margin-bottom:0;border-bottom-width:1px}
+  25%{opacity:1;background:var(--sage-bg);max-height:140px;transform:translateY(0)}
+  65%{opacity:.45;max-height:58px;background:var(--surface-2);transform:translateY(-2px);padding-top:4px;padding-bottom:4px}
+  100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0;border-bottom-width:0;margin-bottom:0;transform:translateY(-4px)}
 }
 .completed-day{margin-bottom:12px}
 .cmp-date{font-size:11px;font-weight:600;color:var(--muted);padding:4px 2px 6px;text-transform:uppercase;letter-spacing:.06em}
@@ -1120,11 +1126,16 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .aic-sec-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:2px}
 .aic-row{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font-size:12.5px;line-height:1.4}
 .aic-text{flex:1;min-width:0;color:var(--text)}
-.aic-rm{flex-shrink:0;width:22px;height:22px;border-radius:50%;border:1px solid var(--border-strong);background:transparent;color:var(--muted);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:all .12s}
+.aic-rm{flex-shrink:0;width:30px;height:30px;border-radius:50%;border:1px solid var(--border-strong);background:transparent;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:all .12s;touch-action:manipulation}
 .aic-rm:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.aic-rm:active{background:var(--red);color:#fff;border-color:var(--red)}
 .aic-empty{color:var(--muted);font-style:italic;font-size:12.5px;padding:14px 8px;text-align:center}
 /* Inline-editable title/match in the AI confirm modal — click to fix typos */
-.aic-edit{background:var(--bg);border-bottom:1px dashed var(--border-strong);padding:0 2px;cursor:text;outline:none;color:var(--text);transition:background .12s,border-color .12s;display:inline}
+/* display:inline on contenteditable makes the caret target one text-line
+   tall — thumb-tappable targets need at least ~32px of hit area, so use
+   inline-block with vertical padding. user-select:text and touch-action:
+   manipulation force phones to treat taps as focus requests. */
+.aic-edit{background:var(--bg);border-bottom:1px dashed var(--border-strong);padding:2px 4px;cursor:text;outline:none;color:var(--text);transition:background .12s,border-color .12s;display:inline-block;user-select:text;-webkit-user-select:text;touch-action:manipulation;min-height:20px}
 .aic-edit:hover{background:var(--surface-hover)}
 .aic-edit:focus{background:var(--surface);border-bottom-color:var(--accent);border-bottom-style:solid}
 /* Preview of real events a removeEvent/updateEvent match string will hit,
@@ -1197,19 +1208,31 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .aside-col{
     position:fixed;top:0;right:0;bottom:0;left:auto;
     width:86%;max-width:340px;
+    /* Explicit height — without this, `overflow-y:auto` flex containers
+       sometimes size children to their content rather than distributing
+       the remaining height, which is why empty cards were collapsing into
+       small chips at the top and leaving a dead zone below. 100dvh tracks
+       the dynamic viewport on mobile so the iOS address-bar show/hide
+       doesn't leave a phantom gap. */
+    height:100dvh;
+    width:86%;max-width:340px;
     display:flex !important;flex-direction:column;gap:14px;
     background:var(--surface);border-left:1px solid var(--border);
-    padding:18px 16px calc(env(safe-area-inset-bottom,0) + 18px);
+    /* No bottom padding — we WANT the last card to kiss the bottom edge
+       of the drawer. Safe-area inset is handled inside the card's inner
+       scroll area via padding on its body, not here. */
+    padding:18px 16px env(safe-area-inset-bottom,0);
     transform:translateX(100%);transition:transform .24s ease;
-    z-index:30;overflow-y:auto;box-shadow:none;
+    z-index:30;overflow:hidden;box-shadow:none;
+    box-sizing:border-box;
   }
   .aside-col.open{transform:translateX(0);box-shadow:-8px 0 28px rgba(0,0,0,.18)}
   /* Make the three cards (Needs attention / Next events / Daily habits)
      share the drawer's available height equally so empty cards still fill
-     and the panel reaches the bottom instead of leaving a dead zone under
-     three tiny chips. */
-  .aside-col .ac-card{flex:1 1 0;min-height:120px;display:flex;flex-direction:column;overflow:hidden}
-  .aside-col .ac-card > *:not(h3){flex:1;overflow-y:auto;min-height:0}
+     and the panel reaches the bottom. Each card has its own internal
+     scroll for overflowing content. */
+  .aside-col .ac-card{flex:1 1 0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .aside-col .ac-card > *:not(h3){flex:1;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
   .aside-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:29;opacity:0;pointer-events:none;transition:opacity .2s}
   .aside-backdrop.open{opacity:1;pointer-events:auto}
   .aside-pull{display:none}
@@ -1944,7 +1967,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v88';
+const APP_VERSION='v89';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -4848,7 +4871,7 @@ function rHabitsFull(){
 // TASKS
 // Kept in sync with the taskFade keyframe duration so we re-render the list
 // (removing the completed row from the DOM) right after the animation ends.
-const TASK_FADE_MS=1400;
+const TASK_FADE_MS=1600;
 // Cap how many completed tasks we keep around in the history so the Firestore
 // doc can't grow unbounded. Anything beyond this is pruned oldest-first when
 // a new task is ticked. Chose 50 to match Zander's ask — plenty for recent
@@ -4960,10 +4983,25 @@ function rTasks(){
       const byDate={};
       sortedCompleted.forEach(t=>{const ds=(t.doneAt?localDs(new Date(t.doneAt)):(t.date||tod()));(byDate[ds]=byDate[ds]||[]).push(t);});
       const days=Object.keys(byDate).sort().reverse();
+      // Tapping a history row expands a read-only panel showing when the
+      // task was added and when it was ticked off — handy for backwards-
+      // looking reference without risk of accidentally editing archived
+      // work. Uses the same `ex` state as live tasks but scoped by type.
+      const fmtCompletedAt=ts=>{if(!ts)return 'unknown';try{return new Date(ts).toLocaleString('en-ZA',{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});}catch(e){return '—';}};
+      const priLabel=p=>({urgent:'Urgent',hi:'High',med:'Medium',lo:'Low',someday:'Someday'})[p]||'Low';
       compEl.innerHTML=days.map(ds=>`
         <div class="completed-day">
           <div class="cmp-date">${fmt(ds)}</div>
-          <div class="tcard">${byDate[ds].map(t=>`<div class="ti ${pCls(t.priority||'lo')}" style="opacity:.75"><span style="width:19px;height:19px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="color:#fff;font-size:11px">✓</span></span><span class="tit dn" style="flex:1">${esc(t.text)}</span><button class="btn btn-ghost btn-sm" onclick="undoTask('${t.id}');event.stopPropagation()">Undo</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}');event.stopPropagation()">×</button></div>`).join('')}</div>
+          <div class="tcard">${byDate[ds].map(t=>{
+            const isEx=ex.id===t.id&&ex.type==='task-done';
+            let row=`<div class="ti ${pCls(t.priority||'lo')}" style="opacity:.75;cursor:pointer" onclick="toggleEx('task-done','${t.id}')"><span style="width:19px;height:19px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="color:#fff;font-size:11px">✓</span></span><span class="tit dn" style="flex:1">${esc(t.text)}</span><button class="btn btn-ghost btn-sm" onclick="undoTask('${t.id}');event.stopPropagation()">Undo</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}');event.stopPropagation()">×</button></div>`;
+            if(isEx){
+              const added=t.date?fmt(t.date):'unknown';
+              const done=fmtCompletedAt(t.doneAt);
+              row+=`<div class="exp-p" style="font-size:12px;color:var(--text-2);line-height:1.7"><div><strong>Added:</strong> ${esc(added)}</div><div><strong>Ticked off:</strong> ${esc(done)}</div><div><strong>Priority:</strong> ${esc(priLabel(t.priority||'lo'))}</div>${t.area?`<div><strong>Area:</strong> ${esc(t.area)}</div>`:''}${t.scheduledTime?`<div><strong>Scheduled:</strong> ${esc(t.scheduledTime)}</div>`:''}</div>`;
+            }
+            return row;
+          }).join('')}</div>
         </div>
       `).join('');
     }
