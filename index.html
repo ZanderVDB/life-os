@@ -252,6 +252,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .reminder-chips .rc:hover{border-color:var(--border-strong);color:var(--text)}
 .reminder-chips .rc input{position:absolute;opacity:0;pointer-events:none}
 .reminder-chips .rc:has(input:checked){background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+/* Calendar defaults — chips right-align and stay compact. On mobile they
+   wrap under the label like the rest of our setting-row-stack rows do. */
+.cd-chips{justify-content:flex-end;max-width:320px}
+@media(max-width:768px){.cd-chips{max-width:none;justify-content:flex-start}}
 .qa-actions{display:flex;gap:8px;margin-top:10px}
 
 /* ━━━ CALENDAR ━━━ */
@@ -1077,6 +1081,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .aic-edit{background:var(--bg);border-bottom:1px dashed var(--border-strong);padding:0 2px;cursor:text;outline:none;color:var(--text);transition:background .12s,border-color .12s;display:inline}
 .aic-edit:hover{background:var(--surface-hover)}
 .aic-edit:focus{background:var(--surface);border-bottom-color:var(--accent);border-bottom-style:solid}
+/* Preview of real events a removeEvent/updateEvent match string will hit,
+   shown under the row so the user sees exactly what Apply will touch. */
+.aic-match{margin-top:6px;padding:6px 10px;background:var(--bg);border-left:3px solid var(--sage);border-radius:4px;font-size:11px;color:var(--text-2);line-height:1.5}
+.aic-match-warn{border-left-color:var(--red);color:var(--red);font-weight:500}
+.aic-match-line{padding:1px 0}
 .modal-body h3{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;margin-bottom:18px;color:var(--text)}
 .modal-row{margin-bottom:12px}
 .modal-row label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px}
@@ -1624,26 +1633,32 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
         <div>
           <div class="section-hdr"><h2>Calendar defaults</h2></div>
-          <div class="setting-row setting-row-stack">
+          <div class="setting-row">
             <div>
               <div class="setting-label">Timed events</div>
               <div class="setting-desc">Default reminders for meetings & appointments.</div>
             </div>
-            <div class="reminder-chips" id="cd-timed" style="width:100%"></div>
+            <div class="setting-right">
+              <div class="reminder-chips cd-chips" id="cd-timed"></div>
+            </div>
           </div>
-          <div class="setting-row setting-row-stack">
+          <div class="setting-row">
             <div>
               <div class="setting-label">All-day events</div>
               <div class="setting-desc">Default reminders for all-day events.</div>
             </div>
-            <div class="reminder-chips" id="cd-allday" style="width:100%"></div>
+            <div class="setting-right">
+              <div class="reminder-chips cd-chips" id="cd-allday"></div>
+            </div>
           </div>
-          <div class="setting-row setting-row-stack">
+          <div class="setting-row">
             <div>
               <div class="setting-label">Birthdays</div>
               <div class="setting-desc">Default reminders for birthday events.</div>
             </div>
-            <div class="reminder-chips" id="cd-bday" style="width:100%"></div>
+            <div class="setting-right">
+              <div class="reminder-chips cd-chips" id="cd-bday"></div>
+            </div>
           </div>
         </div>
 
@@ -1857,7 +1872,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v77';
+const APP_VERSION='v78';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -2525,10 +2540,14 @@ function handleSnapshot(snap){
     S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
     S.workProjects=Array.isArray(d.workProjects)?d.workProjects:[];
     if(d.calendarDefaults&&typeof d.calendarDefaults==='object'){
+      // Migrate legacy all-day reminder minutes (1440/2880/10080/20160 — all
+      // midnight-based) to the new 5pm/9am equivalents matching Google
+      // Calendar's phone-app defaults. One-shot, idempotent.
+      const migrateAllDay=arr=>(arr||[]).map(m=>({1440:420,2880:2340,10080:9540,20160:19620}[m]??m));
       S.calendarDefaults={
         timedReminders:Array.isArray(d.calendarDefaults.timedReminders)?d.calendarDefaults.timedReminders:[60,10],
-        allDayReminders:Array.isArray(d.calendarDefaults.allDayReminders)?d.calendarDefaults.allDayReminders:[0],
-        birthdayReminders:Array.isArray(d.calendarDefaults.birthdayReminders)?d.calendarDefaults.birthdayReminders:[1440,0]
+        allDayReminders:Array.isArray(d.calendarDefaults.allDayReminders)?migrateAllDay(d.calendarDefaults.allDayReminders):[0],
+        birthdayReminders:Array.isArray(d.calendarDefaults.birthdayReminders)?migrateAllDay(d.calendarDefaults.birthdayReminders):[420,0]
       };
     }
     if(d.aiConfirmMode==='off'||d.aiConfirmMode==='calendar'||d.aiConfirmMode==='all')S.aiConfirmMode=d.aiConfirmMode;
@@ -4866,10 +4885,15 @@ function deleteWorkProject(id){
 // ───────── CALENDAR DEFAULTS (user-configurable reminder defaults) ─────────
 // Timed events — precise minutes before the event
 const REMINDER_OPTIONS_TIMED=[{v:0,lbl:'At time'},{v:10,lbl:'10 min'},{v:60,lbl:'1 hour'},{v:1440,lbl:'1 day'},{v:10080,lbl:'1 week'}];
-// All-day / birthday events — Google fires these based on your calendar's
-// daily reminder time (default 9am). "1 day before" = 9am the day before, etc.
-// Hourly options don't really apply so we offer day-granular choices.
-const REMINDER_OPTIONS_ALLDAY=[{v:0,lbl:'On the day'},{v:1440,lbl:'1 day before'},{v:2880,lbl:'2 days before'},{v:10080,lbl:'1 week before'},{v:20160,lbl:'2 weeks before'}];
+// All-day / birthday events — Google Calendar API requires reminder minutes
+// to be non-negative, so we pick sensible fixed times of day rather than
+// midnight (=0, too early) or calendar defaults (can't mix with overrides):
+//   On the day  → midnight (API limit; see note under label)
+//   1 day before → 5pm the day before (420 min before midnight start)
+//   2 days before → 9am two days before (2340 min)
+//   1 week before → 9am a week before (9540 min)
+//   2 weeks before → 9am two weeks before (19620 min)
+const REMINDER_OPTIONS_ALLDAY=[{v:0,lbl:'On the day'},{v:420,lbl:'1 day before · 5pm'},{v:2340,lbl:'2 days before · 9am'},{v:9540,lbl:'1 week before · 9am'},{v:19620,lbl:'2 weeks before · 9am'}];
 function renderCalendarDefaults(){
   const buildChips=(containerId,key,opts)=>{
     const el=document.getElementById(containerId);if(!el)return;
@@ -5153,13 +5177,32 @@ function fixAIEventWeekdays(ch,promptText){
 }
 // Interactive HTML version of the detailed summary — each row has an × so
 // the user can cherry-pick what NOT to apply. Powers showAIConfirmModal.
-function renderAIChangesInteractive(ch){
+// eventPool: optional array of real GCal events used to preview what a
+// removeEvent/updateEvent match will actually target.
+function renderAIChangesInteractive(ch,eventPool){
   const fmtReminder=r=>{if(r==null||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (m/60)+' hr';if(m===1440)return '1 day';return (m/1440)+' day';}).filter(Boolean);return names.length?names.join(' + '):null;};
+  // Preview the real events a remove/update match string will hit. Groups
+  // recurring instances by master id so "10 instances of Bible study" shows
+  // as one line not ten. Returns HTML (or '' if pool not provided).
+  const fmtMatchPreview=(needle,dateFilter)=>{
+    if(!eventPool)return '';
+    const n=(needle||'').toLowerCase();
+    if(!n)return '';
+    const matches=eventPool.filter(e=>(e.title||'').toLowerCase().includes(n)&&(!dateFilter||e.date===dateFilter));
+    if(!matches.length)return `<div class="aic-match aic-match-warn">⚠ No events matching "${esc(needle)}" on your calendar — double-check the title above.</div>`;
+    // Group by recurring series
+    const seen=new Map();
+    matches.forEach(m=>{const k=m.recurringEventId||m.id;if(!seen.has(k))seen.set(k,{title:m.title,date:m.date,time:m.time,recurring:!!m.recurringEventId,count:0});seen.get(k).count++;});
+    const entries=[...seen.values()];
+    const show=entries.slice(0,5);const more=entries.length-show.length;
+    const lines=show.map(e=>{const d=fmtDateWithDay(e.date);const t=e.time?' · '+e.time:'';const rec=e.recurring?` · recurring (${e.count} instance${e.count===1?'':'s'})`:'';return `<div class="aic-match-line">• ${esc(e.title)} — ${esc(d)}${esc(t)}${rec}</div>`;}).join('');
+    return `<div class="aic-match">Will affect:${lines}${more>0?`<div class="aic-match-line" style="color:var(--muted);font-style:italic">...and ${more} more</div>`:''}</div>`;
+  };
   // Editable text: renders the "main" title/name of each row as a
   // contentEditable span that writes back to ch[key][idx][field] on blur.
   // Lets the user fix typos in the AI's proposal before hitting Apply.
   const ed=(key,idx,field,value,label)=>`<span class="aic-edit" data-ed="${esc(key)}:${idx}:${esc(field)}" contenteditable="true" spellcheck="false" title="Click to edit">${esc(value||'?')}</span>${label?'<span class="aic-after">'+label+'</span>':''}`;
-  const row=(html,rmKey)=>`<div class="aic-row"><span class="aic-text">${html}</span><button class="aic-rm" data-rm="${rmKey}" aria-label="Remove">×</button></div>`;
+  const row=(html,rmKey,extra)=>`<div class="aic-row"><div style="flex:1;min-width:0"><span class="aic-text">${html}</span>${extra||''}</div><button class="aic-rm" data-rm="${rmKey}" aria-label="Remove">×</button></div>`;
   const sections=[];
   const taskRows=[];
   (ch.addTasks||[]).forEach((t,i)=>{const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);taskRows.push(row(`Add "${ed('addTasks',i,'text',t.text,'')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addTasks:${i}`));});
@@ -5191,8 +5234,15 @@ function renderAIChangesInteractive(ch){
 
   const calRows=[];
   (ch.addEvent||[]).forEach((e,i)=>{const bits=[];if(e.date)bits.push(fmtDateWithDay(e.date));if(e.allDay||!e.time)bits.push('all day');else bits.push(e.time+(e.endTime?'–'+e.endTime:''));if(e.repeat&&e.repeat!=='none')bits.push('repeats '+e.repeat);const rem=fmtReminder(e.reminderMin);if(rem)bits.push('reminders: '+rem);calRows.push(row(`Add "${ed('addEvent',i,'title',e.title,'')}" — ${esc(bits.join(', '))}`,`addEvent:${i}`));});
-  (ch.removeEvent||[]).forEach((e,i)=>calRows.push(row(`Delete events matching "${ed('removeEvent',i,'match',e.match||e.title,'')}"${e.date?' on '+esc(fmtDateWithDay(e.date)):''}`,`removeEvent:${i}`)));
-  (ch.updateEvent||[]).forEach((e,i)=>{const changes=[];if(e.newTitle)changes.push('title → '+e.newTitle);if(e.newDate)changes.push('date → '+fmtDateWithDay(e.newDate));if(e.newTime)changes.push('time → '+e.newTime);calRows.push(row(`Update "${ed('updateEvent',i,'match',e.match,'')}" — ${esc(changes.join(', ')||'(no changes)')}`,`updateEvent:${i}`));});
+  (ch.removeEvent||[]).forEach((e,i)=>{
+    const preview=fmtMatchPreview(e.match||e.title,e.date);
+    calRows.push(row(`Delete events matching "${ed('removeEvent',i,'match',e.match||e.title,'')}"${e.date?' on '+esc(fmtDateWithDay(e.date)):''}`,`removeEvent:${i}`,preview));
+  });
+  (ch.updateEvent||[]).forEach((e,i)=>{
+    const changes=[];if(e.newTitle)changes.push('title → '+e.newTitle);if(e.newDate)changes.push('date → '+fmtDateWithDay(e.newDate));if(e.newTime)changes.push('time → '+e.newTime);
+    const preview=fmtMatchPreview(e.match,e.date);
+    calRows.push(row(`Update "${ed('updateEvent',i,'match',e.match,'')}" — ${esc(changes.join(', ')||'(no changes)')}`,`updateEvent:${i}`,preview));
+  });
   if(calRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Calendar</div>${calRows.join('')}</div>`);
 
   return sections.length?sections.join(''):`<div class="aic-empty">Nothing left — hit Cancel or Redo.</div>`;
@@ -5202,13 +5252,25 @@ function renderAIChangesInteractive(ch){
 // via ×, then Apply whatever's left. Redo puts the original prompt back in
 // the AI bar so the user can tweak and re-ask. Returns {action, ch}.
 function showAIConfirmModal(ch,prompt){
-  return new Promise(resolve=>{
+  return new Promise(async resolve=>{
+    // If the AI wants to delete or update events, fetch the user's actual
+    // upcoming events once so we can show which real events each match
+    // string resolves to. Prevents "delete everything with 'Bible' in it"
+    // surprises — user sees the exact events BEFORE hitting Apply.
+    let eventPool=null;
+    const needsPool=(ch.removeEvent?.length||0)+(ch.updateEvent?.length||0);
+    if(needsPool&&getGCalToken()){
+      try{
+        const now=new Date();
+        eventPool=await fetchGCal(new Date(now.getFullYear(),now.getMonth()-1,1).toISOString(),new Date(now.getFullYear(),now.getMonth()+6,0).toISOString());
+      }catch(_){eventPool=[];}
+    }
     const overlay=document.createElement('div');
     overlay.className='modal';overlay.id='ai-confirm-modal';overlay.style.display='flex';
     overlay.innerHTML=`<div class="modal-bd"></div>
       <div class="modal-body" style="max-width:520px">
         <h3 style="margin-bottom:6px">The AI wants to:</h3>
-        <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Remove anything you don't want with ×. Apply keeps the rest. Redo drops this and puts your prompt back for editing.</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Click any title to fix typos. × removes that item. Apply runs the rest. Redo drops everything and puts your prompt back for editing.</div>
         <div class="aic-body" id="aic-body"></div>
         <div class="modal-actions">
           <button class="btn btn-danger btn-sm" data-action="cancel">Cancel</button>
@@ -5219,7 +5281,7 @@ function showAIConfirmModal(ch,prompt){
       </div>`;
     document.body.appendChild(overlay);_syncBodyLock();
     const bodyEl=overlay.querySelector('#aic-body');
-    const renderBody=()=>{bodyEl.innerHTML=renderAIChangesInteractive(ch);};
+    const renderBody=()=>{bodyEl.innerHTML=renderAIChangesInteractive(ch,eventPool);};
     renderBody();
     overlay.addEventListener('click',e=>{
       // Don't treat clicks on editable spans as remove / action triggers
@@ -5551,16 +5613,17 @@ function seed(){
 let _updateReady=false;let _swWaiting=null;let _swReg=null;
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('sw.js').then(reg=>{
+    // updateViaCache:'none' bypasses the browser's HTTP cache for sw.js —
+    // without it, desktop Chrome / Edge sometimes serve a stale sw.js from
+    // their own cache layer and never see that we pushed a new version.
+    // Pair with a CDN that respects no-store (Cloudflare Pages does).
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
       _swReg=reg;
-      // If there's ALREADY a waiting SW at startup (user missed a previous
-      // update notice), pick it up right away.
       if(reg.waiting&&navigator.serviceWorker.controller){
         _updateReady=true;_swWaiting=reg.waiting;
         if(currentRoute==='settings')rSettings();
         showUpdateToast();
       }
-      // Fires when the browser finds a new sw.js
       reg.addEventListener('updatefound',()=>{
         const incoming=reg.installing;
         if(!incoming)return;
@@ -5572,14 +5635,14 @@ if('serviceWorker' in navigator){
           }
         });
       });
-      // Mobile browsers (esp. iOS Safari in PWA mode) are stingy about firing
-      // updatefound naturally — they often wait until the user navigates or
-      // reopens the app. Force a check every 5 min while visible, and on
-      // every visibility change.
       document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});});
-      setInterval(()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});},5*60*1000);
-    }).catch(()=>{});
-    // When the waiting SW takes control, reload automatically
+      // Check every 2 minutes while visible (was 5). Browsers often throttle
+      // setInterval on backgrounded tabs so this is best-effort.
+      setInterval(()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});},2*60*1000);
+      // Also poke on focus — covers long-idle desktop tabs that the tab
+      // manager may have deprioritised.
+      window.addEventListener('focus',()=>{reg.update().catch(()=>{});});
+    }).catch(e=>{console.warn('[sw] register failed:',e.message);});
     let reloaded=false;
     navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloaded)return;reloaded=true;window.location.reload();});
   });
