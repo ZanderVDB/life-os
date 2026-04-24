@@ -1619,6 +1619,37 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         </div>
 
         <div>
+          <div class="section-hdr"><h2>Calendar defaults</h2></div>
+          <div class="setting-row setting-row-stack">
+            <div>
+              <div class="setting-label">Default reminders · Timed events</div>
+              <div class="setting-desc">What the AI (and new-event modal) preselect when you add a meeting / appointment with a time.</div>
+            </div>
+            <div class="setting-right" style="width:100%">
+              <div class="reminder-chips" id="cd-timed"></div>
+            </div>
+          </div>
+          <div class="setting-row setting-row-stack">
+            <div>
+              <div class="setting-label">Default reminders · All-day events</div>
+              <div class="setting-desc">For all-day events that aren't birthdays.</div>
+            </div>
+            <div class="setting-right" style="width:100%">
+              <div class="reminder-chips" id="cd-allday"></div>
+            </div>
+          </div>
+          <div class="setting-row setting-row-stack">
+            <div>
+              <div class="setting-label">Default reminders · Birthdays</div>
+              <div class="setting-desc">Auto-applied when the AI detects a birthday event.</div>
+            </div>
+            <div class="setting-right" style="width:100%">
+              <div class="reminder-chips" id="cd-bday"></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
           <div class="section-hdr"><h2>Weekly rhythm</h2></div>
           <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:10px">
             <div style="width:100%">
@@ -1834,7 +1865,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v75';
+const APP_VERSION='v76';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -2145,7 +2176,7 @@ async function fetchGCal(start,end){
         else if(ev.end?.dateTime)endDate=ev.end.dateTime.slice(0,10);
         const time=ev.start.dateTime?ev.start.dateTime.slice(11,16):'';
         const endTime=ev.end?.dateTime?ev.end.dateTime.slice(11,16):'';
-        return{id:ev.id,title:ev.summary||'(No title)',description:ev.description||'',date:startDate,endDate,time,endTime,allDay,gcal:true,colorId:ev.colorId||null,calendarId:cal.id,calendarColor:cal.backgroundColor};
+        return{id:ev.id,title:ev.summary||'(No title)',description:ev.description||'',date:startDate,endDate,time,endTime,allDay,gcal:true,colorId:ev.colorId||null,calendarId:cal.id,calendarColor:cal.backgroundColor,recurringEventId:ev.recurringEventId||null};
       });
     }catch(e){console.warn('[gcal] fetch',cal.id,'failed:',e.message);return[];}
   })()));
@@ -2403,6 +2434,19 @@ document.addEventListener('visibilitychange',()=>{
     if(currentRoute==='calendar')rCal();
     if(currentRoute==='today')rTodayWeek();
   }
+  // Force-pull fresh state from Firestore (bypasses local cache) when
+  // returning to the tab — so a plan generated on another device shows up
+  // without the user having to click Sync. Mobile Safari in PWA mode often
+  // lingers on stale cached data otherwise.
+  if(document.visibilityState==='visible'&&CU){
+    db.collection('users').doc(CU.uid).collection('data').doc('main').get({source:'server'}).then(snap=>{
+      if(snap.exists){
+        const d=snap.data();
+        if(d&&d.todaysTip)S.todaysTip=d.todaysTip;
+        refreshTipCard();
+      }
+    }).catch(()=>{});
+  }
 });
 // Periodic GCal poll — while the tab is active and Google Calendar is
 // connected, re-fetch events every 90 seconds so changes made on the phone
@@ -2488,6 +2532,13 @@ function handleSnapshot(snap){
     S.disabledCalendars=Array.isArray(d.disabledCalendars)?d.disabledCalendars:[];
     S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
     S.workProjects=Array.isArray(d.workProjects)?d.workProjects:[];
+    if(d.calendarDefaults&&typeof d.calendarDefaults==='object'){
+      S.calendarDefaults={
+        timedReminders:Array.isArray(d.calendarDefaults.timedReminders)?d.calendarDefaults.timedReminders:[60,10],
+        allDayReminders:Array.isArray(d.calendarDefaults.allDayReminders)?d.calendarDefaults.allDayReminders:[0],
+        birthdayReminders:Array.isArray(d.calendarDefaults.birthdayReminders)?d.calendarDefaults.birthdayReminders:[1440,0]
+      };
+    }
     if(d.aiConfirmMode==='off'||d.aiConfirmMode==='calendar'||d.aiConfirmMode==='all')S.aiConfirmMode=d.aiConfirmMode;
     else if(typeof d.confirmAllAI==='boolean')S.aiConfirmMode=d.confirmAllAI?'all':'calendar';
     if(!getKey()&&d.ak)localStorage.setItem(AK,d.ak);
@@ -2518,6 +2569,7 @@ function _buildSavePayload(){
   if(S.aiHistory!==undefined)payload.aiHistory=Array.isArray(S.aiHistory)?S.aiHistory:[];
   if(S.aiConfirmMode!==undefined)payload.aiConfirmMode=S.aiConfirmMode;
   if(S.workProjects!==undefined)payload.workProjects=Array.isArray(S.workProjects)?S.workProjects:[];
+  if(S.calendarDefaults!==undefined)payload.calendarDefaults=S.calendarDefaults;
   return payload;
 }
 function svAll(){
@@ -2567,7 +2619,7 @@ function rebuildPROJ(){
 }
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[]};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'off' (nothing needs OK), 'calendar' (default — only
 // calendar edits need OK), 'all' (every AI change needs OK).
@@ -2997,7 +3049,24 @@ function renderTip(tip){
   const title=mode==='tomorrow'?"Tomorrow's plan":"Today's plan";
   const fromLbl=mode==='now'&&tip.fromHour!=null?` <span style="font-size:10px;color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none">· from ${tip.fromHour>12?tip.fromHour-12:(tip.fromHour===0?12:tip.fromHour)}${tip.fromHour>=12?'pm':'am'}</span>`:'';
   const body=tip.markdown?renderMarkdownMini(tip.body||''):`<div class="tip-body">${esc(tip.body||'')}</div>`;
-  el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> ${title}${fromLbl}</div><div class="tip-plan-body">${body}</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="generatePlan('now')">✨ From now</button><button class="btn btn-sm" onclick="generatePlan('tomorrow')">Plan tomorrow</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Reset</button></div>`;
+  el.innerHTML=`<div class="tip-label" style="display:flex;align-items:center;gap:8px"><svg width="12" height="12"><use href="#i-spark"/></svg> <span>${title}${fromLbl}</span><button class="btn btn-ghost" onclick="syncTipFromCloud()" title="Pull latest plan from the cloud" style="margin-left:auto;padding:2px 8px;font-size:10px;color:var(--muted)">↻ Sync</button></div><div class="tip-plan-body">${body}</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="generatePlan('now')">✨ From now</button><button class="btn btn-sm" onclick="generatePlan('tomorrow')">Plan tomorrow</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Reset</button></div>`;
+}
+// Force Firestore to pull the latest doc from the server (bypassing the
+// local cache) and re-render the tip card. Needed when a plan was generated
+// on another device and the local onSnapshot hasn't fired with the fresh
+// copy yet (happens on mobile Safari PWA under aggressive offline caching).
+async function syncTipFromCloud(){
+  if(!CU)return;
+  const btn=event?.currentTarget;if(btn){btn.textContent='↻ syncing…';btn.disabled=true;}
+  try{
+    const snap=await db.collection('users').doc(CU.uid).collection('data').doc('main').get({source:'server'});
+    if(snap.exists){
+      const d=snap.data();
+      if(d&&d.todaysTip)S.todaysTip=d.todaysTip;
+    }
+    refreshTipCard();
+  }catch(e){console.warn('[syncTip]',e.message);}
+  finally{if(btn){btn.textContent='↻ Sync';btn.disabled=false;}}
 }
 
 // CALENDAR HELPERS
@@ -4096,11 +4165,28 @@ function openNewEvent(prefill){
   document.getElementById('em-tm').value=prefill.time||'';
   document.getElementById('em-tm-end').value=prefill.endTime||'';
   document.getElementById('em-del').style.display='none';
+  // Pre-tick the user's default reminder chips (timed vs all-day). They can
+  // still change them before saving, and birthdays auto-apply the birthday
+  // default on the fly if the user types "birthday" in the title.
+  const hasTime=!!(prefill.time);
+  const defaults=hasTime?(S.calendarDefaults?.timedReminders||[60,10]):(S.calendarDefaults?.allDayReminders||[0]);
+  setEmReminderValues(defaults);
+  // Auto-switch to birthday reminders when the user types "birthday" in the title
+  const tEl=document.getElementById('em-t');
+  if(tEl&&!tEl._bdayWatch){
+    tEl._bdayWatch=true;
+    tEl.addEventListener('input',()=>{
+      if(editingEvent?.mode!=='new')return;
+      const v=tEl.value.toLowerCase();
+      if(/birthday|bday|🎂/.test(v)){
+        setEmReminderValues(S.calendarDefaults?.birthdayReminders||[1440,0]);
+        const rep=document.getElementById('em-repeat');if(rep&&rep.value==='none')rep.value='yearly';
+        const ad=document.getElementById('em-allday');if(ad&&!ad.checked){ad.checked=true;toggleEmAllDay();}
+      }
+    });
+  }
   document.getElementById('event-modal').style.display='flex';
   _syncBodyLock();
-  // For NEW events the user is actively adding something — focus the title
-  // so they can start typing immediately. For EDITS, don't auto-focus (on
-  // mobile it pops the keyboard up when they're usually just viewing).
   setTimeout(()=>{const el=document.getElementById('em-t');if(el)el.focus();},50);
 }
 async function openEventEdit(payload){
@@ -4597,6 +4683,7 @@ function rSettings(){
   updateInstallUI();
   renderCalendarList();
   renderWorkProjects();
+  renderCalendarDefaults();
   // AI history moved to a modal — just show the count here
   const cntEl=document.getElementById('ai-history-count');
   if(cntEl){const n=(S.aiHistory||[]).length;cntEl.textContent=n?`${n} entr${n===1?'y':'ies'} · searchable`:'Every AI update will show up here.';}
@@ -4680,6 +4767,26 @@ function deleteWorkProject(id){
   rebuildPROJ();svAll();renderWorkProjects();rTasks();
 }
 
+// ───────── CALENDAR DEFAULTS (user-configurable reminder defaults) ─────────
+const REMINDER_OPTIONS=[{v:0,lbl:'At time'},{v:10,lbl:'10 min'},{v:60,lbl:'1 hour'},{v:1440,lbl:'1 day'},{v:10080,lbl:'1 week'}];
+function renderCalendarDefaults(){
+  const buildChips=(containerId,key)=>{
+    const el=document.getElementById(containerId);if(!el)return;
+    const selected=new Set((S.calendarDefaults?.[key]||[]).map(Number));
+    el.innerHTML=REMINDER_OPTIONS.map(o=>`<label class="rc"><input type="checkbox" value="${o.v}"${selected.has(o.v)?' checked':''} onchange="toggleCalendarDefault('${key}',${o.v},this.checked)"><span>${esc(o.lbl)}</span></label>`).join('');
+  };
+  buildChips('cd-timed','timedReminders');
+  buildChips('cd-allday','allDayReminders');
+  buildChips('cd-bday','birthdayReminders');
+}
+function toggleCalendarDefault(key,minutes,on){
+  S.calendarDefaults=S.calendarDefaults||{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]};
+  const arr=new Set((S.calendarDefaults[key]||[]).map(Number));
+  if(on)arr.add(Number(minutes));else arr.delete(Number(minutes));
+  S.calendarDefaults[key]=[...arr].sort((a,b)=>b-a);
+  svAll();
+}
+
 function toggleSounds(on){
   S.soundsEnabled=!!on;
   try{localStorage.setItem('los_sounds',on?'1':'0');}catch(e){}
@@ -4745,11 +4852,11 @@ async function doUpdate(){
 Today: ${todayName} ${tod()} (user's local time). For reference, ${nextOccurrences}.${rhythm}${projectNames}
 CRITICAL for calendar events: when the user names a weekday (e.g. "community meetings on Wednesday"), use the matching date from the list above. Before returning any date, VERIFY the date you chose actually falls on the requested weekday. Off-by-one day errors break the whole calendar.
 
-Calendar defaults — apply these automatically unless the user explicitly says otherwise:
-- Birthday events: allDay:true, repeat:"yearly", reminderMin:[1440, 0]  (1 day before + at event time)
-- Any other reminder / appointment WITH a time: reminderMin:[60, 10]  (1 hour + 10 min before)
-- Events with no time (all-day): reminderMin:[0]  (on the day) unless user says otherwise
-reminderMin can be a single number OR an array of minutes (up to 5 reminders per event).
+Calendar defaults — apply these automatically unless the user explicitly says otherwise. These come from the user's own Settings and may be empty (no reminders by default):
+- Birthday events: allDay:true, repeat:"yearly", reminderMin:${JSON.stringify(S.calendarDefaults?.birthdayReminders||[1440,0])}
+- Timed events / meetings / appointments: reminderMin:${JSON.stringify(S.calendarDefaults?.timedReminders||[60,10])}
+- All-day events (not birthdays): reminderMin:${JSON.stringify(S.calendarDefaults?.allDayReminders||[0])}
+reminderMin can be a single number OR an array of minutes (up to 5 reminders per event). Empty array = no reminders.
 
 Respond ONLY raw JSON:
 {"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
@@ -5227,13 +5334,23 @@ async function confirmCalendarOps(ops,preConfirmed){
         const res=await createGCEvent(e.title,e.date,e.time||'',e.desc||'',e.endTime||'',opts);
         if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date:e.date,time:e.time||'',endTime:e.endTime||'',title:e.title,allDay:opts.allDay,recurrence:opts.recurrence,reminderMin:opts.reminderMin,timeZone:opts.timeZone});}
       } else if(op.kind==='remove'){
-        // Look up the event(s) via current month cache first, then widen
         const needle=(op.ev.match||op.ev.title||'').toLowerCase();
         if(!needle)continue;
-        let pool=(gcCache.events||[]);
-        if(!pool.length){const now=new Date();pool=await fetchGCal(new Date(now.getFullYear(),now.getMonth()-1,1).toISOString(),new Date(now.getFullYear(),now.getMonth()+3,0).toISOString());}
+        // ALWAYS fetch fresh — local cache may be stale (events just created
+        // moments ago in the same AI turn) or may be missing events outside
+        // the currently-viewed month. Widen to -1 → +6 months.
+        const now=new Date();
+        const pool=await fetchGCal(new Date(now.getFullYear(),now.getMonth()-1,1).toISOString(),new Date(now.getFullYear(),now.getMonth()+6,0).toISOString());
         const matches=pool.filter(e=>(e.title||'').toLowerCase().includes(needle)&&(!op.ev.date||e.date===op.ev.date));
-        for(const m of matches){await deleteGCEvent(m.id,m.calendarId);}
+        // De-dupe: for recurring series, collapse every instance to the
+        // MASTER event id. Deleting the master cascades to all occurrences
+        // (past + future). Deleting an instance only removes that one day.
+        const targetMap=new Map();
+        matches.forEach(m=>{const id=m.recurringEventId||m.id;if(!targetMap.has(id))targetMap.set(id,m.calendarId);});
+        for(const [id,calId] of targetMap){
+          const ok=await deleteGCEvent(id,calId);
+          if(!ok)console.warn('[ai-calendar] delete failed for',id);
+        }
       } else if(op.kind==='update'){
         const needle=(op.ev.match||'').toLowerCase();
         if(!needle)continue;
