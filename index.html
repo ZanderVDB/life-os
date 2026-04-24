@@ -1572,31 +1572,28 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .aside-col{
     position:fixed;top:0;right:0;bottom:0;left:auto;
     width:86%;max-width:340px;
-    /* Explicit height — without this, `overflow-y:auto` flex containers
-       sometimes size children to their content rather than distributing
-       the remaining height, which is why empty cards were collapsing into
-       small chips at the top and leaving a dead zone below. 100dvh tracks
-       the dynamic viewport on mobile so the iOS address-bar show/hide
-       doesn't leave a phantom gap. */
     height:100dvh;
-    width:86%;max-width:340px;
     display:flex !important;flex-direction:column;gap:14px;
     background:var(--surface);border-left:1px solid var(--border);
-    /* No bottom padding — we WANT the last card to kiss the bottom edge
-       of the drawer. Safe-area inset is handled inside the card's inner
-       scroll area via padding on its body, not here. */
-    padding:18px 16px env(safe-area-inset-bottom,0);
+    padding:18px 16px calc(env(safe-area-inset-bottom,0) + 24px);
     transform:translateX(100%);transition:transform .24s ease;
-    z-index:30;overflow:hidden;box-shadow:none;
+    z-index:30;
+    /* Drawer itself scrolls vertically when the three cards (at their
+       natural sizes) total more than the viewport height. Earlier
+       version used overflow:hidden + flex:1 on the cards to stretch
+       them and fill — Zander preferred each card to be sized by its
+       contents instead, with the drawer scrolling when needed. */
+    overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    box-shadow:none;
     box-sizing:border-box;
   }
   .aside-col.open{transform:translateX(0);box-shadow:-8px 0 28px rgba(0,0,0,.18)}
-  /* Make the three cards (Needs attention / Next events / Daily habits)
-     share the drawer's available height equally so empty cards still fill
-     and the panel reaches the bottom. Each card has its own internal
-     scroll for overflowing content. */
-  .aside-col .ac-card{flex:1 1 0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
-  .aside-col .ac-card > *:not(h3){flex:1;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
+  /* Cards size to their content. flex:0 0 auto stops them stretching to
+     share the drawer's height equally (the previous behaviour) — empty
+     cards now stay compact, full cards grow as tall as their list, and
+     the drawer scrolls if the combined height overflows. */
+  .aside-col .ac-card{flex:0 0 auto;min-height:0;display:block;overflow:visible}
   .aside-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:29;opacity:0;pointer-events:none;transition:opacity .2s}
   .aside-backdrop.open{opacity:1;pointer-events:auto}
   .aside-pull{display:none}
@@ -2408,7 +2405,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v102';
+const APP_VERSION='v103';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3081,6 +3078,11 @@ function stopPresence(){
 }
 function showOtherDeviceOverlay(label){
   if(document.getElementById('other-dev-overlay'))return;
+  // Close the mobile right-rail and any other open mobile chrome so the
+  // take-over modal isn't sitting underneath the open drawer (the drawer
+  // sits at z-index 30; the overlay is 9999 — but on phones the user
+  // had to dismiss the drawer first to see what was happening).
+  try{closeRail();closeDrawer();}catch(e){}
   const d=document.createElement('div');
   d.id='other-dev-overlay';
   d.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:16px';
