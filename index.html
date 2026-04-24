@@ -1233,7 +1233,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .nb-tab[data-col="rose"]{background:var(--red-bg,var(--peach-bg));border-color:var(--red-bg,var(--peach-bg))}
 .nb-tab[data-col="rose"].on{background:var(--red-bg,var(--peach-bg));color:var(--red);border-color:var(--red-bg,var(--peach-bg))}
 
+/* Desktop layout: [left arrow] [book] [right arrow] in a horizontal row.
+   On mobile a media query flips this to [book] above [arrows row] below. */
 .nb-book-wrap{display:flex;align-items:center;justify-content:center;gap:14px;padding:4px 0 40px;position:relative}
+.nb-arrows-bottom{display:none}
 .nb-arrow{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:28px;line-height:1;font-family:'Playfair Display',serif;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;padding-bottom:4px;transition:background .12s,color .12s,border-color .12s;box-shadow:var(--shadow)}
 .nb-arrow:hover:not(:disabled){background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
 .nb-arrow:disabled{opacity:.3;cursor:not-allowed}
@@ -1466,26 +1469,47 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   /* Tabs — horizontal scroll, slightly tighter padding */
   .nb-tabs{padding:2px 2px 8px;margin-bottom:12px;gap:4px}
   .nb-tab{padding:6px 10px;font-size:11.5px;flex-shrink:0}
-  /* Book wrapper — arrows overlay on the page edges instead of sitting
-     beside it. That's what Zander meant by "a little bit more on the
-     page, less prominent". */
-  .nb-book-wrap{gap:0;padding:0 0 30px;position:relative}
-  .nb-arrow{
-    position:absolute;top:50%;transform:translateY(-50%);
-    width:32px;height:32px;font-size:20px;padding-bottom:2px;
-    background:rgba(255,255,255,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-    border-color:rgba(0,0,0,.08);box-shadow:0 1px 4px rgba(0,0,0,.1);
-    opacity:.58;z-index:5;
+  /* Book wrapper on mobile: the book spans full width as a block (no
+     more flex-row alongside arrows). Arrows live BELOW the book in their
+     own row — the old overlay-on-edges approach felt intrusive on phones
+     where the thumbs are already near the page. */
+  .nb-book-wrap{display:block;padding:0;position:relative}
+  .nb-book{display:block;width:100%;max-width:none;margin:0}
+  /* Hide the inline (desktop) arrows; show the dedicated bottom row. */
+  .nb-arrow-desktop{display:none !important}
+  .nb-arrows-bottom{display:flex;justify-content:center;gap:28px;padding:14px 0 30px}
+  .nb-arrows-bottom .nb-arrow{
+    position:static;width:44px;height:44px;font-size:24px;padding-bottom:2px;
+    background:var(--surface);border:1px solid var(--border);color:var(--muted);
+    box-shadow:var(--shadow);opacity:1;border-radius:50%;
   }
-  [data-theme="studio"] .nb-arrow{background:rgba(40,36,48,.72);border-color:rgba(255,255,255,.1)}
-  .nb-arrow.nb-prev{left:6px}
-  .nb-arrow.nb-next{right:6px}
-  .nb-arrow:hover:not(:disabled),.nb-arrow:active{opacity:1}
-  /* Book itself: unchanged internal sizing — padding, font, line height
-     all match desktop. The flex allows the book to shrink to fit the
-     viewport width while keeping its A4 aspect-ratio. Pinch-zoom handles
-     reading. */
-  .nb-book{flex:1 1 auto;width:100%;max-width:none}
+  .nb-arrows-bottom .nb-arrow:active{background:var(--surface-hover);color:var(--text)}
+  .nb-arrows-bottom .nb-arrow:disabled{opacity:.35}
+  /* Container-query scaling on mobile: the book's internal proportions
+     (padding, font size, line-height, rules, icon sizes) all become a
+     percentage of the PAGE's own width. That gives an identical-looking
+     layout whether the page is 820px on a laptop or 340px on a phone —
+     just at different scales. User pinches to zoom for detail (viewport
+     meta allows it). Desktop keeps its fixed px sizes. */
+  .nb-page{container-type:inline-size;padding:3.41% 3.9% 2.2% 7.07%;border-radius:1.7cqw;gap:1.7cqw}
+  .nb-page::before{left:5.6cqw;width:0.12cqw}
+  .nb-cell-ta{font-size:1.95cqw;line-height:3.66cqw;padding:0.37cqw 0.5cqw 0;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 3.54cqw,var(--paper-line) 3.54cqw,var(--paper-line) 3.66cqw)}
+  .nb-cell-ta h2{font-size:2.44cqw}
+  .nb-page-hdr{padding-bottom:0.98cqw;gap:1.22cqw}
+  .nb-page-sec{font-size:2.2cqw}
+  .nb-page-meta{font-size:1.46cqw}
+  .nb-page-hdr .iconbtn{width:3.17cqw;height:3.17cqw;font-size:1.46cqw;border-radius:0.73cqw}
+  .nb-toolbar{gap:0.24cqw;padding:0.5cqw 0}
+  .nb-tb-btn{width:3.17cqw;height:3.17cqw;font-size:1.46cqw;border-radius:0.6cqw}
+  .nb-toolbar-sep{height:2.2cqw;margin:0 0.5cqw}
+  .nb-tb-undo{padding:0 1cqw;font-size:1.34cqw;width:auto}
+  .nb-cells{gap:1.22cqw}
+  .nb-page-foot{padding-top:1.22cqw;gap:1cqw;font-size:1.34cqw}
+  .nb-layout-toggle{padding:0.24cqw;border-radius:1cqw}
+  .nb-layout-toggle button{padding:0.5cqw 1.1cqw;font-size:1.34cqw;border-radius:0.73cqw}
+  .nb-mic-btn{width:3.4cqw;height:3.4cqw;font-size:1.6cqw}
+  .nb-refine-btn{padding:0.6cqw 1.46cqw;font-size:1.46cqw;border-radius:1cqw}
+  .nb-cell[data-hint="true"]::after{font-size:1.05cqw;top:0.24cqw;right:0.73cqw;padding:0 0.5cqw}
 }
 
 /* ━━━ MOBILE ━━━ */
@@ -1804,17 +1828,21 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             <h2>Daily notebook</h2>
             <div class="right" style="gap:6px;flex-wrap:wrap">
               <input type="search" class="input nb-search" placeholder="Search…" oninput="searchNotebook(this.value)" style="width:160px;padding:6px 10px;font-size:12px">
-              <!-- Keep the ‹ date › triplet together so wrapping doesn't
-                   orphan the left arrow onto the previous line. -->
-              <div class="dn-date-nav" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;flex-shrink:0">
-                <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
-                <span class="cnt" id="dn-date" onclick="pickNotebookDate()" title="Pick a date" style="min-width:140px;text-align:center;cursor:pointer;padding:4px 10px"></span>
-                <input type="date" id="dn-date-picker" style="position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none">
-                <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
-              </div>
-              <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
-              <button class="btn btn-primary btn-sm" onclick="saveDN()">Save</button>
             </div>
+          </div>
+          <!-- Row 2 of the daily-notebook header: the ‹ date › triplet +
+               optional Today button + Save. Kept on its own line so the
+               search above doesn't have to share room with the arrows and
+               the Today button (when it appears) doesn't shove Save down. -->
+          <div class="dn-controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+            <div class="dn-date-nav" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;flex-shrink:0">
+              <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
+              <span class="cnt" id="dn-date" onclick="pickNotebookDate()" title="Pick a date" style="min-width:140px;text-align:center;cursor:pointer;padding:4px 10px"></span>
+              <input type="date" id="dn-date-picker" style="position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none">
+              <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
+            <button class="btn btn-primary btn-sm" onclick="saveDN()" style="margin-left:auto">Save</button>
           </div>
           <div id="dn-search-results" style="display:none"></div>
           <div class="notebook-wrap" id="dn-wrap">
@@ -2015,11 +2043,17 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <div class="nb-tabs" id="nb-tabs"></div>
         <!-- Row 5: The book itself — a single A4-proportioned sheet,
              horizontally paged. Content is rebuilt by renderNotebookPage()
-             whenever the user flips, adds, deletes or refines. -->
+             whenever the user flips, adds, deletes or refines.
+             Desktop: arrows sit beside the book.
+             Mobile: arrows move to .nb-arrows-bottom row below the book. -->
         <div class="nb-book-wrap">
-          <button class="nb-arrow nb-prev" onclick="nbPrevPage()" aria-label="Previous page" title="Previous page (← arrow)">‹</button>
+          <button class="nb-arrow nb-prev nb-arrow-desktop" onclick="nbPrevPage()" aria-label="Previous page" title="Previous page (← arrow)">‹</button>
           <div class="nb-book" id="nb-book"></div>
-          <button class="nb-arrow nb-next" onclick="nbNextPage()" aria-label="Next page" title="Next page (→ arrow)">›</button>
+          <button class="nb-arrow nb-next nb-arrow-desktop" onclick="nbNextPage()" aria-label="Next page" title="Next page (→ arrow)">›</button>
+        </div>
+        <div class="nb-arrows-bottom">
+          <button class="nb-arrow nb-prev" onclick="nbPrevPage()" aria-label="Previous page">‹</button>
+          <button class="nb-arrow nb-next" onclick="nbNextPage()" aria-label="Next page">›</button>
         </div>
       </div>
 
@@ -2324,7 +2358,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v95';
+const APP_VERSION='v96';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6538,14 +6572,16 @@ function rNotebook(){
   renderNotebookSub();
   nbBindWheel();
 }
-// Bind the horizontal scroll-wheel listener once. Flips the page on tilt /
-// shift-scroll with a short cooldown so a single gesture doesn't trigger
-// multiple flips.
+// Bind the horizontal scroll-wheel listener AND touch-swipe gestures
+// once. Flips the page on mouse-tilt or shift-scroll (desktop) and on
+// horizontal finger swipes (mobile). Short cooldown prevents a single
+// gesture from triggering multiple flips.
 let _nbWheelBound=false;
 let _nbWheelCooldown=0;
 function nbBindWheel(){
   if(_nbWheelBound)return;
   const book=document.getElementById('nb-book');if(!book)return;
+  // Horizontal scroll-wheel / trackpad (desktop)
   book.addEventListener('wheel',e=>{
     if(Math.abs(e.deltaX)<18)return;
     if(Math.abs(e.deltaY)>Math.abs(e.deltaX))return;
@@ -6555,6 +6591,26 @@ function nbBindWheel(){
     e.preventDefault();
     if(e.deltaX>0)nbNextPage();else nbPrevPage();
   },{passive:false});
+  // Touch swipe (mobile). Only treats a gesture as a page-flip when it's
+  // clearly horizontal and clears a minimum distance. Vertical / small
+  // movements fall through to normal browser behaviour so cells can still
+  // be tapped, scrolled, and text-selected.
+  let sx=null,sy=null,multi=false;
+  book.addEventListener('touchstart',e=>{
+    if(e.touches.length>1){multi=true;sx=null;return;}
+    multi=false;sx=e.touches[0].clientX;sy=e.touches[0].clientY;
+  },{passive:true});
+  book.addEventListener('touchend',e=>{
+    if(multi||sx===null)return;
+    const t=e.changedTouches[0];const dx=t.clientX-sx;const dy=t.clientY-sy;
+    sx=sy=null;
+    if(Math.abs(dx)<50)return;                    // too short, probably a tap
+    if(Math.abs(dy)>Math.abs(dx)*0.7)return;      // too vertical, let it scroll
+    const now=Date.now();
+    if(now-_nbWheelCooldown<360)return;
+    _nbWheelCooldown=now;
+    if(dx<0)nbNextPage();else nbPrevPage();
+  },{passive:true});
   _nbWheelBound=true;
 }
 function renderNotebookSub(){
