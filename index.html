@@ -1189,13 +1189,17 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .aside-col{order:-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;position:static;max-height:none;overflow-y:visible;padding-right:0}
 }
 @media(max-width:768px){
-  /* Aside becomes a right-hand slide-in drawer */
+  /* Aside becomes a right-hand slide-in drawer. Note: when the drawer is
+     open it sits at z-index:30, visually covering the fixed AI bar (z:8),
+     so we don't need to reserve AI-bar height at the bottom — just a small
+     visual buffer plus the device safe-area inset. The previous 120px
+     bottom padding was what kept the last card from reaching the bottom. */
   .aside-col{
     position:fixed;top:0;right:0;bottom:0;left:auto;
     width:86%;max-width:340px;
     display:flex !important;flex-direction:column;gap:14px;
     background:var(--surface);border-left:1px solid var(--border);
-    padding:18px 16px calc(env(safe-area-inset-bottom,0) + 120px);
+    padding:18px 16px calc(env(safe-area-inset-bottom,0) + 18px);
     transform:translateX(100%);transition:transform .24s ease;
     z-index:30;overflow-y:auto;box-shadow:none;
   }
@@ -1434,9 +1438,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="section-hdr">
             <h2>Tasks</h2>
             <div class="right">
-              <button class="btn btn-ghost btn-sm" onclick="toggleCompleted()" id="tgl-completed">Show completed</button>
               <button class="btn btn-primary btn-sm" onclick="toggleQA('task-qa')">+ Add task</button>
             </div>
+          </div>
+          <!-- Active vs History tab switcher — makes the completed list feel
+               like a distinct view rather than a lump at the bottom of the
+               same panel. The (N) count on History comes from renderTaskTabs. -->
+          <div class="tabs" id="task-tabs" style="margin-bottom:12px">
+            <button class="tab on" data-ttab="active" onclick="setTaskTab('active')">Active</button>
+            <button class="tab" data-ttab="completed" onclick="setTaskTab('completed')" id="task-tab-completed">History</button>
           </div>
           <div id="task-qa" style="display:none">
             <div class="qa">
@@ -1451,7 +1461,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             </div>
           </div>
           <div id="tasks-sec"></div>
-          <div id="completed-sec" style="display:none;margin-top:16px"></div>
+          <div id="completed-sec" style="display:none"></div>
         </section>
 
         <section>
@@ -1934,7 +1944,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v87';
+const APP_VERSION='v88';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2771,7 +2781,7 @@ try{
   // Back-compat: the old boolean toggle stored '1' / '0' at los_confirm_ai
   else{const legacy=localStorage.getItem('los_confirm_ai');if(legacy==='1')S.aiConfirmMode='all';}
 }catch(e){}
-const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false};
+const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false,taskTab:'active'};
 try{UI.monthDetail=localStorage.getItem('los_month_detail')==='1';}catch(e){}
 const HABIT_COLORS=['#c46a6a','#d9a484','#c9a94a','#7fa186','#6a8ab5','#9d8bb8','#5a8a6e','#e0b04f','#b37d6f','#7a9aa8','#d38a6f','#89a589'];
 function habitColor(h){
@@ -2909,14 +2919,13 @@ async function toggleVoice(){
     vlog('recognition created (default lang, continuous=true)');
     let finalText='';voiceStartedAt=Date.now();voiceHeardSound=false;
     let gotStart=false;
-    // Mobile Chrome on Android has a nasty habit of emitting the SAME final
-    // utterance as multiple *distinct* result entries with different indices.
-    // The earlier index-based dedup missed those because each had a unique
-    // index, so "I have a friend Neil" would still land in the textarea 3x.
-    // Dedup on normalised content instead — cost is that if the user
-    // legitimately repeats themselves verbatim ("okay okay") we collapse it,
-    // but that's an acceptable trade vs the tripling Zander keeps hitting.
-    const seenFinals=new Set();
+    // Mobile Chrome on Android emits the same utterance as a growing chain
+    // of separate final results ("I", "I have", "I have a friend", "I have
+    // a friend who's coming over"), each at a different index. Both the
+    // index-based and exact-content dedups earlier versions used missed
+    // this because each entry has a unique index AND a unique normalised
+    // string. We now prefix-dedup: if any other final in the pass starts
+    // with this one, we drop the shorter one and keep only the longest.
     const normTxt=s=>(s||'').trim().toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
     // Preserve whatever's already in the textarea so new speech appends to it
     let baseText=ta.value||'';
@@ -2928,27 +2937,34 @@ async function toggleVoice(){
     recognition.onresult=e=>{
       vlog('onresult results='+e.results.length+' resultIndex='+e.resultIndex);
       let interim='';
-      // Rebuild finalText from scratch every pass so we can apply dedup
-      // consistently. seenFinals survives across events so mobile re-emits
-      // of the same transcript get skipped even if they come with fresh
-      // indices.
-      finalText='';
-      const runSeen=new Set();  // dedup within a single event pass too
+      // Rebuild finalText from scratch each pass. First gather all the final
+      // transcripts, then drop any that's a prefix of a longer one — that's
+      // the shape Android Chrome's duplicated finals take.
+      const finals=[];
       for(let i=0;i<e.results.length;i++){
         const r=e.results[i];
         if(r.isFinal){
           const raw=(r[0].transcript||'').trim();
-          if(!raw)continue;
-          const key=normTxt(raw);
-          if(!key)continue;
-          if(runSeen.has(key))continue;
-          runSeen.add(key);
-          seenFinals.add(key);
-          finalText+=raw+' ';
+          if(raw)finals.push(raw);
         } else {
           interim+=r[0].transcript;
         }
       }
+      const keys=finals.map(normTxt);
+      const kept=finals.filter((f,i)=>{
+        const ki=keys[i];
+        if(!ki)return false;
+        for(let j=0;j<finals.length;j++){
+          if(j===i)continue;
+          const kj=keys[j];
+          // Another final is a strict super-string of this one — drop ours
+          if(kj.length>ki.length && kj.startsWith(ki))return false;
+          // Exact duplicate — keep only the first occurrence
+          if(kj===ki && j<i)return false;
+        }
+        return true;
+      });
+      finalText=kept.length?kept.join(' ')+' ':'';
       ta.value=(baseText+finalText+interim).replace(/\s+$/,'')+(interim?' ':'');
       ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,140)+'px';
     };
@@ -4754,7 +4770,12 @@ async function applyRecurringDelete(d,mode){
 }
 
 // QUICK ADD
-function toggleQA(id){const el=document.getElementById(id);if(!el)return;const vis=el.style.display!=='none';el.style.display=vis?'none':'block';if(!vis){const inp=el.querySelector('input,textarea');if(inp)setTimeout(()=>inp.focus(),50);}}
+function toggleQA(id){
+  // If the user clicks "+ Add task" while on the History tab, hop back to
+  // Active first so the QA form isn't buried under a hidden section.
+  if(id==='task-qa'&&UI.taskTab==='completed')setTaskTab('active');
+  const el=document.getElementById(id);if(!el)return;const vis=el.style.display!=='none';el.style.display=vis?'none':'block';if(!vis){const inp=el.querySelector('input,textarea');if(inp)setTimeout(()=>inp.focus(),50);}
+}
 function toggleBrainQA(){const map={ideas:'idea-qa',resources:'res-qa',notes:'note-qa'};toggleQA(map[UI.brainTab]);}
 
 function qaAddHabit(){const n=document.getElementById('h-name')?.value?.trim();if(!n)return;S.habits.push({id:uid(),name:n,streak:0,lastDate:null,total:0,doneToday:false});svAll();rHabits();toggleQA('hab-qa');document.getElementById('h-name').value='';}
@@ -4828,23 +4849,45 @@ function rHabitsFull(){
 // Kept in sync with the taskFade keyframe duration so we re-render the list
 // (removing the completed row from the DOM) right after the animation ends.
 const TASK_FADE_MS=1400;
+// Cap how many completed tasks we keep around in the history so the Firestore
+// doc can't grow unbounded. Anything beyond this is pruned oldest-first when
+// a new task is ticked. Chose 50 to match Zander's ask — plenty for recent
+// reference, not enough to bloat sync.
+const MAX_COMPLETED_HISTORY=50;
+function pruneCompletedHistory(){
+  const done=S.tasks.filter(t=>t.done);
+  if(done.length<=MAX_COMPLETED_HISTORY)return false;
+  // Oldest first, drop from the top until we're at the cap. Tasks missing
+  // doneAt (legacy) sort as doneAt=0 so they go first.
+  done.sort((a,b)=>(a.doneAt||0)-(b.doneAt||0));
+  const removeIds=new Set(done.slice(0,done.length-MAX_COMPLETED_HISTORY).map(t=>t.id));
+  if(!removeIds.size)return false;
+  S.tasks=S.tasks.filter(t=>!removeIds.has(t.id));
+  return true;
+}
 let _taskFadeTimer=null;
 function chk(id,e){
   e.stopPropagation();
   const t=S.tasks.find(x=>x.id===id);if(!t)return;
   t.done=!t.done;
   if(t.done)t.doneAt=Date.now();else delete t.doneAt;
+  if(t.done)pruneCompletedHistory();
   svAllNow();rTasks();rAttention();
   if(t.done){
     clearTimeout(_taskFadeTimer);
     _taskFadeTimer=setTimeout(()=>{rTasks();},TASK_FADE_MS+100);
   }
 }
-function toggleCompleted(){
-  UI.showCompleted=!UI.showCompleted;
-  document.getElementById('tgl-completed').textContent=UI.showCompleted?'Hide completed':'Show completed';
+// Tab switcher for the Tasks section — 'active' shows open tasks + the add
+// form, 'completed' shows the history list only. Replaces the old "Show
+// completed" toggle which just appended the history under the live list.
+function setTaskTab(which){
+  UI.taskTab=which==='completed'?'completed':'active';
+  document.querySelectorAll('#task-tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.ttab===UI.taskTab));
   rTasks();
 }
+// Back-compat shim for any leftover call sites.
+function toggleCompleted(){setTaskTab(UI.taskTab==='completed'?'active':'completed');}
 function isTaskVisible(t){
   if(!t.done)return true;
   if(!t.doneAt)return false;
@@ -4888,19 +4931,36 @@ function rTasks(){
   if(!hw)wh+=`<div class="no-t">Clear board.</div>`;
   const ps=srt(pt);
   el.innerHTML=`<div class="tgrid"><div>${wh}</div><div><div class="col-lbl pers">Personal</div>${ps.length?`<div class="tcard">${ps.map(mkTi).join('')}</div>`:'<div class="no-t">Nothing personal.</div>'}</div></div>`;
+  // Tab visibility — Active shows the live lists + add form, History shows
+  // the completed archive only.
+  const onCompletedTab=UI.taskTab==='completed';
+  el.style.display=onCompletedTab?'none':'';
+  const qa=document.getElementById('task-qa');
+  if(qa&&onCompletedTab)qa.style.display='none';
   // Completed history section
   const compEl=document.getElementById('completed-sec');
   const completed=S.tasks.filter(t=>t.done&&!isTaskVisible(t));
-  const tgl=document.getElementById('tgl-completed');
-  if(tgl)tgl.textContent=UI.showCompleted?`Hide completed (${completed.length})`:`Show completed (${completed.length})`;
+  // Update the History tab label with the live count so users can see how
+  // many archived tasks are there without switching tabs.
+  const histTabBtn=document.getElementById('task-tab-completed');
+  if(histTabBtn)histTabBtn.textContent=completed.length?`History (${completed.length})`:'History';
   if(compEl){
-    if(!UI.showCompleted||!completed.length){compEl.style.display='none';}
+    if(!onCompletedTab){compEl.style.display='none';}
+    else if(!completed.length){
+      compEl.style.display='block';
+      compEl.innerHTML=`<div class="no-t">No completed tasks yet — ticking one will land it here.</div>`;
+    }
     else {
       compEl.style.display='block';
+      // Sort newest-ticked first so the most recently-completed task sits at
+      // the top of the history list. Also enforce the 50-item render cap as
+      // a belt-and-braces guard in case storage wasn't pruned (e.g. legacy
+      // Firestore docs from before the prune landed).
+      const sortedCompleted=[...completed].sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,MAX_COMPLETED_HISTORY);
       const byDate={};
-      completed.forEach(t=>{const ds=(t.doneAt?localDs(new Date(t.doneAt)):(t.date||tod()));(byDate[ds]=byDate[ds]||[]).push(t);});
+      sortedCompleted.forEach(t=>{const ds=(t.doneAt?localDs(new Date(t.doneAt)):(t.date||tod()));(byDate[ds]=byDate[ds]||[]).push(t);});
       const days=Object.keys(byDate).sort().reverse();
-      compEl.innerHTML=`<div class="col-lbl" style="color:var(--muted)">Completed</div>`+days.map(ds=>`
+      compEl.innerHTML=days.map(ds=>`
         <div class="completed-day">
           <div class="cmp-date">${fmt(ds)}</div>
           <div class="tcard">${byDate[ds].map(t=>`<div class="ti ${pCls(t.priority||'lo')}" style="opacity:.75"><span style="width:19px;height:19px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="color:#fff;font-size:11px">✓</span></span><span class="tit dn" style="flex:1">${esc(t.text)}</span><button class="btn btn-ghost btn-sm" onclick="undoTask('${t.id}');event.stopPropagation()">Undo</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}');event.stopPropagation()">×</button></div>`).join('')}</div>
