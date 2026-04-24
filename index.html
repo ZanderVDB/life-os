@@ -1827,7 +1827,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v73';
+const APP_VERSION='v74';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -4725,7 +4725,17 @@ async function doUpdate(){
   const projectIds=Object.keys(PROJ).filter(k=>k!=='gen');
   const projectEnum=[...projectIds,'gen'].join('|');
   const projectNames=projectIds.length?' Work-area codes map to: '+projectIds.map(k=>`${k}=${PROJ[k].n}`).join(', ')+'.':'';
-  const prompt=`You manage ${firstName}'s Life OS. Work > personal. Today: ${tod()}.${rhythm}${projectNames}
+  // Spell out today's weekday + the NEXT occurrence of each weekday, so the
+  // AI never has to guess "which date is next Wednesday" (it keeps getting
+  // this off-by-one wrong). Also gives it a grounded reference for
+  // "tomorrow", "this Thursday", "next Monday" etc.
+  const _now=new Date();const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const todayName=DAY_NAMES[_now.getDay()];
+  const nextOccurrences=DAY_NAMES.map((d,i)=>{let delta=(i-_now.getDay()+7)%7;if(delta===0)delta=7;const nd=new Date(_now);nd.setDate(_now.getDate()+delta);return`next ${d}=${localDs(nd)}`;}).join(', ');
+  const prompt=`You manage ${firstName}'s Life OS. Work > personal.
+Today: ${todayName} ${tod()} (user's local time). For reference, ${nextOccurrences}.${rhythm}${projectNames}
+CRITICAL for calendar events: when the user names a weekday (e.g. "community meetings on Wednesday"), use the matching date from the list above. Before returning any date, VERIFY the date you chose actually falls on the requested weekday. Off-by-one day errors break the whole calendar.
+
 Calendar defaults — apply these automatically unless the user explicitly says otherwise:
 - Birthday events: allDay:true, repeat:"yearly", reminderMin:[1440, 0]  (1 day before + at event time)
 - Any other reminder / appointment WITH a time: reminderMin:[60, 10]  (1 hour + 10 min before)
@@ -4745,6 +4755,11 @@ User:"${msg}"`;
     }
     const data=await r.json();
     const ch=JSON.parse((data.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim());
+    // Post-process: if the user's prompt mentioned a weekday and the AI
+    // generated a date that falls on the wrong weekday (off-by-one bug we've
+    // seen repeatedly), snap the date to the nearest matching weekday. This
+    // runs BEFORE the confirm modal so the user sees the corrected dates.
+    fixAIEventWeekdays(ch,msg);
     const hadActionable=formatAIChangesDetailed(ch)!=='';
     // applyChanges handles recordAIHistory itself — only records what was
     // ACTUALLY applied (never records cancelled operations).
@@ -4825,24 +4840,79 @@ function formatAIChangesDetailed(ch){
   const calLines=[];
   (ch.addEvent||[]).forEach(e=>{
     const bits=[];
-    if(e.date)bits.push(e.date);
+    if(e.date)bits.push(fmtDateWithDay(e.date));
     if(e.allDay||!e.time)bits.push('all day');
     else bits.push(e.time+(e.endTime?'–'+e.endTime:''));
     if(e.repeat&&e.repeat!=='none')bits.push('repeats '+e.repeat);
     const rem=fmtReminder(e.reminderMin);if(rem)bits.push('reminders: '+rem);
     calLines.push(`  • Add "${e.title||'(untitled)'}" — ${bits.join(', ')}`);
   });
-  (ch.removeEvent||[]).forEach(e=>calLines.push(`  • Delete events matching "${e.match||e.title||'?'}"${e.date?' on '+e.date:''}`));
+  (ch.removeEvent||[]).forEach(e=>calLines.push(`  • Delete events matching "${e.match||e.title||'?'}"${e.date?' on '+fmtDateWithDay(e.date):''}`));
   (ch.updateEvent||[]).forEach(e=>{
     const changes=[];
     if(e.newTitle)changes.push('title → '+e.newTitle);
-    if(e.newDate)changes.push('date → '+e.newDate);
+    if(e.newDate)changes.push('date → '+fmtDateWithDay(e.newDate));
     if(e.newTime)changes.push('time → '+e.newTime);
     calLines.push(`  • Update "${e.match||'?'}" — ${changes.join(', ')||'(no changes specified)'}`);
   });
   if(calLines.length)sections.push('CALENDAR\n'+calLines.join('\n'));
 
   return sections.length?sections.join('\n\n'):'';
+}
+// Format a YYYY-MM-DD into "Wed, 30 Apr 2026" style for confirm rows / history
+function fmtDateWithDay(ds){
+  if(!ds||typeof ds!=='string')return ds||'';
+  const m=ds.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return ds;
+  const d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));
+  if(isNaN(d))return ds;
+  const DAYS_SHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${DAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+// Scan the user's prompt for weekday mentions + paired event contexts, and
+// if the AI-generated date for that event falls on the WRONG weekday, snap
+// it forward to the nearest correct one. Handles the common off-by-one where
+// the AI picks "tomorrow" instead of "this Wednesday" etc.
+function fixAIEventWeekdays(ch,promptText){
+  const DAY_NAMES=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  const lower=(promptText||'').toLowerCase();
+  // Collect weekday mentions in the prompt
+  const mentioned=DAY_NAMES.filter(d=>new RegExp(`\\b${d}s?\\b`).test(lower));
+  if(!mentioned.length)return;
+  const snapToWeekday=(ds,targetDow)=>{
+    const m=ds.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return ds;
+    const d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));
+    const cur=d.getDay();
+    if(cur===targetDow)return ds;
+    // Shift forward (or backward by at most 3) to the nearest matching weekday
+    let delta=(targetDow-cur+7)%7;
+    if(delta>3)delta=delta-7;  // closer going backward
+    const nd=new Date(d);nd.setDate(d.getDate()+delta);
+    return localDs(nd);
+  };
+  // For each AI-generated event, find the weekday mention closest to its
+  // title in the prompt and snap accordingly.
+  (ch.addEvent||[]).forEach(e=>{
+    if(!e.date||!e.title)return;
+    const title=(e.title||'').toLowerCase();
+    const titleIdx=lower.indexOf(title.slice(0,Math.min(title.length,15)));
+    if(titleIdx<0)return;  // can't correlate
+    // Find all weekday mentions with their distance to the title
+    let best=null,bestDist=Infinity;
+    DAY_NAMES.forEach((d,i)=>{
+      const re=new RegExp(`\\b${d}s?\\b`,'g');let m;
+      while((m=re.exec(lower))!==null){
+        const dist=Math.abs(m.index-titleIdx);
+        if(dist<bestDist){bestDist=dist;best={dow:i,dayName:d};}
+      }
+    });
+    if(!best||bestDist>120)return;  // weekday mention has to be reasonably close to the title
+    const fixed=snapToWeekday(e.date,best.dow);
+    if(fixed!==e.date){
+      console.warn(`[ai] date snapped to ${best.dayName}: ${e.date} → ${fixed} (${e.title})`);
+      e.date=fixed;
+    }
+  });
 }
 // Interactive HTML version of the detailed summary — each row has an × so
 // the user can cherry-pick what NOT to apply. Powers showAIConfirmModal.
@@ -4879,9 +4949,9 @@ function renderAIChangesInteractive(ch){
   if(brainRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Brain</div>${brainRows.join('')}</div>`);
 
   const calRows=[];
-  (ch.addEvent||[]).forEach((e,i)=>{const bits=[];if(e.date)bits.push(e.date);if(e.allDay||!e.time)bits.push('all day');else bits.push(e.time+(e.endTime?'–'+e.endTime:''));if(e.repeat&&e.repeat!=='none')bits.push('repeats '+e.repeat);const rem=fmtReminder(e.reminderMin);if(rem)bits.push('reminders: '+rem);calRows.push(row(`Add "${esc(e.title||'?')}" — ${esc(bits.join(', '))}`,`addEvent:${i}`));});
-  (ch.removeEvent||[]).forEach((e,i)=>calRows.push(row(`Delete events matching "${esc(e.match||e.title||'?')}"${e.date?' on '+esc(e.date):''}`,`removeEvent:${i}`)));
-  (ch.updateEvent||[]).forEach((e,i)=>{const changes=[];if(e.newTitle)changes.push('title → '+e.newTitle);if(e.newDate)changes.push('date → '+e.newDate);if(e.newTime)changes.push('time → '+e.newTime);calRows.push(row(`Update "${esc(e.match||'?')}" — ${esc(changes.join(', ')||'(no changes)')}`,`updateEvent:${i}`));});
+  (ch.addEvent||[]).forEach((e,i)=>{const bits=[];if(e.date)bits.push(fmtDateWithDay(e.date));if(e.allDay||!e.time)bits.push('all day');else bits.push(e.time+(e.endTime?'–'+e.endTime:''));if(e.repeat&&e.repeat!=='none')bits.push('repeats '+e.repeat);const rem=fmtReminder(e.reminderMin);if(rem)bits.push('reminders: '+rem);calRows.push(row(`Add "${esc(e.title||'?')}" — ${esc(bits.join(', '))}`,`addEvent:${i}`));});
+  (ch.removeEvent||[]).forEach((e,i)=>calRows.push(row(`Delete events matching "${esc(e.match||e.title||'?')}"${e.date?' on '+esc(fmtDateWithDay(e.date)):''}`,`removeEvent:${i}`)));
+  (ch.updateEvent||[]).forEach((e,i)=>{const changes=[];if(e.newTitle)changes.push('title → '+e.newTitle);if(e.newDate)changes.push('date → '+fmtDateWithDay(e.newDate));if(e.newTime)changes.push('time → '+e.newTime);calRows.push(row(`Update "${esc(e.match||'?')}" — ${esc(changes.join(', ')||'(no changes)')}`,`updateEvent:${i}`));});
   if(calRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Calendar</div>${calRows.join('')}</div>`);
 
   return sections.length?sections.join(''):`<div class="aic-empty">Nothing left — hit Cancel or Redo.</div>`;
@@ -5093,7 +5163,7 @@ async function confirmCalendarOps(ops,preConfirmed){
   const fmtOp=op=>{
     if(op.kind==='add'){
       const bits=[];
-      if(op.ev.date)bits.push(op.ev.date);
+      if(op.ev.date)bits.push(fmtDateWithDay(op.ev.date));
       if(op.ev.allDay||!op.ev.time)bits.push('all day');
       else bits.push(op.ev.time+(op.ev.endTime?'–'+op.ev.endTime:''));
       if(op.ev.repeat&&op.ev.repeat!=='none')bits.push('repeats '+op.ev.repeat);
@@ -5101,14 +5171,14 @@ async function confirmCalendarOps(ops,preConfirmed){
       return `  • Add "${op.ev.title||'(untitled)'}" — ${bits.join(', ')}`;
     }
     if(op.kind==='remove'){
-      const d=op.ev.date?' on '+op.ev.date:'';
+      const d=op.ev.date?' on '+fmtDateWithDay(op.ev.date):'';
       return `  • Delete events matching "${op.ev.match||op.ev.title||'?'}"${d}`;
     }
     if(op.kind==='update'){
       const m=op.ev.match||op.ev.title||'?';
       const changes=[];
       if(op.ev.newTitle)changes.push('title → '+op.ev.newTitle);
-      if(op.ev.newDate)changes.push('date → '+op.ev.newDate);
+      if(op.ev.newDate)changes.push('date → '+fmtDateWithDay(op.ev.newDate));
       if(op.ev.newTime)changes.push('time → '+op.ev.newTime);
       return `  • Update "${m}" — ${changes.join(', ')||'(no changes specified)'}`;
     }
