@@ -75,8 +75,10 @@ html,body{max-width:100%;overflow-x:hidden}
 .main-wrap,.app,.main-col,.route,section{max-width:100%;min-width:0}
 /* Belt-and-braces — nothing inside a route should be able to cause the
    whole page to scroll sideways on mobile. Any overflowing child must
-   handle its own scroll locally (see .cd-chips, .aic-body). */
-html,body{overflow-x:hidden;max-width:100%}
+   handle its own scroll locally (see .cd-chips, .aic-body). Also disable
+   iOS rubber-band overscroll so the page can't extend past its content
+   when the user pulls at the edges. */
+html,body{overflow-x:hidden;max-width:100%;overscroll-behavior:none}
 .route{overflow-x:clip;max-width:100%}
 @media(max-width:768px){
   /* Stricter containment on mobile — clip any child that would otherwise
@@ -162,7 +164,7 @@ svg{flex-shrink:0}
 .theme-toggle button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06)}
 
 /* ━━━ MAIN LAYOUT ━━━ */
-.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:72px;padding:32px 36px 140px 44px;max-width:1780px;margin:0 auto;width:100%}
+.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:56px;padding:32px 32px 140px 44px;max-width:2200px;margin:0 auto;width:100%}
 .main-col{min-width:0;display:flex;flex-direction:column;gap:28px}
 .aside-col{display:flex;flex-direction:column;gap:14px;min-width:0;position:sticky;top:22px;align-self:start;max-height:calc(100vh - 60px);overflow-y:auto;padding-right:2px}
 .aside-col::-webkit-scrollbar{width:5px}
@@ -1899,7 +1901,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v83';
+const APP_VERSION='v84';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
