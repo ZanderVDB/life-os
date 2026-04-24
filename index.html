@@ -1476,17 +1476,30 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   /* Tabs — horizontal scroll, slightly tighter padding */
   .nb-tabs{padding:2px 2px 8px;margin-bottom:12px;gap:4px}
   .nb-tab{padding:6px 10px;font-size:11.5px;flex-shrink:0}
-  /* Book wrapper on mobile: keep the flex layout from desktop so the
-     .nb-book's aspect-ratio (210/297) actually applies. Previous
-     attempt set display:block on .nb-book, which broke the flex
-     container contract — the .nb-page child no longer filled via
-     flex:1 and the whole book sized to content instead, producing a
-     wider-than-tall page. Arrows sit outside this wrapper in the
-     .nb-arrows-bottom row below.
-     Removing the max-width lets the book span the available viewport
-     width; aspect-ratio handles the height. */
-  .nb-book-wrap{padding:0;position:relative}
-  .nb-book{max-width:none}
+  /* Mobile book: render the book at its FULL desktop internal size
+     (820px wide) and then transform:scale() it down to fit the viewport.
+     This is how Word and Google Docs handle A4 pages on phones — the
+     document's internal layout (padding, font size, ruled lines) stays
+     pixel-identical to the laptop view; the whole thing is just drawn
+     smaller. Pinch-zoom (viewport meta user-scalable=yes) lets the user
+     enlarge to read.
+     Why not container-queries: with flex + aspect-ratio + container
+     containment all interacting, the page's width wasn't resolving
+     before cqw units computed, so internal measurements came out wrong
+     (either tiny or giant). Transform-scale sidesteps all of that. */
+  .nb-book-wrap{
+    --nb-mobile-w: calc(100vw - 28px);   /* viewport minus .main-wrap padding */
+    --nb-mobile-scale: calc(var(--nb-mobile-w) / 820);
+    display:flex;justify-content:center;align-items:flex-start;
+    padding:0;position:relative;overflow:visible;
+    /* Height tracks the SCALED visual height of the A4 book */
+    height:calc(var(--nb-mobile-w) * 297 / 210);
+  }
+  .nb-book{
+    flex:0 0 820px;width:820px;max-width:820px;margin:0;
+    transform-origin:top center;
+    transform:scale(var(--nb-mobile-scale));
+  }
   /* Hide the inline (desktop) arrows; show the dedicated bottom row. */
   .nb-arrow-desktop{display:none !important}
   .nb-arrows-bottom{display:flex;justify-content:center;gap:28px;padding:14px 0 30px}
@@ -1497,31 +1510,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   }
   .nb-arrows-bottom .nb-arrow:active{background:var(--surface-hover);color:var(--text)}
   .nb-arrows-bottom .nb-arrow:disabled{opacity:.35}
-  /* Container-query scaling on mobile: the book's internal proportions
-     (padding, font size, line-height, rules, icon sizes) all become a
-     percentage of the PAGE's own width. That gives an identical-looking
-     layout whether the page is 820px on a laptop or 340px on a phone —
-     just at different scales. User pinches to zoom for detail (viewport
-     meta allows it). Desktop keeps its fixed px sizes. */
-  .nb-page{container-type:inline-size;padding:3.41% 3.9% 2.2% 7.07%;border-radius:1.7cqw;gap:1.7cqw}
-  .nb-page::before{left:5.6cqw;width:0.12cqw}
-  .nb-cell-ta{font-size:1.95cqw;line-height:3.66cqw;padding:0.37cqw 0.5cqw 0;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 3.54cqw,var(--paper-line) 3.54cqw,var(--paper-line) 3.66cqw)}
-  .nb-cell-ta h2{font-size:2.44cqw}
-  .nb-page-hdr{padding-bottom:0.98cqw;gap:1.22cqw}
-  .nb-page-sec{font-size:2.2cqw}
-  .nb-page-meta{font-size:1.46cqw}
-  .nb-page-hdr .iconbtn{width:3.17cqw;height:3.17cqw;font-size:1.46cqw;border-radius:0.73cqw}
-  .nb-toolbar{gap:0.24cqw;padding:0.5cqw 0}
-  .nb-tb-btn{width:3.17cqw;height:3.17cqw;font-size:1.46cqw;border-radius:0.6cqw}
-  .nb-toolbar-sep{height:2.2cqw;margin:0 0.5cqw}
-  .nb-tb-undo{padding:0 1cqw;font-size:1.34cqw;width:auto}
-  .nb-cells{gap:1.22cqw}
-  .nb-page-foot{padding-top:1.22cqw;gap:1cqw;font-size:1.34cqw}
-  .nb-layout-toggle{padding:0.24cqw;border-radius:1cqw}
-  .nb-layout-toggle button{padding:0.5cqw 1.1cqw;font-size:1.34cqw;border-radius:0.73cqw}
-  .nb-mic-btn{width:3.4cqw;height:3.4cqw;font-size:1.6cqw}
-  .nb-refine-btn{padding:0.6cqw 1.46cqw;font-size:1.46cqw;border-radius:1cqw}
-  .nb-cell[data-hint="true"]::after{font-size:1.05cqw;top:0.24cqw;right:0.73cqw;padding:0 0.5cqw}
+  /* The book's internal layout stays at DESKTOP px sizes — identical
+     to what you'd see on a laptop. Overrides from the tablet @media
+     (max-width:900px) that shrunk the font need to be reverted here. */
+  .nb-cell-ta{font-size:16px;line-height:30px;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 29px,var(--paper-line) 29px,var(--paper-line) 30px)}
+  .nb-page{padding:28px 32px 18px 58px;border-radius:14px}
+  .nb-page::before{left:46px}
 }
 
 /* ━━━ MOBILE ━━━ */
@@ -2382,7 +2376,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v97';
+const APP_VERSION='v98';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
