@@ -73,6 +73,11 @@ body.no-scroll{overflow:hidden;touch-action:none}
 /* Never let horizontal overflow make the page wider than the viewport */
 html,body{max-width:100%;overflow-x:hidden}
 .main-wrap,.app,.main-col,.route,section{max-width:100%;min-width:0}
+/* Belt-and-braces — nothing inside a route should be able to cause the
+   whole page to scroll sideways on mobile. Any overflowing child must
+   handle its own scroll locally (see .cd-chips, .aic-body). */
+html,body{overflow-x:hidden;max-width:100vw}
+.route{overflow-x:hidden}
 /* Stop the browser from re-anchoring scroll when content above changes.
    Without this, when #ppl-cnt or #brain-cnt populates with a count AFTER
    the route becomes visible, the browser "helpfully" scrolls down to keep
@@ -253,14 +258,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .reminder-chips .rc input{position:absolute;opacity:0;pointer-events:none}
 .reminder-chips .rc:has(input:checked){background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 /* Calendar defaults — chips on a single line, right-aligned on desktop.
-   Horizontal scroll if the chip set is wider than the row. Compact chip
-   padding so all five options typically fit without scrolling. */
-.cd-chips{flex-wrap:nowrap;justify-content:flex-end;max-width:100%;overflow-x:auto;scrollbar-width:thin}
-.cd-chips::-webkit-scrollbar{height:4px}
+   Horizontal scroll if the chip set is wider than the row. Padding-bottom
+   reserves a strip for the scrollbar so it doesn't overlap the chips. */
+.cd-chips{flex-wrap:nowrap;justify-content:flex-end;max-width:100%;overflow-x:auto;scrollbar-width:thin;padding-bottom:8px}
+.cd-chips::-webkit-scrollbar{height:5px}
 .cd-chips::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.cd-chips::-webkit-scrollbar-track{background:transparent}
 .cd-chips .rc{padding:5px 10px;font-size:11px;white-space:nowrap;flex-shrink:0}
-/* On phones, stack the row — title + description on top, chips below.
-   Keeps the row legible instead of cramming everything into the right. */
 @media(max-width:768px){
   .setting-row:has(.cd-chips){flex-direction:column;align-items:stretch;gap:10px}
   .setting-row:has(.cd-chips) .setting-right{width:100%}
@@ -1882,7 +1886,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v81';
+const APP_VERSION='v82';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -2551,13 +2555,14 @@ function handleSnapshot(snap){
     S.workProjects=Array.isArray(d.workProjects)?d.workProjects:[];
     if(d.calendarDefaults&&typeof d.calendarDefaults==='object'){
       // Migrate legacy all-day reminder minutes to the current 5pm set.
-      // Handles both the ORIGINAL midnight-based values (1440/2880/10080/20160)
-      // and the intermediate 9am values (2340/9540/19620) → unified to 5pm.
+      // Current scheme: 1 day before at 5pm, everything else at 9am. Maps
+      // every legacy value (midnight 1440/2880/10080/20160 and the brief
+      // all-5pm experiment 1860/9060/19140) to the right new value.
       const MAP={
-        1440:420, 2340:420,                      // any "1 day before" flavour → 5pm
-        2880:1860, /* 2340 dup above */          // "2 days before" → 5pm
-        10080:9060, 9540:9060,                   // "1 week before" → 5pm
-        20160:19140, 19620:19140                 // "2 weeks before" → 5pm
+        1440:420,                                 // 1 day before → 5pm
+        2880:2340, 1860:2340,                     // 2 days before → 9am
+        10080:9540, 9060:9540,                    // 1 week before → 9am
+        20160:19620, 19140:19620                  // 2 weeks before → 9am
       };
       const migrateAllDay=arr=>(arr||[]).map(m=>MAP[m]??m);
       S.calendarDefaults={
@@ -2896,19 +2901,31 @@ function saveDN(){const ta=document.getElementById('dn-ta');if(!ta)return;S.dayN
 function pickNotebookDate(){
   const ta=document.getElementById('dn-ta');
   if(ta){S.dayNotes=S.dayNotes||{};const curr=currentNotebookDate();if(ta.value.trim())S.dayNotes[curr]=ta.value;svAll();}
-  const trigger=document.getElementById('dn-date');
-  if(!trigger)return;
-  trigger.querySelectorAll('input[type="date"]').forEach(x=>x.remove());
-  if(getComputedStyle(trigger).position==='static')trigger.style.position='relative';
-  const inp=document.createElement('input');
-  inp.type='date';inp.id='dn-date-picker-live';
-  inp.style.cssText='position:absolute;inset:0;width:100%;height:100%;opacity:0.01;border:none;background:transparent;color:transparent;caret-color:transparent;cursor:pointer;font:inherit;padding:0;margin:0;box-sizing:border-box';
-  inp.value=currentNotebookDate();inp.max=tod();
-  inp.onchange=()=>{if(inp.value){UI.notebookDate=inp.value;renderNotebook();}setTimeout(()=>inp.remove(),100);};
-  inp.onblur=()=>setTimeout(()=>{if(inp.parentNode)inp.remove();},200);
-  trigger.appendChild(inp);
-  if(typeof inp.showPicker==='function'){try{inp.showPicker();return;}catch(e){console.warn('[nb] showPicker',e.message);}}
-  inp.focus();inp.click();
+  const old=document.getElementById('dn-date-modal');if(old)old.remove();
+  const cur=currentNotebookDate();
+  const m=document.createElement('div');
+  m.className='modal';m.id='dn-date-modal';m.style.display='flex';
+  m.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:320px">
+      <h3 style="margin-bottom:14px">Jump to date</h3>
+      <input class="input" id="dn-date-input" type="date" value="${esc(cur)}" max="${esc(tod())}" style="width:100%;margin-bottom:16px">
+      <div class="modal-actions">
+        <button class="btn btn-sm" id="dn-today-jump">Today</button>
+        <div class="spacer"></div>
+        <button class="btn btn-sm" id="dn-jump-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="dn-jump-ok">Go</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);_syncBodyLock();
+  const close=()=>{m.remove();_syncBodyLock();};
+  m.querySelector('.modal-bd').onclick=close;
+  m.querySelector('#dn-jump-cancel').onclick=close;
+  m.querySelector('#dn-today-jump').onclick=()=>{UI.notebookDate=tod();close();renderNotebook();};
+  m.querySelector('#dn-jump-ok').onclick=()=>{
+    const v=m.querySelector('#dn-date-input').value;
+    if(v){UI.notebookDate=v;close();renderNotebook();}
+    else close();
+  };
 }
 function searchNotebook(q){
   const wrap=document.getElementById('dn-wrap');
@@ -3388,6 +3405,11 @@ async function rCal(){
     const seen=new Set(gcEvs.filter(e=>e.task).map(e=>e.id));
     tsks.forEach(t=>{if(!seen.has(t.id))gcEvs.push(t);});
   }catch(e){}
+  // Final de-dupe by id across the whole merged pool. Without this, the
+  // same event occasionally appeared twice in the month view's trailing
+  // next-month days — getGCForMonth + the extra-range fetch + the tasks
+  // merge could each contribute overlapping entries.
+  {const seen=new Set();gcEvs=gcEvs.filter(e=>{if(seen.has(e.id))return false;seen.add(e.id);return true;});}
   const gcForDate=ds=>(gcEvs||[]).filter(e=>e.date===ds);
   if(UI.calView==='day'){
     const ds=localDs(UI.calDate);
@@ -3416,26 +3438,48 @@ async function rCal(){
 }
 function localDs(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function goToCalToday(){UI.calDate=new Date();UI.monthExpandedDs=null;rCal();}
+// Month/year picker for the calendar — instead of wrangling the native
+// date picker (which positions unreliably across browsers on a clicked
+// heading that isn't itself an input), use our own tiny modal with
+// month + year dropdowns. Always opens centered, works the same everywhere.
 function pickCalDate(){
-  const trigger=document.getElementById('cal-ttl');
-  if(!trigger)return;
-  // Embed the date input INSIDE the trigger element, absolutely positioned
-  // to fill it exactly. The input IS physically where the user tapped —
-  // browsers anchor showPicker() to the input's actual bounding rect, so
-  // the native picker pops up directly under the title on every platform.
-  // opacity:0.01 (not 0) so Chrome doesn't treat it as "visually hidden"
-  // and drop the picker at the viewport origin.
-  trigger.querySelectorAll('input[type="date"]').forEach(x=>x.remove());
-  if(getComputedStyle(trigger).position==='static')trigger.style.position='relative';
-  const inp=document.createElement('input');
-  inp.type='date';inp.id='cal-date-picker';
-  inp.style.cssText='position:absolute;inset:0;width:100%;height:100%;opacity:0.01;border:none;background:transparent;color:transparent;caret-color:transparent;cursor:pointer;font:inherit;padding:0;margin:0;box-sizing:border-box';
-  inp.value=localDs(UI.calDate);
-  inp.onchange=()=>{if(inp.value){const [y,mm,d]=inp.value.split('-').map(Number);UI.calDate=new Date(y,mm-1,d);UI.monthExpandedDs=null;rCal();}setTimeout(()=>inp.remove(),100);};
-  inp.onblur=()=>setTimeout(()=>{if(inp.parentNode)inp.remove();},200);
-  trigger.appendChild(inp);
-  if(typeof inp.showPicker==='function'){try{inp.showPicker();return;}catch(e){console.warn('[cal] showPicker',e.message);}}
-  inp.focus();inp.click();
+  const old=document.getElementById('cal-month-modal');if(old)old.remove();
+  const curY=UI.calDate.getFullYear();
+  const curM=UI.calDate.getMonth();
+  const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const years=[];for(let y=curY-5;y<=curY+5;y++)years.push(y);
+  const m=document.createElement('div');
+  m.className='modal';m.id='cal-month-modal';m.style.display='flex';
+  m.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:360px">
+      <h3 style="margin-bottom:14px">Jump to month</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <select class="select" id="cal-m-sel" style="width:100%">
+          ${MONTHS.map((n,i)=>`<option value="${i}"${i===curM?' selected':''}>${n}</option>`).join('')}
+        </select>
+        <select class="select" id="cal-y-sel" style="width:100%">
+          ${years.map(y=>`<option value="${y}"${y===curY?' selected':''}>${y}</option>`).join('')}
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-sm" id="cal-today-jump">Today</button>
+        <div class="spacer"></div>
+        <button class="btn btn-sm" id="cal-jump-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="cal-jump-ok">Go</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);_syncBodyLock();
+  const close=()=>{m.remove();_syncBodyLock();};
+  m.querySelector('.modal-bd').onclick=close;
+  m.querySelector('#cal-jump-cancel').onclick=close;
+  m.querySelector('#cal-today-jump').onclick=()=>{UI.calDate=new Date();UI.monthExpandedDs=null;close();rCal();};
+  m.querySelector('#cal-jump-ok').onclick=()=>{
+    const mm=Number(m.querySelector('#cal-m-sel').value);
+    const yy=Number(m.querySelector('#cal-y-sel').value);
+    UI.calDate=new Date(yy,mm,1);
+    UI.monthExpandedDs=null;
+    close();rCal();
+  };
 }
 function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=localDs(UI.calDate);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
 
@@ -3698,9 +3742,25 @@ function buildWeekView(dates,gcEvs){
 
 // ─────── MONTH VIEW (CSS-grid spans; multi-day bars truly connect) ───────
 function diffDaysDs(a,b){const [y1,m1,d1]=a.split('-').map(Number);const [y2,m2,d2]=b.split('-').map(Number);return Math.round((Date.UTC(y2,m2-1,d2)-Date.UTC(y1,m1-1,d1))/86400000);}
+// Color priority for month-view bar sorting. Lower number = rendered first
+// (higher up the stack). Birthdays get the top slot, then meetings, etc.
+const CAT_PRIORITY={birthday:0,holiday:1,meeting:2,business:3,faith:4,movie:5,event:6,reminder:7,custom:8};
 function layoutWeekEvents(evs){
-  // Sort: longer spans first, then earlier start, then title
-  evs.sort((a,b)=>{const la=a.endCol-a.startCol;const lb=b.endCol-b.startCol;if(lb!==la)return lb-la;if(a.startCol!==b.startCol)return a.startCol-b.startCol;return(a.title||'').localeCompare(b.title||'');});
+  // Sort rule:
+  //   1. Longer (multi-day) spans first — multi-day bars belong at the top
+  //      of the stack so shorter one-off events sit below them cleanly.
+  //   2. Within equal span length: category priority (birthdays first).
+  //   3. Earlier start date.
+  //   4. Title alphabetically — stable tiebreak.
+  evs.sort((a,b)=>{
+    const la=a.endCol-a.startCol,lb=b.endCol-b.startCol;
+    if(lb!==la)return lb-la;
+    const catA=CAT_PRIORITY[eventCategory(a.ev).cat]??99;
+    const catB=CAT_PRIORITY[eventCategory(b.ev).cat]??99;
+    if(catA!==catB)return catA-catB;
+    if(a.startCol!==b.startCol)return a.startCol-b.startCol;
+    return(a.title||'').localeCompare(b.title||'');
+  });
   const rows=[];
   evs.forEach(e=>{
     let row=0;
@@ -4482,19 +4542,26 @@ async function applyRecurringUpdate(d,mode,fields){
       if(!r.ok)return false;
       const oldMaster=await r.json();
       const rrules=(oldMaster.recurrence||[]).filter(x=>x.startsWith('RRULE:'));
+      // Safety net: if the user's form shows "does not repeat" but the old
+      // series was clearly weekly/monthly/etc, carry that forward onto the
+      // new series. Otherwise "this and following" silently becomes "just
+      // this one instance", wiping future occurrences.
+      const adjustedOpts={...opts};
+      if((!adjustedOpts.recurrence||adjustedOpts.recurrence==='none')&&rrules.length){
+        const inherited=parseRRule(rrules[0]);
+        if(inherited&&inherited!=='none')adjustedOpts.recurrence=inherited;
+      }
       if(rrules.length){
-        // Stamp UNTIL = day before THIS instance on the old master
         const [yy,mm,dd]=d.date.split('-').map(Number);
         const cutoff=new Date(yy,mm-1,dd);cutoff.setDate(cutoff.getDate()-1);cutoff.setHours(23,59,59,0);
         const utc=new Date(cutoff.getTime()-cutoff.getTimezoneOffset()*60000);
         const iso=utc.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
         const newRule=rrules[0].replace(/;UNTIL=[^;]+/i,'').replace(/;COUNT=[^;]+/i,'')+';UNTIL='+iso;
         const rebuilt={recurrence:[newRule,...oldMaster.recurrence.filter(x=>!x.startsWith('RRULE:'))]};
-        await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(masterId)}`,{method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(rebuilt)});
+        const patchRes=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(masterId)}`,{method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(rebuilt)});
+        if(!patchRes.ok){console.warn('[update-future] PATCH failed',patchRes.status);return false;}
       }
-      // Create a NEW series from this instance with the updated details.
-      // Keep the same recurrence the user picked in the modal (opts.recurrence).
-      const res=await createGCEvent(title,date,time,desc,endTime,opts);
+      const res=await createGCEvent(title,date,time,desc,endTime,adjustedOpts);
       gcCache={key:'',events:[]};
       return !!res;
     }catch(e){console.warn('[update-future]',e.message);return false;}
@@ -5023,16 +5090,17 @@ function deleteWorkProject(id){
 // ───────── CALENDAR DEFAULTS (user-configurable reminder defaults) ─────────
 // Timed events — precise minutes before the event
 const REMINDER_OPTIONS_TIMED=[{v:0,lbl:'At time'},{v:10,lbl:'10 min'},{v:60,lbl:'1 hour'},{v:1440,lbl:'1 day'},{v:10080,lbl:'1 week'}];
-// All-day / birthday events — every "before" option fires at 5pm (Zander's
-// preference; calmer than 9am). "On the day" is midnight only due to a hard
-// Google Calendar API limit (reminder minutes must be ≥ 0, so a 9am-day-of
-// reminder would need -540 min, which the API rejects).
-//   On the day  → midnight (0 min)
-//   1 day before 5pm   → 420 min
-//   2 days before 5pm  → 1860 min
-//   1 week before 5pm  → 9060 min
-//   2 weeks before 5pm → 19140 min
-const REMINDER_OPTIONS_ALLDAY=[{v:0,lbl:'On the day'},{v:420,lbl:'1 day before · 5pm'},{v:1860,lbl:'2 days before · 5pm'},{v:9060,lbl:'1 week before · 5pm'},{v:19140,lbl:'2 weeks before · 5pm'}];
+// All-day / birthday events. "On the day" is midnight only due to a hard
+// Google Calendar API limit (reminder minutes must be ≥ 0). "1 day before"
+// fires at 5pm the evening before, per user preference. "2 days / 1 week /
+// 2 weeks before" all fire at 9am — matches Google Calendar's phone-app
+// defaults (gentler week-ahead notification).
+//   On the day       → midnight (0 min)
+//   1 day before 5pm → 420 min
+//   2 days before 9am → 2340 min
+//   1 week before 9am → 9540 min
+//   2 weeks before 9am → 19620 min
+const REMINDER_OPTIONS_ALLDAY=[{v:0,lbl:'On the day'},{v:420,lbl:'1 day before · 5pm'},{v:2340,lbl:'2 days before · 9am'},{v:9540,lbl:'1 week before · 9am'},{v:19620,lbl:'2 weeks before · 9am'}];
 function renderCalendarDefaults(){
   const buildChips=(containerId,key,opts)=>{
     const el=document.getElementById(containerId);if(!el)return;
