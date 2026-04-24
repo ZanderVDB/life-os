@@ -1086,6 +1086,16 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
 .save-pill{position:fixed;top:14px;right:14px;background:var(--accent);color:var(--accent-ink);font-size:11px;padding:6px 14px;border-radius:20px;opacity:0;transition:opacity .3s;z-index:50;pointer-events:none;box-shadow:var(--shadow-lift);font-weight:600;letter-spacing:.04em}
 .save-pill.show{opacity:1}
+/* "New version available" toast — appears top-centre when a waiting SW is
+   detected. Dismissable or acted on via the Relaunch button. */
+.update-toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border-strong);border-radius:24px;padding:8px 14px 8px 16px;display:flex;align-items:center;gap:10px;z-index:60;box-shadow:var(--shadow-lift);font-size:12.5px;color:var(--text);animation:update-toast-in .24s ease-out;max-width:calc(100vw - 28px)}
+.update-toast span{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.update-toast-x{background:transparent;border:none;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;padding:0 2px 0 6px}
+.update-toast-x:hover{color:var(--text)}
+@keyframes update-toast-in{from{opacity:0;transform:translate(-50%,-10px)}to{opacity:1;transform:translate(-50%,0)}}
+@media(max-width:500px){
+  .update-toast{top:auto;bottom:calc(100px + env(safe-area-inset-bottom,0));font-size:11.5px}
+}
 
 /* ━━━ MOBILE ━━━ */
 .mobile-top{display:none;align-items:center;justify-content:space-between;padding:0 16px;height:54px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:9;gap:12px}
@@ -1667,6 +1677,19 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             </div>
           </div>
         </div>
+
+        <div>
+          <div class="section-hdr"><h2>About</h2></div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Version</div>
+              <div class="setting-desc" id="version-desc">—</div>
+            </div>
+            <div class="setting-right" id="version-right">
+              <span class="key-mask" id="version-num">—</span>
+            </div>
+          </div>
+        </div>
       </div>
 
     </main>
@@ -1778,6 +1801,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script>
+// App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
+// Settings and used to detect "new version available" via service worker.
+const APP_VERSION='v70';
+const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth(),db=firebase.firestore();
@@ -4441,6 +4468,20 @@ function rSettings(){
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
   document.querySelectorAll('#ai-confirm-toggle button').forEach(b=>b.classList.toggle('on',b.dataset.aiMode===(S.aiConfirmMode||'calendar')));
+  // Version + update banner
+  const vn=document.getElementById('version-num');if(vn)vn.textContent=APP_VERSION;
+  const vd=document.getElementById('version-desc');
+  if(vd){
+    try{const d=new Date(APP_BUILD_DATE);vd.textContent='Built '+d.toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'});}catch(_){vd.textContent='Built '+APP_BUILD_DATE;}
+  }
+  const vr=document.getElementById('version-right');
+  if(vr){
+    if(_updateReady){
+      vr.innerHTML=`<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><span class="key-mask" style="color:var(--peach)">${APP_VERSION} · update ready</span><button class="btn btn-primary btn-sm" onclick="applyUpdate()">↻ Relaunch</button></div>`;
+    } else {
+      vr.innerHTML=`<span class="key-mask" id="version-num">${APP_VERSION}</span>`;
+    }
+  }
   updateInstallUI();
   renderCalendarList();
   rAIHistory();
@@ -5016,7 +5057,51 @@ function seed(){
   svAll();
 }
 
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+// Service worker registration + update detection. When a new SW is installed
+// but an old one is still controlling the page, surface a "New version · Relaunch"
+// pill in Settings so the user can explicitly update without a hard refresh.
+let _updateReady=false;let _swWaiting=null;
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      // Fires when the browser finds a new sw.js
+      reg.addEventListener('updatefound',()=>{
+        const incoming=reg.installing;
+        if(!incoming)return;
+        incoming.addEventListener('statechange',()=>{
+          if(incoming.state==='installed'&&navigator.serviceWorker.controller){
+            // New version ready AND an old SW is still in control → waiting.
+            _updateReady=true;_swWaiting=incoming;
+            if(currentRoute==='settings')rSettings();
+            // Also show a toast so the user notices even if not on Settings
+            showUpdateToast();
+          }
+        });
+      });
+      // Nudge a check when we come back to the tab
+      document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});});
+    }).catch(()=>{});
+    // When the waiting SW takes control, reload automatically
+    let reloaded=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloaded)return;reloaded=true;window.location.reload();});
+  });
+}
+function showUpdateToast(){
+  if(document.getElementById('update-toast'))return;
+  const el=document.createElement('div');
+  el.id='update-toast';el.className='update-toast';
+  el.innerHTML=`<span>🎉 New version available</span><button class="btn btn-primary btn-sm" onclick="applyUpdate()">Relaunch</button><button class="update-toast-x" onclick="this.parentElement.remove()" aria-label="Dismiss">×</button>`;
+  document.body.appendChild(el);
+}
+function applyUpdate(){
+  if(_swWaiting){
+    _swWaiting.postMessage({type:'SKIP_WAITING'});
+    // controllerchange listener above will reload the page
+  } else {
+    // No waiting SW but user clicked update anyway — do a hard reload
+    window.location.reload();
+  }
+}
 
 // Detect multiple concurrent Life OS windows and warn. Realtime sync means
 // both can technically co-exist, but simultaneous writes on the same field
