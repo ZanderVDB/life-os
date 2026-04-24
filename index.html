@@ -244,6 +244,13 @@ svg{flex-shrink:0}
 
 /* ━━━ NOTEBOOK (daily note) ━━━ */
 .notebook-wrap{background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px 18px 58px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+/* Daily-notebook row 2: three-column grid — Today | ‹ date › | Save.
+   Empty columns still take their 1fr share so the date-nav stays centred
+   even when the Today button is hidden (which is the common case). */
+.dn-controls{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-bottom:10px}
+.dn-ctrl-left{justify-self:start}
+.dn-ctrl-center{justify-self:center}
+.dn-ctrl-right{justify-self:end}
 .notebook-wrap::before{content:'';position:absolute;left:46px;top:0;bottom:0;width:1px;background:var(--paper-margin);opacity:.55}
 .notebook-hdr{display:flex;align-items:baseline;gap:10px;margin-bottom:6px;margin-left:-8px}
 .notebook-date{font-family:'Playfair Display',serif;font-size:14px;color:var(--muted);font-style:italic}
@@ -1469,12 +1476,17 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   /* Tabs — horizontal scroll, slightly tighter padding */
   .nb-tabs{padding:2px 2px 8px;margin-bottom:12px;gap:4px}
   .nb-tab{padding:6px 10px;font-size:11.5px;flex-shrink:0}
-  /* Book wrapper on mobile: the book spans full width as a block (no
-     more flex-row alongside arrows). Arrows live BELOW the book in their
-     own row — the old overlay-on-edges approach felt intrusive on phones
-     where the thumbs are already near the page. */
-  .nb-book-wrap{display:block;padding:0;position:relative}
-  .nb-book{display:block;width:100%;max-width:none;margin:0}
+  /* Book wrapper on mobile: keep the flex layout from desktop so the
+     .nb-book's aspect-ratio (210/297) actually applies. Previous
+     attempt set display:block on .nb-book, which broke the flex
+     container contract — the .nb-page child no longer filled via
+     flex:1 and the whole book sized to content instead, producing a
+     wider-than-tall page. Arrows sit outside this wrapper in the
+     .nb-arrows-bottom row below.
+     Removing the max-width lets the book span the available viewport
+     width; aspect-ratio handles the height. */
+  .nb-book-wrap{padding:0;position:relative}
+  .nb-book{max-width:none}
   /* Hide the inline (desktop) arrows; show the dedicated bottom row. */
   .nb-arrow-desktop{display:none !important}
   .nb-arrows-bottom{display:flex;justify-content:center;gap:28px;padding:14px 0 30px}
@@ -1607,6 +1619,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .route[data-route="today"] .nb-search{flex:1 1 100%;width:100% !important;margin-right:0}
   .dn-date-nav{flex-wrap:nowrap !important}
   .dn-date-nav #dn-date{min-width:auto !important;font-size:12px;padding:4px 8px !important}
+  /* Mobile: date-nav shrinks slightly so the 3-column grid still fits
+     on narrow phones without cramping. */
+  .dn-controls{grid-template-columns:minmax(60px,1fr) auto minmax(60px,1fr) !important}
+  .dn-ctrl-right .btn{padding:6px 12px}
   .section-hdr{margin-bottom:8px}
   .tabs{margin-bottom:10px}
   .ai-bar{left:0;padding:10px 12px env(safe-area-inset-bottom,12px)}
@@ -1830,19 +1846,27 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <input type="search" class="input nb-search" placeholder="Search…" oninput="searchNotebook(this.value)" style="width:160px;padding:6px 10px;font-size:12px">
             </div>
           </div>
-          <!-- Row 2 of the daily-notebook header: the ‹ date › triplet +
-               optional Today button + Save. Kept on its own line so the
-               search above doesn't have to share room with the arrows and
-               the Today button (when it appears) doesn't shove Save down. -->
-          <div class="dn-controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-            <div class="dn-date-nav" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;flex-shrink:0">
-              <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
-              <span class="cnt" id="dn-date" onclick="pickNotebookDate()" title="Pick a date" style="min-width:140px;text-align:center;cursor:pointer;padding:4px 10px"></span>
-              <input type="date" id="dn-date-picker" style="position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none">
-              <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
+          <!-- Row 2 of the daily-notebook header, as a 3-column grid:
+               [Today]  [‹ date ›]  [Save]
+               The three <div> slots keep their column even when the Today
+               button is hidden — so the date-nav stays centred and Save
+               stays pinned to the right regardless of whether we're on
+               today or some other day. -->
+          <div class="dn-controls">
+            <div class="dn-ctrl-left">
+              <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
-            <button class="btn btn-primary btn-sm" onclick="saveDN()" style="margin-left:auto">Save</button>
+            <div class="dn-ctrl-center">
+              <div class="dn-date-nav" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;flex-shrink:0">
+                <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
+                <span class="cnt" id="dn-date" onclick="pickNotebookDate()" title="Pick a date" style="min-width:140px;text-align:center;cursor:pointer;padding:4px 10px"></span>
+                <input type="date" id="dn-date-picker" style="position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none">
+                <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
+              </div>
+            </div>
+            <div class="dn-ctrl-right">
+              <button class="btn btn-primary btn-sm" onclick="saveDN()">Save</button>
+            </div>
           </div>
           <div id="dn-search-results" style="display:none"></div>
           <div class="notebook-wrap" id="dn-wrap">
@@ -2358,7 +2382,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v96';
+const APP_VERSION='v97';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
