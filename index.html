@@ -1111,6 +1111,12 @@ svg{flex-shrink:0}
   .page-sub{font-size:11.5px;flex:1 1 100%;order:10;padding:0 !important;margin:0 !important;align-self:auto !important;line-height:1.3}
   .page-sub:empty{display:none}
   .page-actions{margin-left:auto;flex:0 1 auto;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  /* Rows that need to stack vertically on mobile (long description + wide
+     control like the 3-way AI-confirm toggle). */
+  .setting-row.setting-row-stack{flex-direction:column;align-items:stretch;gap:10px}
+  .setting-row.setting-row-stack .setting-right{width:100%}
+  .setting-row.setting-row-stack .theme-toggle{width:100%}
+  .setting-row.setting-row-stack .theme-toggle button{flex:1;padding:8px 6px}
   /* For Brain specifically, pull the search input + add button out of the
      page-actions wrapper so they flow as siblings of page-title. That lets
      the search wrap to its own full-width line BELOW the title+button row.
@@ -1598,10 +1604,10 @@ svg{flex-shrink:0}
 
         <div>
           <div class="section-hdr"><h2>AI behaviour</h2></div>
-          <div class="setting-row">
+          <div class="setting-row setting-row-stack">
             <div>
               <div class="setting-label">Confirm before applying</div>
-              <div class="setting-desc"><strong>Off</strong> — AI makes every change including calendar without asking. <strong>Calendar</strong> — only calendar edits need approval (default). <strong>All</strong> — every AI change (tasks, habits, notes, people, calendar) needs approval.</div>
+              <div class="setting-desc"><strong>Off</strong> — AI makes every change, calendar included, without asking. <strong>Calendar</strong> — only calendar edits need approval (default). <strong>All</strong> — every AI change (tasks, habits, notes, people, calendar) needs approval.</div>
             </div>
             <div class="setting-right">
               <div class="theme-toggle" id="ai-confirm-toggle">
@@ -1711,6 +1717,19 @@ svg{flex-shrink:0}
         <option value="yearly">Every year</option>
       </select></div>
       <div><label>Reminder</label><select class="select" id="em-reminder" style="width:100%">
+        <option value="none">None</option>
+        <option value="0">At time of event</option>
+        <option value="5">5 minutes before</option>
+        <option value="10">10 minutes before</option>
+        <option value="15">15 minutes before</option>
+        <option value="30">30 minutes before</option>
+        <option value="60">1 hour before</option>
+        <option value="120">2 hours before</option>
+        <option value="1440">1 day before</option>
+      </select></div>
+    </div>
+    <div class="modal-row" style="display:grid;grid-template-columns:1fr;gap:10px">
+      <div><label>Second reminder (optional)</label><select class="select" id="em-reminder-2" style="width:100%">
         <option value="none">None</option>
         <option value="0">At time of event</option>
         <option value="5">5 minutes before</option>
@@ -2190,8 +2209,24 @@ function applyAdvancedFields(body,opts){
     const rule=buildRRule(opts.recurrence,opts.date);
     if(rule)body.recurrence=[rule];
   }
+  // reminderMin can be: single number/string, array of numbers, 'none'/null.
+  // Always set useDefault:false to prevent the calendar's default reminder
+  // (often 10 min) being silently added alongside our explicit overrides —
+  // that was the "I set 60 but phone shows 70" mystery.
   if(opts.reminderMin!==null&&opts.reminderMin!==undefined&&opts.reminderMin!==''&&opts.reminderMin!=='none'){
-    body.reminders={useDefault:false,overrides:[{method:'popup',minutes:Number(opts.reminderMin)}]};
+    const arr=Array.isArray(opts.reminderMin)?opts.reminderMin:[opts.reminderMin];
+    const overrides=arr
+      .map(m=>Number(m))
+      .filter(m=>!isNaN(m)&&m>=0&&m!=='none')
+      // De-dupe so asking for [60, 60] doesn't give you two identical popups
+      .filter((m,i,a)=>a.indexOf(m)===i)
+      .slice(0,5)  // Google caps at 5 reminders per event
+      .map(m=>({method:'popup',minutes:m}));
+    if(overrides.length)body.reminders={useDefault:false,overrides};
+    else body.reminders={useDefault:false,overrides:[]};
+  } else {
+    // Explicit "None" — clear reminders entirely, don't let the calendar default resurface
+    body.reminders={useDefault:false,overrides:[]};
   }
 }
 async function createGCEvent(title,date,time,desc='',endTime='',opts={}){
@@ -2564,6 +2599,13 @@ async function toggleVoice(){
     vlog('recognition created (default lang, continuous=true)');
     let finalText='';voiceStartedAt=Date.now();voiceHeardSound=false;
     let gotStart=false;
+    // Track which result indices we've already committed as final. Mobile
+    // Chrome/Safari's SpeechRecognition often fires onresult multiple times
+    // with the SAME result marked isFinal — without tracking seen indices we
+    // append the same transcript 3-4 times, producing the "I have a friend
+    // Neil, I have a friend Neil, I have a friend Neil" duplication Zander
+    // saw on mobile.
+    const committedIdx=new Set();
     // Preserve whatever's already in the textarea so new speech appends to it
     let baseText=ta.value||'';
     if(baseText&&!/\s$/.test(baseText))baseText+=' ';
@@ -2574,10 +2616,18 @@ async function toggleVoice(){
     recognition.onresult=e=>{
       vlog('onresult results='+e.results.length+' resultIndex='+e.resultIndex);
       let interim='';
-      for(let i=e.resultIndex;i<e.results.length;i++){
+      // Walk the FULL results array (not just from resultIndex) so we can
+      // de-dupe reliably against committedIdx.
+      for(let i=0;i<e.results.length;i++){
         const r=e.results[i];
-        if(r.isFinal)finalText+=r[0].transcript+' ';
-        else interim+=r[0].transcript;
+        if(r.isFinal){
+          if(!committedIdx.has(i)){
+            committedIdx.add(i);
+            finalText+=r[0].transcript+' ';
+          }
+        } else {
+          interim+=r[0].transcript;
+        }
       }
       ta.value=(baseText+finalText+interim).replace(/\s+$/,'')+(interim?' ':'');
       ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,140)+'px';
@@ -3875,6 +3925,7 @@ function resetEventModal(){
   const ad=document.getElementById('em-allday');if(ad)ad.checked=false;
   const rep=document.getElementById('em-repeat');if(rep)rep.value='none';
   const rem=document.getElementById('em-reminder');if(rem)rem.value='none';
+  const rem2=document.getElementById('em-reminder-2');if(rem2)rem2.value='none';
   const tz=document.getElementById('em-tz');if(tz)tz.value='Africa/Johannesburg';
   toggleEmAllDay();
 }
@@ -3950,7 +4001,13 @@ async function openEventEdit(payload){
       if(full.start?.date){document.getElementById('em-allday').checked=true;toggleEmAllDay();}
       if(full.start?.timeZone){const ts=document.getElementById('em-tz');if(ts){ts.value=full.start.timeZone;if(ts.value!==full.start.timeZone){const opt=document.createElement('option');opt.value=full.start.timeZone;opt.textContent=full.start.timeZone;ts.appendChild(opt);ts.value=full.start.timeZone;}}}
       if(full.recurrence?.length)document.getElementById('em-repeat').value=parseRRule(full.recurrence[0]);
-      if(full.reminders&&full.reminders.overrides?.length)document.getElementById('em-reminder').value=String(full.reminders.overrides[0].minutes);
+      if(full.reminders&&full.reminders.overrides?.length){
+        // Load up to 2 reminders into the two dropdowns, sorted descending
+        // (earliest first — e.g. [60, 10] so "1 hr before" shows in primary).
+        const mins=full.reminders.overrides.map(o=>o.minutes).sort((a,b)=>b-a);
+        const r1=document.getElementById('em-reminder');if(r1)r1.value=String(mins[0]);
+        const r2=document.getElementById('em-reminder-2');if(r2)r2.value=mins[1]!=null?String(mins[1]):'none';
+      }
     }catch(e){console.warn('[openEventEdit] GCal enrich failed:',e.message);}
   }
 }
@@ -3980,7 +4037,12 @@ async function saveCurrentEvent(){
   const endTime=allDay?'':document.getElementById('em-tm-end').value.trim();
   const desc=document.getElementById('em-desc').value.trim();
   const recurrence=document.getElementById('em-repeat').value;
-  const reminderMin=document.getElementById('em-reminder').value;
+  // Collect both reminder dropdowns; keep unique, drop 'none'. applyAdvancedFields
+  // then writes them as an array of overrides to Google Calendar.
+  const r1=document.getElementById('em-reminder').value;
+  const r2=document.getElementById('em-reminder-2')?.value||'none';
+  const reminderList=[r1,r2].filter(v=>v!=='none'&&v!==''&&v!=null);
+  const reminderMin=reminderList.length?(reminderList.length===1?reminderList[0]:reminderList):'none';
   const timeZone=document.getElementById('em-tz').value;
   const opts={allDay,recurrence,reminderMin,timeZone,endDate};
   if(editingEvent.mode==='new'){
@@ -4411,8 +4473,14 @@ async function doUpdate(){
   };
   const rhythm=S.lifeRhythm?`\nZander's weekly rhythm / regular commitments (use as soft context, don't duplicate as tasks):\n${S.lifeRhythm}\n`:'';
   const prompt=`You manage Zander's Life OS. Entrepreneur, Cape Town SA. Work > personal. Today: ${tod()}.${rhythm}
+Calendar defaults — apply these automatically unless Zander explicitly says otherwise:
+- Birthday events: allDay:true, repeat:"yearly", reminderMin:[1440, 0]  (1 day before + at event time)
+- Any other reminder / appointment WITH a time: reminderMin:[60, 10]  (1 hour + 10 min before)
+- Events with no time (all-day): reminderMin:[0]  (on the day) unless user says otherwise
+reminderMin can be a single number OR an array of minutes (up to 5 reminders per event).
+
 Respond ONLY raw JSON:
-{"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|zm|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":30,"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
+{"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|zm|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 Zander:"${msg}"`;
   try{
@@ -4424,8 +4492,9 @@ Zander:"${msg}"`;
     }
     const data=await r.json();
     const ch=JSON.parse((data.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim());
-    recordAIHistory(msg,ch);
-    applyChanges(ch);
+    // applyChanges handles recordAIHistory itself — only records what was
+    // ACTUALLY applied (never records cancelled operations).
+    applyChanges(ch,msg);
     st.className='ai-st ok';st.textContent=ch.message||'Done!';
     ta.value='';ta.style.height='auto';
     setTimeout(()=>{st.textContent='';st.className='ai-st';},7000);
@@ -4441,17 +4510,82 @@ Zander:"${msg}"`;
   btn.disabled=false;btn.textContent='Update ↗';
 }
 
-// Short human-readable bullets summarising what the AI changed in one update.
-// Stored in S.aiHistory so Zander can scroll back through edits later and
-// confirm what actually happened.
+// DETAILED formatter — a multi-line plain-text report of what the AI is
+// about to do / did. Used for BOTH the confirm() popup AND the history
+// entry, so what you see in the popup is byte-for-byte what gets logged.
+function formatAIChangesDetailed(ch){
+  const fmtReminder=r=>{
+    if(r===null||r===undefined||r===''||r==='none')return null;
+    const arr=Array.isArray(r)?r:[r];
+    const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time of event';if(m<60)return `${m} min before`;if(m===60)return '1 hr before';if(m<1440)return `${Math.round(m/60*10)/10} hrs before`;if(m===1440)return '1 day before';return `${Math.round(m/1440*10)/10} days before`;}).filter(Boolean);
+    return names.length?names.join(' + '):null;
+  };
+  const sections=[];
+  const taskLines=[];
+  (ch.addTasks||[]).forEach(t=>{
+    const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);
+    taskLines.push(`  • Add "${t.text||'(untitled)'}"${bits.length?' — '+bits.join(', '):''}`);
+  });
+  (ch.completeTasks||[]).forEach(t=>taskLines.push(`  • Tick off "${t}"`));
+  (ch.removeTasks||[]).forEach(t=>taskLines.push(`  • Delete "${t}"`));
+  if(taskLines.length)sections.push('TASKS\n'+taskLines.join('\n'));
+
+  const habitLines=[];
+  (ch.addHabits||[]).forEach(h=>habitLines.push(`  • Add habit "${h.name||'(untitled)'}"`));
+  (ch.completeHabits||[]).forEach(h=>habitLines.push(`  • Tick today: "${h}"`));
+  if(ch.logLearning?.length)ch.logLearning.forEach(l=>habitLines.push(`  • Log learning under "${l.skill||'?'}"${l.content?': '+l.content.slice(0,60):''}`));
+  if(habitLines.length)sections.push('HABITS\n'+habitLines.join('\n'));
+
+  const peopleLines=[];
+  (ch.addPerson||[]).forEach(p=>{
+    const bits=[];if(p.context)bits.push(p.context);if(p.note)bits.push('note: "'+p.note+'"');
+    peopleLines.push(`  • Add "${p.name||'(no name)'}"${bits.length?' — '+bits.join(', '):''}`);
+  });
+  (ch.updatePerson||[]).forEach(p=>peopleLines.push(`  • Note on "${p.name}": "${(p.note||'').slice(0,80)}"`));
+  if(peopleLines.length)sections.push('PEOPLE\n'+peopleLines.join('\n'));
+
+  const projLines=[];
+  (ch.addBuild||[]).forEach(b=>projLines.push(`  • Add project "${b.title||'(untitled)'}"${b.status?' ('+b.status+')':''}${b.desc?' — '+b.desc.slice(0,60):''}`));
+  (ch.addBuildNote||[]).forEach(n=>projLines.push(`  • Note on "${n.project}": "${(n.content||'').slice(0,80)}"`));
+  if(projLines.length)sections.push('PROJECTS\n'+projLines.join('\n'));
+
+  const brainLines=[];
+  (ch.addIdea||[]).forEach(i=>brainLines.push(`  • Add idea "${i.title||'(untitled)'}"${i.desc?' — '+i.desc.slice(0,60):''}`));
+  (ch.addResource||[]).forEach(r=>brainLines.push(`  • Add resource "${r.title||'(untitled)'}"${r.tag?' ['+r.tag+']':''}${r.url?' '+r.url:''}`));
+  (ch.addNote||[]).forEach(n=>brainLines.push(`  • Add note "${n.title||'(untitled)'}"`));
+  if(brainLines.length)sections.push('BRAIN\n'+brainLines.join('\n'));
+
+  const calLines=[];
+  (ch.addEvent||[]).forEach(e=>{
+    const bits=[];
+    if(e.date)bits.push(e.date);
+    if(e.allDay||!e.time)bits.push('all day');
+    else bits.push(e.time+(e.endTime?'–'+e.endTime:''));
+    if(e.repeat&&e.repeat!=='none')bits.push('repeats '+e.repeat);
+    const rem=fmtReminder(e.reminderMin);if(rem)bits.push('reminders: '+rem);
+    calLines.push(`  • Add "${e.title||'(untitled)'}" — ${bits.join(', ')}`);
+  });
+  (ch.removeEvent||[]).forEach(e=>calLines.push(`  • Delete events matching "${e.match||e.title||'?'}"${e.date?' on '+e.date:''}`));
+  (ch.updateEvent||[]).forEach(e=>{
+    const changes=[];
+    if(e.newTitle)changes.push('title → '+e.newTitle);
+    if(e.newDate)changes.push('date → '+e.newDate);
+    if(e.newTime)changes.push('time → '+e.newTime);
+    calLines.push(`  • Update "${e.match||'?'}" — ${changes.join(', ')||'(no changes specified)'}`);
+  });
+  if(calLines.length)sections.push('CALENDAR\n'+calLines.join('\n'));
+
+  return sections.length?sections.join('\n\n'):'';
+}
+// Back-compat one-liner (still referenced internally for quick status messages)
 function summariseAIChanges(ch){
   const bits=[];
-  const countFmt=(arr,verb,noun)=>{if(arr?.length)bits.push(`${verb} ${arr.length} ${noun}${arr.length===1?'':'s'}${arr.length<=3?': '+arr.map(x=>x.text||x.name||x.title||x.match||'').filter(Boolean).join(', '):''}`);};
+  const countFmt=(arr,verb,noun)=>{if(arr?.length)bits.push(`${verb} ${arr.length} ${noun}${arr.length===1?'':'s'}`);};
   countFmt(ch.addTasks,'added','task');
-  if(ch.completeTasks?.length)bits.push(`ticked ${ch.completeTasks.length} task${ch.completeTasks.length===1?'':'s'}${ch.completeTasks.length<=3?': '+ch.completeTasks.join(', '):''}`);
-  if(ch.removeTasks?.length)bits.push(`removed ${ch.removeTasks.length} task${ch.removeTasks.length===1?'':'s'}${ch.removeTasks.length<=3?': '+ch.removeTasks.join(', '):''}`);
+  if(ch.completeTasks?.length)bits.push(`ticked ${ch.completeTasks.length} task${ch.completeTasks.length===1?'':'s'}`);
+  if(ch.removeTasks?.length)bits.push(`removed ${ch.removeTasks.length} task${ch.removeTasks.length===1?'':'s'}`);
   countFmt(ch.addHabits,'added','habit');
-  if(ch.completeHabits?.length)bits.push(`ticked habit${ch.completeHabits.length===1?'':'s'}: ${ch.completeHabits.join(', ')}`);
+  if(ch.completeHabits?.length)bits.push(`ticked ${ch.completeHabits.length} habit${ch.completeHabits.length===1?'':'s'}`);
   countFmt(ch.addPerson,'added','person');
   countFmt(ch.updatePerson,'noted','person');
   countFmt(ch.addBuild,'added','project');
@@ -4469,11 +4603,12 @@ function recordAIHistory(prompt,ch){
   S.aiHistory.unshift({
     at:Date.now(),
     prompt:(prompt||'').slice(0,500),
+    // Store BOTH forms — short summary for search snippets and the detailed
+    // multi-line report for the expanded history view.
     summary:summariseAIChanges(ch),
+    detail:formatAIChangesDetailed(ch),
     message:(ch.message||'').slice(0,200)
   });
-  // Cap at 200 entries — enough to scroll back weeks, small enough to ship
-  // cheaply with every Firestore save.
   if(S.aiHistory.length>200)S.aiHistory.length=200;
 }
 
@@ -4486,12 +4621,16 @@ function rAIHistory(){
   el.innerHTML=items.slice(0,100).map(h=>{
     const d=new Date(h.at);
     const when=d.toLocaleDateString('en-ZA',{day:'numeric',month:'short'})+' · '+d.toLocaleTimeString('en-ZA',{hour:'numeric',minute:'2-digit',hour12:true});
+    // Render the detailed multi-line report when present (new entries). Fall
+    // back to the compact one-liner summary for older entries logged before
+    // the detailed formatter existed.
+    const body=h.detail?`<pre style="margin:0;color:var(--text-2);font-size:11px;line-height:1.45;font-family:inherit;white-space:pre-wrap;word-break:break-word">${esc(h.detail)}</pre>`:`<div style="color:var(--text-2);font-size:11.5px">${esc(h.summary)}</div>`;
     return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:12.5px;line-height:1.45">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:3px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:6px">
         <span style="color:var(--text);font-style:italic">"${esc(h.prompt)}"</span>
         <span style="color:var(--muted);font-size:10px;flex-shrink:0;white-space:nowrap">${esc(when)}</span>
       </div>
-      <div style="color:var(--text-2);font-size:11.5px">${esc(h.summary)}</div>
+      ${body}
     </div>`;
   }).join('');
 }
@@ -4533,22 +4672,23 @@ function playSound(kind){
   else if(kind==='confirm'){tone(1047,0,0.1,0.06);}
 }
 
-function applyChanges(ch){
+async function applyChanges(ch,prompt){
   // aiConfirmMode — Settings → AI behaviour → Confirm before applying
   //   'off'      : execute everything immediately (calendar too)
   //   'calendar' : tasks/habits/etc apply now; calendar needs OK (default)
-  //   'all'      : show one combined summary, wait for OK on anything
+  //   'all'      : show one combined detailed summary, wait for OK
   const mode=S.aiConfirmMode||'calendar';
   const calOps=[];
   (ch.addEvent||[]).forEach(e=>calOps.push({kind:'add',ev:e}));
   (ch.removeEvent||[]).forEach(e=>calOps.push({kind:'remove',ev:e}));
   (ch.updateEvent||[]).forEach(e=>calOps.push({kind:'update',ev:e}));
-  const summary=summariseAIChanges(ch);
-  if(mode==='all'&&summary!=='no changes'){
-    const ok=confirm(`The AI wants to:\n\n${summary.replace(/ · /g,'\n• ').replace(/^/,'• ')}\n\nApply?`);
+  const detailed=formatAIChangesDetailed(ch);
+  if(mode==='all'&&detailed){
+    const ok=confirm(`The AI wants to make these changes:\n\n${detailed}\n\nApply?`);
     if(!ok){
       const st=document.getElementById('btm-st');
       if(st){st.className='ai-st';st.textContent='Changes cancelled.';setTimeout(()=>{st.textContent='';st.className='ai-st';},5000);}
+      // Declined in 'all' mode → nothing was applied, don't pollute history.
       return;
     }
   }
@@ -4570,27 +4710,42 @@ function applyChanges(ch){
   //   mode='all'     → already approved above, run directly (no second popup)
   //   mode='off'     → user opted out of all confirms, run directly
   //   mode='calendar'→ show the per-calendar confirm popup (default)
+  // History is recorded based on what ACTUALLY got applied — if the user
+  // declines the calendar confirm in 'calendar' mode, history logs only the
+  // non-calendar part that did run.
   if(calOps.length){
-    if(mode==='all'||mode==='off')confirmCalendarOps(calOps,true);
-    else confirmCalendarOps(calOps);
+    if(mode==='all'||mode==='off'){
+      await confirmCalendarOps(calOps,true);
+      recordAIHistory(prompt,ch);
+    } else {
+      const approved=await confirmCalendarOps(calOps);
+      if(approved)recordAIHistory(prompt,ch);
+      else{const chNoCal={...ch};delete chNoCal.addEvent;delete chNoCal.removeEvent;delete chNoCal.updateEvent;if(formatAIChangesDetailed(chNoCal))recordAIHistory(prompt,chNoCal);}
+    }
+  } else {
+    // No calendar ops at all — everything above applied unconditionally.
+    if(detailed)recordAIHistory(prompt,ch);
   }
 }
 
-// Ask the user before the AI touches the calendar. Every calendar change
-// (add / remove / update) goes through here. The `preConfirmed` flag is set
-// by applyChanges when the "Confirm all AI changes" setting is on — we've
-// already shown a combined summary, no need for a second popup.
+// Ask the user before the AI touches the calendar. The `preConfirmed` flag
+// skips the popup when the combined 'all' confirm has already approved.
+// Returns true if ops were applied (or pre-approved), false if user cancelled.
 async function confirmCalendarOps(ops,preConfirmed){
+  const fmtReminder=r=>{if(r===null||r===undefined||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (Math.round(m/60*10)/10)+' hrs';if(m===1440)return '1 day';return (Math.round(m/1440*10)/10)+' days';}).filter(Boolean);return names.length?names.join(' + '):null;};
   const fmtOp=op=>{
     if(op.kind==='add'){
-      const when=op.ev.date?` on ${op.ev.date}`:'';
-      const at=op.ev.time?` at ${op.ev.time}`:'';
-      const rep=op.ev.repeat&&op.ev.repeat!=='none'?` · repeats ${op.ev.repeat}`:'';
-      return `➕ Add "${op.ev.title}"${when}${at}${rep}`;
+      const bits=[];
+      if(op.ev.date)bits.push(op.ev.date);
+      if(op.ev.allDay||!op.ev.time)bits.push('all day');
+      else bits.push(op.ev.time+(op.ev.endTime?'–'+op.ev.endTime:''));
+      if(op.ev.repeat&&op.ev.repeat!=='none')bits.push('repeats '+op.ev.repeat);
+      const rem=fmtReminder(op.ev.reminderMin);if(rem)bits.push('reminders: '+rem);
+      return `  • Add "${op.ev.title||'(untitled)'}" — ${bits.join(', ')}`;
     }
     if(op.kind==='remove'){
-      const d=op.ev.date?` on ${op.ev.date}`:'';
-      return `✖ Remove events matching "${op.ev.match||op.ev.title||'?'}"${d}`;
+      const d=op.ev.date?' on '+op.ev.date:'';
+      return `  • Delete events matching "${op.ev.match||op.ev.title||'?'}"${d}`;
     }
     if(op.kind==='update'){
       const m=op.ev.match||op.ev.title||'?';
@@ -4598,14 +4753,14 @@ async function confirmCalendarOps(ops,preConfirmed){
       if(op.ev.newTitle)changes.push('title → '+op.ev.newTitle);
       if(op.ev.newDate)changes.push('date → '+op.ev.newDate);
       if(op.ev.newTime)changes.push('time → '+op.ev.newTime);
-      return `✎ Update "${m}" · ${changes.join(', ')||'(no changes specified)'}`;
+      return `  • Update "${m}" — ${changes.join(', ')||'(no changes specified)'}`;
     }
-    return '?';
+    return '  • ?';
   };
   if(!preConfirmed){
     const summary=ops.map(fmtOp).join('\n');
     const ok=confirm(`The AI wants to make ${ops.length} calendar change${ops.length===1?'':'s'}:\n\n${summary}\n\nApply?`);
-    if(!ok){const st=document.getElementById('btm-st');if(st){st.className='ai-st';st.textContent='Calendar changes cancelled.';setTimeout(()=>{st.textContent='';},5000);}return;}
+    if(!ok){const st=document.getElementById('btm-st');if(st){st.className='ai-st';st.textContent='Calendar changes cancelled.';setTimeout(()=>{st.textContent='';},5000);}return false;}
   }
   // Apply in order
   for(const op of ops){
@@ -4638,6 +4793,7 @@ async function confirmCalendarOps(ops,preConfirmed){
   gcCache={key:'',events:[]};
   render();
   const st=document.getElementById('btm-st');if(st){st.className='ai-st ok';st.textContent='Calendar updated.';setTimeout(()=>{st.textContent='';st.className='ai-st';},4000);}
+  return true;
 }
 
 function render(){
