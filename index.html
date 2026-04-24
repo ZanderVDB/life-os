@@ -1032,6 +1032,19 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .switch input:checked + .slider{background:var(--accent)}
 .switch input:checked + .slider::before{transform:translateX(16px)}
 .switch input:focus-visible + .slider{box-shadow:0 0 0 2px var(--accent-bg,var(--border))}
+/* Work-area editor rows (Settings) — name input + coloured dot + colour pickers */
+.wp-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);min-width:0}
+.wp-row:last-child{border-bottom:none}
+.wp-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+.wp-name{flex:1;min-width:0;padding:6px 10px;font-size:13px}
+.wp-colors{display:flex;gap:4px;flex-shrink:0}
+.wp-color{width:18px;height:18px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;transition:border-color .12s,transform .1s}
+.wp-color:hover{transform:scale(1.15)}
+.wp-color.on{border-color:var(--text);transform:scale(1.15)}
+@media(max-width:600px){
+  .wp-row{flex-wrap:wrap;gap:6px}
+  .wp-colors{order:3;flex:1 1 100%;justify-content:flex-start}
+}
 /* Event/Reminder type toggle at top of event modal */
 .em-type-btn{background:var(--surface-2);color:var(--text-2);border:1px solid var(--border);font-weight:500}
 .em-type-btn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -1359,7 +1372,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <div class="qa-row">
                 <input class="input" id="t-text" placeholder="Task description..." style="flex:2">
                 <select class="select" id="t-area"><option value="work">Work</option><option value="personal">Personal</option></select>
-                <select class="select" id="t-proj"><option value="wa">WebAnchor</option><option value="tf">TriFusion</option><option value="gen">General</option></select>
+                <select class="select" id="t-proj"></select>
                 <select class="select" id="t-pri"><option value="urgent">Urgent</option><option value="hi">High</option><option value="med">Medium</option><option value="lo">Low</option><option value="someday">Someday</option></select>
               </div>
               <div class="qa-row"><input class="input" id="t-time" placeholder="Scheduled time (optional, e.g. 10am)"></div>
@@ -1595,6 +1608,17 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         </div>
 
         <div>
+          <div class="section-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <h2>Work areas</h2>
+            <button class="btn btn-ghost btn-sm" onclick="addWorkProject()">+ Add</button>
+          </div>
+          <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:8px;padding:12px">
+            <div class="setting-desc" style="margin-bottom:4px">Your businesses, clients, or companies — anything you want to group work tasks under. Tasks that don't match any area default to "General."</div>
+            <div id="work-projects-list"></div>
+          </div>
+        </div>
+
+        <div>
           <div class="section-hdr"><h2>Weekly rhythm</h2></div>
           <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:10px">
             <div style="width:100%">
@@ -1803,7 +1827,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v71';
+const APP_VERSION='v72';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -2456,6 +2480,7 @@ function handleSnapshot(snap){
     S.lifeRhythm=d.lifeRhythm||'';
     S.disabledCalendars=Array.isArray(d.disabledCalendars)?d.disabledCalendars:[];
     S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
+    S.workProjects=Array.isArray(d.workProjects)?d.workProjects:[];
     if(d.aiConfirmMode==='off'||d.aiConfirmMode==='calendar'||d.aiConfirmMode==='all')S.aiConfirmMode=d.aiConfirmMode;
     else if(typeof d.confirmAllAI==='boolean')S.aiConfirmMode=d.confirmAllAI?'all':'calendar';
     if(!getKey()&&d.ak)localStorage.setItem(AK,d.ak);
@@ -2485,6 +2510,7 @@ function _buildSavePayload(){
   if(S.disabledCalendars!==undefined)payload.disabledCalendars=Array.isArray(S.disabledCalendars)?S.disabledCalendars:[];
   if(S.aiHistory!==undefined)payload.aiHistory=Array.isArray(S.aiHistory)?S.aiHistory:[];
   if(S.aiConfirmMode!==undefined)payload.aiConfirmMode=S.aiConfirmMode;
+  if(S.workProjects!==undefined)payload.workProjects=Array.isArray(S.workProjects)?S.workProjects:[];
   return payload;
 }
 function svAll(){
@@ -2519,10 +2545,22 @@ function promptKey(){
 // DATA
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const SCHED={0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
-const PROJ={wa:{n:'WebAnchor',h:'var(--blue)'},tf:{n:'TriFusion',h:'var(--lavender)'},gen:{n:'General',h:'var(--peach)'}};
+// Work areas (projects / companies / clients) are USER-CONFIGURABLE in
+// Settings. The General bucket is always present as a catch-all. Everything
+// else comes from S.workProjects, which each user builds themselves —
+// nothing business-specific is hardcoded into the app any more.
+const PROJ_COLOR_OPTIONS=['var(--blue)','var(--lavender)','var(--emerald)','var(--sage)','var(--gold)','var(--peach)','var(--red)','var(--pink)'];
+let PROJ={gen:{n:'General',h:'var(--peach)'}};
+function rebuildPROJ(){
+  PROJ={gen:{n:'General',h:'var(--peach)'}};
+  (S.workProjects||[]).forEach((p,i)=>{
+    if(!p||!p.id||!p.name)return;
+    PROJ[p.id]={n:p.name,h:p.color||PROJ_COLOR_OPTIONS[i%PROJ_COLOR_OPTIONS.length]};
+  });
+}
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar'};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[]};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'off' (nothing needs OK), 'calendar' (default — only
 // calendar edits need OK), 'all' (every AI change needs OK).
@@ -2622,7 +2660,7 @@ const yest=()=>{const d=new Date();d.setDate(d.getDate()-1);return`${d.getFullYe
 function addDaysToDateStr(ds,n){const [y,m,d]=ds.split('-').map(Number);const dt=new Date(Date.UTC(y,m-1,d));dt.setUTCDate(dt.getUTCDate()+n);return dt.toISOString().slice(0,10);}
 const fmt=d=>{try{return new Date(d+'T12:00:00').toLocaleDateString('en-ZA',{day:'numeric',month:'short'});}catch(e){return d;}};
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const gTxt=()=>{const h=new Date().getHours();return h<12?'Good morning, Zander.':h<17?'Good afternoon, Zander.':'Good evening, Zander.';};
+const gTxt=()=>{const h=new Date().getHours();const name=(CU&&CU.displayName||'').split(/\s+/)[0];const n=name?', '+name:'';return h<12?'Good morning'+n+'.':h<17?'Good afternoon'+n+'.':'Good evening'+n+'.';};
 const dTxt=()=>new Date().toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 function bump(l){const t=tod(),y=yest();if(l.lastDate===t)return;l.streak=(l.lastDate===y)?(l.streak||0)+1:1;l.lastDate=t;l.total=(l.total||0)+1;}
 function bumpH(h){const t=tod(),y=yest();if(h.lastDate===t){h.doneToday=true;return;}h.streak=(h.lastDate===y)?(h.streak||0)+1:1;h.lastDate=t;h.total=(h.total||0)+1;h.doneToday=true;}
@@ -2886,7 +2924,9 @@ async function generatePlan(mode){
     const nowLabel=now.toLocaleTimeString('en-ZA',{hour:'numeric',minute:'2-digit',hour12:true});
     const scope=mode==='now'?`the REST of today (starting from ${nowLabel})`:mode==='tomorrow'?`tomorrow (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`:`today (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`;
     const ctx={now:`${now.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})} at ${nowLabel}`,hour:hr,mode,planDay:dayName,planDate:refDs,scheduledEvents:evs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
-    const prompt=`You are Zander's thoughtful daily coach. Cape Town entrepreneur (WebAnchor / TriFusion; Zamaka is a WebAnchor client). Instead of a rigid hour-by-hour schedule, draft a softer SUGGESTION-style plan for ${scope} — the vibe of "here's what could make a great day" rather than "do this at 9:00, do that at 10:00."
+    const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
+    const wpCtx=(S.workProjects||[]).length?` They work across: ${S.workProjects.map(p=>p.name).join(', ')}.`:'';
+    const prompt=`You are ${firstName}'s thoughtful daily coach.${wpCtx} Instead of a rigid hour-by-hour schedule, draft a softer SUGGESTION-style plan for ${scope} — the vibe of "here's what could make a great day" rather than "do this at 9:00, do that at 10:00."
 
 Rules:
 - Respect fixed events (meetings, all-day items) — work around them, never suggest moving them.
@@ -3750,7 +3790,9 @@ async function runPlanMyDay(){
     const hr=new Date().getHours();
     const rhythm=S.lifeRhythm||'(none provided)';
     const ctx={now:new Date().toLocaleString('en-ZA',{weekday:'long',day:'numeric',month:'long',hour:'numeric',minute:'2-digit',hour12:true}),hour:hr,todayEvents:todayEvs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
-    const prompt=`You are Zander's Life OS coach. He's a Cape Town-based entrepreneur running WebAnchor / TriFusion (Zamaka is one of WebAnchor's clients). Build him a realistic, focused plan for the REMAINDER of today.
+    const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
+    const wpCtx=(S.workProjects||[]).length?` They work across: ${S.workProjects.map(p=>p.name).join(', ')}.`:'';
+    const prompt=`You are ${firstName}'s Life OS coach.${wpCtx} Build them a realistic, focused plan for the REMAINDER of today.
 
 Rules:
 - Respect fixed events (meetings, all-day items) — schedule around them, don't move them.
@@ -3761,7 +3803,7 @@ Rules:
   · Gym slots, Bible studies, meetings etc. are real commitments — bake them in on the right day.
 - Prioritise urgent tasks first, then high, then work-related. One or two personal items are fine.
 - Be realistic about time: estimate durations, leave small buffers. Don't pack every minute.
-- Give actual clock times (e.g. "2:00–3:00 pm"). Use Cape Town local time.
+- Give actual clock times (e.g. "2:00–3:00 pm"). Use the user's local time.
 - Keep the schedule concise: 5–10 time blocks max. Skip padding like "wake up" / "brush teeth".
 - End with a 1-line "north star" for the day — the single outcome that would make today count.
 
@@ -4264,7 +4306,17 @@ function rTasks(){
   const el=document.getElementById('tasks-sec');if(!el)return;
   const visible=S.tasks.filter(isTaskVisible);
   const wt=visible.filter(t=>t.area==='work'),pt=visible.filter(t=>t.area==='personal');
-  const grps={wa:[],tf:[],gen:[]};wt.forEach(t=>{const k=grps[t.project]!==undefined?t.project:'gen';grps[k].push(t);});
+  // Build the group map dynamically from PROJ so new user-defined work areas
+  // show up automatically. Keys are project IDs; values are arrays of tasks.
+  const grps={};Object.keys(PROJ).forEach(k=>{grps[k]=[];});
+  wt.forEach(t=>{const k=grps[t.project]!==undefined?t.project:'gen';grps[k].push(t);});
+  // Refresh the quick-add dropdown options to match current PROJ
+  const taSel=document.getElementById('t-proj');
+  if(taSel){
+    const curVal=taSel.value;
+    taSel.innerHTML=Object.entries(PROJ).filter(([k])=>k!=='gen').map(([k,p])=>`<option value="${esc(k)}">${esc(p.n)}</option>`).join('')+`<option value="gen">General</option>`;
+    if(curVal&&PROJ[curVal])taSel.value=curVal;
+  }
   // Priority sort. IMPORTANT: PO['urgent'] is 0, and `0||fallback` evaluates
   // to the fallback in JS — that bug used to push urgent tasks to the
   // position of "lo" (3). We use ?? so 0 stays 0.
@@ -4375,7 +4427,7 @@ async function structureWithAI(id){
   if(!current.trim()){alert('Jot a few notes first, then tap Structure.');return;}
   if(btn){btn.disabled=true;btn.textContent='Structuring…';}
   try{
-    const p=`You are cleaning up freeform project notes for Zander's Life OS. The project is "${b.title}"${b.desc?` — ${b.desc}`:''}. Reorganise the brain-dump below into clear sections using markdown-style headers (## Ideas, ## Progress, ## Todos, ## Questions, ## Links — whichever fit the content). Preserve every concrete item. Trim filler and duplicates. Keep any existing [bracketed dates] intact. Return ONLY the structured text, no preamble.
+    const p=`You are cleaning up freeform project notes. The project is "${b.title}"${b.desc?` — ${b.desc}`:''}. Reorganise the brain-dump below into clear sections using markdown-style headers (## Ideas, ## Progress, ## Todos, ## Questions, ## Links — whichever fit the content). Preserve every concrete item. Trim filler and duplicates. Keep any existing [bracketed dates] intact. Return ONLY the structured text, no preamble.
 
 NOTES:
 ${current}`;
@@ -4397,11 +4449,19 @@ function migrateProjects(){
       }
     }
   });
-  // Zomarka was removed as a project — it's a WebAnchor client, not its own
-  // business. Migrate any existing tasks tagged zm → wa so they still appear
-  // under a valid project bucket.
   (S.tasks||[]).forEach(t=>{if(t.project==='zm')t.project='wa';});
   (S.builds||[]).forEach(b=>{if(b.status&&b.title&&/zomarka/i.test(b.title))b.title=b.title.replace(/zomarka/gi,'Zamaka (WebAnchor client)');});
+  // Back-compat: if the user has tasks tagged with old hardcoded project
+  // codes (wa/tf) but S.workProjects is empty, seed it from those so their
+  // grouping doesn't disappear. New users just start with General only.
+  if(!S.workProjects||!S.workProjects.length){
+    const codes=new Set((S.tasks||[]).map(t=>t.project).filter(p=>p&&p!=='gen'));
+    const seeds=[];
+    if(codes.has('wa'))seeds.push({id:'wa',name:'WebAnchor',color:'var(--blue)'});
+    if(codes.has('tf'))seeds.push({id:'tf',name:'TriFusion',color:'var(--lavender)'});
+    if(seeds.length)S.workProjects=seeds;
+  }
+  rebuildPROJ();
 }
 function delBuild(id){if(!confirm('Delete this project? All progress notes will be lost.'))return;S.builds=S.builds.filter(x=>x.id!==id);svAll();if(UI.projectDetail===id)closeProject();else rBuilds();}
 function renderProjectDetail(){
@@ -4510,6 +4570,7 @@ function rSettings(){
   }
   updateInstallUI();
   renderCalendarList();
+  renderWorkProjects();
   rAIHistory();
 }
 async function renderCalendarList(){
@@ -4534,6 +4595,63 @@ async function renderCalendarList(){
     return `<div style="padding:6px 0;display:flex;align-items:center;min-width:0;gap:4px">${dot}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${name}${badge}</span>${toggle}</div>`;
   }).join('');
 }
+// ───────── WORK AREAS (user-configurable PROJ entries) ─────────
+function renderWorkProjects(){
+  const el=document.getElementById('work-projects-list');if(!el)return;
+  const projects=S.workProjects||[];
+  if(!projects.length){
+    el.innerHTML=`<div style="padding:10px 0;color:var(--muted);font-size:12px;font-style:italic">No work areas yet. Tap "+ Add" to create one — e.g. a business you run or a client you freelance for.</div>`;
+    return;
+  }
+  el.innerHTML=projects.map((p,i)=>{
+    const color=p.color||PROJ_COLOR_OPTIONS[i%PROJ_COLOR_OPTIONS.length];
+    return `<div class="wp-row">
+      <span class="wp-dot" style="background:${color}"></span>
+      <input class="input wp-name" data-wp-id="${esc(p.id)}" value="${esc(p.name)}" placeholder="Name" oninput="onWorkProjectNameChange('${esc(p.id)}',this.value)">
+      <div class="wp-colors">${PROJ_COLOR_OPTIONS.map(c=>`<button class="wp-color${c===color?' on':''}" style="background:${c}" onclick="setWorkProjectColor('${esc(p.id)}','${c}')" aria-label="Use colour"></button>`).join('')}</div>
+      <button class="btn btn-ghost btn-sm" onclick="deleteWorkProject('${esc(p.id)}')" title="Remove">×</button>
+    </div>`;
+  }).join('');
+}
+function _genWPId(name){
+  // Derive a 2-letter id from the name (initials), with fallback to timestamp
+  const parts=(name||'').trim().split(/\s+/).filter(Boolean);
+  let base=parts.length>1?(parts[0][0]+parts[1][0]):(parts[0]?parts[0].slice(0,2):'wp');
+  base=base.toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(!base)base='wp';
+  let id=base,n=2;
+  while((S.workProjects||[]).some(p=>p.id===id)||id==='gen')id=base+(n++);
+  return id;
+}
+function addWorkProject(){
+  S.workProjects=S.workProjects||[];
+  if(S.workProjects.length>=8){alert('Keep it to 8 work areas or fewer — the task view gets noisy beyond that.');return;}
+  const name=prompt('Name of the work area (e.g. your business or a client):');
+  if(!name||!name.trim())return;
+  const color=PROJ_COLOR_OPTIONS[S.workProjects.length%PROJ_COLOR_OPTIONS.length];
+  S.workProjects.push({id:_genWPId(name.trim()),name:name.trim(),color});
+  rebuildPROJ();svAll();renderWorkProjects();rTasks();
+}
+function onWorkProjectNameChange(id,newName){
+  const p=(S.workProjects||[]).find(x=>x.id===id);if(!p)return;
+  p.name=newName.trim()||p.name;
+  rebuildPROJ();svAll();rTasks();
+}
+function setWorkProjectColor(id,color){
+  const p=(S.workProjects||[]).find(x=>x.id===id);if(!p)return;
+  p.color=color;
+  rebuildPROJ();svAll();renderWorkProjects();rTasks();
+}
+function deleteWorkProject(id){
+  const p=(S.workProjects||[]).find(x=>x.id===id);if(!p)return;
+  const taskCount=(S.tasks||[]).filter(t=>t.project===id).length;
+  const warn=taskCount?`\n\n${taskCount} task${taskCount===1?'':'s'} tagged to "${p.name}" will move to General.`:'';
+  if(!confirm(`Remove work area "${p.name}"?${warn}`))return;
+  S.workProjects=(S.workProjects||[]).filter(x=>x.id!==id);
+  (S.tasks||[]).forEach(t=>{if(t.project===id)t.project='gen';});
+  rebuildPROJ();svAll();renderWorkProjects();rTasks();
+}
+
 function toggleSounds(on){
   S.soundsEnabled=!!on;
   try{localStorage.setItem('los_sounds',on?'1':'0');}catch(e){}
@@ -4582,18 +4700,23 @@ async function doUpdate(){
     resources:S.resources.map(r=>({id:r.id,title:r.title})),
     notes:S.notes.map(n=>({id:n.id,title:n.title}))
   };
-  const rhythm=S.lifeRhythm?`\nZander's weekly rhythm / regular commitments (use as soft context, don't duplicate as tasks):\n${S.lifeRhythm}\n`:'';
-  const prompt=`You manage Zander's Life OS. Entrepreneur, Cape Town SA. Work > personal. Today: ${tod()}.${rhythm}
-Calendar defaults — apply these automatically unless Zander explicitly says otherwise:
+  const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
+  const rhythm=S.lifeRhythm?`\n${firstName}'s weekly rhythm / regular commitments (use as soft context, don't duplicate as tasks):\n${S.lifeRhythm}\n`:'';
+  // Available work areas — user-configured, not hardcoded to any specific business
+  const projectIds=Object.keys(PROJ).filter(k=>k!=='gen');
+  const projectEnum=[...projectIds,'gen'].join('|');
+  const projectNames=projectIds.length?' Work-area codes map to: '+projectIds.map(k=>`${k}=${PROJ[k].n}`).join(', ')+'.':'';
+  const prompt=`You manage ${firstName}'s Life OS. Work > personal. Today: ${tod()}.${rhythm}${projectNames}
+Calendar defaults — apply these automatically unless the user explicitly says otherwise:
 - Birthday events: allDay:true, repeat:"yearly", reminderMin:[1440, 0]  (1 day before + at event time)
 - Any other reminder / appointment WITH a time: reminderMin:[60, 10]  (1 hour + 10 min before)
 - Events with no time (all-day): reminderMin:[0]  (on the day) unless user says otherwise
 reminderMin can be a single number OR an array of minutes (up to 5 reminders per event).
 
 Respond ONLY raw JSON:
-{"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
+{"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
-Zander:"${msg}"`;
+User:"${msg}"`;
   try{
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});
     if(!r.ok){
@@ -5019,81 +5142,16 @@ function render(){
   if(currentRoute==='settings')rSettings();
 }
 
-// Restore Zander's original data (tasks/habits/people/projects/ideas/notes).
-// Used after accidental data loss. Overwrites current state in those
-// sections; calendar events are intentionally excluded — those live in GCal.
-function restoreStarterData(){
-  if(!confirm('Restore the starter tasks / habits / people / projects / ideas / notes?\n\nThis OVERWRITES whatever is currently in those sections. Calendar events are not touched.'))return;
-  const d=tod();
-  S.tasks=[
-    {id:uid(),text:'Message Jenna — start WebAnchor company registration',area:'work',project:'wa',priority:'urgent',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Railway subscription expires in ~3 days — renew or cancel',area:'work',project:'gen',priority:'urgent',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Create and finish WebAnchor website',area:'work',project:'wa',priority:'hi',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Talk to accountant — register WebAnchor as a legal company',area:'work',project:'wa',priority:'hi',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Set up Sage accounting for WebAnchor',area:'work',project:'wa',priority:'hi',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Get WebAnchor logo designed',area:'work',project:'wa',priority:'med',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Evaluate hiring an employee',area:'work',project:'wa',priority:'med',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Get Claude Max subscription this week',area:'work',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Start Udemy course: using Claude effectively',area:'work',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Update and finish TriFusion website',area:'work',project:'tf',priority:'med',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Update Zamaka website (WebAnchor client)',area:'work',project:'wa',priority:'lo',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Send two boxes to mom — waiting for her to add items first',area:'personal',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Find and book a therapist',area:'personal',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Find acting and public speaking classes',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Update financial spreadsheet — all current subscriptions',area:'personal',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Get food and gym tracking app subscriptions',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Check Cash Converters for a cheap drum kit',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Research upcoming business events in Cape Town',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Teshpo sleeping over this week — night TBD',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Learn how taxes and financial planning work in SA',area:'personal',project:'gen',priority:'someday',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Play paddle with Nina',area:'personal',project:'gen',priority:'someday',scheduledTime:'',done:false,date:d}
-  ];
-  S.habits=[
-    {id:uid(),name:'Prayer / quiet time',description:'',checkedDates:[],createdAt:d,notes:[]},
-    {id:uid(),name:'Read Bible',description:'',checkedDates:[],createdAt:d,notes:[]},
-    {id:uid(),name:'Gym',description:'',checkedDates:[],createdAt:d,notes:[]},
-    {id:uid(),name:'1hr meaningful content',description:'Podcasts, audiobooks, or deep-focus reading — no brain rot.',checkedDates:[],createdAt:d,notes:[]},
-    {id:uid(),name:'No mindless scrolling',description:'',checkedDates:[],createdAt:d,notes:[]}
-  ];
-  S.people=[
-    {id:uid(),name:'Teshpo',lastName:'',phone:'',email:'',workplace:'',metAt:'',context:'Friend, staying over this week',notes:[{date:d,text:'Coming to stay for an undisclosed amount of time'}],lastSeen:d,date:d},
-    {id:uid(),name:'Jenna',lastName:'',phone:'',email:'',workplace:'',metAt:'',context:'Company registration / legal contact',notes:[{date:d,text:'Need to contact about WebAnchor registration process'}],lastSeen:null,date:d}
-  ];
-  S.builds=[
-    {id:uid(),title:'Biblical knowledge quiz app',desc:'Bible verse hints or full verse — guess the book, chapter, character, location. Tests the whole Bible. Top priority.',status:'active',date:d,notes:''},
-    {id:uid(),title:'Social media auto-posting app',desc:'Every morning logs into LinkedIn and posts automatically. Instagram to follow. Best built as a Claude Code Routine.',status:'future',date:d,notes:''},
-    {id:uid(),title:'Business events finder',desc:'Curates local business events with pricing and booking links.',status:'future',date:d,notes:''},
-    {id:uid(),title:'Property investment checker',desc:'Compares listings against recent surrounding sales. Surfaces only undervalued properties.',status:'future',date:d,notes:''},
-    {id:uid(),title:'Investment portfolio advisor',desc:'Daily briefing: hold, sell, or rotate based on live global news.',status:'future',date:d,notes:''}
-  ];
-  S.ideas=[
-    {id:uid(),title:'Self-help content curation system',desc:'Filters and surfaces only genuinely useful content automatically.',date:d}
-  ];
-  S.resources=[];
-  S.notes=[
-    {id:uid(),title:'Cockroach remedy — boric acid',body:'Small bottle from Clicks. Mix with boiled mashed potatoes, place in problem areas. Very effective.',date:d}
-  ];
-  svAllNow();render();
-  alert('Restored. Data will sync to your other device within a second.');
-}
+// Fresh-account bootstrap — deliberately empty. New users get a clean slate
+// instead of any other user's starter content. Adds zero state beyond the
+// default empty arrays, just ensures fields exist and triggers the first
+// Firestore write so the user's document is created.
 function seed(){
-  // Belt-and-braces: never overwrite real data. seed() should only run on a
-  // truly fresh account. If any state is populated, bail out.
   if((S.tasks&&S.tasks.length)||(S.habits&&S.habits.length)||(S.builds&&S.builds.length)||(S.people&&S.people.length)||(S.ideas&&S.ideas.length)||(S.notes&&S.notes.length)){
     console.warn('[seed] skipped — state already populated');
     return;
   }
-  const d=tod();
-  S.tasks=[
-    {id:uid(),text:'Message Jenna — start WebAnchor company registration',area:'work',project:'wa',priority:'urgent',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Create and finish WebAnchor website',area:'work',project:'wa',priority:'hi',scheduledTime:'',done:false,date:d},
-  ];
-  S.habits=[
-    {id:uid(),name:'Prayer / quiet time',streak:0,lastDate:null,total:0,doneToday:false},
-    {id:uid(),name:'Read Bible',streak:0,lastDate:null,total:0,doneToday:false},
-    {id:uid(),name:'Gym',streak:0,lastDate:null,total:0,doneToday:false},
-  ];
-  S.people=[];S.builds=[];S.learning=[];S.ideas=[];S.resources=[];S.notes=[];S.customEvents=[];S.dayNotes={};
+  S.tasks=[];S.habits=[];S.people=[];S.builds=[];S.learning=[];S.ideas=[];S.resources=[];S.notes=[];S.customEvents=[];S.dayNotes={};S.workProjects=[];
   svAll();
 }
 
