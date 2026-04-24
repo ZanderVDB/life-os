@@ -1872,7 +1872,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v78';
+const APP_VERSION='v79';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -2882,9 +2882,11 @@ function pickNotebookDate(){
   if(ta){S.dayNotes=S.dayNotes||{};const curr=currentNotebookDate();if(ta.value.trim())S.dayNotes[curr]=ta.value;svAll();}
   // Fresh input every time — showPicker refuses to re-open on the same node sometimes
   const old=document.getElementById('dn-date-picker-live');if(old)old.remove();
+  const trigger=(typeof event!=='undefined'&&event?.currentTarget)||document.getElementById('dn-date');
+  const rect=trigger?.getBoundingClientRect()||{bottom:40,left:20};
   const inp=document.createElement('input');
   inp.type='date';inp.id='dn-date-picker-live';
-  inp.style.cssText='position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;z-index:-1';
+  inp.style.cssText=`position:fixed;top:${Math.round(rect.bottom+2)}px;left:${Math.round(rect.left)}px;width:1px;height:1px;opacity:0;z-index:-1`;
   inp.value=currentNotebookDate();inp.max=tod();
   inp.onchange=()=>{if(inp.value){UI.notebookDate=inp.value;renderNotebook();}setTimeout(()=>inp.remove(),100);};
   inp.onblur=()=>setTimeout(()=>{const e=document.getElementById('dn-date-picker-live');if(e)e.remove();},400);
@@ -3401,10 +3403,14 @@ function goToCalToday(){UI.calDate=new Date();UI.monthExpandedDs=null;rCal();}
 function pickCalDate(){
   // Fresh input every time so showPicker doesn't get stuck after a previous open
   const old=document.getElementById('cal-date-picker');if(old)old.remove();
+  // Anchor the hidden input to the element the user just clicked, so the
+  // native date picker pops up right below the click target (was rendering
+  // in the top-left of the viewport because the input was positioned at 0,0).
+  const trigger=(typeof event!=='undefined'&&event?.currentTarget)||document.getElementById('cal-ttl');
+  const rect=trigger?.getBoundingClientRect()||{bottom:40,left:20};
   const inp=document.createElement('input');
   inp.type='date';inp.id='cal-date-picker';
-  // Visible (1x1) so showPicker is allowed by the browser; positioned out of the way
-  inp.style.cssText='position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;z-index:-1';
+  inp.style.cssText=`position:fixed;top:${Math.round(rect.bottom+2)}px;left:${Math.round(rect.left)}px;width:1px;height:1px;opacity:0;z-index:-1`;
   inp.value=localDs(UI.calDate);
   inp.onchange=()=>{if(inp.value){const [y,mm,d]=inp.value.split('-').map(Number);UI.calDate=new Date(y,mm-1,d);UI.monthExpandedDs=null;rCal();}setTimeout(()=>inp.remove(),100);};
   inp.onblur=()=>setTimeout(()=>{const e=document.getElementById('cal-date-picker');if(e)e.remove();},400);
