@@ -238,10 +238,20 @@ svg{flex-shrink:0}
   flex:1;min-width:140px;border:1px solid var(--border);border-radius:9px;
   padding:9px 12px;font-size:13px;outline:none;background:var(--bg);color:var(--text);
   transition:border-color .12s,background .12s;
+  font-family:inherit;
 }
 .input:focus,.select:focus,.ta:focus{border-color:var(--border-strong);background:var(--surface)}
-.ta{resize:vertical;line-height:1.5;min-height:56px;font-family:inherit}
-.select{flex:0 0 auto;min-width:auto;padding:8px 10px}
+.ta{resize:vertical;line-height:1.5;min-height:56px}
+.select{flex:0 0 auto;min-width:auto;padding:8px 10px;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b7e6b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:28px}
+/* Native time input — keep the standard control but match our surface colours */
+input[type="time"].input,input[type="date"].input{font-family:inherit;color-scheme:light}
+[data-theme="studio"] input[type="time"].input,[data-theme="studio"] input[type="date"].input{color-scheme:dark}
+/* Reminder chips — wrapping checkbox pills that light up when selected */
+.reminder-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.reminder-chips .rc{display:inline-flex;align-items:center;padding:7px 12px;border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;background:var(--bg);color:var(--text-2);transition:all .12s;user-select:none}
+.reminder-chips .rc:hover{border-color:var(--border-strong);color:var(--text)}
+.reminder-chips .rc input{position:absolute;opacity:0;pointer-events:none}
+.reminder-chips .rc:has(input:checked){background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .qa-actions{display:flex;gap:8px;margin-top:10px}
 
 /* ━━━ CALENDAR ━━━ */
@@ -1031,9 +1041,25 @@ svg{flex-shrink:0}
 .key-mask{font-family:monospace;font-size:12px;color:var(--muted);background:var(--surface-2);padding:4px 8px;border-radius:6px;border:1px solid var(--border)}
 
 /* ━━━ MODAL ━━━ */
-.modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem}
-.modal-bd{position:absolute;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(3px)}
-.modal-body{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px 26px;width:100%;max-width:460px;box-shadow:var(--shadow-lift)}
+.modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem;animation:modal-in .18s ease-out}
+.modal-bd{position:absolute;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(3px);animation:fade-in .18s ease-out}
+/* modal-body scrolls internally when its content exceeds the viewport, so
+   the event editor never spills off the top/bottom on a phone. */
+.modal-body{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px 26px;width:100%;max-width:460px;box-shadow:var(--shadow-lift);max-height:calc(100vh - 2rem);overflow-y:auto;-webkit-overflow-scrolling:touch;animation:modal-body-in .22s ease-out}
+.modal-body::-webkit-scrollbar{width:6px}
+.modal-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:6px}
+@keyframes modal-in{from{opacity:0}to{opacity:1}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+@keyframes modal-body-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+/* AI confirm modal — rich interactive summary with per-item remove buttons */
+.aic-body{display:flex;flex-direction:column;gap:14px;max-height:55vh;overflow-y:auto;margin-bottom:6px}
+.aic-sec{display:flex;flex-direction:column;gap:4px}
+.aic-sec-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:2px}
+.aic-row{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font-size:12.5px;line-height:1.4}
+.aic-text{flex:1;min-width:0;color:var(--text)}
+.aic-rm{flex-shrink:0;width:22px;height:22px;border-radius:50%;border:1px solid var(--border-strong);background:transparent;color:var(--muted);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:all .12s}
+.aic-rm:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.aic-empty{color:var(--muted);font-style:italic;font-size:12.5px;padding:14px 8px;text-align:center}
 .modal-body h3{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;margin-bottom:18px;color:var(--text)}
 .modal-row{margin-bottom:12px}
 .modal-row label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px}
@@ -1704,42 +1730,28 @@ svg{flex-shrink:0}
       <span>All-day event</span>
     </label>
     <div id="em-time-row" class="modal-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div><label>Start</label><input class="input" id="em-tm" placeholder="e.g. 10am" style="width:100%;min-width:0"></div>
-      <div><label>End</label><input class="input" id="em-tm-end" placeholder="e.g. 11am" style="width:100%;min-width:0"></div>
+      <div><label>Start</label><input class="input" id="em-tm" type="time" style="width:100%;min-width:0"></div>
+      <div><label>End</label><input class="input" id="em-tm-end" type="time" style="width:100%;min-width:0"></div>
     </div>
-    <div class="modal-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div><label>Repeat</label><select class="select" id="em-repeat" style="width:100%">
+    <div class="modal-row">
+      <label>Repeat</label><select class="select" id="em-repeat" style="width:100%">
         <option value="none">Does not repeat</option>
         <option value="daily">Every day</option>
         <option value="weekly">Every week</option>
         <option value="monthly">Every month (on this date)</option>
         <option value="monthlyDow">Every month (on this weekday)</option>
         <option value="yearly">Every year</option>
-      </select></div>
-      <div><label>Reminder</label><select class="select" id="em-reminder" style="width:100%">
-        <option value="none">None</option>
-        <option value="0">At time of event</option>
-        <option value="5">5 minutes before</option>
-        <option value="10">10 minutes before</option>
-        <option value="15">15 minutes before</option>
-        <option value="30">30 minutes before</option>
-        <option value="60">1 hour before</option>
-        <option value="120">2 hours before</option>
-        <option value="1440">1 day before</option>
-      </select></div>
+      </select>
     </div>
-    <div class="modal-row" style="display:grid;grid-template-columns:1fr;gap:10px">
-      <div><label>Second reminder (optional)</label><select class="select" id="em-reminder-2" style="width:100%">
-        <option value="none">None</option>
-        <option value="0">At time of event</option>
-        <option value="5">5 minutes before</option>
-        <option value="10">10 minutes before</option>
-        <option value="15">15 minutes before</option>
-        <option value="30">30 minutes before</option>
-        <option value="60">1 hour before</option>
-        <option value="120">2 hours before</option>
-        <option value="1440">1 day before</option>
-      </select></div>
+    <div class="modal-row">
+      <label>Reminders</label>
+      <div class="reminder-chips" id="em-reminders">
+        <label class="rc"><input type="checkbox" value="0"><span>At time</span></label>
+        <label class="rc"><input type="checkbox" value="10"><span>10 min before</span></label>
+        <label class="rc"><input type="checkbox" value="60"><span>1 hour before</span></label>
+        <label class="rc"><input type="checkbox" value="1440"><span>1 day before</span></label>
+        <label class="rc"><input type="checkbox" value="10080"><span>1 week before</span></label>
+      </div>
     </div>
     <div class="modal-row"><label>Time zone</label><select class="select" id="em-tz" style="width:100%">
       <option value="Africa/Johannesburg">Africa/Johannesburg (SAST)</option>
@@ -2783,7 +2795,23 @@ async function loadTip(force){
   const t=tod();
   if(!force&&S.todaysTip&&S.todaysTip.date===t&&S.todaysTip.tip){renderTip(S.todaysTip.tip);return;}
   const key=getKey();if(!key){renderTip({body:"Add your Anthropic API key in Settings to get your AI-generated daily plan.",markdown:false,mode:'today'});return;}
-  await generatePlan('today');
+  // No auto-generate. Previously we kicked off generatePlan('today') here on
+  // every app load, which caused a race on mobile→PC handoffs: mobile's
+  // freshly-saved plan would get overwritten by the PC's auto-generated one.
+  // Now the user has to click "✨ Draft plan" explicitly — matches his stated
+  // preference for a softer suggestion-style tip anyway.
+  if(force){await generatePlan('today');return;}
+  renderEmptyTip();
+}
+function renderEmptyTip(){
+  const el=document.getElementById('tip-card');if(!el)return;
+  el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div>
+    <div class="tip-body" style="color:var(--muted);font-style:italic;padding:4px 0">No plan yet for today — draft one when you're ready.</div>
+    <div class="tip-actions">
+      <button class="btn btn-primary btn-sm" onclick="generatePlan('today')">✨ Draft plan</button>
+      <button class="btn btn-sm" onclick="generatePlan('now')">From now</button>
+      <button class="btn btn-sm" onclick="generatePlan('tomorrow')">Plan tomorrow</button>
+    </div>`;
 }
 // mode: 'today' (whole day) | 'now' (from current hour to end of day) |
 //       'tomorrow' (whole of tomorrow)
@@ -2810,24 +2838,29 @@ async function generatePlan(mode){
     const nowLabel=now.toLocaleTimeString('en-ZA',{hour:'numeric',minute:'2-digit',hour12:true});
     const scope=mode==='now'?`the REST of today (starting from ${nowLabel})`:mode==='tomorrow'?`tomorrow (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`:`today (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`;
     const ctx={now:`${now.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})} at ${nowLabel}`,hour:hr,mode,planDay:dayName,planDate:refDs,scheduledEvents:evs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
-    const prompt=`You are Zander's Life OS coach. Cape Town entrepreneur (WebAnchor / TriFusion / Zomarka). Draft a realistic, focused plan for ${scope}. Ground it in his actual state.
+    const prompt=`You are Zander's thoughtful daily coach. Cape Town entrepreneur (WebAnchor / TriFusion / Zomarka). Instead of a rigid hour-by-hour schedule, draft a softer SUGGESTION-style plan for ${scope} — the vibe of "here's what could make a great day" rather than "do this at 9:00, do that at 10:00."
 
 Rules:
-- Respect fixed events (meetings, all-day items) — schedule around them, never suggest moving them.
+- Respect fixed events (meetings, all-day items) — work around them, never suggest moving them.
 - Treat the weekly rhythm carefully:
-  · Wake / screens-off times are BOUNDARIES — don't schedule blocks outside them.
-  · "Start work by Xam" means deep work begins then — before that is personal/routine, not dead time.
-  · Intermittent fasting windows describe WHEN eating is allowed — they are NOT a dedicated "eating block." Schedule normal work/tasks during that window; do not leave it empty or label it as "eating."
-  · Gym slots, Bible studies, meetings etc. are real commitments — bake them in on the right day.
-- Prioritise urgent tasks first, then high. One or two personal items are fine.
-- Realistic durations with small buffers — don't pack every minute.
-- Use Cape Town local clock times (e.g. "2:00–3:00 pm"). Keep to 5–8 time blocks max.
-- End with ONE short "North star" line — the single outcome that would make the day count.
-- Concise. Skip filler like "wake up" / "brush teeth".
+  · Wake / screens-off times are BOUNDARIES — don't suggest anything outside them.
+  · "Start work by Xam" means deep work begins then — earlier hours are personal.
+  · Eating / fasting windows describe WHEN food is allowed — not a dedicated "eating block." Normal work continues during them.
+  · Gym, Bible studies, standing meetings etc. are real commitments — weave them in naturally on the right day.
+- Structure output as three soft sections: MORNING, AFTERNOON, EVENING. No strict clock times — use loose windows like "around 10ish" or "mid-afternoon" unless a fixed event demands precision. Use 3–5 bullets per section max.
+- Each bullet reads as a suggestion, not an order. "Might be a good time to ..." / "Could squeeze in ..." / "Worth fitting in ...". Warm and calm.
+- Weave in undone habits (from state.habits where doneToday=false) as gentle nudges somewhere they fit — e.g. "you haven't hit the gym yet today, late afternoon would work" — one nudge per unfinished habit, max 2 total.
+- Cover the most important open tasks (urgent first, then high) across the sections — but present them as "you've still got X on the list, afternoon would suit it" rather than a rigid slot.
+- End with ONE "North star" line — the single outcome that would make the day count.
+- Friendly, concise, a touch of warmth. Not a drill sergeant.
 
 Format as markdown:
-## Plan
-- HH:MM–HH:MM · Block name · (short why)
+## Morning
+- suggestion…
+- suggestion…
+## Afternoon
+- …
+## Evening
 - …
 ## North star
 One sentence.
@@ -3924,10 +3957,18 @@ function resetEventModal(){
   ['em-t','em-tm','em-tm-end','em-desc','em-d-end'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
   const ad=document.getElementById('em-allday');if(ad)ad.checked=false;
   const rep=document.getElementById('em-repeat');if(rep)rep.value='none';
-  const rem=document.getElementById('em-reminder');if(rem)rem.value='none';
-  const rem2=document.getElementById('em-reminder-2');if(rem2)rem2.value='none';
+  // Uncheck every reminder chip
+  document.querySelectorAll('#em-reminders input[type="checkbox"]').forEach(cb=>{cb.checked=false;});
   const tz=document.getElementById('em-tz');if(tz)tz.value='Africa/Johannesburg';
   toggleEmAllDay();
+}
+// Helpers for the reminder chip group
+function getEmReminderValues(){
+  return [...document.querySelectorAll('#em-reminders input[type="checkbox"]:checked')].map(cb=>Number(cb.value)).filter(n=>!isNaN(n));
+}
+function setEmReminderValues(mins){
+  const set=new Set((mins||[]).map(m=>String(Number(m))));
+  document.querySelectorAll('#em-reminders input[type="checkbox"]').forEach(cb=>{cb.checked=set.has(cb.value);});
 }
 function openNewEvent(prefill){
   prefill=prefill||{};
@@ -3941,7 +3982,10 @@ function openNewEvent(prefill){
   document.getElementById('em-del').style.display='none';
   document.getElementById('event-modal').style.display='flex';
   _syncBodyLock();
-  setTimeout(()=>document.getElementById('em-t').focus(),50);
+  // For NEW events the user is actively adding something — focus the title
+  // so they can start typing immediately. For EDITS, don't auto-focus (on
+  // mobile it pops the keyboard up when they're usually just viewing).
+  setTimeout(()=>{const el=document.getElementById('em-t');if(el)el.focus();},50);
 }
 async function openEventEdit(payload){
   let p;
@@ -3972,13 +4016,15 @@ async function openEventEdit(payload){
     document.getElementById('em-desc').value=d.description||d.desc||'';
     document.getElementById('em-allday').checked=allDay;
     document.getElementById('em-repeat').value=recurrence;
-    document.getElementById('em-reminder').value=reminderMin;
+    setEmReminderValues(reminderMin==='none'||reminderMin==null?[]:(Array.isArray(reminderMin)?reminderMin:[reminderMin]));
     const tzSel=document.getElementById('em-tz');
     if(tzSel){tzSel.value=timeZone;if(tzSel.value!==timeZone){const opt=document.createElement('option');opt.value=timeZone;opt.textContent=timeZone;tzSel.appendChild(opt);tzSel.value=timeZone;}}
     toggleEmAllDay();
     document.getElementById('em-del').style.display='inline-flex';
     document.getElementById('event-modal').style.display='flex';_syncBodyLock();
-    setTimeout(()=>{const el=document.getElementById('em-t');if(el)el.focus();},50);
+    // Intentionally NOT auto-focusing the title on edit — most of the time
+    // the user just wants to look at the event, and popping the on-screen
+    // keyboard on phones is annoying. They can tap the title to edit it.
   }catch(e){console.error('[openEventEdit] modal populate failed:',e);alert('Sorry — couldn\'t open that event.');return;}
   // Enrich from GCal (best-effort). If this fails, the modal is already open.
   if(p.type==='gc'){
@@ -4002,11 +4048,11 @@ async function openEventEdit(payload){
       if(full.start?.timeZone){const ts=document.getElementById('em-tz');if(ts){ts.value=full.start.timeZone;if(ts.value!==full.start.timeZone){const opt=document.createElement('option');opt.value=full.start.timeZone;opt.textContent=full.start.timeZone;ts.appendChild(opt);ts.value=full.start.timeZone;}}}
       if(full.recurrence?.length)document.getElementById('em-repeat').value=parseRRule(full.recurrence[0]);
       if(full.reminders&&full.reminders.overrides?.length){
-        // Load up to 2 reminders into the two dropdowns, sorted descending
-        // (earliest first — e.g. [60, 10] so "1 hr before" shows in primary).
-        const mins=full.reminders.overrides.map(o=>o.minutes).sort((a,b)=>b-a);
-        const r1=document.getElementById('em-reminder');if(r1)r1.value=String(mins[0]);
-        const r2=document.getElementById('em-reminder-2');if(r2)r2.value=mins[1]!=null?String(mins[1]):'none';
+        // Tick whichever chips match the event's overrides. Google stores
+        // minutes; our chip values are '0', '10', '60', '1440', '10080'.
+        setEmReminderValues(full.reminders.overrides.map(o=>o.minutes));
+      } else if(full.reminders&&full.reminders.useDefault===false){
+        setEmReminderValues([]);
       }
     }catch(e){console.warn('[openEventEdit] GCal enrich failed:',e.message);}
   }
@@ -4037,11 +4083,9 @@ async function saveCurrentEvent(){
   const endTime=allDay?'':document.getElementById('em-tm-end').value.trim();
   const desc=document.getElementById('em-desc').value.trim();
   const recurrence=document.getElementById('em-repeat').value;
-  // Collect both reminder dropdowns; keep unique, drop 'none'. applyAdvancedFields
-  // then writes them as an array of overrides to Google Calendar.
-  const r1=document.getElementById('em-reminder').value;
-  const r2=document.getElementById('em-reminder-2')?.value||'none';
-  const reminderList=[r1,r2].filter(v=>v!=='none'&&v!==''&&v!=null);
+  // Reminder chips — any ticked boxes become an array sent to Google Calendar
+  // as `reminders.overrides`. 'none' means no reminders at all (explicit).
+  const reminderList=getEmReminderValues();
   const reminderMin=reminderList.length?(reminderList.length===1?reminderList[0]:reminderList):'none';
   const timeZone=document.getElementById('em-tz').value;
   const opts={allDay,recurrence,reminderMin,timeZone,endDate};
@@ -4577,6 +4621,88 @@ function formatAIChangesDetailed(ch){
 
   return sections.length?sections.join('\n\n'):'';
 }
+// Interactive HTML version of the detailed summary — each row has an × so
+// the user can cherry-pick what NOT to apply. Powers showAIConfirmModal.
+function renderAIChangesInteractive(ch){
+  const fmtReminder=r=>{if(r==null||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (m/60)+' hr';if(m===1440)return '1 day';return (m/1440)+' day';}).filter(Boolean);return names.length?names.join(' + '):null;};
+  const row=(label,rmKey)=>`<div class="aic-row"><span class="aic-text">${label}</span><button class="aic-rm" data-rm="${rmKey}" aria-label="Remove">×</button></div>`;
+  const sections=[];
+  const taskRows=[];
+  (ch.addTasks||[]).forEach((t,i)=>{const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);taskRows.push(row(`Add "${esc(t.text||'?')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addTasks:${i}`));});
+  (ch.completeTasks||[]).forEach((t,i)=>taskRows.push(row(`Tick off "${esc(t)}"`,`completeTasks:${i}`)));
+  (ch.removeTasks||[]).forEach((t,i)=>taskRows.push(row(`Delete task "${esc(t)}"`,`removeTasks:${i}`)));
+  if(taskRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Tasks</div>${taskRows.join('')}</div>`);
+
+  const habitRows=[];
+  (ch.addHabits||[]).forEach((h,i)=>habitRows.push(row(`Add habit "${esc(h.name||'?')}"`,`addHabits:${i}`)));
+  (ch.completeHabits||[]).forEach((h,i)=>habitRows.push(row(`Tick today: "${esc(h)}"`,`completeHabits:${i}`)));
+  (ch.logLearning||[]).forEach((l,i)=>habitRows.push(row(`Log under "${esc(l.skill||'?')}"${l.content?': '+esc(l.content.slice(0,40)):''}`,`logLearning:${i}`)));
+  if(habitRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Habits</div>${habitRows.join('')}</div>`);
+
+  const peopleRows=[];
+  (ch.addPerson||[]).forEach((p,i)=>{const bits=[];if(p.context)bits.push(p.context);if(p.note)bits.push('note: "'+p.note+'"');peopleRows.push(row(`Add "${esc(p.name||'?')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addPerson:${i}`));});
+  (ch.updatePerson||[]).forEach((p,i)=>peopleRows.push(row(`Note on "${esc(p.name)}": ${esc((p.note||'').slice(0,60))}`,`updatePerson:${i}`)));
+  if(peopleRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">People</div>${peopleRows.join('')}</div>`);
+
+  const projRows=[];
+  (ch.addBuild||[]).forEach((b,i)=>projRows.push(row(`Add project "${esc(b.title||'?')}"${b.status?' ('+esc(b.status)+')':''}`,`addBuild:${i}`)));
+  (ch.addBuildNote||[]).forEach((n,i)=>projRows.push(row(`Note on "${esc(n.project)}": ${esc((n.content||'').slice(0,60))}`,`addBuildNote:${i}`)));
+  if(projRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Projects</div>${projRows.join('')}</div>`);
+
+  const brainRows=[];
+  (ch.addIdea||[]).forEach((x,i)=>brainRows.push(row(`Add idea "${esc(x.title||'?')}"`,`addIdea:${i}`)));
+  (ch.addResource||[]).forEach((x,i)=>brainRows.push(row(`Add resource "${esc(x.title||'?')}"${x.tag?' ['+esc(x.tag)+']':''}`,`addResource:${i}`)));
+  (ch.addNote||[]).forEach((x,i)=>brainRows.push(row(`Add note "${esc(x.title||'?')}"`,`addNote:${i}`)));
+  if(brainRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Brain</div>${brainRows.join('')}</div>`);
+
+  const calRows=[];
+  (ch.addEvent||[]).forEach((e,i)=>{const bits=[];if(e.date)bits.push(e.date);if(e.allDay||!e.time)bits.push('all day');else bits.push(e.time+(e.endTime?'–'+e.endTime:''));if(e.repeat&&e.repeat!=='none')bits.push('repeats '+e.repeat);const rem=fmtReminder(e.reminderMin);if(rem)bits.push('reminders: '+rem);calRows.push(row(`Add "${esc(e.title||'?')}" — ${esc(bits.join(', '))}`,`addEvent:${i}`));});
+  (ch.removeEvent||[]).forEach((e,i)=>calRows.push(row(`Delete events matching "${esc(e.match||e.title||'?')}"${e.date?' on '+esc(e.date):''}`,`removeEvent:${i}`)));
+  (ch.updateEvent||[]).forEach((e,i)=>{const changes=[];if(e.newTitle)changes.push('title → '+e.newTitle);if(e.newDate)changes.push('date → '+e.newDate);if(e.newTime)changes.push('time → '+e.newTime);calRows.push(row(`Update "${esc(e.match||'?')}" — ${esc(changes.join(', ')||'(no changes)')}`,`updateEvent:${i}`));});
+  if(calRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Calendar</div>${calRows.join('')}</div>`);
+
+  return sections.length?sections.join(''):`<div class="aic-empty">Nothing left — hit Cancel or Redo.</div>`;
+}
+
+// Custom confirm modal for AI changes. Lets the user remove individual items
+// via ×, then Apply whatever's left. Redo puts the original prompt back in
+// the AI bar so the user can tweak and re-ask. Returns {action, ch}.
+function showAIConfirmModal(ch,prompt){
+  return new Promise(resolve=>{
+    const overlay=document.createElement('div');
+    overlay.className='modal';overlay.id='ai-confirm-modal';overlay.style.display='flex';
+    overlay.innerHTML=`<div class="modal-bd"></div>
+      <div class="modal-body" style="max-width:520px">
+        <h3 style="margin-bottom:6px">The AI wants to:</h3>
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Remove anything you don't want with ×. Apply keeps the rest. Redo drops this and puts your prompt back for editing.</div>
+        <div class="aic-body" id="aic-body"></div>
+        <div class="modal-actions">
+          <button class="btn btn-danger btn-sm" data-action="cancel">Cancel</button>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" data-action="redo">↻ Redo prompt</button>
+          <button class="btn btn-primary btn-sm" data-action="apply">Apply</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);_syncBodyLock();
+    const bodyEl=overlay.querySelector('#aic-body');
+    const renderBody=()=>{bodyEl.innerHTML=renderAIChangesInteractive(ch);};
+    renderBody();
+    overlay.addEventListener('click',e=>{
+      const rm=e.target.closest('[data-rm]');
+      if(rm){
+        const [key,idxStr]=rm.dataset.rm.split(':');
+        const idx=Number(idxStr);
+        if(Array.isArray(ch[key])){ch[key].splice(idx,1);if(!ch[key].length)delete ch[key];}
+        renderBody();
+        return;
+      }
+      if(e.target.dataset.action==='cancel'||e.target.closest('.modal-bd')){overlay.remove();_syncBodyLock();resolve({action:'cancel'});}
+      else if(e.target.dataset.action==='redo'){overlay.remove();_syncBodyLock();resolve({action:'redo'});}
+      else if(e.target.dataset.action==='apply'){overlay.remove();_syncBodyLock();resolve({action:'apply',ch});}
+    });
+  });
+}
+
 // Back-compat one-liner (still referenced internally for quick status messages)
 function summariseAIChanges(ch){
   const bits=[];
@@ -4676,22 +4802,30 @@ async function applyChanges(ch,prompt){
   // aiConfirmMode — Settings → AI behaviour → Confirm before applying
   //   'off'      : execute everything immediately (calendar too)
   //   'calendar' : tasks/habits/etc apply now; calendar needs OK (default)
-  //   'all'      : show one combined detailed summary, wait for OK
+  //   'all'      : show rich custom modal — user can remove individual items
   const mode=S.aiConfirmMode||'calendar';
+  if(mode==='all'&&formatAIChangesDetailed(ch)){
+    const result=await showAIConfirmModal(ch,prompt,'all');
+    if(result.action==='cancel'){
+      const st=document.getElementById('btm-st');
+      if(st){st.className='ai-st';st.textContent='Changes cancelled.';setTimeout(()=>{st.textContent='';st.className='ai-st';},5000);}
+      return;
+    }
+    if(result.action==='redo'){
+      // Put the original prompt back in the AI bar so the user can tweak it
+      const ta=document.getElementById('ai-ta');if(ta){ta.value=prompt||'';ta.focus();ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,140)+'px';}
+      const st=document.getElementById('btm-st');
+      if(st){st.className='ai-st';st.textContent='Edit your prompt and press Update ↗.';setTimeout(()=>{st.textContent='';st.className='ai-st';},6000);}
+      return;
+    }
+    // 'apply' — use the (possibly-trimmed) ch the modal returned
+    ch=result.ch;
+  }
   const calOps=[];
   (ch.addEvent||[]).forEach(e=>calOps.push({kind:'add',ev:e}));
   (ch.removeEvent||[]).forEach(e=>calOps.push({kind:'remove',ev:e}));
   (ch.updateEvent||[]).forEach(e=>calOps.push({kind:'update',ev:e}));
   const detailed=formatAIChangesDetailed(ch);
-  if(mode==='all'&&detailed){
-    const ok=confirm(`The AI wants to make these changes:\n\n${detailed}\n\nApply?`);
-    if(!ok){
-      const st=document.getElementById('btm-st');
-      if(st){st.className='ai-st';st.textContent='Changes cancelled.';setTimeout(()=>{st.textContent='';st.className='ai-st';},5000);}
-      // Declined in 'all' mode → nothing was applied, don't pollute history.
-      return;
-    }
-  }
   if(ch.addTasks?.length)ch.addTasks.forEach(t=>S.tasks.push({id:uid(),text:t.text,area:t.area||'personal',project:t.project||'gen',priority:t.priority||'lo',scheduledTime:t.scheduledTime||'',done:false,date:tod()}));
   if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)t.done=true;});
   if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)S.tasks=S.tasks.filter(x=>x.id!==t.id);});
