@@ -1827,7 +1827,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v72';
+const APP_VERSION='v73';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -2926,32 +2926,39 @@ async function generatePlan(mode){
     const ctx={now:`${now.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})} at ${nowLabel}`,hour:hr,mode,planDay:dayName,planDate:refDs,scheduledEvents:evs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
     const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
     const wpCtx=(S.workProjects||[]).length?` They work across: ${S.workProjects.map(p=>p.name).join(', ')}.`:'';
-    const prompt=`You are ${firstName}'s thoughtful daily coach.${wpCtx} Instead of a rigid hour-by-hour schedule, draft a softer SUGGESTION-style plan for ${scope} — the vibe of "here's what could make a great day" rather than "do this at 9:00, do that at 10:00."
+    const prompt=`Act as ${firstName}'s thoughtful daily guide, not a scheduler.${wpCtx} Plan for ${scope}.
 
-Rules:
-- Respect fixed events (meetings, all-day items) — work around them, never suggest moving them.
-- Treat the weekly rhythm carefully:
-  · Wake / screens-off times are BOUNDARIES — don't suggest anything outside them.
-  · "Start work by Xam" means deep work begins then — earlier hours are personal.
-  · Eating / fasting windows describe WHEN food is allowed — not a dedicated "eating block." Normal work continues during them.
-  · Gym, Bible studies, standing meetings etc. are real commitments — weave them in naturally on the right day.
-- Structure output as three soft sections: MORNING, AFTERNOON, EVENING. No strict clock times — use loose windows like "around 10ish" or "mid-afternoon" unless a fixed event demands precision. Use 3–5 bullets per section max.
-- Each bullet reads as a suggestion, not an order. "Might be a good time to ..." / "Could squeeze in ..." / "Worth fitting in ...". Warm and calm.
-- Weave in undone habits (from state.habits where doneToday=false) as gentle nudges somewhere they fit — e.g. "you haven't hit the gym yet today, late afternoon would work" — one nudge per unfinished habit, max 2 total.
-- Cover the most important open tasks (urgent first, then high) across the sections — but present them as "you've still got X on the list, afternoon would suit it" rather than a rigid slot.
-- End with ONE "North star" line — the single outcome that would make the day count.
-- Friendly, concise, a touch of warmth. Not a drill sergeant.
+Using the user's calendar events, tasks, habits, active projects, and weekly rhythm:
+- Highlight only what truly matters today (keep it minimal)
+- Do NOT assign exact times unless absolutely necessary
+- Group the day into natural phases (e.g. morning focus, midday reset, afternoon push, evening wind-down) — pick phases that actually suit today's shape, don't force all four
+- Offer light, encouraging suggestions instead of instructions
+- Keep everything concise, spaced out, and easy to scan
+- Add small human touches (gentle nudges, observations, or reminders), but avoid being cheesy
+- Respect the weekly rhythm: wake/screens-off times are BOUNDARIES, start-work time is when deep work begins, eating/fasting windows just describe when food is allowed (NOT a dedicated block), standing commitments weave in naturally
 
-Format as markdown:
-## Morning
+Structure the output as markdown like this:
+
+## Today at a glance
+- 2–4 key priorities max
+
+## Flow of the day
+### [Phase name]
 - suggestion…
-- suggestion…
-## Afternoon
+### [Next phase]
 - …
-## Evening
-- …
-## North star
-One sentence.
+
+## Momentum nudges
+- short, optional suggestions based on habits / undone work / energy
+
+## Watch-outs
+- only if the day is overloaded or something might be missed — otherwise skip this section entirely
+
+## Nice-to-have ideas
+- optional, low-pressure. only if there's real space
+
+Avoid long paragraphs. Avoid overwhelming the user.
+The goal is to make ${firstName} feel clear, calm, and in control — not managed.
 
 STATE:
 ${JSON.stringify(ctx,null,2)}`;
@@ -3792,27 +3799,39 @@ async function runPlanMyDay(){
     const ctx={now:new Date().toLocaleString('en-ZA',{weekday:'long',day:'numeric',month:'long',hour:'numeric',minute:'2-digit',hour12:true}),hour:hr,todayEvents:todayEvs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
     const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
     const wpCtx=(S.workProjects||[]).length?` They work across: ${S.workProjects.map(p=>p.name).join(', ')}.`:'';
-    const prompt=`You are ${firstName}'s Life OS coach.${wpCtx} Build them a realistic, focused plan for the REMAINDER of today.
+    const prompt=`Act as ${firstName}'s thoughtful daily guide, not a scheduler.${wpCtx} Plan for the REST of today.
 
-Rules:
-- Respect fixed events (meetings, all-day items) — schedule around them, don't move them.
-- Treat the weekly rhythm carefully:
-  · Wake / screens-off times are BOUNDARIES — don't schedule blocks outside them.
-  · "Start work by Xam" means deep work begins then — before that is personal/routine, not dead time.
-  · Intermittent fasting windows describe WHEN eating is allowed — they are NOT a dedicated "eating block." Schedule normal work/tasks during that window; do not leave it empty or label it as "eating."
-  · Gym slots, Bible studies, meetings etc. are real commitments — bake them in on the right day.
-- Prioritise urgent tasks first, then high, then work-related. One or two personal items are fine.
-- Be realistic about time: estimate durations, leave small buffers. Don't pack every minute.
-- Give actual clock times (e.g. "2:00–3:00 pm"). Use the user's local time.
-- Keep the schedule concise: 5–10 time blocks max. Skip padding like "wake up" / "brush teeth".
-- End with a 1-line "north star" for the day — the single outcome that would make today count.
+Using the user's calendar events, tasks, habits, active projects, and weekly rhythm:
+- Highlight only what truly matters today (keep it minimal)
+- Do NOT assign exact times unless absolutely necessary
+- Group the day into natural phases (e.g. morning focus, midday reset, afternoon push, evening wind-down) — pick phases that actually suit the time remaining, don't force all four
+- Offer light, encouraging suggestions instead of instructions
+- Keep everything concise, spaced out, and easy to scan
+- Add small human touches (gentle nudges, observations, or reminders), but avoid being cheesy
+- Respect the weekly rhythm: wake/screens-off times are BOUNDARIES, start-work time is when deep work begins, eating/fasting windows describe when food is allowed (NOT a dedicated block), standing commitments weave in naturally
 
-Format the response as MARKDOWN with:
-## Plan
-- HH:MM–HH:MM · Block name · (why / context in parens)
+Structure the output as markdown like this:
+
+## Today at a glance
+- 2–4 key priorities max
+
+## Flow of the day
+### [Phase name]
+- suggestion…
+### [Next phase]
 - …
-## North star
-One sentence.
+
+## Momentum nudges
+- short, optional suggestions based on habits / undone work / energy
+
+## Watch-outs
+- only if the day is overloaded or something might be missed — otherwise skip this section entirely
+
+## Nice-to-have ideas
+- optional, low-pressure. only if there's real space
+
+Avoid long paragraphs. Avoid overwhelming the user.
+The goal is to make ${firstName} feel clear, calm, and in control — not managed.
 
 STATE:
 ${JSON.stringify(ctx,null,2)}`;
