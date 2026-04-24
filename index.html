@@ -1663,11 +1663,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         </div>
 
         <div>
-          <div class="section-hdr"><h2>AI behaviour</h2></div>
+          <div class="section-hdr"><h2>AI</h2></div>
           <div class="setting-row setting-row-stack">
             <div>
               <div class="setting-label">Confirm before applying</div>
-              <div class="setting-desc"><strong>Off</strong> — AI makes every change, calendar included, without asking. <strong>Calendar</strong> — only calendar edits need approval (default). <strong>All</strong> — every AI change (tasks, habits, notes, people, calendar) needs approval.</div>
+              <div class="setting-desc"><strong>Off</strong> — AI makes every change, calendar included, without asking. <strong>Calendar</strong> — only calendar edits need approval (default). <strong>All</strong> — every AI change needs approval.</div>
             </div>
             <div class="setting-right">
               <div class="theme-toggle" id="ai-confirm-toggle">
@@ -1677,16 +1677,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               </div>
             </div>
           </div>
-        </div>
-
-        <div>
-          <div class="section-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-            <h2>AI history</h2>
-            <button class="btn btn-ghost btn-sm" onclick="clearAIHistory()">Clear</button>
-          </div>
-          <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:10px;padding:12px">
-            <input class="input" id="ai-history-search" placeholder="Search prompts or changes…" oninput="rAIHistory()" style="width:100%">
-            <div id="ai-history-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)"></div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">AI history</div>
+              <div class="setting-desc" id="ai-history-count">Every AI update, searchable.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-sm" onclick="openAIHistoryModal()">Open →</button>
+            </div>
           </div>
         </div>
 
@@ -1711,6 +1709,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             </div>
             <div class="setting-right" id="version-right">
               <span class="key-mask" id="version-num">—</span>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Check for updates</div>
+              <div class="setting-desc">Force a check if the update toast hasn't appeared.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-sm" onclick="checkForUpdate()">↻ Check</button>
             </div>
           </div>
         </div>
@@ -1827,7 +1834,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v74';
+const APP_VERSION='v75';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -4590,7 +4597,9 @@ function rSettings(){
   updateInstallUI();
   renderCalendarList();
   renderWorkProjects();
-  rAIHistory();
+  // AI history moved to a modal — just show the count here
+  const cntEl=document.getElementById('ai-history-count');
+  if(cntEl){const n=(S.aiHistory||[]).length;cntEl.textContent=n?`${n} entr${n===1?'y':'ies'} · searchable`:'Every AI update will show up here.';}
 }
 async function renderCalendarList(){
   const el=document.getElementById('gcal-cal-list');if(!el)return;
@@ -5031,7 +5040,26 @@ function recordAIHistory(prompt,ch){
   if(S.aiHistory.length>200)S.aiHistory.length=200;
 }
 
-// ─────── AI HISTORY UI (Settings) ───────
+// ─────── AI HISTORY UI (full-screen modal) ───────
+function openAIHistoryModal(){
+  closeAIHistoryModal();
+  const modal=document.createElement('div');
+  modal.className='modal';modal.id='ai-history-modal';modal.style.display='flex';
+  modal.innerHTML=`<div class="modal-bd" onclick="closeAIHistoryModal()"></div>
+    <div class="modal-body" style="max-width:640px;display:flex;flex-direction:column;max-height:calc(100vh - 2rem)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <h3 style="margin:0">AI history</h3>
+        <button class="btn btn-ghost btn-sm" onclick="clearAIHistory()">Clear all</button>
+      </div>
+      <input class="input" id="ai-history-search" placeholder="Search prompts or changes…" oninput="rAIHistory()" style="width:100%;margin-bottom:12px">
+      <div id="ai-history-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);min-height:200px"></div>
+      <div class="modal-actions"><div class="spacer"></div><button class="btn btn-primary btn-sm" onclick="closeAIHistoryModal()">Close</button></div>
+    </div>`;
+  document.body.appendChild(modal);_syncBodyLock();
+  rAIHistory();
+  setTimeout(()=>{const s=document.getElementById('ai-history-search');if(s&&window.innerWidth>700)s.focus();},50);
+}
+function closeAIHistoryModal(){const m=document.getElementById('ai-history-modal');if(m)m.remove();_syncBodyLock();}
 function rAIHistory(){
   const el=document.getElementById('ai-history-list');if(!el)return;
   const q=(document.getElementById('ai-history-search')?.value||'').toLowerCase().trim();
@@ -5056,6 +5084,7 @@ function rAIHistory(){
 function clearAIHistory(){
   if(!confirm('Clear all AI history? This can\'t be undone.'))return;
   S.aiHistory=[];svAll();rAIHistory();
+  const cntEl=document.getElementById('ai-history-count');if(cntEl)cntEl.textContent='Every AI update, searchable.';
 }
 
 // ─────── SOUND SYSTEM ───────
@@ -5228,7 +5257,20 @@ function render(){
   if(g)g.textContent=gTxt();if(d)d.textContent=dTxt();
   rUpcom();rCal();rFocus();rHabits();rTasks();rPeople();rBuilds();rIdeas();rResources();rNotes();
   rAttention();rTodayWeek();setBrainTab(UI.brainTab);
+  refreshTipCard();
   if(currentRoute==='settings')rSettings();
+}
+// Pull the tip card from current S state. Runs on every render — so when a
+// Firestore snapshot delivers a newer plan generated on another device, the
+// local tip card refreshes instead of staying on whatever was shown before.
+// Skipped while a generation is in flight (tip-loading present) so we don't
+// wipe the loading spinner mid-request.
+function refreshTipCard(){
+  const el=document.getElementById('tip-card');if(!el)return;
+  if(el.querySelector('.tip-loading'))return;
+  const t=tod();
+  if(S.todaysTip&&S.todaysTip.date===t&&S.todaysTip.tip)renderTip(S.todaysTip.tip);
+  else renderEmptyTip();
 }
 
 // Fresh-account bootstrap — deliberately empty. New users get a clean slate
@@ -5247,31 +5289,53 @@ function seed(){
 // Service worker registration + update detection. When a new SW is installed
 // but an old one is still controlling the page, surface a "New version · Relaunch"
 // pill in Settings so the user can explicitly update without a hard refresh.
-let _updateReady=false;let _swWaiting=null;
+let _updateReady=false;let _swWaiting=null;let _swReg=null;
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('sw.js').then(reg=>{
+      _swReg=reg;
+      // If there's ALREADY a waiting SW at startup (user missed a previous
+      // update notice), pick it up right away.
+      if(reg.waiting&&navigator.serviceWorker.controller){
+        _updateReady=true;_swWaiting=reg.waiting;
+        if(currentRoute==='settings')rSettings();
+        showUpdateToast();
+      }
       // Fires when the browser finds a new sw.js
       reg.addEventListener('updatefound',()=>{
         const incoming=reg.installing;
         if(!incoming)return;
         incoming.addEventListener('statechange',()=>{
           if(incoming.state==='installed'&&navigator.serviceWorker.controller){
-            // New version ready AND an old SW is still in control → waiting.
             _updateReady=true;_swWaiting=incoming;
             if(currentRoute==='settings')rSettings();
-            // Also show a toast so the user notices even if not on Settings
             showUpdateToast();
           }
         });
       });
-      // Nudge a check when we come back to the tab
+      // Mobile browsers (esp. iOS Safari in PWA mode) are stingy about firing
+      // updatefound naturally — they often wait until the user navigates or
+      // reopens the app. Force a check every 5 min while visible, and on
+      // every visibility change.
       document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});});
+      setInterval(()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});},5*60*1000);
     }).catch(()=>{});
     // When the waiting SW takes control, reload automatically
     let reloaded=false;
     navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloaded)return;reloaded=true;window.location.reload();});
   });
+}
+// Manual "check for updates" — triggered by the button in Settings → About
+async function checkForUpdate(){
+  if(!_swReg){alert('Service worker not ready yet — try again in a few seconds.');return;}
+  try{
+    await _swReg.update();
+    // updatefound fires asynchronously if there's a new SW; give it a beat
+    setTimeout(()=>{
+      if(_updateReady){showUpdateToast();}
+      else{const st=document.getElementById('btm-st');if(st){st.className='ai-st ok';st.textContent='You\'re on the latest version.';setTimeout(()=>{st.textContent='';st.className='ai-st';},3500);}}
+    },1200);
+  }catch(e){alert('Update check failed: '+(e.message||e));}
 }
 function showUpdateToast(){
   if(document.getElementById('update-toast'))return;
