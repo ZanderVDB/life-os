@@ -216,6 +216,13 @@ svg{flex-shrink:0}
 .tip-card > *{position:relative;z-index:1}
 [data-theme="studio"] .tip-card{background:linear-gradient(135deg,var(--surface-2) 0%,#2a2530 42%,var(--surface) 100%)}
 [data-theme="studio"] .tip-card::before{background:radial-gradient(circle at center,rgba(159,181,165,.15) 0%,transparent 60%);opacity:.5}
+/* On narrow screens the off-centre sage radial creates a visible vertical
+   seam — the left half reads as darker peach-bg and the right half as a
+   washed-out sage/lavender band. Centre the radial on mobile so the card
+   is evenly tinted rather than split in half. */
+@media(max-width:768px){
+  .tip-card::before{top:-50%;right:auto;left:-20%;width:140%;height:200%;opacity:.35}
+}
 .tip-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px}
 .tip-body{font-family:'Playfair Display','Georgia',serif;font-size:19px;line-height:1.45;color:var(--text);margin-bottom:14px;font-weight:400}
 .tip-plan-body{font-size:13.5px;line-height:1.65;color:var(--text-2);margin-bottom:14px;max-height:380px;overflow-y:auto}
@@ -268,9 +275,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 [data-theme="studio"] input[type="time"].input,[data-theme="studio"] input[type="date"].input{color-scheme:dark}
 /* Reminder chips — wrapping checkbox pills that light up when selected */
 .reminder-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
-.reminder-chips .rc{display:inline-flex;align-items:center;padding:7px 12px;border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;background:var(--bg);color:var(--text-2);transition:all .12s;user-select:none}
+.reminder-chips .rc{position:relative;display:inline-flex;align-items:center;padding:7px 12px;border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;background:var(--bg);color:var(--text-2);transition:all .12s;user-select:none}
 .reminder-chips .rc:hover{border-color:var(--border-strong);color:var(--text)}
-.reminder-chips .rc input{position:absolute;opacity:0;pointer-events:none}
+/* Anchor the hidden checkbox INSIDE its chip (position:relative above) with
+   real coords — otherwise iOS treats the absolute input as if at (0,0) of
+   the document and scrolls the page trying to bring it into view when it
+   gets focused via the label click. That's what caused the settings page
+   to shoot past its scroll bounds when toggling a calendar-defaults chip. */
+.reminder-chips .rc input{position:absolute;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;margin:0}
 .reminder-chips .rc:has(input:checked){background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 /* Calendar defaults — chips on a single line, right-aligned on desktop.
    Horizontal scroll if the chip set is wider than the row. Padding-bottom
@@ -1901,9 +1913,33 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v85';
+const APP_VERSION='v86';
 const APP_BUILD_DATE='2026-04-24';
-const AK='los_ak',getKey=()=>localStorage.getItem(AK);
+// Anthropic API key storage — scoped per-user. Previously we stored a single
+// global key in localStorage.los_ak, which meant signing into a second Google
+// account on the same device reused the first account's key. Now each UID
+// gets its own slot. The legacy 'los_ak' slot is still read as a last-resort
+// fallback and migrated into the current user's slot on first load.
+const AK='los_ak';  // legacy, migrated on first load per user
+const akSlot=uid=>uid?`los_ak_${uid}`:AK;
+function getKey(){
+  try{
+    if(typeof CU!=='undefined'&&CU&&CU.uid){
+      const k=localStorage.getItem(akSlot(CU.uid));if(k)return k;
+    }
+    // No per-user key stored yet. Do NOT fall back to the legacy global
+    // slot — that's how account B ended up using account A's key. Only
+    // return the global slot for signed-out callers (empty state etc).
+    if(typeof CU==='undefined'||!CU)return localStorage.getItem(AK);
+  }catch(e){}
+  return null;
+}
+function setKey(k){
+  try{
+    if(typeof CU!=='undefined'&&CU&&CU.uid)localStorage.setItem(akSlot(CU.uid),k);
+    else localStorage.setItem(AK,k);
+  }catch(e){}
+}
 firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth(),db=firebase.firestore();
 // Persist the Firebase session in IndexedDB so closing and reopening the app
@@ -2039,7 +2075,15 @@ auth.onAuthStateChanged(u=>{
   console.log('[auth] state:',u?('signed in as '+u.email):'signed out','(flip #'+authFlipCount+')');
   if(u){
     const wasSignedOut=!CU;
+    const prevUid=CU?CU.uid:null;
+    const uidChanged=prevUid&&prevUid!==u.uid;
     CU=u;
+    // Hard reset in-memory state when switching accounts OR coming up cold
+    // from signed-out. Without this, the previous user's tasks/habits/tips
+    // stay visible on screen for the 1-2s gap before the new user's Firestore
+    // snapshot lands — and the user just complained that their old account's
+    // data flashed across when they signed into a different email.
+    if(uidChanged||wasSignedOut)resetStateForNewUser();
     document.getElementById('login').style.display='none';
     document.getElementById('app').style.display='grid';
     document.getElementById('btm').style.display='block';
@@ -2053,6 +2097,9 @@ auth.onAuthStateChanged(u=>{
   } else {
     CU=null;
     stopSync();
+    // Clear in-memory state on sign-out too so signing back in doesn't
+    // momentarily show the previous session's render().
+    resetStateForNewUser();
     document.getElementById('app').style.display='none';
     document.getElementById('btm').style.display='none';
     const loginEl=document.getElementById('login');
@@ -2416,6 +2463,29 @@ function p2hhmm(s){const m=(s||'').match(/(\d+)(?::(\d+))?\s*(am|pm)/i);if(!m){c
 function endHH(hh){const[h,m]=hh.split(':').map(Number);const eh=(h+1)%24;return`${String(eh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;}
 
 function stopSync(){if(_unsubscribeDoc){try{_unsubscribeDoc();}catch(e){}_unsubscribeDoc=null;}_initialSyncDone=false;stopPresence();}
+// Blank the in-memory state object so a fresh user sign-in doesn't paint
+// the previous user's data during the gap before Firestore snapshot arrives.
+// We mutate S in place (it's declared const) rather than replacing the
+// reference — tons of code captures S directly.
+function resetStateForNewUser(){
+  try{
+    S.tasks=[];S.builds=[];S.learning=[];S.ideas=[];S.notes=[];
+    S.customEvents=[];S.habits=[];S.resources=[];S.people=[];
+    S.dayNotes={};S.disabledCalendars=[];S.aiHistory=[];
+    S.workProjects=[];
+    S.todaysTip=null;S.growthFocus=null;S.lifeRhythm='';
+    S.calendarDefaults={timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]};
+    // Wipe Google Calendar caches too — they were fetched with the previous
+    // user's session and will be re-fetched for the new user on demand.
+    try{gcCache={key:'',events:[]};}catch(e){}
+    try{_calListCache={ts:0,cals:[]};_gtasksCache={ts:0,items:[]};}catch(e){}
+    // Tip card is the most visually-obvious carryover — force it back to
+    // the empty-state pill immediately instead of leaving the old user's
+    // markdown hanging there until render() runs.
+    const tipEl=document.getElementById('tip-card');
+    if(tipEl)tipEl.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div><div class="tip-loading">Loading…</div>`;
+  }catch(e){console.warn('[reset]',e.message);}
+}
 // ─────── CROSS-DEVICE PRESENCE ───────
 const DEVICE_ID=(()=>{try{let id=localStorage.getItem('los_device_id');if(!id){id=Math.random().toString(36).slice(2,10);localStorage.setItem('los_device_id',id);}return id;}catch(e){return 'anon-'+Math.random().toString(36).slice(2,8);}})();
 const DEVICE_LABEL=(()=>{const ua=navigator.userAgent;if(/iPhone/i.test(ua))return 'iPhone';if(/iPad/i.test(ua))return 'iPad';if(/Android/i.test(ua))return /Mobile/i.test(ua)?'Android phone':'Android tablet';if(/Mac/i.test(ua))return 'Mac';if(/Windows/i.test(ua))return 'Windows PC';if(/Linux/i.test(ua))return 'Linux';return 'Web';})();
@@ -2588,7 +2658,10 @@ function handleSnapshot(snap){
     }
     if(d.aiConfirmMode==='off'||d.aiConfirmMode==='calendar'||d.aiConfirmMode==='all')S.aiConfirmMode=d.aiConfirmMode;
     else if(typeof d.confirmAllAI==='boolean')S.aiConfirmMode=d.confirmAllAI?'all':'calendar';
-    if(!getKey()&&d.ak)localStorage.setItem(AK,d.ak);
+    // Each account's Anthropic key lives in Firestore under their own doc,
+    // so this line also enforces the per-user scoping — account B's snapshot
+    // will only ever populate account B's per-user key slot.
+    if(!getKey()&&d.ak)setKey(d.ak);
     migrateHabits();
     migrateProjects();
     if(!_initialSyncDone){
@@ -2638,7 +2711,7 @@ function promptKey(){
   const k=prompt('Enter your Anthropic API key (starts with sk-ant-...)\nGet one at console.anthropic.com → API Keys',existing||'');
   if(k&&k.trim()){
     const key=k.trim();
-    localStorage.setItem(AK,key);
+    setKey(key);
     if(CU){
       // set({merge:true}) works whether the doc exists or not; .update() silently failed for new users
       db.collection('users').doc(CU.uid).collection('data').doc('main').set({ak:key},{merge:true}).catch(e=>console.warn('[ak save]',e.message));
@@ -3124,7 +3197,10 @@ function renderTip(tip){
   const title=mode==='tomorrow'?"Tomorrow's plan":"Today's plan";
   const fromLbl=mode==='now'&&tip.fromHour!=null?` <span style="font-size:10px;color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none">· from ${tip.fromHour>12?tip.fromHour-12:(tip.fromHour===0?12:tip.fromHour)}${tip.fromHour>=12?'pm':'am'}</span>`:'';
   const body=tip.markdown?renderMarkdownMini(tip.body||''):`<div class="tip-body">${esc(tip.body||'')}</div>`;
-  el.innerHTML=`<div class="tip-label" style="display:flex;align-items:center;gap:8px"><svg width="12" height="12"><use href="#i-spark"/></svg> <span>${title}${fromLbl}</span><button class="btn btn-ghost" onclick="syncTipFromCloud()" title="Pull latest plan from the cloud" style="margin-left:auto;padding:2px 8px;font-size:10px;color:var(--muted)">↻ Sync</button></div><div class="tip-plan-body">${body}</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="generatePlan('now')">✨ From now</button><button class="btn btn-sm" onclick="generatePlan('tomorrow')">Plan tomorrow</button><button class="btn btn-ghost btn-sm" onclick="loadTip(true)">↻ Reset</button></div>`;
+  // Just two actions: "From now" (replans remainder of today) and "Plan
+  // tomorrow." Sync button removed since snapshots push plans cross-device
+  // automatically; Reset removed because Zander never found a use for it.
+  el.innerHTML=`<div class="tip-label" style="display:flex;align-items:center;gap:8px"><svg width="12" height="12"><use href="#i-spark"/></svg> <span>${title}${fromLbl}</span></div><div class="tip-plan-body">${body}</div><div class="tip-actions"><button class="btn btn-primary btn-sm" onclick="generatePlan('now')">✨ From now</button><button class="btn btn-sm" onclick="generatePlan('tomorrow')">Plan tomorrow</button></div>`;
 }
 // Force Firestore to pull the latest doc from the server (bypassing the
 // local cache) and re-render the tip card. Needed when a plan was generated
@@ -5140,6 +5216,10 @@ function toggleCalendarDefault(key,minutes,on){
   const arr=new Set((S.calendarDefaults[key]||[]).map(Number));
   if(on)arr.add(Number(minutes));else arr.delete(Number(minutes));
   S.calendarDefaults[key]=[...arr].sort((a,b)=>b-a);
+  // Blur the (invisible) checkbox so iOS doesn't try to scroll-to-focus it
+  // after the re-render, which previously shot the page past its scroll
+  // bounds whenever a chip was toggled.
+  try{document.activeElement&&document.activeElement.blur&&document.activeElement.blur();}catch(e){}
   svAll();
 }
 
