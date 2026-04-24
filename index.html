@@ -2,7 +2,7 @@
 <html lang="en" data-theme="soft">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#f4eee5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1244,7 +1244,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
    On mobile a media query flips this to [book] above [arrows row] below. */
 .nb-book-wrap{display:flex;align-items:center;justify-content:center;gap:14px;padding:4px 0 40px;position:relative}
 .nb-arrows-bottom{display:none}
-.nb-arrow{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:28px;line-height:1;font-family:'Playfair Display',serif;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;padding-bottom:4px;transition:background .12s,color .12s,border-color .12s;box-shadow:var(--shadow)}
+.nb-arrow{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;transition:background .12s,color .12s,border-color .12s;box-shadow:var(--shadow)}
+.nb-arrow svg{width:22px;height:22px;display:block}
 .nb-arrow:hover:not(:disabled){background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
 .nb-arrow:disabled{opacity:.3;cursor:not-allowed}
 .nb-book{
@@ -1354,10 +1355,16 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .nb-cell-ta[contenteditable="true"]{white-space:pre-wrap;word-break:break-word;overflow-y:auto}
 .nb-cell-ta[contenteditable="true"]:empty::before{content:attr(data-placeholder);color:var(--muted-2);font-style:italic;pointer-events:none}
 .nb-cell-ta[contenteditable="true"]:focus{outline:none}
-/* Rich-text styling inside cells */
-.nb-cell-ta h2{font-family:'Playfair Display',serif;font-size:20px;font-weight:500;color:var(--text);margin:4px 0 2px;line-height:1.25}
-.nb-cell-ta ul,.nb-cell-ta ol{padding-left:28px;margin:2px 0}
-.nb-cell-ta li{line-height:inherit}
+/* Rich-text styling inside cells. Vertical rhythm constraint: every block
+   element must occupy a multiple of the ruled-line height (30px) so the
+   ruled background stays in sync with the text baselines below it.
+   Previous values (h2 had margin:4px 0 2px; ul had margin:2px 0) added
+   non-30px multiples and pushed subsequent text out of register, which
+   is what made the heading "cross" a line. */
+.nb-cell-ta h2{font-family:'Playfair Display',serif;font-size:20px;font-weight:500;color:var(--text);margin:0;line-height:30px}
+.nb-cell-ta ul,.nb-cell-ta ol{padding-left:28px;margin:0}
+.nb-cell-ta li{line-height:30px}
+.nb-cell-ta p{margin:0;line-height:30px}
 .nb-cell-ta b,.nb-cell-ta strong{font-weight:700}
 .nb-cell-ta i,.nb-cell-ta em{font-style:italic}
 /* Soft pale-yellow highlight — kept airy enough that the text underneath
@@ -1497,7 +1504,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .nb-book{
     flex:0 0 820px;width:820px;max-width:820px;margin:0;
     transform-origin:top center;
-    transform:scale(var(--nb-mobile-scale,0.42));
+    /* User pinch-zoom (--nb-user-zoom) and pan (--nb-user-tx/--nb-user-ty)
+       layer on top of the fit-to-viewport scale. Defaults are 1 / 0 so a
+       page that hasn't been zoomed renders identically to before. */
+    transform:translate(var(--nb-user-tx,0px),var(--nb-user-ty,0px)) scale(calc(var(--nb-mobile-scale,0.42) * var(--nb-user-zoom,1)));
+    will-change:transform;
   }
   /* Hide the inline (desktop) arrows; show the dedicated bottom row. */
   .nb-arrow-desktop{display:none !important}
@@ -2064,13 +2075,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
              Desktop: arrows sit beside the book.
              Mobile: arrows move to .nb-arrows-bottom row below the book. -->
         <div class="nb-book-wrap">
-          <button class="nb-arrow nb-prev nb-arrow-desktop" onclick="nbPrevPage()" aria-label="Previous page" title="Previous page (← arrow)">‹</button>
+          <button class="nb-arrow nb-prev nb-arrow-desktop" onclick="nbPrevPage()" aria-label="Previous page" title="Previous page (← arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6 L9 12 L15 18"/></svg></button>
           <div class="nb-book" id="nb-book"></div>
-          <button class="nb-arrow nb-next nb-arrow-desktop" onclick="nbNextPage()" aria-label="Next page" title="Next page (→ arrow)">›</button>
+          <button class="nb-arrow nb-next nb-arrow-desktop" onclick="nbNextPage()" aria-label="Next page" title="Next page (→ arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 L15 12 L9 18"/></svg></button>
         </div>
         <div class="nb-arrows-bottom">
-          <button class="nb-arrow nb-prev" onclick="nbPrevPage()" aria-label="Previous page">‹</button>
-          <button class="nb-arrow nb-next" onclick="nbNextPage()" aria-label="Next page">›</button>
+          <button class="nb-arrow nb-prev" onclick="nbPrevPage()" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6 L9 12 L15 18"/></svg></button>
+          <button class="nb-arrow nb-next" onclick="nbNextPage()" aria-label="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 L15 12 L9 18"/></svg></button>
         </div>
       </div>
 
@@ -2375,7 +2386,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v99';
+const APP_VERSION='v100';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6637,27 +6648,81 @@ function nbBindWheel(){
     e.preventDefault();
     if(e.deltaX>0)nbNextPage();else nbPrevPage();
   },{passive:false});
-  // Touch swipe (mobile). Only treats a gesture as a page-flip when it's
-  // clearly horizontal and clears a minimum distance. Vertical / small
-  // movements fall through to normal browser behaviour so cells can still
-  // be tapped, scrolled, and text-selected.
-  let sx=null,sy=null,multi=false;
+  // (Touch-swipe-to-flip removed by user request: while zoomed in on
+  // the page, sideways panning kept being interpreted as flip gestures.
+  // Use the on-screen ‹ › arrows below the book to navigate instead.)
+  // Custom pinch-to-zoom + pan, scoped to the book element. Native
+  // pinch-zoom is disabled site-wide via viewport meta so headers /
+  // sidebars don't scale when the user zooms the page. We layer a
+  // user-zoom factor and a translate offset on top of the fit-to-
+  // viewport scale via CSS variables (--nb-user-zoom / --nb-user-tx /
+  // --nb-user-ty). Two-finger pinch adjusts zoom; one-finger drag
+  // pans, but only when zoomed past 1.05x so normal taps / cursor
+  // placement still work.
+  let pinchDist=0,pinchStartZoom=1;
+  let panLastX=0,panLastY=0,panActive=false;
+  let pinchActive=false;
+  const getZoom=()=>parseFloat(book.style.getPropertyValue('--nb-user-zoom')||'1')||1;
+  const getTx=()=>parseFloat(book.style.getPropertyValue('--nb-user-tx')||'0')||0;
+  const getTy=()=>parseFloat(book.style.getPropertyValue('--nb-user-ty')||'0')||0;
+  const setTransform=(z,tx,ty)=>{
+    z=Math.max(1,Math.min(4,z));
+    book.style.setProperty('--nb-user-zoom',z.toFixed(4));
+    book.style.setProperty('--nb-user-tx',tx.toFixed(2)+'px');
+    book.style.setProperty('--nb-user-ty',ty.toFixed(2)+'px');
+  };
   book.addEventListener('touchstart',e=>{
-    if(e.touches.length>1){multi=true;sx=null;return;}
-    multi=false;sx=e.touches[0].clientX;sy=e.touches[0].clientY;
-  },{passive:true});
+    if(e.touches.length===2){
+      const a=e.touches[0],b=e.touches[1];
+      pinchDist=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
+      pinchStartZoom=getZoom();
+      pinchActive=true;panActive=false;
+      e.preventDefault();
+    } else if(e.touches.length===1&&getZoom()>1.05){
+      panLastX=e.touches[0].clientX;
+      panLastY=e.touches[0].clientY;
+      panActive=true;pinchActive=false;
+    } else {
+      panActive=false;pinchActive=false;
+    }
+  },{passive:false});
+  book.addEventListener('touchmove',e=>{
+    if(pinchActive&&e.touches.length===2){
+      const a=e.touches[0],b=e.touches[1];
+      const d=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
+      if(pinchDist>1){
+        const newZoom=pinchStartZoom*(d/pinchDist);
+        // Drop pan back to (0,0) when zooming back near 1× so the page
+        // recentres on its own rather than getting stranded off-screen.
+        if(newZoom<=1.05){setTransform(newZoom,0,0);}
+        else{setTransform(newZoom,getTx(),getTy());}
+      }
+      e.preventDefault();
+    } else if(panActive&&e.touches.length===1){
+      const t=e.touches[0];
+      const dx=t.clientX-panLastX,dy=t.clientY-panLastY;
+      panLastX=t.clientX;panLastY=t.clientY;
+      setTransform(getZoom(),getTx()+dx,getTy()+dy);
+      e.preventDefault();
+    }
+  },{passive:false});
   book.addEventListener('touchend',e=>{
-    if(multi||sx===null)return;
-    const t=e.changedTouches[0];const dx=t.clientX-sx;const dy=t.clientY-sy;
-    sx=sy=null;
-    if(Math.abs(dx)<50)return;                    // too short, probably a tap
-    if(Math.abs(dy)>Math.abs(dx)*0.7)return;      // too vertical, let it scroll
-    const now=Date.now();
-    if(now-_nbWheelCooldown<360)return;
-    _nbWheelCooldown=now;
-    if(dx<0)nbNextPage();else nbPrevPage();
+    if(e.touches.length<2)pinchActive=false;
+    if(e.touches.length===0)panActive=false;
   },{passive:true});
+  // Reset zoom when user navigates pages — otherwise they'd land on the
+  // next page mid-zoom which is confusing.
+  const _origNext=window.nbNextPage,_origPrev=window.nbPrevPage;
+  // (We hook into the public nav by resetting on each call below.)
   _nbWheelBound=true;
+}
+// Reset the user zoom + pan when explicitly navigating pages so each
+// page starts at its full-fit view.
+function nbResetUserZoom(){
+  const book=document.getElementById('nb-book');if(!book)return;
+  book.style.setProperty('--nb-user-zoom','1');
+  book.style.setProperty('--nb-user-tx','0px');
+  book.style.setProperty('--nb-user-ty','0px');
 }
 function renderNotebookSub(){
   const sub=document.getElementById('nb-sub');if(!sub)return;
@@ -6774,22 +6839,14 @@ function nbBuildPageHTML(ref,side){
 // Apply a formatting command to whichever cell is focused (must belong to
 // the page whose toolbar was clicked). Highlight uses a yellow tone;
 // others use execCommand's defaults. H2 toggles between paragraph and H2.
+// Behaviour: if NO cell is currently focused, do nothing (the formatting
+// has nothing to apply to anyway). The previous version auto-focused the
+// last-used cell, which on mobile popped the keyboard back open every
+// time the user tapped a toolbar button after dismissing it.
 function nbExec(cmd,pageId){
   const active=document.activeElement;
   const inCell=active&&active.classList&&active.classList.contains('nb-cell-ta');
-  // Toolbar button was clicked. If nothing is focused, briefly try to
-  // focus the last-used cell for this page so the command lands somewhere.
-  if(!inCell){
-    const loc=nbLocatePageById(pageId);if(!loc){return;}
-    const lf=NB.lastFocused;
-    if(lf&&loc.page&&S.notebook.sections[lf.sectionIdx]?.pages[lf.pageIdx]===loc.page){
-      const ta=document.getElementById(`nb-ta-${loc.page.id}-${lf.cellIdx}`);
-      if(ta)ta.focus();
-    } else {
-      const ta=document.getElementById(`nb-ta-${loc.page.id}-0`);
-      if(ta)ta.focus();
-    }
-  }
+  if(!inCell)return;
   try{
     if(cmd==='hiliteColor'){
       // Softer yellow so the text underneath stays legible
@@ -6883,12 +6940,17 @@ function renderNotebookPage(flipDir){
       return;
     }
   }
+  // Was a notebook cell actively focused right before this rebuild?
+  // Only restore focus afterwards if so. Without this gate, every layout
+  // toggle / page add / delete / refine would re-focus the last-used cell
+  // and pop the soft keyboard on mobile — which the user explicitly does
+  // NOT want when they're zoomed in trying to tap a toolbar button.
+  const _activeBefore=document.activeElement;
+  const _wasInCell=_activeBefore&&_activeBefore.classList&&_activeBefore.classList.contains('nb-cell-ta');
   book.innerHTML=html;
-  // Restore focus to the previously-focused cell if we stayed on the same
-  // page (e.g. after a re-render from save / voice dictation).
-  if(NB.lastFocused&&NB.lastFocused.sectionIdx===NB.sectionIdx&&NB.lastFocused.pageIdx===NB.pageIdx){
+  if(_wasInCell&&NB.lastFocused&&NB.lastFocused.sectionIdx===NB.sectionIdx&&NB.lastFocused.pageIdx===NB.pageIdx){
     const ta=book.querySelector(`.nb-page:not(.right-page) [data-nb-cell="${NB.lastFocused.cellIdx}"]`);
-    if(ta){try{ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}catch(_){}}
+    if(ta){try{ta.focus();}catch(_){}}
   }
   // Re-apply search highlight if a query is active
   if(NB.searchQuery)nbApplySearchHighlight();
@@ -6920,7 +6982,7 @@ function nbGoSection(i){
 // page of the next. Past the first, back into the previous.
 function nbNextPage(){
   const secs=S.notebook.sections;if(!secs.length)return;
-  const sec=nbCurrentSection();nbStopVoice();
+  const sec=nbCurrentSection();nbStopVoice();nbResetUserZoom();
   if(NB.pageIdx<sec.pages.length-1){NB.pageIdx++;}
   else if(NB.sectionIdx<secs.length-1){NB.sectionIdx++;NB.pageIdx=0;renderNotebookTabs();}
   else return;
@@ -6928,7 +6990,7 @@ function nbNextPage(){
 }
 function nbPrevPage(){
   const secs=S.notebook.sections;if(!secs.length)return;
-  nbStopVoice();
+  nbStopVoice();nbResetUserZoom();
   if(NB.pageIdx>0){NB.pageIdx--;}
   else if(NB.sectionIdx>0){NB.sectionIdx--;NB.pageIdx=S.notebook.sections[NB.sectionIdx].pages.length-1;renderNotebookTabs();}
   else return;
