@@ -1190,10 +1190,19 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 /* A4-proportioned sheet in the centre of the route. Horizontal paging —
    scrolling *through* the book, not down. Each page holds 1, 2, or 4
    cells depending on layout. */
-.nb-search-wrap{position:relative;display:flex;align-items:center;gap:4px}
-.nb-search-input{width:220px;padding:7px 11px;font-size:12.5px}
-.nb-search-count{font-size:11px;color:var(--muted);min-width:54px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.nb-search-nav{padding:4px 8px;font-size:13px;line-height:1;width:28px;height:28px;min-width:28px}
+/* Compact search cluster — input + inline prev/next pill buttons + match
+   count, all sitting together so they don't drift across the header.
+   Prev/next are hidden until the user starts typing a query. */
+.nb-search-wrap{position:relative;display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:3px 3px 3px 4px}
+.nb-search-wrap:focus-within{border-color:var(--border-strong)}
+.nb-search-input{border:none;outline:none;background:transparent;padding:5px 6px;font-size:12.5px;width:180px;color:var(--text);font-family:inherit}
+.nb-search-input::placeholder{color:var(--muted-2)}
+.nb-search-nav{display:none;width:24px;height:24px;border-radius:6px;border:none;background:var(--surface-2);color:var(--muted);font-size:12px;line-height:1;padding:0;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit}
+.nb-search-nav:hover{background:var(--surface-hover);color:var(--text)}
+.nb-search-count{display:none;font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;padding:0 6px}
+.nb-search-wrap.has-query .nb-search-nav,.nb-search-wrap.has-query .nb-search-count{display:inline-flex;align-items:center}
+#nb-spread-btn.active,#nb-font-btn{background:var(--surface-2)}
+#nb-spread-btn.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .nb-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:4px 2px 14px;border-bottom:1px dashed var(--border);margin-bottom:22px;overflow-x:auto;scrollbar-width:thin}
 .nb-tabs::-webkit-scrollbar{height:4px}
 .nb-tabs::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
@@ -1224,65 +1233,92 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .nb-book{
   flex:1;max-width:780px;aspect-ratio:210/297;
   position:relative;perspective:1600px;min-width:0;
+  display:flex;gap:6px;
 }
+/* Two-page spread: doubles the max-width, keeps both sheets side-by-side. */
+.nb-book.spread{max-width:1320px;aspect-ratio:420/297}
 .nb-page{
-  position:absolute;inset:0;
+  flex:1;position:relative;
   background:var(--paper);
   border:1px solid var(--border);
-  border-radius:3px 10px 10px 3px;
+  /* Softer, symmetric corners as requested — the old 3/10/10/3 rounded
+     corners gave a subtle "book binding" feel but read as square. */
+  border-radius:14px;
   box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--paper-margin);
-  padding:34px 32px 20px 58px;
-  display:flex;flex-direction:column;gap:16px;
+  padding:28px 32px 18px 58px;
+  display:flex;flex-direction:column;gap:14px;
   overflow:hidden;
-  background-image:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 29px,
-      var(--paper-line) 29px,
-      var(--paper-line) 30px
-    );
-  background-position:0 56px;
+  box-sizing:border-box;
+  min-width:0;
 }
 /* The thin vertical margin stripe like a real exercise book */
 .nb-page::before{content:'';position:absolute;left:46px;top:0;bottom:0;width:1px;background:var(--paper-margin);opacity:.55;pointer-events:none}
-.nb-page.flipping-left{animation:nbFlipLeft .28s cubic-bezier(.4,0,.2,1) forwards}
-.nb-page.flipping-right{animation:nbFlipRight .28s cubic-bezier(.4,0,.2,1) forwards}
-@keyframes nbFlipLeft{from{transform:translateX(0);opacity:1}to{transform:translateX(-12%);opacity:0}}
-@keyframes nbFlipRight{from{transform:translateX(0);opacity:1}to{transform:translateX(12%);opacity:0}}
-.nb-page.entering-left{animation:nbEnterLeft .28s cubic-bezier(.4,0,.2,1) backwards}
-.nb-page.entering-right{animation:nbEnterRight .28s cubic-bezier(.4,0,.2,1) backwards}
-@keyframes nbEnterLeft{from{transform:translateX(12%);opacity:0}to{transform:translateX(0);opacity:1}}
-@keyframes nbEnterRight{from{transform:translateX(-12%);opacity:0}to{transform:translateX(0);opacity:1}}
+/* Right page in spread mode: mirror the margin stripe onto the outer edge
+   so both pages feel like they belong to the same book, with the binding
+   implied between them. */
+.nb-book.spread .nb-page.right-page{
+  padding:28px 58px 18px 32px;
+  box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--paper-margin);
+}
+.nb-book.spread .nb-page.right-page::before{left:auto;right:46px}
+.nb-page.flipping-left{animation:nbFlipLeft .26s cubic-bezier(.4,0,.2,1) forwards}
+.nb-page.flipping-right{animation:nbFlipRight .26s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes nbFlipLeft{from{transform:translateX(0);opacity:1}to{transform:translateX(-14%);opacity:0}}
+@keyframes nbFlipRight{from{transform:translateX(0);opacity:1}to{transform:translateX(14%);opacity:0}}
+.nb-page.entering-left{animation:nbEnterLeft .26s cubic-bezier(.4,0,.2,1) backwards}
+.nb-page.entering-right{animation:nbEnterRight .26s cubic-bezier(.4,0,.2,1) backwards}
+@keyframes nbEnterLeft{from{transform:translateX(14%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes nbEnterRight{from{transform:translateX(-14%);opacity:0}to{transform:translateX(0);opacity:1}}
 
-.nb-page-hdr{display:flex;align-items:baseline;gap:10px;margin-left:-8px;flex-shrink:0;position:relative;z-index:1}
-.nb-page-sec{font-family:'Playfair Display',serif;font-size:18px;color:var(--text);font-weight:500;letter-spacing:-.3px}
-.nb-page-meta{font-family:'Playfair Display',serif;font-size:13px;color:var(--muted);font-style:italic}
+/* Header row sits ABOVE the ruled area (the lines live on the cells now,
+   not the page) so the title + page number read cleanly. Thin bottom
+   border gives the section heading its own "banner" feel. */
+.nb-page-hdr{display:flex;align-items:baseline;gap:10px;flex-shrink:0;position:relative;z-index:1;padding-bottom:8px;border-bottom:1px solid var(--border);margin-left:-8px;margin-right:-6px}
+.nb-page-sec{font-family:'Playfair Display',serif;font-size:18px;color:var(--text);font-weight:500;letter-spacing:-.3px;line-height:1.1}
+.nb-page-meta{font-family:'Playfair Display',serif;font-size:12px;color:var(--muted);font-style:italic;line-height:1.2}
 .nb-page-hdr-right{margin-left:auto;display:flex;gap:4px}
-.nb-page-hdr .iconbtn{width:28px;height:28px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);font-size:13px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:all .12s}
+.nb-page-hdr .iconbtn{width:26px;height:26px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:12px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:all .12s}
 .nb-page-hdr .iconbtn:hover{background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
 .nb-page-hdr .iconbtn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 
-.nb-cells{flex:1;display:grid;gap:12px;min-height:0;position:relative;z-index:1}
+.nb-cells{flex:1;display:grid;gap:10px;min-height:0;position:relative;z-index:1}
 .nb-cells[data-layout="single"]{grid-template-columns:1fr;grid-template-rows:1fr}
-.nb-cells[data-layout="half"]{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+/* Half = LEFT / RIGHT split. Top/bottom you can already get by pressing
+   Enter a few times, so the layout option is more useful as a column
+   divider. Thin vertical separator between the two cells. */
+.nb-cells[data-layout="half"]{grid-template-columns:1fr 1fr;grid-template-rows:1fr;column-gap:18px}
+.nb-cells[data-layout="half"]>.nb-cell:first-child{border-right:1px dashed var(--border);padding-right:14px}
 .nb-cells[data-layout="quad"]{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
 .nb-cell{
   background:transparent;border:1px dashed transparent;border-radius:6px;
-  padding:4px 6px;min-height:0;display:flex;flex-direction:column;
+  padding:0;min-height:0;display:flex;flex-direction:column;
   transition:border-color .12s;position:relative;
+  overflow:hidden;
 }
-.nb-cell:focus-within{border-color:var(--border-strong)}
 .nb-cell-ta{
-  flex:1;border:none;background:transparent;outline:none;resize:none;
-  font-family:'Kalam','Playfair Display',serif;font-size:15px;line-height:30px;
+  flex:1;border:none;outline:none;resize:none;
+  font-family:'Kalam','Playfair Display',serif;font-size:16px;line-height:30px;
   color:var(--text);width:100%;min-height:0;
-  padding:0;
+  /* Ruled background lives on the textarea itself so the first line sits
+     exactly at the first line of text (was previously on the page, which
+     meant lines drifted once the header was above them and the user saw
+     text floating between rules). repeat cycles = line-height for 1:1. */
+  background:transparent;
+  background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 29px,var(--paper-line) 29px,var(--paper-line) 30px);
+  background-attachment:local;
+  padding:3px 4px 0;
+  box-sizing:border-box;
 }
 .nb-cell-ta::placeholder{color:var(--muted-2);font-style:italic}
-.nb-cell-ta.hl{background:linear-gradient(transparent 60%,var(--gold-bg) 60%)}
-/* Subtle corner marker so users know each cell is a distinct writing space */
-.nb-cell[data-hint="true"]::after{content:attr(data-hint-label);position:absolute;top:4px;right:8px;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);pointer-events:none;font-family:'Inter',system-ui,sans-serif}
+.nb-cell-ta.hl{box-shadow:inset 0 0 0 2px var(--gold)}
+/* Clean font variant: Inter, no ruled lines, normal block text. */
+.nb-book.font-clean .nb-cell-ta{
+  font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:22px;
+  background-image:none;padding:4px 6px;
+}
+/* Subtle corner marker so users know each cell is a distinct writing space.
+   Hidden in the single-cell layout (no need). */
+.nb-cell[data-hint="true"]::after{content:attr(data-hint-label);position:absolute;top:2px;right:6px;font-size:8.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);pointer-events:none;font-family:'Inter',system-ui,sans-serif;opacity:.6;z-index:2;background:var(--paper);padding:0 4px;border-radius:3px}
 
 .nb-page-foot{flex-shrink:0;display:flex;align-items:center;gap:8px;padding-top:10px;border-top:1px dashed var(--border);margin-left:-8px;position:relative;z-index:1;font-family:'Inter',system-ui,sans-serif;flex-wrap:wrap}
 .nb-layout-toggle{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:2px;gap:2px}
@@ -1328,8 +1364,16 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 /* Tablet */
 @media(max-width:900px){
   .nb-book{max-width:560px}
-  .nb-page{padding:26px 22px 16px 50px}
-  .nb-cell-ta{font-size:14px;line-height:28px}
+  .nb-page{padding:22px 22px 16px 50px}
+  .nb-cell-ta{font-size:15px;line-height:28px;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,var(--paper-line) 27px,var(--paper-line) 28px)}
+}
+
+/* Spread button only visible on wide screens. Forces .nb-book.spread back
+   to single-page layout on narrower viewports so it can't get orphaned. */
+@media(max-width:1099px){
+  #nb-spread-btn{display:none !important}
+  .nb-book.spread{max-width:780px;aspect-ratio:210/297}
+  .nb-book.spread .nb-page.right-page{display:none}
 }
 
 /* Mobile — keep A4 ratio but let the page scale. Arrows shrink and sit on
@@ -1339,13 +1383,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .nb-tab{padding:6px 10px;font-size:11.5px}
   .nb-book-wrap{gap:4px;padding:4px 0 30px}
   .nb-arrow{width:34px;height:34px;font-size:22px;padding-bottom:2px;box-shadow:none}
-  .nb-page{padding:22px 18px 14px 38px;background-position:0 48px;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 25px,var(--paper-line) 25px,var(--paper-line) 26px)}
+  .nb-page{padding:18px 18px 14px 38px;border-radius:10px}
   .nb-page::before{left:28px}
-  .nb-cell-ta{font-size:13.5px;line-height:26px}
-  .nb-page-hdr{margin-left:-4px;flex-wrap:wrap;gap:6px}
+  .nb-cell-ta{font-size:14.5px;line-height:26px;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 25px,var(--paper-line) 25px,var(--paper-line) 26px)}
+  .nb-page-hdr{flex-wrap:wrap;gap:6px}
   .nb-page-sec{font-size:16px}
   .nb-page-meta{font-size:11.5px}
-  .nb-page-foot{margin-left:-4px;gap:6px;padding-top:8px;font-size:11px}
+  .nb-page-foot{gap:6px;padding-top:8px;font-size:11px}
   .nb-refine-btn{padding:4px 9px;font-size:11.5px}
   .nb-search-wrap{flex:1 1 100%;order:20}
   .nb-search-input{width:100%;flex:1}
@@ -1535,8 +1579,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
         <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
         <a href="#people" data-route-link="people"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span class="label">People</span><span class="dot"></span></a>
-        <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
         <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
+        <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
       </nav>
       <div class="s-sep"></div>
       <div class="s-foot">
@@ -1572,8 +1616,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
       <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
       <a href="#people" data-route-link="people" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span>People</span></a>
-      <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
       <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
+      <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
       <div class="m-drawer-foot">
         <a href="#settings" data-route-link="settings" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
       </div>
@@ -1844,12 +1888,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="page-title">Notebook</div>
           <div class="page-sub" id="nb-sub"></div>
           <div class="page-actions">
-            <div class="nb-search-wrap">
+            <div class="nb-search-wrap" id="nb-search-wrap">
               <input type="search" id="nb-search" class="input nb-search-input" placeholder="Search notebook…" oninput="nbSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();nbFindNext(event.shiftKey?-1:1);}">
+              <button class="nb-search-nav" onclick="nbFindNext(-1)" title="Previous match (Shift+Enter)" aria-label="Previous match">↑</button>
+              <button class="nb-search-nav" onclick="nbFindNext(1)" title="Next match (Enter)" aria-label="Next match">↓</button>
               <span class="nb-search-count" id="nb-search-count"></span>
-              <button class="btn btn-ghost btn-sm nb-search-nav" onclick="nbFindNext(-1)" title="Previous match (Shift+Enter)" aria-label="Previous match">↑</button>
-              <button class="btn btn-ghost btn-sm nb-search-nav" onclick="nbFindNext(1)" title="Next match (Enter)" aria-label="Next match">↓</button>
             </div>
+            <button class="btn btn-ghost btn-sm" onclick="nbToggleSpread()" id="nb-spread-btn" title="Toggle two-page spread (wide screens only)">⧉ Spread</button>
+            <button class="btn btn-ghost btn-sm" onclick="nbToggleFont()" id="nb-font-btn" title="Toggle writing font">Aa</button>
             <button class="btn btn-primary btn-sm" onclick="nbAddSection()">+ New section</button>
           </div>
         </div>
@@ -2167,7 +2213,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v90';
+const APP_VERSION='v91';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6271,7 +6317,12 @@ const NB_LAYOUT_CELLS={single:1,half:2,quad:4};
 // In-memory navigation + search state. Not persisted — the sections/pages
 // themselves are. Lost on reload, which is fine (you always start at the
 // first page of the first section).
-const NB={sectionIdx:0,pageIdx:0,lastFocused:null,searchQuery:'',matches:[],matchIdx:-1,voiceActive:false,_voiceRec:null,_voiceTarget:null};
+const NB={sectionIdx:0,pageIdx:0,lastFocused:null,searchQuery:'',matches:[],matchIdx:-1,voiceActive:false,_voiceRec:null,_voiceTarget:null,spread:false,font:'hand'};
+// Restore the viewing preferences from localStorage. Font and spread mode
+// are device-local (not synced) — one user might prefer the handwriting
+// look on their iPad but the clean font on their work laptop.
+try{NB.spread=localStorage.getItem('los_nb_spread')==='1';}catch(e){}
+try{const f=localStorage.getItem('los_nb_font');if(f==='hand'||f==='clean')NB.font=f;}catch(e){}
 function nbEnsureShape(){
   if(!S.notebook||typeof S.notebook!=='object'||!Array.isArray(S.notebook.sections))S.notebook={sections:[]};
   S.notebook.sections.forEach(sec=>{
@@ -6301,11 +6352,46 @@ function nbClampPosition(){
 
 // Top-level render — called by setRoute when landing on notebook, and by
 // individual mutation helpers below.
+// CRITICAL: skip the full DOM rebuild if the user is actively typing in a
+// cell. Snapshot echoes of our own writes used to come back and blow away
+// the textarea contents mid-keystroke, causing the "reverting" Zander hit.
+// The in-memory S is already up-to-date; the DOM just stays as-is until
+// the user navigates, which triggers a fresh render.
 function rNotebook(){
   nbEnsureShape();nbClampPosition();
+  const active=document.activeElement;
+  const typing=active&&active.classList&&active.classList.contains('nb-cell-ta');
+  // Keep the spread and font toggles' visual states in sync on every render.
+  const sb=document.getElementById('nb-spread-btn');if(sb)sb.classList.toggle('active',NB.spread);
+  const fb=document.getElementById('nb-font-btn');if(fb)fb.textContent=NB.font==='clean'?'Aa✒':'Aa';
+  if(typing){
+    renderNotebookTabs();
+    renderNotebookSub();
+    return;
+  }
   renderNotebookTabs();
   renderNotebookPage('none');
   renderNotebookSub();
+  nbBindWheel();
+}
+// Bind the horizontal scroll-wheel listener once. Flips the page on tilt /
+// shift-scroll with a short cooldown so a single gesture doesn't trigger
+// multiple flips.
+let _nbWheelBound=false;
+let _nbWheelCooldown=0;
+function nbBindWheel(){
+  if(_nbWheelBound)return;
+  const book=document.getElementById('nb-book');if(!book)return;
+  book.addEventListener('wheel',e=>{
+    if(Math.abs(e.deltaX)<18)return;
+    if(Math.abs(e.deltaY)>Math.abs(e.deltaX))return;
+    const now=Date.now();
+    if(now-_nbWheelCooldown<360)return;
+    _nbWheelCooldown=now;
+    e.preventDefault();
+    if(e.deltaX>0)nbNextPage();else nbPrevPage();
+  },{passive:false});
+  _nbWheelBound=true;
 }
 function renderNotebookSub(){
   const sub=document.getElementById('nb-sub');if(!sub)return;
@@ -6320,56 +6406,92 @@ function renderNotebookTabs(){
   if(!secs.length){el.innerHTML=`<span class="nb-tab-empty">No sections yet — create one on the right →</span>`;return;}
   el.innerHTML=secs.map((s,i)=>`<button class="nb-tab${i===NB.sectionIdx?' on':''}" data-col="${esc(s.color||'peach')}" onclick="nbGoSection(${i})" ondblclick="nbOpenSectionPopover(${i},event)" oncontextmenu="event.preventDefault();nbOpenSectionPopover(${i},event)" title="${esc(s.title||'Untitled')} — double-click to rename / recolour / delete"><span>${esc(s.title||'Untitled')}</span><span class="nb-tab-count">${s.pages.length}</span></button>`).join('');
 }
+// Resolve the (section, page) pair that sits at offset N from the current
+// position. Used by spread mode to find the "next" page, and by flow-past-
+// the-end navigation.
+function nbPageAtOffset(off){
+  const secs=S.notebook.sections;if(!secs.length)return null;
+  let si=NB.sectionIdx,pi=NB.pageIdx+off;
+  while(pi>=secs[si].pages.length){
+    pi-=secs[si].pages.length;si++;
+    if(si>=secs.length)return null;
+  }
+  while(pi<0){
+    si--;
+    if(si<0)return null;
+    pi+=secs[si].pages.length;
+  }
+  return {sectionIdx:si,pageIdx:pi,section:secs[si],page:secs[si].pages[pi]};
+}
+// Build the innerHTML for a single page (used for both single and spread
+// renders — spread just passes its own section/page/label overrides and a
+// side marker so the right page can mirror its margin stripe).
+function nbBuildPageHTML(ref,side){
+  if(!ref)return `<div class="nb-page${side==='right'?' right-page':''}"><div class="nb-page-empty">End of notebook.</div></div>`;
+  const {section:sec,page,pageIdx,sectionIdx}=ref;
+  const isCurrent=sectionIdx===NB.sectionIdx&&pageIdx===NB.pageIdx;
+  const cellCount=NB_LAYOUT_CELLS[page.layout]||1;
+  const layoutBtns=[['single','▭','One cell'],['half','▯▯','Left / right split'],['quad','⊞','Four cells']]
+    .map(([k,lbl,ttl])=>`<button type="button" onclick="nbSetLayout('${k}')" class="${page.layout===k?'on':''}" title="${ttl}">${lbl}</button>`).join('');
+  const updatedLbl=page.updatedAt?new Date(page.updatedAt).toLocaleDateString('en-ZA',{day:'numeric',month:'short'}):'new';
+  const halfLbls=['Left','Right'];const quadLbls=['Top-L','Top-R','Bot-L','Bot-R'];
+  const cells=Array.from({length:cellCount}).map((_,i)=>{
+    const val=page.cells[i]||'';
+    const lbl=cellCount===2?halfLbls[i]:(cellCount===4?quadLbls[i]:'');
+    const hint=cellCount>1?` data-hint="true" data-hint-label="${lbl}"`:'';
+    const taId=`nb-ta-${page.id}-${i}`;
+    return `<div class="nb-cell"${hint}><textarea id="${taId}" class="nb-cell-ta" data-nb-cell="${i}" data-nb-page-id="${page.id}" placeholder="${i===0?'Start writing…':'…'}" oninput="nbOnCellInput(${i},this)" onfocus="nbOnCellFocus(${i},this)">${esc(val)}</textarea></div>`;
+  }).join('');
+  // In spread mode only the current (left) page gets the footer controls —
+  // the right page just shows its content. That keeps actions unambiguous.
+  const showFooter=(side!=='right');
+  return `<div class="nb-page${side==='right'?' right-page':''}">
+    <div class="nb-page-hdr">
+      <span class="nb-page-sec">${esc(sec.title||'Untitled')}</span>
+      <span class="nb-page-meta">Page ${pageIdx+1} of ${sec.pages.length} · ${esc(updatedLbl)}</span>
+      ${showFooter?`<div class="nb-page-hdr-right">
+        <button class="iconbtn" onclick="nbAddPage()" title="Add page after this one" aria-label="Add page">＋</button>
+        <button class="iconbtn" onclick="nbDeletePage()" title="Delete this page" aria-label="Delete page">🗑</button>
+      </div>`:''}
+    </div>
+    <div class="nb-cells" data-layout="${page.layout}">${cells}</div>
+    ${showFooter?`<div class="nb-page-foot">
+      <div class="nb-layout-toggle">${layoutBtns}</div>
+      <div class="nb-page-foot-spacer"></div>
+      <button class="nb-mic-btn${NB.voiceActive?' on':''}" onclick="nbToggleVoice()" title="Record into the focused cell" aria-label="Voice record into focused cell">🎙</button>
+      <button class="nb-refine-btn" onclick="nbRefine()" title="Use AI to restructure this page cleanly">✨ Refine</button>
+    </div>`:''}
+  </div>`;
+}
 function renderNotebookPage(flipDir){
   const book=document.getElementById('nb-book');if(!book)return;
+  // Apply font + spread classes on the book wrapper so CSS picks them up.
+  book.classList.toggle('font-clean',NB.font==='clean');
+  book.classList.toggle('spread',NB.spread);
   const secs=S.notebook.sections;
   if(!secs.length){
+    book.classList.remove('spread');
     book.innerHTML=`<div class="nb-page"><div class="nb-page-empty">
       Your notebook is empty.<br>
       Tap <strong>+ New section</strong> in the top-right to create your first chapter — Finance, Poems, Random — whatever's on your mind.
     </div></div>`;
     return;
   }
-  const sec=nbCurrentSection();const page=nbCurrentPage();
-  if(!sec||!page){book.innerHTML='';return;}
-  const cellCount=NB_LAYOUT_CELLS[page.layout]||1;
-  const layoutBtns=[['single','▭','One cell'],['half','▯▯','Split in half'],['quad','⊞','Four cells']]
-    .map(([k,lbl,ttl])=>`<button type="button" onclick="nbSetLayout('${k}')" class="${page.layout===k?'on':''}" title="${ttl}">${lbl}</button>`).join('');
-  const updatedLbl=page.updatedAt?new Date(page.updatedAt).toLocaleDateString('en-ZA',{day:'numeric',month:'short'}):'new';
-  const cells=Array.from({length:cellCount}).map((_,i)=>{
-    const val=page.cells[i]||'';
-    const hint=cellCount>1?` data-hint="true" data-hint-label="${['Top','Bottom','Top-L','Top-R','Bot-L','Bot-R'][cellCount===2?i:i+2]||''}"`:'';
-    return `<div class="nb-cell"${hint}><textarea class="nb-cell-ta" data-nb-cell="${i}" placeholder="${i===0?'Start writing…':'…'}" oninput="nbOnCellInput(${i},this)" onfocus="nbOnCellFocus(${i})">${esc(val)}</textarea></div>`;
-  }).join('');
-  const html=`<div class="nb-page">
-    <div class="nb-page-hdr">
-      <span class="nb-page-sec">${esc(sec.title||'Untitled')}</span>
-      <span class="nb-page-meta">· Page ${NB.pageIdx+1} of ${sec.pages.length} · ${esc(updatedLbl)}</span>
-      <div class="nb-page-hdr-right">
-        <button class="iconbtn" onclick="nbAddPage()" title="Add page after this one" aria-label="Add page">＋</button>
-        <button class="iconbtn" onclick="nbDeletePage()" title="Delete this page" aria-label="Delete page">🗑</button>
-      </div>
-    </div>
-    <div class="nb-cells" data-layout="${page.layout}">${cells}</div>
-    <div class="nb-page-foot">
-      <div class="nb-layout-toggle">${layoutBtns}</div>
-      <div class="nb-page-foot-spacer"></div>
-      <button class="nb-mic-btn${NB.voiceActive?' on':''}" onclick="nbToggleVoice()" title="Record into the focused cell" aria-label="Voice record into focused cell">🎙</button>
-      <button class="nb-refine-btn" onclick="nbRefine()" title="Use AI to restructure this page cleanly">✨ Refine</button>
-    </div>
-  </div>`;
-  // Apply flip-out then flip-in animation when navigating between pages so
-  // it feels like turning a physical page. 'none' skips animation for the
-  // initial render / edits that don't change the page number.
+  const leftRef={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,section:nbCurrentSection(),page:nbCurrentPage()};
+  if(!leftRef.page){book.innerHTML='';return;}
+  const rightRef=NB.spread?nbPageAtOffset(1):null;
+  const html=nbBuildPageHTML(leftRef,'left')+(NB.spread?nbBuildPageHTML(rightRef,'right'):'');
+  // Page-flip animation. 'none' skips (initial render / in-place edits).
+  // 'left' = moving forward, 'right' = moving back. In spread mode both
+  // pages animate together so it still reads as a single motion.
   if(flipDir==='left'||flipDir==='right'){
-    const cur=book.querySelector('.nb-page');
-    if(cur){
-      cur.classList.add(flipDir==='left'?'flipping-left':'flipping-right');
+    const curPages=book.querySelectorAll('.nb-page');
+    if(curPages.length){
+      curPages.forEach(p=>p.classList.add(flipDir==='left'?'flipping-left':'flipping-right'));
       setTimeout(()=>{
         book.innerHTML=html;
-        const np=book.querySelector('.nb-page');
-        if(np)np.classList.add(flipDir==='left'?'entering-left':'entering-right');
-      },240);
+        book.querySelectorAll('.nb-page').forEach(p=>p.classList.add(flipDir==='left'?'entering-left':'entering-right'));
+      },220);
       return;
     }
   }
@@ -6377,11 +6499,27 @@ function renderNotebookPage(flipDir){
   // Restore focus to the previously-focused cell if we stayed on the same
   // page (e.g. after a re-render from save / voice dictation).
   if(NB.lastFocused&&NB.lastFocused.sectionIdx===NB.sectionIdx&&NB.lastFocused.pageIdx===NB.pageIdx){
-    const ta=book.querySelector(`[data-nb-cell="${NB.lastFocused.cellIdx}"]`);
+    const ta=book.querySelector(`.nb-page:not(.right-page) [data-nb-cell="${NB.lastFocused.cellIdx}"]`);
     if(ta){try{ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}catch(_){}}
   }
   // Re-apply search highlight if a query is active
   if(NB.searchQuery)nbApplySearchHighlight();
+}
+// Spread toggle — only real effect on wide screens (CSS hides the button
+// on narrow ones, and @media force-reverts .nb-book.spread back to single).
+function nbToggleSpread(){
+  NB.spread=!NB.spread;
+  try{localStorage.setItem('los_nb_spread',NB.spread?'1':'0');}catch(e){}
+  renderNotebookPage('none');
+  const btn=document.getElementById('nb-spread-btn');
+  if(btn)btn.classList.toggle('active',NB.spread);
+}
+// Font toggle — flips between the Kalam handwriting look and clean Inter.
+// Ruled lines disappear in clean mode since block text doesn't need them.
+function nbToggleFont(){
+  NB.font=NB.font==='clean'?'hand':'clean';
+  try{localStorage.setItem('los_nb_font',NB.font);}catch(e){}
+  renderNotebookPage('none');
 }
 // Section nav — click a tab, hop there with the appropriate flip direction.
 function nbGoSection(i){
@@ -6498,19 +6636,39 @@ function nbSetLayout(layout){
   page.layout=layout;page.updatedAt=Date.now();
   svAll();rNotebook();
 }
+// Look up the (section, page) indices of whichever page a given textarea
+// belongs to. Used for both edits and focus tracking so spread mode's
+// right page writes to the right data (not the current page).
+function nbLocatePageById(id){
+  if(!id)return null;
+  for(let si=0;si<S.notebook.sections.length;si++){
+    const pages=S.notebook.sections[si].pages;
+    for(let pi=0;pi<pages.length;pi++){
+      if(pages[pi].id===id)return {sectionIdx:si,pageIdx:pi,page:pages[pi]};
+    }
+  }
+  return null;
+}
 // Debounced save for textarea typing — prevents a Firestore write on every
-// keystroke while still syncing quickly across devices.
+// keystroke while still syncing quickly across devices. Bumped to 1200ms
+// so fast typing doesn't trigger back-to-back snapshot echoes that were
+// making the textarea stutter on Zander's machine.
 let _nbSaveTimer=null;
 function nbOnCellInput(cellIdx,ta){
-  const page=nbCurrentPage();if(!page)return;
+  const loc=nbLocatePageById(ta&&ta.dataset&&ta.dataset.nbPageId);
+  const page=loc?loc.page:nbCurrentPage();
+  if(!page)return;
   page.cells[cellIdx]=ta.value;
   page.updatedAt=Date.now();
-  NB.lastFocused={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,cellIdx};
+  if(loc)NB.lastFocused={sectionIdx:loc.sectionIdx,pageIdx:loc.pageIdx,cellIdx};
+  else NB.lastFocused={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,cellIdx};
   clearTimeout(_nbSaveTimer);
-  _nbSaveTimer=setTimeout(()=>svAll(),500);
+  _nbSaveTimer=setTimeout(()=>svAll(),1200);
 }
-function nbOnCellFocus(cellIdx){
-  NB.lastFocused={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,cellIdx};
+function nbOnCellFocus(cellIdx,ta){
+  const loc=ta?nbLocatePageById(ta.dataset&&ta.dataset.nbPageId):null;
+  if(loc)NB.lastFocused={sectionIdx:loc.sectionIdx,pageIdx:loc.pageIdx,cellIdx};
+  else NB.lastFocused={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,cellIdx};
 }
 // Search: walk every section → page → cell once to build an ordered list
 // of match positions. nbFindNext rotates through them.
@@ -6542,10 +6700,16 @@ function nbFindNext(dir){
   nbJumpToMatch(NB.matchIdx);
 }
 function nbUpdateSearchUI(){
-  const cnt=document.getElementById('nb-search-count');if(!cnt)return;
+  const cnt=document.getElementById('nb-search-count');
+  const wrap=document.getElementById('nb-search-wrap');
+  // Wrap gets a `has-query` class when there's text in the input. Prev/next
+  // and count are all CSS-hidden without it — keeps the header tidy when
+  // you're not actively searching.
+  if(wrap)wrap.classList.toggle('has-query',!!NB.searchQuery);
+  if(!cnt)return;
   if(!NB.searchQuery){cnt.textContent='';return;}
-  if(!NB.matches.length){cnt.textContent='0 matches';return;}
-  cnt.textContent=`${NB.matchIdx+1} / ${NB.matches.length}`;
+  if(!NB.matches.length){cnt.textContent='0';return;}
+  cnt.textContent=`${NB.matchIdx+1}/${NB.matches.length}`;
 }
 function nbJumpToMatch(idx){
   const m=NB.matches[idx];if(!m)return;
