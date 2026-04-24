@@ -1253,13 +1253,35 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 }
 /* The thin vertical margin stripe like a real exercise book */
 .nb-page::before{content:'';position:absolute;left:46px;top:0;bottom:0;width:1px;background:var(--paper-margin);opacity:.55;pointer-events:none}
+/* Section-coloured spine. The thick inset shadow on the left edge of each
+   page (and mirrored on the right edge in spread mode) picks up the
+   section's colour so you can tell at a glance which section you're on —
+   especially useful in spread mode when the two pages can come from
+   different sections. Falls back to the default paper-margin red. */
+.nb-page[data-sec-col="peach"]{box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--peach)}
+.nb-page[data-sec-col="sage"]{box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--sage)}
+.nb-page[data-sec-col="lavender"]{box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--lavender)}
+.nb-page[data-sec-col="gold"]{box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--gold)}
+.nb-page[data-sec-col="blue"]{box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--blue)}
+.nb-page[data-sec-col="rose"]{box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--red)}
+/* Thin vertical rule also matches section colour, softer so it doesn't
+   compete with the bold spine. */
+.nb-page[data-sec-col="peach"]::before{background:var(--peach);opacity:.35}
+.nb-page[data-sec-col="sage"]::before{background:var(--sage);opacity:.35}
+.nb-page[data-sec-col="lavender"]::before{background:var(--lavender);opacity:.35}
+.nb-page[data-sec-col="gold"]::before{background:var(--gold);opacity:.35}
+.nb-page[data-sec-col="blue"]::before{background:var(--blue);opacity:.35}
+.nb-page[data-sec-col="rose"]::before{background:var(--red);opacity:.35}
 /* Right page in spread mode: mirror the margin stripe onto the outer edge
    so both pages feel like they belong to the same book, with the binding
-   implied between them. */
-.nb-book.spread .nb-page.right-page{
-  padding:28px 58px 18px 32px;
-  box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--paper-margin);
-}
+   implied between them. Stripe colour follows the right page's section. */
+.nb-book.spread .nb-page.right-page{padding:28px 58px 18px 32px}
+.nb-book.spread .nb-page.right-page[data-sec-col="peach"]{box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--peach)}
+.nb-book.spread .nb-page.right-page[data-sec-col="sage"]{box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--sage)}
+.nb-book.spread .nb-page.right-page[data-sec-col="lavender"]{box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--lavender)}
+.nb-book.spread .nb-page.right-page[data-sec-col="gold"]{box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--gold)}
+.nb-book.spread .nb-page.right-page[data-sec-col="blue"]{box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--blue)}
+.nb-book.spread .nb-page.right-page[data-sec-col="rose"]{box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--red)}
 .nb-book.spread .nb-page.right-page::before{left:auto;right:46px}
 .nb-page.flipping-left{animation:nbFlipLeft .26s cubic-bezier(.4,0,.2,1) forwards}
 .nb-page.flipping-right{animation:nbFlipRight .26s cubic-bezier(.4,0,.2,1) forwards}
@@ -1311,11 +1333,38 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 }
 .nb-cell-ta::placeholder{color:var(--muted-2);font-style:italic}
 .nb-cell-ta.hl{box-shadow:inset 0 0 0 2px var(--gold)}
+/* Contenteditable-specific: placeholder via data attr + :empty pseudo */
+.nb-cell-ta[contenteditable="true"]{white-space:pre-wrap;word-break:break-word;overflow-y:auto}
+.nb-cell-ta[contenteditable="true"]:empty::before{content:attr(data-placeholder);color:var(--muted-2);font-style:italic;pointer-events:none}
+.nb-cell-ta[contenteditable="true"]:focus{outline:none}
+/* Rich-text styling inside cells */
+.nb-cell-ta h2{font-family:'Playfair Display',serif;font-size:20px;font-weight:500;color:var(--text);margin:4px 0 2px;line-height:1.25}
+.nb-cell-ta ul,.nb-cell-ta ol{padding-left:28px;margin:2px 0}
+.nb-cell-ta li{line-height:inherit}
+.nb-cell-ta b,.nb-cell-ta strong{font-weight:700}
+.nb-cell-ta i,.nb-cell-ta em{font-style:italic}
+.nb-cell-ta mark{background:#fff3a8;padding:0 2px;border-radius:2px}
 /* Clean font variant: Inter, no ruled lines, normal block text. */
 .nb-book.font-clean .nb-cell-ta{
   font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:22px;
   background-image:none;padding:4px 6px;
 }
+.nb-book.font-clean .nb-cell-ta h2{font-family:'Playfair Display',serif;font-size:18px}
+
+/* Rich-text toolbar — sits between the page header and the cells. Small,
+   muted when a cell isn't focused so it doesn't shout. */
+.nb-toolbar{display:flex;gap:2px;align-items:center;padding:4px 0;flex-shrink:0;flex-wrap:wrap;position:relative;z-index:1}
+.nb-tb-btn{width:26px;height:26px;padding:0;border:1px solid transparent;background:transparent;color:var(--text-2);font-size:12px;font-family:'Inter',system-ui,sans-serif;font-weight:500;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .1s}
+.nb-tb-btn:hover{background:var(--surface-2);color:var(--text);border-color:var(--border)}
+.nb-tb-btn:active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.nb-tb-btn b{font-weight:700}
+.nb-tb-btn i{font-style:italic}
+.nb-tb-btn u{text-decoration:underline}
+.nb-tb-btn s{text-decoration:line-through}
+.nb-toolbar-sep{width:1px;height:18px;background:var(--border);margin:0 4px}
+/* Undo button sits on the right side of the toolbar, a bit separated. */
+.nb-tb-undo{margin-left:auto;display:inline-flex;align-items:center;gap:4px;padding:0 8px;width:auto;font-size:11px;font-weight:600}
+.nb-tb-undo:disabled{opacity:.35;cursor:not-allowed}
 /* Subtle corner marker so users know each cell is a distinct writing space.
    Hidden in the single-cell layout (no need). */
 .nb-cell[data-hint="true"]::after{content:attr(data-hint-label);position:absolute;top:2px;right:6px;font-size:8.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);pointer-events:none;font-family:'Inter',system-ui,sans-serif;opacity:.6;z-index:2;background:var(--paper);padding:0 4px;border-radius:3px}
@@ -2213,7 +2262,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v91';
+const APP_VERSION='v92';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6323,6 +6372,50 @@ const NB={sectionIdx:0,pageIdx:0,lastFocused:null,searchQuery:'',matches:[],matc
 // look on their iPad but the clean font on their work laptop.
 try{NB.spread=localStorage.getItem('los_nb_spread')==='1';}catch(e){}
 try{const f=localStorage.getItem('los_nb_font');if(f==='hand'||f==='clean')NB.font=f;}catch(e){}
+
+// ─── UNDO STACK ───
+// Snapshot-based undo for the notebook. Stores serialised S.notebook
+// snapshots. Push BEFORE each mutation so undo rolls back to the state
+// right before the user's last action. Scoped to notebook only — the rest
+// of Life OS has its own quirks and we don't want an undo button here
+// rolling back a habit tick somewhere else.
+const NB_HISTORY=[];
+const NB_HISTORY_MAX=40;
+// Remember which cell the user was typing in so we can group consecutive
+// keystrokes into a single undo step instead of one-per-character.
+let _nbHistoryTypingKey=null;
+let _nbHistoryIdleTimer=null;
+function nbSnapshot(){return JSON.stringify(S.notebook||{sections:[]});}
+function nbPushHistory(){
+  const snap=nbSnapshot();
+  // Collapse consecutive duplicates
+  if(NB_HISTORY.length&&NB_HISTORY[NB_HISTORY.length-1]===snap)return;
+  NB_HISTORY.push(snap);
+  if(NB_HISTORY.length>NB_HISTORY_MAX)NB_HISTORY.shift();
+  // Keep the toolbar's disabled state in sync
+  document.querySelectorAll('.nb-tb-undo').forEach(b=>b.disabled=false);
+}
+// Called from typing handlers. Pushes once per "typing session" per cell —
+// defined as either (a) the user entering a new cell, or (b) 2s of idle.
+function nbMaybePushTypingHistory(key){
+  if(_nbHistoryTypingKey!==key){
+    nbPushHistory();
+    _nbHistoryTypingKey=key;
+  }
+  clearTimeout(_nbHistoryIdleTimer);
+  _nbHistoryIdleTimer=setTimeout(()=>{_nbHistoryTypingKey=null;},2000);
+}
+function nbUndo(){
+  if(!NB_HISTORY.length)return;
+  const prev=NB_HISTORY.pop();
+  try{
+    const parsed=JSON.parse(prev);
+    S.notebook=parsed;
+    _nbHistoryTypingKey=null;
+    nbEnsureShape();nbClampPosition();
+    svAll();rNotebook();
+  }catch(e){console.warn('[nb undo]',e);}
+}
 function nbEnsureShape(){
   if(!S.notebook||typeof S.notebook!=='object'||!Array.isArray(S.notebook.sections))S.notebook={sections:[]};
   S.notebook.sections.forEach(sec=>{
@@ -6423,45 +6516,135 @@ function nbPageAtOffset(off){
   }
   return {sectionIdx:si,pageIdx:pi,section:secs[si],page:secs[si].pages[pi]};
 }
-// Build the innerHTML for a single page (used for both single and spread
-// renders — spread just passes its own section/page/label overrides and a
-// side marker so the right page can mirror its margin stripe).
+// Strip HTML tags for searching and for computing "has content". Rich-text
+// cells now store HTML (with <b>, <i>, <ul>, etc.), but the raw tag soup
+// isn't what the user means when searching.
+function nbStripHtml(html){
+  if(!html)return '';
+  const tmp=document.createElement('div');tmp.innerHTML=html;
+  return tmp.textContent||tmp.innerText||'';
+}
+// Migrate a plain-text cell to HTML on first render: if the stored string
+// has no obvious tags, escape it and turn newlines into <br> so it renders
+// correctly inside a contenteditable div.
+function nbCellToHtml(raw){
+  if(!raw)return '';
+  const hasTags=/<(b|i|u|s|br|div|p|span|h[1-6]|ul|ol|li|strong|em|mark)\b/i.test(raw);
+  if(hasTags)return raw;
+  return esc(raw).replace(/\n/g,'<br>');
+}
+// Per-page formatting toolbar. Calls document.execCommand so selections
+// inside contenteditable cells get formatted. execCommand is officially
+// "deprecated" but every major browser still ships it and there's no modern
+// replacement for rich-text editing in vanilla contenteditable.
+function nbBuildToolbar(pageId){
+  const btns=[
+    ['bold','<b>B</b>','Bold (Ctrl/Cmd+B)'],
+    ['italic','<i>I</i>','Italic (Ctrl/Cmd+I)'],
+    ['underline','<u>U</u>','Underline (Ctrl/Cmd+U)'],
+    ['strikeThrough','<s>S</s>','Strikethrough'],
+    ['sep','',''],
+    ['h2','H','Heading'],
+    ['insertUnorderedList','•','Bulleted list'],
+    ['insertOrderedList','1.','Numbered list'],
+    ['sep','',''],
+    ['hiliteColor','🖍','Highlight'],
+    ['removeFormat','↺','Clear formatting']
+  ];
+  const canUndo=NB_HISTORY.length>0;
+  // onmousedown preventDefault so clicking the button doesn't blur the
+  // currently-focused cell — execCommand needs selection intact.
+  const mainBtns=btns.map(([cmd,lbl,ttl])=>cmd==='sep'?`<span class="nb-toolbar-sep"></span>`:`<button type="button" class="nb-tb-btn" data-cmd="${cmd}" title="${esc(ttl)}" onmousedown="event.preventDefault()" onclick="nbExec('${cmd}','${pageId}')">${lbl}</button>`).join('');
+  const undoBtn=`<button type="button" class="nb-tb-btn nb-tb-undo" title="Undo (Ctrl/Cmd+Z)" onmousedown="event.preventDefault()" onclick="nbUndo()" ${canUndo?'':'disabled'}>↶ Undo</button>`;
+  return `<div class="nb-toolbar" data-nb-toolbar-for="${pageId}">${mainBtns}${undoBtn}</div>`;
+}
+// Build the innerHTML for a single page. Every page gets its OWN controls
+// so spread mode's right page is fully operable (toolbar, layout toggle,
+// mic, refine, add, delete).
 function nbBuildPageHTML(ref,side){
   if(!ref)return `<div class="nb-page${side==='right'?' right-page':''}"><div class="nb-page-empty">End of notebook.</div></div>`;
-  const {section:sec,page,pageIdx,sectionIdx}=ref;
-  const isCurrent=sectionIdx===NB.sectionIdx&&pageIdx===NB.pageIdx;
+  const {section:sec,page,pageIdx}=ref;
   const cellCount=NB_LAYOUT_CELLS[page.layout]||1;
   const layoutBtns=[['single','▭','One cell'],['half','▯▯','Left / right split'],['quad','⊞','Four cells']]
-    .map(([k,lbl,ttl])=>`<button type="button" onclick="nbSetLayout('${k}')" class="${page.layout===k?'on':''}" title="${ttl}">${lbl}</button>`).join('');
+    .map(([k,lbl,ttl])=>`<button type="button" onclick="nbSetLayout('${k}','${page.id}')" class="${page.layout===k?'on':''}" title="${ttl}">${lbl}</button>`).join('');
   const updatedLbl=page.updatedAt?new Date(page.updatedAt).toLocaleDateString('en-ZA',{day:'numeric',month:'short'}):'new';
   const halfLbls=['Left','Right'];const quadLbls=['Top-L','Top-R','Bot-L','Bot-R'];
   const cells=Array.from({length:cellCount}).map((_,i)=>{
-    const val=page.cells[i]||'';
+    const htmlVal=nbCellToHtml(page.cells[i]||'');
     const lbl=cellCount===2?halfLbls[i]:(cellCount===4?quadLbls[i]:'');
     const hint=cellCount>1?` data-hint="true" data-hint-label="${lbl}"`:'';
-    const taId=`nb-ta-${page.id}-${i}`;
-    return `<div class="nb-cell"${hint}><textarea id="${taId}" class="nb-cell-ta" data-nb-cell="${i}" data-nb-page-id="${page.id}" placeholder="${i===0?'Start writing…':'…'}" oninput="nbOnCellInput(${i},this)" onfocus="nbOnCellFocus(${i},this)">${esc(val)}</textarea></div>`;
+    const ceId=`nb-ta-${page.id}-${i}`;
+    // Contenteditable div (was textarea). Allows bold / italic / lists /
+    // highlights via document.execCommand from the per-page toolbar.
+    return `<div class="nb-cell"${hint}><div id="${ceId}" class="nb-cell-ta" contenteditable="true" data-nb-cell="${i}" data-nb-page-id="${page.id}" data-placeholder="${i===0?'Start writing…':'…'}" spellcheck="true" oninput="nbOnCellInput(${i},this)" onfocus="nbOnCellFocus(${i},this)" onkeydown="nbOnCellKeyDown(event,${i},this)">${htmlVal}</div></div>`;
   }).join('');
-  // In spread mode only the current (left) page gets the footer controls —
-  // the right page just shows its content. That keeps actions unambiguous.
-  const showFooter=(side!=='right');
-  return `<div class="nb-page${side==='right'?' right-page':''}">
+  const secCol=sec.color||'peach';
+  return `<div class="nb-page${side==='right'?' right-page':''}" data-nb-page-id="${page.id}" data-sec-col="${secCol}">
     <div class="nb-page-hdr">
       <span class="nb-page-sec">${esc(sec.title||'Untitled')}</span>
       <span class="nb-page-meta">Page ${pageIdx+1} of ${sec.pages.length} · ${esc(updatedLbl)}</span>
-      ${showFooter?`<div class="nb-page-hdr-right">
-        <button class="iconbtn" onclick="nbAddPage()" title="Add page after this one" aria-label="Add page">＋</button>
-        <button class="iconbtn" onclick="nbDeletePage()" title="Delete this page" aria-label="Delete page">🗑</button>
-      </div>`:''}
+      <div class="nb-page-hdr-right">
+        <button class="iconbtn" onclick="nbAddPageAfter('${page.id}')" title="Add page after this one" aria-label="Add page">＋</button>
+        <button class="iconbtn" onclick="nbDeletePageById('${page.id}')" title="Delete this page" aria-label="Delete page">🗑</button>
+      </div>
     </div>
+    ${nbBuildToolbar(page.id)}
     <div class="nb-cells" data-layout="${page.layout}">${cells}</div>
-    ${showFooter?`<div class="nb-page-foot">
+    <div class="nb-page-foot">
       <div class="nb-layout-toggle">${layoutBtns}</div>
       <div class="nb-page-foot-spacer"></div>
       <button class="nb-mic-btn${NB.voiceActive?' on':''}" onclick="nbToggleVoice()" title="Record into the focused cell" aria-label="Voice record into focused cell">🎙</button>
-      <button class="nb-refine-btn" onclick="nbRefine()" title="Use AI to restructure this page cleanly">✨ Refine</button>
-    </div>`:''}
+      <button class="nb-refine-btn" onclick="nbRefinePage('${page.id}')" title="Use AI to restructure this page cleanly">✨ Refine</button>
+    </div>
   </div>`;
+}
+// Apply a formatting command to whichever cell is focused (must belong to
+// the page whose toolbar was clicked). Highlight uses a yellow tone;
+// others use execCommand's defaults. H2 toggles between paragraph and H2.
+function nbExec(cmd,pageId){
+  const active=document.activeElement;
+  const inCell=active&&active.classList&&active.classList.contains('nb-cell-ta');
+  // Toolbar button was clicked. If nothing is focused, briefly try to
+  // focus the last-used cell for this page so the command lands somewhere.
+  if(!inCell){
+    const loc=nbLocatePageById(pageId);if(!loc){return;}
+    const lf=NB.lastFocused;
+    if(lf&&loc.page&&S.notebook.sections[lf.sectionIdx]?.pages[lf.pageIdx]===loc.page){
+      const ta=document.getElementById(`nb-ta-${loc.page.id}-${lf.cellIdx}`);
+      if(ta)ta.focus();
+    } else {
+      const ta=document.getElementById(`nb-ta-${loc.page.id}-0`);
+      if(ta)ta.focus();
+    }
+  }
+  try{
+    if(cmd==='hiliteColor'){
+      document.execCommand('hiliteColor',false,'#fff3a8');
+    } else if(cmd==='h2'){
+      // Toggle between <p> and <h2>. formatBlock takes a tag name.
+      const sel=window.getSelection();
+      const node=sel&&sel.anchorNode;
+      const inH2=node&&(node.nodeName==='H2'||(node.parentElement&&node.parentElement.closest('h2')));
+      document.execCommand('formatBlock',false,inH2?'p':'h2');
+    } else {
+      document.execCommand(cmd,false,null);
+    }
+  }catch(e){console.warn('[nb exec]',e.message);}
+  // Manually trigger save path since execCommand doesn't fire input on
+  // every browser/command combo.
+  const ce=document.activeElement;
+  if(ce&&ce.classList&&ce.classList.contains('nb-cell-ta')){
+    nbOnCellInput(Number(ce.dataset.nbCell||0),ce);
+  }
+}
+// Keyboard shortcuts: Cmd/Ctrl+B / +I / +U already trigger bold/italic
+// /underline natively on contenteditable, but on some browsers the input
+// event doesn't fire reliably, so we just let the default run and then
+// queue a save on keyup.
+function nbOnCellKeyDown(e,cellIdx,ce){
+  // Let the browser handle normal typing; after the key is applied, input
+  // handler fires and saves. Nothing to do here right now — kept as a hook
+  // for future shortcuts (e.g. Tab to indent inside a list).
 }
 function renderNotebookPage(flipDir){
   const book=document.getElementById('nb-book');if(!book)return;
@@ -6549,6 +6732,7 @@ function nbPrevPage(){
 function nbAddSection(){
   const name=prompt('Section title:','');if(!name||!name.trim())return;
   nbEnsureShape();
+  nbPushHistory();
   const color=NB_COLORS[S.notebook.sections.length%NB_COLORS.length];
   S.notebook.sections.push({id:uid(),title:name.trim(),color,pages:[nbBlankPage()]});
   NB.sectionIdx=S.notebook.sections.length-1;NB.pageIdx=0;
@@ -6585,45 +6769,87 @@ function nbSaveSectionPopover(i,pop){
   const sec=S.notebook.sections[i];if(!sec){pop.remove();return;}
   const inp=pop.querySelector('#nb-sec-pop-title');
   const newTitle=(inp&&inp.value.trim())||sec.title||'Untitled';
+  if(newTitle!==sec.title)nbPushHistory();
   sec.title=newTitle;
   pop.remove();svAll();rNotebook();
 }
 function nbSetColor(i,c){
   const sec=S.notebook.sections[i];if(!sec)return;
+  if(sec.color!==c)nbPushHistory();
   sec.color=c;svAll();renderNotebookTabs();
 }
 function nbDeleteSection(i){
   const sec=S.notebook.sections[i];if(!sec)return;
-  const hasContent=sec.pages.some(p=>p.cells.some(c=>(c||'').trim()));
+  const hasContent=sec.pages.some(p=>p.cells.some(c=>nbStripHtml(c||'').trim()));
   if(hasContent&&!confirm(`Delete section "${sec.title}" and all ${sec.pages.length} page(s)?`))return;
   if(!hasContent&&!confirm(`Delete empty section "${sec.title}"?`))return;
+  nbPushHistory();
   S.notebook.sections.splice(i,1);
   if(NB.sectionIdx>=S.notebook.sections.length)NB.sectionIdx=Math.max(0,S.notebook.sections.length-1);
   NB.pageIdx=0;
   svAll();rNotebook();
 }
-function nbAddPage(){
-  const sec=nbCurrentSection();if(!sec)return;
-  sec.pages.splice(NB.pageIdx+1,0,nbBlankPage());
-  NB.pageIdx++;
+// Add a new page immediately AFTER the page with the given id. Behaviour
+// branches on spread mode:
+//  - Single view: insert after target, navigate the user to the new page
+//    so they can start writing on it.
+//  - Spread view: insert after target but DON'T move NB.pageIdx. The new
+//    page lands in the right slot (if + was on left) or the next flip (if
+//    + was on right), which matches Zander's mental model of "adding to
+//    the right" rather than "replacing the current page."
+function nbAddPageAfter(pageId){
+  const loc=nbLocatePageById(pageId);if(!loc)return;
+  nbPushHistory();
+  const {sectionIdx:si,pageIdx:pi}=loc;
+  const sec=S.notebook.sections[si];
+  const newPage=nbBlankPage();
+  sec.pages.splice(pi+1,0,newPage);
+  if(NB.spread){
+    // Leave NB position alone. If + was on the left page, the new page is
+    // now at NB.pageIdx+1 which is exactly the right slot — perfect.
+  } else {
+    // Single view — navigate to the new page.
+    NB.sectionIdx=si;NB.pageIdx=pi+1;
+  }
   svAll();rNotebook();
 }
-function nbDeletePage(){
-  const sec=nbCurrentSection();if(!sec)return;
-  const page=nbCurrentPage();if(!page)return;
-  const hasContent=page.cells.some(c=>(c||'').trim());
+// Delete a specific page. If it's the ONLY page in the section, delete
+// the whole section (Zander explicitly wanted the final page's 🗑 to
+// collapse the section rather than just blanking it). Otherwise remove
+// the page and slide to a sensible neighbour.
+function nbDeletePageById(pageId){
+  const loc=nbLocatePageById(pageId);if(!loc)return;
+  nbPushHistory();
+  const {sectionIdx:si,pageIdx:pi}=loc;
+  const sec=S.notebook.sections[si];
+  const page=sec.pages[pi];
+  const hasContent=page.cells.some(c=>nbStripHtml(c||'').trim());
   if(sec.pages.length===1){
-    if(hasContent&&!confirm('This is the only page in this section. Clear it?'))return;
-    sec.pages[0]=nbBlankPage();
-  } else {
-    if(hasContent&&!confirm('Delete this page? Content will be lost.'))return;
-    sec.pages.splice(NB.pageIdx,1);
+    const msg=hasContent
+      ?`This is the only page in "${sec.title}". Delete the whole section?`
+      :`Delete the empty section "${sec.title}"?`;
+    if(!confirm(msg))return;
+    S.notebook.sections.splice(si,1);
+    if(NB.sectionIdx>=S.notebook.sections.length)NB.sectionIdx=Math.max(0,S.notebook.sections.length-1);
+    NB.pageIdx=0;
+    svAll();rNotebook();
+    return;
+  }
+  if(hasContent&&!confirm('Delete this page? Content will be lost.'))return;
+  sec.pages.splice(pi,1);
+  // Adjust NB.pageIdx if we deleted a page before / at the current position
+  if(NB.sectionIdx===si){
+    if(NB.pageIdx>pi)NB.pageIdx--;
     if(NB.pageIdx>=sec.pages.length)NB.pageIdx=sec.pages.length-1;
   }
   svAll();rNotebook();
 }
-function nbSetLayout(layout){
-  const page=nbCurrentPage();if(!page||!(layout in NB_LAYOUT_CELLS))return;
+function nbSetLayout(layout,pageId){
+  const loc=pageId?nbLocatePageById(pageId):null;
+  const page=loc?loc.page:nbCurrentPage();
+  if(!page||!(layout in NB_LAYOUT_CELLS))return;
+  if(page.layout===layout)return;
+  nbPushHistory();
   const need=NB_LAYOUT_CELLS[layout];
   // Preserve existing content; pad or trim the cell array.
   if(page.cells.length<need)while(page.cells.length<need)page.cells.push('');
@@ -6636,6 +6862,9 @@ function nbSetLayout(layout){
   page.layout=layout;page.updatedAt=Date.now();
   svAll();rNotebook();
 }
+// Back-compat shims for any stale references
+function nbAddPage(){const p=nbCurrentPage();if(p)nbAddPageAfter(p.id);}
+function nbDeletePage(){const p=nbCurrentPage();if(p)nbDeletePageById(p.id);}
 // Look up the (section, page) indices of whichever page a given textarea
 // belongs to. Used for both edits and focus tracking so spread mode's
 // right page writes to the right data (not the current page).
@@ -6649,24 +6878,35 @@ function nbLocatePageById(id){
   }
   return null;
 }
-// Debounced save for textarea typing — prevents a Firestore write on every
-// keystroke while still syncing quickly across devices. Bumped to 1200ms
-// so fast typing doesn't trigger back-to-back snapshot echoes that were
-// making the textarea stutter on Zander's machine.
+// Debounced save for contenteditable typing. Reads from innerHTML so the
+// rich-text formatting (bold / lists / highlights) survives into Firestore.
+// Bumped to 1200ms so fast typing doesn't trigger back-to-back snapshot
+// echoes that were making the textarea stutter.
 let _nbSaveTimer=null;
-function nbOnCellInput(cellIdx,ta){
-  const loc=nbLocatePageById(ta&&ta.dataset&&ta.dataset.nbPageId);
+function nbCellReadValue(el){
+  if(!el)return '';
+  // Empty contenteditable div often reports '<br>' — normalise to empty.
+  let h=el.innerHTML||'';
+  if(h==='<br>'||h==='<div><br></div>')h='';
+  return h;
+}
+function nbOnCellInput(cellIdx,el){
+  const loc=nbLocatePageById(el&&el.dataset&&el.dataset.nbPageId);
   const page=loc?loc.page:nbCurrentPage();
   if(!page)return;
-  page.cells[cellIdx]=ta.value;
+  // Push an undo snapshot the FIRST keystroke in a new cell / typing
+  // session. Subsequent keystrokes within 2s coalesce into that same step.
+  const typingKey=`${page.id}:${cellIdx}`;
+  nbMaybePushTypingHistory(typingKey);
+  page.cells[cellIdx]=nbCellReadValue(el);
   page.updatedAt=Date.now();
   if(loc)NB.lastFocused={sectionIdx:loc.sectionIdx,pageIdx:loc.pageIdx,cellIdx};
   else NB.lastFocused={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,cellIdx};
   clearTimeout(_nbSaveTimer);
   _nbSaveTimer=setTimeout(()=>svAll(),1200);
 }
-function nbOnCellFocus(cellIdx,ta){
-  const loc=ta?nbLocatePageById(ta.dataset&&ta.dataset.nbPageId):null;
+function nbOnCellFocus(cellIdx,el){
+  const loc=el?nbLocatePageById(el.dataset&&el.dataset.nbPageId):null;
   if(loc)NB.lastFocused={sectionIdx:loc.sectionIdx,pageIdx:loc.pageIdx,cellIdx};
   else NB.lastFocused={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,cellIdx};
 }
@@ -6677,10 +6917,12 @@ function nbSearchInput(q){
   if(!NB.searchQuery){NB.matches=[];NB.matchIdx=-1;nbUpdateSearchUI();nbApplySearchHighlight();return;}
   const needle=NB.searchQuery.toLowerCase();
   const out=[];
+  // Strip HTML tags before searching so the user's query matches actual
+  // words, not tag names or inline markup.
   S.notebook.sections.forEach((sec,si)=>{
     sec.pages.forEach((p,pi)=>{
       p.cells.forEach((c,ci)=>{
-        const hay=(c||'').toLowerCase();
+        const hay=nbStripHtml(c||'').toLowerCase();
         let idx=0,pos;
         while((pos=hay.indexOf(needle,idx))!==-1){
           out.push({sectionIdx:si,pageIdx:pi,cellIdx:ci,start:pos,end:pos+needle.length});
@@ -6723,16 +6965,44 @@ function nbJumpToMatch(idx){
     nbSelectMatch(m);
   }
 }
+// Find the (node, offset) pair at character position `pos` within el's
+// plain text. Walks text nodes until we've covered `pos` characters.
+function nbTextPositionToNode(el,pos){
+  const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,null);
+  let node,consumed=0;
+  while((node=walker.nextNode())){
+    const len=node.nodeValue.length;
+    if(consumed+len>=pos)return {node,offset:pos-consumed};
+    consumed+=len;
+  }
+  // Fell off the end — anchor to the last text node's end
+  return node?{node,offset:node.nodeValue.length}:null;
+}
 function nbSelectMatch(m){
-  const ta=document.querySelector(`#nb-book [data-nb-cell="${m.cellIdx}"]`);
-  if(!ta)return;
-  try{ta.focus();ta.setSelectionRange(m.start,m.end);}catch(_){}
+  // Find the cell — scope to the LEFT page (the active one) since spread's
+  // right page is read-only-ish from nav's perspective.
+  const book=document.getElementById('nb-book');if(!book)return;
+  const ce=book.querySelector(`.nb-page:not(.right-page) [data-nb-cell="${m.cellIdx}"]`);
+  if(!ce)return;
+  try{
+    ce.focus();
+    const sel=window.getSelection();
+    const range=document.createRange();
+    const startRef=nbTextPositionToNode(ce,m.start);
+    const endRef=nbTextPositionToNode(ce,m.end);
+    if(startRef&&endRef){
+      range.setStart(startRef.node,startRef.offset);
+      range.setEnd(endRef.node,endRef.offset);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }catch(_){}
   nbApplySearchHighlight();
 }
 function nbApplySearchHighlight(){
-  // Textareas can't render inline highlights. Visual cue is the selection
-  // itself (handled by nbSelectMatch) plus a subtle background on the cell
-  // containing the current match.
+  // Contenteditable divs can't easily render inline highlights without
+  // touching the user's HTML. Visual cue is the selection itself (via
+  // nbSelectMatch) plus a subtle outline on the cell containing the match.
   const book=document.getElementById('nb-book');if(!book)return;
   book.querySelectorAll('.nb-cell-ta').forEach(t=>t.classList.remove('hl'));
   const m=NB.matches[NB.matchIdx];if(!m)return;
@@ -6740,19 +7010,28 @@ function nbApplySearchHighlight(){
   if(ta)ta.classList.add('hl');
 }
 
-// ✨ Refine — sends the current page's cells to Claude with a restructure
-// prompt, then shows a preview modal. User picks Keep or Discard.
-async function nbRefine(){
-  const page=nbCurrentPage();const sec=nbCurrentSection();
+// Back-compat shim: nbRefine() still works and refines the current page.
+async function nbRefine(){const p=nbCurrentPage();if(p)return nbRefinePage(p.id);}
+// ✨ Refine — sends the specified page's cells to Claude with a restructure
+// prompt, then shows a preview modal. User picks Keep or Discard. Takes a
+// page id so the right page in spread mode refines its own content.
+async function nbRefinePage(pageId){
+  const loc=nbLocatePageById(pageId);if(!loc)return;
+  const page=loc.page;const sec=S.notebook.sections[loc.sectionIdx];
   if(!page||!sec)return;
   const key=getKey();
   if(!key){alert('Add your Anthropic API key in Settings first.');return;}
-  const hasContent=page.cells.some(c=>(c||'').trim());
+  const hasContent=page.cells.some(c=>nbStripHtml(c||'').trim());
   if(!hasContent){alert('Nothing on this page to refine yet — write something first.');return;}
-  const btn=document.querySelector('.nb-refine-btn');
+  // Scope the spinner to THIS page's refine button (spread mode has two).
+  const btn=document.querySelector(`.nb-page[data-nb-page-id="${pageId}"] .nb-refine-btn`);
   if(btn){btn.disabled=true;btn.textContent='✨ Refining…';}
   try{
-    const currentCells=page.cells.map((c,i)=>({cellIndex:i,content:c||''}));
+    // Strip HTML formatting before sending to Claude — the model gets the
+    // plain text and we'll wrap whatever it returns back in HTML via
+    // nbCellToHtml when the user hits Keep. Formatting tags would only
+    // confuse the restructure task.
+    const currentCells=page.cells.map((c,i)=>({cellIndex:i,content:nbStripHtml(c||'')}));
     const prompt=`You're helping tidy up a page in someone's personal notebook titled "${sec.title}". The page currently uses a "${page.layout}" layout (single / half = 2 cells / quad = 4 cells).
 
 Given the current cell contents below, produce a cleaner version. You MAY:
@@ -6787,7 +7066,7 @@ The cells array length MUST match the layout (1 / 2 / 4).`;
     console.warn('[nb refine]',e);
     alert('Refine failed: '+e.message);
   }finally{
-    const b2=document.querySelector('.nb-refine-btn');if(b2){b2.disabled=false;b2.textContent='✨ Refine';}
+    const b2=document.querySelector(`.nb-page[data-nb-page-id="${pageId}"] .nb-refine-btn`);if(b2){b2.disabled=false;b2.textContent='✨ Refine';}
   }
 }
 function nbShowRefinePreview(page,refined){
@@ -6811,8 +7090,11 @@ function nbShowRefinePreview(page,refined){
   overlay.addEventListener('click',e=>{
     const act=e.target.dataset?.action;
     if(act==='keep'){
+      nbPushHistory();
       page.layout=refined.layout;
-      page.cells=refined.cells.slice();
+      // Wrap plain-text cells back into HTML so the rich-text editor
+      // displays them correctly (newlines → <br>, escape <>).
+      page.cells=refined.cells.map(c=>nbCellToHtml(c));
       page.updatedAt=Date.now();
       overlay.remove();_syncBodyLock();
       svAll();rNotebook();
@@ -6830,19 +7112,29 @@ function nbToggleVoice(){
   if(NB.voiceActive){nbStopVoice();return;}
   const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SpeechRec){alert('Voice recording isn\'t supported in this browser. Try Chrome, Edge, or Safari.');return;}
-  if(!NB.lastFocused||NB.lastFocused.sectionIdx!==NB.sectionIdx||NB.lastFocused.pageIdx!==NB.pageIdx){
+  if(!NB.lastFocused){
     alert('Click into a cell first, then tap the mic to record into it.');
     return;
   }
-  const ta=document.querySelector(`#nb-book [data-nb-cell="${NB.lastFocused.cellIdx}"]`);
-  if(!ta){alert('Couldn\'t find the focused cell — click into one and try again.');return;}
+  // Locate the focused page/cell. Works in spread mode too — lastFocused
+  // tracks whichever page the user clicked into.
+  const secs=S.notebook.sections;
+  const page=secs[NB.lastFocused.sectionIdx]?.pages?.[NB.lastFocused.pageIdx];
+  if(!page){alert('Lost the focused cell — click into one and try again.');return;}
+  const ce=document.getElementById(`nb-ta-${page.id}-${NB.lastFocused.cellIdx}`);
+  if(!ce){alert('Couldn\'t find the focused cell — click into one and try again.');return;}
   const rec=new SpeechRec();
   rec.continuous=true;rec.interimResults=true;rec.maxAlternatives=1;
-  NB._voiceRec=rec;NB._voiceTarget={ta,cellIdx:NB.lastFocused.cellIdx,sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx};
-  let baseText=ta.value||'';if(baseText&&!/\s$/.test(baseText))baseText+=' ';
+  NB._voiceRec=rec;NB._voiceTarget={ce,cellIdx:NB.lastFocused.cellIdx,page};
+  // Record a snapshot BEFORE voice modifies anything so undo works after.
+  nbPushHistory();
+  // Read existing plain text so dictation appends to it. We keep HTML
+  // formatting on the way out but dictated words are plain text.
+  let baseText=(ce.innerText||ce.textContent||'').trimEnd();
+  if(baseText)baseText+=' ';
   let finalText='';
   const normTxt=s=>(s||'').trim().toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
-  rec.onstart=()=>{NB.voiceActive=true;const btn=document.querySelector('.nb-mic-btn');if(btn)btn.classList.add('on');};
+  rec.onstart=()=>{NB.voiceActive=true;document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.add('on'));};
   rec.onresult=e=>{
     let interim='';const finals=[];
     for(let i=0;i<e.results.length;i++){const r=e.results[i];
@@ -6854,28 +7146,38 @@ function nbToggleVoice(){
     const kept=finals.filter((f,i)=>{const ki=keys[i];if(!ki)return false;for(let j=0;j<finals.length;j++){if(j===i)continue;const kj=keys[j];if(kj.length>ki.length&&kj.startsWith(ki))return false;if(kj===ki&&j<i)return false;}return true;});
     finalText=kept.length?kept.join(' ')+' ':'';
     const v=(baseText+finalText+interim).replace(/\s+$/,'')+(interim?' ':'');
-    ta.value=v;
-    // Push live value into state so it persists even if user navigates away
-    const page=nbCurrentPage();if(page)page.cells[NB._voiceTarget.cellIdx]=v;
+    // Replace cell content (newlines → <br> so multi-sentence dictation
+    // still reads cleanly). Skip if the cell isn't mounted anymore.
+    const target=document.getElementById(ce.id);
+    if(target){target.innerHTML=esc(v).replace(/\n/g,'<br>');}
+    NB._voiceTarget.page.cells[NB._voiceTarget.cellIdx]=esc(v).replace(/\n/g,'<br>');
     clearTimeout(_nbSaveTimer);_nbSaveTimer=setTimeout(()=>svAll(),600);
   };
   rec.onerror=e=>{console.warn('[nb voice]',e.error);nbStopVoice();};
-  rec.onend=()=>{NB.voiceActive=false;NB._voiceRec=null;const btn=document.querySelector('.nb-mic-btn');if(btn)btn.classList.remove('on');svAll();};
+  rec.onend=()=>{NB.voiceActive=false;NB._voiceRec=null;document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.remove('on'));svAll();};
   try{rec.start();}catch(e){NB.voiceActive=false;alert('Couldn\'t start voice: '+e.message);}
 }
 function nbStopVoice(){
   if(NB._voiceRec){try{NB._voiceRec.stop();}catch(_){}NB._voiceRec=null;}
   NB.voiceActive=false;
-  const btn=document.querySelector('.nb-mic-btn');if(btn)btn.classList.remove('on');
+  document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.remove('on'));
 }
 // Keyboard shortcuts: arrows flip pages when notebook is active and no
-// input is focused; Ctrl/Cmd+F focuses the search bar.
+// input is focused; Ctrl/Cmd+F focuses the search bar; Ctrl/Cmd+Z runs the
+// notebook's own undo stack (takes precedence over the browser's native
+// contenteditable undo when the focus is in a cell).
 window.addEventListener('keydown',e=>{
   if(currentRoute!=='notebook')return;
   const t=e.target;const inEditor=t&&(t.tagName==='TEXTAREA'||t.tagName==='INPUT'||t.isContentEditable);
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='f'){
     const sb=document.getElementById('nb-search');if(sb){e.preventDefault();sb.focus();sb.select();}
     return;
+  }
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==='z'){
+    // Our own undo. Prefer it over the browser's contenteditable undo so
+    // structural changes (layout swap, page add/delete) are reversible
+    // from inside a cell too.
+    if(NB_HISTORY.length){e.preventDefault();nbUndo();return;}
   }
   if(inEditor)return;
   if(e.key==='ArrowLeft'){e.preventDefault();nbPrevPage();}
