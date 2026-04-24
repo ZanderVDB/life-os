@@ -1073,6 +1073,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .aic-rm{flex-shrink:0;width:22px;height:22px;border-radius:50%;border:1px solid var(--border-strong);background:transparent;color:var(--muted);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:all .12s}
 .aic-rm:hover{background:var(--red);color:#fff;border-color:var(--red)}
 .aic-empty{color:var(--muted);font-style:italic;font-size:12.5px;padding:14px 8px;text-align:center}
+/* Inline-editable title/match in the AI confirm modal — click to fix typos */
+.aic-edit{background:var(--bg);border-bottom:1px dashed var(--border-strong);padding:0 2px;cursor:text;outline:none;color:var(--text);transition:background .12s,border-color .12s;display:inline}
+.aic-edit:hover{background:var(--surface-hover)}
+.aic-edit:focus{background:var(--surface);border-bottom-color:var(--accent);border-bottom-style:solid}
 .modal-body h3{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;margin-bottom:18px;color:var(--text)}
 .modal-row{margin-bottom:12px}
 .modal-row label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px}
@@ -1622,30 +1626,24 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="section-hdr"><h2>Calendar defaults</h2></div>
           <div class="setting-row setting-row-stack">
             <div>
-              <div class="setting-label">Default reminders · Timed events</div>
-              <div class="setting-desc">What the AI (and new-event modal) preselect when you add a meeting / appointment with a time.</div>
+              <div class="setting-label">Timed events</div>
+              <div class="setting-desc">Default reminders for meetings & appointments.</div>
             </div>
-            <div class="setting-right" style="width:100%">
-              <div class="reminder-chips" id="cd-timed"></div>
-            </div>
+            <div class="reminder-chips" id="cd-timed" style="width:100%"></div>
           </div>
           <div class="setting-row setting-row-stack">
             <div>
-              <div class="setting-label">Default reminders · All-day events</div>
-              <div class="setting-desc">For all-day events that aren't birthdays.</div>
+              <div class="setting-label">All-day events</div>
+              <div class="setting-desc">Default reminders for all-day events.</div>
             </div>
-            <div class="setting-right" style="width:100%">
-              <div class="reminder-chips" id="cd-allday"></div>
-            </div>
+            <div class="reminder-chips" id="cd-allday" style="width:100%"></div>
           </div>
           <div class="setting-row setting-row-stack">
             <div>
-              <div class="setting-label">Default reminders · Birthdays</div>
-              <div class="setting-desc">Auto-applied when the AI detects a birthday event.</div>
+              <div class="setting-label">Birthdays</div>
+              <div class="setting-desc">Default reminders for birthday events.</div>
             </div>
-            <div class="setting-right" style="width:100%">
-              <div class="reminder-chips" id="cd-bday"></div>
-            </div>
+            <div class="reminder-chips" id="cd-bday" style="width:100%"></div>
           </div>
         </div>
 
@@ -1830,13 +1828,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
     </div>
     <div class="modal-row">
       <label>Reminders</label>
-      <div class="reminder-chips" id="em-reminders">
-        <label class="rc"><input type="checkbox" value="0"><span>At time</span></label>
-        <label class="rc"><input type="checkbox" value="10"><span>10 min before</span></label>
-        <label class="rc"><input type="checkbox" value="60"><span>1 hour before</span></label>
-        <label class="rc"><input type="checkbox" value="1440"><span>1 day before</span></label>
-        <label class="rc"><input type="checkbox" value="10080"><span>1 week before</span></label>
-      </div>
+      <div class="reminder-chips" id="em-reminders"></div>
     </div>
     <div class="modal-row"><label>Time zone</label><select class="select" id="em-tz" style="width:100%">
       <option value="Africa/Johannesburg">Africa/Johannesburg (SAST)</option>
@@ -1865,7 +1857,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v76';
+const APP_VERSION='v77';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -3027,7 +3019,12 @@ ${JSON.stringify(ctx,null,2)}`;
     const text=(d.content?.[0]?.text||'').trim();
     const tip={markdown:true,body:text,mode,fromHour:mode==='now'?hr:null};
     // Only cache the "today full" version — "now" and "tomorrow" are on-demand
-    if(mode==='today'){S.todaysTip={date:tod(),tip};svAll();}
+    // Save for BOTH 'today' and 'now' — "now" is just a replan of today so it
+    // should overwrite. Previously only 'today' saved, so regenerating "From
+    // now" on a laptop never propagated to the phone — the phone kept the
+    // older saved plan. svAllNow() bypasses the 300ms debounce so the new
+    // plan is in Firestore the moment the user switches devices.
+    if(mode==='today'||mode==='now'){S.todaysTip={date:tod(),tip};svAllNow();}
     renderTip(tip);
   }catch(e){
     console.warn('[plan] fetch failed:',e.message);
@@ -4107,6 +4104,10 @@ function toggleEmAllDay(){
   const cb=document.getElementById('em-allday');
   const row=document.getElementById('em-time-row');
   if(row)row.style.display=cb.checked?'none':'grid';
+  // Rebuild the reminder chip set to match event type (all-day gets
+  // day-granular options, timed gets minutes-before). Preserves any ticks
+  // whose minute value exists in both sets (0 = At time / On the day).
+  renderEmReminderChips(getEmReminderValues());
 }
 // Switch the event modal between "Event" (full calendar event, saved to GCal)
 // and "Reminder" (Google Task with due date only — no time, no repeat).
@@ -4142,18 +4143,27 @@ function resetEventModal(){
   ['em-t','em-tm','em-tm-end','em-desc','em-d-end'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
   const ad=document.getElementById('em-allday');if(ad)ad.checked=false;
   const rep=document.getElementById('em-repeat');if(rep)rep.value='none';
-  // Uncheck every reminder chip
-  document.querySelectorAll('#em-reminders input[type="checkbox"]').forEach(cb=>{cb.checked=false;});
   const tz=document.getElementById('em-tz');if(tz)tz.value='Africa/Johannesburg';
+  renderEmReminderChips([]);
   toggleEmAllDay();
 }
-// Helpers for the reminder chip group
+// Helpers for the reminder chip group. Rebuilds the chip set based on
+// whether the event is all-day (granular day-level options) or timed
+// (minutes-before options). Called whenever all-day is toggled.
+function renderEmReminderChips(kept){
+  const wrap=document.getElementById('em-reminders');if(!wrap)return;
+  const isAllDay=document.getElementById('em-allday')?.checked;
+  const titleEl=document.getElementById('em-t');
+  const isBday=titleEl&&/birthday|bday|🎂/i.test(titleEl.value||'');
+  const opts=(isAllDay||isBday)?REMINDER_OPTIONS_ALLDAY:REMINDER_OPTIONS_TIMED;
+  const current=kept?new Set(kept.map(Number)):new Set([...wrap.querySelectorAll('input[type="checkbox"]:checked')].map(cb=>Number(cb.value)));
+  wrap.innerHTML=opts.map(o=>`<label class="rc"><input type="checkbox" value="${o.v}"${current.has(o.v)?' checked':''}><span>${esc(o.lbl)}</span></label>`).join('');
+}
 function getEmReminderValues(){
   return [...document.querySelectorAll('#em-reminders input[type="checkbox"]:checked')].map(cb=>Number(cb.value)).filter(n=>!isNaN(n));
 }
 function setEmReminderValues(mins){
-  const set=new Set((mins||[]).map(m=>String(Number(m))));
-  document.querySelectorAll('#em-reminders input[type="checkbox"]').forEach(cb=>{cb.checked=set.has(cb.value);});
+  renderEmReminderChips((mins||[]).map(Number));
 }
 function openNewEvent(prefill){
   prefill=prefill||{};
@@ -4305,11 +4315,97 @@ async function saveCurrentEvent(){
 }
 async function deleteCurrentEvent(){
   if(!editingEvent||editingEvent.mode==='new')return closeEventModal();
-  if(!confirm(editingEvent.type==='task'?'Delete this reminder?':'Delete this event?'))return;
-  if(editingEvent.type==='task'){const ok=await deleteGTask(editingEvent.data.id,editingEvent.data.tasklistId);if(!ok)alert('Failed to delete reminder.');}
-  else if(editingEvent.type==='gc'){const ok=await deleteGCEvent(editingEvent.data.id,editingEvent.data.calendarId);if(!ok)alert('Failed to delete Google event.');}
-  else if(editingEvent.type==='cus'){S.customEvents=(S.customEvents||[]).filter(x=>x.id!==editingEvent.data.id);}
+  if(editingEvent.type==='task'){
+    if(!confirm('Delete this reminder?'))return;
+    const ok=await deleteGTask(editingEvent.data.id,editingEvent.data.tasklistId);
+    if(!ok)alert('Failed to delete reminder.');
+  }
+  else if(editingEvent.type==='gc'){
+    // Recurring events get the 3-option prompt like the phone Calendar app.
+    // data.recurringEventId present → this instance belongs to a series.
+    const isRecurring=!!editingEvent.data.recurringEventId;
+    let mode='single';
+    if(isRecurring){
+      mode=await showRecurringDeleteModal();
+      if(!mode)return;  // cancelled
+    } else {
+      if(!confirm('Delete this event?'))return;
+    }
+    const ok=await applyRecurringDelete(editingEvent.data,mode);
+    if(!ok)alert('Failed to delete Google event.');
+  }
+  else if(editingEvent.type==='cus'){
+    if(!confirm('Delete this event?'))return;
+    S.customEvents=(S.customEvents||[]).filter(x=>x.id!==editingEvent.data.id);
+  }
   svAll();closeEventModal();rCal();render();
+}
+// Modal: ask which occurrences of a recurring event to delete. Mirrors the
+// three-way choice Google Calendar shows on phone (single / future / series).
+// Returns 'single' | 'future' | 'series' | null (null = cancelled).
+function showRecurringDeleteModal(){
+  return new Promise(resolve=>{
+    const m=document.createElement('div');m.className='modal';m.style.display='flex';
+    m.innerHTML=`<div class="modal-bd"></div>
+      <div class="modal-body" style="max-width:420px">
+        <h3 style="margin-bottom:10px">Delete recurring event</h3>
+        <div style="font-size:13px;color:var(--text-2);line-height:1.55;margin-bottom:16px">This event repeats. What would you like to delete?</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-sm" data-mode="single" style="text-align:left;padding:12px 14px">Just this event</button>
+          <button class="btn btn-sm" data-mode="future" style="text-align:left;padding:12px 14px">This and all future events</button>
+          <button class="btn btn-sm" data-mode="series" style="text-align:left;padding:12px 14px">All events in the series</button>
+        </div>
+        <div class="modal-actions"><div class="spacer"></div><button class="btn btn-ghost btn-sm" data-mode="cancel">Cancel</button></div>
+      </div>`;
+    document.body.appendChild(m);_syncBodyLock();
+    m.addEventListener('click',e=>{
+      const mode=e.target.dataset?.mode||(e.target.closest('.modal-bd')?'cancel':null);
+      if(!mode)return;
+      m.remove();_syncBodyLock();
+      resolve(mode==='cancel'?null:mode);
+    });
+  });
+}
+// Execute the delete based on which 'mode' the user chose in the modal above.
+async function applyRecurringDelete(d,mode){
+  const calId=d.calendarId||'primary';
+  if(mode==='single'){
+    // Delete just this instance. data.id for a single-event fetch (with
+    // singleEvents=true) IS the instance id, so direct delete works.
+    return await deleteGCEvent(d.id,calId);
+  }
+  if(mode==='series'){
+    // Delete the master event — cascades to every past + future instance.
+    const master=d.recurringEventId||d.id;
+    return await deleteGCEvent(master,calId);
+  }
+  if(mode==='future'){
+    // "This and following" — GCal doesn't have a single API call for this.
+    // Approach: fetch the master event, grab its RRULE, set UNTIL to the day
+    // before THIS instance, PATCH the master. Future occurrences disappear.
+    try{
+      const tok=getGCalToken();if(!tok)return false;
+      const masterId=d.recurringEventId||d.id;
+      const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(masterId)}`,{headers:{Authorization:'Bearer '+tok}});
+      if(!r.ok)return false;
+      const master=await r.json();
+      const rrules=(master.recurrence||[]).filter(x=>x.startsWith('RRULE:'));
+      if(!rrules.length)return false;
+      // UNTIL must be yyyymmddThhmmssZ in UTC. Use day before d.date at
+      // 23:59:59 local → converted to UTC.
+      const [yy,mm,dd]=d.date.split('-').map(Number);
+      const cutoff=new Date(yy,mm-1,dd);cutoff.setDate(cutoff.getDate()-1);cutoff.setHours(23,59,59,0);
+      const utc=new Date(cutoff.getTime()-cutoff.getTimezoneOffset()*60000);
+      const iso=utc.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+      // Strip any existing UNTIL / COUNT, then append UNTIL
+      const newRule=rrules[0].replace(/;UNTIL=[^;]+/i,'').replace(/;COUNT=[^;]+/i,'')+';UNTIL='+iso;
+      const updated={recurrence:[newRule, ...master.recurrence.filter(x=>!x.startsWith('RRULE:'))]};
+      const r2=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(masterId)}`,{method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(updated)});
+      if(r2.ok)gcCache={key:'',events:[]};
+      return r2.ok;
+    }catch(e){console.warn('[delete-future]',e.message);return false;}
+  }
+  return false;
 }
 
 // QUICK ADD
@@ -4768,16 +4864,21 @@ function deleteWorkProject(id){
 }
 
 // ───────── CALENDAR DEFAULTS (user-configurable reminder defaults) ─────────
-const REMINDER_OPTIONS=[{v:0,lbl:'At time'},{v:10,lbl:'10 min'},{v:60,lbl:'1 hour'},{v:1440,lbl:'1 day'},{v:10080,lbl:'1 week'}];
+// Timed events — precise minutes before the event
+const REMINDER_OPTIONS_TIMED=[{v:0,lbl:'At time'},{v:10,lbl:'10 min'},{v:60,lbl:'1 hour'},{v:1440,lbl:'1 day'},{v:10080,lbl:'1 week'}];
+// All-day / birthday events — Google fires these based on your calendar's
+// daily reminder time (default 9am). "1 day before" = 9am the day before, etc.
+// Hourly options don't really apply so we offer day-granular choices.
+const REMINDER_OPTIONS_ALLDAY=[{v:0,lbl:'On the day'},{v:1440,lbl:'1 day before'},{v:2880,lbl:'2 days before'},{v:10080,lbl:'1 week before'},{v:20160,lbl:'2 weeks before'}];
 function renderCalendarDefaults(){
-  const buildChips=(containerId,key)=>{
+  const buildChips=(containerId,key,opts)=>{
     const el=document.getElementById(containerId);if(!el)return;
     const selected=new Set((S.calendarDefaults?.[key]||[]).map(Number));
-    el.innerHTML=REMINDER_OPTIONS.map(o=>`<label class="rc"><input type="checkbox" value="${o.v}"${selected.has(o.v)?' checked':''} onchange="toggleCalendarDefault('${key}',${o.v},this.checked)"><span>${esc(o.lbl)}</span></label>`).join('');
+    el.innerHTML=opts.map(o=>`<label class="rc"><input type="checkbox" value="${o.v}"${selected.has(o.v)?' checked':''} onchange="toggleCalendarDefault('${key}',${o.v},this.checked)"><span>${esc(o.lbl)}</span></label>`).join('');
   };
-  buildChips('cd-timed','timedReminders');
-  buildChips('cd-allday','allDayReminders');
-  buildChips('cd-bday','birthdayReminders');
+  buildChips('cd-timed','timedReminders',REMINDER_OPTIONS_TIMED);
+  buildChips('cd-allday','allDayReminders',REMINDER_OPTIONS_ALLDAY);
+  buildChips('cd-bday','birthdayReminders',REMINDER_OPTIONS_ALLDAY);
 }
 function toggleCalendarDefault(key,minutes,on){
   S.calendarDefaults=S.calendarDefaults||{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]};
@@ -4826,6 +4927,20 @@ async function doUpdate(){
   const btn=document.getElementById('btm-btn'),st=document.getElementById('btm-st');
   const key=getKey();if(!key){promptKey();return;}
   btn.disabled=true;btn.textContent='Thinking…';st.className='ai-st';st.textContent='';
+  // Pull upcoming calendar events (next 90 days) so the AI can match EXACT
+  // existing titles when the user asks to remove / update something. Without
+  // this it was guessing and generating mis-spelled match strings that never
+  // hit anything real.
+  let upcomingEvents=[];
+  try{
+    if(getGCalToken()){
+      const now=new Date();const horizon=new Date(now);horizon.setDate(now.getDate()+90);
+      const gc=await fetchGCal(now.toISOString(),horizon.toISOString());
+      // De-dupe recurring instances down to one entry per series
+      const seen=new Set();
+      upcomingEvents=gc.filter(e=>{const k=e.recurringEventId||e.id;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,40).map(e=>({title:e.title,date:e.date,time:e.time||null,recurring:!!e.recurringEventId}));
+    }
+  }catch(_){}
   const ctx={
     tasks:S.tasks.filter(t=>!t.done).map(t=>({id:t.id,text:t.text,area:t.area,project:t.project,priority:t.priority})),
     habits:S.habits.map(h=>{const s=computeHabitStats(h);return{id:h.id,name:h.name,streak:s.current,doneToday:(h.checkedDates||[]).includes(tod())};}),
@@ -4833,7 +4948,8 @@ async function doUpdate(){
     builds:S.builds.map(b=>({id:b.id,title:b.title,status:b.status,entries:(b.entries||[]).length})),
     ideas:S.ideas.map(i=>({id:i.id,title:i.title})),
     resources:S.resources.map(r=>({id:r.id,title:r.title})),
-    notes:S.notes.map(n=>({id:n.id,title:n.title}))
+    notes:S.notes.map(n=>({id:n.id,title:n.title})),
+    upcomingEvents
   };
   const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
   const rhythm=S.lifeRhythm?`\n${firstName}'s weekly rhythm / regular commitments (use as soft context, don't duplicate as tasks):\n${S.lifeRhythm}\n`:'';
@@ -4857,6 +4973,11 @@ Calendar defaults — apply these automatically unless the user explicitly says 
 - Timed events / meetings / appointments: reminderMin:${JSON.stringify(S.calendarDefaults?.timedReminders||[60,10])}
 - All-day events (not birthdays): reminderMin:${JSON.stringify(S.calendarDefaults?.allDayReminders||[0])}
 reminderMin can be a single number OR an array of minutes (up to 5 reminders per event). Empty array = no reminders.
+
+CRITICAL for removeEvent / updateEvent:
+- state.upcomingEvents lists the REAL calendar events that currently exist (next 90 days, one entry per recurring series).
+- The "match" field in removeEvent/updateEvent MUST be copied VERBATIM from one of those titles. Do NOT invent or reword. Fuzzy-match the user's request against state.upcomingEvents and use the EXACT title string.
+- If the user asks to remove/update something that does NOT exist in upcomingEvents, do NOT generate a removeEvent/updateEvent at all. Instead, set the top-level "message" field to something like: "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title) or "Nothing matching X exists in the next 90 days." Leave the remove/update arrays empty.
 
 Respond ONLY raw JSON:
 {"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
@@ -5034,40 +5155,44 @@ function fixAIEventWeekdays(ch,promptText){
 // the user can cherry-pick what NOT to apply. Powers showAIConfirmModal.
 function renderAIChangesInteractive(ch){
   const fmtReminder=r=>{if(r==null||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (m/60)+' hr';if(m===1440)return '1 day';return (m/1440)+' day';}).filter(Boolean);return names.length?names.join(' + '):null;};
-  const row=(label,rmKey)=>`<div class="aic-row"><span class="aic-text">${label}</span><button class="aic-rm" data-rm="${rmKey}" aria-label="Remove">×</button></div>`;
+  // Editable text: renders the "main" title/name of each row as a
+  // contentEditable span that writes back to ch[key][idx][field] on blur.
+  // Lets the user fix typos in the AI's proposal before hitting Apply.
+  const ed=(key,idx,field,value,label)=>`<span class="aic-edit" data-ed="${esc(key)}:${idx}:${esc(field)}" contenteditable="true" spellcheck="false" title="Click to edit">${esc(value||'?')}</span>${label?'<span class="aic-after">'+label+'</span>':''}`;
+  const row=(html,rmKey)=>`<div class="aic-row"><span class="aic-text">${html}</span><button class="aic-rm" data-rm="${rmKey}" aria-label="Remove">×</button></div>`;
   const sections=[];
   const taskRows=[];
-  (ch.addTasks||[]).forEach((t,i)=>{const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);taskRows.push(row(`Add "${esc(t.text||'?')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addTasks:${i}`));});
-  (ch.completeTasks||[]).forEach((t,i)=>taskRows.push(row(`Tick off "${esc(t)}"`,`completeTasks:${i}`)));
-  (ch.removeTasks||[]).forEach((t,i)=>taskRows.push(row(`Delete task "${esc(t)}"`,`removeTasks:${i}`)));
+  (ch.addTasks||[]).forEach((t,i)=>{const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);taskRows.push(row(`Add "${ed('addTasks',i,'text',t.text,'')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addTasks:${i}`));});
+  (ch.completeTasks||[]).forEach((t,i)=>taskRows.push(row(`Tick off "${ed('completeTasks',i,'',t,'')}"`,`completeTasks:${i}`)));
+  (ch.removeTasks||[]).forEach((t,i)=>taskRows.push(row(`Delete task "${ed('removeTasks',i,'',t,'')}"`,`removeTasks:${i}`)));
   if(taskRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Tasks</div>${taskRows.join('')}</div>`);
 
   const habitRows=[];
-  (ch.addHabits||[]).forEach((h,i)=>habitRows.push(row(`Add habit "${esc(h.name||'?')}"`,`addHabits:${i}`)));
-  (ch.completeHabits||[]).forEach((h,i)=>habitRows.push(row(`Tick today: "${esc(h)}"`,`completeHabits:${i}`)));
-  (ch.logLearning||[]).forEach((l,i)=>habitRows.push(row(`Log under "${esc(l.skill||'?')}"${l.content?': '+esc(l.content.slice(0,40)):''}`,`logLearning:${i}`)));
+  (ch.addHabits||[]).forEach((h,i)=>habitRows.push(row(`Add habit "${ed('addHabits',i,'name',h.name,'')}"`,`addHabits:${i}`)));
+  (ch.completeHabits||[]).forEach((h,i)=>habitRows.push(row(`Tick today: "${ed('completeHabits',i,'',h,'')}"`,`completeHabits:${i}`)));
+  (ch.logLearning||[]).forEach((l,i)=>habitRows.push(row(`Log under "${ed('logLearning',i,'skill',l.skill,'')}"${l.content?': '+esc(l.content.slice(0,40)):''}`,`logLearning:${i}`)));
   if(habitRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Habits</div>${habitRows.join('')}</div>`);
 
   const peopleRows=[];
-  (ch.addPerson||[]).forEach((p,i)=>{const bits=[];if(p.context)bits.push(p.context);if(p.note)bits.push('note: "'+p.note+'"');peopleRows.push(row(`Add "${esc(p.name||'?')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addPerson:${i}`));});
-  (ch.updatePerson||[]).forEach((p,i)=>peopleRows.push(row(`Note on "${esc(p.name)}": ${esc((p.note||'').slice(0,60))}`,`updatePerson:${i}`)));
+  (ch.addPerson||[]).forEach((p,i)=>{const bits=[];if(p.context)bits.push(p.context);if(p.note)bits.push('note: "'+p.note+'"');peopleRows.push(row(`Add "${ed('addPerson',i,'name',p.name,'')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addPerson:${i}`));});
+  (ch.updatePerson||[]).forEach((p,i)=>peopleRows.push(row(`Note on "${ed('updatePerson',i,'name',p.name,'')}": ${esc((p.note||'').slice(0,60))}`,`updatePerson:${i}`)));
   if(peopleRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">People</div>${peopleRows.join('')}</div>`);
 
   const projRows=[];
-  (ch.addBuild||[]).forEach((b,i)=>projRows.push(row(`Add project "${esc(b.title||'?')}"${b.status?' ('+esc(b.status)+')':''}`,`addBuild:${i}`)));
-  (ch.addBuildNote||[]).forEach((n,i)=>projRows.push(row(`Note on "${esc(n.project)}": ${esc((n.content||'').slice(0,60))}`,`addBuildNote:${i}`)));
+  (ch.addBuild||[]).forEach((b,i)=>projRows.push(row(`Add project "${ed('addBuild',i,'title',b.title,'')}"${b.status?' ('+esc(b.status)+')':''}`,`addBuild:${i}`)));
+  (ch.addBuildNote||[]).forEach((n,i)=>projRows.push(row(`Note on "${ed('addBuildNote',i,'project',n.project,'')}": ${esc((n.content||'').slice(0,60))}`,`addBuildNote:${i}`)));
   if(projRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Projects</div>${projRows.join('')}</div>`);
 
   const brainRows=[];
-  (ch.addIdea||[]).forEach((x,i)=>brainRows.push(row(`Add idea "${esc(x.title||'?')}"`,`addIdea:${i}`)));
-  (ch.addResource||[]).forEach((x,i)=>brainRows.push(row(`Add resource "${esc(x.title||'?')}"${x.tag?' ['+esc(x.tag)+']':''}`,`addResource:${i}`)));
-  (ch.addNote||[]).forEach((x,i)=>brainRows.push(row(`Add note "${esc(x.title||'?')}"`,`addNote:${i}`)));
+  (ch.addIdea||[]).forEach((x,i)=>brainRows.push(row(`Add idea "${ed('addIdea',i,'title',x.title,'')}"`,`addIdea:${i}`)));
+  (ch.addResource||[]).forEach((x,i)=>brainRows.push(row(`Add resource "${ed('addResource',i,'title',x.title,'')}"${x.tag?' ['+esc(x.tag)+']':''}`,`addResource:${i}`)));
+  (ch.addNote||[]).forEach((x,i)=>brainRows.push(row(`Add note "${ed('addNote',i,'title',x.title,'')}"`,`addNote:${i}`)));
   if(brainRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Brain</div>${brainRows.join('')}</div>`);
 
   const calRows=[];
-  (ch.addEvent||[]).forEach((e,i)=>{const bits=[];if(e.date)bits.push(fmtDateWithDay(e.date));if(e.allDay||!e.time)bits.push('all day');else bits.push(e.time+(e.endTime?'–'+e.endTime:''));if(e.repeat&&e.repeat!=='none')bits.push('repeats '+e.repeat);const rem=fmtReminder(e.reminderMin);if(rem)bits.push('reminders: '+rem);calRows.push(row(`Add "${esc(e.title||'?')}" — ${esc(bits.join(', '))}`,`addEvent:${i}`));});
-  (ch.removeEvent||[]).forEach((e,i)=>calRows.push(row(`Delete events matching "${esc(e.match||e.title||'?')}"${e.date?' on '+esc(fmtDateWithDay(e.date)):''}`,`removeEvent:${i}`)));
-  (ch.updateEvent||[]).forEach((e,i)=>{const changes=[];if(e.newTitle)changes.push('title → '+e.newTitle);if(e.newDate)changes.push('date → '+fmtDateWithDay(e.newDate));if(e.newTime)changes.push('time → '+e.newTime);calRows.push(row(`Update "${esc(e.match||'?')}" — ${esc(changes.join(', ')||'(no changes)')}`,`updateEvent:${i}`));});
+  (ch.addEvent||[]).forEach((e,i)=>{const bits=[];if(e.date)bits.push(fmtDateWithDay(e.date));if(e.allDay||!e.time)bits.push('all day');else bits.push(e.time+(e.endTime?'–'+e.endTime:''));if(e.repeat&&e.repeat!=='none')bits.push('repeats '+e.repeat);const rem=fmtReminder(e.reminderMin);if(rem)bits.push('reminders: '+rem);calRows.push(row(`Add "${ed('addEvent',i,'title',e.title,'')}" — ${esc(bits.join(', '))}`,`addEvent:${i}`));});
+  (ch.removeEvent||[]).forEach((e,i)=>calRows.push(row(`Delete events matching "${ed('removeEvent',i,'match',e.match||e.title,'')}"${e.date?' on '+esc(fmtDateWithDay(e.date)):''}`,`removeEvent:${i}`)));
+  (ch.updateEvent||[]).forEach((e,i)=>{const changes=[];if(e.newTitle)changes.push('title → '+e.newTitle);if(e.newDate)changes.push('date → '+fmtDateWithDay(e.newDate));if(e.newTime)changes.push('time → '+e.newTime);calRows.push(row(`Update "${ed('updateEvent',i,'match',e.match,'')}" — ${esc(changes.join(', ')||'(no changes)')}`,`updateEvent:${i}`));});
   if(calRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Calendar</div>${calRows.join('')}</div>`);
 
   return sections.length?sections.join(''):`<div class="aic-empty">Nothing left — hit Cancel or Redo.</div>`;
@@ -5097,6 +5222,8 @@ function showAIConfirmModal(ch,prompt){
     const renderBody=()=>{bodyEl.innerHTML=renderAIChangesInteractive(ch);};
     renderBody();
     overlay.addEventListener('click',e=>{
+      // Don't treat clicks on editable spans as remove / action triggers
+      if(e.target.closest('.aic-edit'))return;
       const rm=e.target.closest('[data-rm]');
       if(rm){
         const [key,idxStr]=rm.dataset.rm.split(':');
@@ -5108,6 +5235,21 @@ function showAIConfirmModal(ch,prompt){
       if(e.target.dataset.action==='cancel'||e.target.closest('.modal-bd')){overlay.remove();_syncBodyLock();resolve({action:'cancel'});}
       else if(e.target.dataset.action==='redo'){overlay.remove();_syncBodyLock();resolve({action:'redo'});}
       else if(e.target.dataset.action==='apply'){overlay.remove();_syncBodyLock();resolve({action:'apply',ch});}
+    });
+    // Write-back for inline-edited titles/matches. Commits on blur or Enter.
+    overlay.addEventListener('blur',e=>{
+      const ed=e.target.closest?e.target.closest('.aic-edit'):null;if(!ed)return;
+      const [key,idxStr,field]=(ed.dataset.ed||'').split(':');
+      const idx=Number(idxStr);
+      if(!Array.isArray(ch[key]))return;
+      const newVal=ed.textContent.trim();
+      if(field){ch[key][idx][field]=newVal;}
+      else{ch[key][idx]=newVal;}
+    },true);
+    overlay.addEventListener('keydown',e=>{
+      if(e.target.classList&&e.target.classList.contains('aic-edit')&&e.key==='Enter'){
+        e.preventDefault();e.target.blur();
+      }
     });
   });
 }
