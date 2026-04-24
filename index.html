@@ -1359,7 +1359,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <div class="qa-row">
                 <input class="input" id="t-text" placeholder="Task description..." style="flex:2">
                 <select class="select" id="t-area"><option value="work">Work</option><option value="personal">Personal</option></select>
-                <select class="select" id="t-proj"><option value="wa">WebAnchor</option><option value="tf">TriFusion</option><option value="zm">Zomarka</option><option value="gen">General</option></select>
+                <select class="select" id="t-proj"><option value="wa">WebAnchor</option><option value="tf">TriFusion</option><option value="gen">General</option></select>
                 <select class="select" id="t-pri"><option value="urgent">Urgent</option><option value="hi">High</option><option value="med">Medium</option><option value="lo">Low</option><option value="someday">Someday</option></select>
               </div>
               <div class="qa-row"><input class="input" id="t-time" placeholder="Scheduled time (optional, e.g. 10am)"></div>
@@ -1803,7 +1803,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v70';
+const APP_VERSION='v71';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -2373,6 +2373,27 @@ document.addEventListener('visibilitychange',()=>{
     if(currentRoute==='today')rTodayWeek();
   }
 });
+// Periodic GCal poll — while the tab is active and Google Calendar is
+// connected, re-fetch events every 90 seconds so changes made on the phone
+// propagate without the user having to leave the tab. Google Calendar's
+// free API doesn't push, so polling is the only option without a backend.
+let _gcPollTimer=null;
+function startGCalPoll(){
+  if(_gcPollTimer)return;
+  _gcPollTimer=setInterval(()=>{
+    if(document.visibilityState!=='visible')return;
+    if(!getGCalToken())return;
+    // Skip poll if the user is in the middle of editing an event (avoid
+    // clobbering their draft via a re-render)
+    if(document.getElementById('event-modal')?.style.display==='flex')return;
+    gcCache={key:'',events:[]};
+    _gtasksCache={ts:0,items:[]};
+    if(currentRoute==='calendar')rCal();
+    if(currentRoute==='today')rTodayWeek();
+  },90000);
+}
+// Kick off polling once the user is signed in and the sidebar loads
+setTimeout(startGCalPoll,5000);
 function stopPresence(){
   if(_presenceUnsub){try{_presenceUnsub();}catch(e){}_presenceUnsub=null;}
   if(_presenceHeart){clearInterval(_presenceHeart);_presenceHeart=null;}
@@ -2498,7 +2519,7 @@ function promptKey(){
 // DATA
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const SCHED={0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
-const PROJ={wa:{n:'WebAnchor',h:'var(--blue)'},tf:{n:'TriFusion',h:'var(--lavender)'},zm:{n:'Zomarka',h:'var(--emerald)'},gen:{n:'General',h:'var(--peach)'}};
+const PROJ={wa:{n:'WebAnchor',h:'var(--blue)'},tf:{n:'TriFusion',h:'var(--lavender)'},gen:{n:'General',h:'var(--peach)'}};
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
 const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar'};
@@ -2865,7 +2886,7 @@ async function generatePlan(mode){
     const nowLabel=now.toLocaleTimeString('en-ZA',{hour:'numeric',minute:'2-digit',hour12:true});
     const scope=mode==='now'?`the REST of today (starting from ${nowLabel})`:mode==='tomorrow'?`tomorrow (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`:`today (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`;
     const ctx={now:`${now.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})} at ${nowLabel}`,hour:hr,mode,planDay:dayName,planDate:refDs,scheduledEvents:evs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
-    const prompt=`You are Zander's thoughtful daily coach. Cape Town entrepreneur (WebAnchor / TriFusion / Zomarka). Instead of a rigid hour-by-hour schedule, draft a softer SUGGESTION-style plan for ${scope} — the vibe of "here's what could make a great day" rather than "do this at 9:00, do that at 10:00."
+    const prompt=`You are Zander's thoughtful daily coach. Cape Town entrepreneur (WebAnchor / TriFusion; Zamaka is a WebAnchor client). Instead of a rigid hour-by-hour schedule, draft a softer SUGGESTION-style plan for ${scope} — the vibe of "here's what could make a great day" rather than "do this at 9:00, do that at 10:00."
 
 Rules:
 - Respect fixed events (meetings, all-day items) — work around them, never suggest moving them.
@@ -3729,7 +3750,7 @@ async function runPlanMyDay(){
     const hr=new Date().getHours();
     const rhythm=S.lifeRhythm||'(none provided)';
     const ctx={now:new Date().toLocaleString('en-ZA',{weekday:'long',day:'numeric',month:'long',hour:'numeric',minute:'2-digit',hour12:true}),hour:hr,todayEvents:todayEvs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
-    const prompt=`You are Zander's Life OS coach. He's a Cape Town-based entrepreneur running WebAnchor / TriFusion / Zomarka. Build him a realistic, focused plan for the REMAINDER of today.
+    const prompt=`You are Zander's Life OS coach. He's a Cape Town-based entrepreneur running WebAnchor / TriFusion (Zamaka is one of WebAnchor's clients). Build him a realistic, focused plan for the REMAINDER of today.
 
 Rules:
 - Respect fixed events (meetings, all-day items) — schedule around them, don't move them.
@@ -4243,7 +4264,7 @@ function rTasks(){
   const el=document.getElementById('tasks-sec');if(!el)return;
   const visible=S.tasks.filter(isTaskVisible);
   const wt=visible.filter(t=>t.area==='work'),pt=visible.filter(t=>t.area==='personal');
-  const grps={wa:[],tf:[],zm:[],gen:[]};wt.forEach(t=>{const k=grps[t.project]!==undefined?t.project:'gen';grps[k].push(t);});
+  const grps={wa:[],tf:[],gen:[]};wt.forEach(t=>{const k=grps[t.project]!==undefined?t.project:'gen';grps[k].push(t);});
   // Priority sort. IMPORTANT: PO['urgent'] is 0, and `0||fallback` evaluates
   // to the fallback in JS — that bug used to push urgent tasks to the
   // position of "lo" (3). We use ?? so 0 stays 0.
@@ -4376,6 +4397,11 @@ function migrateProjects(){
       }
     }
   });
+  // Zomarka was removed as a project — it's a WebAnchor client, not its own
+  // business. Migrate any existing tasks tagged zm → wa so they still appear
+  // under a valid project bucket.
+  (S.tasks||[]).forEach(t=>{if(t.project==='zm')t.project='wa';});
+  (S.builds||[]).forEach(b=>{if(b.status&&b.title&&/zomarka/i.test(b.title))b.title=b.title.replace(/zomarka/gi,'Zamaka (WebAnchor client)');});
 }
 function delBuild(id){if(!confirm('Delete this project? All progress notes will be lost.'))return;S.builds=S.builds.filter(x=>x.id!==id);svAll();if(UI.projectDetail===id)closeProject();else rBuilds();}
 function renderProjectDetail(){
@@ -4565,7 +4591,7 @@ Calendar defaults — apply these automatically unless Zander explicitly says ot
 reminderMin can be a single number OR an array of minutes (up to 5 reminders per event).
 
 Respond ONLY raw JSON:
-{"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|zm|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
+{"addTasks":[{"text":"...","area":"work|personal","project":"wa|tf|gen","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 Zander:"${msg}"`;
   try{
@@ -4577,10 +4603,24 @@ Zander:"${msg}"`;
     }
     const data=await r.json();
     const ch=JSON.parse((data.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim());
+    const hadActionable=formatAIChangesDetailed(ch)!=='';
     // applyChanges handles recordAIHistory itself — only records what was
     // ACTUALLY applied (never records cancelled operations).
     applyChanges(ch,msg);
-    st.className='ai-st ok';st.textContent=ch.message||'Done!';
+    if(hadActionable){
+      st.className='ai-st ok';st.textContent=ch.message||'Done!';
+    } else {
+      // AI returned nothing actionable (couldn't interpret / not in schema /
+      // it's just a text reply). Surface that explicitly so the user doesn't
+      // wonder if anything happened, and log the attempt to history with a
+      // "no changes" note.
+      st.className='ai-st';
+      st.textContent=ch.message?`AI: ${ch.message}`:'AI didn\'t make any changes — try rephrasing.';
+      S.aiHistory=S.aiHistory||[];
+      S.aiHistory.unshift({at:Date.now(),prompt:msg.slice(0,500),summary:'no changes',detail:'',message:(ch.message||'').slice(0,200)});
+      if(S.aiHistory.length>200)S.aiHistory.length=200;
+      svAll();
+    }
     ta.value='';ta.style.height='auto';
     setTimeout(()=>{st.textContent='';st.className='ai-st';},7000);
   }catch(e){
@@ -4996,7 +5036,7 @@ function restoreStarterData(){
     {id:uid(),text:'Get Claude Max subscription this week',area:'work',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
     {id:uid(),text:'Start Udemy course: using Claude effectively',area:'work',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
     {id:uid(),text:'Update and finish TriFusion website',area:'work',project:'tf',priority:'med',scheduledTime:'',done:false,date:d},
-    {id:uid(),text:'Update Zomarka website',area:'work',project:'zm',priority:'lo',scheduledTime:'',done:false,date:d},
+    {id:uid(),text:'Update Zamaka website (WebAnchor client)',area:'work',project:'wa',priority:'lo',scheduledTime:'',done:false,date:d},
     {id:uid(),text:'Send two boxes to mom — waiting for her to add items first',area:'personal',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
     {id:uid(),text:'Find and book a therapist',area:'personal',project:'gen',priority:'med',scheduledTime:'',done:false,date:d},
     {id:uid(),text:'Find acting and public speaking classes',area:'personal',project:'gen',priority:'lo',scheduledTime:'',done:false,date:d},
