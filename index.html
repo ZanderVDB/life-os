@@ -1345,9 +1345,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .nb-cell-ta i,.nb-cell-ta em{font-style:italic}
 /* Soft pale-yellow highlight — kept airy enough that the text underneath
    is still readable. Earlier #fff3a8 washed out the words. */
-.nb-cell-ta mark{background:#fff5c8;padding:0 2px;border-radius:2px;color:inherit}
-/* Matches the colour used by execCommand('hiliteColor') via the toolbar. */
-.nb-cell-ta [style*="background-color"]{color:inherit !important}
+.nb-cell-ta mark{background:#fff5c8;padding:0 2px;border-radius:2px;color:#1a1a1a}
+/* execCommand('hiliteColor') wraps selected text in <span style="background-
+   color:...">. In dark (studio) theme the cell's default text colour is
+   near-white, which made highlighted text unreadable on yellow. Force a
+   dark ink colour wherever a background-color inline style is set inside
+   a cell — works regardless of theme. */
+.nb-cell-ta [style*="background-color"]{color:#1a1a1a !important}
 /* Clean font variant: Inter, no ruled lines, normal block text. */
 .nb-book.font-clean .nb-cell-ta{
   font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:22px;
@@ -2269,7 +2273,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v93';
+const APP_VERSION='v94';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6999,13 +7003,23 @@ function nbSearchInput(q){
       });
     });
   });
-  NB.matches=out;NB.matchIdx=out.length?0:-1;
+  NB.matches=out;
+  // Don't jump mid-typing — just compute and display the count. The user
+  // hits Enter (or clicks Next) to actually land on the first match.
+  // Previously typing "a" jumped to the first 'a' while the user was still
+  // trying to type "apps", yanking focus out of the search box mid-word.
+  NB.matchIdx=-1;
   nbUpdateSearchUI();
-  if(out.length)nbJumpToMatch(0);else nbApplySearchHighlight();
 }
 function nbFindNext(dir){
   if(!NB.matches.length)return;
-  NB.matchIdx=(NB.matchIdx+dir+NB.matches.length)%NB.matches.length;
+  // First press after a fresh query lands on the first match (or last if
+  // going backwards). Subsequent presses cycle normally.
+  if(NB.matchIdx===-1){
+    NB.matchIdx=dir>0?0:NB.matches.length-1;
+  } else {
+    NB.matchIdx=(NB.matchIdx+dir+NB.matches.length)%NB.matches.length;
+  }
   nbUpdateSearchUI();
   nbJumpToMatch(NB.matchIdx);
 }
@@ -7019,7 +7033,10 @@ function nbUpdateSearchUI(){
   if(!cnt)return;
   if(!NB.searchQuery){cnt.textContent='';return;}
   if(!NB.matches.length){cnt.textContent='0';return;}
-  cnt.textContent=`${NB.matchIdx+1}/${NB.matches.length}`;
+  // Before the user hits Enter / Next we show just the count. Once they
+  // land on a match, show position/total.
+  if(NB.matchIdx<0)cnt.textContent=`${NB.matches.length}`;
+  else cnt.textContent=`${NB.matchIdx+1}/${NB.matches.length}`;
 }
 function nbJumpToMatch(idx){
   const m=NB.matches[idx];if(!m)return;
@@ -7098,9 +7115,12 @@ async function nbRefinePage(pageId){
     // Send plain text. Claude returns HTML (see formatting rules in the
     // prompt) and we render it directly into the contenteditable cells.
     const currentCells=page.cells.map((c,i)=>({cellIndex:i,content:nbStripHtml(c||'')}));
-    const prompt=`You're helping tidy up a page in someone's personal notebook titled "${sec.title}". The page currently uses a "${page.layout}" layout (single = 1 cell / half = 2 cells / quad = 4 cells).
+    const layoutName=page.layout;
+    const cellCount=NB_LAYOUT_CELLS[page.layout];
+    const layoutDescription=layoutName==='single'?'1 cell covering the whole page':(layoutName==='half'?'2 cells side by side (left column and right column)':'4 cells in a 2×2 grid (top-left, top-right, bottom-left, bottom-right)');
+    const prompt=`You're helping tidy up a page in someone's personal notebook titled "${sec.title}". The page layout is FIXED — do NOT suggest changing it. Current layout: "${layoutName}" — ${layoutDescription}. Your response MUST have exactly ${cellCount} cell${cellCount===1?'':'s'}.
 
-Given the current cell contents below, produce a cleaner version. You MAY and SHOULD use HTML formatting to make the structure readable:
+Use HTML formatting inside each cell to make the structure readable:
 - <h2> for section titles — use when a cell has a clear heading
 - <b> for names, key terms, dates, amounts, or items that stand out
 - <i> for emphasis, book/movie titles, foreign words
@@ -7110,19 +7130,18 @@ Given the current cell contents below, produce a cleaner version. You MAY and SH
 - <br> for line breaks inside a paragraph
 - <mark> for truly critical words — use VERY sparingly, only for things the user must not miss
 
-Other things you MAY do:
-- Suggest a different layout ("single" / "half" / "quad") if the content splits naturally into distinct pieces (e.g. multiple poems → quad; one topic → single).
-- Reorganise content BETWEEN cells for clarity.
+You MAY:
+- Reorganise content BETWEEN the existing cells for clarity (but keep the same number of cells).
 - Fix obvious typos. DO NOT change the meaning, paraphrase, or add content that wasn't there.
 
 If the content is already well-organised, return it almost as-is with minimal formatting changes.
 
-Current cells (JSON, plain text):
+Current cells (JSON, plain text — ${cellCount} cell${cellCount===1?'':'s'}):
 ${JSON.stringify(currentCells,null,2)}
 
 Respond with ONLY a JSON object (no prose, no code fences):
-{"layout":"single|half|quad","cells":["<h2>Title</h2><ul><li>item</li></ul>", "..."]}
-The cells array length MUST match the layout (1 / 2 / 4). Each cell is an HTML string.`;
+{"layout":"${layoutName}","cells":[${Array.from({length:cellCount}).map(()=>'"<cell HTML>"').join(',')}]}
+The cells array length MUST be exactly ${cellCount}. Each cell is an HTML string.`;
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:prompt}]})});
     if(!r.ok){let m='HTTP '+r.status;try{const j=await r.json();if(j.error?.message)m=j.error.message;}catch(_){}throw new Error(m);}
     const d=await r.json();
@@ -7131,7 +7150,9 @@ The cells array length MUST match the layout (1 / 2 / 4). Each cell is an HTML s
     const jsonMatch=text.match(/\{[\s\S]*\}/);
     if(!jsonMatch)throw new Error('Couldn\'t parse AI response as JSON.');
     const refined=JSON.parse(jsonMatch[0]);
-    if(!refined.layout||!(refined.layout in NB_LAYOUT_CELLS))refined.layout=page.layout;
+    // Lock the layout to whatever the page currently has — the prompt
+    // tells Claude this, but belt-and-braces in case it ignores us.
+    refined.layout=page.layout;
     if(!Array.isArray(refined.cells))throw new Error('Invalid cells array.');
     const need=NB_LAYOUT_CELLS[refined.layout];
     while(refined.cells.length<need)refined.cells.push('');
