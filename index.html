@@ -2,7 +2,7 @@
 <html lang="en" data-theme="soft">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes,viewport-fit=cover">
 <meta name="theme-color" content="#f4eee5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1203,7 +1203,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .nb-search-wrap.has-query .nb-search-nav,.nb-search-wrap.has-query .nb-search-count{display:inline-flex;align-items:center}
 #nb-spread-btn.active,#nb-font-btn{background:var(--surface-2)}
 #nb-spread-btn.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.nb-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:4px 2px 14px;border-bottom:1px dashed var(--border);margin-bottom:22px;overflow-x:auto;scrollbar-width:thin}
+/* Section-page sub (Finance · Page 2 of 3) styled as its own row */
+.nb-sub{font-size:12.5px;color:var(--muted);margin:-6px 0 8px;font-family:'Playfair Display',serif;font-style:italic;letter-spacing:.01em}
+.nb-sub:empty{display:none}
+/* Dedicated row for the search bar */
+.nb-search-row{display:flex;margin-bottom:10px}
+/* Section tabs scroll horizontally when too many — doesn't wrap to a
+   second row (would mess up a neat top-to-bottom reading flow on mobile). */
+.nb-tabs{display:flex;gap:6px;flex-wrap:nowrap;padding:4px 2px 14px;border-bottom:1px dashed var(--border);margin-bottom:22px;overflow-x:auto;scrollbar-width:thin}
 .nb-tabs::-webkit-scrollbar{height:4px}
 .nb-tabs::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
 .nb-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--border);border-radius:20px 20px 4px 4px;background:var(--surface);font-size:12px;font-weight:600;color:var(--text-2);cursor:pointer;white-space:nowrap;position:relative;transition:background .12s,color .12s,border-color .12s;font-family:'Playfair Display','Georgia',serif}
@@ -1436,23 +1443,49 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .nb-book.spread .nb-page.right-page{display:none}
 }
 
-/* Mobile — keep A4 ratio but let the page scale. Arrows shrink and sit on
-   the page edges. Search bar wraps to its own line. */
+/* Mobile. Key difference vs earlier versions: the book keeps its desktop
+   internal proportions (font, padding, line spacing) so a quad-layout page
+   with tiny text still looks exactly like it would on a laptop. Pinch-
+   zoom is enabled via viewport meta so users can zoom in to read.
+   Header restructures into a clean top-to-bottom flow matching Zander's
+   spec: title+actions → search → sub → tabs → book. */
 @media(max-width:768px){
-  .nb-tabs{padding:2px 2px 10px;margin-bottom:14px;gap:4px}
-  .nb-tab{padding:6px 10px;font-size:11.5px}
-  .nb-book-wrap{gap:4px;padding:4px 0 30px}
-  .nb-arrow{width:34px;height:34px;font-size:22px;padding-bottom:2px;box-shadow:none}
-  .nb-page{padding:18px 18px 14px 38px;border-radius:10px}
-  .nb-page::before{left:28px}
-  .nb-cell-ta{font-size:14.5px;line-height:26px;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 25px,var(--paper-line) 25px,var(--paper-line) 26px)}
-  .nb-page-hdr{flex-wrap:wrap;gap:6px}
-  .nb-page-sec{font-size:16px}
-  .nb-page-meta{font-size:11.5px}
-  .nb-page-foot{gap:6px;padding-top:8px;font-size:11px}
-  .nb-refine-btn{padding:4px 9px;font-size:11.5px}
-  .nb-search-wrap{flex:1 1 100%;order:20}
-  .nb-search-input{width:100%;flex:1}
+  /* Header row: title on the left, font + add on the right. Spread button
+     is already hidden on <1100px via its own @media so we don't need to
+     touch it here. */
+  .route[data-route="notebook"] .page-hdr{flex-wrap:wrap;align-items:center;gap:8px;row-gap:8px;margin-bottom:8px}
+  .route[data-route="notebook"] .page-title{font-size:22px;flex:1 1 auto;min-width:0;line-height:1.1}
+  .route[data-route="notebook"] .page-actions{display:flex;flex:0 0 auto;gap:6px;margin:0;flex-wrap:nowrap}
+  .route[data-route="notebook"] .page-actions .btn{padding:6px 10px;font-size:12px;white-space:nowrap}
+  /* Search sits on its own row, full width */
+  .nb-search-row{margin-bottom:8px}
+  .route[data-route="notebook"] .nb-search-wrap{flex:1 1 100%;width:100%}
+  .route[data-route="notebook"] .nb-search-input{flex:1;min-width:0}
+  /* Sub row — compact */
+  .nb-sub{font-size:11.5px;margin:0 0 6px}
+  /* Tabs — horizontal scroll, slightly tighter padding */
+  .nb-tabs{padding:2px 2px 8px;margin-bottom:12px;gap:4px}
+  .nb-tab{padding:6px 10px;font-size:11.5px;flex-shrink:0}
+  /* Book wrapper — arrows overlay on the page edges instead of sitting
+     beside it. That's what Zander meant by "a little bit more on the
+     page, less prominent". */
+  .nb-book-wrap{gap:0;padding:0 0 30px;position:relative}
+  .nb-arrow{
+    position:absolute;top:50%;transform:translateY(-50%);
+    width:32px;height:32px;font-size:20px;padding-bottom:2px;
+    background:rgba(255,255,255,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    border-color:rgba(0,0,0,.08);box-shadow:0 1px 4px rgba(0,0,0,.1);
+    opacity:.58;z-index:5;
+  }
+  [data-theme="studio"] .nb-arrow{background:rgba(40,36,48,.72);border-color:rgba(255,255,255,.1)}
+  .nb-arrow.nb-prev{left:6px}
+  .nb-arrow.nb-next{right:6px}
+  .nb-arrow:hover:not(:disabled),.nb-arrow:active{opacity:1}
+  /* Book itself: unchanged internal sizing — padding, font, line height
+     all match desktop. The flex allows the book to shrink to fit the
+     viewport width while keeping its A4 aspect-ratio. Pinch-zoom handles
+     reading. */
+  .nb-book{flex:1 1 auto;width:100%;max-width:none}
 }
 
 /* ━━━ MOBILE ━━━ */
@@ -1543,6 +1576,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .route[data-route="brain"] .page-hdr .page-actions{display:contents}
   .route[data-route="brain"] .page-hdr .page-actions button{margin-left:auto}
   .route[data-route="brain"] #brain-search{width:100% !important;flex:1 1 100%;order:20;font-size:13px;padding:7px 10px;min-width:0}
+  /* Daily notebook: search wraps to its own line; the ‹ date › triplet
+     stays together as a unit (inline-flex with nowrap on .dn-date-nav)
+     so the left arrow can't orphan onto a different row from the rest. */
+  .route[data-route="today"] .section-hdr:has(h2) .right{flex:1 1 100%;gap:8px;justify-content:flex-end}
+  .route[data-route="today"] .nb-search{flex:1 1 100%;width:100% !important;margin-right:0}
+  .dn-date-nav{flex-wrap:nowrap !important}
+  .dn-date-nav #dn-date{min-width:auto !important;font-size:12px;padding:4px 8px !important}
   .section-hdr{margin-bottom:8px}
   .tabs{margin-bottom:10px}
   .ai-bar{left:0;padding:10px 12px env(safe-area-inset-bottom,12px)}
@@ -1764,10 +1804,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             <h2>Daily notebook</h2>
             <div class="right" style="gap:6px;flex-wrap:wrap">
               <input type="search" class="input nb-search" placeholder="Search…" oninput="searchNotebook(this.value)" style="width:160px;padding:6px 10px;font-size:12px">
-              <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
-              <span class="cnt" id="dn-date" onclick="pickNotebookDate()" title="Pick a date" style="min-width:140px;text-align:center;cursor:pointer;padding:4px 10px"></span>
-              <input type="date" id="dn-date-picker" style="position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none">
-              <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
+              <!-- Keep the ‹ date › triplet together so wrapping doesn't
+                   orphan the left arrow onto the previous line. -->
+              <div class="dn-date-nav" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;flex-shrink:0">
+                <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
+                <span class="cnt" id="dn-date" onclick="pickNotebookDate()" title="Pick a date" style="min-width:140px;text-align:center;cursor:pointer;padding:4px 10px"></span>
+                <input type="date" id="dn-date-picker" style="position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none">
+                <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
+              </div>
               <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
               <button class="btn btn-primary btn-sm" onclick="saveDN()">Save</button>
             </div>
@@ -1944,27 +1988,34 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
            route (see buildAIContext) — only the per-page ✨ Refine button
            ever sends any of this content to Claude. -->
       <div class="route" data-route="notebook">
+        <!-- Row 1: title on left, font/spread/add on right -->
         <div class="page-hdr">
           <div class="page-title">Notebook</div>
-          <div class="page-sub" id="nb-sub"></div>
           <div class="page-actions">
-            <div class="nb-search-wrap" id="nb-search-wrap">
-              <input type="search" id="nb-search" class="input nb-search-input" placeholder="Search notebook…" oninput="nbSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();nbFindNext(event.shiftKey?-1:1);}">
-              <button class="nb-search-nav" onclick="nbFindNext(-1)" title="Previous match (Shift+Enter)" aria-label="Previous match">↑</button>
-              <button class="nb-search-nav" onclick="nbFindNext(1)" title="Next match (Enter)" aria-label="Next match">↓</button>
-              <span class="nb-search-count" id="nb-search-count"></span>
-            </div>
-            <button class="btn btn-ghost btn-sm" onclick="nbToggleSpread()" id="nb-spread-btn" title="Toggle two-page spread (wide screens only)">⧉ Spread</button>
             <button class="btn btn-ghost btn-sm" onclick="nbToggleFont()" id="nb-font-btn" title="Toggle writing font">Aa</button>
+            <button class="btn btn-ghost btn-sm" onclick="nbToggleSpread()" id="nb-spread-btn" title="Toggle two-page spread (wide screens only)">⧉ Spread</button>
             <button class="btn btn-primary btn-sm" onclick="nbAddSection()">+ New section</button>
           </div>
         </div>
-        <!-- Section tabs: soft-coloured pills, click flips to section.
-             Active tab highlights based on the page you're currently on. -->
+        <!-- Row 2: search bar. Full-width row on its own so the prev/next
+             and match count can live snugly next to the input. -->
+        <div class="nb-search-row">
+          <div class="nb-search-wrap" id="nb-search-wrap">
+            <input type="search" id="nb-search" class="input nb-search-input" placeholder="Search notebook…" oninput="nbSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();nbFindNext(event.shiftKey?-1:1);}">
+            <button class="nb-search-nav" onclick="nbFindNext(-1)" title="Previous match (Shift+Enter)" aria-label="Previous match">↑</button>
+            <button class="nb-search-nav" onclick="nbFindNext(1)" title="Next match (Enter)" aria-label="Next match">↓</button>
+            <span class="nb-search-count" id="nb-search-count"></span>
+          </div>
+        </div>
+        <!-- Row 3: "Finance · Page 2 of 3" — which section/page you're on -->
+        <div class="page-sub nb-sub" id="nb-sub"></div>
+        <!-- Row 4: Section tabs (soft-coloured pills). Horizontally
+             scrollable when there are more than fit. Click flips to section
+             and the active tab highlights based on the page you're on. -->
         <div class="nb-tabs" id="nb-tabs"></div>
-        <!-- The book itself — a single A4-proportioned sheet, horizontally
-             paged. Content is rebuilt by renderNotebookPage() whenever the
-             user flips, adds, deletes or refines. -->
+        <!-- Row 5: The book itself — a single A4-proportioned sheet,
+             horizontally paged. Content is rebuilt by renderNotebookPage()
+             whenever the user flips, adds, deletes or refines. -->
         <div class="nb-book-wrap">
           <button class="nb-arrow nb-prev" onclick="nbPrevPage()" aria-label="Previous page" title="Previous page (← arrow)">‹</button>
           <div class="nb-book" id="nb-book"></div>
@@ -2273,7 +2324,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v94';
+const APP_VERSION='v95';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3485,11 +3536,14 @@ async function loadTip(force){
 }
 function renderEmptyTip(){
   const el=document.getElementById('tip-card');if(!el)return;
+  // Two buttons, not three. "Draft plan" now just means "plan from now to
+  // the end of today" — the old whole-day 'today' mode was redundant
+  // because the app is almost never opened at 00:00, and "draft the rest
+  // of the day" is what the user actually wants.
   el.innerHTML=`<div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div>
     <div class="tip-body" style="color:var(--muted);font-style:italic;padding:4px 0">No plan yet for today — draft one when you're ready.</div>
     <div class="tip-actions">
-      <button class="btn btn-primary btn-sm" onclick="generatePlan('today')">✨ Draft plan</button>
-      <button class="btn btn-sm" onclick="generatePlan('now')">From now</button>
+      <button class="btn btn-primary btn-sm" onclick="generatePlan('now')">✨ Draft plan</button>
       <button class="btn btn-sm" onclick="generatePlan('tomorrow')">Plan tomorrow</button>
     </div>`;
 }
