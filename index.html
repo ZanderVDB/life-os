@@ -252,10 +252,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .reminder-chips .rc:hover{border-color:var(--border-strong);color:var(--text)}
 .reminder-chips .rc input{position:absolute;opacity:0;pointer-events:none}
 .reminder-chips .rc:has(input:checked){background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-/* Calendar defaults — chips right-align and stay compact. On mobile they
-   wrap under the label like the rest of our setting-row-stack rows do. */
-.cd-chips{justify-content:flex-end;max-width:320px}
-@media(max-width:768px){.cd-chips{max-width:none;justify-content:flex-start}}
+/* Calendar defaults — chips right-align and stay on ONE line. Horizontal
+   scroll if the row is narrower than the chip set. Smaller padding +
+   no-wrap so all five options fit side-by-side on desktop. */
+.cd-chips{flex-wrap:nowrap;justify-content:flex-end;max-width:100%;overflow-x:auto;scrollbar-width:thin}
+.cd-chips::-webkit-scrollbar{height:4px}
+.cd-chips::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.cd-chips .rc{padding:5px 10px;font-size:11px;white-space:nowrap;flex-shrink:0}
+@media(max-width:768px){.cd-chips{justify-content:flex-start}}
 .qa-actions{display:flex;gap:8px;margin-top:10px}
 
 /* ━━━ CALENDAR ━━━ */
@@ -1872,7 +1876,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v79';
+const APP_VERSION='v80';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -2540,10 +2544,16 @@ function handleSnapshot(snap){
     S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
     S.workProjects=Array.isArray(d.workProjects)?d.workProjects:[];
     if(d.calendarDefaults&&typeof d.calendarDefaults==='object'){
-      // Migrate legacy all-day reminder minutes (1440/2880/10080/20160 — all
-      // midnight-based) to the new 5pm/9am equivalents matching Google
-      // Calendar's phone-app defaults. One-shot, idempotent.
-      const migrateAllDay=arr=>(arr||[]).map(m=>({1440:420,2880:2340,10080:9540,20160:19620}[m]??m));
+      // Migrate legacy all-day reminder minutes to the current 5pm set.
+      // Handles both the ORIGINAL midnight-based values (1440/2880/10080/20160)
+      // and the intermediate 9am values (2340/9540/19620) → unified to 5pm.
+      const MAP={
+        1440:420, 2340:420,                      // any "1 day before" flavour → 5pm
+        2880:1860, /* 2340 dup above */          // "2 days before" → 5pm
+        10080:9060, 9540:9060,                   // "1 week before" → 5pm
+        20160:19140, 19620:19140                 // "2 weeks before" → 5pm
+      };
+      const migrateAllDay=arr=>(arr||[]).map(m=>MAP[m]??m);
       S.calendarDefaults={
         timedReminders:Array.isArray(d.calendarDefaults.timedReminders)?d.calendarDefaults.timedReminders:[60,10],
         allDayReminders:Array.isArray(d.calendarDefaults.allDayReminders)?migrateAllDay(d.calendarDefaults.allDayReminders):[0],
@@ -2880,13 +2890,12 @@ function saveDN(){const ta=document.getElementById('dn-ta');if(!ta)return;S.dayN
 function pickNotebookDate(){
   const ta=document.getElementById('dn-ta');
   if(ta){S.dayNotes=S.dayNotes||{};const curr=currentNotebookDate();if(ta.value.trim())S.dayNotes[curr]=ta.value;svAll();}
-  // Fresh input every time — showPicker refuses to re-open on the same node sometimes
   const old=document.getElementById('dn-date-picker-live');if(old)old.remove();
-  const trigger=(typeof event!=='undefined'&&event?.currentTarget)||document.getElementById('dn-date');
-  const rect=trigger?.getBoundingClientRect()||{bottom:40,left:20};
+  const trigger=document.getElementById('dn-date');
+  const rect=trigger?.getBoundingClientRect()||{top:60,left:20,width:140,height:28};
   const inp=document.createElement('input');
   inp.type='date';inp.id='dn-date-picker-live';
-  inp.style.cssText=`position:fixed;top:${Math.round(rect.bottom+2)}px;left:${Math.round(rect.left)}px;width:1px;height:1px;opacity:0;z-index:-1`;
+  inp.style.cssText=`position:fixed;top:${Math.round(rect.top)}px;left:${Math.round(rect.left)}px;width:${Math.max(Math.round(rect.width),120)}px;height:${Math.max(Math.round(rect.height),28)}px;opacity:0.001;border:none;background:transparent;color:transparent;z-index:9999;pointer-events:none`;
   inp.value=currentNotebookDate();inp.max=tod();
   inp.onchange=()=>{if(inp.value){UI.notebookDate=inp.value;renderNotebook();}setTimeout(()=>inp.remove(),100);};
   inp.onblur=()=>setTimeout(()=>{const e=document.getElementById('dn-date-picker-live');if(e)e.remove();},400);
@@ -3401,16 +3410,15 @@ async function rCal(){
 function localDs(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function goToCalToday(){UI.calDate=new Date();UI.monthExpandedDs=null;rCal();}
 function pickCalDate(){
-  // Fresh input every time so showPicker doesn't get stuck after a previous open
   const old=document.getElementById('cal-date-picker');if(old)old.remove();
-  // Anchor the hidden input to the element the user just clicked, so the
-  // native date picker pops up right below the click target (was rendering
-  // in the top-left of the viewport because the input was positioned at 0,0).
-  const trigger=(typeof event!=='undefined'&&event?.currentTarget)||document.getElementById('cal-ttl');
-  const rect=trigger?.getBoundingClientRect()||{bottom:40,left:20};
+  // Size the hidden input to match the trigger (title span) and sit ON TOP
+  // of it. Using opacity:0.001 (not 0) because Chrome treats fully-invisible
+  // inputs as off-screen and renders showPicker() at the viewport top-left.
+  const trigger=document.getElementById('cal-ttl');
+  const rect=trigger?.getBoundingClientRect()||{top:60,left:20,width:140,height:28};
   const inp=document.createElement('input');
   inp.type='date';inp.id='cal-date-picker';
-  inp.style.cssText=`position:fixed;top:${Math.round(rect.bottom+2)}px;left:${Math.round(rect.left)}px;width:1px;height:1px;opacity:0;z-index:-1`;
+  inp.style.cssText=`position:fixed;top:${Math.round(rect.top)}px;left:${Math.round(rect.left)}px;width:${Math.max(Math.round(rect.width),120)}px;height:${Math.max(Math.round(rect.height),28)}px;opacity:0.001;border:none;background:transparent;color:transparent;z-index:9999;pointer-events:none`;
   inp.value=localDs(UI.calDate);
   inp.onchange=()=>{if(inp.value){const [y,mm,d]=inp.value.split('-').map(Number);UI.calDate=new Date(y,mm-1,d);UI.monthExpandedDs=null;rCal();}setTimeout(()=>inp.remove(),100);};
   inp.onblur=()=>setTimeout(()=>{const e=document.getElementById('cal-date-picker');if(e)e.remove();},400);
@@ -4891,15 +4899,16 @@ function deleteWorkProject(id){
 // ───────── CALENDAR DEFAULTS (user-configurable reminder defaults) ─────────
 // Timed events — precise minutes before the event
 const REMINDER_OPTIONS_TIMED=[{v:0,lbl:'At time'},{v:10,lbl:'10 min'},{v:60,lbl:'1 hour'},{v:1440,lbl:'1 day'},{v:10080,lbl:'1 week'}];
-// All-day / birthday events — Google Calendar API requires reminder minutes
-// to be non-negative, so we pick sensible fixed times of day rather than
-// midnight (=0, too early) or calendar defaults (can't mix with overrides):
-//   On the day  → midnight (API limit; see note under label)
-//   1 day before → 5pm the day before (420 min before midnight start)
-//   2 days before → 9am two days before (2340 min)
-//   1 week before → 9am a week before (9540 min)
-//   2 weeks before → 9am two weeks before (19620 min)
-const REMINDER_OPTIONS_ALLDAY=[{v:0,lbl:'On the day'},{v:420,lbl:'1 day before · 5pm'},{v:2340,lbl:'2 days before · 9am'},{v:9540,lbl:'1 week before · 9am'},{v:19620,lbl:'2 weeks before · 9am'}];
+// All-day / birthday events — every "before" option fires at 5pm (Zander's
+// preference; calmer than 9am). "On the day" is midnight only due to a hard
+// Google Calendar API limit (reminder minutes must be ≥ 0, so a 9am-day-of
+// reminder would need -540 min, which the API rejects).
+//   On the day  → midnight (0 min)
+//   1 day before 5pm   → 420 min
+//   2 days before 5pm  → 1860 min
+//   1 week before 5pm  → 9060 min
+//   2 weeks before 5pm → 19140 min
+const REMINDER_OPTIONS_ALLDAY=[{v:0,lbl:'On the day'},{v:420,lbl:'1 day before · 5pm'},{v:1860,lbl:'2 days before · 5pm'},{v:9060,lbl:'1 week before · 5pm'},{v:19140,lbl:'2 weeks before · 5pm'}];
 function renderCalendarDefaults(){
   const buildChips=(containerId,key,opts)=>{
     const el=document.getElementById(containerId);if(!el)return;
@@ -5006,8 +5015,10 @@ reminderMin can be a single number OR an array of minutes (up to 5 reminders per
 
 CRITICAL for removeEvent / updateEvent:
 - state.upcomingEvents lists the REAL calendar events that currently exist (next 90 days, one entry per recurring series).
-- The "match" field in removeEvent/updateEvent MUST be copied VERBATIM from one of those titles. Do NOT invent or reword. Fuzzy-match the user's request against state.upcomingEvents and use the EXACT title string.
-- If the user asks to remove/update something that does NOT exist in upcomingEvents, do NOT generate a removeEvent/updateEvent at all. Instead, set the top-level "message" field to something like: "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title) or "Nothing matching X exists in the next 90 days." Leave the remove/update arrays empty.
+- The "match" field MUST be the EXACT title of ONE event from upcomingEvents. Copy it verbatim. Matching is strict (exact case-insensitive equality, not substring) — if you say match:"Bible study" and the title is actually "Bible Study Monday", NOTHING gets deleted.
+- When the user asks to delete "Bible study", look up upcomingEvents for the one matching event and copy that EXACT title into match. If multiple events share the exact title (e.g. two "Young Adults" events), one removeEvent op with that exact match will correctly clear all of them.
+- If the user's request is ambiguous (e.g. multiple different-titled events could fit), pick the single closest and mention the others in the "message" field: "Deleted X; you also have Y and Z — should I remove those too?"
+- If no event in upcomingEvents matches the user's request, leave the remove/update arrays empty and tell them in "message": "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title).
 
 Respond ONLY raw JSON:
 {"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
@@ -5187,15 +5198,18 @@ function fixAIEventWeekdays(ch,promptText){
 // removeEvent/updateEvent match will actually target.
 function renderAIChangesInteractive(ch,eventPool){
   const fmtReminder=r=>{if(r==null||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (m/60)+' hr';if(m===1440)return '1 day';return (m/1440)+' day';}).filter(Boolean);return names.length?names.join(' + '):null;};
-  // Preview the real events a remove/update match string will hit. Groups
-  // recurring instances by master id so "10 instances of Bible study" shows
-  // as one line not ten. Returns HTML (or '' if pool not provided).
+  // Preview the real events a remove/update match string will hit. Uses
+  // the SAME strict matching as the delete path — exact title first,
+  // startsWith as fallback. Never substring, so "Bible study" doesn't show
+  // "Caitlin from Bible study's birthday" in the preview and then nuke it
+  // on Apply.
   const fmtMatchPreview=(needle,dateFilter)=>{
     if(!eventPool)return '';
-    const n=(needle||'').toLowerCase();
+    const n=(needle||'').toLowerCase().trim();
     if(!n)return '';
-    const matches=eventPool.filter(e=>(e.title||'').toLowerCase().includes(n)&&(!dateFilter||e.date===dateFilter));
-    if(!matches.length)return `<div class="aic-match aic-match-warn">⚠ No events matching "${esc(needle)}" on your calendar — double-check the title above.</div>`;
+    let matches=eventPool.filter(e=>(e.title||'').toLowerCase().trim()===n&&(!dateFilter||e.date===dateFilter));
+    if(!matches.length)matches=eventPool.filter(e=>(e.title||'').toLowerCase().trim().startsWith(n)&&(!dateFilter||e.date===dateFilter));
+    if(!matches.length)return `<div class="aic-match aic-match-warn">⚠ No events with title "${esc(needle)}" on your calendar — click the text above to fix the title, or ✕ to skip this.</div>`;
     // Group by recurring series
     const seen=new Map();
     matches.forEach(m=>{const k=m.recurringEventId||m.id;if(!seen.has(k))seen.set(k,{title:m.title,date:m.date,time:m.time,recurring:!!m.recurringEventId,count:0});seen.get(k).count++;});
@@ -5544,17 +5558,19 @@ async function confirmCalendarOps(ops,preConfirmed){
         const res=await createGCEvent(e.title,e.date,e.time||'',e.desc||'',e.endTime||'',opts);
         if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date:e.date,time:e.time||'',endTime:e.endTime||'',title:e.title,allDay:opts.allDay,recurrence:opts.recurrence,reminderMin:opts.reminderMin,timeZone:opts.timeZone});}
       } else if(op.kind==='remove'){
-        const needle=(op.ev.match||op.ev.title||'').toLowerCase();
+        const needle=(op.ev.match||op.ev.title||'').toLowerCase().trim();
         if(!needle)continue;
-        // ALWAYS fetch fresh — local cache may be stale (events just created
-        // moments ago in the same AI turn) or may be missing events outside
-        // the currently-viewed month. Widen to -1 → +6 months.
         const now=new Date();
         const pool=await fetchGCal(new Date(now.getFullYear(),now.getMonth()-1,1).toISOString(),new Date(now.getFullYear(),now.getMonth()+6,0).toISOString());
-        const matches=pool.filter(e=>(e.title||'').toLowerCase().includes(needle)&&(!op.ev.date||e.date===op.ev.date));
-        // De-dupe: for recurring series, collapse every instance to the
-        // MASTER event id. Deleting the master cascades to all occurrences
-        // (past + future). Deleting an instance only removes that one day.
+        // STRICT matching — was `includes()` which deleted every event with
+        // the needle as a substring (e.g. "Bible study" also matched
+        // "Caitlin from Bible study's birthday"). Now:
+        //   1. exact case-insensitive title match
+        //   2. fall back to startsWith if nothing exact
+        //   3. never substring/contains
+        let matches=pool.filter(e=>(e.title||'').toLowerCase().trim()===needle&&(!op.ev.date||e.date===op.ev.date));
+        if(!matches.length)matches=pool.filter(e=>(e.title||'').toLowerCase().trim().startsWith(needle)&&(!op.ev.date||e.date===op.ev.date));
+        if(!matches.length){console.warn('[ai-calendar] no exact match for',needle);continue;}
         const targetMap=new Map();
         matches.forEach(m=>{const id=m.recurringEventId||m.id;if(!targetMap.has(id))targetMap.set(id,m.calendarId);});
         for(const [id,calId] of targetMap){
