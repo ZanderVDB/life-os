@@ -76,8 +76,21 @@ html,body{max-width:100%;overflow-x:hidden}
 /* Belt-and-braces — nothing inside a route should be able to cause the
    whole page to scroll sideways on mobile. Any overflowing child must
    handle its own scroll locally (see .cd-chips, .aic-body). */
-html,body{overflow-x:hidden;max-width:100vw}
-.route{overflow-x:hidden}
+html,body{overflow-x:hidden;max-width:100%}
+.route{overflow-x:clip;max-width:100%}
+@media(max-width:768px){
+  /* Stricter containment on mobile — clip any child that would otherwise
+     drag the viewport sideways (color popovers, long titles, etc.) and
+     cap every settings descendant at 100% width. */
+  .route[data-route="settings"]{overflow-x:clip;max-width:100vw;width:100%}
+  .route[data-route="settings"] > *,
+  .route[data-route="settings"] .setting-row,
+  .route[data-route="settings"] .setting-row > *{max-width:100%;box-sizing:border-box;min-width:0}
+  /* Swap vh for dvh so the min-height doesn't bake in the collapsible
+     address-bar height (mobile Safari), which was over-extending the
+     scrollable area past the real content. */
+  .route.active{min-height:calc(100dvh - 200px)}
+}
 /* Stop the browser from re-anchoring scroll when content above changes.
    Without this, when #ppl-cnt or #brain-cnt populates with a count AFTER
    the route becomes visible, the browser "helpfully" scrolls down to keep
@@ -149,7 +162,7 @@ svg{flex-shrink:0}
 .theme-toggle button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06)}
 
 /* ━━━ MAIN LAYOUT ━━━ */
-.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:110px;padding:32px 56px 140px 44px;max-width:1780px;margin:0 auto;width:100%}
+.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:72px;padding:32px 36px 140px 44px;max-width:1780px;margin:0 auto;width:100%}
 .main-col{min-width:0;display:flex;flex-direction:column;gap:28px}
 .aside-col{display:flex;flex-direction:column;gap:14px;min-width:0;position:sticky;top:22px;align-self:start;max-height:calc(100vh - 60px);overflow-y:auto;padding-right:2px}
 .aside-col::-webkit-scrollbar{width:5px}
@@ -1886,7 +1899,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v82';
+const APP_VERSION='v83';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -3022,16 +3035,25 @@ async function generatePlan(mode){
     const endIso=new Date(refDate.getFullYear(),refDate.getMonth(),refDate.getDate(),23,59,59).toISOString();
     const gc=await fetchGCal(startIso,endIso).catch(()=>[]);
     const evs=gc.filter(e=>evCoversDay(e,refDs)).map(e=>({title:e.title,time:e.time||null,endTime:e.endTime||null,allDay:e.allDay}));
+    // Birthdays falling on the plan-date — surfaced to the AI so it can
+    // lead the plan with a friendly reminder at the top.
+    const birthdays=gc.filter(e=>evCoversDay(e,refDs)&&isBirthdayEv(e)).map(e=>{
+      // Pull out the person name — strip "'s birthday" / " birthday" suffix
+      const m=(e.title||'').match(/^(.+?)(?:'s)?\s*(?:birthday|bday)\b/i);
+      return m?m[1].trim():e.title;
+    });
     const openTasks=S.tasks.filter(t=>!t.done).sort((a,b)=>(PO[a.priority]??99)-(PO[b.priority]??99)).slice(0,20).map(t=>({text:t.text,area:t.area,project:t.project,priority:t.priority}));
     const activeBuilds=S.builds.filter(b=>b.status==='active').slice(0,3).map(b=>({title:b.title,desc:(b.desc||'').slice(0,120)}));
     const habits=S.habits.map(h=>({name:h.name,doneToday:(h.checkedDates||[]).includes(tod())}));
     const rhythm=S.lifeRhythm||'(none provided)';
     const nowLabel=now.toLocaleTimeString('en-ZA',{hour:'numeric',minute:'2-digit',hour12:true});
     const scope=mode==='now'?`the REST of today (starting from ${nowLabel})`:mode==='tomorrow'?`tomorrow (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`:`today (${dayName}, ${refDate.toLocaleDateString('en-ZA',{day:'numeric',month:'long'})})`;
-    const ctx={now:`${now.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})} at ${nowLabel}`,hour:hr,mode,planDay:dayName,planDate:refDs,scheduledEvents:evs,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
+    const ctx={now:`${now.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})} at ${nowLabel}`,hour:hr,mode,planDay:dayName,planDate:refDs,scheduledEvents:evs,birthdaysToday:birthdays,openTasks,activeBuilds,habits,weeklyRhythm:rhythm};
     const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
     const wpCtx=(S.workProjects||[]).length?` They work across: ${S.workProjects.map(p=>p.name).join(', ')}.`:'';
     const prompt=`Act as ${firstName}'s thoughtful daily guide, not a scheduler.${wpCtx} Plan for ${scope}.
+
+If state.birthdaysToday has anyone in it, lead the ENTIRE response with a warm 🎂 callout ABOVE the "Today at a glance" section — format exactly: "## 🎂 Birthday today — [Name]" (one heading per name, no dashes/bullets). Add a short warm nudge underneath like "Worth dropping a message or a call." Keep it to one line per person. Do NOT include this section if state.birthdaysToday is empty.
 
 Using the user's calendar events, tasks, habits, active projects, and weekly rhythm:
 - Highlight only what truly matters today (keep it minimal)
