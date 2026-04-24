@@ -252,14 +252,20 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .reminder-chips .rc:hover{border-color:var(--border-strong);color:var(--text)}
 .reminder-chips .rc input{position:absolute;opacity:0;pointer-events:none}
 .reminder-chips .rc:has(input:checked){background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-/* Calendar defaults — chips right-align and stay on ONE line. Horizontal
-   scroll if the row is narrower than the chip set. Smaller padding +
-   no-wrap so all five options fit side-by-side on desktop. */
+/* Calendar defaults — chips on a single line, right-aligned on desktop.
+   Horizontal scroll if the chip set is wider than the row. Compact chip
+   padding so all five options typically fit without scrolling. */
 .cd-chips{flex-wrap:nowrap;justify-content:flex-end;max-width:100%;overflow-x:auto;scrollbar-width:thin}
 .cd-chips::-webkit-scrollbar{height:4px}
 .cd-chips::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
 .cd-chips .rc{padding:5px 10px;font-size:11px;white-space:nowrap;flex-shrink:0}
-@media(max-width:768px){.cd-chips{justify-content:flex-start}}
+/* On phones, stack the row — title + description on top, chips below.
+   Keeps the row legible instead of cramming everything into the right. */
+@media(max-width:768px){
+  .setting-row:has(.cd-chips){flex-direction:column;align-items:stretch;gap:10px}
+  .setting-row:has(.cd-chips) .setting-right{width:100%}
+  .cd-chips{justify-content:flex-start}
+}
 .qa-actions{display:flex;gap:8px;margin-top:10px}
 
 /* ━━━ CALENDAR ━━━ */
@@ -1040,19 +1046,19 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .switch input:checked + .slider{background:var(--accent)}
 .switch input:checked + .slider::before{transform:translateX(16px)}
 .switch input:focus-visible + .slider{box-shadow:0 0 0 2px var(--accent-bg,var(--border))}
-/* Work-area editor rows (Settings) — name input + coloured dot + colour pickers */
+/* Work-area editor rows (Settings) — clickable colour dot + name input + × */
 .wp-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);min-width:0}
 .wp-row:last-child{border-bottom:none}
-.wp-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+.wp-dot-btn{width:22px;height:22px;border-radius:50%;flex-shrink:0;border:2px solid var(--border);cursor:pointer;padding:0;transition:transform .12s,border-color .12s;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
+.wp-dot-btn:hover{transform:scale(1.1);border-color:var(--border-strong)}
 .wp-name{flex:1;min-width:0;padding:6px 10px;font-size:13px}
-.wp-colors{display:flex;gap:4px;flex-shrink:0}
-.wp-color{width:18px;height:18px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;transition:border-color .12s,transform .1s}
+.wp-del{flex-shrink:0}
+/* Popover palette that appears when the dot is clicked */
+.wp-colorpop{z-index:120;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;padding:8px;display:flex;gap:6px;box-shadow:var(--shadow-lift);animation:wp-colorpop-in .14s ease-out}
+@keyframes wp-colorpop-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.wp-color{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;transition:border-color .12s,transform .1s}
 .wp-color:hover{transform:scale(1.15)}
 .wp-color.on{border-color:var(--text);transform:scale(1.15)}
-@media(max-width:600px){
-  .wp-row{flex-wrap:wrap;gap:6px}
-  .wp-colors{order:3;flex:1 1 100%;justify-content:flex-start}
-}
 /* Event/Reminder type toggle at top of event modal */
 .em-type-btn{background:var(--surface-2);color:var(--text-2);border:1px solid var(--border);font-weight:500}
 .em-type-btn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -1876,7 +1882,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v80';
+const APP_VERSION='v81';
 const APP_BUILD_DATE='2026-04-24';
 const AK='los_ak',getKey=()=>localStorage.getItem(AK);
 firebase.initializeApp(firebaseConfig);
@@ -2890,17 +2896,18 @@ function saveDN(){const ta=document.getElementById('dn-ta');if(!ta)return;S.dayN
 function pickNotebookDate(){
   const ta=document.getElementById('dn-ta');
   if(ta){S.dayNotes=S.dayNotes||{};const curr=currentNotebookDate();if(ta.value.trim())S.dayNotes[curr]=ta.value;svAll();}
-  const old=document.getElementById('dn-date-picker-live');if(old)old.remove();
   const trigger=document.getElementById('dn-date');
-  const rect=trigger?.getBoundingClientRect()||{top:60,left:20,width:140,height:28};
+  if(!trigger)return;
+  trigger.querySelectorAll('input[type="date"]').forEach(x=>x.remove());
+  if(getComputedStyle(trigger).position==='static')trigger.style.position='relative';
   const inp=document.createElement('input');
   inp.type='date';inp.id='dn-date-picker-live';
-  inp.style.cssText=`position:fixed;top:${Math.round(rect.top)}px;left:${Math.round(rect.left)}px;width:${Math.max(Math.round(rect.width),120)}px;height:${Math.max(Math.round(rect.height),28)}px;opacity:0.001;border:none;background:transparent;color:transparent;z-index:9999;pointer-events:none`;
+  inp.style.cssText='position:absolute;inset:0;width:100%;height:100%;opacity:0.01;border:none;background:transparent;color:transparent;caret-color:transparent;cursor:pointer;font:inherit;padding:0;margin:0;box-sizing:border-box';
   inp.value=currentNotebookDate();inp.max=tod();
   inp.onchange=()=>{if(inp.value){UI.notebookDate=inp.value;renderNotebook();}setTimeout(()=>inp.remove(),100);};
-  inp.onblur=()=>setTimeout(()=>{const e=document.getElementById('dn-date-picker-live');if(e)e.remove();},400);
-  document.body.appendChild(inp);
-  if(typeof inp.showPicker==='function'){try{inp.showPicker();return;}catch(e){console.warn('showPicker',e.message);}}
+  inp.onblur=()=>setTimeout(()=>{if(inp.parentNode)inp.remove();},200);
+  trigger.appendChild(inp);
+  if(typeof inp.showPicker==='function'){try{inp.showPicker();return;}catch(e){console.warn('[nb] showPicker',e.message);}}
   inp.focus();inp.click();
 }
 function searchNotebook(q){
@@ -3410,20 +3417,24 @@ async function rCal(){
 function localDs(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function goToCalToday(){UI.calDate=new Date();UI.monthExpandedDs=null;rCal();}
 function pickCalDate(){
-  const old=document.getElementById('cal-date-picker');if(old)old.remove();
-  // Size the hidden input to match the trigger (title span) and sit ON TOP
-  // of it. Using opacity:0.001 (not 0) because Chrome treats fully-invisible
-  // inputs as off-screen and renders showPicker() at the viewport top-left.
   const trigger=document.getElementById('cal-ttl');
-  const rect=trigger?.getBoundingClientRect()||{top:60,left:20,width:140,height:28};
+  if(!trigger)return;
+  // Embed the date input INSIDE the trigger element, absolutely positioned
+  // to fill it exactly. The input IS physically where the user tapped —
+  // browsers anchor showPicker() to the input's actual bounding rect, so
+  // the native picker pops up directly under the title on every platform.
+  // opacity:0.01 (not 0) so Chrome doesn't treat it as "visually hidden"
+  // and drop the picker at the viewport origin.
+  trigger.querySelectorAll('input[type="date"]').forEach(x=>x.remove());
+  if(getComputedStyle(trigger).position==='static')trigger.style.position='relative';
   const inp=document.createElement('input');
   inp.type='date';inp.id='cal-date-picker';
-  inp.style.cssText=`position:fixed;top:${Math.round(rect.top)}px;left:${Math.round(rect.left)}px;width:${Math.max(Math.round(rect.width),120)}px;height:${Math.max(Math.round(rect.height),28)}px;opacity:0.001;border:none;background:transparent;color:transparent;z-index:9999;pointer-events:none`;
+  inp.style.cssText='position:absolute;inset:0;width:100%;height:100%;opacity:0.01;border:none;background:transparent;color:transparent;caret-color:transparent;cursor:pointer;font:inherit;padding:0;margin:0;box-sizing:border-box';
   inp.value=localDs(UI.calDate);
   inp.onchange=()=>{if(inp.value){const [y,mm,d]=inp.value.split('-').map(Number);UI.calDate=new Date(y,mm-1,d);UI.monthExpandedDs=null;rCal();}setTimeout(()=>inp.remove(),100);};
-  inp.onblur=()=>setTimeout(()=>{const e=document.getElementById('cal-date-picker');if(e)e.remove();},400);
-  document.body.appendChild(inp);
-  if(typeof inp.showPicker==='function'){try{inp.showPicker();return;}catch(e){console.warn('showPicker',e.message);}}
+  inp.onblur=()=>setTimeout(()=>{if(inp.parentNode)inp.remove();},200);
+  trigger.appendChild(inp);
+  if(typeof inp.showPicker==='function'){try{inp.showPicker();return;}catch(e){console.warn('[cal] showPicker',e.message);}}
   inp.focus();inp.click();
 }
 function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=localDs(UI.calDate);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
@@ -4291,7 +4302,21 @@ async function openEventEdit(payload){
       }
       if(full.start?.date){document.getElementById('em-allday').checked=true;toggleEmAllDay();}
       if(full.start?.timeZone){const ts=document.getElementById('em-tz');if(ts){ts.value=full.start.timeZone;if(ts.value!==full.start.timeZone){const opt=document.createElement('option');opt.value=full.start.timeZone;opt.textContent=full.start.timeZone;ts.appendChild(opt);ts.value=full.start.timeZone;}}}
-      if(full.recurrence?.length)document.getElementById('em-repeat').value=parseRRule(full.recurrence[0]);
+      // Recurrence lives on the MASTER event, not on each instance. When
+      // editing an instance, we also fetch the master so the Repeat dropdown
+      // populates correctly (was always showing "Does not repeat" for
+      // recurring events because singleEvents=true gives us instances).
+      if(full.recurrence?.length){
+        document.getElementById('em-repeat').value=parseRRule(full.recurrence[0]);
+      } else if(full.recurringEventId){
+        try{
+          const mr=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(full.recurringEventId)}`,{headers:{Authorization:'Bearer '+tok}});
+          if(mr.ok){
+            const master=await mr.json();
+            if(master.recurrence?.length)document.getElementById('em-repeat').value=parseRRule(master.recurrence[0]);
+          }
+        }catch(_){}
+      }
       if(full.reminders&&full.reminders.overrides?.length){
         // Tick whichever chips match the event's overrides. Google stores
         // minutes; our chip values are '0', '10', '60', '1440', '10080'.
@@ -4338,7 +4363,15 @@ async function saveCurrentEvent(){
     const res=await createGCEvent(title,date,time,desc,endTime,opts);
     if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date,endDate:endDate!==date?endDate:null,time,endTime,title,desc,allDay,recurrence,reminderMin,timeZone});}
   } else if(editingEvent.type==='gc'){
-    const ok=await updateGCEvent(editingEvent.data.id,title,date,time,desc,endTime,{...opts,calendarId:editingEvent.data.calendarId});
+    // Recurring events get the same 3-option prompt as delete — apply the
+    // changes to just this instance / this and all future / the whole series.
+    const isRecurring=!!editingEvent.data.recurringEventId;
+    let scope='single';
+    if(isRecurring){
+      scope=await showRecurringUpdateModal();
+      if(!scope)return;
+    }
+    const ok=await applyRecurringUpdate(editingEvent.data,scope,{title,date,time,desc,endTime,opts:{...opts,calendarId:editingEvent.data.calendarId}});
     if(!ok)alert('Failed to update Google event.');
   } else if(editingEvent.type==='cus'){
     const ev=(S.customEvents||[]).find(x=>x.id===editingEvent.data.id);
@@ -4398,6 +4431,75 @@ function showRecurringDeleteModal(){
       resolve(mode==='cancel'?null:mode);
     });
   });
+}
+// Same three-option prompt, but phrased for an UPDATE rather than a delete.
+// Returns 'single' | 'future' | 'series' | null.
+function showRecurringUpdateModal(){
+  return new Promise(resolve=>{
+    const m=document.createElement('div');m.className='modal';m.style.display='flex';
+    m.innerHTML=`<div class="modal-bd"></div>
+      <div class="modal-body" style="max-width:420px">
+        <h3 style="margin-bottom:10px">Edit recurring event</h3>
+        <div style="font-size:13px;color:var(--text-2);line-height:1.55;margin-bottom:16px">This event repeats. What would you like to change?</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-sm" data-mode="single" style="text-align:left;padding:12px 14px">This event only</button>
+          <button class="btn btn-sm" data-mode="future" style="text-align:left;padding:12px 14px">This and all following events</button>
+          <button class="btn btn-sm" data-mode="series" style="text-align:left;padding:12px 14px">All events in the series</button>
+        </div>
+        <div class="modal-actions"><div class="spacer"></div><button class="btn btn-ghost btn-sm" data-mode="cancel">Cancel</button></div>
+      </div>`;
+    document.body.appendChild(m);_syncBodyLock();
+    m.addEventListener('click',e=>{
+      const mode=e.target.dataset?.mode||(e.target.closest('.modal-bd')?'cancel':null);
+      if(!mode)return;
+      m.remove();_syncBodyLock();
+      resolve(mode==='cancel'?null:mode);
+    });
+  });
+}
+// Execute the UPDATE based on scope. "single" patches the instance (Google
+// stores it as an exception, detaching this date from the series). "series"
+// patches the master. "future" splits the series: UNTIL on the old master
+// + brand-new master starting from this instance with the new details.
+async function applyRecurringUpdate(d,mode,fields){
+  const calId=d.calendarId||'primary';
+  const {title,date,time,desc,endTime,opts}=fields;
+  if(mode==='single'){
+    // PATCH THIS instance only. Don't carry recurrence onto the instance —
+    // that would replace the series. Strip recurrence from opts.
+    const instanceOpts={...opts,recurrence:'none'};
+    return await updateGCEvent(d.id,title,date,time,desc,endTime,instanceOpts);
+  }
+  if(mode==='series'){
+    const master=d.recurringEventId||d.id;
+    return await updateGCEvent(master,title,date,time,desc,endTime,opts);
+  }
+  if(mode==='future'){
+    const tok=getGCalToken();if(!tok)return false;
+    try{
+      const masterId=d.recurringEventId||d.id;
+      const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(masterId)}`,{headers:{Authorization:'Bearer '+tok}});
+      if(!r.ok)return false;
+      const oldMaster=await r.json();
+      const rrules=(oldMaster.recurrence||[]).filter(x=>x.startsWith('RRULE:'));
+      if(rrules.length){
+        // Stamp UNTIL = day before THIS instance on the old master
+        const [yy,mm,dd]=d.date.split('-').map(Number);
+        const cutoff=new Date(yy,mm-1,dd);cutoff.setDate(cutoff.getDate()-1);cutoff.setHours(23,59,59,0);
+        const utc=new Date(cutoff.getTime()-cutoff.getTimezoneOffset()*60000);
+        const iso=utc.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+        const newRule=rrules[0].replace(/;UNTIL=[^;]+/i,'').replace(/;COUNT=[^;]+/i,'')+';UNTIL='+iso;
+        const rebuilt={recurrence:[newRule,...oldMaster.recurrence.filter(x=>!x.startsWith('RRULE:'))]};
+        await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(masterId)}`,{method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(rebuilt)});
+      }
+      // Create a NEW series from this instance with the updated details.
+      // Keep the same recurrence the user picked in the modal (opts.recurrence).
+      const res=await createGCEvent(title,date,time,desc,endTime,opts);
+      gcCache={key:'',events:[]};
+      return !!res;
+    }catch(e){console.warn('[update-future]',e.message);return false;}
+  }
+  return false;
 }
 // Execute the delete based on which 'mode' the user chose in the modal above.
 async function applyRecurringDelete(d,mode){
@@ -4849,13 +4951,35 @@ function renderWorkProjects(){
   }
   el.innerHTML=projects.map((p,i)=>{
     const color=p.color||PROJ_COLOR_OPTIONS[i%PROJ_COLOR_OPTIONS.length];
-    return `<div class="wp-row">
-      <span class="wp-dot" style="background:${color}"></span>
+    // Colour dot is now a BUTTON that opens a small popover with the six
+    // swatches (instead of always showing the full palette inline, which
+    // looked cluttered). Click elsewhere to dismiss.
+    return `<div class="wp-row" data-wp-row="${esc(p.id)}">
+      <button class="wp-dot-btn" style="background:${color}" onclick="toggleWorkProjectColorPicker('${esc(p.id)}',event)" aria-label="Change colour"></button>
       <input class="input wp-name" data-wp-id="${esc(p.id)}" value="${esc(p.name)}" placeholder="Name" oninput="onWorkProjectNameChange('${esc(p.id)}',this.value)">
-      <div class="wp-colors">${PROJ_COLOR_OPTIONS.map(c=>`<button class="wp-color${c===color?' on':''}" style="background:${c}" onclick="setWorkProjectColor('${esc(p.id)}','${c}')" aria-label="Use colour"></button>`).join('')}</div>
-      <button class="btn btn-ghost btn-sm" onclick="deleteWorkProject('${esc(p.id)}')" title="Remove">×</button>
+      <button class="btn btn-ghost btn-sm wp-del" onclick="deleteWorkProject('${esc(p.id)}')" title="Remove">×</button>
     </div>`;
   }).join('');
+}
+// Popover color picker — appears next to the clicked dot with six swatches.
+// Dismissed by selecting a colour or clicking outside.
+function toggleWorkProjectColorPicker(id,ev){
+  ev?.stopPropagation();
+  const existing=document.getElementById('wp-colorpop');
+  if(existing&&existing.dataset.for===id){existing.remove();return;}
+  if(existing)existing.remove();
+  const p=(S.workProjects||[]).find(x=>x.id===id);if(!p)return;
+  const dot=ev?.currentTarget||document.querySelector(`[data-wp-row="${id}"] .wp-dot-btn`);
+  const rect=dot.getBoundingClientRect();
+  const pop=document.createElement('div');
+  pop.id='wp-colorpop';pop.className='wp-colorpop';pop.dataset.for=id;
+  pop.style.cssText=`position:fixed;top:${Math.round(rect.bottom+6)}px;left:${Math.round(rect.left)}px`;
+  pop.innerHTML=PROJ_COLOR_OPTIONS.map(c=>`<button class="wp-color${c===(p.color||'')?' on':''}" style="background:${c}" onclick="setWorkProjectColor('${esc(id)}','${c}');document.getElementById('wp-colorpop')?.remove();" aria-label="Use colour"></button>`).join('');
+  document.body.appendChild(pop);
+  setTimeout(()=>{
+    const closeHandler=e=>{if(!e.target.closest('#wp-colorpop')&&!e.target.closest('.wp-dot-btn')){pop.remove();document.removeEventListener('click',closeHandler);}};
+    document.addEventListener('click',closeHandler);
+  },10);
 }
 function _genWPId(name){
   // Derive a 2-letter id from the name (initials), with fallback to timestamp
@@ -5016,7 +5140,9 @@ reminderMin can be a single number OR an array of minutes (up to 5 reminders per
 CRITICAL for removeEvent / updateEvent:
 - state.upcomingEvents lists the REAL calendar events that currently exist (next 90 days, one entry per recurring series).
 - The "match" field MUST be the EXACT title of ONE event from upcomingEvents. Copy it verbatim. Matching is strict (exact case-insensitive equality, not substring) — if you say match:"Bible study" and the title is actually "Bible Study Monday", NOTHING gets deleted.
-- When the user asks to delete "Bible study", look up upcomingEvents for the one matching event and copy that EXACT title into match. If multiple events share the exact title (e.g. two "Young Adults" events), one removeEvent op with that exact match will correctly clear all of them.
+- When the user asks to delete "Bible study", look up upcomingEvents for the one matching event and copy that EXACT title into match.
+- RESPECT the user's day/date scope rigorously. If they say "delete Bible studies on Tuesday", include the "date" field on the removeEvent and ONLY target Tuesday's event. Do NOT also emit a removeEvent for the Monday occurrence just because the title matches — they didn't ask for that day.
+- One removeEvent op clears every matching instance of a recurring series (by design). Don't generate a separate removeEvent per instance — one op per distinct (title, date-scope) combination is correct.
 - If the user's request is ambiguous (e.g. multiple different-titled events could fit), pick the single closest and mention the others in the "message" field: "Deleted X; you also have Y and Z — should I remove those too?"
 - If no event in upcomingEvents matches the user's request, leave the remove/update arrays empty and tell them in "message": "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title).
 
