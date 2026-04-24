@@ -1343,7 +1343,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .nb-cell-ta li{line-height:inherit}
 .nb-cell-ta b,.nb-cell-ta strong{font-weight:700}
 .nb-cell-ta i,.nb-cell-ta em{font-style:italic}
-.nb-cell-ta mark{background:#fff3a8;padding:0 2px;border-radius:2px}
+/* Soft pale-yellow highlight — kept airy enough that the text underneath
+   is still readable. Earlier #fff3a8 washed out the words. */
+.nb-cell-ta mark{background:#fff5c8;padding:0 2px;border-radius:2px;color:inherit}
+/* Matches the colour used by execCommand('hiliteColor') via the toolbar. */
+.nb-cell-ta [style*="background-color"]{color:inherit !important}
 /* Clean font variant: Inter, no ruled lines, normal block text. */
 .nb-book.font-clean .nb-cell-ta{
   font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:22px;
@@ -1354,9 +1358,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 /* Rich-text toolbar — sits between the page header and the cells. Small,
    muted when a cell isn't focused so it doesn't shout. */
 .nb-toolbar{display:flex;gap:2px;align-items:center;padding:4px 0;flex-shrink:0;flex-wrap:wrap;position:relative;z-index:1}
-.nb-tb-btn{width:26px;height:26px;padding:0;border:1px solid transparent;background:transparent;color:var(--text-2);font-size:12px;font-family:'Inter',system-ui,sans-serif;font-weight:500;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .1s}
+.nb-tb-btn{width:26px;height:26px;padding:0;border:1px solid transparent;background:transparent;color:var(--text-2);font-size:12px;font-family:'Inter',system-ui,sans-serif;font-weight:500;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .1s,color .1s,border-color .1s}
 .nb-tb-btn:hover{background:var(--surface-2);color:var(--text);border-color:var(--border)}
-.nb-tb-btn:active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+/* Active state — set by nbUpdateToolbarStates whenever the cursor sits on
+   formatted text. Stronger shading than :hover so it reads as "applied". */
+.nb-tb-btn.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.nb-tb-btn:active{transform:scale(.95)}
 .nb-tb-btn b{font-weight:700}
 .nb-tb-btn i{font-style:italic}
 .nb-tb-btn u{text-decoration:underline}
@@ -2262,7 +2269,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v92';
+const APP_VERSION='v93';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6413,6 +6420,12 @@ function nbUndo(){
     S.notebook=parsed;
     _nbHistoryTypingKey=null;
     nbEnsureShape();nbClampPosition();
+    // CRITICAL: blur the active cell first. Otherwise rNotebook's typing
+    // guard sees a focused cell and skips the DOM rebuild, which made
+    // undo look completely inert — the state changed but the page didn't
+    // repaint so the user saw their old text still on screen.
+    const active=document.activeElement;
+    if(active&&active.classList&&active.classList.contains('nb-cell-ta')){try{active.blur();}catch(_){}}
     svAll();rNotebook();
   }catch(e){console.warn('[nb undo]',e);}
 }
@@ -6619,7 +6632,8 @@ function nbExec(cmd,pageId){
   }
   try{
     if(cmd==='hiliteColor'){
-      document.execCommand('hiliteColor',false,'#fff3a8');
+      // Softer yellow so the text underneath stays legible
+      document.execCommand('hiliteColor',false,'#fff5c8');
     } else if(cmd==='h2'){
       // Toggle between <p> and <h2>. formatBlock takes a tag name.
       const sel=window.getSelection();
@@ -6646,6 +6660,37 @@ function nbOnCellKeyDown(e,cellIdx,ce){
   // handler fires and saves. Nothing to do here right now — kept as a hook
   // for future shortcuts (e.g. Tab to indent inside a list).
 }
+// Refresh the toolbar's active-state indicators whenever the caret moves
+// or a cell value changes. Highlights B/I/U/S/H2/lists that are currently
+// applied at the caret, so the user can see what formatting they're
+// inside.
+function nbUpdateToolbarStates(){
+  if(currentRoute!=='notebook')return;
+  const active=document.activeElement;
+  if(!active||!active.classList||!active.classList.contains('nb-cell-ta'))return;
+  const pageEl=active.closest('.nb-page');if(!pageEl)return;
+  const toolbar=pageEl.querySelector('.nb-toolbar');if(!toolbar)return;
+  // Clear active state on ALL toolbars so stale ones from other pages
+  // (e.g. after clicking the right page in spread) don't linger lit.
+  document.querySelectorAll('.nb-toolbar .nb-tb-btn').forEach(b=>b.classList.remove('active'));
+  const setActive=(cmd,on)=>{const b=toolbar.querySelector(`[data-cmd="${cmd}"]`);if(b)b.classList.toggle('active',!!on);};
+  try{setActive('bold',document.queryCommandState('bold'));}catch(e){}
+  try{setActive('italic',document.queryCommandState('italic'));}catch(e){}
+  try{setActive('underline',document.queryCommandState('underline'));}catch(e){}
+  try{setActive('strikeThrough',document.queryCommandState('strikeThrough'));}catch(e){}
+  try{setActive('insertUnorderedList',document.queryCommandState('insertUnorderedList'));}catch(e){}
+  try{setActive('insertOrderedList',document.queryCommandState('insertOrderedList'));}catch(e){}
+  // H2 detection: walk up from the caret to see if we're inside an <h2>
+  const sel=window.getSelection();
+  const node=sel&&sel.anchorNode;
+  let inH2=false;
+  if(node){
+    let el=node.nodeType===3?node.parentElement:node;
+    while(el&&el!==active){if(el.tagName==='H2'){inH2=true;break;}el=el.parentElement;}
+  }
+  setActive('h2',inH2);
+}
+document.addEventListener('selectionchange',nbUpdateToolbarStates);
 function renderNotebookPage(flipDir){
   const book=document.getElementById('nb-book');if(!book)return;
   // Apply font + spread classes on the book wrapper so CSS picks them up.
@@ -6844,21 +6889,44 @@ function nbDeletePageById(pageId){
   }
   svAll();rNotebook();
 }
+// Layout-aware cell remapping. Naïve "take the first N cells" was the
+// reason quad → half put cell 0 on the left and 1+2+3 on the right.
+// Now we map by spatial position:
+//   quad [TL,TR,BL,BR] → half [TL+BL, TR+BR]      (columns preserved)
+//   quad [TL,TR,BL,BR] → single [TL+TR+BL+BR]     (everything merged)
+//   half [L,R]         → single [L+R]             (everything merged)
+//   half [L,R]         → quad [L,R,'','']         (blanks fill bottom row)
+//   single [A]         → half [A,'']              (goes to the left)
+//   single [A]         → quad [A,'','','']        (goes to the top-left)
+function nbMergeCells(parts){
+  // Combine HTML cells with a visible separator, dropping empty chunks.
+  const keep=parts.filter(p=>nbStripHtml(p||'').trim());
+  return keep.join('<br><br>');
+}
+function nbRemapCells(fromLayout,toLayout,cells){
+  const c=(i)=>cells[i]||'';
+  if(fromLayout===toLayout)return cells.slice();
+  const key=fromLayout+'->'+toLayout;
+  switch(key){
+    case 'quad->half':   return [nbMergeCells([c(0),c(2)]),nbMergeCells([c(1),c(3)])];
+    case 'quad->single': return [nbMergeCells([c(0),c(1),c(2),c(3)])];
+    case 'half->single': return [nbMergeCells([c(0),c(1)])];
+    case 'half->quad':   return [c(0),c(1),'',''];
+    case 'single->half': return [c(0),''];
+    case 'single->quad': return [c(0),'','',''];
+  }
+  // Fallback: pad/trim
+  const out=cells.slice(0,NB_LAYOUT_CELLS[toLayout]);
+  while(out.length<NB_LAYOUT_CELLS[toLayout])out.push('');
+  return out;
+}
 function nbSetLayout(layout,pageId){
   const loc=pageId?nbLocatePageById(pageId):null;
   const page=loc?loc.page:nbCurrentPage();
   if(!page||!(layout in NB_LAYOUT_CELLS))return;
   if(page.layout===layout)return;
   nbPushHistory();
-  const need=NB_LAYOUT_CELLS[layout];
-  // Preserve existing content; pad or trim the cell array.
-  if(page.cells.length<need)while(page.cells.length<need)page.cells.push('');
-  else if(page.cells.length>need){
-    // Merge overflowing cells into the LAST kept cell so nothing is lost
-    const tail=page.cells.slice(need).filter(c=>(c||'').trim()).join('\n\n');
-    page.cells.length=need;
-    if(tail){page.cells[need-1]=((page.cells[need-1]||'')+'\n\n'+tail).trim();}
-  }
+  page.cells=nbRemapCells(page.layout,layout,page.cells);
   page.layout=layout;page.updatedAt=Date.now();
   svAll();rNotebook();
 }
@@ -7027,27 +7095,34 @@ async function nbRefinePage(pageId){
   const btn=document.querySelector(`.nb-page[data-nb-page-id="${pageId}"] .nb-refine-btn`);
   if(btn){btn.disabled=true;btn.textContent='✨ Refining…';}
   try{
-    // Strip HTML formatting before sending to Claude — the model gets the
-    // plain text and we'll wrap whatever it returns back in HTML via
-    // nbCellToHtml when the user hits Keep. Formatting tags would only
-    // confuse the restructure task.
+    // Send plain text. Claude returns HTML (see formatting rules in the
+    // prompt) and we render it directly into the contenteditable cells.
     const currentCells=page.cells.map((c,i)=>({cellIndex:i,content:nbStripHtml(c||'')}));
-    const prompt=`You're helping tidy up a page in someone's personal notebook titled "${sec.title}". The page currently uses a "${page.layout}" layout (single / half = 2 cells / quad = 4 cells).
+    const prompt=`You're helping tidy up a page in someone's personal notebook titled "${sec.title}". The page currently uses a "${page.layout}" layout (single = 1 cell / half = 2 cells / quad = 4 cells).
 
-Given the current cell contents below, produce a cleaner version. You MAY:
-- Suggest a different layout ("single" / "half" / "quad") if the content splits naturally into distinct pieces (e.g. multiple poems → quad).
-- Add short titles/headings at the top of cells where helpful.
-- Reorganise the content into the cells for clarity.
+Given the current cell contents below, produce a cleaner version. You MAY and SHOULD use HTML formatting to make the structure readable:
+- <h2> for section titles — use when a cell has a clear heading
+- <b> for names, key terms, dates, amounts, or items that stand out
+- <i> for emphasis, book/movie titles, foreign words
+- <u> for anything that feels like it needs underlining (rare)
+- <ul><li>…</li></ul> for bulleted lists
+- <ol><li>…</li></ol> for numbered / ordered steps
+- <br> for line breaks inside a paragraph
+- <mark> for truly critical words — use VERY sparingly, only for things the user must not miss
+
+Other things you MAY do:
+- Suggest a different layout ("single" / "half" / "quad") if the content splits naturally into distinct pieces (e.g. multiple poems → quad; one topic → single).
+- Reorganise content BETWEEN cells for clarity.
 - Fix obvious typos. DO NOT change the meaning, paraphrase, or add content that wasn't there.
 
-If the content is already well-organised, return it almost as-is with minimal changes.
+If the content is already well-organised, return it almost as-is with minimal formatting changes.
 
-Current cells (JSON):
+Current cells (JSON, plain text):
 ${JSON.stringify(currentCells,null,2)}
 
-Respond with ONLY a JSON object:
-{"layout":"single|half|quad","cells":["cell 0 text","cell 1 text",...]}
-The cells array length MUST match the layout (1 / 2 / 4).`;
+Respond with ONLY a JSON object (no prose, no code fences):
+{"layout":"single|half|quad","cells":["<h2>Title</h2><ul><li>item</li></ul>", "..."]}
+The cells array length MUST match the layout (1 / 2 / 4). Each cell is an HTML string.`;
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:prompt}]})});
     if(!r.ok){let m='HTTP '+r.status;try{const j=await r.json();if(j.error?.message)m=j.error.message;}catch(_){}throw new Error(m);}
     const d=await r.json();
@@ -7069,12 +7144,50 @@ The cells array length MUST match the layout (1 / 2 / 4).`;
     const b2=document.querySelector(`.nb-page[data-nb-page-id="${pageId}"] .nb-refine-btn`);if(b2){b2.disabled=false;b2.textContent='✨ Refine';}
   }
 }
+// Minimal sanitizer for refined HTML. Strips any tag we don't explicitly
+// allow, plus all attributes except `style` (and even there, nukes values
+// that smell like javascript:/expression/url(). Keeps the notebook safe
+// from Claude returning surprising markup.
+function nbSanitizeHtml(html){
+  if(!html)return '';
+  const allowed=new Set(['b','strong','i','em','u','s','strike','h1','h2','h3','h4','ul','ol','li','p','br','span','mark','div','a']);
+  const tmp=document.createElement('div');tmp.innerHTML=html;
+  const walk=(node)=>{
+    const children=[...node.childNodes];
+    children.forEach(walk);
+    if(node.nodeType!==1)return;
+    const tag=(node.tagName||'').toLowerCase();
+    if(!allowed.has(tag)){
+      // Unwrap: move children up into parent, then remove
+      while(node.firstChild)node.parentNode.insertBefore(node.firstChild,node);
+      node.parentNode.removeChild(node);
+      return;
+    }
+    // Strip attrs except style (and scrub style)
+    [...node.attributes].forEach(a=>{
+      if(a.name==='style'){
+        if(/url\(|expression|javascript/i.test(a.value))node.removeAttribute('style');
+      } else if(a.name==='href'&&tag==='a'){
+        // Allow http(s) and mailto only
+        if(!/^(https?:|mailto:)/i.test(a.value))node.removeAttribute('href');
+      } else {
+        node.removeAttribute(a.name);
+      }
+    });
+  };
+  walk(tmp);
+  return tmp.innerHTML;
+}
 function nbShowRefinePreview(page,refined){
+  // Sanitize everything Claude returned before we show it or store it.
+  refined.cells=refined.cells.map(c=>nbSanitizeHtml(c||''));
   const overlay=document.createElement('div');
   overlay.className='modal';overlay.style.display='flex';overlay.id='nb-refine-modal';
-  const cellLbls={single:['Page'],half:['Top','Bottom'],quad:['Top-left','Top-right','Bottom-left','Bottom-right']};
+  const cellLbls={single:['Page'],half:['Left','Right'],quad:['Top-left','Top-right','Bottom-left','Bottom-right']};
   const lbls=cellLbls[refined.layout]||[];
-  const preview=refined.cells.map((c,i)=>`<div style="margin-bottom:14px"><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:5px">${esc(lbls[i]||('Cell '+(i+1)))}</div><div class="nb-refine-preview">${esc(c||'(empty)')}</div></div>`).join('');
+  // Render the sanitised HTML directly so Bold/Italic/Lists preview
+  // formatted, not as tag soup.
+  const preview=refined.cells.map((c,i)=>`<div style="margin-bottom:14px"><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:5px">${esc(lbls[i]||('Cell '+(i+1)))}</div><div class="nb-refine-preview">${c||'<span style="color:var(--muted);font-style:italic">(empty)</span>'}</div></div>`).join('');
   overlay.innerHTML=`<div class="modal-bd"></div>
     <div class="modal-body" style="max-width:620px">
       <h3 style="margin-bottom:6px">Refine preview</h3>
@@ -7092,9 +7205,8 @@ function nbShowRefinePreview(page,refined){
     if(act==='keep'){
       nbPushHistory();
       page.layout=refined.layout;
-      // Wrap plain-text cells back into HTML so the rich-text editor
-      // displays them correctly (newlines → <br>, escape <>).
-      page.cells=refined.cells.map(c=>nbCellToHtml(c));
+      // Cells are already sanitised HTML at this point — store directly.
+      page.cells=refined.cells.slice();
       page.updatedAt=Date.now();
       overlay.remove();_syncBodyLock();
       svAll();rNotebook();
