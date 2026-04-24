@@ -877,15 +877,20 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ti input[type=checkbox]:hover{border-color:var(--text-2)}
 .ti input[type=checkbox]:checked{background:var(--sage);border-color:var(--sage)}
 .ti input[type=checkbox]:checked::after{content:'';position:absolute;left:5px;top:2px;width:5px;height:9px;border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg)}
-.ti.fading{overflow:hidden;pointer-events:none;animation:taskFade 5s ease-out forwards;will-change:opacity,max-height}
+/* Completion animation: collapse height smoothly throughout (not in a rushed
+   burst at the end) and add a slight upward translate so the row feels like
+   it's being lifted out, while the items BELOW slide up to close the gap.
+   Previously max-height held steady for 85% of the run then collapsed in a
+   jerky finish, which made the top of the list feel like it was dropping
+   down to fill the space rather than the bottom pulling up. */
+.ti.fading{overflow:hidden;pointer-events:none;animation:taskFade 1.4s cubic-bezier(.4,0,.2,1) forwards;will-change:opacity,max-height,transform;transform-origin:top}
 .ti.fading .tit{color:var(--muted);text-decoration:line-through}
 .ti.fading input[type=checkbox]{pointer-events:none}
 @keyframes taskFade{
-  0%{opacity:1;background:var(--sage-bg);max-height:140px}
-  8%{opacity:1;background:var(--sage-bg)}
-  18%{opacity:.85;background:var(--surface-2)}
-  85%{opacity:.35;max-height:140px;padding-top:10px;padding-bottom:10px;border-bottom-width:1px}
-  100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0;border-bottom-width:0;margin:0}
+  0%{opacity:1;background:var(--sage-bg);max-height:140px;transform:translateY(0)}
+  20%{opacity:1;background:var(--sage-bg);max-height:140px}
+  55%{opacity:.55;max-height:70px;background:var(--surface-2)}
+  100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0;border-bottom-width:0;margin:0;transform:translateY(-6px)}
 }
 .completed-day{margin-bottom:12px}
 .cmp-date{font-size:11px;font-weight:600;color:var(--muted);padding:4px 2px 6px;text-transform:uppercase;letter-spacing:.06em}
@@ -1144,6 +1149,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 @keyframes pulse-mic{0%,100%{box-shadow:0 0 0 0 rgba(196,106,106,.4)}50%{box-shadow:0 0 0 8px rgba(196,106,106,0)}}
 .ai-ta{flex:1;min-width:0;border:none;padding:10px 2px;font-size:14px;outline:none;resize:none;min-height:38px;max-height:140px;overflow-y:auto;color:var(--text);background:transparent;line-height:1.5}
 .ai-ta::placeholder{color:var(--muted-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Clear button — only shows when the textarea isn't empty (uses
+   :placeholder-shown inverse). Lives between the textarea and the Update
+   button so it's thumb-reachable on mobile. */
+.ai-clear{display:none;width:28px;height:28px;border-radius:50%;border:none;background:var(--surface-2);color:var(--muted);font-size:18px;line-height:1;flex-shrink:0;padding:0;cursor:pointer;align-items:center;justify-content:center;font-weight:500}
+.ai-clear:hover{background:var(--surface-hover);color:var(--text)}
+.ai-ta:not(:placeholder-shown)~.ai-clear{display:inline-flex}
 .ai-btn{background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;white-space:nowrap;flex-shrink:0;border:none}
 .ai-btn:hover{opacity:.85}
 .ai-btn:disabled{opacity:.35;cursor:not-allowed}
@@ -1189,6 +1200,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
     z-index:30;overflow-y:auto;box-shadow:none;
   }
   .aside-col.open{transform:translateX(0);box-shadow:-8px 0 28px rgba(0,0,0,.18)}
+  /* Make the three cards (Needs attention / Next events / Daily habits)
+     share the drawer's available height equally so empty cards still fill
+     and the panel reaches the bottom instead of leaving a dead zone under
+     three tiny chips. */
+  .aside-col .ac-card{flex:1 1 0;min-height:120px;display:flex;flex-direction:column;overflow:hidden}
+  .aside-col .ac-card > *:not(h3){flex:1;overflow-y:auto;min-height:0}
   .aside-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:29;opacity:0;pointer-events:none;transition:opacity .2s}
   .aside-backdrop.open{opacity:1;pointer-events:auto}
   .aside-pull{display:none}
@@ -1845,6 +1862,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
     <textarea class="ai-ta" id="ai-ta" rows="1" placeholder="Tell me what's going on…"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();doUpdate()}"></textarea>
+    <!-- Clear button. CSS (.ai-ta:not(:placeholder-shown) ~ .ai-clear) makes
+         it visible only when the textarea has content — saves having to
+         hold backspace on mobile when you want to start over. -->
+    <button class="ai-clear" id="ai-clear" type="button" onclick="clearAIInput()" title="Clear" aria-label="Clear input">×</button>
     <button class="ai-btn" id="btm-btn" onclick="doUpdate()">Update ↗</button>
   </div>
   <div class="ai-st" id="btm-st"></div>
@@ -1913,7 +1934,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v86';
+const APP_VERSION='v87';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2844,6 +2865,18 @@ const dTxt=()=>new Date().toLocaleDateString('en-ZA',{weekday:'long',day:'numeri
 function bump(l){const t=tod(),y=yest();if(l.lastDate===t)return;l.streak=(l.lastDate===y)?(l.streak||0)+1:1;l.lastDate=t;l.total=(l.total||0)+1;}
 function bumpH(h){const t=tod(),y=yest();if(h.lastDate===t){h.doneToday=true;return;}h.streak=(h.lastDate===y)?(h.streak||0)+1:1;h.lastDate=t;h.total=(h.total||0)+1;h.doneToday=true;}
 
+// Clear the AI command textarea. Wired to the × pill next to the Update
+// button. Also resets the auto-sized height and hides the status line so
+// the bar snaps back to its resting size.
+function clearAIInput(){
+  const ta=document.getElementById('ai-ta');if(!ta)return;
+  ta.value='';
+  ta.style.height='auto';
+  ta.style.height='38px';
+  const st=document.getElementById('btm-st');if(st){st.textContent='';st.className='ai-st';}
+  try{ta.focus();}catch(e){}
+}
+
 // VOICE
 const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
 let recognition=null,isListening=false,voiceStartedAt=0,voiceHeardSound=false,voiceUserStop=false;
@@ -2876,13 +2909,15 @@ async function toggleVoice(){
     vlog('recognition created (default lang, continuous=true)');
     let finalText='';voiceStartedAt=Date.now();voiceHeardSound=false;
     let gotStart=false;
-    // Track which result indices we've already committed as final. Mobile
-    // Chrome/Safari's SpeechRecognition often fires onresult multiple times
-    // with the SAME result marked isFinal — without tracking seen indices we
-    // append the same transcript 3-4 times, producing the "I have a friend
-    // Neil, I have a friend Neil, I have a friend Neil" duplication Zander
-    // saw on mobile.
-    const committedIdx=new Set();
+    // Mobile Chrome on Android has a nasty habit of emitting the SAME final
+    // utterance as multiple *distinct* result entries with different indices.
+    // The earlier index-based dedup missed those because each had a unique
+    // index, so "I have a friend Neil" would still land in the textarea 3x.
+    // Dedup on normalised content instead — cost is that if the user
+    // legitimately repeats themselves verbatim ("okay okay") we collapse it,
+    // but that's an acceptable trade vs the tripling Zander keeps hitting.
+    const seenFinals=new Set();
+    const normTxt=s=>(s||'').trim().toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
     // Preserve whatever's already in the textarea so new speech appends to it
     let baseText=ta.value||'';
     if(baseText&&!/\s$/.test(baseText))baseText+=' ';
@@ -2893,15 +2928,23 @@ async function toggleVoice(){
     recognition.onresult=e=>{
       vlog('onresult results='+e.results.length+' resultIndex='+e.resultIndex);
       let interim='';
-      // Walk the FULL results array (not just from resultIndex) so we can
-      // de-dupe reliably against committedIdx.
+      // Rebuild finalText from scratch every pass so we can apply dedup
+      // consistently. seenFinals survives across events so mobile re-emits
+      // of the same transcript get skipped even if they come with fresh
+      // indices.
+      finalText='';
+      const runSeen=new Set();  // dedup within a single event pass too
       for(let i=0;i<e.results.length;i++){
         const r=e.results[i];
         if(r.isFinal){
-          if(!committedIdx.has(i)){
-            committedIdx.add(i);
-            finalText+=r[0].transcript+' ';
-          }
+          const raw=(r[0].transcript||'').trim();
+          if(!raw)continue;
+          const key=normTxt(raw);
+          if(!key)continue;
+          if(runSeen.has(key))continue;
+          runSeen.add(key);
+          seenFinals.add(key);
+          finalText+=raw+' ';
         } else {
           interim+=r[0].transcript;
         }
@@ -4782,7 +4825,9 @@ function rHabitsFull(){
 }
 
 // TASKS
-const TASK_FADE_MS=5000;
+// Kept in sync with the taskFade keyframe duration so we re-render the list
+// (removing the completed row from the DOM) right after the animation ends.
+const TASK_FADE_MS=1400;
 let _taskFadeTimer=null;
 function chk(id,e){
   e.stopPropagation();
@@ -5259,6 +5304,11 @@ async function refreshCalendarList(){
 // AI UPDATE
 async function doUpdate(){
   const ta=document.getElementById('ai-ta'),msg=ta.value.trim();if(!msg)return;
+  // Stop any in-progress voice recording before sending — otherwise the mic
+  // keeps listening in the background and new speech gets appended after
+  // the update has already been submitted, which was producing orphaned
+  // text in the textarea once the AI response came back.
+  if(isListening){try{voiceUserStop=true;recognition?.stop();}catch(e){}}
   const btn=document.getElementById('btm-btn'),st=document.getElementById('btm-st');
   const key=getKey();if(!key){promptKey();return;}
   btn.disabled=true;btn.textContent='Thinking…';st.className='ai-st';st.textContent='';
