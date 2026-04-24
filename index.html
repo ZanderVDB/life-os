@@ -1483,22 +1483,21 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
      pixel-identical to the laptop view; the whole thing is just drawn
      smaller. Pinch-zoom (viewport meta user-scalable=yes) lets the user
      enlarge to read.
-     Why not container-queries: with flex + aspect-ratio + container
-     containment all interacting, the page's width wasn't resolving
-     before cqw units computed, so internal measurements came out wrong
-     (either tiny or giant). Transform-scale sidesteps all of that. */
+     The scale factor + scaled-visual-height come from JS
+     (nbUpdateMobileScale) because CSS calc() can't produce a unitless
+     ratio from a length-divided-by-length, and transform:scale() needs
+     unitless. JS sets --nb-mobile-scale and --nb-mobile-h on :root.
+     The fallbacks (0.42, 50vh) are just safety in case JS hasn't run
+     yet — they look approximately right and don't crash the layout. */
   .nb-book-wrap{
-    --nb-mobile-w: calc(100vw - 28px);   /* viewport minus .main-wrap padding */
-    --nb-mobile-scale: calc(var(--nb-mobile-w) / 820);
     display:flex;justify-content:center;align-items:flex-start;
     padding:0;position:relative;overflow:visible;
-    /* Height tracks the SCALED visual height of the A4 book */
-    height:calc(var(--nb-mobile-w) * 297 / 210);
+    height:var(--nb-mobile-h,50vh);
   }
   .nb-book{
     flex:0 0 820px;width:820px;max-width:820px;margin:0;
     transform-origin:top center;
-    transform:scale(var(--nb-mobile-scale));
+    transform:scale(var(--nb-mobile-scale,0.42));
   }
   /* Hide the inline (desktop) arrows; show the dedicated bottom row. */
   .nb-arrow-desktop{display:none !important}
@@ -2376,7 +2375,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v98';
+const APP_VERSION='v99';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6590,6 +6589,35 @@ function rNotebook(){
   renderNotebookSub();
   nbBindWheel();
 }
+// Compute the mobile scale factor as a UNITLESS CSS variable. Pure-CSS
+// calc() can't divide a length by a number and produce a unitless result
+// (the result inherits the length unit), and transform:scale() only
+// accepts unitless numbers. The naive calc((100vw - 28px) / 820) ended
+// up as a length and the browser silently dropped the whole transform —
+// which is why the book was rendering at full 820px on phones until now.
+// Compute in JS, push the result onto :root as a unitless var, and
+// CSS reads it via var(--nb-mobile-scale).
+function nbUpdateMobileScale(){
+  try{
+    const w=window.innerWidth;
+    const root=document.documentElement;
+    if(w>768){
+      root.style.removeProperty('--nb-mobile-scale');
+      root.style.removeProperty('--nb-mobile-h');
+      return;
+    }
+    const bookW=Math.max(220,w-28);          // viewport minus main-wrap padding
+    const scale=bookW/820;                   // unitless
+    const visualH=bookW*297/210;             // scaled book's visual height in px
+    root.style.setProperty('--nb-mobile-scale',scale.toFixed(5));
+    root.style.setProperty('--nb-mobile-h',visualH.toFixed(2)+'px');
+  }catch(e){console.warn('[nb scale]',e.message);}
+}
+window.addEventListener('resize',nbUpdateMobileScale);
+window.addEventListener('orientationchange',nbUpdateMobileScale);
+// Run once on first script execution so the value is in place before
+// the user navigates to the notebook route.
+nbUpdateMobileScale();
 // Bind the horizontal scroll-wheel listener AND touch-swipe gestures
 // once. Flips the page on mouse-tilt or shift-scroll (desktop) and on
 // horizontal finger swipes (mobile). Short cooldown prevents a single
