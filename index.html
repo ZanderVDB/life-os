@@ -737,6 +737,41 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .mcw-habits{display:flex;gap:2px;flex-wrap:nowrap;justify-content:flex-end;align-items:center;min-width:0;overflow:hidden}
 .mcw-habit-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
 .mcw-habit-more{font-size:8px;font-weight:700;color:var(--muted);flex-shrink:0;margin-left:1px}
+
+/* ━━━ HABITS-MODE CALENDAR ━━━ */
+/* Day view: vertical list of every habit with done / undone state */
+.hab-day-list{display:flex;flex-direction:column;gap:8px;padding:18px 16px;font-family:inherit}
+.hab-day-hdr{font-family:'Playfair Display',serif;font-size:18px;color:var(--text);margin-bottom:8px;letter-spacing:-.2px}
+.hab-day-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:background .12s,border-color .12s}
+.hab-day-row:hover{background:var(--surface-hover);border-color:var(--border-strong)}
+.hab-day-row.done{background:color-mix(in srgb,var(--sage-bg,var(--surface-2)) 50%,var(--surface))}
+.hab-day-row.rest{opacity:.65}
+.hab-day-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.hab-day-name{flex:1;font-size:13.5px;font-weight:500;color:var(--text)}
+.hab-day-row.done .hab-day-name{color:var(--text)}
+.hab-day-tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:3px 7px;background:var(--surface-2);border-radius:5px}
+.hab-day-state{font-size:11.5px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0;text-transform:uppercase;letter-spacing:.05em}
+.hab-day-row.done .hab-day-state{color:var(--sage,var(--accent))}
+/* Multi-day (3-day / week) — coloured habit bars stacked per day */
+.hab-grid .cv-gcol-hdr{padding:6px 8px}
+.hab-count{font-size:10px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.hab-bars{display:flex;flex-direction:column;gap:3px;padding:6px;min-height:60px}
+.hab-bar{display:flex;align-items:center;padding:3px 7px;border-radius:4px;font-size:10.5px;font-weight:600;color:#1a1a1a;line-height:1.2;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-height:14px}
+.hab-bar > span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hab-bar-exp{padding:4px 8px;font-size:11px}
+/* Month view: same grid, smaller bars, text only in expand mode */
+.hab-weeks .hab-cell{cursor:pointer}
+.hab-cell-bars{display:flex;flex-direction:column;gap:2px;padding:0 2px;flex:1;min-height:0;overflow:hidden}
+.hab-weeks:not(.detail) .hab-bar{height:5px;padding:0;border-radius:2px;font-size:0}
+.hab-weeks.detail .hab-bar{height:auto;font-size:9.5px;padding:1px 4px;border-radius:3px;color:#1a1a1a}
+.hab-cell-more{font-size:9px;font-weight:700;color:var(--muted);text-align:right;padding:0 4px}
+/* Habit day modal */
+.hab-modal-stat{font-size:12px;color:var(--muted);margin-bottom:14px;padding:6px 10px;background:var(--surface-2);border-radius:6px;display:inline-block}
+.hab-modal-sec{margin-bottom:12px}
+.hab-modal-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:6px}
+.hab-modal-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface-2);border-radius:6px;margin-bottom:4px;font-size:13px;color:var(--text)}
+.hab-modal-row.miss{opacity:.7}
+.hab-modal-row.rest{opacity:.55;font-style:italic}
 .mcw-more-note{font-size:9px;color:var(--muted);font-weight:600;text-align:center;padding:1px 2px;pointer-events:none;align-self:end}
 
 /* Spanning bars — every bar fills its grid row uniformly so the "expand all"
@@ -2008,6 +2043,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <button class="btn btn-ghost btn-sm" onclick="goToCalToday()" id="cal-today-btn" style="display:none">Today</button>
+              <!-- Mode toggle: switch the calendar between rendering events
+                   and rendering habit tick history. Same view (day/3day/
+                   week/month) — different data layer. -->
+              <div class="cv-row cv-mode-row">
+                <button class="cv" data-cm="events" onclick="setCalMode('events')">Events</button>
+                <button class="cv" data-cm="habits" onclick="setCalMode('habits')">Habits</button>
+              </div>
               <div class="cv-row">
                 <button class="cv" onclick="setCV('day')">Day</button>
                 <button class="cv" onclick="setCV('3day')">3 Day</button>
@@ -2498,7 +2540,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v105';
+const APP_VERSION='v106';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3495,7 +3537,16 @@ function toggleHabitExcluded(id,dayNum){
   svAll();rHabits();
 }
 function delHabit(id){if(!confirm('Delete this habit? Streak history will be lost.'))return;S.habits=S.habits.filter(x=>x.id!==id);svAll();rHabits();rCal();}
-function setCalMode(){/* removed — habits now merged into main calendar as dots */}
+// Toggle the calendar between Events and Habits modes. Habit mode shows
+// ticked-history bars (one per ticked habit per day) so you can see
+// patterns at a glance and audit past completion. Events mode is the
+// default Google Calendar / reminders view.
+function setCalMode(mode){
+  if(mode!=='events'&&mode!=='habits')mode='events';
+  UI.calMode=mode;
+  UI.monthExpandedDs=null;
+  rCal();
+}
 let ex={id:null,type:null};
 const uid=()=>Math.random().toString(36).slice(2,9);
 // Use local date, not UTC — avoids off-by-one when the local time zone is
@@ -4220,7 +4271,8 @@ async function rCal(){
   calBindSwipe();
   const el=document.getElementById('cal');if(!el)return;
   const ttl=document.getElementById('cal-ttl');if(ttl){ttl.textContent=getCalTitle();ttl.onclick=pickCalDate;ttl.style.cursor='pointer';ttl.title='Pick a date';}
-  document.querySelectorAll('.cv-row .cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
+  document.querySelectorAll('.cv-row:not(.cv-mode-row) .cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
+  document.querySelectorAll('.cv-mode-row .cv').forEach(b=>b.classList.toggle('on',b.dataset.cm===(UI.calMode||'events')));
   const notice=document.getElementById('gcal-notice');
   if(notice)notice.style.display=getGCalToken()?'none':'flex';
   const todayBtn=document.getElementById('cal-today-btn');
@@ -4249,27 +4301,28 @@ async function rCal(){
   // merge could each contribute overlapping entries.
   {const seen=new Set();gcEvs=gcEvs.filter(e=>{if(seen.has(e.id))return false;seen.add(e.id);return true;});}
   const gcForDate=ds=>(gcEvs||[]).filter(e=>e.date===ds);
+  const habitsMode=UI.calMode==='habits';
   if(UI.calView==='day'){
     const ds=localDs(UI.calDate);
     const isToday=UI.calDate.toDateString()===today.toDateString();
     const dates=[{date:UI.calDate,ds,isToday}];
-    el.innerHTML=buildDayView(dates,gcEvs);
+    el.innerHTML=habitsMode?buildHabitsDayView(dates):buildDayView(dates,gcEvs);
     el.onclick=null;
   } else if(UI.calView==='3day'){
     const dates=Array.from({length:3},(_,i)=>{const d=new Date(UI.calDate);d.setDate(UI.calDate.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
-    el.innerHTML=buildThreeDayView(dates,gcEvs);
+    el.innerHTML=habitsMode?buildHabitsMultiDayView(dates):buildThreeDayView(dates,gcEvs);
     el.onclick=null;
   } else if(UI.calView==='week'){
     const s=new Date(UI.calDate);const dow=UI.calDate.getDay();s.setDate(UI.calDate.getDate()+(dow===0?-6:1-dow));
     const dates=Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
-    el.innerHTML=buildWeekView(dates,gcEvs);
+    el.innerHTML=habitsMode?buildHabitsWeekView(dates):buildWeekView(dates,gcEvs);
     el.onclick=null;
   } else {
     // MONTH
     let gcExtra=[];try{gcExtra=await getGCForMonth(y,m+1);}catch(e){}
     let gcPrev=[];try{gcPrev=await getGCForMonth(y,m-1);}catch(e){}
     const allGc=[...gcEvs,...gcExtra,...gcPrev];
-    el.innerHTML=buildMonthView(y,m,today,allGc);
+    el.innerHTML=habitsMode?buildHabitsMonthView(y,m,today):buildMonthView(y,m,today,allGc);
     el.onclick=null;
   }
   renderComingUp();
@@ -4701,6 +4754,142 @@ function buildMonthView(y,m,today,allGc){
     }
   },0);
   return h;
+}
+
+// ─────── HABITS MODE BUILDERS ───────
+// Each view returns the same outer DOM shape as its events counterpart so
+// the surrounding chrome (cell tap → day modal, swipe gesture, etc.) keeps
+// working. Bars are coloured per habit (habitColor) and stacked one per
+// ticked habit. Future / un-ticked days simply have no bars. Tapping a day
+// in any multi-day view jumps to the Day view for that date so the user
+// can audit which habits were done that day.
+function _habitsForDay(ds){
+  return (S.habits||[]).filter(h=>(h.checkedDates||[]).includes(ds));
+}
+function _habitColorFor(h){return habitColor(h);}
+// Day view in habits mode — full list of every habit, with done/undone
+// state for the focused day, plus the rest-day badge if the weekday is
+// excluded for that habit.
+function buildHabitsDayView(dates){
+  const {ds,date,isToday}=dates[0];
+  const habits=S.habits||[];
+  if(!habits.length)return `<div class="cv-empty" style="padding:32px;text-align:center">No habits yet — add one in the Habits tab to start tracking.</div>`;
+  const dow=date.getDay();
+  let h=`<div class="hab-day-list">`;
+  h+=`<div class="hab-day-hdr">${isToday?'Today':DAYS[dow]} · ${date.getDate()} ${date.toLocaleDateString('en-ZA',{month:'long'})}</div>`;
+  habits.forEach(hb=>{
+    const done=(hb.checkedDates||[]).includes(ds);
+    const rest=(hb.excludedDays||[]).includes(dow);
+    const col=_habitColorFor(hb);
+    h+=`<div class="hab-day-row${done?' done':''}${rest?' rest':''}" onclick="toggleHabitDate('${hb.id}','${ds}')" title="Tap to ${done?'untick':'tick'}">
+      <div class="hab-day-dot" style="background:${col}"></div>
+      <div class="hab-day-name">${esc(hb.name)}</div>
+      ${rest?`<span class="hab-day-tag">Rest day</span>`:''}
+      <div class="hab-day-state">${done?'✓ Done':rest?'—':'Not done'}</div>
+    </div>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+// 3-day and week share the same column-based bar layout. Each column is
+// a day; bars stack vertically inside, one per ticked habit.
+function _buildHabitsColumns(dates){
+  const habits=S.habits||[];
+  let h=`<div class="cv-grid-7 hab-grid" style="grid-template-columns:repeat(${dates.length},1fr)">`;
+  dates.forEach(({date,ds,isToday})=>{
+    const dayHabits=_habitsForDay(ds);
+    const dow=date.getDay();
+    const total=habits.length;
+    h+=`<div class="cv-gcol${isToday?' today':''}" style="cursor:pointer" onclick="UI.calDate=new Date(${date.getFullYear()},${date.getMonth()},${date.getDate()});UI.calView='day';rCal()" title="Open day in habit detail">
+      <div class="cv-gcol-hdr">
+        <span><span class="cv-gcol-dname">${DAYS[dow]}</span><span class="cv-gcol-dnum" style="margin-left:6px">${date.getDate()}</span></span>
+        <span class="hab-count">${dayHabits.length}/${total||0}</span>
+      </div>
+      <div class="hab-bars">${dayHabits.length?dayHabits.map(hb=>`<div class="hab-bar" style="background:${_habitColorFor(hb)}" title="${esc(hb.name)}"><span>${esc(hb.name)}</span></div>`).join(''):'<div class="cv-empty" style="font-size:11px">—</div>'}</div>
+    </div>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+function buildHabitsMultiDayView(dates){return _buildHabitsColumns(dates);}
+function buildHabitsWeekView(dates){return _buildHabitsColumns(dates);}
+// Month view in habits mode — same grid as the events month view, but each
+// cell shows a stack of small coloured bars instead of event text. Tap the
+// cell to open the day modal showing which habits were ticked.
+function buildHabitsMonthView(y,m,today){
+  const cells=_monthCells(y,m);
+  let lastWeek=0;for(let i=0;i<cells.length;i++)if(!cells[i].faded)lastWeek=Math.floor(i/7);
+  const showWeeks=lastWeek+1;
+  const detail=!!UI.monthDetail;
+  const MAX_ROWS=detail?8:5;
+  let h=`<div class="mv-toolbar"><button class="btn btn-ghost btn-sm" onclick="toggleMonthDetail()">${detail?'▦ Bars':'☰ Expand all'}</button></div>`;
+  h+=`<div class="cv-weeks${detail?' detail':''} hab-weeks">`;
+  h+=`<div class="cv-week-row cv-week-hdr">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="cv-week-dayname">${d}</div>`).join('')}</div>`;
+  for(let wk=0;wk<showWeeks;wk++){
+    const weekCells=cells.slice(wk*7,wk*7+7);
+    h+=`<div class="cv-week-row mv-wk hab-wk" style="--wk-rows:${MAX_ROWS}">`;
+    weekCells.forEach(({y:cy,m:cm,d:cd,faded},idx)=>{
+      const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
+      const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
+      const dayHabits=_habitsForDay(ds);
+      const showCount=detail?MAX_ROWS:Math.min(MAX_ROWS-1,dayHabits.length);
+      const visible=dayHabits.slice(0,showCount);
+      const extra=dayHabits.length-visible.length;
+      h+=`<div class="mcw-cell hab-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}" style="grid-column:${idx+1};grid-row:1/-1">
+        <div class="mcw-top"><div class="mcw-num">${cd}</div></div>
+        <div class="hab-cell-bars">${visible.map(hb=>detail?`<div class="hab-bar hab-bar-exp" style="background:${_habitColorFor(hb)}" title="${esc(hb.name)}"><span>${esc(hb.name)}</span></div>`:`<div class="hab-bar" style="background:${_habitColorFor(hb)}" title="${esc(hb.name)}"></div>`).join('')}</div>
+        ${extra>0?`<div class="hab-cell-more">+${extra}</div>`:''}
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`</div>`;
+  setTimeout(()=>{
+    const cal=document.getElementById('cal');if(!cal)return;
+    if(!detail){
+      // Tap a cell → open the day modal (in habits mode) so user sees which
+      // habits were done.
+      cal.onclick=e=>{const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openHabitDayModal(cy,cm,cd);};
+    } else {
+      // Expanded view — each cell jumps straight to the Day-view audit.
+      cal.onclick=e=>{const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);UI.calDate=new Date(cy,cm,cd);UI.calView='day';rCal();};
+    }
+  },0);
+  return h;
+}
+// Lightweight day modal for habits mode. Lists habits done / not done on
+// the tapped day with a "Open in Day view" link to the full audit.
+function openHabitDayModal(cy,cm,cd){
+  hideMcwPopover();
+  const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
+  const date=new Date(cy,cm,cd);
+  const dow=date.getDay();
+  const habits=S.habits||[];
+  const done=habits.filter(h=>(h.checkedDates||[]).includes(ds));
+  const notDone=habits.filter(h=>!(h.checkedDates||[]).includes(ds)&&!(h.excludedDays||[]).includes(dow));
+  const rest=habits.filter(h=>!(h.checkedDates||[]).includes(ds)&&(h.excludedDays||[]).includes(dow));
+  // Re-use the events day modal styling
+  const overlay=document.createElement('div');
+  overlay.className='modal';overlay.style.display='flex';overlay.id='habit-day-modal';
+  overlay.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:440px">
+      <h3>${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</h3>
+      <div class="hab-modal-stat">${done.length} of ${habits.length||0} done${rest.length?` · ${rest.length} rest day${rest.length===1?'':'s'}`:''}</div>
+      ${done.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Done</div>${done.map(hb=>`<div class="hab-modal-row done"><div class="hab-day-dot" style="background:${_habitColorFor(hb)}"></div><span>${esc(hb.name)}</span></div>`).join('')}</div>`:''}
+      ${notDone.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Not done</div>${notDone.map(hb=>`<div class="hab-modal-row miss"><div class="hab-day-dot" style="background:${_habitColorFor(hb)};opacity:.35"></div><span>${esc(hb.name)}</span></div>`).join('')}</div>`:''}
+      ${rest.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Rest days</div>${rest.map(hb=>`<div class="hab-modal-row rest"><div class="hab-day-dot" style="background:${_habitColorFor(hb)};opacity:.35"></div><span>${esc(hb.name)}</span></div>`).join('')}</div>`:''}
+      <div class="modal-actions" style="margin-top:14px">
+        <button class="btn btn-sm" data-action="close">Close</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary btn-sm" data-action="open">Open in Day view</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);_syncBodyLock();
+  overlay.addEventListener('click',e=>{
+    const act=e.target.dataset?.action;
+    if(act==='close'||e.target.closest('.modal-bd')){overlay.remove();_syncBodyLock();}
+    else if(act==='open'){overlay.remove();_syncBodyLock();UI.calDate=date;UI.calView='day';rCal();}
+  });
 }
 
 // Desktop-only hover popover: preview a day's events on mouseover without
