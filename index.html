@@ -77,6 +77,26 @@ html{color-scheme:light}
    (line below) already kills the rubber-band effect, so touch-action:none
    wasn't pulling its weight. */
 body.no-scroll{overflow:hidden}
+/* Calendar-disconnected banner. Sits at the very top of the app shell
+   so it's the first thing the user sees if their GCal token has lapsed. */
+.gcal-warn{position:sticky;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;background:var(--red-bg,#fde7e7);color:var(--red,#c44);font-size:12.5px;font-weight:600;cursor:pointer;border-bottom:1px solid var(--red,#c44);font-family:'Inter',system-ui,sans-serif}
+[data-theme="studio"] .gcal-warn{background:rgba(196,68,68,.15);color:#ff8a8a;border-bottom-color:rgba(196,68,68,.4)}
+.gcal-warn:hover{filter:brightness(1.04)}
+.gcal-warn-icon{font-size:16px;line-height:1}
+.gcal-warn-text{line-height:1.3}
+/* Portrait-only on phones. Hidden by default; the @media rule below
+   reveals it when a touch device is rotated landscape. Desktops in
+   landscape are unaffected (pointer:coarse + max-width gate). */
+#orientation-warning{display:none;position:fixed;inset:0;z-index:99999;background:var(--bg);color:var(--text);align-items:center;justify-content:center;padding:32px;text-align:center;font-family:'Inter',system-ui,sans-serif}
+.orientation-warning-inner{display:flex;flex-direction:column;align-items:center;gap:14px;max-width:300px}
+.orientation-warning-icon{font-size:64px;line-height:1;color:var(--accent);font-family:'Playfair Display',serif;animation:rotate-hint 1.6s ease-in-out infinite}
+.orientation-warning-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;color:var(--text);line-height:1.2}
+.orientation-warning-sub{font-size:13px;color:var(--muted);line-height:1.5}
+@keyframes rotate-hint{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-90deg)}}
+@media (max-width:900px) and (orientation:landscape) and (pointer:coarse){
+  #app,#login,.mobile-top,.aside-col,.aside-backdrop,.ai-bar,.mobile-drawer{display:none !important}
+  #orientation-warning{display:flex !important}
+}
 /* Never let horizontal overflow make the page wider than the viewport */
 html,body{max-width:100%;overflow-x:hidden}
 .main-wrap,.app,.main-col,.route,section{max-width:100%;min-width:0}
@@ -933,10 +953,51 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .hc{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .15s}
 .hc:hover{border-color:var(--border-strong)}
 .hc.done{background:var(--sage-bg);border-color:var(--sage)}
-/* Habit "rest day" picker — small weekday pills inside each habit card */
-.hb-rest-row{display:flex;align-items:center;gap:4px;margin:2px 0 4px;flex-wrap:wrap;font-family:'Inter',system-ui,sans-serif}
-.hb-rest-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-right:6px}
-.hb-rest-d{padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .12s}
+/* Habit description textarea — auto-grows to fit content. Critical:
+   overflow:hidden so the textarea NEVER shows an internal scrollbar
+   (we manage height via JS oninput / on render). resize:none stops
+   the user dragging it manually. min-height:0 lets it shrink to a
+   single line when empty. */
+.hb-desc{
+  font-size:12px;line-height:1.5;
+  padding:8px 10px;
+  background:var(--surface-2);
+  color:var(--text);
+  border:1px solid transparent;border-radius:8px;
+  width:100%;display:block;
+  font-family:inherit;
+  outline:none;resize:none;
+  min-height:0;
+  overflow:hidden;
+  box-sizing:border-box;
+  word-break:break-word;
+}
+.hb-desc:focus{border-color:var(--border-strong);background:var(--surface)}
+.hb-desc::placeholder{color:var(--muted-2);font-style:italic}
+
+/* Brain item detail view (project-style edit page). Activated by
+   openBrainDetail when an idea/resource/note is tapped. */
+#brain-detail-view{display:flex;flex-direction:column;gap:14px;animation:fade .25s ease}
+.bd-hdr{display:flex;align-items:center;gap:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.bd-back{padding:6px 12px}
+.bd-typetag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:3px 8px;background:var(--surface-2);border-radius:6px}
+.bd-date{margin-left:auto;font-size:11px;color:var(--muted);font-style:italic;font-family:'Playfair Display',serif}
+.bd-field{display:flex;flex-direction:column;gap:5px}
+.bd-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.bd-title-input{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;padding:10px 14px;line-height:1.25;letter-spacing:-.2px}
+/* The description textarea grows to fit its content. overflow:hidden so
+   we never get an internal scrollbar — height is controlled by the
+   oninput auto-grow handler. */
+.bd-desc-ta{min-height:200px;resize:none;overflow:hidden;line-height:1.6;padding:14px 16px;font-size:14px;font-family:inherit}
+.bd-actions{display:flex;justify-content:space-between;gap:10px;padding-top:10px}
+/* Habit "rest day" picker — label on the left, weekday pills laid out
+   in a 4×2 grid (4 on the top row, 3 on the bottom). Pills stretch to
+   fill their grid cells so the bottom row's 3 pills line up neatly
+   beneath the top row's 4. */
+.hb-rest-row{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:10px;margin:2px 0 4px;font-family:'Inter',system-ui,sans-serif}
+.hb-rest-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.hb-rest-days{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.hb-rest-d{padding:5px 4px;border-radius:6px;border:1px solid var(--border);background:transparent;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .12s;text-align:center}
 .hb-rest-d:hover{background:var(--surface-2);color:var(--text)}
 .hb-rest-d.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .hc-tick{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--muted-2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all .15s}
@@ -1675,6 +1736,19 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 </head>
 <body>
 
+<!-- Mobile-only orientation gate. App is designed for portrait; if the
+     user rotates to landscape it overlays a "rotate to portrait" message
+     instead of trying to lay out for landscape. Works on any browser
+     (CSS media-query); the screen.orientation.lock attempt below is a
+     bonus on installed PWA. -->
+<div id="orientation-warning">
+  <div class="orientation-warning-inner">
+    <div class="orientation-warning-icon">↻</div>
+    <div class="orientation-warning-title">Please rotate your device</div>
+    <div class="orientation-warning-sub">Life OS is designed for portrait mode.</div>
+  </div>
+</div>
+
 <!-- ICON DEFS -->
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -1733,6 +1807,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <div class="save-pill" id="sp">Saved</div>
 
 <!-- APP -->
+<!-- Calendar disconnect warning. Sits at the top of the app shell when
+     getGCalToken() returns null, so the user can't open the app and miss
+     the fact that their token expired (which used to lead them to create
+     events that ghost-existed in S.customEvents). Tap to reconnect. -->
+<div id="gcal-warn" class="gcal-warn" style="display:none" onclick="connectGoogleCalendar()">
+  <span class="gcal-warn-icon">⚠</span>
+  <span class="gcal-warn-text">Google Calendar isn't connected — tap to reconnect</span>
+</div>
+
 <div class="app" id="app" style="display:none">
 
   <!-- SIDEBAR -->
@@ -2061,6 +2144,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
           <div class="nl-grid" id="notes"></div>
         </div>
+        <!-- Brain item detail view (project-style). Shown via openBrainDetail
+             when the user taps an idea / resource / note. The list/tabs
+             above are hidden while this is up. -->
+        <div id="brain-detail-view" style="display:none"></div>
       </div>
 
       <!-- NOTEBOOK -->
@@ -2411,7 +2498,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v104';
+const APP_VERSION='v105';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2496,6 +2583,10 @@ function setRoute(r,skipHash){
   const bs=document.getElementById('brain-search');if(bs&&bs.value){bs.value='';UI.brainQuery='';}
   // Leave project detail mode if user navigates away from projects
   if(r!=='projects'&&UI.projectDetail){UI.projectDetail=null;const pd=document.getElementById('project-detail-view');if(pd)pd.style.display='none';const pl=document.getElementById('projects-list-view');if(pl)pl.style.display='block';}
+  // Close the brain detail view on any route change so navigating away
+  // and back lands on the list, not a stale item that may have been
+  // edited/deleted from another device.
+  if(r!=='brain'&&UI.brainDetail){closeBrainDetail();}
   window.scrollTo({top:0,behavior:'instant'});
   if(r==='settings')rSettings();
   // Stop any live notebook voice recording when navigating away
@@ -2714,7 +2805,7 @@ async function fetchCalendarList(){
   if(Date.now()-_calListCache.ts<5*60000&&_calListCache.cals.length)return _calListCache.cals;
   try{
     const r=await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader',{headers:{Authorization:'Bearer '+tok}});
-    if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}return[];}
+    if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}try{refreshGCalWarn();}catch(_){}return[];}
     if(!r.ok)return[];
     const d=await r.json();
     // Include every readable calendar — filtering by selected:true was hiding
@@ -2747,7 +2838,7 @@ async function fetchGCal(start,end){
   const results=await Promise.all(activeCals.map(cal=>(async()=>{
     try{
       const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime&maxResults=250`,{headers:{Authorization:'Bearer '+tok}});
-      if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}return[];}
+      if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}try{refreshGCalWarn();}catch(_){}return[];}
       if(!r.ok)return[];
       const d=await r.json();
       return(d.items||[]).map(ev=>{
@@ -3137,7 +3228,15 @@ function handleSnapshot(snap){
     let focStart=null,focEnd=null;
     if(focEditable){try{focStart=focused.selectionStart;focEnd=focused.selectionEnd;}catch(_){}}
     // Pull arrays / objects into local state
-    ['tasks','builds','learning','ideas','notes','customEvents','habits','resources','people'].forEach(k=>{if(d[k]!==undefined)S[k]=d[k];});
+    ['tasks','builds','learning','ideas','notes','habits','resources','people'].forEach(k=>{if(d[k]!==undefined)S[k]=d[k];});
+    // customEvents was a fallback for GCal-create failures and now produces
+    // ghost entries on the calendar (visible in some views, missing from
+    // others, undeletable). The new GCal hard-gate prevents new ones, but
+    // legacy entries persist in Firestore until they're cleared. Drop them
+    // unconditionally on every snapshot — next svAll writes back []. If you
+    // ever want this back as a real local-only events store it'll need to
+    // be a different field.
+    S.customEvents=[];
     S.dayNotes=d.dayNotes||{};
     S.todaysTip=d.todaysTip||null;
     S.growthFocus=d.growthFocus||null;
@@ -5420,16 +5519,20 @@ function rHabitsFull(){
     const color=habitColor(h);
     return `<div class="lc2" style="border-left-color:${color}">
       <div class="lc2-hdr"><div class="lc2-skill">${esc(h.name)}</div><button class="lc2-del" onclick="delHabit('${h.id}')" title="Delete">×</button></div>
-      <textarea class="ta hb-desc" id="hb-desc-${h.id}" placeholder="What 'done' means for this habit…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'" onblur="saveHabitDesc('${h.id}')" rows="1" style="font-size:12px;padding:7px 10px;background:var(--surface-2);border-color:transparent;min-height:0;resize:none;line-height:1.45;width:100%;display:block;font-family:inherit;color:var(--text);outline:none;border:1px solid transparent;border-radius:8px">${esc(h.description||'')}</textarea>
+      <textarea class="ta hb-desc" id="hb-desc-${h.id}" placeholder="What 'done' means for this habit…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'" onblur="saveHabitDesc('${h.id}')" rows="1">${esc(h.description||'')}</textarea>
       <!-- Rest-day picker. Tap a weekday to mark it as a rest day for
            this habit; missing it doesn't break the streak. Useful for
-           e.g. weekend rest days on a 5-day-a-week schedule. -->
+           e.g. weekend rest days on a 5-day-a-week schedule. Days laid
+           out as 4-on-top + 3-on-bottom for a tidy block instead of a
+           single line that wraps awkwardly. -->
       <div class="hb-rest-row">
         <span class="hb-rest-lbl">Rest days</span>
-        ${[['Sun',0],['Mon',1],['Tue',2],['Wed',3],['Thu',4],['Fri',5],['Sat',6]].map(([lbl,d])=>{
-          const on=(h.excludedDays||[]).includes(d);
-          return `<button class="hb-rest-d${on?' on':''}" onclick="toggleHabitExcluded('${h.id}',${d})" title="${on?'Tap to remove rest-day':'Tap to mark as rest-day'}">${lbl}</button>`;
-        }).join('')}
+        <div class="hb-rest-days">
+          ${[['Sun',0],['Mon',1],['Tue',2],['Wed',3],['Thu',4],['Fri',5],['Sat',6]].map(([lbl,d])=>{
+            const on=(h.excludedDays||[]).includes(d);
+            return `<button class="hb-rest-d${on?' on':''}" onclick="toggleHabitExcluded('${h.id}',${d})" title="${on?'Tap to remove rest-day':'Tap to mark as rest-day'}">${lbl}</button>`;
+          }).join('')}
+        </div>
       </div>
       ${tier?`<div class="lc2-tier"><span class="tier-badge ${tier.cls}">${tier.icon} ${tier.label}</span>${nextTier?`<span style="font-size:10px;color:var(--muted)">${nextTier.days-stats.current} days to ${nextTier.label}</span>`:''}</div>`:(nextTier?`<div class="lc2-tier"><span style="font-size:10px;color:var(--muted)">${nextTier.days-stats.current} days to first tier (${nextTier.label})</span></div>`:'')}
       <div class="lc2-stats">
@@ -5741,19 +5844,93 @@ function rBuilds(){
 
 
 // IDEAS
-function saveIdea(id){const i=S.ideas.find(x=>x.id===id);if(!i)return;const ti=document.getElementById('i-t-'+id),de=document.getElementById('i-d-'+id);if(ti?.value?.trim())i.title=ti.value.trim();if(de?.value?.trim())i.desc=de.value.trim();svAll();ex={id:null,type:null};rIdeas();}
-function delIdea(id){if(!confirm('Delete this idea?'))return;S.ideas=S.ideas.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rIdeas();}
-function rIdeas(){const el=document.getElementById('ideas');if(!el)return;const list=brainFilter([...S.ideas].reverse(),['title','desc']);el.innerHTML=list.length?list.map(i=>{const isEx=ex.id===i.id&&ex.type==='idea';return`<div class="ic" onclick="toggleEx('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div>${isEx?`<div class="i-exp" onclick="event.stopPropagation()"><input class="inp-e" id="i-t-${i.id}" value="${esc(i.title)}"><textarea class="exp-ta xl" id="i-d-${i.id}" rows="4">${esc(i.desc)}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveIdea('${i.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delIdea('${i.id}')">Delete</button></div></div>`:''}</div></div>`;}).join(''):(UI.brainQuery?`<div class="no-t">No ideas match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No ideas yet — drop one in or dictate it</div>`);}
+function saveIdea(id){const i=S.ideas.find(x=>x.id===id);if(!i)return;const ti=document.getElementById('bd-title'),de=document.getElementById('bd-desc');if(ti?.value?.trim())i.title=ti.value.trim();if(de?.value?.trim())i.desc=de.value.trim();svAll();closeBrainDetail();rIdeas();}
+function delIdea(id){if(!confirm('Delete this idea?'))return;S.ideas=S.ideas.filter(x=>x.id!==id);svAll();closeBrainDetail();rIdeas();}
+function rIdeas(){const el=document.getElementById('ideas');if(!el)return;const list=brainFilter([...S.ideas].reverse(),['title','desc']);el.innerHTML=list.length?list.map(i=>`<div class="ic" onclick="openBrainDetail('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div></div></div>`).join(''):(UI.brainQuery?`<div class="no-t">No ideas match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No ideas yet — drop one in or dictate it</div>`);}
 
 // RESOURCES
-function saveRes(id){const r=S.resources.find(x=>x.id===id);if(!r)return;const ti=document.getElementById('r-t-'+id),de=document.getElementById('r-d-'+id),ur=document.getElementById('r-u-'+id);if(ti?.value?.trim())r.title=ti.value.trim();if(de?.value?.trim())r.desc=de.value.trim();if(ur)r.url=ur.value.trim();svAll();ex={id:null,type:null};rResources();}
-function delRes(id){if(!confirm('Delete this resource?'))return;S.resources=S.resources.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rResources();}
-function rResources(){const el=document.getElementById('resources');if(!el)return;const list=brainFilter([...S.resources].reverse(),['title','desc','url','tag']);el.innerHTML=list.length?list.map(r=>{const isEx=ex.id===r.id&&ex.type==='resource';return`<div class="rc" onclick="toggleEx('resource','${r.id}')"><div class="rc-top"><div class="rc-title">${esc(r.title)}</div>${r.tag?`<span class="rc-tag">${esc(r.tag)}</span>`:''}</div>${r.desc?`<div class="rc-desc">${esc(r.desc)}</div>`:''} ${r.url?`<a class="rc-url" href="${esc(r.url)}" target="_blank" onclick="event.stopPropagation()">${esc(r.url)}</a>`:''} ${isEx?`<div class="r-exp" onclick="event.stopPropagation()"><input class="inp-e" id="r-t-${r.id}" value="${esc(r.title)}"><input class="inp-e" id="r-u-${r.id}" value="${esc(r.url||'')}" placeholder="URL"><textarea class="exp-ta" id="r-d-${r.id}" rows="3">${esc(r.desc||'')}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveRes('${r.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delRes('${r.id}')">Delete</button></div></div>`:''}</div>`;}).join(''):(UI.brainQuery?`<div class="no-t">No resources match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No resources saved</div>`);}
+function saveRes(id){const r=S.resources.find(x=>x.id===id);if(!r)return;const ti=document.getElementById('bd-title'),de=document.getElementById('bd-desc'),ur=document.getElementById('bd-url'),tg=document.getElementById('bd-tag');if(ti?.value?.trim())r.title=ti.value.trim();if(de)r.desc=de.value.trim();if(ur)r.url=ur.value.trim();if(tg)r.tag=tg.value;svAll();closeBrainDetail();rResources();}
+function delRes(id){if(!confirm('Delete this resource?'))return;S.resources=S.resources.filter(x=>x.id!==id);svAll();closeBrainDetail();rResources();}
+function rResources(){const el=document.getElementById('resources');if(!el)return;const list=brainFilter([...S.resources].reverse(),['title','desc','url','tag']);el.innerHTML=list.length?list.map(r=>`<div class="rc" onclick="openBrainDetail('resource','${r.id}')"><div class="rc-top"><div class="rc-title">${esc(r.title)}</div>${r.tag?`<span class="rc-tag">${esc(r.tag)}</span>`:''}</div>${r.desc?`<div class="rc-desc">${esc(r.desc)}</div>`:''} ${r.url?`<a class="rc-url" href="${esc(r.url)}" target="_blank" onclick="event.stopPropagation()">${esc(r.url)}</a>`:''}</div>`).join(''):(UI.brainQuery?`<div class="no-t">No resources match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No resources saved</div>`);}
 
 // NOTES
-function saveNote(id){const n=S.notes.find(x=>x.id===id);if(!n)return;const ti=document.getElementById('n-t-'+id),bo=document.getElementById('n-b-'+id);if(ti?.value?.trim())n.title=ti.value.trim();if(bo?.value?.trim())n.body=bo.value.trim();svAll();ex={id:null,type:null};rNotes();}
-function delNote(id){if(!confirm('Delete this note?'))return;S.notes=S.notes.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rNotes();}
-function rNotes(){const el=document.getElementById('notes');if(!el)return;const list=brainFilter(S.notes,['title','body']);el.innerHTML=list.length?list.map(n=>{const isEx=ex.id===n.id&&ex.type==='note';return`<div class="nc" onclick="toggleEx('note','${n.id}')"><div class="nct">${esc(n.title)}</div><div class="ncb">${esc(n.body)}</div>${isEx?`<div class="n-exp" onclick="event.stopPropagation()"><input class="inp-e" id="n-t-${n.id}" value="${esc(n.title)}" style="font-size:12px"><textarea class="exp-ta xl" id="n-b-${n.id}" rows="4">${esc(n.body)}</textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveNote('${n.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delNote('${n.id}')">Delete</button></div></div>`:''}</div>`;}).join(''):(UI.brainQuery?`<div class="no-t">No notes match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No notes yet</div>`);}
+function saveNote(id){const n=S.notes.find(x=>x.id===id);if(!n)return;const ti=document.getElementById('bd-title'),bo=document.getElementById('bd-desc');if(ti?.value?.trim())n.title=ti.value.trim();if(bo?.value?.trim())n.body=bo.value.trim();svAll();closeBrainDetail();rNotes();}
+function delNote(id){if(!confirm('Delete this note?'))return;S.notes=S.notes.filter(x=>x.id!==id);svAll();closeBrainDetail();rNotes();}
+function rNotes(){const el=document.getElementById('notes');if(!el)return;const list=brainFilter(S.notes,['title','body']);el.innerHTML=list.length?list.map(n=>`<div class="nc" onclick="openBrainDetail('note','${n.id}')"><div class="nct">${esc(n.title)}</div><div class="ncb">${esc(n.body)}</div></div>`).join(''):(UI.brainQuery?`<div class="no-t">No notes match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No notes yet</div>`);}
+
+// Brain detail-view: project-style edit page that replaces the list/tabs
+// when a user taps an idea / resource / note. Title at the top, an
+// auto-growing description textarea below, and Save/Delete actions.
+// Replaces the inline-expand `ex` pattern that pushed everything else
+// on the page down when opened.
+function openBrainDetail(type,id){
+  UI.brainDetail={type,id};
+  document.querySelectorAll('#brain-tabs,#brain-ideas-panel,#brain-resources-panel,#brain-notes-panel').forEach(el=>{if(el)el.style.display='none';});
+  // Hide quick-add forms too — they live inside the panels we just hid
+  // but their parent panel might've been display:block when toggled.
+  document.querySelectorAll('#idea-qa,#res-qa,#note-qa').forEach(el=>{if(el)el.style.display='none';});
+  const dv=document.getElementById('brain-detail-view');if(dv)dv.style.display='block';
+  // Hide page header's tabs counter since it's wrong while in detail
+  const sa=document.querySelector('.route[data-route="brain"] .page-actions');
+  if(sa)sa.style.visibility='hidden';
+  renderBrainDetail();
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function closeBrainDetail(){
+  UI.brainDetail=null;
+  const dv=document.getElementById('brain-detail-view');if(dv){dv.style.display='none';dv.innerHTML='';}
+  document.getElementById('brain-tabs').style.display='';
+  setBrainTab(UI.brainTab);
+  const sa=document.querySelector('.route[data-route="brain"] .page-actions');
+  if(sa)sa.style.visibility='';
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function renderBrainDetail(){
+  const dv=document.getElementById('brain-detail-view');if(!dv||!UI.brainDetail)return;
+  const {type,id}=UI.brainDetail;
+  const item=type==='idea'?S.ideas.find(x=>x.id===id):type==='resource'?S.resources.find(x=>x.id===id):S.notes.find(x=>x.id===id);
+  if(!item){closeBrainDetail();return;}
+  const typeLabel={idea:'Idea',resource:'Resource',note:'Note'}[type];
+  const descField=type==='note'?'body':'desc';
+  const descLabel=type==='note'?'Content':'Description';
+  const descValue=item[descField]||'';
+  const saveFn=type==='idea'?'saveIdea':type==='resource'?'saveRes':'saveNote';
+  const delFn=type==='idea'?'delIdea':type==='resource'?'delRes':'delNote';
+  // Resource has extra URL + tag fields
+  const extraFields=type==='resource'?`
+    <div class="bd-field">
+      <label class="bd-lbl">URL</label>
+      <input id="bd-url" class="input" value="${esc(item.url||'')}" placeholder="https://…" style="width:100%">
+    </div>
+    <div class="bd-field">
+      <label class="bd-lbl">Tag</label>
+      <select id="bd-tag" class="select" style="width:auto">
+        ${['article','tool','video','book','person','other'].map(t=>`<option value="${t}"${item.tag===t?' selected':''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('')}
+      </select>
+    </div>`:'';
+  dv.innerHTML=`
+    <div class="bd-hdr">
+      <button class="btn btn-ghost btn-sm bd-back" onclick="closeBrainDetail()">← Back</button>
+      <span class="bd-typetag">${typeLabel}</span>
+      <span class="bd-date">${item.date?fmt(item.date):''}</span>
+    </div>
+    <div class="bd-field">
+      <label class="bd-lbl">Title</label>
+      <input id="bd-title" class="input bd-title-input" value="${esc(item.title||'')}" placeholder="Title">
+    </div>
+    ${extraFields}
+    <div class="bd-field">
+      <label class="bd-lbl">${descLabel}</label>
+      <textarea id="bd-desc" class="ta bd-desc-ta" placeholder="${type==='note'?'Write the note…':'Add a longer description…'}" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${esc(descValue)}</textarea>
+    </div>
+    <div class="bd-actions">
+      <button class="btn btn-danger btn-sm" onclick="${delFn}('${id}')">Delete</button>
+      <button class="btn btn-primary btn-sm" onclick="${saveFn}('${id}')">Save & close</button>
+    </div>`;
+  // Auto-size the description textarea after mount so existing content
+  // expands to fit instead of starting at the default rows="2" height.
+  setTimeout(()=>{const ta=document.getElementById('bd-desc');if(ta){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}},0);
+}
 
 function setBrainTab(t){UI.brainTab=t;document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['ideas','resources','notes'].forEach(x=>{const el=document.getElementById('brain-'+x+'-panel');if(el)el.style.display=x===t?'block':'none';});const brainCnt=document.getElementById('brain-cnt');if(brainCnt)brainCnt.textContent=t==='ideas'?`${S.ideas.length} ideas`:t==='resources'?`${S.resources.length} resources`:`${S.notes.length} notes`;const s=document.getElementById('brain-search');if(s&&s.value)searchBrain(s.value);}
 function searchBrain(q){
@@ -6784,6 +6961,15 @@ window.addEventListener('orientationchange',nbUpdateMobileScale);
 // Run once on first script execution so the value is in place before
 // the user navigates to the notebook route.
 nbUpdateMobileScale();
+// Try to lock orientation to portrait on installed-PWA / fullscreen
+// contexts. The standard API only works in those modes; in a normal
+// mobile-browser tab it'll throw. The CSS media-query overlay above
+// catches the cases where this fails.
+try{
+  if(screen&&screen.orientation&&typeof screen.orientation.lock==='function'){
+    screen.orientation.lock('portrait').catch(()=>{/* not allowed in this context, that's fine */});
+  }
+}catch(e){}
 // Bind the horizontal scroll-wheel listener AND touch-swipe gestures
 // once. Flips the page on mouse-tilt or shift-scroll (desktop) and on
 // horizontal finger swipes (mobile). Short cooldown prevents a single
@@ -7731,9 +7917,23 @@ function render(){
   rUpcom();rCal();rFocus();rHabits();rTasks();rPeople();rBuilds();rIdeas();rResources();rNotes();
   rAttention();rTodayWeek();setBrainTab(UI.brainTab);
   refreshTipCard();
+  refreshGCalWarn();
   if(currentRoute==='settings')rSettings();
   if(currentRoute==='notebook')rNotebook();
 }
+// Show / hide the prominent "GCal not connected" banner based on whether
+// we have a live token. Called from render() on every snapshot. Also
+// re-checked periodically below in case the token expires while the
+// app is open.
+function refreshGCalWarn(){
+  const el=document.getElementById('gcal-warn');if(!el)return;
+  const hasTok=!!getGCalToken();
+  el.style.display=(CU&&!hasTok)?'flex':'none';
+}
+// Token expires after ~1hr (Google access token lifetime). If the user
+// keeps the app open longer than that, the warning won't appear until
+// something triggers render(). Poll every 60s as a backstop.
+setInterval(refreshGCalWarn,60000);
 // Pull the tip card from current S state. Runs on every render — so when a
 // Firestore snapshot delivers a newer plan generated on another device, the
 // local tip card refreshes instead of staying on whatever was shown before.
