@@ -338,6 +338,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .cal-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
 .cal-nav{display:flex;align-items:center;gap:6px}
 .cal-ttl{font-size:15px;font-weight:600;min-width:160px;text-align:center;color:var(--text);font-family:'Playfair Display','Georgia',serif}
+.cal-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .carr{background:transparent;border:1px solid var(--border);border-radius:8px;width:30px;height:30px;font-size:13px;color:var(--muted);display:flex;align-items:center;justify-content:center}
 .carr:hover{background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
 .cv-row{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:2px}
@@ -752,18 +753,34 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .hab-day-tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:3px 7px;background:var(--surface-2);border-radius:5px}
 .hab-day-state{font-size:11.5px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0;text-transform:uppercase;letter-spacing:.05em}
 .hab-day-row.done .hab-day-state{color:var(--sage,var(--accent))}
-/* Multi-day (3-day / week) — coloured habit bars stacked per day */
+/* Multi-day (3-day / week) — habit bars stacked per day. Same visual
+   language as event chips: tinted bg + coloured left border + ink text.
+   Habits expose their colour via inline `--hab-c` (set in the renderer)
+   and we derive the tinted bg via color-mix so it works in both themes. */
 .hab-grid .cv-gcol-hdr{padding:6px 8px}
 .hab-count{font-size:10px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
 .hab-bars{display:flex;flex-direction:column;gap:3px;padding:6px;min-height:60px}
-.hab-bar{display:flex;align-items:center;padding:3px 7px;border-radius:4px;font-size:10.5px;font-weight:600;color:#1a1a1a;line-height:1.2;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-height:14px}
+.hab-bar{
+  display:flex;align-items:center;
+  padding:4px 8px;
+  border-radius:5px;
+  font-size:11px;font-weight:500;line-height:1.25;
+  color:var(--text);
+  background:color-mix(in srgb,var(--hab-c,var(--accent)) 18%,var(--surface));
+  border-left:3px solid var(--hab-c,var(--accent));
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  min-height:0;
+}
+[data-theme="studio"] .hab-bar{background:color-mix(in srgb,var(--hab-c,var(--accent)) 25%,var(--surface))}
 .hab-bar > span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hab-bar-exp{padding:4px 8px;font-size:11px}
-/* Month view: same grid, smaller bars, text only in expand mode */
+/* Month view: collapsed mode shows thin coloured strips (no text); detail
+   mode uses the same tinted-bg/left-border style as events expanded so the
+   month reads consistently across modes. */
 .hab-weeks .hab-cell{cursor:pointer}
-.hab-cell-bars{display:flex;flex-direction:column;gap:2px;padding:0 2px;flex:1;min-height:0;overflow:hidden}
-.hab-weeks:not(.detail) .hab-bar{height:5px;padding:0;border-radius:2px;font-size:0}
-.hab-weeks.detail .hab-bar{height:auto;font-size:9.5px;padding:1px 4px;border-radius:3px;color:#1a1a1a}
+.hab-cell-bars{display:flex;flex-direction:column;gap:2px;padding:1px 4px 0;flex:1;min-height:0;overflow:hidden;margin-top:4px}
+.hab-weeks:not(.detail) .hab-bar{height:3px;padding:0;border-radius:2px;font-size:0;border-left:none;background:var(--hab-c,var(--accent))}
+.hab-weeks.detail .hab-bar{height:auto;font-size:9.5px;padding:1px 5px;border-radius:3px;border-left:2px solid var(--hab-c,var(--accent));background:color-mix(in srgb,var(--hab-c,var(--accent)) 18%,var(--surface));color:var(--text)}
+[data-theme="studio"] .hab-weeks.detail .hab-bar{background:color-mix(in srgb,var(--hab-c,var(--accent)) 28%,var(--surface))}
 .hab-cell-more{font-size:9px;font-weight:700;color:var(--muted);text-align:right;padding:0 4px}
 /* Habit day modal */
 .hab-modal-stat{font-size:12px;color:var(--muted);margin-bottom:14px;padding:6px 10px;background:var(--surface-2);border-radius:6px;display:inline-block}
@@ -1346,6 +1363,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
    On mobile a media query flips this to [book] above [arrows row] below. */
 .nb-book-wrap{display:flex;align-items:center;justify-content:center;gap:14px;padding:4px 0 40px;position:relative}
 .nb-arrows-bottom{display:none}
+/* Mobile-only top + bottom control bars (rendered by
+   renderNotebookMobileBars). Hidden on desktop; the in-page controls
+   provide the same actions there. */
+.nb-mobile-top,.nb-mobile-bot{display:none}
 .nb-arrow{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;transition:background .12s,color .12s,border-color .12s;box-shadow:var(--shadow)}
 .nb-arrow svg{width:22px;height:22px;display:block}
 .nb-arrow:hover:not(:disabled){background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
@@ -1636,6 +1657,26 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   }
   /* Hide the inline (desktop) arrows; show the dedicated bottom row. */
   .nb-arrow-desktop{display:none !important}
+  /* On mobile, controls live OUTSIDE the zoomable book so they keep
+     their tap-friendly size when the user pinches the page. Hide every
+     in-page control element; the top + bottom mobile bars take over. */
+  .nb-page-hdr,.nb-page-foot,.nb-page .nb-toolbar{display:none !important}
+  .nb-mobile-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 4px 10px;flex-wrap:wrap}
+  .nb-mb-info{display:flex;flex-direction:column;line-height:1.2;min-width:0;flex:1}
+  .nb-mb-sec{font-family:'Playfair Display',serif;font-size:16px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nb-mb-meta{font-family:'Playfair Display',serif;font-size:11px;color:var(--muted);font-style:italic}
+  .nb-mb-actions{display:flex;align-items:center;gap:6px}
+  .nb-mb-layout{padding:2px}
+  .nb-mb-layout button{padding:5px 9px;font-size:11px}
+  .nb-mb-iconbtn{width:30px;height:30px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+  .nb-mb-iconbtn:hover{background:var(--surface-hover);color:var(--text)}
+  .nb-mobile-bot{display:flex;flex-direction:column;gap:8px;padding:12px 4px 6px;border-top:1px solid var(--border);margin-top:12px}
+  .nb-mb-toolbar{flex-wrap:wrap;justify-content:flex-start}
+  .nb-mb-toolbar .nb-tb-btn{width:32px;height:32px;font-size:13px}
+  .nb-mb-toolbar .nb-tb-undo{width:auto;padding:0 10px;margin-left:auto}
+  .nb-mb-foot-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+  .nb-mb-foot-actions .nb-mic-btn{width:36px;height:36px;font-size:14px}
+  .nb-mb-foot-actions .nb-refine-btn{padding:7px 14px;font-size:13px}
   .nb-arrows-bottom{display:flex;justify-content:center;gap:28px;padding:14px 0 30px}
   .nb-arrows-bottom .nb-arrow{
     position:static;width:44px;height:44px;font-size:24px;padding-bottom:2px;
@@ -1755,8 +1796,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .ai-ta{font-size:13.5px}
   .ai-btn{padding:9px 12px;font-size:12.5px}
   .mic-btn{width:34px;height:34px;font-size:14px}
-  .cal-hdr{padding:10px 12px;gap:8px}
+  .cal-hdr{padding:10px 12px;gap:8px;row-gap:8px}
   .cal-ttl{font-size:13px;min-width:110px}
+  .cal-today-inline{padding:4px 10px;font-size:11px;margin-left:4px !important}
+  .cal-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .cal-controls .cv-row{padding:1px}
+  .cal-controls .cv{padding:4px 8px;font-size:11px}
+  /* Mode pills slightly smaller so [Events|Habits] [Day|3Day|Week|Month]
+     fit on one line on a typical phone width. */
+  .cal-controls .cv-mode-row .cv{padding:4px 7px;font-size:10.5px}
   .ts-wrap{max-height:440px}
   .ts-cell,.ts-hr-lbl{height:50px}
   .mc{min-height:60px;padding:4px}
@@ -2036,13 +2084,16 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         </div>
         <div class="cal-card">
           <div class="cal-hdr">
+            <!-- Today button moved INTO the nav row so on mobile it sits
+                 next to the title arrows instead of dropping to a third
+                 layer. Desktop: same place, just visually next to ›. -->
             <div class="cal-nav">
               <button class="carr" onclick="calNav(-1)">‹</button>
               <div class="cal-ttl" id="cal-ttl"></div>
               <button class="carr" onclick="calNav(1)">›</button>
+              <button class="btn btn-ghost btn-sm cal-today-inline" onclick="goToCalToday()" id="cal-today-btn" style="display:none;margin-left:6px">Today</button>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <button class="btn btn-ghost btn-sm" onclick="goToCalToday()" id="cal-today-btn" style="display:none">Today</button>
+            <div class="cal-controls">
               <!-- Mode toggle: switch the calendar between rendering events
                    and rendering habit tick history. Same view (day/3day/
                    week/month) — different data layer. -->
@@ -2223,6 +2274,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
              scrollable when there are more than fit. Click flips to section
              and the active tab highlights based on the page you're on. -->
         <div class="nb-tabs" id="nb-tabs"></div>
+        <!-- Mobile-only top control bar. Lives OUTSIDE the .nb-book-wrap
+             (which scales via transform on mobile) so its buttons stay
+             at native pixel size when the user pinch-zooms the page.
+             Mirrors the in-page header: section name, page X/Y, layout
+             toggle, add/delete page. CSS hides this on desktop. -->
+        <div class="nb-mobile-top" id="nb-mobile-top"></div>
         <!-- Row 5: The book itself — a single A4-proportioned sheet,
              horizontally paged. Content is rebuilt by renderNotebookPage()
              whenever the user flips, adds, deletes or refines.
@@ -2233,6 +2290,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="nb-book" id="nb-book"></div>
           <button class="nb-arrow nb-next nb-arrow-desktop" onclick="nbNextPage()" aria-label="Next page" title="Next page (→ arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 L15 12 L9 18"/></svg></button>
         </div>
+        <!-- Mobile-only bottom control bar. Toolbar + mic + refine. Same
+             rationale as the top bar — outside the zoomable area so the
+             buttons stay tap-sized when pinching the page. -->
+        <div class="nb-mobile-bot" id="nb-mobile-bot"></div>
         <div class="nb-arrows-bottom">
           <button class="nb-arrow nb-prev" onclick="nbPrevPage()" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6 L9 12 L15 18"/></svg></button>
           <button class="nb-arrow nb-next" onclick="nbNextPage()" aria-label="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 L15 12 L9 18"/></svg></button>
@@ -2540,7 +2601,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v106';
+const APP_VERSION='v107';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3234,9 +3295,25 @@ function showOtherDeviceOverlay(label){
 }
 function hideOtherDeviceOverlay(){const d=document.getElementById('other-dev-overlay');if(d)d.remove();}
 function takeOverDevice(){claimPresence();hideOtherDeviceOverlay();}
+// Validate the cached Google Calendar token at load. A 60-second
+// cached "ping" tests for liveness; if expired the 401 path clears
+// the token and surfaces the banner. This guarantees the user sees
+// the disconnect warning immediately on app open, rather than only
+// after they navigate to a route that happens to fetch GCal data.
+async function probeGCalLive(){
+  if(!getGCalToken())return;
+  try{
+    await fetchCalendarList();
+  }catch(e){/* 401 already handled inside fetchCalendarList */}
+  try{refreshGCalWarn();}catch(_){}
+}
 function loadData(){
   stopSync();
   try{startPresence();}catch(e){console.warn('[presence]',e.message);}
+  // Probe the calendar token early so the user sees the disconnect
+  // banner immediately on open, rather than after navigating to a
+  // route that fetches GCal. Async, doesn't block sync.
+  probeGCalLive();
   const docRef=db.collection('users').doc(CU.uid).collection('data').doc('main');
   // Safety net: if no snapshot has arrived in 8s, render empty-state. NEVER
   // call seed() here — that would write default data to Firestore and wipe
@@ -4334,43 +4411,79 @@ function goToCalToday(){UI.calDate=new Date();UI.monthExpandedDs=null;rCal();}
 // heading that isn't itself an input), use our own tiny modal with
 // month + year dropdowns. Always opens centered, works the same everywhere.
 function pickCalDate(){
+  // Picker shape depends on the active view:
+  //   - Month → month/year (no point picking a day, the whole month is shown)
+  //   - Day / 3-Day / Week → full date input so you can land on a specific day
+  // Day/3day/week previously dropped to the 1st of the chosen month, which
+  // wasn't useful when navigating to a specific day.
   const old=document.getElementById('cal-month-modal');if(old)old.remove();
   const curY=UI.calDate.getFullYear();
   const curM=UI.calDate.getMonth();
-  const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const years=[];for(let y=curY-5;y<=curY+5;y++)years.push(y);
   const m=document.createElement('div');
   m.className='modal';m.id='cal-month-modal';m.style.display='flex';
-  m.innerHTML=`<div class="modal-bd"></div>
-    <div class="modal-body" style="max-width:360px">
-      <h3 style="margin-bottom:14px">Jump to month</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <select class="select" id="cal-m-sel" style="width:100%">
-          ${MONTHS.map((n,i)=>`<option value="${i}"${i===curM?' selected':''}>${n}</option>`).join('')}
-        </select>
-        <select class="select" id="cal-y-sel" style="width:100%">
-          ${years.map(y=>`<option value="${y}"${y===curY?' selected':''}>${y}</option>`).join('')}
-        </select>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-sm" id="cal-today-jump">Today</button>
-        <div class="spacer"></div>
-        <button class="btn btn-sm" id="cal-jump-cancel">Cancel</button>
-        <button class="btn btn-primary btn-sm" id="cal-jump-ok">Go</button>
-      </div>
-    </div>`;
-  document.body.appendChild(m);_syncBodyLock();
-  const close=()=>{m.remove();_syncBodyLock();};
-  m.querySelector('.modal-bd').onclick=close;
-  m.querySelector('#cal-jump-cancel').onclick=close;
-  m.querySelector('#cal-today-jump').onclick=()=>{UI.calDate=new Date();UI.monthExpandedDs=null;close();rCal();};
-  m.querySelector('#cal-jump-ok').onclick=()=>{
-    const mm=Number(m.querySelector('#cal-m-sel').value);
-    const yy=Number(m.querySelector('#cal-y-sel').value);
-    UI.calDate=new Date(yy,mm,1);
-    UI.monthExpandedDs=null;
-    close();rCal();
-  };
+  if(UI.calView==='month'){
+    const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const years=[];for(let y=curY-5;y<=curY+5;y++)years.push(y);
+    m.innerHTML=`<div class="modal-bd"></div>
+      <div class="modal-body" style="max-width:360px">
+        <h3 style="margin-bottom:14px">Jump to month</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+          <select class="select" id="cal-m-sel" style="width:100%">
+            ${MONTHS.map((n,i)=>`<option value="${i}"${i===curM?' selected':''}>${n}</option>`).join('')}
+          </select>
+          <select class="select" id="cal-y-sel" style="width:100%">
+            ${years.map(y=>`<option value="${y}"${y===curY?' selected':''}>${y}</option>`).join('')}
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-sm" id="cal-today-jump">Today</button>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="cal-jump-cancel">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="cal-jump-ok">Go</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);_syncBodyLock();
+    const close=()=>{m.remove();_syncBodyLock();};
+    m.querySelector('.modal-bd').onclick=close;
+    m.querySelector('#cal-jump-cancel').onclick=close;
+    m.querySelector('#cal-today-jump').onclick=()=>{UI.calDate=new Date();UI.monthExpandedDs=null;close();rCal();};
+    m.querySelector('#cal-jump-ok').onclick=()=>{
+      const mm=Number(m.querySelector('#cal-m-sel').value);
+      const yy=Number(m.querySelector('#cal-y-sel').value);
+      UI.calDate=new Date(yy,mm,1);
+      UI.monthExpandedDs=null;
+      close();rCal();
+    };
+  } else {
+    // Day / 3-Day / Week — use the native date input so the user can pick
+    // an actual day (matches the daily-notebook jump-to-date behaviour).
+    const cur=localDs(UI.calDate);
+    m.innerHTML=`<div class="modal-bd"></div>
+      <div class="modal-body" style="max-width:320px">
+        <h3 style="margin-bottom:14px">Jump to date</h3>
+        <input class="input" id="cal-date-input" type="date" value="${esc(cur)}" style="width:100%;margin-bottom:16px">
+        <div class="modal-actions">
+          <button class="btn btn-sm" id="cal-today-jump">Today</button>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="cal-jump-cancel">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="cal-jump-ok">Go</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);_syncBodyLock();
+    const close=()=>{m.remove();_syncBodyLock();};
+    m.querySelector('.modal-bd').onclick=close;
+    m.querySelector('#cal-jump-cancel').onclick=close;
+    m.querySelector('#cal-today-jump').onclick=()=>{UI.calDate=new Date();UI.monthExpandedDs=null;close();rCal();};
+    m.querySelector('#cal-jump-ok').onclick=()=>{
+      const v=m.querySelector('#cal-date-input').value;
+      if(v){
+        const [yy,mm,dd]=v.split('-').map(Number);
+        UI.calDate=new Date(yy,mm-1,dd);
+        UI.monthExpandedDs=null;
+      }
+      close();rCal();
+    };
+  }
 }
 function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=localDs(UI.calDate);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
 
@@ -4805,7 +4918,7 @@ function _buildHabitsColumns(dates){
         <span><span class="cv-gcol-dname">${DAYS[dow]}</span><span class="cv-gcol-dnum" style="margin-left:6px">${date.getDate()}</span></span>
         <span class="hab-count">${dayHabits.length}/${total||0}</span>
       </div>
-      <div class="hab-bars">${dayHabits.length?dayHabits.map(hb=>`<div class="hab-bar" style="background:${_habitColorFor(hb)}" title="${esc(hb.name)}"><span>${esc(hb.name)}</span></div>`).join(''):'<div class="cv-empty" style="font-size:11px">—</div>'}</div>
+      <div class="hab-bars">${dayHabits.length?dayHabits.map(hb=>`<div class="hab-bar" style="--hab-c:${_habitColorFor(hb)}" title="${esc(hb.name)}"><span>${esc(hb.name)}</span></div>`).join(''):'<div class="cv-empty" style="font-size:11px">—</div>'}</div>
     </div>`;
   });
   h+=`</div>`;
@@ -4837,7 +4950,7 @@ function buildHabitsMonthView(y,m,today){
       const extra=dayHabits.length-visible.length;
       h+=`<div class="mcw-cell hab-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}" style="grid-column:${idx+1};grid-row:1/-1">
         <div class="mcw-top"><div class="mcw-num">${cd}</div></div>
-        <div class="hab-cell-bars">${visible.map(hb=>detail?`<div class="hab-bar hab-bar-exp" style="background:${_habitColorFor(hb)}" title="${esc(hb.name)}"><span>${esc(hb.name)}</span></div>`:`<div class="hab-bar" style="background:${_habitColorFor(hb)}" title="${esc(hb.name)}"></div>`).join('')}</div>
+        <div class="hab-cell-bars">${visible.map(hb=>detail?`<div class="hab-bar" style="--hab-c:${_habitColorFor(hb)}" title="${esc(hb.name)}"><span>${esc(hb.name)}</span></div>`:`<div class="hab-bar" style="--hab-c:${_habitColorFor(hb)}" title="${esc(hb.name)}"></div>`).join('')}</div>
         ${extra>0?`<div class="hab-cell-more">+${extra}</div>`:''}
       </div>`;
     });
@@ -7114,12 +7227,60 @@ function rNotebook(){
   if(typing){
     renderNotebookTabs();
     renderNotebookSub();
+    renderNotebookMobileBars();
     return;
   }
   renderNotebookTabs();
   renderNotebookPage('none');
   renderNotebookSub();
+  renderNotebookMobileBars();
   nbBindWheel();
+}
+// Mobile-only top + bottom control bars. They live OUTSIDE .nb-book-wrap
+// (which is transform:scale'd to fit the viewport) so their buttons stay
+// at native pixel size when the user pinch-zooms the page. The same
+// controls are still rendered INSIDE the page via nbBuildPageHTML for
+// desktop; CSS hides the in-page versions on phones.
+function renderNotebookMobileBars(){
+  const top=document.getElementById('nb-mobile-top');
+  const bot=document.getElementById('nb-mobile-bot');
+  if(!top||!bot)return;
+  const sec=nbCurrentSection();const page=nbCurrentPage();
+  if(!sec||!page){top.innerHTML='';bot.innerHTML='';return;}
+  const layoutBtns=[['single','▭','One cell'],['half','▯▯','Left / right split'],['quad','⊞','Four cells']]
+    .map(([k,lbl,ttl])=>`<button type="button" onclick="nbSetLayout('${k}','${page.id}')" class="${page.layout===k?'on':''}" title="${ttl}">${lbl}</button>`).join('');
+  top.innerHTML=`
+    <div class="nb-mb-info">
+      <span class="nb-mb-sec">${esc(sec.title||'Untitled')}</span>
+      <span class="nb-mb-meta">Page ${NB.pageIdx+1} of ${sec.pages.length}</span>
+    </div>
+    <div class="nb-mb-actions">
+      <div class="nb-layout-toggle nb-mb-layout">${layoutBtns}</div>
+      <button class="iconbtn nb-mb-iconbtn" onclick="nbAddPageAfter('${page.id}')" title="Add page" aria-label="Add page">＋</button>
+      <button class="iconbtn nb-mb-iconbtn" onclick="nbDeletePageById('${page.id}')" title="Delete page" aria-label="Delete page">🗑</button>
+    </div>`;
+  // Bottom toolbar: same rich-text formatting buttons + mic + refine + undo
+  const tbBtns=[
+    ['bold','<b>B</b>','Bold'],
+    ['italic','<i>I</i>','Italic'],
+    ['underline','<u>U</u>','Underline'],
+    ['strikeThrough','<s>S</s>','Strikethrough'],
+    ['sep','',''],
+    ['h2','H','Heading'],
+    ['insertUnorderedList','•','Bulleted list'],
+    ['insertOrderedList','1.','Numbered list'],
+    ['sep','',''],
+    ['hiliteColor','🖍','Highlight'],
+    ['removeFormat','↺','Clear formatting']
+  ];
+  const canUndo=NB_HISTORY.length>0;
+  const tbHtml=tbBtns.map(([cmd,lbl,ttl])=>cmd==='sep'?`<span class="nb-toolbar-sep"></span>`:`<button type="button" class="nb-tb-btn" data-cmd="${cmd}" title="${esc(ttl)}" onmousedown="event.preventDefault()" onclick="nbExec('${cmd}','${page.id}')">${lbl}</button>`).join('');
+  bot.innerHTML=`
+    <div class="nb-toolbar nb-mb-toolbar">${tbHtml}<button type="button" class="nb-tb-btn nb-tb-undo" title="Undo" onmousedown="event.preventDefault()" onclick="nbUndo()" ${canUndo?'':'disabled'}>↶</button></div>
+    <div class="nb-mb-foot-actions">
+      <button class="nb-mic-btn${NB.voiceActive?' on':''}" onclick="nbToggleVoice()" title="Record into the focused cell" aria-label="Voice record">🎙</button>
+      <button class="nb-refine-btn" onclick="nbRefinePage('${page.id}')" title="AI refine page">✨ Refine</button>
+    </div>`;
 }
 // Compute the mobile scale factor as a UNITLESS CSS variable. Pure-CSS
 // calc() can't divide a length by a number and produce a unitless result
