@@ -933,6 +933,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .hc{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .15s}
 .hc:hover{border-color:var(--border-strong)}
 .hc.done{background:var(--sage-bg);border-color:var(--sage)}
+/* Habit "rest day" picker — small weekday pills inside each habit card */
+.hb-rest-row{display:flex;align-items:center;gap:4px;margin:2px 0 4px;flex-wrap:wrap;font-family:'Inter',system-ui,sans-serif}
+.hb-rest-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-right:6px}
+.hb-rest-d{padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .12s}
+.hb-rest-d:hover{background:var(--surface-2);color:var(--text)}
+.hb-rest-d.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .hc-tick{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--muted-2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all .15s}
 .hc.done .hc-tick{background:var(--sage);border-color:var(--sage);color:#fff}
 .hc-name{font-size:12px;font-weight:500;color:var(--text);flex:1;line-height:1.3;min-width:0}
@@ -2405,7 +2411,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v103';
+const APP_VERSION='v104';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3309,19 +3315,61 @@ function migrateHabits(){
   }
 }
 function habitCheckedSet(h){return new Set(h.checkedDates||[]);}
+// Days the user has marked as "rest days" for this habit (e.g. Saturday
+// + Sunday for a 5-day-a-week gym schedule). Stored as weekday numbers
+// 0-6 where 0=Sunday. Missing those days does NOT break the streak.
+// If the user DOES tick an excluded day, it counts as a bonus check
+// (still counts toward total / contributes to a continuous run).
+function habitExcludedDays(h){return new Set(h.excludedDays||[]);}
+function isExcludedWeekday(h,date){return habitExcludedDays(h).has(date.getDay());}
 function computeHabitStats(h){
   const set=habitCheckedSet(h);
   if(!set.size)return {current:0,max:0,total:0};
   const today=new Date();const todayStr=localDs(today);
   const y=new Date(today);y.setDate(y.getDate()-1);const yestStr=localDs(y);
+  // Streak walk: from today (or yesterday if today not yet ticked), step
+  // backwards day-by-day. Each step:
+  //   - checked → streak++
+  //   - excluded weekday (rest day) → skip, don't count, don't break
+  //   - neither → streak ends
   let current=0;
-  if(set.has(todayStr)||set.has(yestStr)){
-    let cursor=new Date(today);
-    if(!set.has(todayStr))cursor.setDate(cursor.getDate()-1);
-    while(set.has(localDs(cursor))){current++;cursor.setDate(cursor.getDate()-1);}
+  // Find the starting cursor: the most recent day that's checked (or
+  // today if checked, else yesterday-or-earlier walking back through
+  // excluded days until we find a checked one).
+  let cursor=new Date(today);
+  // Walk forward through any excluded days from today first — if today
+  // is a rest day, treat it as already "covered" and step back.
+  while(!set.has(localDs(cursor))&&isExcludedWeekday(h,cursor)&&cursor>=new Date(today.getFullYear()-2,0,1)){
+    cursor.setDate(cursor.getDate()-1);
   }
+  // If now-cursor isn't checked but we've reached today/yesterday, allow
+  // one grace if cursor is today and yesterday is checked (legacy behaviour).
+  if(!set.has(localDs(cursor))){
+    // Maybe yesterday is checked
+    const tryYest=new Date(cursor);tryYest.setDate(tryYest.getDate()-1);
+    if(set.has(localDs(tryYest)))cursor=tryYest;
+  }
+  // Walk backwards counting checked days, skipping excluded weekdays.
+  while(cursor>=new Date(today.getFullYear()-2,0,1)){
+    const ds=localDs(cursor);
+    if(set.has(ds)){current++;cursor.setDate(cursor.getDate()-1);}
+    else if(isExcludedWeekday(h,cursor)){cursor.setDate(cursor.getDate()-1);}
+    else break;
+  }
+  // Max streak across all-time history with rest-day skipping.
   const sorted=[...set].sort();let max=0;let run=0;let prev=null;
-  sorted.forEach(ds=>{const d=new Date(ds+'T12:00:00');if(prev){const diff=Math.round((d-prev)/86400000);run=diff===1?run+1:1;}else run=1;if(run>max)max=run;prev=d;});
+  sorted.forEach(ds=>{
+    const d=new Date(ds+'T12:00:00');
+    if(prev){
+      // Count the gap, but skip excluded weekdays in the gap
+      let gap=Math.round((d-prev)/86400000);
+      let walker=new Date(prev);walker.setDate(walker.getDate()+1);
+      let realGap=0;
+      while(walker<d){if(!isExcludedWeekday(h,walker))realGap++;walker.setDate(walker.getDate()+1);}
+      run=realGap===0?run+1:1;
+    } else run=1;
+    if(run>max)max=run;prev=d;
+  });
   return {current,max,total:set.size};
 }
 function toggleHabitDate(id,ds){
@@ -3337,6 +3385,16 @@ function toggleHabitDate(id,ds){
 }
 function qaAddHabitFull(){const n=document.getElementById('hb-name')?.value?.trim();if(!n)return;const d=document.getElementById('hb-desc')?.value?.trim()||'';S.habits.push({id:uid(),name:n,description:d,checkedDates:[],createdAt:tod(),notes:[]});svAll();rHabits();rCal();toggleQA('habit-qa');document.getElementById('hb-name').value='';document.getElementById('hb-desc').value='';}
 function saveHabitDesc(id){const h=S.habits.find(x=>x.id===id);if(!h)return;const inp=document.getElementById('hb-desc-'+id);if(inp)h.description=inp.value;svAll();}
+// Toggle a weekday on/off the rest-day list for a habit. Rest days don't
+// break the streak when missed but DO count as bonus checks if ticked.
+function toggleHabitExcluded(id,dayNum){
+  const h=S.habits.find(x=>x.id===id);if(!h)return;
+  h.excludedDays=Array.isArray(h.excludedDays)?h.excludedDays:[];
+  const idx=h.excludedDays.indexOf(dayNum);
+  if(idx>=0)h.excludedDays.splice(idx,1);
+  else h.excludedDays.push(dayNum);
+  svAll();rHabits();
+}
 function delHabit(id){if(!confirm('Delete this habit? Streak history will be lost.'))return;S.habits=S.habits.filter(x=>x.id!==id);svAll();rHabits();rCal();}
 function setCalMode(){/* removed — habits now merged into main calendar as dots */}
 let ex={id:null,type:null};
@@ -3383,7 +3441,8 @@ async function toggleVoice(){
     else vstatus('Voice not available in this browser.',true);
     return;
   }
-  if(isListening){try{recognition?.stop();}catch(e){}return;}
+  if(isListening){voiceUserStop=true;try{recognition?.stop();}catch(e){}return;}
+  voiceUserStop=false;
   // Permissions API — check without acquiring the mic so we don't race the speech service
   const perm=await checkMicPerm();
   vlog('permission state: '+perm);
@@ -3459,9 +3518,18 @@ async function toggleVoice(){
       vstatus('Voice error: '+e.error,true);
     };
     recognition.onend=()=>{
-      isListening=false;btn.classList.remove('on');
       const elapsed=Math.round((Date.now()-voiceStartedAt)/1000);
-      vlog('onend, elapsed='+elapsed+'s, gotStart='+gotStart+', heardSound='+voiceHeardSound);
+      vlog('onend, elapsed='+elapsed+'s, gotStart='+gotStart+', heardSound='+voiceHeardSound+', userStop='+voiceUserStop);
+      // Auto-restart on browser-imposed silence timeout. Mobile Chrome
+      // ends recognition after just a few seconds of quiet; restarting
+      // it transparently lets the user pause for breath / words without
+      // the mic stopping. Only restart if (a) the user didn't tap the
+      // mic to stop, (b) we got a real session going, (c) we haven't
+      // been running for more than 2 minutes (cap to avoid runaway).
+      if(!voiceUserStop && gotStart && voiceHeardSound && elapsed<120){
+        try{recognition.start();vlog('auto-restart after silence');return;}catch(e){vlog('auto-restart failed: '+e.message);}
+      }
+      isListening=false;btn.classList.remove('on');
       if(!gotStart&&elapsed<2){
         // Silent abort. If mic works on other sites in the same browser, this is
         // almost always a blocker intercepting Google's speech endpoint.
@@ -3902,6 +3970,35 @@ function calNav(dir){
   else UI.calDate=new Date(UI.calDate.getTime()+dir*86400000);
   rCal();
 }
+// Touch-swipe nav on the calendar (mobile). Same threshold as the
+// notebook's old swipe — 50px horizontal, vertical-dominant gestures
+// pass through so day-cell taps and inner scrolling still work. Bound
+// once on the calendar route element; cooldown prevents a single swipe
+// firing multiple navs.
+let _calSwipeBound=false;let _calSwipeCooldown=0;
+function calBindSwipe(){
+  if(_calSwipeBound)return;
+  const root=document.querySelector('.route[data-route="calendar"]');
+  if(!root)return;
+  let sx=null,sy=null,multi=false;
+  root.addEventListener('touchstart',e=>{
+    if(e.touches.length>1){multi=true;sx=null;return;}
+    multi=false;sx=e.touches[0].clientX;sy=e.touches[0].clientY;
+  },{passive:true});
+  root.addEventListener('touchend',e=>{
+    if(multi||sx===null)return;
+    const t=e.changedTouches[0];const dx=t.clientX-sx;const dy=t.clientY-sy;
+    sx=sy=null;
+    if(Math.abs(dx)<60)return;
+    if(Math.abs(dy)>Math.abs(dx)*0.7)return;
+    const now=Date.now();if(now-_calSwipeCooldown<350)return;
+    _calSwipeCooldown=now;
+    // Swipe left → next; swipe right → previous. Matches a physical
+    // calendar/diary's flip direction.
+    calNav(dx<0?1:-1);
+  },{passive:true});
+  _calSwipeBound=true;
+}
 function setCV(v){UI.calView=v;UI.monthExpandedDs=null;UI.calDate=new Date();rCal();}
 
 function fmtEvTime(e){
@@ -4021,6 +4118,7 @@ function buildWeekList(dates,gcEvs){
 }
 
 async function rCal(){
+  calBindSwipe();
   const el=document.getElementById('cal');if(!el)return;
   const ttl=document.getElementById('cal-ttl');if(ttl){ttl.textContent=getCalTitle();ttl.onclick=pickCalDate;ttl.style.cursor='pointer';ttl.title='Pick a date';}
   document.querySelectorAll('.cv-row .cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
@@ -5031,6 +5129,14 @@ async function openEventEdit(payload){
 function closeEventModal(){document.getElementById('event-modal').style.display='none';editingEvent=null;_syncBodyLock();}
 async function saveCurrentEvent(){
   if(!editingEvent)return;
+  // Calendar must be connected for any create/edit. Previously the code
+  // fell back to a local S.customEvents entry when no token, which left
+  // the user with ghost events that showed in some views (month) but not
+  // others (week/day) and didn't sync to Google. Block instead.
+  if(!getGCalToken()){
+    alert('Google Calendar isn\'t connected. Settings → Integrations → Connect Google Calendar, then try again.');
+    return;
+  }
   const title=document.getElementById('em-t').value.trim();
   if(!title){alert('Title required');return;}
   const date=document.getElementById('em-d').value||tod();
@@ -5038,7 +5144,7 @@ async function saveCurrentEvent(){
   if(_emType==='task'||editingEvent.type==='task'){
     if(editingEvent.mode==='new'){
       const res=await createGTask(title,date);
-      if(!res)alert('Failed to create reminder.');
+      if(!res){alert('Failed to create reminder.');return;}
     } else if(editingEvent.type==='task'){
       // Simplest: delete + recreate (Tasks PATCH is finicky with due-date round-trips)
       await deleteGTask(editingEvent.data.id,editingEvent.data.tasklistId);
@@ -5062,7 +5168,7 @@ async function saveCurrentEvent(){
   const opts={allDay,recurrence,reminderMin,timeZone,endDate};
   if(editingEvent.mode==='new'){
     const res=await createGCEvent(title,date,time,desc,endTime,opts);
-    if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date,endDate:endDate!==date?endDate:null,time,endTime,title,desc,allDay,recurrence,reminderMin,timeZone});}
+    if(!res){alert('Could not save to Google Calendar. The token may have expired — reconnect in Settings → Integrations.');return;}
   } else if(editingEvent.type==='gc'){
     // Recurring events get the same 3-option prompt as delete — apply the
     // changes to just this instance / this and all future / the whole series.
@@ -5314,7 +5420,17 @@ function rHabitsFull(){
     const color=habitColor(h);
     return `<div class="lc2" style="border-left-color:${color}">
       <div class="lc2-hdr"><div class="lc2-skill">${esc(h.name)}</div><button class="lc2-del" onclick="delHabit('${h.id}')" title="Delete">×</button></div>
-      <input class="input" id="hb-desc-${h.id}" value="${esc(h.description||'')}" placeholder="What 'done' means for this habit…" onblur="saveHabitDesc('${h.id}')" style="font-size:12px;padding:7px 10px;background:var(--surface-2);border-color:transparent">
+      <textarea class="ta hb-desc" id="hb-desc-${h.id}" placeholder="What 'done' means for this habit…" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'" onblur="saveHabitDesc('${h.id}')" rows="1" style="font-size:12px;padding:7px 10px;background:var(--surface-2);border-color:transparent;min-height:0;resize:none;line-height:1.45;width:100%;display:block;font-family:inherit;color:var(--text);outline:none;border:1px solid transparent;border-radius:8px">${esc(h.description||'')}</textarea>
+      <!-- Rest-day picker. Tap a weekday to mark it as a rest day for
+           this habit; missing it doesn't break the streak. Useful for
+           e.g. weekend rest days on a 5-day-a-week schedule. -->
+      <div class="hb-rest-row">
+        <span class="hb-rest-lbl">Rest days</span>
+        ${[['Sun',0],['Mon',1],['Tue',2],['Wed',3],['Thu',4],['Fri',5],['Sat',6]].map(([lbl,d])=>{
+          const on=(h.excludedDays||[]).includes(d);
+          return `<button class="hb-rest-d${on?' on':''}" onclick="toggleHabitExcluded('${h.id}',${d})" title="${on?'Tap to remove rest-day':'Tap to mark as rest-day'}">${lbl}</button>`;
+        }).join('')}
+      </div>
       ${tier?`<div class="lc2-tier"><span class="tier-badge ${tier.cls}">${tier.icon} ${tier.label}</span>${nextTier?`<span style="font-size:10px;color:var(--muted)">${nextTier.days-stats.current} days to ${nextTier.label}</span>`:''}</div>`:(nextTier?`<div class="lc2-tier"><span style="font-size:10px;color:var(--muted)">${nextTier.days-stats.current} days to first tier (${nextTier.label})</span></div>`:'')}
       <div class="lc2-stats">
         <div class="lc2-stat"><span class="s-val${stats.current===0?' z':''}">${stats.current||'—'}</span><span class="s-lbl">Current</span></div>
@@ -5325,6 +5441,9 @@ function rHabitsFull(){
       ${lastNote?`<div class="lc2-notes"><div class="lc2-notes-lbl">Last note</div>${esc(lastNote)}</div>`:''}
     </div>`;
   }).join('');
+  // Auto-size the description textareas after they're in the DOM so a
+  // long description wraps and the field grows to fit instead of clipping.
+  setTimeout(()=>{document.querySelectorAll('.hb-desc').forEach(t=>{t.style.height='auto';t.style.height=t.scrollHeight+'px';});},0);
 }
 
 // TASKS
@@ -6430,6 +6549,15 @@ async function applyChanges(ch,prompt){
 // skips the popup when the combined 'all' confirm has already approved.
 // Returns true if ops were applied (or pre-approved), false if user cancelled.
 async function confirmCalendarOps(ops,preConfirmed){
+  // Hard gate: calendar must be connected. The fallback path that wrote
+  // to S.customEvents has been removed because it produced ghost events
+  // that didn't sync (showed in some views but not others, couldn't be
+  // edited from another device).
+  if(!getGCalToken()){
+    const st=document.getElementById('btm-st');
+    if(st){st.className='ai-st er';st.textContent='Calendar isn\'t connected — connect it in Settings → Integrations and try again.';setTimeout(()=>{st.textContent='';st.className='ai-st';},6000);}
+    return false;
+  }
   const fmtReminder=r=>{if(r===null||r===undefined||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (Math.round(m/60*10)/10)+' hrs';if(m===1440)return '1 day';return (Math.round(m/1440*10)/10)+' days';}).filter(Boolean);return names.length?names.join(' + '):null;};
   const fmtOp=op=>{
     if(op.kind==='add'){
@@ -6467,7 +6595,10 @@ async function confirmCalendarOps(ops,preConfirmed){
         const e=op.ev;
         const opts={allDay:e.allDay||!e.time,recurrence:e.repeat||'none',reminderMin:e.reminderMin==null?'none':e.reminderMin,timeZone:e.timeZone||'Africa/Johannesburg'};
         const res=await createGCEvent(e.title,e.date,e.time||'',e.desc||'',e.endTime||'',opts);
-        if(!res){S.customEvents=S.customEvents||[];S.customEvents.push({id:uid(),date:e.date,time:e.time||'',endTime:e.endTime||'',title:e.title,allDay:opts.allDay,recurrence:opts.recurrence,reminderMin:opts.reminderMin,timeZone:opts.timeZone});}
+        // No customEvents fallback — confirmCalendarOps already gated on
+        // an active GCal token, so a failure here is a real API error
+        // worth surfacing rather than silently writing a local-only ghost.
+        if(!res)console.warn('[ai cal] add failed:',e.title);
       } else if(op.kind==='remove'){
         const needle=(op.ev.match||op.ev.title||'').toLowerCase().trim();
         if(!needle)continue;
@@ -7549,11 +7680,25 @@ function nbToggleVoice(){
     NB._voiceTarget.page.cells[NB._voiceTarget.cellIdx]=esc(v).replace(/\n/g,'<br>');
     clearTimeout(_nbSaveTimer);_nbSaveTimer=setTimeout(()=>svAll(),600);
   };
-  rec.onerror=e=>{console.warn('[nb voice]',e.error);nbStopVoice();};
-  rec.onend=()=>{NB.voiceActive=false;NB._voiceRec=null;document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.remove('on'));svAll();};
+  rec.onerror=e=>{console.warn('[nb voice]',e.error);NB._voiceErrored=true;nbStopVoice();};
+  let voiceStartedAtNb=Date.now();
+  rec.onend=()=>{
+    // Auto-restart on browser silence-timeout so the user can pause
+    // for breath / words mid-dictation. Stop only if user tapped mic
+    // (NB._voiceUserStop) or there was an error / 2 minutes elapsed.
+    const elapsed=Math.round((Date.now()-voiceStartedAtNb)/1000);
+    if(!NB._voiceUserStop&&!NB._voiceErrored&&elapsed<120&&NB._voiceRec===rec){
+      try{rec.start();return;}catch(e){}
+    }
+    NB.voiceActive=false;NB._voiceRec=null;
+    document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.remove('on'));
+    svAll();
+  };
+  NB._voiceUserStop=false;NB._voiceErrored=false;
   try{rec.start();}catch(e){NB.voiceActive=false;alert('Couldn\'t start voice: '+e.message);}
 }
 function nbStopVoice(){
+  NB._voiceUserStop=true;
   if(NB._voiceRec){try{NB._voiceRec.stop();}catch(_){}NB._voiceRec=null;}
   NB.voiceActive=false;
   document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.remove('on'));
