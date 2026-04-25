@@ -338,11 +338,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .cal-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
 .cal-nav{display:flex;align-items:center;gap:6px}
 .cal-ttl{font-size:15px;font-weight:600;min-width:160px;text-align:center;color:var(--text);font-family:'Playfair Display','Georgia',serif}
-/* Mode pills (Events/Habits) anchored left, view pills (Day/3day/Week/
-   Month) anchored right. justify-content:space-between in the parent
-   row plus auto-margin-left on the view-row pushes them apart. */
-.cal-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1}
-.cal-controls .cv-mode-row{margin-right:auto}
+/* Desktop: both pill groups [Events|Habits] [Day|3Day|Week|Month] sit
+   together on the right side of the header (after the title row). The
+   `flex` keeps them as one group; mobile @media flips to LEFT/RIGHT
+   split below. */
+.cal-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .carr{background:transparent;border:1px solid var(--border);border-radius:8px;width:30px;height:30px;font-size:13px;color:var(--muted);display:flex;align-items:center;justify-content:center}
 .carr:hover{background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
 .cv-row{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:2px}
@@ -757,23 +757,27 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .hab-day-tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:3px 7px;background:var(--surface-2);border-radius:5px}
 .hab-day-state{font-size:11.5px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0;text-transform:uppercase;letter-spacing:.05em}
 .hab-day-row.done .hab-day-state{color:var(--sage,var(--accent))}
-/* Multi-day (3-day / week) — habit bars stacked per day. Same visual
-   language as event chips: tinted bg + coloured left border + ink text.
-   Habits expose their colour via inline `--hab-c` (set in the renderer)
-   and we derive the tinted bg via color-mix so it works in both themes. */
-.hab-grid .cv-gcol-hdr{padding:6px 8px}
+/* Multi-day (3-day / week) — habit chips stacked per day. Sized to
+   match the event chips (.cv-ev-chip) exactly so toggling Events ⇄
+   Habits doesn't change the visual weight of the column. Per-habit
+   colour via inline `--hab-c` + color-mix tinted background. */
+.hab-grid .cv-gcol{padding:12px 14px;gap:8px}
+.hab-grid .cv-gcol-hdr{padding:0;margin-bottom:2px}
 .hab-count{font-size:10px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
-.hab-bars{display:flex;flex-direction:column;gap:3px;padding:6px;min-height:60px}
+.hab-bars{display:flex;flex-direction:column;gap:8px;min-height:0;flex:1}
 .hab-bar{
-  display:flex;align-items:center;
-  padding:4px 8px;
-  border-radius:5px;
-  font-size:11px;font-weight:500;line-height:1.25;
+  display:inline-flex;align-items:center;
+  padding:5px 10px;
+  border-radius:8px;
+  font-size:11.5px;font-weight:500;line-height:1.3;
   color:var(--text);
   background:color-mix(in srgb,var(--hab-c,var(--accent)) 18%,var(--surface));
   border-left:3px solid var(--hab-c,var(--accent));
   overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
   min-height:0;
+  width:100%;
+  cursor:pointer;
+  box-sizing:border-box;
 }
 [data-theme="studio"] .hab-bar{background:color-mix(in srgb,var(--hab-c,var(--accent)) 25%,var(--surface))}
 .hab-bar > span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1006,6 +1010,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pri-lbl{font-size:11px;color:var(--muted);margin-right:4px}
 .pb{border:none;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;opacity:.45;transition:opacity .1s}
 .pb.on{opacity:1}
+/* Grid variant: label on the left, 5 priority buttons in a 3-column
+   grid (Urgent / High / Medium on top, Low / Someday on bottom).
+   Used in the task pop-out modal so the buttons don't wrap awkwardly. */
+.pri-row-grid{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:10px;margin-top:10px}
+.pri-row-grid .pri-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:0}
+.pri-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.pri-buttons .pb{padding:7px 6px;font-size:11.5px;text-align:center;cursor:pointer}
 .pu-b{background:var(--red-bg);color:var(--red)}
 .ph-b{background:var(--peach-bg);color:var(--peach)}
 .pm-b{background:var(--gold-bg);color:var(--gold)}
@@ -1050,8 +1061,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .bd-date{margin-left:auto;font-size:11px;color:var(--muted);font-style:italic;font-family:'Playfair Display',serif}
 /* Field rows get more vertical breathing room above the input so the
    label doesn't kiss the input box. */
-.bd-field{display:flex;flex-direction:column;gap:8px;margin-top:4px}
-.bd-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.bd-field{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+.bd-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:0}
 /* Title was 22px which read as a banner. 17px sits more like a normal
    document title and matches the rest of the form weight. */
 .bd-title-input{font-family:'Playfair Display',serif;font-size:17px;font-weight:500;padding:9px 12px;line-height:1.3;letter-spacing:-.1px}
@@ -1836,11 +1847,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .cal-hdr{padding:10px 12px;gap:8px;row-gap:8px}
   .cal-ttl{font-size:13px;min-width:110px}
   .cal-today-inline{padding:4px 10px;font-size:11px;margin-left:4px !important}
-  .cal-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  /* Mobile: mode pills LEFT, view pills RIGHT (split). cal-controls
+     becomes a flex row spanning the full second line, with auto-margin
+     on the view-row pushing it to the right. Desktop keeps both
+     together on the right via the base rule above. */
+  .cal-controls{flex:1 1 100%;justify-content:space-between}
   .cal-controls .cv-row{padding:1px}
   .cal-controls .cv{padding:4px 8px;font-size:11px}
-  /* Mode pills slightly smaller so [Events|Habits] [Day|3Day|Week|Month]
-     fit on one line on a typical phone width. */
   .cal-controls .cv-mode-row .cv{padding:4px 7px;font-size:10.5px}
   .ts-wrap{max-height:440px}
   .ts-cell,.ts-hr-lbl{height:50px}
@@ -2198,6 +2211,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="page-title">People</div>
           <div class="page-sub" id="ppl-cnt" style="align-self:flex-end;padding-bottom:6px"></div>
           <div class="page-actions">
+            <input type="search" id="ppl-search" class="input" placeholder="Search people, notes, workplace…" oninput="searchPeople(this.value)" style="width:220px;padding:7px 11px;font-size:12.5px">
             <button class="btn btn-primary btn-sm" onclick="toggleQA('ppl-qa')">+ Add person</button>
           </div>
         </div>
@@ -2638,7 +2652,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v108';
+const APP_VERSION='v109';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2721,6 +2735,7 @@ function setRoute(r,skipHash){
   // Reset This week centering so it re-centers today when you return
   const wk=document.getElementById('today-week');if(wk)delete wk.dataset.centered;
   const bs=document.getElementById('brain-search');if(bs&&bs.value){bs.value='';UI.brainQuery='';}
+  const ps=document.getElementById('ppl-search');if(ps&&ps.value){ps.value='';UI.peopleQuery='';}
   // Leave project detail mode if user navigates away from projects
   if(r!=='projects'&&UI.projectDetail){UI.projectDetail=null;const pd=document.getElementById('project-detail-view');if(pd)pd.style.display='none';const pl=document.getElementById('projects-list-view');if(pl)pl.style.display='block';}
   // Close the brain detail view on any route change so navigating away
@@ -3723,6 +3738,20 @@ async function toggleVoice(){
     vlog('recognition created (default lang, continuous=true)');
     let finalText='';voiceStartedAt=Date.now();voiceHeardSound=false;
     let gotStart=false;
+    // Auto-stop guard: if no NEW final transcript arrives for 25 seconds
+    // (meaning the user has stopped speaking even though the recogniser
+    // keeps auto-restarting from background noise), force a real stop.
+    // Without this the mic could run indefinitely if forgotten — the
+    // v104 auto-restart-on-silence fix made this possible because
+    // ambient noise prevents the browser's built-in silence timeout.
+    let _voiceIdleTimer=null;
+    const resetIdleStop=()=>{
+      clearTimeout(_voiceIdleTimer);
+      _voiceIdleTimer=setTimeout(()=>{
+        voiceUserStop=true;
+        try{recognition?.stop();}catch(e){}
+      },25000);
+    };
     // Mobile Chrome on Android emits the same utterance as a growing chain
     // of separate final results ("I", "I have", "I have a friend", "I have
     // a friend who's coming over"), each at a different index. Both the
@@ -3734,7 +3763,7 @@ async function toggleVoice(){
     // Preserve whatever's already in the textarea so new speech appends to it
     let baseText=ta.value||'';
     if(baseText&&!/\s$/.test(baseText))baseText+=' ';
-    recognition.onstart=()=>{gotStart=true;isListening=true;btn.classList.add('on');vlog('onstart');vstatus('🎙 Listening — tap the mic to stop');};
+    recognition.onstart=()=>{gotStart=true;isListening=true;btn.classList.add('on');vlog('onstart');vstatus('🎙 Listening — tap the mic to stop');resetIdleStop();};
     recognition.onaudiostart=()=>vlog('onaudiostart');
     recognition.onsoundstart=()=>{voiceHeardSound=true;vlog('onsoundstart');};
     recognition.onspeechstart=()=>{voiceHeardSound=true;vlog('onspeechstart');vstatus('🎙 Hearing you… tap mic to stop');};
@@ -3771,6 +3800,8 @@ async function toggleVoice(){
       finalText=kept.length?kept.join(' ')+' ':'';
       ta.value=(baseText+finalText+interim).replace(/\s+$/,'')+(interim?' ':'');
       ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,140)+'px';
+      // Reset the 25s idle timer whenever NEW speech actually lands.
+      if(kept.length||interim)resetIdleStop();
     };
     recognition.onerror=e=>{
       isListening=false;btn.classList.remove('on');
@@ -4922,7 +4953,10 @@ function _buildHabitsColumns(dates){
     const dayHabits=_habitsForDay(ds);
     const dow=date.getDay();
     const total=habits.length;
-    h+=`<div class="cv-gcol${isToday?' today':''}" style="cursor:pointer" onclick="UI.calDate=new Date(${date.getFullYear()},${date.getMonth()},${date.getDate()});UI.calView='day';rCal()" title="Open day in habit detail">
+    // Tapping a column opens the habit-day modal (matches the month-
+    // view behaviour). Same modal lets the user tick / untick from
+    // there, so they don't have to jump to Day view per Zander's ask.
+    h+=`<div class="cv-gcol${isToday?' today':''}" style="cursor:pointer" onclick="openHabitDayModal(${date.getFullYear()},${date.getMonth()},${date.getDate()})" title="Tap to view / tick habits for this day">
       <div class="cv-gcol-hdr">
         <span><span class="cv-gcol-dname">${DAYS[dow]}</span><span class="cv-gcol-dnum" style="margin-left:6px">${date.getDate()}</span></span>
         <span class="hab-count">${dayHabits.length}/${total||0}</span>
@@ -5049,55 +5083,68 @@ function showHabitsMcwPopover(cell){
   _mcwHoverPop=pop;
 }
 // Lightweight day modal for habits mode. Lists habits done / not done on
-// the tapped day with a "Open in Day view" link to the full audit.
+// the tapped day with a "Open in Day view" link to the full audit. Rows
+// are tappable to toggle the habit's tick on the focused date.
 function openHabitDayModal(cy,cm,cd){
   hideMcwPopover();
-  const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
   const date=new Date(cy,cm,cd);
-  const dow=date.getDay();
+  // If the modal is already open for this day (e.g. user just tapped a
+  // row), refresh its body in place so the rows move between sections
+  // without the close/reopen flicker.
+  let overlay=document.getElementById('habit-day-modal');
+  let body=overlay?overlay.querySelector('.hab-modal-body'):null;
+  let stat=overlay?overlay.querySelector('.hab-modal-stat'):null;
+  if(!overlay){
+    overlay=document.createElement('div');
+    overlay.className='modal';overlay.style.display='flex';overlay.id='habit-day-modal';
+    overlay.innerHTML=`<div class="modal-bd"></div>
+      <div class="modal-body" style="max-width:440px">
+        <h3>${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</h3>
+        <div class="hab-modal-stat"></div>
+        <div class="hab-modal-body"></div>
+        <div class="modal-actions" style="margin-top:14px">
+          <button class="btn btn-sm" data-action="close">Close</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary btn-sm" data-action="open">Open in Day view</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);_syncBodyLock();
+    body=overlay.querySelector('.hab-modal-body');
+    stat=overlay.querySelector('.hab-modal-stat');
+    overlay.addEventListener('click',e=>{
+      const act=e.target.dataset?.action;
+      if(act==='close'||e.target.closest('.modal-bd')){overlay.remove();_syncBodyLock();return;}
+      if(act==='open'){overlay.remove();_syncBodyLock();UI.calDate=date;UI.calView='day';rCal();return;}
+      const tap=e.target.closest('.hab-modal-tap');
+      if(tap){
+        const hid=tap.dataset.toggleId;
+        toggleHabitDate(hid,overlay.dataset.ds);
+        // Update the body in place — no flicker.
+        renderHabitDayModalBody(overlay,cy,cm,cd);
+      }
+    });
+  }
+  overlay.dataset.ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
+  renderHabitDayModalBody(overlay,cy,cm,cd);
+}
+function renderHabitDayModalBody(overlay,cy,cm,cd){
+  const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
+  const date=new Date(cy,cm,cd);const dow=date.getDay();
   const habits=S.habits||[];
   const done=habits.filter(h=>(h.checkedDates||[]).includes(ds));
   const notDone=habits.filter(h=>!(h.checkedDates||[]).includes(ds)&&!(h.excludedDays||[]).includes(dow));
   const rest=habits.filter(h=>!(h.checkedDates||[]).includes(ds)&&(h.excludedDays||[]).includes(dow));
-  // Build row HTML — each row is tappable to toggle that habit's tick on
-  // this date (data-toggle-id). Future-day taps are blocked downstream by
-  // toggleHabitDate.
   const mkRow=(hb,kind)=>{
     const checkSym=kind==='done'?'✓':'';
     return `<div class="hab-modal-row ${kind} hab-modal-tap" data-toggle-id="${hb.id}" title="Tap to ${kind==='done'?'untick':'tick'}"><div class="hab-day-dot" style="background:${_habitColorFor(hb)}${kind!=='done'?';opacity:.35':''}"></div><span>${esc(hb.name)}</span><span class="hab-modal-check">${checkSym}</span></div>`;
   };
-  const overlay=document.createElement('div');
-  overlay.className='modal';overlay.style.display='flex';overlay.id='habit-day-modal';
-  overlay.dataset.ds=ds;
-  overlay.innerHTML=`<div class="modal-bd"></div>
-    <div class="modal-body" style="max-width:440px">
-      <h3>${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</h3>
-      <div class="hab-modal-stat">${done.length} of ${habits.length||0} done${rest.length?` · ${rest.length} rest day${rest.length===1?'':'s'}`:''}</div>
-      <div class="hab-modal-body">
-        ${done.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Done</div>${done.map(hb=>mkRow(hb,'done')).join('')}</div>`:''}
-        ${notDone.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Not done</div>${notDone.map(hb=>mkRow(hb,'miss')).join('')}</div>`:''}
-        ${rest.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Rest days</div>${rest.map(hb=>mkRow(hb,'rest')).join('')}</div>`:''}
-      </div>
-      <div class="modal-actions" style="margin-top:14px">
-        <button class="btn btn-sm" data-action="close">Close</button>
-        <div class="spacer"></div>
-        <button class="btn btn-primary btn-sm" data-action="open">Open in Day view</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);_syncBodyLock();
-  overlay.addEventListener('click',e=>{
-    const act=e.target.dataset?.action;
-    if(act==='close'||e.target.closest('.modal-bd')){overlay.remove();_syncBodyLock();return;}
-    if(act==='open'){overlay.remove();_syncBodyLock();UI.calDate=date;UI.calView='day';rCal();return;}
-    const tap=e.target.closest('.hab-modal-tap');
-    if(tap){
-      const hid=tap.dataset.toggleId;
-      toggleHabitDate(hid,ds);
-      // Re-render the modal in place so the row moves between sections.
-      overlay.remove();_syncBodyLock();
-      openHabitDayModal(cy,cm,cd);
-    }
-  });
+  const stat=overlay.querySelector('.hab-modal-stat');
+  if(stat)stat.textContent=`${done.length} of ${habits.length||0} done${rest.length?` · ${rest.length} rest day${rest.length===1?'':'s'}`:''}`;
+  const body=overlay.querySelector('.hab-modal-body');
+  if(body)body.innerHTML=`
+    ${done.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Done</div>${done.map(hb=>mkRow(hb,'done')).join('')}</div>`:''}
+    ${notDone.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Not done</div>${notDone.map(hb=>mkRow(hb,'miss')).join('')}</div>`:''}
+    ${rest.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Rest days</div>${rest.map(hb=>mkRow(hb,'rest')).join('')}</div>`:''}`;
 }
 
 // Desktop-only hover popover: preview a day's events on mouseover without
@@ -5154,6 +5201,10 @@ function toggleMonthDetail(){UI.monthDetail=!UI.monthDetail;try{localStorage.set
 
 // Day preview modal — opened by clicking a day in the month view
 function openDayModal(cy,cm,cd,allGc){
+  // Kill any hover-preview that might still be open (long-press on
+  // touch can fire the popover before the click commits to opening
+  // the modal — leaving both visible until the user dismisses one).
+  hideMcwPopover();
   const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
   const {evs}=_monthEvsForDay(cy,cm,cd,allGc);
   const d=new Date(cy,cm,cd);
@@ -6065,10 +6116,12 @@ function openTaskModal(id){
       </div>
     </div>`;
   document.body.appendChild(overlay);_syncBodyLock();
-  // Focus the text field on open so keyboard-first editing works on
-  // desktop. On mobile the soft keyboard pops, which is what user wants
-  // since they tapped INTO the task explicitly.
-  setTimeout(()=>{const ta=document.getElementById('tm-text');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}},80);
+  // Auto-focus the text field on hover-capable (mouse) devices so
+  // keyboard-first editing works. Skip on touch devices where it would
+  // pop the on-screen keyboard before the user has even read the task.
+  if(matchMedia('(hover: hover) and (pointer: fine)').matches){
+    setTimeout(()=>{const ta=document.getElementById('tm-text');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}},80);
+  }
   overlay.addEventListener('click',e=>{
     if(e.target.closest('.modal-bd'))closeTaskModal();
   });
@@ -6078,7 +6131,14 @@ function closeTaskModal(){
   if(m){m.remove();_syncBodyLock();}
   UI._taskModalId=null;
 }
-function mkPriRow(t){return`<div class="pri-row"><span class="pri-lbl">Priority</span>${[['urgent','Urgent','pu-b'],['hi','High','ph-b'],['med','Medium','pm-b'],['lo','Low','pl-b'],['someday','Someday','ps-b']].map(([p,l,c])=>`<button class="pb ${c}${(t.priority||'lo')===p?' on':''}" onclick="setPri('${t.id}','${p}')">${l}</button>`).join('')}</div>`;}
+function mkPriRow(t){
+  // 3-column grid: [Urgent | High | Medium] on top row, [Low | Someday]
+  // on bottom (left-aligned). Replaces the old single-line wrap that
+  // looked messy on narrow screens.
+  const buttons=[['urgent','Urgent','pu-b'],['hi','High','ph-b'],['med','Medium','pm-b'],['lo','Low','pl-b'],['someday','Someday','ps-b']]
+    .map(([p,l,c])=>`<button class="pb ${c}${(t.priority||'lo')===p?' on':''}" onclick="setPri('${t.id}','${p}')">${l}</button>`).join('');
+  return`<div class="pri-row pri-row-grid"><span class="pri-lbl">Priority</span><div class="pri-buttons">${buttons}</div></div>`;
+}
 function rTasks(){
   const el=document.getElementById('tasks-sec');if(!el)return;
   const visible=S.tasks.filter(isTaskVisible);
@@ -6180,10 +6240,26 @@ function savePerson(id){
 function delPerson(id){if(!confirm('Delete this person?'))return;S.people=S.people.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rPeople();}
 function initials(first,last){const a=(first||'')[0]||'';const b=(last||'')[0]||'';return(a+b).toUpperCase()||'?';}
 function fullName(p){return[p.name,p.lastName].filter(Boolean).join(' ')||'—';}
+function searchPeople(q){UI.peopleQuery=(q||'').trim().toLowerCase();rPeople();}
 function rPeople(){
   const el=document.getElementById('people-list');if(!el)return;
-  const cnt=document.getElementById('ppl-cnt');if(cnt)cnt.textContent=S.people.length?`${S.people.length} saved`:'';
-  el.innerHTML=S.people.length?S.people.map(p=>{
+  // Filter against name, last name, context, workplace, where met, all
+  // notes, and contact details. Empty query shows everyone.
+  const q=(UI.peopleQuery||'').toLowerCase();
+  const list=q?S.people.filter(p=>{
+    const hay=[p.name,p.lastName,p.context,p.workplace,p.metAt,p.phone,p.email,...((p.notes||[]).map(n=>n.text))].filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(q);
+  }):S.people;
+  const cnt=document.getElementById('ppl-cnt');
+  if(cnt){
+    if(q&&S.people.length)cnt.textContent=`${list.length}/${S.people.length} match`;
+    else cnt.textContent=S.people.length?`${S.people.length} saved`:'';
+  }
+  if(!list.length){
+    el.innerHTML=q?`<div class="no-t">No people match "${esc(UI.peopleQuery)}"</div>`:`<div class="no-t">No people saved yet</div>`;
+    return;
+  }
+  el.innerHTML=list.map(p=>{
     const isEx=ex.id===p.id&&ex.type==='person';
     const recentNotes=(p.notes||[]).slice(-2).reverse();
     const info=[];
@@ -6205,7 +6281,7 @@ function rPeople(){
         <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="savePerson('${p.id}')">Save</button><button class="btn btn-danger btn-sm" onclick="delPerson('${p.id}')">Delete</button></div>
       </div>`:''}
     </div>`;
-  }).join(''):`<div class="no-t">No people yet — mention someone and I'll create a profile</div>`;
+  }).join('');
 }
 
 // BUILDS
@@ -8377,7 +8453,15 @@ function nbToggleVoice(){
   if(baseText)baseText+=' ';
   let finalText='';
   const normTxt=s=>(s||'').trim().toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
-  rec.onstart=()=>{NB.voiceActive=true;document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.add('on'));};
+  // Same auto-stop-on-silence guard as the AI bar mic. Background noise
+  // can defeat the browser's built-in timeout and keep the mic running
+  // indefinitely if forgotten — force a stop after 25s of no real speech.
+  let _nbVoiceIdleTimer=null;
+  const resetNbIdleStop=()=>{
+    clearTimeout(_nbVoiceIdleTimer);
+    _nbVoiceIdleTimer=setTimeout(()=>{nbStopVoice();},25000);
+  };
+  rec.onstart=()=>{NB.voiceActive=true;document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.add('on'));resetNbIdleStop();};
   rec.onresult=e=>{
     let interim='';const finals=[];
     for(let i=0;i<e.results.length;i++){const r=e.results[i];
@@ -8395,6 +8479,7 @@ function nbToggleVoice(){
     if(target){target.innerHTML=esc(v).replace(/\n/g,'<br>');}
     NB._voiceTarget.page.cells[NB._voiceTarget.cellIdx]=esc(v).replace(/\n/g,'<br>');
     clearTimeout(_nbSaveTimer);_nbSaveTimer=setTimeout(()=>svAll(),600);
+    if(kept.length||interim)resetNbIdleStop();
   };
   rec.onerror=e=>{console.warn('[nb voice]',e.error);NB._voiceErrored=true;nbStopVoice();};
   let voiceStartedAtNb=Date.now();
