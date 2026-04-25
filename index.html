@@ -338,7 +338,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .cal-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
 .cal-nav{display:flex;align-items:center;gap:6px}
 .cal-ttl{font-size:15px;font-weight:600;min-width:160px;text-align:center;color:var(--text);font-family:'Playfair Display','Georgia',serif}
-.cal-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* Mode pills (Events/Habits) anchored left, view pills (Day/3day/Week/
+   Month) anchored right. justify-content:space-between in the parent
+   row plus auto-margin-left on the view-row pushes them apart. */
+.cal-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1}
+.cal-controls .cv-mode-row{margin-right:auto}
 .carr{background:transparent;border:1px solid var(--border);border-radius:8px;width:30px;height:30px;font-size:13px;color:var(--muted);display:flex;align-items:center;justify-content:center}
 .carr:hover{background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
 .cv-row{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:2px}
@@ -773,22 +777,32 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 }
 [data-theme="studio"] .hab-bar{background:color-mix(in srgb,var(--hab-c,var(--accent)) 25%,var(--surface))}
 .hab-bar > span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* Month view: collapsed mode shows thin coloured strips (no text); detail
-   mode uses the same tinted-bg/left-border style as events expanded so the
-   month reads consistently across modes. */
-.hab-weeks .hab-cell{cursor:pointer}
-.hab-cell-bars{display:flex;flex-direction:column;gap:2px;padding:1px 4px 0;flex:1;min-height:0;overflow:hidden;margin-top:4px}
-.hab-weeks:not(.detail) .hab-bar{height:3px;padding:0;border-radius:2px;font-size:0;border-left:none;background:var(--hab-c,var(--accent))}
-.hab-weeks.detail .hab-bar{height:auto;font-size:9.5px;padding:1px 5px;border-radius:3px;border-left:2px solid var(--hab-c,var(--accent));background:color-mix(in srgb,var(--hab-c,var(--accent)) 18%,var(--surface));color:var(--text)}
-[data-theme="studio"] .hab-weeks.detail .hab-bar{background:color-mix(in srgb,var(--hab-c,var(--accent)) 28%,var(--surface))}
-.hab-cell-more{font-size:9px;font-weight:700;color:var(--muted);text-align:right;padding:0 4px}
+/* Habit month bars in expanded mode reuse the .mv-bar / .mv-bar-exp
+   layout (so cell sizing matches events exactly) but apply the per-
+   habit colour via --hab-c → tinted background + coloured left border,
+   matching how event chips look in expanded mode. Collapsed mode just
+   uses inline background:colour like events do for their solid bars. */
+.mv-bar-hab{
+  background:color-mix(in srgb,var(--hab-c,var(--accent)) 22%,var(--surface)) !important;
+  border-left:3px solid var(--hab-c,var(--accent));
+  color:var(--text) !important;
+}
+[data-theme="studio"] .mv-bar-hab{
+  background:color-mix(in srgb,var(--hab-c,var(--accent)) 30%,var(--surface)) !important;
+}
+.mv-bar-more{pointer-events:none}
 /* Habit day modal */
 .hab-modal-stat{font-size:12px;color:var(--muted);margin-bottom:14px;padding:6px 10px;background:var(--surface-2);border-radius:6px;display:inline-block}
 .hab-modal-sec{margin-bottom:12px}
 .hab-modal-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:6px}
-.hab-modal-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface-2);border-radius:6px;margin-bottom:4px;font-size:13px;color:var(--text)}
+.hab-modal-body{max-height:60vh;overflow-y:auto;margin:0 -2px;padding:0 2px}
+.hab-modal-row{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--surface-2);border-radius:6px;margin-bottom:4px;font-size:13px;color:var(--text);transition:background .12s}
+.hab-modal-row.hab-modal-tap{cursor:pointer}
+.hab-modal-row.hab-modal-tap:hover{background:var(--surface-hover)}
 .hab-modal-row.miss{opacity:.7}
 .hab-modal-row.rest{opacity:.55;font-style:italic}
+.hab-modal-row > span{flex:1;min-width:0}
+.hab-modal-check{flex:0 0 auto;font-size:14px;font-weight:700;color:var(--sage,var(--accent));min-width:18px;text-align:right}
 .mcw-more-note{font-size:9px;color:var(--muted);font-weight:600;text-align:center;padding:1px 2px;pointer-events:none;align-self:end}
 
 /* Spanning bars — every bar fills its grid row uniformly so the "expand all"
@@ -1029,14 +1043,18 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
 /* Brain item detail view (project-style edit page). Activated by
    openBrainDetail when an idea/resource/note is tapped. */
-#brain-detail-view{display:flex;flex-direction:column;gap:14px;animation:fade .25s ease}
+#brain-detail-view{display:flex;flex-direction:column;gap:18px;animation:fade .25s ease;padding-top:6px}
 .bd-hdr{display:flex;align-items:center;gap:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
 .bd-back{padding:6px 12px}
 .bd-typetag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:3px 8px;background:var(--surface-2);border-radius:6px}
 .bd-date{margin-left:auto;font-size:11px;color:var(--muted);font-style:italic;font-family:'Playfair Display',serif}
-.bd-field{display:flex;flex-direction:column;gap:5px}
+/* Field rows get more vertical breathing room above the input so the
+   label doesn't kiss the input box. */
+.bd-field{display:flex;flex-direction:column;gap:8px;margin-top:4px}
 .bd-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
-.bd-title-input{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;padding:10px 14px;line-height:1.25;letter-spacing:-.2px}
+/* Title was 22px which read as a banner. 17px sits more like a normal
+   document title and matches the rest of the form weight. */
+.bd-title-input{font-family:'Playfair Display',serif;font-size:17px;font-weight:500;padding:9px 12px;line-height:1.3;letter-spacing:-.1px}
 /* The description textarea grows to fit its content. overflow:hidden so
    we never get an internal scrollbar — height is controlled by the
    oninput auto-grow handler. */
@@ -1052,6 +1070,16 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .hb-rest-d{padding:5px 4px;border-radius:6px;border:1px solid var(--border);background:transparent;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .12s;text-align:center}
 .hb-rest-d:hover{background:var(--surface-2);color:var(--text)}
 .hb-rest-d.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+/* Task pop-out modal (openTaskModal). Replaces inline expansion so
+   opening a task doesn't shift the rest of the page around. */
+.tm-hdr{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:14px}
+.tm-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:3px 9px;border-radius:5px;background:var(--surface-2);color:var(--text-2);position:relative}
+.tm-tag::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--proj,var(--accent));border-radius:5px 0 0 5px}
+.tm-date{margin-left:auto;font-size:11px;color:var(--muted);font-style:italic;font-family:'Playfair Display',serif}
+.tm-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);display:block;margin:10px 0 5px}
+.tm-text-ta{width:100%;font-size:14px;line-height:1.45;padding:10px 12px;resize:vertical;min-height:60px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;outline:none}
+.tm-text-ta:focus{border-color:var(--border-strong);background:var(--surface)}
 .hc-tick{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--muted-2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all .15s}
 .hc.done .hc-tick{background:var(--sage);border-color:var(--sage);color:#fff}
 .hc-name{font-size:12px;font-weight:500;color:var(--text);flex:1;line-height:1.3;min-width:0}
@@ -1661,20 +1689,29 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
      their tap-friendly size when the user pinches the page. Hide every
      in-page control element; the top + bottom mobile bars take over. */
   .nb-page-hdr,.nb-page-foot,.nb-page .nb-toolbar{display:none !important}
-  .nb-mobile-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 4px 10px;flex-wrap:wrap}
+  /* Top bar: 2 sub-rows.
+       Row A: section + page meta | + 🗑
+       Row B: rich-text toolbar (Word-style placement) */
+  .nb-mobile-top{display:flex;flex-direction:column;gap:8px;padding:6px 4px 8px}
+  .nb-mb-info-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .nb-mb-info{display:flex;flex-direction:column;line-height:1.2;min-width:0;flex:1}
   .nb-mb-sec{font-family:'Playfair Display',serif;font-size:16px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .nb-mb-meta{font-family:'Playfair Display',serif;font-size:11px;color:var(--muted);font-style:italic}
-  .nb-mb-actions{display:flex;align-items:center;gap:6px}
-  .nb-mb-layout{padding:2px}
-  .nb-mb-layout button{padding:5px 9px;font-size:11px}
+  .nb-mb-info-actions{display:flex;align-items:center;gap:6px}
   .nb-mb-iconbtn{width:30px;height:30px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
   .nb-mb-iconbtn:hover{background:var(--surface-hover);color:var(--text)}
-  .nb-mobile-bot{display:flex;flex-direction:column;gap:8px;padding:12px 4px 6px;border-top:1px solid var(--border);margin-top:12px}
-  .nb-mb-toolbar{flex-wrap:wrap;justify-content:flex-start}
-  .nb-mb-toolbar .nb-tb-btn{width:32px;height:32px;font-size:13px}
-  .nb-mb-toolbar .nb-tb-undo{width:auto;padding:0 10px;margin-left:auto}
-  .nb-mb-foot-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+  /* Toolbar must fit undo on the same line — tighten button widths and
+     drop separator margins. Buttons get smaller with less padding. */
+  .nb-mb-toolbar{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;gap:1px;padding:4px 2px}
+  .nb-mb-toolbar::-webkit-scrollbar{display:none}
+  .nb-mb-toolbar .nb-tb-btn{width:28px;height:28px;font-size:12px;flex-shrink:0}
+  .nb-mb-toolbar .nb-toolbar-sep{margin:0 2px;flex-shrink:0}
+  .nb-mb-toolbar .nb-tb-undo{width:auto;padding:0 8px;font-size:11.5px;margin-left:auto;flex-shrink:0}
+  /* Bottom bar: layout toggle LEFT, mic + refine RIGHT */
+  .nb-mobile-bot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 4px 6px;border-top:1px solid var(--border);margin-top:10px}
+  .nb-mb-layout{padding:2px;flex-shrink:0}
+  .nb-mb-layout button{padding:5px 9px;font-size:11px}
+  .nb-mb-foot-actions{display:flex;align-items:center;gap:8px}
   .nb-mb-foot-actions .nb-mic-btn{width:36px;height:36px;font-size:14px}
   .nb-mb-foot-actions .nb-refine-btn{padding:7px 14px;font-size:13px}
   .nb-arrows-bottom{display:flex;justify-content:center;gap:28px;padding:14px 0 30px}
@@ -2601,7 +2638,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v107';
+const APP_VERSION='v108';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2690,6 +2727,8 @@ function setRoute(r,skipHash){
   // and back lands on the list, not a stale item that may have been
   // edited/deleted from another device.
   if(r!=='brain'&&UI.brainDetail){closeBrainDetail();}
+  // Close the task modal too so it doesn't linger over a different route
+  if(UI._taskModalId)closeTaskModal();
   window.scrollTo({top:0,behavior:'instant'});
   if(r==='settings')rSettings();
   // Stop any live notebook voice recording when navigating away
@@ -4187,7 +4226,13 @@ function getCalTitle(){
   if(UI.calView==='month')return d.toLocaleDateString('en-ZA',{month:'long',year:'numeric'});
   if(UI.calView==='day')return d.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'});
   if(UI.calView==='3day'){const e=new Date(d);e.setDate(d.getDate()+2);return`${d.getDate()} ${d.toLocaleDateString('en-ZA',{month:'short'})} – ${e.getDate()} ${e.toLocaleDateString('en-ZA',{month:'short'})}`;}
-  const s=new Date(d);s.setDate(d.getDate()-d.getDay());const e=new Date(s);e.setDate(s.getDate()+6);return`${s.getDate()} ${s.toLocaleDateString('en-ZA',{month:'short'})} – ${e.getDate()} ${e.toLocaleDateString('en-ZA',{month:'short'})}`;
+  // Week view: cells start Monday. Title needs to match — previously
+  // `s.setDate(d.getDate()-d.getDay())` snapped to Sunday so the title
+  // read Sun-Sat while the grid actually showed Mon-Sun. Compute the
+  // Monday-of-week the same way buildWeekView does.
+  const s=new Date(d);const dow=d.getDay();s.setDate(d.getDate()+(dow===0?-6:1-dow));
+  const e=new Date(s);e.setDate(s.getDate()+6);
+  return`${s.getDate()} ${s.toLocaleDateString('en-ZA',{month:'short'})} – ${e.getDate()} ${e.toLocaleDateString('en-ZA',{month:'short'})}`;
 }
 function calNav(dir){
   UI.monthExpandedDs=null;
@@ -4411,79 +4456,43 @@ function goToCalToday(){UI.calDate=new Date();UI.monthExpandedDs=null;rCal();}
 // heading that isn't itself an input), use our own tiny modal with
 // month + year dropdowns. Always opens centered, works the same everywhere.
 function pickCalDate(){
-  // Picker shape depends on the active view:
-  //   - Month → month/year (no point picking a day, the whole month is shown)
-  //   - Day / 3-Day / Week → full date input so you can land on a specific day
-  // Day/3day/week previously dropped to the 1st of the chosen month, which
-  // wasn't useful when navigating to a specific day.
+  // Uniform date-input picker for every view. Month view uses the chosen
+  // day's month/year (the day itself isn't significant — the whole month
+  // is shown — but using the same picker keeps the UX consistent across
+  // the four views).
   const old=document.getElementById('cal-month-modal');if(old)old.remove();
-  const curY=UI.calDate.getFullYear();
-  const curM=UI.calDate.getMonth();
+  const cur=localDs(UI.calDate);
   const m=document.createElement('div');
   m.className='modal';m.id='cal-month-modal';m.style.display='flex';
-  if(UI.calView==='month'){
-    const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const years=[];for(let y=curY-5;y<=curY+5;y++)years.push(y);
-    m.innerHTML=`<div class="modal-bd"></div>
-      <div class="modal-body" style="max-width:360px">
-        <h3 style="margin-bottom:14px">Jump to month</h3>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-          <select class="select" id="cal-m-sel" style="width:100%">
-            ${MONTHS.map((n,i)=>`<option value="${i}"${i===curM?' selected':''}>${n}</option>`).join('')}
-          </select>
-          <select class="select" id="cal-y-sel" style="width:100%">
-            ${years.map(y=>`<option value="${y}"${y===curY?' selected':''}>${y}</option>`).join('')}
-          </select>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-sm" id="cal-today-jump">Today</button>
-          <div class="spacer"></div>
-          <button class="btn btn-sm" id="cal-jump-cancel">Cancel</button>
-          <button class="btn btn-primary btn-sm" id="cal-jump-ok">Go</button>
-        </div>
-      </div>`;
-    document.body.appendChild(m);_syncBodyLock();
-    const close=()=>{m.remove();_syncBodyLock();};
-    m.querySelector('.modal-bd').onclick=close;
-    m.querySelector('#cal-jump-cancel').onclick=close;
-    m.querySelector('#cal-today-jump').onclick=()=>{UI.calDate=new Date();UI.monthExpandedDs=null;close();rCal();};
-    m.querySelector('#cal-jump-ok').onclick=()=>{
-      const mm=Number(m.querySelector('#cal-m-sel').value);
-      const yy=Number(m.querySelector('#cal-y-sel').value);
-      UI.calDate=new Date(yy,mm,1);
+  m.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:320px">
+      <h3 style="margin-bottom:14px">Jump to date</h3>
+      <input class="input" id="cal-date-input" type="date" value="${esc(cur)}" style="width:100%;margin-bottom:16px">
+      <div class="modal-actions">
+        <button class="btn btn-sm" id="cal-today-jump">Today</button>
+        <div class="spacer"></div>
+        <button class="btn btn-sm" id="cal-jump-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="cal-jump-ok">Go</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);_syncBodyLock();
+  const close=()=>{m.remove();_syncBodyLock();};
+  m.querySelector('.modal-bd').onclick=close;
+  m.querySelector('#cal-jump-cancel').onclick=close;
+  m.querySelector('#cal-today-jump').onclick=()=>{UI.calDate=new Date();UI.monthExpandedDs=null;close();rCal();};
+  m.querySelector('#cal-jump-ok').onclick=()=>{
+    const v=m.querySelector('#cal-date-input').value;
+    if(v){
+      const [yy,mm,dd]=v.split('-').map(Number);
+      // For month view we still anchor to the 1st so the rendering math
+      // stays simple, but the picker accepts any day so the UX matches
+      // the other views.
+      if(UI.calView==='month')UI.calDate=new Date(yy,mm-1,1);
+      else UI.calDate=new Date(yy,mm-1,dd);
       UI.monthExpandedDs=null;
-      close();rCal();
-    };
-  } else {
-    // Day / 3-Day / Week — use the native date input so the user can pick
-    // an actual day (matches the daily-notebook jump-to-date behaviour).
-    const cur=localDs(UI.calDate);
-    m.innerHTML=`<div class="modal-bd"></div>
-      <div class="modal-body" style="max-width:320px">
-        <h3 style="margin-bottom:14px">Jump to date</h3>
-        <input class="input" id="cal-date-input" type="date" value="${esc(cur)}" style="width:100%;margin-bottom:16px">
-        <div class="modal-actions">
-          <button class="btn btn-sm" id="cal-today-jump">Today</button>
-          <div class="spacer"></div>
-          <button class="btn btn-sm" id="cal-jump-cancel">Cancel</button>
-          <button class="btn btn-primary btn-sm" id="cal-jump-ok">Go</button>
-        </div>
-      </div>`;
-    document.body.appendChild(m);_syncBodyLock();
-    const close=()=>{m.remove();_syncBodyLock();};
-    m.querySelector('.modal-bd').onclick=close;
-    m.querySelector('#cal-jump-cancel').onclick=close;
-    m.querySelector('#cal-today-jump').onclick=()=>{UI.calDate=new Date();UI.monthExpandedDs=null;close();rCal();};
-    m.querySelector('#cal-jump-ok').onclick=()=>{
-      const v=m.querySelector('#cal-date-input').value;
-      if(v){
-        const [yy,mm,dd]=v.split('-').map(Number);
-        UI.calDate=new Date(yy,mm-1,dd);
-        UI.monthExpandedDs=null;
-      }
-      close();rCal();
-    };
-  }
+    }
+    close();rCal();
+  };
 }
 function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=localDs(UI.calDate);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
 
@@ -4926,49 +4935,118 @@ function _buildHabitsColumns(dates){
 }
 function buildHabitsMultiDayView(dates){return _buildHabitsColumns(dates);}
 function buildHabitsWeekView(dates){return _buildHabitsColumns(dates);}
-// Month view in habits mode — same grid as the events month view, but each
-// cell shows a stack of small coloured bars instead of event text. Tap the
-// cell to open the day modal showing which habits were ticked.
+// Month view in habits mode — uses the IDENTICAL grid + bar machinery
+// as the events month view (.cv-weeks / .mv-wk / .mcw-cell / .mv-bar)
+// so cell sizing and row spacing match exactly. Each habit ticked on a
+// day becomes a row in that day's column. Bars are .mv-bar (collapsed)
+// or .mv-bar-exp (detail) with the habit colour as background / left
+// border + tinted bg — same treatment as event chips.
 function buildHabitsMonthView(y,m,today){
   const cells=_monthCells(y,m);
   let lastWeek=0;for(let i=0;i<cells.length;i++)if(!cells[i].faded)lastWeek=Math.floor(i/7);
   const showWeeks=lastWeek+1;
   const detail=!!UI.monthDetail;
-  const MAX_ROWS=detail?8:5;
+  // Same MAX_ROWS as events so cell heights and row tracks are identical.
+  const MAX_ROWS=detail?6:4;
   let h=`<div class="mv-toolbar"><button class="btn btn-ghost btn-sm" onclick="toggleMonthDetail()">${detail?'▦ Bars':'☰ Expand all'}</button></div>`;
-  h+=`<div class="cv-weeks${detail?' detail':''} hab-weeks">`;
+  h+=`<div class="cv-weeks${detail?' detail':''}">`;
   h+=`<div class="cv-week-row cv-week-hdr">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="cv-week-dayname">${d}</div>`).join('')}</div>`;
   for(let wk=0;wk<showWeeks;wk++){
     const weekCells=cells.slice(wk*7,wk*7+7);
-    h+=`<div class="cv-week-row mv-wk hab-wk" style="--wk-rows:${MAX_ROWS}">`;
+    h+=`<div class="cv-week-row mv-wk" style="--wk-rows:${MAX_ROWS}">`;
+    // Cells first — span all rows of the week so bars layer on top.
+    weekCells.forEach(({y:cy,m:cm,d:cd,faded},idx)=>{
+      const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
+      h+=`<div class="mcw-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}" style="grid-column:${idx+1};grid-row:1/-1"><div class="mcw-top"><div class="mcw-num">${cd}</div></div></div>`;
+    });
+    // Then bars — one .mv-bar per habit ticked, anchored to the day's
+    // column and stacked from row 2 down. Identical layout machinery
+    // to events; click bubbles to the cell which opens the habit-day modal.
     weekCells.forEach(({y:cy,m:cm,d:cd,faded},idx)=>{
       const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
-      const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
       const dayHabits=_habitsForDay(ds);
-      const showCount=detail?MAX_ROWS:Math.min(MAX_ROWS-1,dayHabits.length);
+      const showCount=Math.min(MAX_ROWS,dayHabits.length);
       const visible=dayHabits.slice(0,showCount);
       const extra=dayHabits.length-visible.length;
-      h+=`<div class="mcw-cell hab-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}" style="grid-column:${idx+1};grid-row:1/-1">
-        <div class="mcw-top"><div class="mcw-num">${cd}</div></div>
-        <div class="hab-cell-bars">${visible.map(hb=>detail?`<div class="hab-bar" style="--hab-c:${_habitColorFor(hb)}" title="${esc(hb.name)}"><span>${esc(hb.name)}</span></div>`:`<div class="hab-bar" style="--hab-c:${_habitColorFor(hb)}" title="${esc(hb.name)}"></div>`).join('')}</div>
-        ${extra>0?`<div class="hab-cell-more">+${extra}</div>`:''}
-      </div>`;
+      visible.forEach((hb,i)=>{
+        const c=_habitColorFor(hb);
+        const fadedCls=faded?' mv-bar-faded':'';
+        if(detail){
+          h+=`<div class="mv-bar mv-bar-exp mv-bar-hab both${fadedCls}" style="grid-column:${idx+1}/${idx+2};grid-row:${i+2};--hab-c:${c}" title="${esc(hb.name)}"><span class="mv-bar-txt">${esc(hb.name)}</span></div>`;
+        } else {
+          h+=`<div class="mv-bar both${fadedCls}" style="grid-column:${idx+1}/${idx+2};grid-row:${i+2};background:${c}" title="${esc(hb.name)}"></div>`;
+        }
+      });
+      if(extra>0&&!detail){
+        h+=`<div class="mv-bar mv-bar-more${faded?' mv-bar-faded':''}" style="grid-column:${idx+1}/${idx+2};grid-row:${MAX_ROWS+1};background:transparent;color:var(--muted);font-size:9px;font-weight:700;justify-content:flex-end;padding-right:4px" title="+${extra} more">+${extra}</div>`;
+      }
     });
     h+=`</div>`;
   }
   h+=`</div>`;
   setTimeout(()=>{
     const cal=document.getElementById('cal');if(!cal)return;
+    // Clear any leftover events-mode hover handlers — otherwise hovering
+    // a cell here would still pop the events-preview popover.
+    cal.onmouseover=null;cal.onmouseout=null;hideMcwPopover();
     if(!detail){
-      // Tap a cell → open the day modal (in habits mode) so user sees which
-      // habits were done.
       cal.onclick=e=>{const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openHabitDayModal(cy,cm,cd);};
+      // Habits-mode hover: shows the habits ticked that day. Skipped on
+      // touch-only devices; expanded mode has no hover (bar labels
+      // already make everything visible).
+      attachHabitsMonthHover(cal);
     } else {
       // Expanded view — each cell jumps straight to the Day-view audit.
       cal.onclick=e=>{const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);UI.calDate=new Date(cy,cm,cd);UI.calView='day';rCal();};
     }
   },0);
   return h;
+}
+// Habits-month hover popover. Listed habits ticked that day, mirroring
+// the events month's hover preview but with habit content.
+function attachHabitsMonthHover(cal){
+  if(!matchMedia('(hover: hover)').matches)return;
+  cal.onmouseover=e=>{
+    const cell=e.target.closest('.mcw-cell');
+    if(!cell||cell.classList.contains('faded'))return;
+    clearTimeout(_mcwHoverTimer);
+    _mcwHoverTimer=setTimeout(()=>showHabitsMcwPopover(cell),220);
+  };
+  cal.onmouseout=e=>{
+    const cell=e.target.closest('.mcw-cell');if(!cell)return;
+    if(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest('.mcw-popover'))return;
+    clearTimeout(_mcwHoverTimer);hideMcwPopover();
+  };
+}
+function showHabitsMcwPopover(cell){
+  hideMcwPopover();
+  const [cy,cm,cd]=cell.dataset.cd.split(',').map(Number);
+  const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
+  const dt=new Date(cy,cm,cd);
+  const title=dt.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'});
+  const habits=S.habits||[];
+  const done=habits.filter(h=>(h.checkedDates||[]).includes(ds));
+  const total=habits.length;
+  const pop=document.createElement('div');
+  pop.className='mcw-popover';pop.id='mcw-popover';
+  pop.onmouseleave=hideMcwPopover;
+  let body=`<div class="mcwp-title">${esc(title)}</div>`;
+  if(!total)body+=`<div class="mcwp-empty">No habits set up yet.</div>`;
+  else if(!done.length)body+=`<div class="mcwp-empty">No habits ticked.</div>`;
+  else body+=`<div class="mcwp-evs">${done.map(hb=>`<div class="mv-bar mv-bar-exp mv-bar-hab both" style="--hab-c:${_habitColorFor(hb)};margin:2px 0"><span class="mv-bar-txt" style="display:block">${esc(hb.name)}</span></div>`).join('')}</div>`;
+  body+=`<div class="mcwp-foot"><span style="font-size:10px;color:var(--muted)">${done.length}/${total} done · click for details</span></div>`;
+  pop.innerHTML=body;
+  document.body.appendChild(pop);
+  const rect=cell.getBoundingClientRect();
+  const viewW=window.innerWidth,viewH=window.innerHeight;
+  const pW=pop.offsetWidth,pH=pop.offsetHeight;
+  let top=rect.bottom+6;
+  let left=rect.left+rect.width/2-pW/2;
+  if(top+pH>viewH-10)top=rect.top-pH-6;
+  if(left+pW>viewW-10)left=viewW-pW-10;
+  if(left<10)left=10;
+  pop.style.top=top+'px';pop.style.left=left+'px';
+  _mcwHoverPop=pop;
 }
 // Lightweight day modal for habits mode. Lists habits done / not done on
 // the tapped day with a "Open in Day view" link to the full audit.
@@ -4981,16 +5059,25 @@ function openHabitDayModal(cy,cm,cd){
   const done=habits.filter(h=>(h.checkedDates||[]).includes(ds));
   const notDone=habits.filter(h=>!(h.checkedDates||[]).includes(ds)&&!(h.excludedDays||[]).includes(dow));
   const rest=habits.filter(h=>!(h.checkedDates||[]).includes(ds)&&(h.excludedDays||[]).includes(dow));
-  // Re-use the events day modal styling
+  // Build row HTML — each row is tappable to toggle that habit's tick on
+  // this date (data-toggle-id). Future-day taps are blocked downstream by
+  // toggleHabitDate.
+  const mkRow=(hb,kind)=>{
+    const checkSym=kind==='done'?'✓':'';
+    return `<div class="hab-modal-row ${kind} hab-modal-tap" data-toggle-id="${hb.id}" title="Tap to ${kind==='done'?'untick':'tick'}"><div class="hab-day-dot" style="background:${_habitColorFor(hb)}${kind!=='done'?';opacity:.35':''}"></div><span>${esc(hb.name)}</span><span class="hab-modal-check">${checkSym}</span></div>`;
+  };
   const overlay=document.createElement('div');
   overlay.className='modal';overlay.style.display='flex';overlay.id='habit-day-modal';
+  overlay.dataset.ds=ds;
   overlay.innerHTML=`<div class="modal-bd"></div>
     <div class="modal-body" style="max-width:440px">
       <h3>${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</h3>
       <div class="hab-modal-stat">${done.length} of ${habits.length||0} done${rest.length?` · ${rest.length} rest day${rest.length===1?'':'s'}`:''}</div>
-      ${done.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Done</div>${done.map(hb=>`<div class="hab-modal-row done"><div class="hab-day-dot" style="background:${_habitColorFor(hb)}"></div><span>${esc(hb.name)}</span></div>`).join('')}</div>`:''}
-      ${notDone.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Not done</div>${notDone.map(hb=>`<div class="hab-modal-row miss"><div class="hab-day-dot" style="background:${_habitColorFor(hb)};opacity:.35"></div><span>${esc(hb.name)}</span></div>`).join('')}</div>`:''}
-      ${rest.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Rest days</div>${rest.map(hb=>`<div class="hab-modal-row rest"><div class="hab-day-dot" style="background:${_habitColorFor(hb)};opacity:.35"></div><span>${esc(hb.name)}</span></div>`).join('')}</div>`:''}
+      <div class="hab-modal-body">
+        ${done.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Done</div>${done.map(hb=>mkRow(hb,'done')).join('')}</div>`:''}
+        ${notDone.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Not done</div>${notDone.map(hb=>mkRow(hb,'miss')).join('')}</div>`:''}
+        ${rest.length?`<div class="hab-modal-sec"><div class="hab-modal-lbl">Rest days</div>${rest.map(hb=>mkRow(hb,'rest')).join('')}</div>`:''}
+      </div>
       <div class="modal-actions" style="margin-top:14px">
         <button class="btn btn-sm" data-action="close">Close</button>
         <div class="spacer"></div>
@@ -5000,8 +5087,16 @@ function openHabitDayModal(cy,cm,cd){
   document.body.appendChild(overlay);_syncBodyLock();
   overlay.addEventListener('click',e=>{
     const act=e.target.dataset?.action;
-    if(act==='close'||e.target.closest('.modal-bd')){overlay.remove();_syncBodyLock();}
-    else if(act==='open'){overlay.remove();_syncBodyLock();UI.calDate=date;UI.calView='day';rCal();}
+    if(act==='close'||e.target.closest('.modal-bd')){overlay.remove();_syncBodyLock();return;}
+    if(act==='open'){overlay.remove();_syncBodyLock();UI.calDate=date;UI.calView='day';rCal();return;}
+    const tap=e.target.closest('.hab-modal-tap');
+    if(tap){
+      const hid=tap.dataset.toggleId;
+      toggleHabitDate(hid,ds);
+      // Re-render the modal in place so the row moves between sections.
+      overlay.remove();_syncBodyLock();
+      openHabitDayModal(cy,cm,cd);
+    }
   });
 }
 
@@ -5902,9 +5997,87 @@ function isTaskVisible(t){
 function undoTask(id){const t=S.tasks.find(x=>x.id===id);if(!t)return;t.done=false;delete t.doneAt;svAll();rTasks();rAttention();}
 function toggleEx(type,id){ex=(ex.id===id&&ex.type===type)?{id:null,type:null}:{id,type};render();}
 function pCls(p){return p==='urgent'?'pu':p==='hi'?'ph':p==='med'?'pm':p==='lo'?'pl':'ps';}
-function setPri(id,p){const t=S.tasks.find(x=>x.id===id);if(!t)return;const ta=document.getElementById('exp-ta-'+id);if(ta)t.text=ta.value||t.text;t.priority=p;svAll();rTasks();rAttention();}
-function saveTask(id){const t=S.tasks.find(x=>x.id===id);if(!t)return;const ta=document.getElementById('exp-ta-'+id);if(ta?.value?.trim())t.text=ta.value.trim();const ti=document.getElementById('exp-ti-'+id);if(ti)t.scheduledTime=ti.value;svAll();ex={id:null,type:null};rTasks();rAttention();}
-function delTask(id){if(!confirm('Delete this task?'))return;S.tasks=S.tasks.filter(x=>x.id!==id);svAll();ex={id:null,type:null};rTasks();rAttention();}
+function setPri(id,p){
+  const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  // Pull any pending text edit from the modal first so changing priority
+  // doesn't lose the edit. Read either the modal field or the legacy
+  // inline expand field (history view still uses inline).
+  const modalTa=document.getElementById('tm-text');
+  const inlineTa=document.getElementById('exp-ta-'+id);
+  if(modalTa&&UI._taskModalId===id&&modalTa.value.trim())t.text=modalTa.value.trim();
+  else if(inlineTa)t.text=inlineTa.value||t.text;
+  t.priority=p;svAll();
+  // Repaint just the priority button row in the modal so the user sees
+  // the toggle without a full re-render.
+  const pr=document.getElementById('tm-pri-row');if(pr)pr.outerHTML=mkPriRow(t).replace('class="pri-row"','class="pri-row" id="tm-pri-row"');
+  rTasks();rAttention();
+}
+function saveTask(id){
+  const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  const modalTa=document.getElementById('tm-text');
+  const modalTi=document.getElementById('tm-time');
+  if(modalTa&&UI._taskModalId===id){if(modalTa.value.trim())t.text=modalTa.value.trim();}
+  else{const ta=document.getElementById('exp-ta-'+id);if(ta?.value?.trim())t.text=ta.value.trim();}
+  if(modalTi&&UI._taskModalId===id)t.scheduledTime=modalTi.value;
+  else{const ti=document.getElementById('exp-ti-'+id);if(ti)t.scheduledTime=ti.value;}
+  svAll();ex={id:null,type:null};
+  closeTaskModal();
+  rTasks();rAttention();
+}
+function delTask(id){
+  if(!confirm('Delete this task?'))return;
+  S.tasks=S.tasks.filter(x=>x.id!==id);svAll();ex={id:null,type:null};
+  closeTaskModal();
+  rTasks();rAttention();
+}
+// Pop-out task detail modal. Replaces the inline-expand pattern so opening
+// a task doesn't shove the rest of the page around. mkPriRow + chk + setPri
+// + saveTask + delTask are all reused; the modal just provides different
+// IDs (tm-*) for the live edit fields, and saveTask falls back to the old
+// exp-* IDs for any code path that still uses them (e.g. the History tab
+// keeps the read-only inline expand).
+function openTaskModal(id){
+  const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  // Don't re-open mid-fade; let the user untick first if needed
+  if(t.done&&t.doneAt&&Date.now()-t.doneAt<TASK_FADE_MS)return;
+  closeTaskModal();
+  UI._taskModalId=id;
+  const overlay=document.createElement('div');
+  overlay.className='modal';overlay.style.display='flex';overlay.id='task-modal';
+  const proj=PROJ[t.project]||PROJ.gen;
+  overlay.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:480px">
+      <div class="tm-hdr">
+        <span class="tm-tag" style="--proj:${proj.h}">${esc(t.area==='work'?proj.n:'Personal')}</span>
+        <span class="tm-date">Added ${fmt(t.date||tod())}</span>
+      </div>
+      <label class="tm-lbl" for="tm-text">Task</label>
+      <textarea id="tm-text" class="ta tm-text-ta" rows="2">${esc(t.text||'')}</textarea>
+      <label class="tm-lbl" for="tm-time">Scheduled time</label>
+      <input id="tm-time" class="input" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am">
+      <label class="tm-lbl">Priority</label>
+      ${mkPriRow(t).replace('class="pri-row"','class="pri-row" id="tm-pri-row"')}
+      <div class="modal-actions" style="margin-top:18px">
+        <button class="btn btn-danger btn-sm" onclick="delTask('${id}')">Delete</button>
+        <div class="spacer"></div>
+        <button class="btn btn-sm" onclick="closeTaskModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveTask('${id}')">Save & close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);_syncBodyLock();
+  // Focus the text field on open so keyboard-first editing works on
+  // desktop. On mobile the soft keyboard pops, which is what user wants
+  // since they tapped INTO the task explicitly.
+  setTimeout(()=>{const ta=document.getElementById('tm-text');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}},80);
+  overlay.addEventListener('click',e=>{
+    if(e.target.closest('.modal-bd'))closeTaskModal();
+  });
+}
+function closeTaskModal(){
+  const m=document.getElementById('task-modal');
+  if(m){m.remove();_syncBodyLock();}
+  UI._taskModalId=null;
+}
 function mkPriRow(t){return`<div class="pri-row"><span class="pri-lbl">Priority</span>${[['urgent','Urgent','pu-b'],['hi','High','ph-b'],['med','Medium','pm-b'],['lo','Low','pl-b'],['someday','Someday','ps-b']].map(([p,l,c])=>`<button class="pb ${c}${(t.priority||'lo')===p?' on':''}" onclick="setPri('${t.id}','${p}')">${l}</button>`).join('')}</div>`;}
 function rTasks(){
   const el=document.getElementById('tasks-sec');if(!el)return;
@@ -5926,11 +6099,10 @@ function rTasks(){
   // position of "lo" (3). We use ?? so 0 stays 0.
   const srt=arr=>[...arr].sort((a,b)=>(PO[a.priority]??99)-(PO[b.priority]??99));
   const mkTi=t=>{
-    const isEx=ex.id===t.id&&ex.type==='task';
     const fading=t.done&&t.doneAt;
-    let h=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="toggleEx('task','${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
-    if(isEx)h+=`<div class="exp-p"><textarea class="exp-ta" id="exp-ta-${t.id}" rows="2">${esc(t.text)}</textarea><div style="display:flex;gap:8px;margin-top:8px;align-items:center"><label style="font-size:11px;color:var(--muted)">Time</label><input class="inp-e" id="exp-ti-${t.id}" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am" style="margin-bottom:0;flex:1"></div>${mkPriRow(t)}<div class="exp-dt">Added ${fmt(t.date||tod())}</div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveTask('${t.id}')">Save & close</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}')">Delete</button></div></div>`;
-    return h;
+    // Single row, no inline expansion any more — clicking the row opens
+    // a pop-out modal so the page layout doesn't shift.
+    return `<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="openTaskModal('${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
   };
   let wh='<div class="col-lbl work">Work</div>',hw=false;
   Object.entries(grps).forEach(([k,ts])=>{if(!ts.length)return;hw=true;const p=PROJ[k];wh+=`<div class="proj-g"><div class="proj-hdr"><span class="pdot" style="background:${p.h}"></span><span class="pnm">${p.n}</span></div><div class="tcard">${srt(ts).map(mkTi).join('')}</div></div>`;});
@@ -7249,17 +7421,11 @@ function renderNotebookMobileBars(){
   if(!sec||!page){top.innerHTML='';bot.innerHTML='';return;}
   const layoutBtns=[['single','▭','One cell'],['half','▯▯','Left / right split'],['quad','⊞','Four cells']]
     .map(([k,lbl,ttl])=>`<button type="button" onclick="nbSetLayout('${k}','${page.id}')" class="${page.layout===k?'on':''}" title="${ttl}">${lbl}</button>`).join('');
-  top.innerHTML=`
-    <div class="nb-mb-info">
-      <span class="nb-mb-sec">${esc(sec.title||'Untitled')}</span>
-      <span class="nb-mb-meta">Page ${NB.pageIdx+1} of ${sec.pages.length}</span>
-    </div>
-    <div class="nb-mb-actions">
-      <div class="nb-layout-toggle nb-mb-layout">${layoutBtns}</div>
-      <button class="iconbtn nb-mb-iconbtn" onclick="nbAddPageAfter('${page.id}')" title="Add page" aria-label="Add page">＋</button>
-      <button class="iconbtn nb-mb-iconbtn" onclick="nbDeletePageById('${page.id}')" title="Delete page" aria-label="Delete page">🗑</button>
-    </div>`;
-  // Bottom toolbar: same rich-text formatting buttons + mic + refine + undo
+  // Top bar: two stacked rows.
+  //   Row A: section title + page X/Y on LEFT, ＋ / 🗑 on RIGHT
+  //   Row B: rich-text toolbar (B / I / U / S | H / • / 1. | 🖍 / ↺ / ↶)
+  // Toolbar lives at the top now (Word-style) per user feedback. Layout
+  // toggle moves to the bottom bar below the page.
   const tbBtns=[
     ['bold','<b>B</b>','Bold'],
     ['italic','<i>I</i>','Italic'],
@@ -7275,8 +7441,22 @@ function renderNotebookMobileBars(){
   ];
   const canUndo=NB_HISTORY.length>0;
   const tbHtml=tbBtns.map(([cmd,lbl,ttl])=>cmd==='sep'?`<span class="nb-toolbar-sep"></span>`:`<button type="button" class="nb-tb-btn" data-cmd="${cmd}" title="${esc(ttl)}" onmousedown="event.preventDefault()" onclick="nbExec('${cmd}','${page.id}')">${lbl}</button>`).join('');
+  top.innerHTML=`
+    <div class="nb-mb-info-row">
+      <div class="nb-mb-info">
+        <span class="nb-mb-sec">${esc(sec.title||'Untitled')}</span>
+        <span class="nb-mb-meta">Page ${NB.pageIdx+1} of ${sec.pages.length}</span>
+      </div>
+      <div class="nb-mb-info-actions">
+        <button class="iconbtn nb-mb-iconbtn" onclick="nbAddPageAfter('${page.id}')" title="Add page" aria-label="Add page">＋</button>
+        <button class="iconbtn nb-mb-iconbtn" onclick="nbDeletePageById('${page.id}')" title="Delete page" aria-label="Delete page">🗑</button>
+      </div>
+    </div>
+    <div class="nb-toolbar nb-mb-toolbar">${tbHtml}<button type="button" class="nb-tb-btn nb-tb-undo" title="Undo" onmousedown="event.preventDefault()" onclick="nbUndo()" ${canUndo?'':'disabled'}>↶</button></div>`;
+  // Bottom bar: layout toggle on LEFT, mic + refine on RIGHT (matches the
+  // desktop in-page footer layout).
   bot.innerHTML=`
-    <div class="nb-toolbar nb-mb-toolbar">${tbHtml}<button type="button" class="nb-tb-btn nb-tb-undo" title="Undo" onmousedown="event.preventDefault()" onclick="nbUndo()" ${canUndo?'':'disabled'}>↶</button></div>
+    <div class="nb-layout-toggle nb-mb-layout">${layoutBtns}</div>
     <div class="nb-mb-foot-actions">
       <button class="nb-mic-btn${NB.voiceActive?' on':''}" onclick="nbToggleVoice()" title="Record into the focused cell" aria-label="Voice record">🎙</button>
       <button class="nb-refine-btn" onclick="nbRefinePage('${page.id}')" title="AI refine page">✨ Refine</button>
