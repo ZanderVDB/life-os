@@ -1108,6 +1108,27 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .tm-step-add .input{flex:1;font-size:12.5px;padding:7px 10px}
 /* Step-count badge on task rows */
 .ti-steps{font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-2);padding:2px 7px;border-radius:5px;flex-shrink:0;margin-top:2px;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+/* Inline substep — small row directly under a task that has steps,
+   showing only the NEXT undone step. Indented + dashed border-left so
+   it visually nests under the parent task. */
+.ti-substep{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 12px 7px 32px;
+  margin:-2px 0 8px 14px;
+  background:var(--surface-2);
+  border-left:2px dashed var(--border-strong);
+  border-radius:0 8px 8px 0;
+  font-size:12px;color:var(--text-2);
+  cursor:pointer;
+  transition:background .12s;
+}
+.ti-substep:hover{background:var(--surface-hover)}
+.ti-substep input[type=checkbox]{flex-shrink:0;width:17px;height:17px;cursor:pointer;margin:0}
+.ti-substep-text{flex:1;line-height:1.4;word-break:break-word}
+.ti-substep-meta{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:.02em;flex-shrink:0;text-transform:uppercase;font-weight:600}
+/* When the main checkbox is locked (steps unfinished), dim it visually
+   and show the not-allowed cursor so the lock is obvious. */
+.ti.has-steps input[type=checkbox]{opacity:.4;cursor:not-allowed}
 .hc-tick{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--muted-2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all .15s}
 .hc.done .hc-tick{background:var(--sage);border-color:var(--sage);color:#fff}
 .hc-name{font-size:12px;font-weight:500;color:var(--text);flex:1;line-height:1.3;min-width:0}
@@ -2490,6 +2511,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
           <div class="setting-row">
             <div>
+              <div class="setting-label">Daily reminders</div>
+              <div class="setting-desc" id="notif-desc">A short nudge at 9am and 6pm (when the app's open) with your urgent tasks + habits left for the day.</div>
+            </div>
+            <div class="setting-right">
+              <label class="switch"><input type="checkbox" id="notif-toggle" onchange="toggleNotifEnabled(this.checked)"><span class="slider"></span></label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
               <div class="setting-label">Install app</div>
               <div class="setting-desc" id="install-desc">Fullscreen, app-like.</div>
             </div>
@@ -2669,7 +2699,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v111';
+const APP_VERSION='v112';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6060,6 +6090,16 @@ let _taskFadeTimer=null;
 function chk(id,e){
   e.stopPropagation();
   const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  // Defensive: if the task has unfinished steps, refuse to tick the
+  // main row — user has to advance through the steps. The disabled
+  // attribute on the checkbox should already block the click, but
+  // some browsers fire the change event anyway.
+  const hasOpenSteps=Array.isArray(t.steps)&&t.steps.some(s=>!s.done);
+  if(!t.done&&hasOpenSteps){
+    // Bounce the checkbox back to its visual state
+    if(e.target&&e.target.tagName==='INPUT')e.target.checked=false;
+    return;
+  }
   t.done=!t.done;
   if(t.done)t.doneAt=Date.now();else delete t.doneAt;
   if(t.done)pruneCompletedHistory();
@@ -6264,13 +6304,31 @@ function rTasks(){
   const srt=arr=>[...arr].sort((a,b)=>(PO[a.priority]??99)-(PO[b.priority]??99));
   const mkTi=t=>{
     const fading=t.done&&t.doneAt;
-    // Show a step-progress badge "n/m" when the task has a sub-step
-    // breakdown, so the user can see at-a-glance how much remains
-    // without opening the modal.
-    const stepBadge=Array.isArray(t.steps)&&t.steps.length
-      ?`<span class="ti-steps" title="${t.steps.filter(s=>s.done).length} of ${t.steps.length} steps done">${t.steps.filter(s=>s.done).length}/${t.steps.length}</span>`
+    const hasSteps=Array.isArray(t.steps)&&t.steps.length>0;
+    const nextStep=hasSteps?t.steps.find(s=>!s.done):null;
+    const doneCount=hasSteps?t.steps.filter(s=>s.done).length:0;
+    const stepBadge=hasSteps
+      ?`<span class="ti-steps" title="${doneCount} of ${t.steps.length} steps done">${doneCount}/${t.steps.length}</span>`
       :'';
-    return `<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="openTaskModal('${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
+    // When the task has open steps, the main checkbox is LOCKED — the
+    // user advances one step at a time via the sub-row below. Ticking
+    // the last step auto-completes the parent. Without steps the
+    // checkbox behaves as before (toggle done immediately).
+    const mainLocked=hasSteps&&!!nextStep;
+    const checkboxAttrs=mainLocked?' disabled title="Complete the steps below first"':'';
+    let html=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${mainLocked?' has-steps':''}" onclick="openTaskModal('${t.id}')"><input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
+    // Inline sub-row: shows the NEXT undone step. Tapping its checkbox
+    // marks that step done — which then auto-shows the next step on the
+    // next render (or auto-completes the task on the last step).
+    if(nextStep&&!t.done){
+      const stepNum=t.steps.findIndex(s=>!s.done)+1;
+      html+=`<div class="ti-substep" onclick="event.stopPropagation();openTaskModal('${t.id}')" title="Tap the checkbox to mark done. Tap text to open all steps.">
+        <input type="checkbox" onclick="event.stopPropagation();toggleTaskStep('${t.id}','${nextStep.id}',true)" title="Mark this step done">
+        <span class="ti-substep-text">${esc(nextStep.text)}</span>
+        <span class="ti-substep-meta">Step ${stepNum} of ${t.steps.length}</span>
+      </div>`;
+    }
+    return html;
   };
   let wh='<div class="col-lbl work">Work</div>',hw=false;
   Object.entries(grps).forEach(([k,ts])=>{if(!ts.length)return;hw=true;const p=PROJ[k];wh+=`<div class="proj-g"><div class="proj-hdr"><span class="pdot" style="background:${p.h}"></span><span class="pnm">${p.n}</span></div><div class="tcard">${srt(ts).map(mkTi).join('')}</div></div>`;});
@@ -6653,6 +6711,21 @@ function rSettings(){
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
+  // Daily reminder toggle reflects both the user preference AND the
+  // browser permission state, since either being off means no notifs fire.
+  const ntTog=document.getElementById('notif-toggle');
+  const ntDesc=document.getElementById('notif-desc');
+  if(ntTog){
+    const enabled=notifEnabled()&&notifPermState()==='granted';
+    ntTog.checked=enabled;
+    if(ntDesc){
+      const perm=notifPermState();
+      let suffix='';
+      if(perm==='denied')suffix=' Permission was denied — you\'ll need to allow it in your browser/site settings to re-enable.';
+      else if(perm!=='granted'&&notifEnabled())suffix=' Tap the toggle to grant browser permission.';
+      ntDesc.innerHTML=`A short nudge at 9am and 6pm (when the app's open) with your urgent tasks + habits left for the day.${suffix}`;
+    }
+  }
   document.querySelectorAll('#ai-confirm-toggle button').forEach(b=>b.classList.toggle('on',b.dataset.aiMode===(S.aiConfirmMode||'calendar')));
   // Version + update banner
   const vn=document.getElementById('version-num');if(vn)vn.textContent=APP_VERSION;
@@ -6813,6 +6886,27 @@ function toggleCalendarDefault(key,minutes,on){
   svAll();
 }
 
+// Toggle daily reminder notifications. Asks for browser permission on
+// first enable; if denied (or revoked later), the toggle reflects that
+// state via rSettings. Does NOT fire a notification immediately — the
+// scheduler picks them up at 9am / 6pm.
+async function toggleNotifEnabled(on){
+  if(on){
+    const ok=await requestNotifPermission();
+    if(!ok){
+      // Permission denied — keep our preference off and re-render so
+      // the toggle reflects reality.
+      setNotifEnabled(false);
+      const t=document.getElementById('notif-toggle');if(t)t.checked=false;
+      rSettings();
+      return;
+    }
+    setNotifEnabled(true);
+  } else {
+    setNotifEnabled(false);
+  }
+  rSettings();
+}
 function toggleSounds(on){
   S.soundsEnabled=!!on;
   try{localStorage.setItem('los_sounds',on?'1':'0');}catch(e){}
@@ -8693,6 +8787,100 @@ function refreshGCalWarn(){
 // keeps the app open longer than that, the warning won't appear until
 // something triggers render(). Poll every 60s as a backstop.
 setInterval(refreshGCalWarn,60000);
+
+// ━━━━━━━━━━ DAILY REMINDER NOTIFICATIONS ━━━━━━━━━━
+// Honest scope: the browser/PWA must be open (or the Service Worker
+// active) at the trigger time for these to fire. Truly background
+// scheduled notifications need either a Cloud Function pushing via FCM
+// or the Notification Triggers API (experimental, Chrome only). Both
+// are deferable. The simple version below covers the common case
+// where the user opens the app at least once a day.
+//
+// Two slots: morning (9am) and evening (6pm). Each fires once per
+// day per slot — the last-fired date is stored in localStorage so
+// we don't double-notify if the user reloads the page.
+const NOTIF_SLOTS=[
+  {key:'morning',hour:9,label:'morning'},
+  {key:'evening',hour:18,label:'evening'}
+];
+function notifPermState(){try{return Notification.permission||'default';}catch(e){return 'denied';}}
+async function requestNotifPermission(){
+  if(!('Notification' in window)){alert('This browser doesn\'t support notifications.');return false;}
+  try{
+    const res=await Notification.requestPermission();
+    if(res==='granted'){
+      // Fire a confirmation notification so user knows it's working
+      try{new Notification('Life OS reminders enabled',{body:'You\'ll get a nudge at 9am and 6pm.',icon:'/icon.svg'});}catch(e){}
+      return true;
+    }
+    return false;
+  }catch(e){return false;}
+}
+function notifEnabled(){
+  try{return localStorage.getItem('los_notif_daily')==='1';}catch(e){return false;}
+}
+function setNotifEnabled(on){
+  try{localStorage.setItem('los_notif_daily',on?'1':'0');}catch(e){}
+}
+// Build a short, dynamic message based on the user's current state
+// (urgent task count, habits left to tick, calendar events for the day).
+function buildNotifMessage(slot){
+  const urgentTasks=(S.tasks||[]).filter(t=>!t.done&&t.priority==='urgent').length;
+  const todayDs=tod();
+  const habitsLeft=(S.habits||[]).filter(h=>!(h.checkedDates||[]).includes(todayDs)).length;
+  const bits=[];
+  if(slot==='morning'){
+    if(urgentTasks)bits.push(`${urgentTasks} urgent ${urgentTasks===1?'task':'tasks'} on your plate`);
+    if(habitsLeft)bits.push(`${habitsLeft} ${habitsLeft===1?'habit':'habits'} to tick`);
+    return bits.length?`Good morning · ${bits.join(' · ')}.`:'Good morning. Plan your day in Life OS.';
+  } else {
+    const remaining=urgentTasks;
+    if(remaining)return `Evening check-in · ${remaining} urgent ${remaining===1?'task':'tasks'} still open.`;
+    if(habitsLeft)return `Evening check-in · ${habitsLeft} ${habitsLeft===1?'habit':'habits'} left for today.`;
+    return 'Evening check-in. Anything left for today?';
+  }
+}
+// Has this slot already fired today? Stored as last-fired date string.
+function notifSlotFiredToday(key){
+  try{return localStorage.getItem('los_notif_last_'+key)===tod();}catch(e){return false;}
+}
+function markNotifSlotFired(key){
+  try{localStorage.setItem('los_notif_last_'+key,tod());}catch(e){}
+}
+function fireNotification(slot){
+  if(!notifEnabled())return;
+  if(notifPermState()!=='granted')return;
+  if(notifSlotFiredToday(slot.key))return;
+  try{
+    const title=slot.key==='morning'?'☀ Life OS · Morning':'🌙 Life OS · Evening';
+    const body=buildNotifMessage(slot.key);
+    new Notification(title,{
+      body,
+      icon:'/icon.svg',
+      badge:'/icon.svg',
+      tag:'los-'+slot.key,    // replaces any existing notification of the same slot
+      requireInteraction:false
+    });
+    markNotifSlotFired(slot.key);
+  }catch(e){console.warn('[notif]',e.message);}
+}
+// Check every minute whether we're inside a notification window. The
+// 5-minute window per slot means we'll fire even if the user opens the
+// app a few minutes after the trigger time (laptop closed at 9am, opened
+// at 9:03 → still gets the morning nudge).
+function checkNotifSchedule(){
+  if(!notifEnabled())return;
+  if(notifPermState()!=='granted')return;
+  const now=new Date();
+  const h=now.getHours(),m=now.getMinutes();
+  for(const slot of NOTIF_SLOTS){
+    if(h===slot.hour&&m<5)fireNotification(slot);
+  }
+}
+setInterval(checkNotifSchedule,60000);
+// Also check once on load — if user opens the app right at the trigger
+// minute, we don't want them to miss the slot waiting for the 60s tick.
+setTimeout(checkNotifSchedule,1500);
 // Pull the tip card from current S state. Runs on every render — so when a
 // Firestore snapshot delivers a newer plan generated on another device, the
 // local tip card refreshes instead of staying on whatever was shown before.
