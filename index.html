@@ -2696,10 +2696,17 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<!-- Google Identity Services — used to silently refresh the Calendar /
+     Tasks access token in the background, so the user no longer has to
+     reconnect every hour. Firebase Auth still handles user sign-in +
+     Firestore identity; GIS layers on top specifically for Google API
+     access tokens (because Firebase doesn't expose the refresh token
+     it manages internally). -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v112';
+const APP_VERSION='v113';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2916,6 +2923,7 @@ setTimeout(()=>{if(!authResolved){console.warn('[auth] timeout — showing login
 
 // GOOGLE CALENDAR
 let gTok=null;let gcCache={key:'',events:[]};
+const GCAL_SCOPES='https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks';
 function makeGProvider(){
   const p=new firebase.auth.GoogleAuthProvider();
   p.addScope('https://www.googleapis.com/auth/calendar');
@@ -2929,12 +2937,156 @@ function makeGProvider(){
   return p;
 }
 function isPopupIssue(err){const c=err&&err.code||'';return c==='auth/popup-blocked'||c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request'||c==='auth/operation-not-supported-in-this-environment';}
+
+// ─── Google Identity Services (GIS) — silent token refresh layer ───
+// Firebase Auth can't expose the OAuth refresh token it manages
+// internally, so on its own the calendar access token dies after 60min
+// and the user has to reconnect. GIS uses the same OAuth client ID
+// Firebase set up + the consent the user already granted, and lets us
+// silently mint a fresh access token in the background. Setup:
+//  1. Page loads gsi/client (script tag in <head>).
+//  2. We read the OAuth web client ID — preferred from
+//     window.GOOGLE_OAUTH_CLIENT_ID or firebaseConfig.googleClientId,
+//     fallback to the JWT audience cached on first sign-in (see
+//     _cacheClientIdFromCredential below).
+//  3. initTokenClient is called with that ID + Calendar+Tasks scopes.
+//  4. requestAccessToken({prompt:''}) silently returns a new token if
+//     the user has already granted consent in this browser. No popup.
+//  5. We schedule a refresh ~5min before each token's expires_in.
+let _gisTokenClient=null;
+let _gisInitialized=false;
+let _gisRefreshTimer=null;
+let _gisLastError=null;
+// One-shot resolver for user-initiated GIS requests (connectGoogleCalendar).
+// The token client only takes one callback, so we route through this hook
+// when an explicit click is awaiting a result.
+let _gisPendingResolver=null;
+function _decodeJwtAudience(jwt){
+  try{
+    const parts=String(jwt||'').split('.');
+    if(parts.length!==3)return null;
+    const b64=parts[1].replace(/-/g,'+').replace(/_/g,'/').padEnd(parts[1].length+(4-parts[1].length%4)%4,'=');
+    const payload=JSON.parse(atob(b64));
+    return payload&&payload.aud||null;
+  }catch(e){return null;}
+}
+function _getOAuthClientId(){
+  return (
+    (typeof window!=='undefined'&&window.GOOGLE_OAUTH_CLIENT_ID)||
+    (typeof firebaseConfig!=='undefined'&&(firebaseConfig.googleClientId||firebaseConfig.oauthClientId))||
+    (function(){try{return localStorage.getItem('los_oauth_client_id')||'';}catch(e){return '';}})()
+  );
+}
+function _cacheClientIdFromCredential(credential){
+  // Cache the Web OAuth client ID by parsing the audience claim out of
+  // Google's ID token. This runs after a fresh Firebase sign-in so the
+  // GIS layer can take over for refresh on subsequent loads — even if
+  // the user never set window.GOOGLE_OAUTH_CLIENT_ID.
+  const aud=_decodeJwtAudience(credential&&credential.idToken);
+  if(aud&&/\.apps\.googleusercontent\.com$/.test(aud)){
+    try{localStorage.setItem('los_oauth_client_id',aud);}catch(e){}
+    return aud;
+  }
+  return null;
+}
+function initGISTokenClient(){
+  if(_gisInitialized)return true;
+  if(!(window.google&&google.accounts&&google.accounts.oauth2))return false;
+  const clientId=_getOAuthClientId();
+  if(!clientId){
+    console.warn('[gis] no OAuth client ID found — silent refresh disabled. Set window.GOOGLE_OAUTH_CLIENT_ID in config.js, or sign in once with the Firebase popup so we can cache it from the credential.');
+    return false;
+  }
+  _gisTokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:clientId,
+    scope:GCAL_SCOPES,
+    callback:(resp)=>{
+      if(resp&&resp.error){
+        _gisLastError=resp.error;
+        console.warn('[gis] token error:',resp.error,resp.error_description||'');
+        // Silent refresh failed — clear cached token so banner shows.
+        // The user will need to click Connect for a fresh consent.
+        if(resp.error==='access_denied'||resp.error==='consent_required'||resp.error==='interaction_required'){
+          gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}
+        }
+        if(_gisPendingResolver){_gisPendingResolver.reject(new Error(resp.error));_gisPendingResolver=null;}
+        try{refreshGCalWarn();}catch(_){}
+        return;
+      }
+      _gisLastError=null;
+      const newTok=resp&&resp.access_token;
+      if(!newTok){
+        if(_gisPendingResolver){_gisPendingResolver.reject(new Error('no access_token'));_gisPendingResolver=null;}
+        return;
+      }
+      gTok=newTok;
+      try{localStorage.setItem('los_gat',gTok);}catch(e){}
+      _scheduleTokenRefresh(resp.expires_in||3600);
+      if(_gisPendingResolver){_gisPendingResolver.resolve(newTok);_gisPendingResolver=null;}
+      try{refreshGCalWarn();}catch(_){}
+      console.log('[gis] token refreshed — expires in '+(resp.expires_in||3600)+'s');
+    }
+  });
+  _gisInitialized=true;
+  // If we have a cached token already, schedule a conservative refresh
+  // (we don't know the exact expiry of the cached one). 50 min = safely
+  // before the 1hr boundary even if the cache is fresh.
+  if(gTok||(function(){try{return localStorage.getItem('los_gat');}catch(e){return null;}}())){
+    _scheduleTokenRefresh(3000);
+    // Also do an immediate silent attempt in case the cached token is
+    // already expired (probeGCalLive will catch it via 401 too, but
+    // this is faster).
+    setTimeout(()=>silentRefreshGCalToken(),500);
+  }
+  return true;
+}
+function _scheduleTokenRefresh(secondsValid){
+  clearTimeout(_gisRefreshTimer);
+  // Refresh ≥1 minute from now, otherwise 5 minutes before the token
+  // expires. For a 1-hour token: refresh at the 55-minute mark.
+  const refreshInMs=Math.max(60000,(Number(secondsValid||3600)-300)*1000);
+  _gisRefreshTimer=setTimeout(()=>silentRefreshGCalToken(),refreshInMs);
+  console.log('[gis] next silent refresh in '+(refreshInMs/1000|0)+'s');
+}
+function silentRefreshGCalToken(){
+  if(!_gisInitialized){if(!initGISTokenClient())return false;}
+  if(_gisTokenClient){
+    try{
+      // prompt:'' tells GIS to attempt silently — no UI shown if the
+      // user has already granted consent. If consent was revoked or
+      // never given, the callback fires with error and we surface
+      // the banner.
+      _gisTokenClient.requestAccessToken({prompt:''});
+      return true;
+    }catch(e){console.warn('[gis] requestAccessToken failed:',e.message);}
+  }
+  return false;
+}
+// Wait briefly for the GIS script to load if it hasn't yet, then init.
+function _bootstrapGIS(){
+  let tries=0;
+  const tick=()=>{
+    if(initGISTokenClient())return;
+    if(++tries<30)setTimeout(tick,200);   // ~6 seconds to load
+  };
+  tick();
+}
+// Kick off as soon as the page script runs (the script tag has async/
+// defer; this loop waits for it to land).
+_bootstrapGIS();
+
 async function signInGoogle(){
   try{await persistenceReady;}catch(e){}
   const p=makeGProvider();
   try{
     const r=await auth.signInWithPopup(p);
     if(r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);}catch(e){}}
+    // Cache the OAuth web client ID so GIS can take over for silent
+    // refresh on subsequent loads even without an explicit config entry.
+    if(r.credential)_cacheClientIdFromCredential(r.credential);
+    // Initial token from Firebase popup is good for ~1hr; schedule a
+    // GIS-driven silent refresh before then.
+    if(initGISTokenClient())_scheduleTokenRefresh(3500);
   }catch(e){
     if(isPopupIssue(e)){
       try{sessionStorage.setItem('los_redirect','1');}catch(_){}
@@ -2963,12 +3115,42 @@ async function connectGoogleCalendar(){
     try{
       try{await persistenceReady;}catch(e){}
       if(!auth.currentUser){alert('Sign in first, then Connect Google Calendar.');return null;}
+      // Preferred path: GIS. Same OAuth client ID, but it can silently
+      // refresh later without bothering the user. prompt:'consent' here
+      // makes sure any newly-added scopes get granted.
+      if(initGISTokenClient()&&_gisTokenClient){
+        try{
+          const tok=await new Promise((resolve,reject)=>{
+            _gisPendingResolver={resolve,reject};
+            // Safety timeout in case the user dismisses the consent UI.
+            const safetyTimer=setTimeout(()=>{
+              if(_gisPendingResolver){_gisPendingResolver=null;reject(new Error('consent timeout'));}
+            },120000);
+            const orig=_gisPendingResolver;
+            _gisPendingResolver={
+              resolve:(v)=>{clearTimeout(safetyTimer);orig.resolve(v);},
+              reject:(e)=>{clearTimeout(safetyTimer);orig.reject(e);}
+            };
+            try{_gisTokenClient.requestAccessToken({prompt:'consent'});}
+            catch(e){clearTimeout(safetyTimer);_gisPendingResolver=null;reject(e);}
+          });
+          if(tok)return tok;
+        }catch(e){
+          console.warn('[gcal] GIS connect failed, falling back to Firebase:',e.message||e);
+          // Fall through to Firebase popup as a last resort.
+        }
+      }
+      // Fallback: Firebase reauth popup. Also bootstraps the OAuth client
+      // ID cache (via _cacheClientIdFromCredential) so the next call can
+      // use the GIS path.
       const p=makeGProvider();
       try{
         const r=await auth.currentUser.reauthenticateWithPopup(p);
         if(r.credential?.accessToken){
           gTok=r.credential.accessToken;
           try{localStorage.setItem('los_gat',gTok);}catch(e){}
+          if(r.credential)_cacheClientIdFromCredential(r.credential);
+          if(initGISTokenClient())_scheduleTokenRefresh(3500);
           return gTok;
         }
       }catch(e){
@@ -2995,6 +3177,12 @@ async function revokeAndReconnect(){
     try{await fetch('https://oauth2.googleapis.com/revoke?token='+encodeURIComponent(tok),{method:'POST'});}catch(e){console.warn('[revoke]',e.message);}
   }
   gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}
+  // Stop pending GIS silent refreshes — the token they would mint is for
+  // a grant we just revoked, so it would just bounce. The next click
+  // reconnects from scratch with a consent prompt.
+  clearTimeout(_gisRefreshTimer);
+  _gisLastError=null;
+  if(_gisPendingResolver){try{_gisPendingResolver.reject(new Error('revoked'));}catch(_){}_gisPendingResolver=null;}
   gcCache={key:'',events:[]};_calListCache={ts:0,cals:[]};_gtasksCache={ts:0,items:[]};
   // Brief pause lets Google register the revoke before we re-request
   setTimeout(()=>reconnectGCalAndRefresh(),500);
@@ -3009,7 +3197,15 @@ async function fetchCalendarList(){
   if(Date.now()-_calListCache.ts<5*60000&&_calListCache.cals.length)return _calListCache.cals;
   try{
     const r=await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader',{headers:{Authorization:'Bearer '+tok}});
-    if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}try{refreshGCalWarn();}catch(_){}return[];}
+    if(r.status===401){
+      // Try a silent GIS refresh before surfacing the disconnect banner.
+      // If GIS is wired up the callback will swap in a fresh token and
+      // the next render's fetch will succeed.
+      const refreshing=silentRefreshGCalToken();
+      if(!refreshing){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}}
+      try{refreshGCalWarn();}catch(_){}
+      return[];
+    }
     if(!r.ok)return[];
     const d=await r.json();
     // Include every readable calendar — filtering by selected:true was hiding
@@ -3042,7 +3238,14 @@ async function fetchGCal(start,end){
   const results=await Promise.all(activeCals.map(cal=>(async()=>{
     try{
       const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime&maxResults=250`,{headers:{Authorization:'Bearer '+tok}});
-      if(r.status===401){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}try{refreshGCalWarn();}catch(_){}return[];}
+      if(r.status===401){
+        // Same silent-refresh path as fetchCalendarList — let GIS swap
+        // in a fresh token in the background before we drop the user.
+        const refreshing=silentRefreshGCalToken();
+        if(!refreshing){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}}
+        try{refreshGCalWarn();}catch(_){}
+        return[];
+      }
       if(!r.ok)return[];
       const d=await r.json();
       return(d.items||[]).map(ev=>{
