@@ -1091,6 +1091,23 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .tm-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);display:block;margin:10px 0 5px}
 .tm-text-ta{width:100%;font-size:14px;line-height:1.45;padding:10px 12px;resize:vertical;min-height:60px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;outline:none}
 .tm-text-ta:focus{border-color:var(--border-strong);background:var(--surface)}
+.tm-pri-wrap{margin-top:14px}
+/* mkPriRow's own .pri-lbl provides the "Priority" label; we don't need
+   the .tm-lbl above it (was rendering "Priority" twice). */
+.tm-pri-wrap .pri-row{margin-top:0}
+/* Multi-step task list inside the task modal */
+.tm-steps-wrap{display:flex;flex-direction:column;gap:5px;margin-top:6px;margin-bottom:6px}
+.tm-step{display:flex;align-items:center;gap:9px;padding:7px 10px;background:var(--surface-2);border-radius:7px;font-size:13px;color:var(--text)}
+.tm-step.done{opacity:.6}
+.tm-step.done .tm-step-text{text-decoration:line-through;color:var(--muted)}
+.tm-step input[type=checkbox]{flex-shrink:0;width:16px;height:16px;cursor:pointer}
+.tm-step-text{flex:1;line-height:1.35;word-break:break-word}
+.tm-step-del{flex-shrink:0;width:22px;height:22px;border:none;background:transparent;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;padding:0}
+.tm-step-del:hover{background:var(--red);color:#fff}
+.tm-step-add{display:flex;gap:6px;margin-top:4px}
+.tm-step-add .input{flex:1;font-size:12.5px;padding:7px 10px}
+/* Step-count badge on task rows */
+.ti-steps{font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-2);padding:2px 7px;border-radius:5px;flex-shrink:0;margin-top:2px;font-variant-numeric:tabular-nums;letter-spacing:.02em}
 .hc-tick{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--muted-2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all .15s}
 .hc.done .hc-tick{background:var(--sage);border-color:var(--sage);color:#fff}
 .hc-name{font-size:12px;font-weight:500;color:var(--text);flex:1;line-height:1.3;min-width:0}
@@ -2092,22 +2109,22 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             </div>
           </div>
           <!-- Row 2 of the daily-notebook header, as a 3-column grid:
-               [Today]  [‹ date ›]  [Save]
-               The three <div> slots keep their column even when the Today
-               button is hidden — so the date-nav stays centred and Save
-               stays pinned to the right regardless of whether we're on
-               today or some other day. -->
+               [‹ date ›]  [Today]  [Save]
+               Date-nav stays pinned to the LEFT, Today (when off-today)
+               sits in the centre, Save on the right. The three <div>
+               slots keep their column even when Today is hidden so the
+               date-nav doesn't shift. -->
           <div class="dn-controls">
             <div class="dn-ctrl-left">
-              <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
-            </div>
-            <div class="dn-ctrl-center">
               <div class="dn-date-nav" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;flex-shrink:0">
                 <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
                 <span class="cnt" id="dn-date" onclick="pickNotebookDate()" title="Pick a date" style="min-width:140px;text-align:center;cursor:pointer;padding:4px 10px"></span>
                 <input type="date" id="dn-date-picker" style="position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none">
                 <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
               </div>
+            </div>
+            <div class="dn-ctrl-center">
+              <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
             </div>
             <div class="dn-ctrl-right">
               <button class="btn btn-primary btn-sm" onclick="saveDN()">Save</button>
@@ -2652,7 +2669,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v109';
+const APP_VERSION='v111';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3481,7 +3498,13 @@ function _buildSavePayload(){
   return payload;
 }
 function svAll(){
-  if(!CU)return;clearTimeout(ST);
+  if(!CU)return;
+  // CRITICAL: don't write before initial sync has landed. resetStateForNewUser
+  // clears S in-memory at sign-in/restore; if a user action triggers svAll
+  // BEFORE the Firestore snapshot arrives, the empty state would overwrite
+  // their real cloud data. This is what was nuking projects across devices.
+  if(!_initialSyncDone){console.warn('[save] skipped — initial sync not done yet');return;}
+  clearTimeout(ST);
   ST=setTimeout(async()=>{
     try{await db.collection('users').doc(CU.uid).collection('data').doc('main').set(_buildSavePayload(),{merge:true});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error('[save]',e.message);}
   },300);
@@ -3490,7 +3513,9 @@ function svAll(){
 // ticks and task checks so concurrent devices don't race against a stale
 // local state.
 async function svAllNow(){
-  if(!CU)return;clearTimeout(ST);
+  if(!CU)return;
+  if(!_initialSyncDone){console.warn('[save-now] skipped — initial sync not done yet');return;}
+  clearTimeout(ST);
   try{await db.collection('users').doc(CU.uid).collection('data').doc('main').set(_buildSavePayload(),{merge:true});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error('[save-now]',e.message);}
 }
 function saveLifeRhythm(){const ta=document.getElementById('life-rhythm-ta');if(!ta)return;const v=ta.value;if(v===S.lifeRhythm)return;S.lifeRhythm=v;svAll();}
@@ -3977,12 +4002,17 @@ async function loadTip(force){
   const t=tod();
   if(!force&&S.todaysTip&&S.todaysTip.date===t&&S.todaysTip.tip){renderTip(S.todaysTip.tip);return;}
   const key=getKey();if(!key){renderTip({body:"Add your Anthropic API key in Settings to get your AI-generated daily plan.",markdown:false,mode:'today'});return;}
-  // No auto-generate. Previously we kicked off generatePlan('today') here on
-  // every app load, which caused a race on mobile→PC handoffs: mobile's
-  // freshly-saved plan would get overwritten by the PC's auto-generated one.
-  // Now the user has to click "✨ Draft plan" explicitly — matches his stated
-  // preference for a softer suggestion-style tip anyway.
-  if(force){await generatePlan('today');return;}
+  if(force){await generatePlan('now');return;}
+  // First-launch auto-generate: no saved plan for today + we have a key
+  // → kick off generatePlan('now') automatically. The tip is then cached
+  // under today's date so subsequent loads (or other devices syncing in)
+  // skip the regenerate. Across-device handoffs are still safe because
+  // the date check above short-circuits when a tip already exists.
+  if(!S.todaysTip||S.todaysTip.date!==t){
+    renderEmptyTip();          // show shell while generating
+    generatePlan('now').catch(e=>console.warn('[auto-plan]',e.message));
+    return;
+  }
   renderEmptyTip();
 }
 function renderEmptyTip(){
@@ -5023,15 +5053,15 @@ function buildHabitsMonthView(y,m,today){
     // Clear any leftover events-mode hover handlers — otherwise hovering
     // a cell here would still pop the events-preview popover.
     cal.onmouseover=null;cal.onmouseout=null;hideMcwPopover();
+    // Both collapsed and expanded views open the habit-day modal on a
+    // cell tap. Previously expanded jumped straight to Day view, but
+    // Zander prefers the modal-with-tickable-rows everywhere so habits
+    // can be ticked without the round-trip.
+    cal.onclick=e=>{const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openHabitDayModal(cy,cm,cd);};
     if(!detail){
-      cal.onclick=e=>{const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);openHabitDayModal(cy,cm,cd);};
-      // Habits-mode hover: shows the habits ticked that day. Skipped on
-      // touch-only devices; expanded mode has no hover (bar labels
-      // already make everything visible).
+      // Hover preview only on collapsed mode (expanded already shows
+      // names directly inside cells).
       attachHabitsMonthHover(cal);
-    } else {
-      // Expanded view — each cell jumps straight to the Day-view audit.
-      cal.onclick=e=>{const c=e.target.closest('[data-cd]');if(!c)return;const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);UI.calDate=new Date(cy,cm,cd);UI.calView='day';rCal();};
     }
   },0);
   return h;
@@ -5039,7 +5069,9 @@ function buildHabitsMonthView(y,m,today){
 // Habits-month hover popover. Listed habits ticked that day, mirroring
 // the events month's hover preview but with habit content.
 function attachHabitsMonthHover(cal){
-  if(!matchMedia('(hover: hover)').matches)return;
+  // Same mouse-only gate as attachMonthHover so touch taps don't fire
+  // both the preview and the day modal.
+  if(!matchMedia('(hover: hover) and (pointer: fine)').matches)return;
   cal.onmouseover=e=>{
     const cell=e.target.closest('.mcw-cell');
     if(!cell||cell.classList.contains('faded'))return;
@@ -5086,7 +5118,9 @@ function showHabitsMcwPopover(cell){
 // the tapped day with a "Open in Day view" link to the full audit. Rows
 // are tappable to toggle the habit's tick on the focused date.
 function openHabitDayModal(cy,cm,cd){
-  hideMcwPopover();
+  // Kill any queued/visible hover preview so we don't get the modal
+  // AND the popover on screen at the same time.
+  clearTimeout(_mcwHoverTimer);hideMcwPopover();
   const date=new Date(cy,cm,cd);
   // If the modal is already open for this day (e.g. user just tapped a
   // row), refresh its body in place so the rows move between sections
@@ -5148,10 +5182,13 @@ function renderHabitDayModalBody(overlay,cy,cm,cd){
 }
 
 // Desktop-only hover popover: preview a day's events on mouseover without
-// committing to the full click-modal.
+// committing to the full click-modal. The (hover:hover)+(pointer:fine)
+// query targets devices with a real mouse — phones / tablets that
+// emulate hover events on long-press are skipped, which fixes the bug
+// where mobile taps were popping both the preview AND the day modal.
 let _mcwHoverTimer=null;let _mcwHoverPop=null;
 function attachMonthHover(cal){
-  if(!matchMedia('(hover: hover)').matches)return; // skip touch-only devices
+  if(!matchMedia('(hover: hover) and (pointer: fine)').matches)return;
   cal.onmouseover=e=>{
     const cell=e.target.closest('.mcw-cell');
     if(!cell||cell.classList.contains('faded'))return;
@@ -5204,7 +5241,9 @@ function openDayModal(cy,cm,cd,allGc){
   // Kill any hover-preview that might still be open (long-press on
   // touch can fire the popover before the click commits to opening
   // the modal — leaving both visible until the user dismisses one).
-  hideMcwPopover();
+  // Also clear the pending hover timer so a queued show doesn't fire
+  // AFTER the modal opens.
+  clearTimeout(_mcwHoverTimer);hideMcwPopover();
   const ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
   const {evs}=_monthEvsForDay(cy,cm,cd,allGc);
   const d=new Date(cy,cm,cd);
@@ -6058,9 +6097,11 @@ function setPri(id,p){
   if(modalTa&&UI._taskModalId===id&&modalTa.value.trim())t.text=modalTa.value.trim();
   else if(inlineTa)t.text=inlineTa.value||t.text;
   t.priority=p;svAll();
-  // Repaint just the priority button row in the modal so the user sees
-  // the toggle without a full re-render.
-  const pr=document.getElementById('tm-pri-row');if(pr)pr.outerHTML=mkPriRow(t).replace('class="pri-row"','class="pri-row" id="tm-pri-row"');
+  // Repaint just the priority section in the modal so the visual
+  // toggle updates without a full re-render. The wrapper #tm-pri-wrap
+  // gets replaced with a fresh mkPriRow output so the .on class lands
+  // on the correct button.
+  const pr=document.getElementById('tm-pri-wrap');if(pr)pr.innerHTML=mkPriRow(t);
   rTasks();rAttention();
 }
 function saveTask(id){
@@ -6106,13 +6147,14 @@ function openTaskModal(id){
       <textarea id="tm-text" class="ta tm-text-ta" rows="2">${esc(t.text||'')}</textarea>
       <label class="tm-lbl" for="tm-time">Scheduled time</label>
       <input id="tm-time" class="input" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am">
-      <label class="tm-lbl">Priority</label>
-      ${mkPriRow(t).replace('class="pri-row"','class="pri-row" id="tm-pri-row"')}
+      <label class="tm-lbl">Steps</label>
+      <div id="tm-steps-wrap" class="tm-steps-wrap">${renderTaskSteps(t)}</div>
+      <div id="tm-pri-wrap" class="tm-pri-wrap">${mkPriRow(t)}</div>
       <div class="modal-actions" style="margin-top:18px">
         <button class="btn btn-danger btn-sm" onclick="delTask('${id}')">Delete</button>
         <div class="spacer"></div>
-        <button class="btn btn-sm" onclick="closeTaskModal()">Cancel</button>
-        <button class="btn btn-primary btn-sm" onclick="saveTask('${id}')">Save & close</button>
+        <!-- Edits auto-save when the modal closes (backdrop tap or Done) -->
+        <button class="btn btn-primary btn-sm" onclick="closeTaskModal()">Done</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);_syncBodyLock();
@@ -6126,9 +6168,71 @@ function openTaskModal(id){
     if(e.target.closest('.modal-bd'))closeTaskModal();
   });
 }
+// Multi-step task helpers. t.steps is an array of {id, text, done}.
+// Empty / missing steps means "this task has no breakdown" — checkbox
+// toggles the task itself as before. With steps, the modal renders a
+// checklist; ticking the last step auto-completes the parent task.
+function renderTaskSteps(t){
+  const steps=Array.isArray(t.steps)?t.steps:[];
+  const list=steps.map(s=>`<div class="tm-step${s.done?' done':''}">
+    <input type="checkbox" ${s.done?'checked':''} onchange="toggleTaskStep('${t.id}','${s.id}',this.checked)">
+    <span class="tm-step-text">${esc(s.text||'')}</span>
+    <button class="tm-step-del" onclick="delTaskStep('${t.id}','${s.id}')" aria-label="Remove step" title="Remove">×</button>
+  </div>`).join('');
+  return `${list||''}
+    <div class="tm-step-add">
+      <input id="tm-step-input" class="input" placeholder="Add a step…" onkeydown="if(event.key==='Enter'){event.preventDefault();addTaskStep('${t.id}')}">
+      <button class="btn btn-sm" onclick="addTaskStep('${t.id}')">+ Add</button>
+    </div>`;
+}
+function _refreshStepsUI(t){
+  const w=document.getElementById('tm-steps-wrap');if(w)w.innerHTML=renderTaskSteps(t);
+}
+function addTaskStep(taskId){
+  const t=S.tasks.find(x=>x.id===taskId);if(!t)return;
+  const inp=document.getElementById('tm-step-input');
+  const text=(inp?inp.value:'').trim();
+  if(!text)return;
+  t.steps=Array.isArray(t.steps)?t.steps:[];
+  t.steps.push({id:uid(),text,done:false});
+  svAll();_refreshStepsUI(t);rTasks();
+  // Re-focus input so user can keep adding
+  setTimeout(()=>{const ni=document.getElementById('tm-step-input');if(ni)ni.focus();},10);
+}
+function toggleTaskStep(taskId,stepId,done){
+  const t=S.tasks.find(x=>x.id===taskId);if(!t||!Array.isArray(t.steps))return;
+  const s=t.steps.find(x=>x.id===stepId);if(!s)return;
+  s.done=!!done;
+  // Auto-complete the parent task when EVERY step is checked.
+  // Don't auto-uncheck the task if a previously-done step is unticked —
+  // user might just be revisiting an entry. Manual untick still works.
+  const allDone=t.steps.length>0&&t.steps.every(x=>x.done);
+  if(allDone&&!t.done){t.done=true;t.doneAt=Date.now();pruneCompletedHistory();}
+  svAll();_refreshStepsUI(t);rTasks();rAttention();
+}
+function delTaskStep(taskId,stepId){
+  const t=S.tasks.find(x=>x.id===taskId);if(!t||!Array.isArray(t.steps))return;
+  t.steps=t.steps.filter(x=>x.id!==stepId);
+  svAll();_refreshStepsUI(t);rTasks();
+}
 function closeTaskModal(){
   const m=document.getElementById('task-modal');
-  if(m){m.remove();_syncBodyLock();}
+  if(m){
+    // Auto-save any pending edits BEFORE removing the modal — user
+    // explicitly asked for click-out-to-save behaviour.
+    const id=UI._taskModalId;
+    if(id){
+      const t=S.tasks.find(x=>x.id===id);
+      if(t){
+        const ta=document.getElementById('tm-text');
+        const ti=document.getElementById('tm-time');
+        if(ta&&ta.value.trim()&&ta.value.trim()!==t.text)t.text=ta.value.trim();
+        if(ti&&ti.value!==t.scheduledTime)t.scheduledTime=ti.value;
+        svAll();rTasks();rAttention();
+      }
+    }
+    m.remove();_syncBodyLock();
+  }
   UI._taskModalId=null;
 }
 function mkPriRow(t){
@@ -6160,9 +6264,13 @@ function rTasks(){
   const srt=arr=>[...arr].sort((a,b)=>(PO[a.priority]??99)-(PO[b.priority]??99));
   const mkTi=t=>{
     const fading=t.done&&t.doneAt;
-    // Single row, no inline expansion any more — clicking the row opens
-    // a pop-out modal so the page layout doesn't shift.
-    return `<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="openTaskModal('${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
+    // Show a step-progress badge "n/m" when the task has a sub-step
+    // breakdown, so the user can see at-a-glance how much remains
+    // without opening the modal.
+    const stepBadge=Array.isArray(t.steps)&&t.steps.length
+      ?`<span class="ti-steps" title="${t.steps.filter(s=>s.done).length} of ${t.steps.length} steps done">${t.steps.filter(s=>s.done).length}/${t.steps.length}</span>`
+      :'';
+    return `<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}" onclick="openTaskModal('${t.id}')"><input type="checkbox"${t.done?' checked':''} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
   };
   let wh='<div class="col-lbl work">Work</div>',hw=false;
   Object.entries(grps).forEach(([k,ts])=>{if(!ts.length)return;hw=true;const p=PROJ[k];wh+=`<div class="proj-g"><div class="proj-hdr"><span class="pdot" style="background:${p.h}"></span><span class="pnm">${p.n}</span></div><div class="tcard">${srt(ts).map(mkTi).join('')}</div></div>`;});
@@ -6427,6 +6535,9 @@ function openBrainDetail(type,id){
   window.scrollTo({top:0,behavior:'instant'});
 }
 function closeBrainDetail(){
+  // Auto-save any pending edits before closing — user explicitly asked
+  // for click-out-to-save behaviour.
+  saveBrainDetailQuiet();
   UI.brainDetail=null;
   const dv=document.getElementById('brain-detail-view');if(dv){dv.style.display='none';dv.innerHTML='';}
   document.getElementById('brain-tabs').style.display='';
@@ -6434,6 +6545,35 @@ function closeBrainDetail(){
   const sa=document.querySelector('.route[data-route="brain"] .page-actions');
   if(sa)sa.style.visibility='';
   window.scrollTo({top:0,behavior:'instant'});
+}
+// Save the in-flight detail-view edits without closing or re-rendering.
+// Called from closeBrainDetail and on input blur for instant persistence.
+function saveBrainDetailQuiet(){
+  if(!UI.brainDetail)return;
+  const {type,id}=UI.brainDetail;
+  const ti=document.getElementById('bd-title');
+  const de=document.getElementById('bd-desc');
+  const ur=document.getElementById('bd-url');
+  const tg=document.getElementById('bd-tag');
+  let item;
+  if(type==='idea')item=S.ideas.find(x=>x.id===id);
+  else if(type==='resource')item=S.resources.find(x=>x.id===id);
+  else if(type==='note')item=S.notes.find(x=>x.id===id);
+  if(!item)return;
+  let dirty=false;
+  const newTitle=ti?.value?.trim();
+  if(newTitle&&newTitle!==item.title){item.title=newTitle;dirty=true;}
+  const descField=type==='note'?'body':'desc';
+  if(de&&de.value!==(item[descField]||'')){item[descField]=de.value;dirty=true;}
+  if(ur&&ur.value.trim()!==(item.url||'')){item.url=ur.value.trim();dirty=true;}
+  if(tg&&tg.value!==item.tag){item.tag=tg.value;dirty=true;}
+  if(dirty){
+    svAll();
+    // Refresh the matching list section so the change shows after close
+    if(type==='idea')rIdeas();
+    else if(type==='resource')rResources();
+    else rNotes();
+  }
 }
 function renderBrainDetail(){
   const dv=document.getElementById('brain-detail-view');if(!dv||!UI.brainDetail)return;
@@ -6446,15 +6586,15 @@ function renderBrainDetail(){
   const descValue=item[descField]||'';
   const saveFn=type==='idea'?'saveIdea':type==='resource'?'saveRes':'saveNote';
   const delFn=type==='idea'?'delIdea':type==='resource'?'delRes':'delNote';
-  // Resource has extra URL + tag fields
+  // Resource has extra URL + tag fields. Both auto-save on blur/change.
   const extraFields=type==='resource'?`
     <div class="bd-field">
       <label class="bd-lbl">URL</label>
-      <input id="bd-url" class="input" value="${esc(item.url||'')}" placeholder="https://…" style="width:100%">
+      <input id="bd-url" class="input" value="${esc(item.url||'')}" placeholder="https://…" style="width:100%" onblur="saveBrainDetailQuiet()">
     </div>
     <div class="bd-field">
       <label class="bd-lbl">Tag</label>
-      <select id="bd-tag" class="select" style="width:auto">
+      <select id="bd-tag" class="select" style="width:auto" onchange="saveBrainDetailQuiet()">
         ${['article','tool','video','book','person','other'].map(t=>`<option value="${t}"${item.tag===t?' selected':''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('')}
       </select>
     </div>`:'';
@@ -6466,16 +6606,18 @@ function renderBrainDetail(){
     </div>
     <div class="bd-field">
       <label class="bd-lbl">Title</label>
-      <input id="bd-title" class="input bd-title-input" value="${esc(item.title||'')}" placeholder="Title">
+      <input id="bd-title" class="input bd-title-input" value="${esc(item.title||'')}" placeholder="Title" onblur="saveBrainDetailQuiet()">
     </div>
     ${extraFields}
     <div class="bd-field">
       <label class="bd-lbl">${descLabel}</label>
-      <textarea id="bd-desc" class="ta bd-desc-ta" placeholder="${type==='note'?'Write the note…':'Add a longer description…'}" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${esc(descValue)}</textarea>
+      <textarea id="bd-desc" class="ta bd-desc-ta" placeholder="${type==='note'?'Write the note…':'Add a longer description…'}" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'" onblur="saveBrainDetailQuiet()">${esc(descValue)}</textarea>
     </div>
     <div class="bd-actions">
       <button class="btn btn-danger btn-sm" onclick="${delFn}('${id}')">Delete</button>
-      <button class="btn btn-primary btn-sm" onclick="${saveFn}('${id}')">Save & close</button>
+      <!-- Edits auto-save on blur and on close. The Done button just
+           closes the detail view; no explicit Save needed. -->
+      <button class="btn btn-primary btn-sm" onclick="closeBrainDetail()">Done</button>
     </div>`;
   // Auto-size the description textarea after mount so existing content
   // expands to fit instead of starting at the default rows="2" height.
@@ -6761,6 +6903,8 @@ async function doUpdate(){
   const prompt=`You manage ${firstName}'s Life OS. Work > personal.
 Today: ${todayName} ${tod()} (user's local time). For reference, ${nextOccurrences}.${rhythm}${projectNames}
 CRITICAL for calendar events: when the user names a weekday (e.g. "community meetings on Wednesday"), use the matching date from the list above. Before returning any date, VERIFY the date you chose actually falls on the requested weekday. Off-by-one day errors break the whole calendar.
+
+TASK SCHEDULING — when the user mentions a task with any time hint, ALWAYS fill scheduledTime. Even soft hints like "tomorrow" / "later" / "next week" should resolve to a sensible default time (use 11am for "morning"/"tomorrow"/no specific hint, 2pm for "afternoon", 7pm for "evening", and the literal time when one is given e.g. "at 3pm"). Format scheduledTime as a human-readable 12-hour string like "11am" or "3:30pm". Skip scheduledTime ONLY if the user is clearly adding a free-form to-do with no time intent at all ("buy groceries some day"). Default to giving a time over leaving it blank.
 
 Calendar defaults — apply these automatically unless the user explicitly says otherwise. These come from the user's own Settings and may be empty (no reminders by default):
 - Birthday events: allDay:true, repeat:"yearly", reminderMin:${JSON.stringify(S.calendarDefaults?.birthdayReminders||[1440,0])}
