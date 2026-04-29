@@ -2733,7 +2733,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v118';
+const APP_VERSION='v119';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6432,6 +6432,22 @@ let _taskFadeTimer=null;
 // animation where it left off instead of restarting from frame 0 (which
 // is what made the row "shoot back open" mid-fade).
 const _taskFadeStarts=new Map();
+// ─── Synthetic-task mode for the AI review editor ───
+// When the AI review queue clicks an addTasks card, it opens the SAME
+// real task modal as the manual flow — but in "synthetic" mode where
+// edits don't write to S.tasks (and don't trigger Firestore syncs or
+// list re-renders). Instead, on close/save the synthetic task is passed
+// to opts.onSave so the AI review code can update ch[key][idx]. This
+// gives the user a single source of truth: change the manual task form
+// and the AI editor automatically reflects it.
+let _modalSyntheticTask=null;
+let _modalSaveCallback=null;
+let _modalDeleteCallback=null;
+function _findTask(id){
+  if(_modalSyntheticTask&&_modalSyntheticTask.id===id)return _modalSyntheticTask;
+  return S.tasks.find(x=>x.id===id);
+}
+function _isSyntheticTaskMode(){return !!_modalSyntheticTask;}
 function chk(id,e){
   e.stopPropagation();
   const t=S.tasks.find(x=>x.id===id);if(!t)return;
@@ -6492,7 +6508,7 @@ function undoTask(id){const t=S.tasks.find(x=>x.id===id);if(!t)return;t.done=fal
 function toggleEx(type,id){ex=(ex.id===id&&ex.type===type)?{id:null,type:null}:{id,type};render();}
 function pCls(p){return p==='urgent'?'pu':p==='hi'?'ph':p==='med'?'pm':p==='lo'?'pl':'ps';}
 function setPri(id,p){
-  const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  const t=_findTask(id);if(!t)return;
   // Pull any pending text edit from the modal first so changing priority
   // doesn't lose the edit. Read either the modal field or the legacy
   // inline expand field (history view still uses inline).
@@ -6500,31 +6516,53 @@ function setPri(id,p){
   const inlineTa=document.getElementById('exp-ta-'+id);
   if(modalTa&&UI._taskModalId===id&&modalTa.value.trim())t.text=modalTa.value.trim();
   else if(inlineTa)t.text=inlineTa.value||t.text;
-  t.priority=p;svAll();
+  t.priority=p;
+  if(!_isSyntheticTaskMode())svAll();
   // Repaint just the priority section in the modal so the visual
   // toggle updates without a full re-render. The wrapper #tm-pri-wrap
   // gets replaced with a fresh mkPriRow output so the .on class lands
   // on the correct button.
   const pr=document.getElementById('tm-pri-wrap');if(pr)pr.innerHTML=mkPriRow(t);
-  rTasks();rAttention();
+  if(!_isSyntheticTaskMode()){rTasks();rAttention();}
 }
 function saveTask(id){
-  const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  const t=_findTask(id);if(!t)return;
   const modalTa=document.getElementById('tm-text');
   const modalTi=document.getElementById('tm-time');
   if(modalTa&&UI._taskModalId===id){if(modalTa.value.trim())t.text=modalTa.value.trim();}
   else{const ta=document.getElementById('exp-ta-'+id);if(ta?.value?.trim())t.text=ta.value.trim();}
   if(modalTi&&UI._taskModalId===id)t.scheduledTime=modalTi.value;
   else{const ti=document.getElementById('exp-ti-'+id);if(ti)t.scheduledTime=ti.value;}
-  svAll();ex={id:null,type:null};
+  if(!_isSyntheticTaskMode())svAll();
+  ex={id:null,type:null};
   closeTaskModal();
-  rTasks();rAttention();
+  if(!_isSyntheticTaskMode()){rTasks();rAttention();}
 }
 function delTask(id){
+  // Synthetic mode: this is "remove the AI's proposed task", not "delete
+  // a real task". Hand off to the AI-side delete callback and dismiss.
+  if(_modalSyntheticTask&&_modalSyntheticTask.id===id){
+    if(!confirm('Remove this proposed task?'))return;
+    const cb=_modalDeleteCallback;
+    _dismissTaskModal();
+    if(cb)cb();
+    return;
+  }
   if(!confirm('Delete this task?'))return;
   S.tasks=S.tasks.filter(x=>x.id!==id);svAll();ex={id:null,type:null};
   closeTaskModal();
   rTasks();rAttention();
+}
+// Tear down the modal DOM + clear synthetic state without invoking the
+// auto-save callback. Used by delTask's synthetic branch (we already
+// know the user wants to throw away the proposal, not save it).
+function _dismissTaskModal(){
+  const m=document.getElementById('task-modal');
+  if(m){m.remove();_syncBodyLock();}
+  UI._taskModalId=null;
+  _modalSyntheticTask=null;
+  _modalSaveCallback=null;
+  _modalDeleteCallback=null;
 }
 // Pop-out task detail modal. Replaces the inline-expand pattern so opening
 // a task doesn't shove the rest of the page around. mkPriRow + chk + setPri
@@ -6532,14 +6570,50 @@ function delTask(id){
 // IDs (tm-*) for the live edit fields, and saveTask falls back to the old
 // exp-* IDs for any code path that still uses them (e.g. the History tab
 // keeps the read-only inline expand).
-function openTaskModal(id){
-  const t=S.tasks.find(x=>x.id===id);if(!t)return;
+// Two callable shapes:
+//   openTaskModal(id)              — opens a real task from S.tasks (current behaviour)
+//   openTaskModal(taskObj, opts)   — opens a synthetic task (e.g. an AI-
+//     proposed item before it's been applied). opts.onSave is called with
+//     the (possibly-edited) synthetic task when the modal closes via auto-
+//     save or the Done button. opts.onDelete is called when the user hits
+//     Delete inside the modal. The modal looks and behaves identically to
+//     the manual task editor — the AI review queue uses this so any change
+//     to the manual task UI propagates to the AI editor automatically.
+function openTaskModal(idOrTask,opts){
+  let t,id;
+  if(typeof idOrTask==='string'){
+    id=idOrTask;
+    t=S.tasks.find(x=>x.id===id);
+    if(!t)return;
+    _modalSyntheticTask=null;
+    _modalSaveCallback=null;
+    _modalDeleteCallback=null;
+  } else {
+    t=idOrTask;
+    if(!t)return;
+    if(!t.id)t.id='__aic_'+uid();
+    id=t.id;
+    _modalSyntheticTask=t;
+    _modalSaveCallback=(opts&&opts.onSave)||null;
+    _modalDeleteCallback=(opts&&opts.onDelete)||null;
+  }
   // Don't re-open mid-fade; let the user untick first if needed
   if(t.done&&t.doneAt&&Date.now()-t.doneAt<TASK_FADE_MS)return;
-  closeTaskModal();
+  // closeTaskModal would call the synthetic save callback if invoked here
+  // before we set _modalSyntheticTask above. Use the dismiss helper which
+  // tears down DOM only, then re-set the synthetic state.
+  const synthSnapshot=_modalSyntheticTask,saveSnapshot=_modalSaveCallback,delSnapshot=_modalDeleteCallback;
+  _dismissTaskModal();
+  _modalSyntheticTask=synthSnapshot;
+  _modalSaveCallback=saveSnapshot;
+  _modalDeleteCallback=delSnapshot;
   UI._taskModalId=id;
   const overlay=document.createElement('div');
   overlay.className='modal';overlay.style.display='flex';overlay.id='task-modal';
+  // When in synthetic mode (AI review queue), stack above the open
+  // confirm modal so the editor appears in front, same as the
+  // dedicated aic-edit-modal does.
+  if(_isSyntheticTaskMode())overlay.style.zIndex='120';
   const proj=PROJ[t.project]||PROJ.gen;
   overlay.innerHTML=`<div class="modal-bd"></div>
     <div class="modal-body" style="max-width:480px">
@@ -6593,41 +6667,51 @@ function _refreshStepsUI(t){
   const w=document.getElementById('tm-steps-wrap');if(w)w.innerHTML=renderTaskSteps(t);
 }
 function addTaskStep(taskId){
-  const t=S.tasks.find(x=>x.id===taskId);if(!t)return;
+  const t=_findTask(taskId);if(!t)return;
   const inp=document.getElementById('tm-step-input');
   const text=(inp?inp.value:'').trim();
   if(!text)return;
   t.steps=Array.isArray(t.steps)?t.steps:[];
   t.steps.push({id:uid(),text,done:false});
-  svAll();_refreshStepsUI(t);rTasks();
+  if(!_isSyntheticTaskMode())svAll();
+  _refreshStepsUI(t);
+  if(!_isSyntheticTaskMode())rTasks();
   // Re-focus input so user can keep adding
   setTimeout(()=>{const ni=document.getElementById('tm-step-input');if(ni)ni.focus();},10);
 }
 function toggleTaskStep(taskId,stepId,done){
-  const t=S.tasks.find(x=>x.id===taskId);if(!t||!Array.isArray(t.steps))return;
+  const t=_findTask(taskId);if(!t||!Array.isArray(t.steps))return;
   const s=t.steps.find(x=>x.id===stepId);if(!s)return;
   s.done=!!done;
   // Auto-complete the parent task when EVERY step is checked.
   // Don't auto-uncheck the task if a previously-done step is unticked —
   // user might just be revisiting an entry. Manual untick still works.
-  const allDone=t.steps.length>0&&t.steps.every(x=>x.done);
-  if(allDone&&!t.done){
-    t.done=true;t.doneAt=Date.now();
-    // Hook into the same fade-tracking + post-fade re-render that chk uses,
-    // so step-driven completions glide off the list cleanly instead of
-    // hanging around in the DOM.
-    _taskFadeStarts.set(t.id,Date.now());
-    setTimeout(()=>_taskFadeStarts.delete(t.id),TASK_FADE_MS+200);
-    clearTimeout(_taskFadeTimer);
-    _taskFadeTimer=setTimeout(()=>{rTasks();},TASK_FADE_MS+100);
-    pruneCompletedHistory();
+  // (Synthetic mode skips the auto-complete behaviour — the user is just
+  // reviewing the AI's proposal, they're not actually completing a task.)
+  if(!_isSyntheticTaskMode()){
+    const allDone=t.steps.length>0&&t.steps.every(x=>x.done);
+    if(allDone&&!t.done){
+      t.done=true;t.doneAt=Date.now();
+      // Hook into the same fade-tracking + post-fade re-render that chk uses,
+      // so step-driven completions glide off the list cleanly instead of
+      // hanging around in the DOM.
+      _taskFadeStarts.set(t.id,Date.now());
+      setTimeout(()=>_taskFadeStarts.delete(t.id),TASK_FADE_MS+200);
+      clearTimeout(_taskFadeTimer);
+      _taskFadeTimer=setTimeout(()=>{rTasks();},TASK_FADE_MS+100);
+      pruneCompletedHistory();
+    }
+    svAll();
   }
-  svAll();_refreshStepsUI(t);rTasks();rAttention();
+  _refreshStepsUI(t);
+  if(!_isSyntheticTaskMode()){rTasks();rAttention();}
 }
 function delTaskStep(taskId,stepId){
-  const t=S.tasks.find(x=>x.id===taskId);if(!t||!Array.isArray(t.steps))return;
+  const t=_findTask(taskId);if(!t||!Array.isArray(t.steps))return;
   t.steps=t.steps.filter(x=>x.id!==stepId);
-  svAll();_refreshStepsUI(t);rTasks();
+  if(!_isSyntheticTaskMode())svAll();
+  _refreshStepsUI(t);
+  if(!_isSyntheticTaskMode())rTasks();
 }
 function closeTaskModal(){
   const m=document.getElementById('task-modal');
@@ -6636,18 +6720,30 @@ function closeTaskModal(){
     // explicitly asked for click-out-to-save behaviour.
     const id=UI._taskModalId;
     if(id){
-      const t=S.tasks.find(x=>x.id===id);
+      const t=_findTask(id);
       if(t){
         const ta=document.getElementById('tm-text');
         const ti=document.getElementById('tm-time');
         if(ta&&ta.value.trim()&&ta.value.trim()!==t.text)t.text=ta.value.trim();
         if(ti&&ti.value!==t.scheduledTime)t.scheduledTime=ti.value;
-        svAll();rTasks();rAttention();
+        if(_isSyntheticTaskMode()){
+          // Hand the synthetic back to the AI review queue without
+          // touching S or Firestore. Strip the temporary modal-only
+          // synthetic id; restore the original id if there was one.
+          const cb=_modalSaveCallback;
+          const synthCopy={...t};
+          if(cb)cb(synthCopy);
+        } else {
+          svAll();rTasks();rAttention();
+        }
       }
     }
     m.remove();_syncBodyLock();
   }
   UI._taskModalId=null;
+  _modalSyntheticTask=null;
+  _modalSaveCallback=null;
+  _modalDeleteCallback=null;
 }
 function mkPriRow(t){
   // 3-column grid: [Urgent | High | Medium] on top row, [Low | Someday]
@@ -7772,6 +7868,42 @@ function closeAIReviewEditor(){const m=document.getElementById('aic-edit-modal')
 function openAIReviewEditor(ch,key,idx,refreshFn){
   if(!Array.isArray(ch[key])||idx<0||idx>=ch[key].length)return;
   const item=ch[key][idx];
+  // For addTasks, reuse the EXACT same modal the manual flow uses, in
+  // synthetic mode. Edits to the manual form propagate here automatically.
+  if(key==='addTasks'){
+    const synth={
+      id:'__aic_'+uid(),
+      text:item.text||'',
+      area:item.area||'personal',
+      project:item.project||'gen',
+      priority:item.priority||'med',
+      scheduledTime:item.scheduledTime||'',
+      done:false,
+      date:item.date||tod(),
+      steps:Array.isArray(item.steps)?item.steps.map(s=>({id:s.id||uid(),text:s.text||'',done:!!s.done})):undefined
+    };
+    if(!synth.steps)delete synth.steps;
+    openTaskModal(synth,{
+      onSave:(updated)=>{
+        // Strip the temporary synthetic id and the runtime-only fields
+        // before writing back to the change object — ch only stores the
+        // AI-relevant subset (text, area, project, priority, scheduledTime, steps).
+        const out={text:updated.text||'',area:updated.area||'personal',project:updated.project||'gen',priority:updated.priority||'med',scheduledTime:updated.scheduledTime||''};
+        if(Array.isArray(updated.steps)&&updated.steps.length){
+          out.steps=updated.steps.filter(s=>s&&s.text&&s.text.trim()).map(s=>({text:s.text.trim()}));
+          if(!out.steps.length)delete out.steps;
+        }
+        ch[key][idx]=out;
+        if(refreshFn)refreshFn();
+      },
+      onDelete:()=>{
+        ch[key].splice(idx,1);
+        if(!ch[key].length)delete ch[key];
+        if(refreshFn)refreshFn();
+      }
+    });
+    return;
+  }
   const label=AIC_TYPES[key]?.label||'Change';
   closeAIReviewEditor();
   const overlay=document.createElement('div');
