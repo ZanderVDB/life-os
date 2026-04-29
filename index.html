@@ -1380,6 +1380,52 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .aic-match{margin-top:6px;padding:6px 10px;background:var(--bg);border-left:3px solid var(--sage);border-radius:4px;font-size:11px;color:var(--text-2);line-height:1.5}
 .aic-match-warn{border-left-color:var(--red);color:var(--red);font-weight:500}
 .aic-match-line{padding:1px 0}
+/* ─── Card-style review rows ───
+   Each AI-proposed change renders as a tappable card. The card is a
+   summary; tapping it opens a prefilled editor. Edit / Change-type /
+   Remove buttons sit on the right and stop propagation. */
+.aic-card{display:flex;align-items:stretch;gap:0;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;font-size:12.5px;line-height:1.4;cursor:pointer;transition:background .12s,border-color .12s;overflow:hidden}
+.aic-card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
+.aic-card-icon{flex-shrink:0;width:38px;display:flex;align-items:center;justify-content:center;background:var(--surface);border-right:1px solid var(--border);font-size:16px;color:var(--text-2)}
+.aic-card-body{flex:1;min-width:0;padding:9px 11px;display:flex;flex-direction:column;gap:2px}
+.aic-card-title{color:var(--text);font-weight:500;word-break:break-word;line-height:1.35}
+.aic-card-meta{font-size:11px;color:var(--muted);line-height:1.4;font-variant-numeric:tabular-nums}
+.aic-card-meta strong{color:var(--text-2);font-weight:600}
+.aic-card-steps{margin-top:2px;font-size:11.5px;color:var(--muted);line-height:1.45}
+.aic-card-steps>div{padding-left:14px;position:relative}
+.aic-card-steps>div::before{content:'↳';position:absolute;left:0;color:var(--text-2)}
+.aic-card-actions{flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 8px 0 4px}
+.aic-card-btn{flex-shrink:0;width:30px;height:30px;border-radius:50%;border:1px solid transparent;background:transparent;color:var(--muted);font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:all .12s;touch-action:manipulation}
+.aic-card-btn:hover{background:var(--surface);border-color:var(--border-strong);color:var(--text)}
+.aic-card-btn.danger:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.aic-card-warn{margin:0 11px 9px;padding:6px 10px;background:var(--bg);border-left:3px solid var(--red);border-radius:4px;font-size:11px;color:var(--red);font-weight:500;line-height:1.4}
+.aic-card-preview{margin:0 11px 9px;padding:6px 10px;background:var(--bg);border-left:3px solid var(--sage);border-radius:4px;font-size:11px;color:var(--text-2);line-height:1.5}
+.aic-card-preview strong{color:var(--text);font-weight:600}
+/* ─── Review editor modal (per-row form) ─── */
+.aic-edit-form{display:flex;flex-direction:column;gap:14px;margin-bottom:6px}
+.aic-edit-field{display:flex;flex-direction:column;gap:5px}
+.aic-edit-field label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.aic-edit-field input,.aic-edit-field textarea,.aic-edit-field select{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:13px;background:var(--bg);color:var(--text);outline:none;font-family:inherit;box-sizing:border-box}
+.aic-edit-field input:focus,.aic-edit-field textarea:focus,.aic-edit-field select:focus{border-color:var(--border-strong);background:var(--surface)}
+.aic-edit-field textarea{resize:vertical;min-height:60px;line-height:1.5}
+.aic-edit-row{display:flex;gap:10px}
+.aic-edit-row .aic-edit-field{flex:1}
+.aic-edit-checkbox{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.aic-edit-checkbox input{width:auto}
+.aic-edit-steps{display:flex;flex-direction:column;gap:6px}
+.aic-edit-step{display:flex;gap:6px;align-items:center}
+.aic-edit-step input{flex:1}
+.aic-edit-step button{flex-shrink:0;width:30px;height:30px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:6px;font-size:16px;line-height:1}
+.aic-edit-step button:hover{background:var(--red);color:#fff}
+.aic-edit-step-add{font-size:12px;color:var(--accent,var(--peach));background:transparent;border:1px dashed var(--border-strong);padding:7px 10px;border-radius:7px;cursor:pointer;text-align:left}
+.aic-edit-step-add:hover{background:var(--surface-hover);color:var(--text)}
+/* Type-selector menu (Change type) */
+.aic-type-menu{display:flex;flex-direction:column;gap:4px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;padding:6px;box-shadow:0 6px 20px rgba(0,0,0,.18);min-width:200px}
+.aic-type-opt{display:flex;align-items:center;gap:9px;padding:9px 11px;background:transparent;border:none;color:var(--text);font-size:13px;text-align:left;cursor:pointer;border-radius:7px;font-family:inherit}
+.aic-type-opt:hover{background:var(--surface-hover)}
+.aic-type-opt-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.aic-type-opt.current{opacity:.45;cursor:default}
+.aic-type-opt.current:hover{background:transparent}
 .modal-body h3{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;margin-bottom:18px;color:var(--text)}
 .modal-row{margin-bottom:12px}
 .modal-row label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px}
@@ -2568,11 +2614,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="setting-row setting-row-stack">
             <div>
               <div class="setting-label">Confirm before applying</div>
-              <div class="setting-desc"><strong>Off</strong> — AI makes every change, calendar included, without asking. <strong>Calendar</strong> — only calendar edits need approval (default). <strong>All</strong> — every AI change needs approval.</div>
+              <div class="setting-desc">Calendar changes always need your OK. <strong>Calendar</strong> — only calendar edits open a confirm popup; tasks, notes, etc. apply immediately (default). <strong>All</strong> — every AI change opens the review queue, where you tap each card to refine it (or convert it to a different type) before it lands.</div>
             </div>
             <div class="setting-right">
               <div class="theme-toggle" id="ai-confirm-toggle">
-                <button data-ai-mode="off" onclick="setAIConfirmMode('off')">Off</button>
                 <button data-ai-mode="calendar" onclick="setAIConfirmMode('calendar')">Calendar</button>
                 <button data-ai-mode="all" onclick="setAIConfirmMode('all')">All</button>
               </div>
@@ -2740,7 +2785,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v115';
+const APP_VERSION='v116';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3819,7 +3864,10 @@ function handleSnapshot(snap){
         birthdayReminders:Array.isArray(d.calendarDefaults.birthdayReminders)?migrateAllDay(d.calendarDefaults.birthdayReminders):[420,0]
       };
     }
-    if(d.aiConfirmMode==='off'||d.aiConfirmMode==='calendar'||d.aiConfirmMode==='all')S.aiConfirmMode=d.aiConfirmMode;
+    // Legacy 'off' values are migrated to 'calendar' — confirmation is no
+    // longer optional, the AI always pauses for review on calendar changes.
+    if(d.aiConfirmMode==='calendar'||d.aiConfirmMode==='all')S.aiConfirmMode=d.aiConfirmMode;
+    else if(d.aiConfirmMode==='off')S.aiConfirmMode='calendar';
     else if(typeof d.confirmAllAI==='boolean')S.aiConfirmMode=d.confirmAllAI?'all':'calendar';
     // Each account's Anthropic key lives in Firestore under their own doc,
     // so this line also enforces the per-user scoping — account B's snapshot
@@ -3913,12 +3961,14 @@ const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
 const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],people:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
-// aiConfirmMode values: 'off' (nothing needs OK), 'calendar' (default — only
-// calendar edits need OK), 'all' (every AI change needs OK).
+// aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
+// or 'all' (every AI change opens the review queue). Legacy 'off' is no
+// longer accepted and is migrated to 'calendar'.
 try{S.soundsEnabled=localStorage.getItem('los_sounds')==='1';}catch(e){}
 try{
   const m=localStorage.getItem('los_ai_confirm');
-  if(m==='off'||m==='calendar'||m==='all')S.aiConfirmMode=m;
+  if(m==='calendar'||m==='all')S.aiConfirmMode=m;
+  else if(m==='off'){S.aiConfirmMode='calendar';try{localStorage.setItem('los_ai_confirm','calendar');}catch(_){}}
   // Back-compat: the old boolean toggle stored '1' / '0' at los_confirm_ai
   else{const legacy=localStorage.getItem('los_confirm_ai');if(legacy==='1')S.aiConfirmMode='all';}
 }catch(e){}
@@ -7286,7 +7336,10 @@ function toggleSounds(on){
   if(on)playSound('confirm');
 }
 function setAIConfirmMode(mode){
-  if(mode!=='off'&&mode!=='calendar'&&mode!=='all')mode='calendar';
+  // 'off' is no longer allowed — the AI must always pause for review on
+  // calendar (or everything, depending on this setting). Old saved 'off'
+  // values are migrated to 'calendar' on snapshot load too.
+  if(mode!=='calendar'&&mode!=='all')mode='calendar';
   S.aiConfirmMode=mode;
   try{localStorage.setItem('los_ai_confirm',mode);}catch(e){}
   document.querySelectorAll('#ai-confirm-toggle button').forEach(b=>b.classList.toggle('on',b.dataset.aiMode===mode));
@@ -7567,85 +7620,197 @@ function fixAIEventWeekdays(ch,promptText){
 }
 // Interactive HTML version of the detailed summary — each row has an × so
 // the user can cherry-pick what NOT to apply. Powers showAIConfirmModal.
+// ─── AI review queue: card-based UI for the confirm modal ───
+// Each proposed change renders as a tappable card. Tap → opens
+// openAIReviewEditor() with a prefilled form for that exact change type
+// so the user can refine fields properly. Buttons on the right convert
+// the change to a different type (task ↔ event etc.) or remove it.
+// Type metadata: icon, label, canonical-title extractor, and per-key
+// summary builder. Used by both the card renderer and the editor.
+const AIC_TYPES={
+  addTasks:{icon:'☐',label:'Task'},
+  completeTasks:{icon:'✓',label:'Tick task'},
+  removeTasks:{icon:'⊘',label:'Delete task'},
+  addEvent:{icon:'📅',label:'Calendar event'},
+  removeEvent:{icon:'⊘',label:'Delete event'},
+  updateEvent:{icon:'✎',label:'Update event'},
+  addHabits:{icon:'↻',label:'Habit'},
+  completeHabits:{icon:'✓',label:'Tick habit'},
+  logLearning:{icon:'✎',label:'Learning log'},
+  addPerson:{icon:'👤',label:'Person'},
+  updatePerson:{icon:'✎',label:'Person note'},
+  addBuild:{icon:'★',label:'Project'},
+  addBuildNote:{icon:'✎',label:'Project note'},
+  addIdea:{icon:'💡',label:'Idea'},
+  addNote:{icon:'▤',label:'Note'},
+  addResource:{icon:'🔗',label:'Resource'}
+};
+function _aicFmtReminder(r){if(r==null||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (m/60)+' hr';if(m===1440)return '1 day';return (m/1440)+' day';}).filter(Boolean);return names.length?names.join(' + '):null;}
+// Preview the real events a remove/update match string will hit. Uses
+// the SAME strict matching as the delete path — exact title first,
+// startsWith as fallback. Never substring, so "Bible study" doesn't show
+// "Caitlin from Bible study's birthday" in the preview and then nuke it
+// on Apply.
+function _aicMatchPreview(needle,dateFilter,eventPool){
+  if(!eventPool)return null;
+  const n=(needle||'').toLowerCase().trim();
+  if(!n)return null;
+  let matches=eventPool.filter(e=>(e.title||'').toLowerCase().trim()===n&&(!dateFilter||e.date===dateFilter));
+  if(!matches.length)matches=eventPool.filter(e=>(e.title||'').toLowerCase().trim().startsWith(n)&&(!dateFilter||e.date===dateFilter));
+  if(!matches.length)return {warn:`⚠ No events with title "${esc(needle)}" on your calendar — tap to fix the title, or ✕ to skip this.`};
+  const seen=new Map();
+  matches.forEach(m=>{const k=m.recurringEventId||m.id;if(!seen.has(k))seen.set(k,{title:m.title,date:m.date,time:m.time,recurring:!!m.recurringEventId,count:0});seen.get(k).count++;});
+  const entries=[...seen.values()];
+  const show=entries.slice(0,5);const more=entries.length-show.length;
+  const lines=show.map(e=>{const d=fmtDateWithDay(e.date);const t=e.time?' · '+e.time:'';const rec=e.recurring?` · recurring (${e.count} instance${e.count===1?'':'s'})`:'';return `<div>• <strong>${esc(e.title)}</strong> — ${esc(d)}${esc(t)}${rec}</div>`;}).join('');
+  return {preview:`<div>Will affect:</div>${lines}${more>0?`<div style="color:var(--muted);font-style:italic">...and ${more} more</div>`:''}`};
+}
+// Build the summary HTML shown on each card (title + meta + steps).
+function _aicSummary(key,item){
+  const meta=[];let title='';let stepsHTML='';
+  switch(key){
+    case 'addTasks':{
+      title=`Add "${esc(item.text||'(untitled)')}"`;
+      if(item.area)meta.push(esc(item.area));
+      if(item.project&&item.project!=='gen')meta.push(esc(PROJ[item.project]?.n||item.project));
+      if(item.priority)meta.push(esc(item.priority));
+      if(item.scheduledTime)meta.push('at '+esc(item.scheduledTime));
+      if(Array.isArray(item.steps)&&item.steps.length){
+        stepsHTML=item.steps.filter(s=>s&&s.text).map(s=>`<div>${esc(s.text)}</div>`).join('');
+      }
+      break;
+    }
+    case 'completeTasks':title=`Tick off "${esc(item||'')}"`;break;
+    case 'removeTasks':title=`Delete task "${esc(item||'')}"`;break;
+    case 'addEvent':{
+      title=`Add event "${esc(item.title||'(untitled)')}"`;
+      if(item.date)meta.push(esc(fmtDateWithDay(item.date)));
+      if(item.allDay||!item.time)meta.push('all day');
+      else meta.push(esc(item.time+(item.endTime?'–'+item.endTime:'')));
+      if(item.repeat&&item.repeat!=='none')meta.push('repeats '+esc(item.repeat));
+      const rem=_aicFmtReminder(item.reminderMin);if(rem)meta.push('reminders: '+esc(rem));
+      break;
+    }
+    case 'removeEvent':{
+      title=`Delete events matching "${esc(item.match||item.title||'')}"`;
+      if(item.date)meta.push('on '+esc(fmtDateWithDay(item.date)));
+      break;
+    }
+    case 'updateEvent':{
+      title=`Update "${esc(item.match||'')}"`;
+      const changes=[];
+      if(item.newTitle)changes.push('title → '+item.newTitle);
+      if(item.newDate)changes.push('date → '+fmtDateWithDay(item.newDate));
+      if(item.newTime)changes.push('time → '+item.newTime);
+      meta.push(esc(changes.join(', ')||'(no changes)'));
+      break;
+    }
+    case 'addHabits':title=`Add habit "${esc(item.name||'')}"`;break;
+    case 'completeHabits':title=`Tick today: "${esc(item||'')}"`;break;
+    case 'logLearning':{
+      title=`Log under "${esc(item.skill||'?')}"`;
+      if(item.content)meta.push(esc(item.content.slice(0,60)));
+      break;
+    }
+    case 'addPerson':{
+      title=`Add "${esc(item.name||'(no name)')}"`;
+      if(item.context)meta.push(esc(item.context));
+      if(item.note)meta.push('note: "'+esc(item.note.slice(0,40))+'"');
+      break;
+    }
+    case 'updatePerson':{
+      title=`Note on "${esc(item.name||'')}"`;
+      if(item.note)meta.push(esc(item.note.slice(0,60)));
+      break;
+    }
+    case 'addBuild':{
+      title=`Add project "${esc(item.title||'')}"`;
+      if(item.status)meta.push(esc(item.status));
+      if(item.desc)meta.push(esc(item.desc.slice(0,40)));
+      break;
+    }
+    case 'addBuildNote':{
+      title=`Note on "${esc(item.project||'')}"`;
+      if(item.content)meta.push(esc(item.content.slice(0,60)));
+      break;
+    }
+    case 'addIdea':{
+      title=`Add idea "${esc(item.title||'')}"`;
+      if(item.desc)meta.push(esc(item.desc.slice(0,60)));
+      break;
+    }
+    case 'addNote':{
+      title=`Add note "${esc(item.title||'')}"`;
+      if(item.body)meta.push(esc(item.body.slice(0,60)));
+      break;
+    }
+    case 'addResource':{
+      title=`Add resource "${esc(item.title||'')}"`;
+      if(item.tag)meta.push('['+esc(item.tag)+']');
+      if(item.url)meta.push(esc(item.url.slice(0,40)));
+      break;
+    }
+    default:title=esc(JSON.stringify(item).slice(0,60));
+  }
+  return {title,meta:meta.join(' · '),stepsHTML};
+}
 // eventPool: optional array of real GCal events used to preview what a
 // removeEvent/updateEvent match will actually target.
 function renderAIChangesInteractive(ch,eventPool){
-  const fmtReminder=r=>{if(r==null||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (m/60)+' hr';if(m===1440)return '1 day';return (m/1440)+' day';}).filter(Boolean);return names.length?names.join(' + '):null;};
-  // Preview the real events a remove/update match string will hit. Uses
-  // the SAME strict matching as the delete path — exact title first,
-  // startsWith as fallback. Never substring, so "Bible study" doesn't show
-  // "Caitlin from Bible study's birthday" in the preview and then nuke it
-  // on Apply.
-  const fmtMatchPreview=(needle,dateFilter)=>{
-    if(!eventPool)return '';
-    const n=(needle||'').toLowerCase().trim();
-    if(!n)return '';
-    let matches=eventPool.filter(e=>(e.title||'').toLowerCase().trim()===n&&(!dateFilter||e.date===dateFilter));
-    if(!matches.length)matches=eventPool.filter(e=>(e.title||'').toLowerCase().trim().startsWith(n)&&(!dateFilter||e.date===dateFilter));
-    if(!matches.length)return `<div class="aic-match aic-match-warn">⚠ No events with title "${esc(needle)}" on your calendar — click the text above to fix the title, or ✕ to skip this.</div>`;
-    // Group by recurring series
-    const seen=new Map();
-    matches.forEach(m=>{const k=m.recurringEventId||m.id;if(!seen.has(k))seen.set(k,{title:m.title,date:m.date,time:m.time,recurring:!!m.recurringEventId,count:0});seen.get(k).count++;});
-    const entries=[...seen.values()];
-    const show=entries.slice(0,5);const more=entries.length-show.length;
-    const lines=show.map(e=>{const d=fmtDateWithDay(e.date);const t=e.time?' · '+e.time:'';const rec=e.recurring?` · recurring (${e.count} instance${e.count===1?'':'s'})`:'';return `<div class="aic-match-line">• ${esc(e.title)} — ${esc(d)}${esc(t)}${rec}</div>`;}).join('');
-    return `<div class="aic-match">Will affect:${lines}${more>0?`<div class="aic-match-line" style="color:var(--muted);font-style:italic">...and ${more} more</div>`:''}</div>`;
+  // Card builder. Each card has data-edit="key:idx" for the row tap, and
+  // child buttons with data-action="convert|remove" + data-key/data-idx.
+  // Buttons stop propagation in the click handler upstream.
+  const card=(key,idx,extra)=>{
+    const item=ch[key][idx];
+    const {title,meta,stepsHTML}=_aicSummary(key,item);
+    const meta2=meta?`<div class="aic-card-meta">${meta}</div>`:'';
+    const steps2=stepsHTML?`<div class="aic-card-steps">${stepsHTML}</div>`:'';
+    const ico=AIC_TYPES[key]?.icon||'•';
+    const cardHTML=`<div class="aic-card" data-edit="${key}:${idx}" role="button" tabindex="0">
+      <div class="aic-card-icon">${ico}</div>
+      <div class="aic-card-body">
+        <div class="aic-card-title">${title}</div>
+        ${meta2}
+        ${steps2}
+      </div>
+      <div class="aic-card-actions">
+        <button class="aic-card-btn" data-action="convert" data-key="${key}" data-idx="${idx}" title="Change type">⇄</button>
+        <button class="aic-card-btn danger" data-action="remove" data-key="${key}" data-idx="${idx}" title="Remove">×</button>
+      </div>
+    </div>`;
+    return cardHTML+(extra||'');
   };
-  // Editable text: renders the "main" title/name of each row as a
-  // contentEditable span that writes back to ch[key][idx][field] on blur.
-  // Lets the user fix typos in the AI's proposal before hitting Apply.
-  const ed=(key,idx,field,value,label)=>`<span class="aic-edit" data-ed="${esc(key)}:${idx}:${esc(field)}" contenteditable="true" spellcheck="false" title="Click to edit">${esc(value||'?')}</span>${label?'<span class="aic-after">'+label+'</span>':''}`;
-  const row=(html,rmKey,extra)=>`<div class="aic-row"><div style="flex:1;min-width:0"><span class="aic-text">${html}</span>${extra||''}</div><button class="aic-rm" data-rm="${rmKey}" aria-label="Remove">×</button></div>`;
   const sections=[];
-  const taskRows=[];
-  (ch.addTasks||[]).forEach((t,i)=>{
-    const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);
-    let extra='';
-    if(Array.isArray(t.steps)&&t.steps.length){
-      const stepLines=t.steps.filter(s=>s&&s.text).map(s=>`<div style="margin-left:18px;font-size:11.5px;color:var(--muted);line-height:1.5">↳ ${esc(s.text)}</div>`).join('');
-      extra=stepLines;
-    }
-    taskRows.push(row(`Add "${ed('addTasks',i,'text',t.text,'')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addTasks:${i}`,extra));
-  });
-  (ch.completeTasks||[]).forEach((t,i)=>taskRows.push(row(`Tick off "${ed('completeTasks',i,'',t,'')}"`,`completeTasks:${i}`)));
-  (ch.removeTasks||[]).forEach((t,i)=>taskRows.push(row(`Delete task "${ed('removeTasks',i,'',t,'')}"`,`removeTasks:${i}`)));
-  if(taskRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Tasks</div>${taskRows.join('')}</div>`);
-
-  const habitRows=[];
-  (ch.addHabits||[]).forEach((h,i)=>habitRows.push(row(`Add habit "${ed('addHabits',i,'name',h.name,'')}"`,`addHabits:${i}`)));
-  (ch.completeHabits||[]).forEach((h,i)=>habitRows.push(row(`Tick today: "${ed('completeHabits',i,'',h,'')}"`,`completeHabits:${i}`)));
-  (ch.logLearning||[]).forEach((l,i)=>habitRows.push(row(`Log under "${ed('logLearning',i,'skill',l.skill,'')}"${l.content?': '+esc(l.content.slice(0,40)):''}`,`logLearning:${i}`)));
-  if(habitRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Habits</div>${habitRows.join('')}</div>`);
-
-  const peopleRows=[];
-  (ch.addPerson||[]).forEach((p,i)=>{const bits=[];if(p.context)bits.push(p.context);if(p.note)bits.push('note: "'+p.note+'"');peopleRows.push(row(`Add "${ed('addPerson',i,'name',p.name,'')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addPerson:${i}`));});
-  (ch.updatePerson||[]).forEach((p,i)=>peopleRows.push(row(`Note on "${ed('updatePerson',i,'name',p.name,'')}": ${esc((p.note||'').slice(0,60))}`,`updatePerson:${i}`)));
-  if(peopleRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">People</div>${peopleRows.join('')}</div>`);
-
-  const projRows=[];
-  (ch.addBuild||[]).forEach((b,i)=>projRows.push(row(`Add project "${ed('addBuild',i,'title',b.title,'')}"${b.status?' ('+esc(b.status)+')':''}`,`addBuild:${i}`)));
-  (ch.addBuildNote||[]).forEach((n,i)=>projRows.push(row(`Note on "${ed('addBuildNote',i,'project',n.project,'')}": ${esc((n.content||'').slice(0,60))}`,`addBuildNote:${i}`)));
-  if(projRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Projects</div>${projRows.join('')}</div>`);
-
-  const brainRows=[];
-  (ch.addIdea||[]).forEach((x,i)=>brainRows.push(row(`Add idea "${ed('addIdea',i,'title',x.title,'')}"`,`addIdea:${i}`)));
-  (ch.addResource||[]).forEach((x,i)=>brainRows.push(row(`Add resource "${ed('addResource',i,'title',x.title,'')}"${x.tag?' ['+esc(x.tag)+']':''}`,`addResource:${i}`)));
-  (ch.addNote||[]).forEach((x,i)=>brainRows.push(row(`Add note "${ed('addNote',i,'title',x.title,'')}"`,`addNote:${i}`)));
-  if(brainRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Brain</div>${brainRows.join('')}</div>`);
-
-  const calRows=[];
-  (ch.addEvent||[]).forEach((e,i)=>{const bits=[];if(e.date)bits.push(fmtDateWithDay(e.date));if(e.allDay||!e.time)bits.push('all day');else bits.push(e.time+(e.endTime?'–'+e.endTime:''));if(e.repeat&&e.repeat!=='none')bits.push('repeats '+e.repeat);const rem=fmtReminder(e.reminderMin);if(rem)bits.push('reminders: '+rem);calRows.push(row(`Add "${ed('addEvent',i,'title',e.title,'')}" — ${esc(bits.join(', '))}`,`addEvent:${i}`));});
-  (ch.removeEvent||[]).forEach((e,i)=>{
-    const preview=fmtMatchPreview(e.match||e.title,e.date);
-    calRows.push(row(`Delete events matching "${ed('removeEvent',i,'match',e.match||e.title,'')}"${e.date?' on '+esc(fmtDateWithDay(e.date)):''}`,`removeEvent:${i}`,preview));
-  });
-  (ch.updateEvent||[]).forEach((e,i)=>{
-    const changes=[];if(e.newTitle)changes.push('title → '+e.newTitle);if(e.newDate)changes.push('date → '+fmtDateWithDay(e.newDate));if(e.newTime)changes.push('time → '+e.newTime);
-    const preview=fmtMatchPreview(e.match,e.date);
-    calRows.push(row(`Update "${ed('updateEvent',i,'match',e.match,'')}" — ${esc(changes.join(', ')||'(no changes)')}`,`updateEvent:${i}`,preview));
-  });
-  if(calRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Calendar</div>${calRows.join('')}</div>`);
-
+  // Group cards by section for visual grouping; section labels stay.
+  const tasksKeys=['addTasks','completeTasks','removeTasks'];
+  const habitsKeys=['addHabits','completeHabits','logLearning'];
+  const peopleKeys=['addPerson','updatePerson'];
+  const projKeys=['addBuild','addBuildNote'];
+  const brainKeys=['addIdea','addNote','addResource'];
+  const calKeys=['addEvent','removeEvent','updateEvent'];
+  const buildSection=(label,keys,opts)=>{
+    const cards=[];
+    keys.forEach(k=>{
+      (ch[k]||[]).forEach((_,i)=>{
+        let extra='';
+        if(opts&&opts.matchPreviewKeys&&opts.matchPreviewKeys.includes(k)){
+          const item=ch[k][i];
+          const needle=item.match||item.title||'';
+          const p=_aicMatchPreview(needle,item.date,eventPool);
+          if(p&&p.warn)extra=`<div class="aic-card-warn">${p.warn}</div>`;
+          else if(p&&p.preview)extra=`<div class="aic-card-preview">${p.preview}</div>`;
+        }
+        cards.push(card(k,i,extra));
+      });
+    });
+    if(cards.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">${label}</div>${cards.join('')}</div>`);
+  };
+  buildSection('Tasks',tasksKeys);
+  buildSection('Habits',habitsKeys);
+  buildSection('People',peopleKeys);
+  buildSection('Projects',projKeys);
+  buildSection('Brain',brainKeys);
+  buildSection('Calendar',calKeys,{matchPreviewKeys:['removeEvent','updateEvent']});
   return sections.length?sections.join(''):`<div class="aic-empty">Nothing left — hit Cancel or Redo.</div>`;
 }
 
@@ -7669,9 +7834,9 @@ function showAIConfirmModal(ch,prompt){
     const overlay=document.createElement('div');
     overlay.className='modal';overlay.id='ai-confirm-modal';overlay.style.display='flex';
     overlay.innerHTML=`<div class="modal-bd"></div>
-      <div class="modal-body" style="max-width:520px">
+      <div class="modal-body" style="max-width:540px">
         <h3 style="margin-bottom:6px">The AI wants to:</h3>
-        <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Click any title to fix typos. × removes that item. Apply runs the rest. Redo drops everything and puts your prompt back for editing.</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Tap any card to refine its details. ⇄ converts a change to a different type (e.g. task → calendar event). × removes it. Apply runs everything that's left.</div>
         <div class="aic-body" id="aic-body"></div>
         <div class="modal-actions">
           <button class="btn btn-danger btn-sm" data-action="cancel">Cancel</button>
@@ -7685,36 +7850,368 @@ function showAIConfirmModal(ch,prompt){
     const renderBody=()=>{bodyEl.innerHTML=renderAIChangesInteractive(ch,eventPool);};
     renderBody();
     overlay.addEventListener('click',e=>{
-      // Don't treat clicks on editable spans as remove / action triggers
-      if(e.target.closest('.aic-edit'))return;
-      const rm=e.target.closest('[data-rm]');
-      if(rm){
-        const [key,idxStr]=rm.dataset.rm.split(':');
+      // Action buttons inside cards take priority — they have data-action.
+      const actionBtn=e.target.closest('[data-action]');
+      if(actionBtn&&actionBtn.dataset.key){
+        e.stopPropagation();
+        const key=actionBtn.dataset.key;
+        const idx=Number(actionBtn.dataset.idx);
+        if(actionBtn.dataset.action==='remove'){
+          if(Array.isArray(ch[key])){ch[key].splice(idx,1);if(!ch[key].length)delete ch[key];}
+          renderBody();
+          return;
+        }
+        if(actionBtn.dataset.action==='convert'){
+          openTypeConvertMenu(ch,key,idx,renderBody,actionBtn);
+          return;
+        }
+      }
+      // Card body click → open prefilled editor
+      const card=e.target.closest('.aic-card');
+      if(card&&card.dataset.edit){
+        const [key,idxStr]=card.dataset.edit.split(':');
         const idx=Number(idxStr);
-        if(Array.isArray(ch[key])){ch[key].splice(idx,1);if(!ch[key].length)delete ch[key];}
-        renderBody();
+        openAIReviewEditor(ch,key,idx,renderBody);
         return;
       }
-      if(e.target.dataset.action==='cancel'||e.target.closest('.modal-bd')){overlay.remove();_syncBodyLock();resolve({action:'cancel'});}
-      else if(e.target.dataset.action==='redo'){overlay.remove();_syncBodyLock();resolve({action:'redo'});}
-      else if(e.target.dataset.action==='apply'){overlay.remove();_syncBodyLock();resolve({action:'apply',ch});}
+      // Modal-level action buttons (cancel/redo/apply)
+      const ma=e.target.dataset.action;
+      if(ma==='cancel'||e.target.closest('.modal-bd')){overlay.remove();_syncBodyLock();resolve({action:'cancel'});}
+      else if(ma==='redo'){overlay.remove();_syncBodyLock();resolve({action:'redo'});}
+      else if(ma==='apply'){overlay.remove();_syncBodyLock();resolve({action:'apply',ch});}
     });
-    // Write-back for inline-edited titles/matches. Commits on blur or Enter.
-    overlay.addEventListener('blur',e=>{
-      const ed=e.target.closest?e.target.closest('.aic-edit'):null;if(!ed)return;
-      const [key,idxStr,field]=(ed.dataset.ed||'').split(':');
-      const idx=Number(idxStr);
-      if(!Array.isArray(ch[key]))return;
-      const newVal=ed.textContent.trim();
-      if(field){ch[key][idx][field]=newVal;}
-      else{ch[key][idx]=newVal;}
-    },true);
+    // Keyboard support — Enter on focused card opens the editor.
     overlay.addEventListener('keydown',e=>{
-      if(e.target.classList&&e.target.classList.contains('aic-edit')&&e.key==='Enter'){
-        e.preventDefault();e.target.blur();
+      if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('aic-card')){
+        e.preventDefault();
+        const [key,idxStr]=(e.target.dataset.edit||'').split(':');
+        if(key)openAIReviewEditor(ch,key,Number(idxStr),renderBody);
       }
     });
   });
+}
+// ─── Per-row review editor ───
+// Opens a prefilled form for the change at ch[key][idx]. On Save, writes
+// back to ch and triggers the parent confirm-modal re-render.
+function closeAIReviewEditor(){const m=document.getElementById('aic-edit-modal');if(m){m.remove();_syncBodyLock();}}
+function openAIReviewEditor(ch,key,idx,refreshFn){
+  if(!Array.isArray(ch[key])||idx<0||idx>=ch[key].length)return;
+  const item=ch[key][idx];
+  const label=AIC_TYPES[key]?.label||'Change';
+  closeAIReviewEditor();
+  const overlay=document.createElement('div');
+  overlay.className='modal';overlay.id='aic-edit-modal';overlay.style.display='flex';
+  overlay.style.zIndex='120';
+  overlay.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:480px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <h3 style="margin:0;flex:1">Edit: ${esc(label)}</h3>
+        <button class="btn btn-ghost btn-sm" data-action="convert">⇄ Change type</button>
+      </div>
+      <div class="aic-edit-form" id="aic-edit-form">${_aicBuildForm(key,item)}</div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm" data-action="cancel">Cancel</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary btn-sm" data-action="save">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);_syncBodyLock();
+  // Set <select> values via JS — easier than threading the selected attr
+  // through every option. Loop over data-fselect markers.
+  overlay.querySelectorAll('[data-fselect]').forEach(sel=>{
+    const v=sel.getAttribute('data-fselect');if(v!=null)sel.value=v;
+  });
+  // Step add/remove handlers (only present for addTasks)
+  const stepsWrap=overlay.querySelector('.aic-edit-steps');
+  if(stepsWrap){
+    stepsWrap.addEventListener('click',e=>{
+      if(e.target.dataset.action==='add-step'){
+        const row=document.createElement('div');
+        row.className='aic-edit-step';
+        row.innerHTML=`<input value="" placeholder="Step description"><button type="button" data-action="rm-step">×</button>`;
+        stepsWrap.insertBefore(row,e.target);
+        row.querySelector('input').focus();
+      } else if(e.target.dataset.action==='rm-step'){
+        const row=e.target.closest('.aic-edit-step');if(row)row.remove();
+      }
+    });
+  }
+  // Auto-toggle event time fields when allDay flips
+  const allDayBox=overlay.querySelector('[data-f="allDay"]');
+  if(allDayBox){
+    const sync=()=>{
+      const onTimes=overlay.querySelector('#aic-evt-times');
+      if(onTimes)onTimes.style.display=allDayBox.checked?'none':'';
+    };
+    allDayBox.addEventListener('change',sync);sync();
+  }
+  overlay.addEventListener('click',e=>{
+    const a=e.target.dataset.action;
+    if(a==='cancel'||e.target.closest('.modal-bd')){closeAIReviewEditor();return;}
+    if(a==='save'){
+      const updated=_aicReadForm(key,overlay.querySelector('#aic-edit-form'),item);
+      ch[key][idx]=updated;
+      closeAIReviewEditor();
+      if(refreshFn)refreshFn();
+      return;
+    }
+    if(a==='convert'){
+      openTypeConvertMenu(ch,key,idx,refreshFn,e.target,{fromEditor:true});
+      return;
+    }
+  });
+}
+// Build the per-key form HTML. Each input has data-f="<field>" so the
+// reader knows where to write back. Selects use data-fselect="value" set
+// after innerHTML so we don't need {selected ? 'selected' : ''} per option.
+function _aicBuildForm(key,it){
+  const v=s=>esc(s||'');
+  const projOpts=Object.entries(PROJ).filter(([k])=>k!=='gen').map(([k,p])=>`<option value="${esc(k)}">${esc(p.n)}</option>`).join('')+`<option value="gen">General</option>`;
+  switch(key){
+    case 'addTasks':{
+      const stepsHTML=(Array.isArray(it.steps)?it.steps:[]).filter(s=>s&&s.text).map(s=>`<div class="aic-edit-step"><input value="${v(s.text)}"><button type="button" data-action="rm-step">×</button></div>`).join('');
+      return `
+        <div class="aic-edit-field"><label>Task</label><textarea data-f="text" rows="2">${v(it.text)}</textarea></div>
+        <div class="aic-edit-row">
+          <div class="aic-edit-field"><label>Area</label><select data-f="area" data-fselect="${v(it.area||'personal')}"><option value="personal">Personal</option><option value="work">Work</option></select></div>
+          <div class="aic-edit-field"><label>Project</label><select data-f="project" data-fselect="${v(it.project||'gen')}">${projOpts}</select></div>
+        </div>
+        <div class="aic-edit-row">
+          <div class="aic-edit-field"><label>Priority</label><select data-f="priority" data-fselect="${v(it.priority||'med')}"><option value="urgent">Urgent</option><option value="hi">High</option><option value="med">Medium</option><option value="lo">Low</option><option value="someday">Someday</option></select></div>
+          <div class="aic-edit-field"><label>Time</label><input data-f="scheduledTime" placeholder="e.g. 11am" value="${v(it.scheduledTime)}"></div>
+        </div>
+        <div class="aic-edit-field">
+          <label>Steps (optional)</label>
+          <div class="aic-edit-steps">${stepsHTML}<button type="button" class="aic-edit-step-add" data-action="add-step">+ Add a step</button></div>
+        </div>`;
+    }
+    case 'completeTasks':case 'removeTasks':case 'completeHabits':
+      return `<div class="aic-edit-field"><label>Match</label><input data-f="_string" value="${v(it)}" placeholder="Partial title to match"></div>`;
+    case 'addEvent':{
+      const remList=Array.isArray(it.reminderMin)?it.reminderMin.join(', '):(it.reminderMin!=null?String(it.reminderMin):'');
+      return `
+        <div class="aic-edit-field"><label>Title</label><input data-f="title" value="${v(it.title)}"></div>
+        <div class="aic-edit-row">
+          <div class="aic-edit-field"><label>Date</label><input data-f="date" type="date" value="${v(it.date||tod())}"></div>
+          <div class="aic-edit-field"><label>Repeat</label><select data-f="repeat" data-fselect="${v(it.repeat||'none')}"><option value="none">None</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></div>
+        </div>
+        <label class="aic-edit-checkbox"><input type="checkbox" data-f="allDay" ${it.allDay?'checked':''}>All day</label>
+        <div id="aic-evt-times" class="aic-edit-row">
+          <div class="aic-edit-field"><label>Start time</label><input data-f="time" placeholder="e.g. 10am" value="${v(it.time)}"></div>
+          <div class="aic-edit-field"><label>End time</label><input data-f="endTime" placeholder="optional" value="${v(it.endTime)}"></div>
+        </div>
+        <div class="aic-edit-field"><label>Reminders (minutes before, comma-separated)</label><input data-f="reminderMin" value="${v(remList)}" placeholder="e.g. 60, 10"></div>`;
+    }
+    case 'removeEvent':
+      return `
+        <div class="aic-edit-field"><label>Match (event title)</label><input data-f="match" value="${v(it.match||it.title)}"></div>
+        <div class="aic-edit-field"><label>Date (optional, only target this date)</label><input data-f="date" type="date" value="${v(it.date)}"></div>`;
+    case 'updateEvent':
+      return `
+        <div class="aic-edit-field"><label>Match (event title)</label><input data-f="match" value="${v(it.match)}"></div>
+        <div class="aic-edit-field"><label>Date (optional, only target this date)</label><input data-f="date" type="date" value="${v(it.date)}"></div>
+        <div class="aic-edit-field"><label>New title (optional)</label><input data-f="newTitle" value="${v(it.newTitle)}"></div>
+        <div class="aic-edit-row">
+          <div class="aic-edit-field"><label>New date</label><input data-f="newDate" type="date" value="${v(it.newDate)}"></div>
+          <div class="aic-edit-field"><label>New time</label><input data-f="newTime" value="${v(it.newTime)}" placeholder="e.g. 3pm"></div>
+        </div>`;
+    case 'addHabits':
+      return `<div class="aic-edit-field"><label>Habit name</label><input data-f="name" value="${v(it.name)}"></div>`;
+    case 'logLearning':
+      return `
+        <div class="aic-edit-field"><label>Skill</label><input data-f="skill" value="${v(it.skill)}"></div>
+        <div class="aic-edit-field"><label>Note</label><textarea data-f="content" rows="3">${v(it.content)}</textarea></div>`;
+    case 'addPerson':
+      return `
+        <div class="aic-edit-field"><label>Name</label><input data-f="name" value="${v(it.name)}"></div>
+        <div class="aic-edit-field"><label>Context (how you know them)</label><input data-f="context" value="${v(it.context)}"></div>
+        <div class="aic-edit-field"><label>Note (optional)</label><textarea data-f="note" rows="2">${v(it.note)}</textarea></div>`;
+    case 'updatePerson':
+      return `
+        <div class="aic-edit-field"><label>Name (partial match)</label><input data-f="name" value="${v(it.name)}"></div>
+        <div class="aic-edit-field"><label>Note</label><textarea data-f="note" rows="3">${v(it.note)}</textarea></div>`;
+    case 'addBuild':
+      return `
+        <div class="aic-edit-field"><label>Project name</label><input data-f="title" value="${v(it.title)}"></div>
+        <div class="aic-edit-field"><label>Description</label><textarea data-f="desc" rows="2">${v(it.desc)}</textarea></div>
+        <div class="aic-edit-field"><label>Status</label><select data-f="status" data-fselect="${v(it.status||'active')}"><option value="active">Building now</option><option value="future">Future</option><option value="background">Background</option></select></div>`;
+    case 'addBuildNote':
+      return `
+        <div class="aic-edit-field"><label>Project (partial match)</label><input data-f="project" value="${v(it.project)}"></div>
+        <div class="aic-edit-field"><label>Note content</label><textarea data-f="content" rows="3">${v(it.content)}</textarea></div>`;
+    case 'addIdea':
+      return `
+        <div class="aic-edit-field"><label>Title</label><input data-f="title" value="${v(it.title)}"></div>
+        <div class="aic-edit-field"><label>Description</label><textarea data-f="desc" rows="3">${v(it.desc)}</textarea></div>`;
+    case 'addNote':
+      return `
+        <div class="aic-edit-field"><label>Title</label><input data-f="title" value="${v(it.title)}"></div>
+        <div class="aic-edit-field"><label>Body</label><textarea data-f="body" rows="4">${v(it.body)}</textarea></div>`;
+    case 'addResource':
+      return `
+        <div class="aic-edit-field"><label>Title</label><input data-f="title" value="${v(it.title)}"></div>
+        <div class="aic-edit-field"><label>URL</label><input data-f="url" value="${v(it.url)}" placeholder="https://..."></div>
+        <div class="aic-edit-field"><label>Description</label><textarea data-f="desc" rows="2">${v(it.desc)}</textarea></div>
+        <div class="aic-edit-field"><label>Tag</label><select data-f="tag" data-fselect="${v(it.tag||'other')}"><option value="article">Article</option><option value="tool">Tool</option><option value="video">Video</option><option value="book">Book</option><option value="person">Person</option><option value="other">Other</option></select></div>`;
+    default:
+      return `<div class="aic-edit-field"><label>Raw JSON (advanced)</label><textarea data-f="_json" rows="6">${v(JSON.stringify(it,null,2))}</textarea></div>`;
+  }
+}
+// Read the form back into a plain object. Mirror of _aicBuildForm.
+function _aicReadForm(key,formEl,orig){
+  const get=sel=>{const el=formEl.querySelector(`[data-f="${sel}"]`);return el?(el.type==='checkbox'?el.checked:el.value):'';};
+  const trim=s=>String(s||'').trim();
+  switch(key){
+    case 'addTasks':{
+      const stepEls=formEl.querySelectorAll('.aic-edit-step input');
+      const steps=Array.from(stepEls).map(el=>trim(el.value)).filter(Boolean).map(text=>({text}));
+      const out={...orig,text:trim(get('text')),area:get('area'),project:get('project'),priority:get('priority'),scheduledTime:trim(get('scheduledTime'))};
+      if(steps.length)out.steps=steps;else delete out.steps;
+      return out;
+    }
+    case 'completeTasks':case 'removeTasks':case 'completeHabits':
+      return trim(get('_string'));
+    case 'addEvent':{
+      const remRaw=trim(get('reminderMin'));
+      const reminderMin=remRaw?remRaw.split(',').map(s=>Number(s.trim())).filter(n=>!isNaN(n)):[];
+      const out={...orig,title:trim(get('title')),date:trim(get('date')),repeat:get('repeat'),allDay:!!get('allDay'),time:trim(get('time')),endTime:trim(get('endTime')),reminderMin};
+      if(out.allDay){out.time='';out.endTime='';}
+      return out;
+    }
+    case 'removeEvent':
+      return {...orig,match:trim(get('match')),date:trim(get('date'))||undefined};
+    case 'updateEvent':
+      return {...orig,match:trim(get('match')),date:trim(get('date'))||undefined,newTitle:trim(get('newTitle'))||undefined,newDate:trim(get('newDate'))||undefined,newTime:trim(get('newTime'))||undefined};
+    case 'addHabits':
+      return {...orig,name:trim(get('name'))};
+    case 'logLearning':
+      return {...orig,skill:trim(get('skill')),content:trim(get('content'))};
+    case 'addPerson':
+      return {...orig,name:trim(get('name')),context:trim(get('context')),note:trim(get('note'))};
+    case 'updatePerson':
+      return {...orig,name:trim(get('name')),note:trim(get('note'))};
+    case 'addBuild':
+      return {...orig,title:trim(get('title')),desc:trim(get('desc')),status:get('status')};
+    case 'addBuildNote':
+      return {...orig,project:trim(get('project')),content:trim(get('content'))};
+    case 'addIdea':
+      return {...orig,title:trim(get('title')),desc:trim(get('desc'))};
+    case 'addNote':
+      return {...orig,title:trim(get('title')),body:trim(get('body'))};
+    case 'addResource':
+      return {...orig,title:trim(get('title')),url:trim(get('url')),desc:trim(get('desc')),tag:get('tag')};
+    default:
+      try{return JSON.parse(get('_json'));}catch(_){return orig;}
+  }
+}
+// ─── Type conversion ───
+// Move ch[srcKey][srcIdx] to ch[dstKey] with field-mapping. Returns the
+// new {key, idx} so the caller can reopen the editor on the converted item.
+const AIC_DEFAULTS={
+  addTasks:t=>({text:t,area:'personal',project:'gen',priority:'med',scheduledTime:'',date:tod()}),
+  addEvent:t=>({title:t,date:tod(),allDay:true,time:'',repeat:'none',reminderMin:[]}),
+  addIdea:t=>({title:t,desc:''}),
+  addNote:t=>({title:t,body:''}),
+  addResource:t=>({title:t,url:'',desc:'',tag:'other'}),
+  addBuild:t=>({title:t,desc:'',status:'active'}),
+  addPerson:t=>({name:t,context:'',note:''}),
+  addHabits:t=>({name:t})
+};
+const AIC_CANONICAL_TEXT={
+  addTasks:t=>t.text||'',
+  addEvent:e=>e.title||'',
+  addIdea:i=>i.title||'',
+  addNote:n=>n.title||'',
+  addResource:r=>r.title||'',
+  addBuild:b=>b.title||'',
+  addPerson:p=>p.name||'',
+  addHabits:h=>h.name||''
+};
+function convertChangeType(ch,srcKey,srcIdx,dstKey){
+  if(srcKey===dstKey)return null;
+  if(!Array.isArray(ch[srcKey])||srcIdx<0||srcIdx>=ch[srcKey].length)return null;
+  const src=ch[srcKey][srcIdx];
+  const text=AIC_CANONICAL_TEXT[srcKey]?AIC_CANONICAL_TEXT[srcKey](src):'';
+  if(!AIC_DEFAULTS[dstKey])return null;
+  const newItem=AIC_DEFAULTS[dstKey](text);
+  // Carry over compatible fields between adjacent types so the user
+  // doesn't have to retype info that translates cleanly.
+  if(srcKey==='addTasks'&&dstKey==='addEvent'){
+    if(src.scheduledTime){newItem.time=src.scheduledTime;newItem.allDay=false;}
+  }
+  if(srcKey==='addEvent'&&dstKey==='addTasks'){
+    if(src.time)newItem.scheduledTime=src.time;
+  }
+  if(srcKey==='addIdea'&&dstKey==='addNote'&&src.desc)newItem.body=src.desc;
+  if(srcKey==='addNote'&&dstKey==='addIdea'&&src.body)newItem.desc=src.body;
+  if(srcKey==='addIdea'&&dstKey==='addResource'&&src.desc)newItem.desc=src.desc;
+  if(srcKey==='addNote'&&dstKey==='addResource'&&src.body)newItem.desc=src.body;
+  // Splice from source, push to destination
+  ch[srcKey].splice(srcIdx,1);
+  if(!ch[srcKey].length)delete ch[srcKey];
+  ch[dstKey]=ch[dstKey]||[];
+  ch[dstKey].push(newItem);
+  return {key:dstKey,idx:ch[dstKey].length-1};
+}
+// Floating popover with conversion targets. opts.fromEditor=true means
+// the user is currently in the editor — we close it and reopen pointing
+// at the converted item.
+function openTypeConvertMenu(ch,key,idx,refreshFn,anchorEl,opts){
+  // Remove any existing menu first
+  document.querySelectorAll('.aic-type-menu').forEach(el=>el.remove());
+  const TARGETS=[
+    ['addTasks','☐','Task'],
+    ['addEvent','📅','Calendar event'],
+    ['addIdea','💡','Idea'],
+    ['addNote','▤','Note'],
+    ['addResource','🔗','Resource'],
+    ['addBuild','★','Project'],
+    ['addPerson','👤','Person'],
+    ['addHabits','↻','Habit']
+  ];
+  const popover=document.createElement('div');
+  popover.className='aic-type-menu';
+  popover.innerHTML=TARGETS.map(([k,ic,lbl])=>{
+    const isCur=k===key;
+    return `<button class="aic-type-opt${isCur?' current':''}" data-target="${k}" ${isCur?'disabled':''}><span class="aic-type-opt-icon">${ic}</span>${lbl}${isCur?' (current)':''}</button>`;
+  }).join('');
+  // Position: below+right of anchor, but flip if it'd go offscreen.
+  const rect=anchorEl.getBoundingClientRect();
+  popover.style.position='fixed';
+  popover.style.zIndex='200';
+  document.body.appendChild(popover);
+  const pw=popover.offsetWidth,ph=popover.offsetHeight;
+  let top=rect.bottom+6,left=rect.left;
+  if(left+pw>window.innerWidth-8)left=Math.max(8,window.innerWidth-pw-8);
+  if(top+ph>window.innerHeight-8)top=Math.max(8,rect.top-ph-6);
+  popover.style.top=top+'px';popover.style.left=left+'px';
+  popover.addEventListener('click',e=>{
+    e.stopPropagation();
+    const btn=e.target.closest('.aic-type-opt');
+    if(!btn||btn.classList.contains('current'))return;
+    const target=btn.dataset.target;
+    const result=convertChangeType(ch,key,idx,target);
+    popover.remove();
+    if(!result)return;
+    if(opts&&opts.fromEditor){
+      // We were inside the editor — reopen on the new item so the user
+      // can refine the destination's specific fields.
+      closeAIReviewEditor();
+      if(refreshFn)refreshFn();
+      openAIReviewEditor(ch,result.key,result.idx,refreshFn);
+    } else {
+      if(refreshFn)refreshFn();
+    }
+  });
+  // Dismiss on outside click / escape
+  setTimeout(()=>{
+    const onOutside=e=>{
+      if(!popover.contains(e.target)){popover.remove();document.removeEventListener('mousedown',onOutside);document.removeEventListener('touchstart',onOutside);}
+    };
+    document.addEventListener('mousedown',onOutside);
+    document.addEventListener('touchstart',onOutside);
+  },50);
+  popover.addEventListener('keydown',e=>{if(e.key==='Escape')popover.remove();});
 }
 
 // Back-compat one-liner (still referenced internally for quick status messages)
@@ -7834,9 +8331,8 @@ function playSound(kind){
 
 async function applyChanges(ch,prompt){
   // aiConfirmMode — Settings → AI behaviour → Confirm before applying
-  //   'off'      : execute everything immediately (calendar too)
   //   'calendar' : tasks/habits/etc apply now; calendar needs OK (default)
-  //   'all'      : show rich custom modal — user can remove individual items
+  //   'all'      : every AI change goes through the review queue
   const mode=S.aiConfirmMode||'calendar';
   if(mode==='all'&&formatAIChangesDetailed(ch)){
     const result=await showAIConfirmModal(ch,prompt,'all');
@@ -7884,14 +8380,13 @@ async function applyChanges(ch,prompt){
   if(ch.addNote?.length)ch.addNote.forEach(n=>S.notes.push({id:uid(),title:n.title,body:n.body,date:tod()}));
   svAll();render();
   // Calendar execution decision:
-  //   mode='all'     → already approved above, run directly (no second popup)
-  //   mode='off'     → user opted out of all confirms, run directly
+  //   mode='all'     → already approved in the review queue above, run directly
   //   mode='calendar'→ show the per-calendar confirm popup (default)
   // History is recorded based on what ACTUALLY got applied — if the user
   // declines the calendar confirm in 'calendar' mode, history logs only the
   // non-calendar part that did run.
   if(calOps.length){
-    if(mode==='all'||mode==='off'){
+    if(mode==='all'){
       await confirmCalendarOps(calOps,true);
       recordAIHistory(prompt,ch);
     } else {
