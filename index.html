@@ -2740,7 +2740,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v114';
+const APP_VERSION='v115';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2995,6 +2995,38 @@ let _gisLastError=null;
 // The token client only takes one callback, so we route through this hook
 // when an explicit click is awaiting a result.
 let _gisPendingResolver=null;
+// If GIS fails (e.g. origin_mismatch — the page origin isn't listed as an
+// "Authorized JavaScript origin" on the OAuth web client), we flip this
+// for the rest of the session so subsequent connect clicks skip straight
+// to the Firebase reauth fallback. Persisted across reloads via
+// localStorage so a one-time misconfiguration doesn't keep poking the
+// user with Google's error page on every page load.
+let _gisDisabledThisSession=false;
+function _gisIsDisabled(){
+  if(_gisDisabledThisSession)return true;
+  try{
+    const flag=localStorage.getItem('los_gis_disabled_until');
+    if(flag&&Number(flag)>Date.now())return true;
+  }catch(_){}
+  return false;
+}
+function _markGisBroken(reason){
+  _gisDisabledThisSession=true;
+  // Disable for 7 days. User can clear localStorage or set the flag to
+  // 0 to re-enable manually if they fix the OAuth config.
+  try{localStorage.setItem('los_gis_disabled_until',String(Date.now()+7*24*60*60*1000));}catch(_){}
+  console.warn('[gis] disabled for this session/origin:',reason||'unknown','— call _retryGCalSync() from the console after fixing the OAuth config to re-enable.');
+}
+// Console-callable rescue: clear the GIS disable flag so the silent
+// refresh layer retries on next page load. Use after adding the page
+// origin to the OAuth client's "Authorized JavaScript origins" in
+// Google Cloud Console.
+window._retryGCalSync=function(){
+  try{localStorage.removeItem('los_gis_disabled_until');}catch(_){}
+  _gisDisabledThisSession=false;
+  _gisInitialized=false;
+  console.log('[gis] re-enabled. Refresh the page and try connecting Google Calendar.');
+};
 function _decodeJwtAudience(jwt){
   try{
     const parts=String(jwt||'').split('.');
@@ -3025,6 +3057,9 @@ function _cacheClientIdFromCredential(credential){
 }
 function initGISTokenClient(){
   if(_gisInitialized)return true;
+  // Skip init if GIS is known-broken on this origin — saves the user
+  // from seeing Google's error 400 page every load.
+  if(_gisIsDisabled())return false;
   if(!(window.google&&google.accounts&&google.accounts.oauth2))return false;
   const clientId=_getOAuthClientId();
   if(!clientId){
@@ -3042,6 +3077,12 @@ function initGISTokenClient(){
         // The user will need to click Connect for a fresh consent.
         if(resp.error==='access_denied'||resp.error==='consent_required'||resp.error==='interaction_required'){
           gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}
+        }
+        // Origin mismatch / invalid client come back here too — disable
+        // GIS so we don't keep retrying a setup that can't work on this
+        // origin. Firebase popup still works via *.firebaseapp.com.
+        if(/origin|invalid_client|unauthorized_client|idpiframe/i.test(String(resp.error||''))){
+          _markGisBroken(resp.error);
         }
         if(_gisPendingResolver){_gisPendingResolver.reject(new Error(resp.error));_gisPendingResolver=null;}
         try{refreshGCalWarn();}catch(_){}
@@ -3170,7 +3211,15 @@ async function connectGoogleCalendar(){
           });
           if(tok)return tok;
         }catch(e){
-          console.warn('[gcal] GIS connect failed, falling back to Firebase:',e.message||e);
+          const msg=String(e.message||e||'');
+          console.warn('[gcal] GIS connect failed, falling back to Firebase:',msg);
+          // origin_mismatch / popup_closed / consent timeout all mean GIS
+          // is unusable for this origin/session. Mark it broken so we
+          // skip GIS on subsequent clicks and reloads — Firebase popup
+          // works fine via *.firebaseapp.com regardless of origin config.
+          if(/origin|popup_closed|consent|access_denied|popup_blocked/i.test(msg)){
+            _markGisBroken(msg);
+          }
           // Fall through to Firebase popup as a last resort.
         }
       }
@@ -3653,26 +3702,69 @@ function loadData(){
   // route that fetches GCal. Async, doesn't block sync.
   probeGCalLive();
   const docRef=db.collection('users').doc(CU.uid).collection('data').doc('main');
-  // Safety net: if no snapshot has arrived in 8s, render empty-state. NEVER
-  // call seed() here — that would write default data to Firestore and wipe
-  // the user's real state if the snapshot is just slow (this is the bug
-  // that lost Zander's tasks on his PC).
+  // Safety net: if no snapshot has arrived in 8s, render the empty UI so
+  // the user isn't staring at a loader. CRITICALLY do NOT flip
+  // _initialSyncDone — that would unblock svAll, and any user action on
+  // the empty UI (typing, ticking, navigating, anything that triggers a
+  // save) would write that empty state to Firestore and OVERWRITE the
+  // real data when the slow snapshot finally arrives. This is the bug
+  // that ate Zander's tasks. Saves stay BLOCKED until handleSnapshot
+  // confirms a real Firestore read.
+  _emptyFallbackRendered=false;
   setTimeout(()=>{
-    if(!_initialSyncDone){
-      console.warn('[sync] no snapshot after 8s — rendering with empty state, will update once snapshot arrives');
-      _initialSyncDone=true;
-      try{render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}catch(e){console.error('[sync] fallback render failed:',e);}
+    if(!_initialSyncDone&&!_emptyFallbackRendered){
+      _emptyFallbackRendered=true;
+      console.warn('[sync] no snapshot after 8s — rendering empty UI, saves stay BLOCKED until snapshot arrives');
+      try{render();loadDailyNote();loadTip(false);}catch(e){console.error('[sync] fallback render failed:',e);}
+      showSyncWaitingBanner();
     }
   },8000);
-  _unsubscribeDoc=docRef.onSnapshot(snap=>{try{handleSnapshot(snap);}catch(e){console.error('[sync] snapshot handler error:',e);if(!_initialSyncDone){_initialSyncDone=true;try{seed();render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}catch(e2){}}}},err=>console.warn('[sync] snapshot:',err.code||err.message));
+  _unsubscribeDoc=docRef.onSnapshot(snap=>{
+    try{handleSnapshot(snap);}
+    catch(e){
+      console.error('[sync] snapshot handler error:',e);
+      // Render-side recovery only — do NOT call seed() and do NOT flip
+      // _initialSyncDone. seed() calls svAll on empty arrays, which
+      // would overwrite the real data the user has in Firestore. Better
+      // to show an empty app and keep saves blocked than to nuke data.
+      if(!_initialSyncDone){
+        try{render();}catch(e2){}
+        showSyncWaitingBanner();
+      }
+    }
+  },err=>{console.warn('[sync] snapshot:',err.code||err.message);showSyncWaitingBanner();});
+}
+let _emptyFallbackRendered=false;
+function showSyncWaitingBanner(){
+  if(document.getElementById('sync-waiting-banner'))return;
+  const el=document.createElement('div');
+  el.id='sync-waiting-banner';
+  el.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--surface);border:1.5px solid var(--peach,#e8a87c);border-radius:10px;padding:10px 16px;font-size:12.5px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.15);display:flex;align-items:center;gap:10px;max-width:calc(100% - 24px);box-sizing:border-box;font-family:Inter,system-ui,sans-serif;font-weight:500';
+  el.innerHTML='<span style="font-size:14px">↻</span><span>Connecting to your data… new entries are paused until sync completes.</span>';
+  document.body.appendChild(el);
+}
+function hideSyncWaitingBanner(){
+  const el=document.getElementById('sync-waiting-banner');
+  if(el)el.remove();
 }
 function handleSnapshot(snap){
     // Always apply. Filtering hasPendingWrites caused the initial snapshot to
     // be skipped if the local cache had any pending local writes, leaving the
     // app stuck with empty state. Self-mirror snapshots are no-ops anyway
     // because our local S was already mutated before svAll.
+    // We've now received a real Firestore reply — saves can be unblocked
+    // and the "still syncing" banner removed (if it was showing).
+    hideSyncWaitingBanner();
     if(!snap.exists){
-      if(!_initialSyncDone){_initialSyncDone=true;seed();render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}
+      // Genuinely-new user: their Firestore doc doesn't exist yet. seed()
+      // creates it with empty arrays. fromCache=true means this came from
+      // local cache only, NOT confirmed by the server, so don't seed in
+      // that case — wait for the authoritative server reply. (Cache can
+      // legitimately say "doesn't exist" for a doc that does exist server-
+      // side if the cache was never warmed.)
+      if(!_initialSyncDone&&!snap.metadata.fromCache){
+        _initialSyncDone=true;seed();render();loadDailyNote();loadTip(false);if(!getKey())promptKey();
+      }
       return;
     }
     const d=snap.data();
