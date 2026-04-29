@@ -79,7 +79,10 @@ html{color-scheme:light}
 body.no-scroll{overflow:hidden}
 /* Calendar-disconnected banner. Sits at the very top of the app shell
    so it's the first thing the user sees if their GCal token has lapsed. */
-.gcal-warn{position:sticky;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;background:var(--red-bg,#fde7e7);color:var(--red,#c44);font-size:12.5px;font-weight:600;cursor:pointer;border-bottom:1px solid var(--red,#c44);font-family:'Inter',system-ui,sans-serif}
+/* Banner sits in normal flow (not sticky) so the rest of the app shifts
+   down by its height instead of having content scroll behind it. The
+   user reported overlap on phone where rows would slide under the bar. */
+.gcal-warn{position:relative;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;background:var(--red-bg,#fde7e7);color:var(--red,#c44);font-size:12.5px;font-weight:600;cursor:pointer;border-bottom:1px solid var(--red,#c44);font-family:'Inter',system-ui,sans-serif}
 [data-theme="studio"] .gcal-warn{background:rgba(196,68,68,.15);color:#ff8a8a;border-bottom-color:rgba(196,68,68,.4)}
 .gcal-warn:hover{filter:brightness(1.04)}
 .gcal-warn-icon{font-size:16px;line-height:1}
@@ -977,6 +980,9 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ti.pm{border-left-color:var(--gold)}
 .ti.pl{border-left-color:var(--sage)}
 .ti.ps{border-left-color:var(--border);opacity:.55}
+/* Neutral / "no priority" — used by History rows so completed work
+   renders flat-grey regardless of urgency it had before being ticked. */
+.ti.pn{border-left-color:var(--border)}
 .ti input[type=checkbox]{appearance:none;-webkit-appearance:none;width:19px;height:19px;margin-top:0;flex-shrink:0;border:1.5px solid var(--border-strong);border-radius:50%;background:var(--surface);cursor:pointer;position:relative;transition:all .15s;outline:none}
 .ti input[type=checkbox]:hover{border-color:var(--text-2)}
 .ti input[type=checkbox]:checked{background:var(--sage);border-color:var(--sage)}
@@ -1108,24 +1114,52 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .tm-step-add .input{flex:1;font-size:12.5px;padding:7px 10px}
 /* Step-count badge on task rows */
 .ti-steps{font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-2);padding:2px 7px;border-radius:5px;flex-shrink:0;margin-top:2px;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+/* Wrap parent task + its substep so they read as one nested unit.
+   When a substep is present we drop the parent's bottom-border so the
+   two rows visually fuse, and the substep sits flush with no gutter on
+   the left. */
+.ti-wrap{display:block}
+.ti-wrap.has-substep .ti{border-bottom:1px solid var(--border-2,rgba(0,0,0,.04))}
 /* Inline substep — small row directly under a task that has steps,
-   showing only the NEXT undone step. Indented + dashed border-left so
-   it visually nests under the parent task. */
+   showing only the NEXT undone step. Indented inside the same card
+   with a small ↳ glyph so the parent-child link is obvious. */
 .ti-substep{
   display:flex;align-items:center;gap:10px;
-  padding:7px 12px 7px 32px;
-  margin:-2px 0 8px 14px;
+  padding:8px 13px 8px 38px;
   background:var(--surface-2);
-  border-left:2px dashed var(--border-strong);
-  border-radius:0 8px 8px 0;
+  border-bottom:1px solid var(--border);
   font-size:12px;color:var(--text-2);
   cursor:pointer;
   transition:background .12s;
+  position:relative;
+  overflow:hidden;
 }
+.ti-substep::before{
+  content:'↳';
+  position:absolute;
+  left:18px;top:50%;
+  transform:translateY(-55%);
+  color:var(--muted);
+  font-size:14px;
+  line-height:1;
+  font-weight:600;
+}
+.ti-substep:last-of-type{border-bottom:none}
 .ti-substep:hover{background:var(--surface-hover)}
-.ti-substep input[type=checkbox]{flex-shrink:0;width:17px;height:17px;cursor:pointer;margin:0}
+.ti-substep input[type=checkbox]{flex-shrink:0;width:17px;height:17px;cursor:pointer;margin:0;appearance:none;-webkit-appearance:none;border:1.5px solid var(--border-strong);border-radius:50%;background:var(--surface);position:relative;transition:all .15s;outline:none}
+.ti-substep input[type=checkbox]:hover{border-color:var(--text-2)}
+.ti-substep input[type=checkbox]:checked{background:var(--sage);border-color:var(--sage)}
+.ti-substep input[type=checkbox]:checked::after{content:'';position:absolute;left:4px;top:1.5px;width:4px;height:8px;border:solid #fff;border-width:0 1.6px 1.6px 0;transform:rotate(45deg)}
 .ti-substep-text{flex:1;line-height:1.4;word-break:break-word}
 .ti-substep-meta{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:.02em;flex-shrink:0;text-transform:uppercase;font-weight:600}
+/* Substep fade-out — fires when the user ticks the inline checkbox so
+   the row glides away instead of vanishing instantly. */
+.ti-substep.fading{pointer-events:none;animation:substepFade .32s cubic-bezier(.25,.8,.25,1) forwards;will-change:opacity,max-height,padding,margin,border-bottom-width}
+@keyframes substepFade{
+  0%{opacity:1;max-height:60px}
+  60%{opacity:.4;max-height:30px}
+  100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0;border-bottom-width:0}
+}
 /* When the main checkbox is locked (steps unfinished), dim it visually
    and show the not-allowed cursor so the lock is obvious. */
 .ti.has-steps input[type=checkbox]{opacity:.4;cursor:not-allowed}
@@ -2706,7 +2740,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v113';
+const APP_VERSION='v114';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6290,6 +6324,12 @@ function pruneCompletedHistory(){
   return true;
 }
 let _taskFadeTimer=null;
+// Track when each task's fade animation started so re-renders triggered
+// by Firestore's echo of our local write (or rAttention etc.) can apply
+// a NEGATIVE animation-delay to the new DOM element — that picks up the
+// animation where it left off instead of restarting from frame 0 (which
+// is what made the row "shoot back open" mid-fade).
+const _taskFadeStarts=new Map();
 function chk(id,e){
   e.stopPropagation();
   const t=S.tasks.find(x=>x.id===id);if(!t)return;
@@ -6304,13 +6344,32 @@ function chk(id,e){
     return;
   }
   t.done=!t.done;
-  if(t.done)t.doneAt=Date.now();else delete t.doneAt;
-  if(t.done)pruneCompletedHistory();
+  if(t.done){
+    t.doneAt=Date.now();
+    _taskFadeStarts.set(t.id,Date.now());
+    setTimeout(()=>_taskFadeStarts.delete(t.id),TASK_FADE_MS+200);
+    pruneCompletedHistory();
+  }else{
+    delete t.doneAt;
+    _taskFadeStarts.delete(t.id);
+  }
   svAllNow();rTasks();rAttention();
   if(t.done){
     clearTimeout(_taskFadeTimer);
     _taskFadeTimer=setTimeout(()=>{rTasks();},TASK_FADE_MS+100);
   }
+}
+// Substep checkbox handler — fades the row out before mutating state so
+// the change feels deliberate instead of an instant pop. toggleTaskStep
+// handles auto-complete + fade-tracking on the parent itself, so we
+// just wait out the local fade and call into it.
+function _fadeAndCompleteStep(checkboxEl,taskId,stepId){
+  // Optimistically check the box so the user sees their tap took effect
+  // immediately, even though the state mutation is delayed by the fade.
+  if(checkboxEl){checkboxEl.checked=true;checkboxEl.disabled=true;}
+  const row=checkboxEl?checkboxEl.closest('.ti-substep'):null;
+  if(row)row.classList.add('fading');
+  setTimeout(()=>toggleTaskStep(taskId,stepId,true),320);
 }
 // Tab switcher for the Tasks section — 'active' shows open tasks + the add
 // form, 'completed' shows the history list only. Replaces the old "Show
@@ -6450,7 +6509,17 @@ function toggleTaskStep(taskId,stepId,done){
   // Don't auto-uncheck the task if a previously-done step is unticked —
   // user might just be revisiting an entry. Manual untick still works.
   const allDone=t.steps.length>0&&t.steps.every(x=>x.done);
-  if(allDone&&!t.done){t.done=true;t.doneAt=Date.now();pruneCompletedHistory();}
+  if(allDone&&!t.done){
+    t.done=true;t.doneAt=Date.now();
+    // Hook into the same fade-tracking + post-fade re-render that chk uses,
+    // so step-driven completions glide off the list cleanly instead of
+    // hanging around in the DOM.
+    _taskFadeStarts.set(t.id,Date.now());
+    setTimeout(()=>_taskFadeStarts.delete(t.id),TASK_FADE_MS+200);
+    clearTimeout(_taskFadeTimer);
+    _taskFadeTimer=setTimeout(()=>{rTasks();},TASK_FADE_MS+100);
+    pruneCompletedHistory();
+  }
   svAll();_refreshStepsUI(t);rTasks();rAttention();
 }
 function delTaskStep(taskId,stepId){
@@ -6519,18 +6588,35 @@ function rTasks(){
     // checkbox behaves as before (toggle done immediately).
     const mainLocked=hasSteps&&!!nextStep;
     const checkboxAttrs=mainLocked?' disabled title="Complete the steps below first"':'';
-    let html=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${mainLocked?' has-steps':''}" onclick="openTaskModal('${t.id}')"><input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
+    // Resume mid-animation if the row was already fading from a previous
+    // render — prevents the "shoots back open" flicker when Firestore
+    // echoes our local write a few hundred ms after we ticked.
+    let fadeStyle='';
+    if(fading){
+      const startedAt=_taskFadeStarts.get(t.id);
+      if(startedAt){
+        const elapsed=Date.now()-startedAt;
+        if(elapsed>20&&elapsed<TASK_FADE_MS)fadeStyle=` style="animation-delay:-${elapsed}ms"`;
+      }
+    }
+    const showSubstep=nextStep&&!t.done;
+    let html=`<div class="ti-wrap${showSubstep?' has-substep':''}">`;
+    html+=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${mainLocked?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')"><input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
     // Inline sub-row: shows the NEXT undone step. Tapping its checkbox
-    // marks that step done — which then auto-shows the next step on the
-    // next render (or auto-completes the task on the last step).
-    if(nextStep&&!t.done){
+    // fades the row out, then marks the step done — which auto-shows
+    // the next step on the next render (or auto-completes the parent
+    // task when this was the last step).
+    if(showSubstep){
       const stepNum=t.steps.findIndex(s=>!s.done)+1;
+      const isLast=stepNum===t.steps.length;
+      const meta=isLast?'Last step':`Step ${stepNum} of ${t.steps.length}`;
       html+=`<div class="ti-substep" onclick="event.stopPropagation();openTaskModal('${t.id}')" title="Tap the checkbox to mark done. Tap text to open all steps.">
-        <input type="checkbox" onclick="event.stopPropagation();toggleTaskStep('${t.id}','${nextStep.id}',true)" title="Mark this step done">
+        <input type="checkbox" onclick="event.stopPropagation();_fadeAndCompleteStep(this,'${t.id}','${nextStep.id}')" title="Mark this step done">
         <span class="ti-substep-text">${esc(nextStep.text)}</span>
-        <span class="ti-substep-meta">Step ${stepNum} of ${t.steps.length}</span>
+        <span class="ti-substep-meta">${meta}</span>
       </div>`;
     }
+    html+=`</div>`;
     return html;
   };
   let wh='<div class="col-lbl work">Work</div>',hw=false;
@@ -6562,32 +6648,23 @@ function rTasks(){
       // Sort newest-ticked first so the most recently-completed task sits at
       // the top of the history list. Also enforce the 50-item render cap as
       // a belt-and-braces guard in case storage wasn't pruned (e.g. legacy
-      // Firestore docs from before the prune landed).
+      // Firestore docs from before the prune landed). All tasks land in ONE
+      // chronological list — no per-day headers (those bloat the page once
+      // you've been ticking tasks for months) and no priority colours
+      // (history doesn't need urgency cues, every row reads as "done").
       const sortedCompleted=[...completed].sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,MAX_COMPLETED_HISTORY);
-      const byDate={};
-      sortedCompleted.forEach(t=>{const ds=(t.doneAt?localDs(new Date(t.doneAt)):(t.date||tod()));(byDate[ds]=byDate[ds]||[]).push(t);});
-      const days=Object.keys(byDate).sort().reverse();
-      // Tapping a history row expands a read-only panel showing when the
-      // task was added and when it was ticked off — handy for backwards-
-      // looking reference without risk of accidentally editing archived
-      // work. Uses the same `ex` state as live tasks but scoped by type.
       const fmtCompletedAt=ts=>{if(!ts)return 'unknown';try{return new Date(ts).toLocaleString('en-ZA',{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});}catch(e){return '—';}};
       const priLabel=p=>({urgent:'Urgent',hi:'High',med:'Medium',lo:'Low',someday:'Someday'})[p]||'Low';
-      compEl.innerHTML=days.map(ds=>`
-        <div class="completed-day">
-          <div class="cmp-date">${fmt(ds)}</div>
-          <div class="tcard">${byDate[ds].map(t=>{
-            const isEx=ex.id===t.id&&ex.type==='task-done';
-            let row=`<div class="ti ${pCls(t.priority||'lo')}" style="opacity:.75;cursor:pointer" onclick="toggleEx('task-done','${t.id}')"><span style="width:19px;height:19px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="color:#fff;font-size:11px">✓</span></span><span class="tit dn" style="flex:1">${esc(t.text)}</span><button class="btn btn-ghost btn-sm" onclick="undoTask('${t.id}');event.stopPropagation()">Undo</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}');event.stopPropagation()">×</button></div>`;
-            if(isEx){
-              const added=t.date?fmt(t.date):'unknown';
-              const done=fmtCompletedAt(t.doneAt);
-              row+=`<div class="exp-p" style="font-size:12px;color:var(--text-2);line-height:1.7"><div><strong>Added:</strong> ${esc(added)}</div><div><strong>Ticked off:</strong> ${esc(done)}</div><div><strong>Priority:</strong> ${esc(priLabel(t.priority||'lo'))}</div>${t.area?`<div><strong>Area:</strong> ${esc(t.area)}</div>`:''}${t.scheduledTime?`<div><strong>Scheduled:</strong> ${esc(t.scheduledTime)}</div>`:''}</div>`;
-            }
-            return row;
-          }).join('')}</div>
-        </div>
-      `).join('');
+      compEl.innerHTML=`<div class="tcard">${sortedCompleted.map(t=>{
+        const isEx=ex.id===t.id&&ex.type==='task-done';
+        let row=`<div class="ti pn" style="opacity:.78;cursor:pointer" onclick="toggleEx('task-done','${t.id}')"><span style="width:19px;height:19px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="color:#fff;font-size:11px">✓</span></span><span class="tit dn" style="flex:1">${esc(t.text)}</span><button class="btn btn-ghost btn-sm" onclick="undoTask('${t.id}');event.stopPropagation()">Undo</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}');event.stopPropagation()">×</button></div>`;
+        if(isEx){
+          const added=t.date?fmt(t.date):'unknown';
+          const done=fmtCompletedAt(t.doneAt);
+          row+=`<div class="exp-p" style="font-size:12px;color:var(--text-2);line-height:1.7"><div><strong>Added:</strong> ${esc(added)}</div><div><strong>Completed:</strong> ${esc(done)}</div><div><strong>Priority:</strong> ${esc(priLabel(t.priority||'lo'))}</div>${t.area?`<div><strong>Area:</strong> ${esc(t.area)}</div>`:''}${t.scheduledTime?`<div><strong>Scheduled:</strong> ${esc(t.scheduledTime)}</div>`:''}</div>`;
+        }
+        return row;
+      }).join('')}</div>`;
     }
   }
 }
@@ -7203,6 +7280,8 @@ CRITICAL for calendar events: when the user names a weekday (e.g. "community mee
 
 TASK SCHEDULING — when the user mentions a task with any time hint, ALWAYS fill scheduledTime. Even soft hints like "tomorrow" / "later" / "next week" should resolve to a sensible default time (use 11am for "morning"/"tomorrow"/no specific hint, 2pm for "afternoon", 7pm for "evening", and the literal time when one is given e.g. "at 3pm"). Format scheduledTime as a human-readable 12-hour string like "11am" or "3:30pm". Skip scheduledTime ONLY if the user is clearly adding a free-form to-do with no time intent at all ("buy groceries some day"). Default to giving a time over leaving it blank.
 
+MULTI-STEP TASKS — addTasks supports an optional "steps" array of {text}. Use steps ONLY when the user describes a task that genuinely has multiple distinct sub-actions ("plan dad's birthday — book restaurant, buy gift, organise people", "ship the new feature: write code, write tests, deploy"). DO NOT auto-decompose simple tasks into steps just because you can — most tasks are single-action and should NOT have steps. A task with steps locks the main checkbox until every step is ticked, so adding steps to a one-shot task makes it harder to complete. When you do use steps, list them in execution order, keep each step short and concrete, and limit to 2–6 steps unless the user explicitly enumerated more.
+
 Calendar defaults — apply these automatically unless the user explicitly says otherwise. These come from the user's own Settings and may be empty (no reminders by default):
 - Birthday events: allDay:true, repeat:"yearly", reminderMin:${JSON.stringify(S.calendarDefaults?.birthdayReminders||[1440,0])}
 - Timed events / meetings / appointments: reminderMin:${JSON.stringify(S.calendarDefaults?.timedReminders||[60,10])}
@@ -7219,7 +7298,7 @@ CRITICAL for removeEvent / updateEvent:
 - If no event in upcomingEvents matches the user's request, leave the remove/update arrays empty and tell them in "message": "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title).
 
 Respond ONLY raw JSON:
-{"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional"}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
+{"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addPerson":[{"name":"...","context":"...","note":"..."}],"updatePerson":[{"name":"partial","note":"..."}],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 User:"${msg}"`;
   try{
@@ -7283,6 +7362,10 @@ function formatAIChangesDetailed(ch){
   (ch.addTasks||[]).forEach(t=>{
     const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);
     taskLines.push(`  • Add "${t.text||'(untitled)'}"${bits.length?' — '+bits.join(', '):''}`);
+    // Show step breakdown if AI proposed one, indented under its parent.
+    if(Array.isArray(t.steps)&&t.steps.length){
+      t.steps.forEach(s=>{if(s&&s.text)taskLines.push(`      ↳ ${s.text}`);});
+    }
   });
   (ch.completeTasks||[]).forEach(t=>taskLines.push(`  • Tick off "${t}"`));
   (ch.removeTasks||[]).forEach(t=>taskLines.push(`  • Delete "${t}"`));
@@ -7423,7 +7506,15 @@ function renderAIChangesInteractive(ch,eventPool){
   const row=(html,rmKey,extra)=>`<div class="aic-row"><div style="flex:1;min-width:0"><span class="aic-text">${html}</span>${extra||''}</div><button class="aic-rm" data-rm="${rmKey}" aria-label="Remove">×</button></div>`;
   const sections=[];
   const taskRows=[];
-  (ch.addTasks||[]).forEach((t,i)=>{const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);taskRows.push(row(`Add "${ed('addTasks',i,'text',t.text,'')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addTasks:${i}`));});
+  (ch.addTasks||[]).forEach((t,i)=>{
+    const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);
+    let extra='';
+    if(Array.isArray(t.steps)&&t.steps.length){
+      const stepLines=t.steps.filter(s=>s&&s.text).map(s=>`<div style="margin-left:18px;font-size:11.5px;color:var(--muted);line-height:1.5">↳ ${esc(s.text)}</div>`).join('');
+      extra=stepLines;
+    }
+    taskRows.push(row(`Add "${ed('addTasks',i,'text',t.text,'')}"${bits.length?' — '+esc(bits.join(', ')):''}`,`addTasks:${i}`,extra));
+  });
   (ch.completeTasks||[]).forEach((t,i)=>taskRows.push(row(`Tick off "${ed('completeTasks',i,'',t,'')}"`,`completeTasks:${i}`)));
   (ch.removeTasks||[]).forEach((t,i)=>taskRows.push(row(`Delete task "${ed('removeTasks',i,'',t,'')}"`,`removeTasks:${i}`)));
   if(taskRows.length)sections.push(`<div class="aic-sec"><div class="aic-sec-lbl">Tasks</div>${taskRows.join('')}</div>`);
@@ -7677,7 +7768,16 @@ async function applyChanges(ch,prompt){
   (ch.removeEvent||[]).forEach(e=>calOps.push({kind:'remove',ev:e}));
   (ch.updateEvent||[]).forEach(e=>calOps.push({kind:'update',ev:e}));
   const detailed=formatAIChangesDetailed(ch);
-  if(ch.addTasks?.length)ch.addTasks.forEach(t=>S.tasks.push({id:uid(),text:t.text,area:t.area||'personal',project:t.project||'gen',priority:t.priority||'lo',scheduledTime:t.scheduledTime||'',done:false,date:tod()}));
+  if(ch.addTasks?.length)ch.addTasks.forEach(t=>{
+    const newT={id:uid(),text:t.text,area:t.area||'personal',project:t.project||'gen',priority:t.priority||'lo',scheduledTime:t.scheduledTime||'',done:false,date:tod()};
+    // Optional multi-step breakdown — only attached when AI returns 2+
+    // genuine sub-actions (single-step tasks would just lock the
+    // checkbox for no benefit, so the prompt warns against that).
+    if(Array.isArray(t.steps)&&t.steps.length){
+      newT.steps=t.steps.filter(s=>s&&s.text&&String(s.text).trim()).map(s=>({id:uid(),text:String(s.text).trim(),done:false}));
+    }
+    S.tasks.push(newT);
+  });
   if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)t.done=true;});
   if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)S.tasks=S.tasks.filter(x=>x.id!==t.id);});
   if(ch.addHabits?.length)ch.addHabits.forEach(h=>{if(!S.habits.some(x=>x.name.toLowerCase()===h.name.toLowerCase()))S.habits.push({id:uid(),name:h.name,checkedDates:[],createdAt:tod(),notes:[]});});
