@@ -2733,7 +2733,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v117';
+const APP_VERSION='v118';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -4119,20 +4119,6 @@ async function toggleVoice(){
     vlog('recognition created (default lang, continuous=true)');
     let finalText='';voiceStartedAt=Date.now();voiceHeardSound=false;
     let gotStart=false;
-    // Auto-stop guard: if no NEW final transcript arrives for 25 seconds
-    // (meaning the user has stopped speaking even though the recogniser
-    // keeps auto-restarting from background noise), force a real stop.
-    // Without this the mic could run indefinitely if forgotten — the
-    // v104 auto-restart-on-silence fix made this possible because
-    // ambient noise prevents the browser's built-in silence timeout.
-    let _voiceIdleTimer=null;
-    const resetIdleStop=()=>{
-      clearTimeout(_voiceIdleTimer);
-      _voiceIdleTimer=setTimeout(()=>{
-        voiceUserStop=true;
-        try{recognition?.stop();}catch(e){}
-      },25000);
-    };
     // Mobile Chrome on Android emits the same utterance as a growing chain
     // of separate final results ("I", "I have", "I have a friend", "I have
     // a friend who's coming over"), each at a different index. Both the
@@ -4141,15 +4127,45 @@ async function toggleVoice(){
     // string. We now prefix-dedup: if any other final in the pass starts
     // with this one, we drop the shorter one and keep only the longest.
     const normTxt=s=>(s||'').trim().toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
-    // Preserve whatever's already in the textarea so new speech appends to it
-    let baseText=ta.value||'';
-    if(baseText&&!/\s$/.test(baseText))baseText+=' ';
-    recognition.onstart=()=>{gotStart=true;isListening=true;btn.classList.add('on');vlog('onstart');vstatus('🎙 Listening — tap the mic to stop');resetIdleStop();};
+    // baseText holds whatever was already in the textarea before voice
+    // started writing — new speech is appended to it. lastWrittenValue
+    // tracks what we last wrote so we can detect manual edits to the
+    // field between recognition writes; on edit we force a session
+    // restart (recognition.stop() → onend → auto-restart) so the new
+    // session's fresh e.results doesn't replay finals from before the edit.
+    let baseText='';
+    let lastWrittenValue='';
+    const reBaseline=()=>{
+      baseText=ta.value||'';
+      if(baseText&&!/\s$/.test(baseText))baseText+=' ';
+      finalText='';
+      lastWrittenValue=ta.value||'';
+    };
+    reBaseline();
+    recognition.onstart=()=>{
+      gotStart=true;isListening=true;btn.classList.add('on');
+      vlog('onstart');
+      vstatus('🎙 Listening — tap the mic to stop');
+      // Re-baseline on every (re)start so that auto-restart-after-silence
+      // sessions don't replay finals from a previous session, and any
+      // user edit during the gap is honoured.
+      reBaseline();
+    };
     recognition.onaudiostart=()=>vlog('onaudiostart');
     recognition.onsoundstart=()=>{voiceHeardSound=true;vlog('onsoundstart');};
     recognition.onspeechstart=()=>{voiceHeardSound=true;vlog('onspeechstart');vstatus('🎙 Hearing you… tap mic to stop');};
     recognition.onresult=e=>{
       vlog('onresult results='+e.results.length+' resultIndex='+e.resultIndex);
+      // If the user manually edited the textarea since our last write,
+      // restart the recognition session — the current session's e.results
+      // would otherwise replay the edited-out finals on the next pass and
+      // restore the text the user just deleted. The auto-restart in
+      // onend will pick up cleanly with a fresh, empty result set.
+      if(ta.value!==lastWrittenValue){
+        vlog('textarea edited externally — restarting session');
+        try{recognition.stop();}catch(_){}
+        return;
+      }
       let interim='';
       // Rebuild finalText from scratch each pass. First gather all the final
       // transcripts, then drop any that's a prefix of a longer one — that's
@@ -4179,16 +4195,23 @@ async function toggleVoice(){
         return true;
       });
       finalText=kept.length?kept.join(' ')+' ':'';
-      ta.value=(baseText+finalText+interim).replace(/\s+$/,'')+(interim?' ':'');
+      const newVal=(baseText+finalText+interim).replace(/\s+$/,'')+(interim?' ':'');
+      ta.value=newVal;
+      lastWrittenValue=newVal;
       ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,140)+'px';
-      // Reset the 25s idle timer whenever NEW speech actually lands.
-      if(kept.length||interim)resetIdleStop();
     };
+    let voiceFatalError=false;
     recognition.onerror=e=>{
-      isListening=false;btn.classList.remove('on');
       vlog('onerror: '+e.error+' '+(e.message||''));
+      // Fatal errors block auto-restart in onend so we don't hammer the
+      // speech endpoint with retries that will keep failing. Tracked
+      // separately from voiceUserStop so onend can tell user-stop from
+      // error-stop and not overwrite the error message with "Stopped."
+      const fatal=['not-allowed','service-not-allowed','audio-capture','network'];
+      if(fatal.includes(e.error))voiceFatalError=true;
+      isListening=false;btn.classList.remove('on');
       if(e.error==='aborted')return;
-      if(e.error==='no-speech'){vstatus('No speech heard — tap mic and try again.');return;}
+      if(e.error==='no-speech'){/* recoverable — onend will auto-restart */return;}
       if(e.error==='not-allowed'||e.error==='service-not-allowed'){vstatus('Mic blocked. Click the 🔒 lock in the address bar → allow microphone, then retry.',true);return;}
       if(e.error==='network'){vstatus('Network error — Chrome sends speech to Google for transcription. Check your connection.',true);return;}
       if(e.error==='audio-capture'){vstatus('No microphone detected.',true);return;}
@@ -4198,16 +4221,18 @@ async function toggleVoice(){
     recognition.onend=()=>{
       const elapsed=Math.round((Date.now()-voiceStartedAt)/1000);
       vlog('onend, elapsed='+elapsed+'s, gotStart='+gotStart+', heardSound='+voiceHeardSound+', userStop='+voiceUserStop);
-      // Auto-restart on browser-imposed silence timeout. Mobile Chrome
-      // ends recognition after just a few seconds of quiet; restarting
-      // it transparently lets the user pause for breath / words without
-      // the mic stopping. Only restart if (a) the user didn't tap the
-      // mic to stop, (b) we got a real session going, (c) we haven't
-      // been running for more than 2 minutes (cap to avoid runaway).
-      if(!voiceUserStop && gotStart && voiceHeardSound && elapsed<120){
+      // Click-to-toggle: keep auto-restarting after silence forever until
+      // the user explicitly taps the mic again. No idle timer, no elapsed
+      // cap. Mobile Chrome's silence-timeout no longer kills the session;
+      // it will keep running as long as the tab is open. Fatal errors
+      // (mic blocked, no audio device, network down) block the restart.
+      if(!voiceUserStop && !voiceFatalError && gotStart){
         try{recognition.start();vlog('auto-restart after silence');return;}catch(e){vlog('auto-restart failed: '+e.message);}
       }
       isListening=false;btn.classList.remove('on');
+      // If the session ended because of a fatal error, the error handler
+      // already showed an explanatory message — don't stomp it.
+      if(voiceFatalError)return;
       if(!gotStart&&elapsed<2){
         // Silent abort. If mic works on other sites in the same browser, this is
         // almost always a blocker intercepting Google's speech endpoint.
@@ -9406,21 +9431,37 @@ function nbToggleVoice(){
   // Record a snapshot BEFORE voice modifies anything so undo works after.
   nbPushHistory();
   // Read existing plain text so dictation appends to it. We keep HTML
-  // formatting on the way out but dictated words are plain text.
-  let baseText=(ce.innerText||ce.textContent||'').trimEnd();
-  if(baseText)baseText+=' ';
+  // formatting on the way out but dictated words are plain text. Track
+  // lastWrittenInner so we can detect manual edits to the cell between
+  // recognition writes — without this guard a delete-and-redo would have
+  // the deleted text restored on the next final result.
+  let baseText='';
   let finalText='';
-  const normTxt=s=>(s||'').trim().toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
-  // Same auto-stop-on-silence guard as the AI bar mic. Background noise
-  // can defeat the browser's built-in timeout and keep the mic running
-  // indefinitely if forgotten — force a stop after 25s of no real speech.
-  let _nbVoiceIdleTimer=null;
-  const resetNbIdleStop=()=>{
-    clearTimeout(_nbVoiceIdleTimer);
-    _nbVoiceIdleTimer=setTimeout(()=>{nbStopVoice();},25000);
+  let lastWrittenInner='';
+  const reBaseline=()=>{
+    const live=document.getElementById(ce.id);
+    const cur=live?(live.innerText||live.textContent||''):'';
+    baseText=cur.trimEnd();
+    if(baseText)baseText+=' ';
+    finalText='';
+    lastWrittenInner=live?live.innerHTML:'';
   };
-  rec.onstart=()=>{NB.voiceActive=true;document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.add('on'));resetNbIdleStop();};
+  reBaseline();
+  const normTxt=s=>(s||'').trim().toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim();
+  rec.onstart=()=>{
+    NB.voiceActive=true;
+    document.querySelectorAll('.nb-mic-btn').forEach(b=>b.classList.add('on'));
+    // Re-baseline on every (re)start so a user edit during the gap is honoured.
+    reBaseline();
+  };
   rec.onresult=e=>{
+    const live=document.getElementById(ce.id);
+    if(live&&live.innerHTML!==lastWrittenInner){
+      // User edited the cell directly — restart the session so the new
+      // e.results doesn't replay the edited-out finals.
+      try{rec.stop();}catch(_){}
+      return;
+    }
     let interim='';const finals=[];
     for(let i=0;i<e.results.length;i++){const r=e.results[i];
       if(r.isFinal){const raw=(r[0].transcript||'').trim();if(raw)finals.push(raw);}
@@ -9431,22 +9472,17 @@ function nbToggleVoice(){
     const kept=finals.filter((f,i)=>{const ki=keys[i];if(!ki)return false;for(let j=0;j<finals.length;j++){if(j===i)continue;const kj=keys[j];if(kj.length>ki.length&&kj.startsWith(ki))return false;if(kj===ki&&j<i)return false;}return true;});
     finalText=kept.length?kept.join(' ')+' ':'';
     const v=(baseText+finalText+interim).replace(/\s+$/,'')+(interim?' ':'');
-    // Replace cell content (newlines → <br> so multi-sentence dictation
-    // still reads cleanly). Skip if the cell isn't mounted anymore.
-    const target=document.getElementById(ce.id);
-    if(target){target.innerHTML=esc(v).replace(/\n/g,'<br>');}
-    NB._voiceTarget.page.cells[NB._voiceTarget.cellIdx]=esc(v).replace(/\n/g,'<br>');
+    const newInner=esc(v).replace(/\n/g,'<br>');
+    if(live){live.innerHTML=newInner;}
+    lastWrittenInner=newInner;
+    NB._voiceTarget.page.cells[NB._voiceTarget.cellIdx]=newInner;
     clearTimeout(_nbSaveTimer);_nbSaveTimer=setTimeout(()=>svAll(),600);
-    if(kept.length||interim)resetNbIdleStop();
   };
   rec.onerror=e=>{console.warn('[nb voice]',e.error);NB._voiceErrored=true;nbStopVoice();};
-  let voiceStartedAtNb=Date.now();
   rec.onend=()=>{
-    // Auto-restart on browser silence-timeout so the user can pause
-    // for breath / words mid-dictation. Stop only if user tapped mic
-    // (NB._voiceUserStop) or there was an error / 2 minutes elapsed.
-    const elapsed=Math.round((Date.now()-voiceStartedAtNb)/1000);
-    if(!NB._voiceUserStop&&!NB._voiceErrored&&elapsed<120&&NB._voiceRec===rec){
+    // Click-to-toggle: auto-restart after silence forever until the user
+    // taps mic again or hits an error. No idle timer, no elapsed cap.
+    if(!NB._voiceUserStop&&!NB._voiceErrored&&NB._voiceRec===rec){
       try{rec.start();return;}catch(e){}
     }
     NB.voiceActive=false;NB._voiceRec=null;
