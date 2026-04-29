@@ -1433,9 +1433,28 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ai-btn{background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;white-space:nowrap;flex-shrink:0;border:none}
 .ai-btn:hover{opacity:.85}
 .ai-btn:disabled{opacity:.35;cursor:not-allowed}
+.ai-btn-secondary{background:var(--surface-2);color:var(--text);border-radius:10px;padding:10px 14px;font-size:12.5px;font-weight:500;white-space:nowrap;flex-shrink:0;border:1px solid var(--border-strong);cursor:pointer;font-family:inherit}
+.ai-btn-secondary:hover{background:var(--surface-hover)}
 .ai-st{max-width:1544px;margin:5px auto 0;font-size:11px;color:var(--muted);text-align:right;min-height:14px}
 .ai-st.ok{color:var(--emerald);font-weight:500}
 .ai-st.er{color:var(--red)}
+/* ─── Clarification chat panel ───
+   Sits above the AI bar's textarea while a multi-round clarification is
+   in flight. Each Q/A pair renders as a chat bubble; user sees the
+   AI's running best-guess "preview" and can either type an answer or
+   tap "You decide" to commit with defaults. */
+.ai-chat{max-width:1544px;margin:0 auto 8px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-size:12.5px;line-height:1.4;font-family:'Inter',system-ui,sans-serif}
+.ai-chat-msgs{display:flex;flex-direction:column;gap:7px;max-height:200px;overflow-y:auto;margin-bottom:9px}
+.ai-chat-bubble{padding:7px 11px;border-radius:10px;max-width:85%;color:var(--text);word-break:break-word}
+.ai-chat-bubble.user{background:var(--surface-2);align-self:flex-end;border-bottom-right-radius:3px}
+.ai-chat-bubble.bot{background:var(--peach-bg,rgba(232,168,124,.18));align-self:flex-start;border-bottom-left-radius:3px}
+.ai-chat-bubble strong{display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:2px}
+.ai-chat-bubble.bot strong{color:var(--peach,#e8a87c)}
+.ai-chat-preview{margin:6px 0;padding:7px 11px;background:var(--bg);border-left:3px solid var(--sage);border-radius:5px;font-size:11.5px;color:var(--text-2);line-height:1.5}
+.ai-chat-preview strong{color:var(--text);font-weight:600}
+.ai-chat-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ai-chat-cancel{font-size:11px;color:var(--muted);background:transparent;border:none;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit}
+.ai-chat-cancel:hover{color:var(--red)}
 
 .save-pill{position:fixed;top:14px;right:14px;background:var(--accent);color:var(--accent-ink);font-size:11px;padding:6px 14px;border-radius:20px;opacity:0;transition:opacity .3s;z-index:50;pointer-events:none;box-shadow:var(--shadow-lift);font-weight:600;letter-spacing:.04em}
 .save-pill.show{opacity:1}
@@ -2658,6 +2677,9 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
          it visible only when the textarea has content — saves having to
          hold backspace on mobile when you want to start over. -->
     <button class="ai-clear" id="ai-clear" type="button" onclick="clearAIInput()" title="Clear" aria-label="Clear input">×</button>
+    <!-- Visible only during clarification rounds. Tells the AI to commit
+         with sensible defaults for whatever it's still unsure about. -->
+    <button class="ai-btn-secondary" id="btm-decide" type="button" onclick="_youDecide()" style="display:none">You decide</button>
     <button class="ai-btn" id="btm-btn" onclick="doUpdate()">Update ↗</button>
   </div>
   <div class="ai-st" id="btm-st"></div>
@@ -2733,7 +2755,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v119';
+const APP_VERSION='v120';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -7361,6 +7383,13 @@ async function refreshCalendarList(){
 }
 
 // AI UPDATE
+// Conversation state for the back-and-forth clarification flow. When the
+// AI is uncertain about a request (ambiguous type, fuzzy time, etc.) it
+// returns a "clarifications" array of questions instead of (or alongside)
+// committing to a guess. We render those as a chat thread above the bar
+// and the user answers in the same textarea. After up to 3 rounds the AI
+// must commit. Null when no conversation is in flight.
+let _aiConversation=null;
 async function doUpdate(){
   const ta=document.getElementById('ai-ta'),msg=ta.value.trim();if(!msg)return;
   // Stop any in-progress voice recording before sending — otherwise the mic
@@ -7368,8 +7397,28 @@ async function doUpdate(){
   // the update has already been submitted, which was producing orphaned
   // text in the textarea once the AI response came back.
   if(isListening){try{voiceUserStop=true;recognition?.stop();}catch(e){}}
+  // If a clarification chat is open, this Update is the user's ANSWER to
+  // the AI's pending question, not a new prompt.
+  if(_aiConversation&&_aiConversation.active&&_aiConversation.pendingQuestions){
+    _submitClarificationAnswer(msg);
+    return;
+  }
+  // Start a fresh conversation
+  _aiConversation={active:true,originalPrompt:msg,rounds:[],pendingQuestions:null};
+  // Clear textarea so the user can see the AI's response cleanly. The
+  // original prompt is preserved in _aiConversation for re-sending.
+  ta.value='';ta.style.height='auto';
+  await _aiTurn();
+}
+// One round-trip with Claude. Builds the prompt (with conversation
+// context if mid-conversation), calls the API, dispatches based on the
+// response: clarifications → chat UI; ready → review modal / apply.
+async function _aiTurn(){
+  if(!_aiConversation)return;
+  const conv=_aiConversation;
+  const msg=conv.originalPrompt;
   const btn=document.getElementById('btm-btn'),st=document.getElementById('btm-st');
-  const key=getKey();if(!key){promptKey();return;}
+  const key=getKey();if(!key){promptKey();_endConversation();return;}
   btn.disabled=true;btn.textContent='Thinking…';st.className='ai-st';st.textContent='';
   // Pull upcoming calendar events (next 90 days) so the AI can match EXACT
   // existing titles when the user asks to remove / update something. Without
@@ -7413,9 +7462,34 @@ async function doUpdate(){
   const _now=new Date();const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const todayName=DAY_NAMES[_now.getDay()];
   const nextOccurrences=DAY_NAMES.map((d,i)=>{let delta=(i-_now.getDay()+7)%7;if(delta===0)delta=7;const nd=new Date(_now);nd.setDate(_now.getDate()+delta);return`next ${d}=${localDs(nd)}`;}).join(', ');
+  const round=conv.rounds.length+1;
+  const isFinalRound=round>=3;
+  // Conversation context block — only present after the user has answered
+  // at least one clarification question.
+  let convBlock='';
+  if(conv.rounds.length){
+    const turns=conv.rounds.map((r,i)=>{
+      const qs=Array.isArray(r.questions)?r.questions.join(' / '):String(r.questions||'');
+      const ans=r.answer==='__YOU_DECIDE__'?'(use your best judgment)':r.answer;
+      return `Round ${i+1}:\nQ: ${qs}\nA: ${ans}`;
+    }).join('\n\n');
+    convBlock=`
+
+CONVERSATION CONTEXT — this is round ${round} of an ongoing clarification with ${firstName}. Earlier turns:
+${turns}
+
+Use these answers to refine your proposal. ${isFinalRound?'This is the FINAL round — you MUST commit. Return an empty clarifications array (or omit the field) and use sensible defaults for anything still unclear.':'Only ask MORE clarifications if something CRITICAL is still ambiguous. Otherwise commit by leaving clarifications empty.'} If any answer was "(use your best judgment)" the user wants you to decide for ALL remaining ambiguity in that area — don't ask about it again.`;
+  }
   const prompt=`You manage ${firstName}'s Life OS. Work > personal.
 Today: ${todayName} ${tod()} (user's local time). For reference, ${nextOccurrences}.${rhythm}${projectNames}
 CRITICAL for calendar events: when the user names a weekday (e.g. "community meetings on Wednesday"), use the matching date from the list above. Before returning any date, VERIFY the date you chose actually falls on the requested weekday. Off-by-one day errors break the whole calendar.
+
+CLARIFY WHEN GENUINELY UNCERTAIN — instead of guessing on truly ambiguous input, ask the user back. Populate the "clarifications" array with 1–3 short, specific questions and the chat will surface them.
+- ASK when the input is ambiguous about TYPE (e.g. "going to pick flowers in two months" — task? calendar event? idea? project?), CRITICAL fields like a vague time ("this afternoon" without a specific hour) or a vague date ("next month"), or which existing item the user means.
+- DO NOT ask about routine inferences. "Buy groceries" obviously becomes a task, "lunch with Mike at 1pm Friday" obviously becomes an event. Only ask when a reasonable person would also be unsure.
+- Cap at 3 questions per turn. Be concise — "Should this be a task or a calendar event?" not "I want to clarify a few details".
+- ALWAYS still fill out a best-guess proposal in the other fields. The user sees it and the answers refine it.
+- Empty clarifications array (or omitted) means "I'm confident, apply this".${convBlock}
 
 TASK SCHEDULING — when the user mentions a task with any time hint, ALWAYS fill scheduledTime. Even soft hints like "tomorrow" / "later" / "next week" should resolve to a sensible default time (use 11am for "morning"/"tomorrow"/no specific hint, 2pm for "afternoon", 7pm for "evening", and the literal time when one is given e.g. "at 3pm"). Format scheduledTime as a human-readable 12-hour string like "11am" or "3:30pm". Skip scheduledTime ONLY if the user is clearly adding a free-form to-do with no time intent at all ("buy groceries some day"). Default to giving a time over leaving it blank.
 
@@ -7437,7 +7511,7 @@ CRITICAL for removeEvent / updateEvent:
 - If no event in upcomingEvents matches the user's request, leave the remove/update arrays empty and tell them in "message": "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title).
 
 Respond ONLY raw JSON:
-{"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
+{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 User:"${msg}"`;
   try{
@@ -7454,6 +7528,22 @@ User:"${msg}"`;
     // seen repeatedly), snap the date to the nearest matching weekday. This
     // runs BEFORE the confirm modal so the user sees the corrected dates.
     fixAIEventWeekdays(ch,msg);
+    // CLARIFICATION BRANCH — if the AI is uncertain it returns a non-empty
+    // clarifications array. We open a chat thread above the bar instead of
+    // committing. The 3-round cap is enforced both in the prompt and here.
+    const clarifications=Array.isArray(ch.clarifications)?ch.clarifications.filter(q=>q&&String(q).trim()):[];
+    if(clarifications.length&&!isFinalRound){
+      conv.pendingQuestions=clarifications;
+      conv.partial_ch=ch;
+      _renderAIChat(ch);
+      btn.disabled=false;btn.textContent='Send ↗';
+      return;
+    }
+    // No more clarifications (or final round forced) — clean up conv state
+    // and commit. Drop the clarifications field so it doesn't leak into
+    // formatAIChangesDetailed / the review modal cards.
+    delete ch.clarifications;
+    _endConversation();
     const hadActionable=formatAIChangesDetailed(ch)!=='';
     // applyChanges handles recordAIHistory itself — only records what was
     // ACTUALLY applied (never records cancelled operations).
@@ -7472,7 +7562,6 @@ User:"${msg}"`;
       if(S.aiHistory.length>200)S.aiHistory.length=200;
       svAll();
     }
-    ta.value='';ta.style.height='auto';
     setTimeout(()=>{st.textContent='';st.className='ai-st';},7000);
   }catch(e){
     const isAuthErr=/401|invalid.*api.{0,3}key|authentication|unauthorized/i.test(e.message);
@@ -7482,8 +7571,90 @@ User:"${msg}"`;
     } else {
       st.textContent='Error: '+e.message;
     }
+    _endConversation();
   }
   btn.disabled=false;btn.textContent='Update ↗';
+}
+// ─── Clarification chat helpers ───
+function _submitClarificationAnswer(answer){
+  if(!_aiConversation||!_aiConversation.pendingQuestions)return;
+  _aiConversation.rounds.push({questions:_aiConversation.pendingQuestions,answer});
+  _aiConversation.pendingQuestions=null;
+  const ta=document.getElementById('ai-ta');
+  if(ta){ta.value='';ta.style.height='auto';}
+  _aiTurn();
+}
+function _youDecide(){
+  if(!_aiConversation||!_aiConversation.pendingQuestions)return;
+  _submitClarificationAnswer('__YOU_DECIDE__');
+}
+function _cancelConversation(){
+  if(!_aiConversation)return;
+  const st=document.getElementById('btm-st');
+  if(st){st.className='ai-st';st.textContent='Cancelled.';setTimeout(()=>{st.textContent='';},3000);}
+  _endConversation();
+}
+function _endConversation(){
+  _aiConversation=null;
+  const chatEl=document.getElementById('ai-chat');
+  if(chatEl)chatEl.style.display='none';
+  const decideBtn=document.getElementById('btm-decide');
+  if(decideBtn)decideBtn.style.display='none';
+  const btn=document.getElementById('btm-btn');
+  if(btn)btn.textContent='Update ↗';
+  const ta=document.getElementById('ai-ta');
+  if(ta){ta.placeholder=`Tell me what's going on…`;}
+}
+function _renderAIChat(ch){
+  const conv=_aiConversation;if(!conv)return;
+  let chatEl=document.getElementById('ai-chat');
+  if(!chatEl){
+    // Inject the chat panel above the AI bar's status line on first use.
+    const btm=document.getElementById('btm');
+    if(!btm)return;
+    chatEl=document.createElement('div');
+    chatEl.id='ai-chat';
+    chatEl.className='ai-chat';
+    btm.insertBefore(chatEl,btm.firstChild);
+  }
+  // Build the chat bubbles: original prompt → past Q/A → current question(s)
+  const bubbles=[];
+  bubbles.push(`<div class="ai-chat-bubble user"><strong>You:</strong>${esc(conv.originalPrompt)}</div>`);
+  conv.rounds.forEach(r=>{
+    const qs=Array.isArray(r.questions)?r.questions:[String(r.questions||'')];
+    qs.forEach(q=>bubbles.push(`<div class="ai-chat-bubble bot"><strong>AI:</strong>${esc(q)}</div>`));
+    const ans=r.answer==='__YOU_DECIDE__'?'<em>You decide</em>':esc(r.answer);
+    bubbles.push(`<div class="ai-chat-bubble user"><strong>You:</strong>${ans}</div>`);
+  });
+  (conv.pendingQuestions||[]).forEach(q=>{
+    bubbles.push(`<div class="ai-chat-bubble bot"><strong>AI:</strong>${esc(q)}</div>`);
+  });
+  // Tiny preview of the AI's current best-guess proposal, so the user can
+  // see the conversation converging on something concrete instead of
+  // answering questions blind.
+  let preview='';
+  try{
+    const summary=summariseAIChanges(ch);
+    if(summary&&summary!=='no changes')preview=`<div class="ai-chat-preview"><strong>Best guess so far:</strong> ${esc(summary)}</div>`;
+  }catch(_){}
+  chatEl.innerHTML=`
+    <div class="ai-chat-msgs">${bubbles.join('')}</div>
+    ${preview}
+    <div class="ai-chat-foot">
+      <button class="ai-chat-cancel" onclick="_cancelConversation()">Cancel</button>
+      <span style="color:var(--muted);font-size:11px">Round ${conv.rounds.length+1} of 3 — type your answer below or tap "You decide".</span>
+    </div>`;
+  chatEl.style.display='block';
+  // Show the You-decide button alongside Update; relabel Update → Send.
+  const decideBtn=document.getElementById('btm-decide');
+  if(decideBtn)decideBtn.style.display='inline-flex';
+  const btn=document.getElementById('btm-btn');
+  if(btn)btn.textContent='Send ↗';
+  // Update placeholder to hint at conversation mode
+  const ta=document.getElementById('ai-ta');
+  if(ta)ta.placeholder='Type your answer…';
+  // Scroll the latest bubble into view
+  setTimeout(()=>{const m=chatEl.querySelector('.ai-chat-msgs');if(m)m.scrollTop=m.scrollHeight;},10);
 }
 
 // DETAILED formatter — a multi-line plain-text report of what the AI is
