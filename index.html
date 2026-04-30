@@ -2178,7 +2178,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="section-hdr">
             <h2>Tasks</h2>
             <div class="right">
-              <button class="btn btn-primary btn-sm" onclick="toggleQA('task-qa')">+ Add task</button>
+              <button class="btn btn-primary btn-sm" onclick="openNewTaskModal()">+ Add task</button>
             </div>
           </div>
           <!-- Active vs History tab switcher — makes the completed list feel
@@ -2187,18 +2187,6 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="tabs" id="task-tabs" style="margin-bottom:12px">
             <button class="tab on" data-ttab="active" onclick="setTaskTab('active')">Active</button>
             <button class="tab" data-ttab="completed" onclick="setTaskTab('completed')" id="task-tab-completed">History</button>
-          </div>
-          <div id="task-qa" style="display:none">
-            <div class="qa">
-              <div class="qa-row">
-                <input class="input" id="t-text" placeholder="Task description..." style="flex:2">
-                <select class="select" id="t-area"><option value="work">Work</option><option value="personal">Personal</option></select>
-                <select class="select" id="t-proj"></select>
-                <select class="select" id="t-pri"><option value="urgent">Urgent</option><option value="hi">High</option><option value="med">Medium</option><option value="lo">Low</option><option value="someday">Someday</option></select>
-              </div>
-              <div class="qa-row"><input class="input" id="t-time" placeholder="Scheduled time (optional, e.g. 10am)"></div>
-              <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddTask()">Add task</button><button class="btn btn-sm" onclick="toggleQA('task-qa')">Cancel</button></div>
-            </div>
           </div>
           <div id="tasks-sec"></div>
           <div id="completed-sec" style="display:none"></div>
@@ -2759,7 +2747,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v121';
+const APP_VERSION='v122';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6360,7 +6348,9 @@ function toggleQA(id){
 function toggleBrainQA(){const map={ideas:'idea-qa',resources:'res-qa',notes:'note-qa'};toggleQA(map[UI.brainTab]);}
 
 function qaAddHabit(){const n=document.getElementById('h-name')?.value?.trim();if(!n)return;S.habits.push({id:uid(),name:n,streak:0,lastDate:null,total:0,doneToday:false});svAll();rHabits();toggleQA('hab-qa');document.getElementById('h-name').value='';}
-function qaAddTask(){const t=document.getElementById('t-text')?.value?.trim();if(!t)return;S.tasks.push({id:uid(),text:t,area:document.getElementById('t-area')?.value||'personal',project:document.getElementById('t-proj')?.value||'gen',priority:document.getElementById('t-pri')?.value||'med',scheduledTime:document.getElementById('t-time')?.value||'',done:false,date:tod()});svAll();rTasks();rAttention();toggleQA('task-qa');document.getElementById('t-text').value='';}
+// Back-compat shim: legacy code paths or stale browser cache may still
+// reference qaAddTask. Forward to the unified modal flow.
+function qaAddTask(){openNewTaskModal();}
 function qaAddBuild(){const t=document.getElementById('b-title')?.value?.trim();if(!t)return;const desc=document.getElementById('b-desc')?.value?.trim()||'';const st=document.getElementById('b-status')?.value||'future';S.builds.push({id:uid(),title:t,desc,status:st,date:tod()});svAll();rBuilds();toggleQA('build-qa');['b-title','b-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
 function qaAddIdea(){const t=document.getElementById('id-title')?.value?.trim();if(!t)return;S.ideas.push({id:uid(),title:t,desc:document.getElementById('id-desc')?.value?.trim()||'',date:tod()});svAll();rIdeas();toggleQA('idea-qa');['id-title','id-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
 function qaAddRes(){const t=document.getElementById('r-title')?.value?.trim();if(!t)return;S.resources.push({id:uid(),title:t,url:document.getElementById('r-url')?.value?.trim()||'',desc:document.getElementById('r-desc')?.value?.trim()||'',tag:document.getElementById('r-tag')?.value||'other',date:tod()});svAll();rResources();toggleQA('res-qa');['r-title','r-url','r-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
@@ -6555,10 +6545,14 @@ function saveTask(id){
   const t=_findTask(id);if(!t)return;
   const modalTa=document.getElementById('tm-text');
   const modalTi=document.getElementById('tm-time');
+  const modalAr=document.getElementById('tm-area');
+  const modalPr=document.getElementById('tm-project');
   if(modalTa&&UI._taskModalId===id){if(modalTa.value.trim())t.text=modalTa.value.trim();}
   else{const ta=document.getElementById('exp-ta-'+id);if(ta?.value?.trim())t.text=ta.value.trim();}
   if(modalTi&&UI._taskModalId===id)t.scheduledTime=modalTi.value;
   else{const ti=document.getElementById('exp-ti-'+id);if(ti)t.scheduledTime=ti.value;}
+  if(modalAr&&UI._taskModalId===id&&modalAr.value)t.area=modalAr.value;
+  if(modalPr&&UI._taskModalId===id&&modalPr.value)t.project=modalPr.value;
   if(!_isSyntheticTaskMode())svAll();
   ex={id:null,type:null};
   closeTaskModal();
@@ -6641,24 +6635,39 @@ function openTaskModal(idOrTask,opts){
   // dedicated aic-edit-modal does.
   if(_isSyntheticTaskMode())overlay.style.zIndex='120';
   const proj=PROJ[t.project]||PROJ.gen;
+  // Detect "new" mode (no existing text) to relabel Delete → Cancel and
+  // change the header from "Added" to "New task". Synthetic from AI is
+  // also "review" mode but the Delete=Remove proposal label still fits.
+  const isNew=_isSyntheticTaskMode()&&!String(t.text||'').trim();
+  const projOpts=Object.entries(PROJ).filter(([k])=>k!=='gen').map(([k,p])=>`<option value="${esc(k)}"${t.project===k?' selected':''}>${esc(p.n)}</option>`).join('')+`<option value="gen"${t.project==='gen'||!t.project?' selected':''}>General</option>`;
   overlay.innerHTML=`<div class="modal-bd"></div>
     <div class="modal-body" style="max-width:480px">
       <div class="tm-hdr">
         <span class="tm-tag" style="--proj:${proj.h}">${esc(t.area==='work'?proj.n:'Personal')}</span>
-        <span class="tm-date">Added ${fmt(t.date||tod())}</span>
+        <span class="tm-date">${isNew?'New task':'Added '+fmt(t.date||tod())}</span>
       </div>
       <label class="tm-lbl" for="tm-text">Task</label>
-      <textarea id="tm-text" class="ta tm-text-ta" rows="2">${esc(t.text||'')}</textarea>
+      <textarea id="tm-text" class="ta tm-text-ta" rows="2" placeholder="What needs doing?">${esc(t.text||'')}</textarea>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <div style="flex:1">
+          <label class="tm-lbl" for="tm-area">Area</label>
+          <select id="tm-area" class="input"><option value="personal"${(t.area||'personal')==='personal'?' selected':''}>Personal</option><option value="work"${t.area==='work'?' selected':''}>Work</option></select>
+        </div>
+        <div style="flex:1">
+          <label class="tm-lbl" for="tm-project">Project</label>
+          <select id="tm-project" class="input">${projOpts}</select>
+        </div>
+      </div>
       <label class="tm-lbl" for="tm-time">Scheduled time</label>
       <input id="tm-time" class="input" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am">
       <label class="tm-lbl">Steps</label>
       <div id="tm-steps-wrap" class="tm-steps-wrap">${renderTaskSteps(t)}</div>
       <div id="tm-pri-wrap" class="tm-pri-wrap">${mkPriRow(t)}</div>
       <div class="modal-actions" style="margin-top:18px">
-        <button class="btn btn-danger btn-sm" onclick="delTask('${id}')">Delete</button>
+        <button class="btn btn-danger btn-sm" onclick="delTask('${id}')">${isNew?'Cancel':'Delete'}</button>
         <div class="spacer"></div>
         <!-- Edits auto-save when the modal closes (backdrop tap or Done) -->
-        <button class="btn btn-primary btn-sm" onclick="closeTaskModal()">Done</button>
+        <button class="btn btn-primary btn-sm" onclick="closeTaskModal()">${isNew?'Add task':'Done'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);_syncBodyLock();
@@ -6750,12 +6759,15 @@ function closeTaskModal(){
       if(t){
         const ta=document.getElementById('tm-text');
         const ti=document.getElementById('tm-time');
+        const ar=document.getElementById('tm-area');
+        const pr=document.getElementById('tm-project');
         if(ta&&ta.value.trim()&&ta.value.trim()!==t.text)t.text=ta.value.trim();
         if(ti&&ti.value!==t.scheduledTime)t.scheduledTime=ti.value;
+        if(ar&&ar.value)t.area=ar.value;
+        if(pr&&pr.value)t.project=pr.value;
         if(_isSyntheticTaskMode()){
-          // Hand the synthetic back to the AI review queue without
-          // touching S or Firestore. Strip the temporary modal-only
-          // synthetic id; restore the original id if there was one.
+          // Hand the synthetic back to the AI review queue / new-task
+          // creator without touching S or Firestore.
           const cb=_modalSaveCallback;
           const synthCopy={...t};
           if(cb)cb(synthCopy);
@@ -6770,6 +6782,49 @@ function closeTaskModal(){
   _modalSyntheticTask=null;
   _modalSaveCallback=null;
   _modalDeleteCallback=null;
+}
+// Open the same modal in synthetic mode for creating a new task. Lives
+// in synthetic state so closeTaskModal's onSave callback fires with the
+// final task object, which we then push into S.tasks. This unifies
+// "manual add" with "manual edit" and "AI review" — one form, three
+// entry points, no duplication.
+function openNewTaskModal(prefill){
+  // If the user clicks "+ Add task" while on the History tab, hop back
+  // to Active so the freshly-added task is actually visible.
+  if(UI.taskTab==='completed')setTaskTab('active');
+  const synth={
+    text:'',
+    area:(prefill&&prefill.area)||'personal',
+    project:(prefill&&prefill.project)||'gen',
+    priority:(prefill&&prefill.priority)||'med',
+    scheduledTime:(prefill&&prefill.scheduledTime)||'',
+    done:false,
+    date:tod()
+  };
+  openTaskModal(synth,{
+    onSave:(t)=>{
+      const text=String(t.text||'').trim();
+      // Empty text → user effectively cancelled; don't add.
+      if(!text)return;
+      const newTask={
+        id:uid(),
+        text,
+        area:t.area||'personal',
+        project:t.project||'gen',
+        priority:t.priority||'med',
+        scheduledTime:String(t.scheduledTime||'').trim(),
+        done:false,
+        date:tod()
+      };
+      if(Array.isArray(t.steps)&&t.steps.length){
+        newTask.steps=t.steps.filter(s=>s&&s.text&&String(s.text).trim()).map(s=>({id:uid(),text:String(s.text).trim(),done:!!s.done}));
+        if(!newTask.steps.length)delete newTask.steps;
+      }
+      S.tasks.push(newTask);
+      svAll();rTasks();rAttention();
+    },
+    onDelete:()=>{/* "Cancel" in new mode — just dismiss without adding */}
+  });
 }
 function mkPriRow(t){
   // 3-column grid: [Urgent | High | Medium] on top row, [Low | Someday]
