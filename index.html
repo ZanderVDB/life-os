@@ -2300,14 +2300,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="page-title">Habits</div>
           <div class="page-sub" style="align-self:flex-end;padding-bottom:6px">Skills, routines, anything you want to show up for daily.</div>
           <div class="page-actions">
-            <button class="btn btn-primary btn-sm" onclick="toggleQA('habit-qa')">+ Add habit</button>
-          </div>
-        </div>
-        <div id="habit-qa" style="display:none">
-          <div class="qa">
-            <div class="qa-row"><input class="input" id="hb-name" placeholder="e.g. Gym, Read, Guitar, Prayer, Drink water..."></div>
-            <div class="qa-row"><input class="input" id="hb-desc" placeholder="Short description — what 'done' means for this habit (optional)"></div>
-            <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddHabitFull()">Add habit</button><button class="btn btn-sm" onclick="toggleQA('habit-qa')">Cancel</button></div>
+            <button class="btn btn-primary btn-sm" onclick="openNewHabitModal()">+ Add habit</button>
           </div>
         </div>
         <div class="lg-grid" id="learn"></div>
@@ -2603,13 +2596,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <div id="upcom-area"></div>
       </div>
       <div class="ac-card">
-        <h3><svg width="14" height="14"><use href="#i-check"/></svg> Daily habits <span class="cnt" id="hab-cnt" style="margin-left:auto"></span><button class="plus-btn" onclick="toggleQA('hab-qa')" title="Add habit" style="margin-left:6px;width:22px;height:22px;font-size:13px">+</button></h3>
-        <div id="hab-qa" style="display:none">
-          <div class="qa" style="margin-bottom:10px">
-            <div class="qa-row"><input class="input" id="h-name" placeholder="Habit name..."></div>
-            <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddHabit()">Add</button><button class="btn btn-sm" onclick="toggleQA('hab-qa')">Cancel</button></div>
-          </div>
-        </div>
+        <h3><svg width="14" height="14"><use href="#i-check"/></svg> Daily habits <span class="cnt" id="hab-cnt" style="margin-left:auto"></span><button class="plus-btn" onclick="openNewHabitModal()" title="Add habit" style="margin-left:6px;width:22px;height:22px;font-size:13px">+</button></h3>
         <div class="hab-list" id="habits-list"></div>
       </div>
     </aside>
@@ -2709,7 +2696,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v123';
+const APP_VERSION='v124';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -4012,7 +3999,151 @@ function toggleHabitDate(id,ds){
   delete h.doneToday;delete h.lastDate;
   svAllNow();rHabits();rCal();
 }
-function qaAddHabitFull(){const n=document.getElementById('hb-name')?.value?.trim();if(!n)return;const d=document.getElementById('hb-desc')?.value?.trim()||'';S.habits.push({id:uid(),name:n,description:d,checkedDates:[],createdAt:tod(),notes:[]});svAll();rHabits();rCal();toggleQA('habit-qa');document.getElementById('hb-name').value='';document.getElementById('hb-desc').value='';}
+// Back-compat shim: legacy callers go through the modal flow now.
+function qaAddHabitFull(){openNewHabitModal();}
+// ─── Habit modal (add / edit) ───
+// Pop-out for the manual add-habit and AI-review-edit-habit flows.
+// Synthetic mode: pass a habit-like obj + opts.onSave/onDelete.
+let _habitSyntheticItem=null;
+let _habitSaveCallback=null;
+let _habitDeleteCallback=null;
+function _isHabitSynthMode(){return !!_habitSyntheticItem;}
+function openHabitModal(idOrObj,opts){
+  let h,id,isSynth=false,isNew=false;
+  if(typeof idOrObj==='string'){
+    h=S.habits.find(x=>x.id===idOrObj);
+    if(!h)return;
+    id=idOrObj;
+    _habitSyntheticItem=null;_habitSaveCallback=null;_habitDeleteCallback=null;
+  } else if(idOrObj&&typeof idOrObj==='object'){
+    h=idOrObj;
+    if(!h.id)h.id='__habit_'+uid();
+    id=h.id;
+    isSynth=true;
+    isNew=!String(h.name||'').trim();
+    _habitSyntheticItem=h;
+    _habitSaveCallback=(opts&&opts.onSave)||null;
+    _habitDeleteCallback=(opts&&opts.onDelete)||null;
+  } else return;
+  closeHabitModal({skipSave:true});
+  if(isSynth){_habitSyntheticItem=h;_habitSaveCallback=(opts&&opts.onSave)||null;_habitDeleteCallback=(opts&&opts.onDelete)||null;}
+  UI._habitModalId=id;
+  const overlay=document.createElement('div');
+  overlay.className='modal';overlay.style.display='flex';overlay.id='habit-modal';
+  if(isSynth)overlay.style.zIndex='120';
+  const dayLabels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const excluded=new Set(Array.isArray(h.excludedDays)?h.excludedDays:[]);
+  const restDayChips=dayLabels.map((lbl,i)=>`<button type="button" class="hb-rest-d${excluded.has(i)?' on':''}" data-day="${i}">${lbl}</button>`).join('');
+  overlay.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:480px">
+      <div class="bd-hdr" style="margin-bottom:14px">
+        <span class="bd-typetag">Habit</span>
+        <span class="bd-date">${isNew?'New habit':(h.createdAt?'Since '+fmt(h.createdAt):'')}</span>
+      </div>
+      <div class="bd-field">
+        <label class="bd-lbl">Name</label>
+        <input id="hm-name" class="input" value="${esc(h.name||'')}" placeholder="e.g. Gym, Read, Guitar, Prayer">
+      </div>
+      <div class="bd-field">
+        <label class="bd-lbl">Description (optional)</label>
+        <input id="hm-desc" class="input" value="${esc(h.description||'')}" placeholder="What 'done' means for this habit">
+      </div>
+      <div class="bd-field">
+        <label class="bd-lbl">Rest days (tap to toggle — these don't break your streak)</label>
+        <div id="hm-rest" style="display:flex;gap:6px;flex-wrap:wrap">${restDayChips}</div>
+      </div>
+      <div class="modal-actions" style="margin-top:18px">
+        <button class="btn btn-danger btn-sm" onclick="delHabitModal()">${isNew?'Cancel':'Delete'}</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary btn-sm" onclick="closeHabitModal()">${isNew?'Add habit':'Done'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);_syncBodyLock();
+  // Rest-day chip toggles. Update the synthetic / live habit's
+  // excludedDays directly so the in-modal state stays consistent.
+  const restWrap=overlay.querySelector('#hm-rest');
+  if(restWrap){
+    restWrap.addEventListener('click',e=>{
+      const btn=e.target.closest('[data-day]');if(!btn)return;
+      const dayNum=Number(btn.dataset.day);
+      const target=_habitSyntheticItem||S.habits.find(x=>x.id===id);
+      if(!target)return;
+      target.excludedDays=Array.isArray(target.excludedDays)?target.excludedDays:[];
+      const i=target.excludedDays.indexOf(dayNum);
+      if(i>=0)target.excludedDays.splice(i,1);else target.excludedDays.push(dayNum);
+      btn.classList.toggle('on');
+      if(!_isHabitSynthMode())svAll();
+    });
+  }
+  if(matchMedia('(hover: hover) and (pointer: fine)').matches){
+    setTimeout(()=>{const n=document.getElementById('hm-name');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}},80);
+  }
+  overlay.addEventListener('click',e=>{
+    if(e.target.closest('.modal-bd'))closeHabitModal();
+  });
+}
+function closeHabitModal(opts){
+  const m=document.getElementById('habit-modal');
+  if(m&&(!opts||!opts.skipSave)){
+    const id=UI._habitModalId;
+    if(id){
+      const target=_habitSyntheticItem||S.habits.find(x=>x.id===id);
+      if(target){
+        const nm=document.getElementById('hm-name');
+        const ds=document.getElementById('hm-desc');
+        if(nm&&nm.value.trim())target.name=nm.value.trim();
+        if(ds)target.description=ds.value.trim();
+      }
+      if(_isHabitSynthMode()){
+        const cb=_habitSaveCallback;
+        const synthCopy={..._habitSyntheticItem};
+        if(cb)cb(synthCopy);
+      } else {
+        svAll();rHabits();rCal();
+      }
+    }
+  }
+  if(m){m.remove();_syncBodyLock();}
+  UI._habitModalId=null;
+  _habitSyntheticItem=null;
+  _habitSaveCallback=null;
+  _habitDeleteCallback=null;
+}
+function delHabitModal(){
+  const id=UI._habitModalId;
+  if(_isHabitSynthMode()){
+    if(!confirm('Cancel this proposal?'))return;
+    const cb=_habitDeleteCallback;
+    UI._habitModalId=null;
+    _habitSyntheticItem=null;_habitSaveCallback=null;_habitDeleteCallback=null;
+    const m=document.getElementById('habit-modal');if(m){m.remove();_syncBodyLock();}
+    if(cb)cb();
+    return;
+  }
+  if(!confirm('Delete this habit? Streak history will be lost.'))return;
+  S.habits=S.habits.filter(x=>x.id!==id);svAll();
+  UI._habitModalId=null;
+  const m=document.getElementById('habit-modal');if(m){m.remove();_syncBodyLock();}
+  rHabits();rCal();
+}
+function openNewHabitModal(){
+  openHabitModal({name:'',description:'',checkedDates:[],createdAt:tod(),notes:[]},{
+    onSave:(it)=>{
+      const n=String(it.name||'').trim();if(!n)return;
+      S.habits.push({
+        id:uid(),
+        name:n,
+        description:String(it.description||'').trim(),
+        checkedDates:[],
+        createdAt:tod(),
+        notes:[],
+        ...(Array.isArray(it.excludedDays)&&it.excludedDays.length?{excludedDays:it.excludedDays}:{})
+      });
+      svAll();rHabits();rCal();
+    },
+    onDelete:()=>{}
+  });
+}
 function saveHabitDesc(id){const h=S.habits.find(x=>x.id===id);if(!h)return;const inp=document.getElementById('hb-desc-'+id);if(inp)h.description=inp.value;svAll();}
 // Toggle a weekday on/off the rest-day list for a habit. Rest days don't
 // break the streak when missed but DO count as bonus checks if ticked.
@@ -6318,7 +6449,8 @@ function openNewBrainItem(){
 // previous inline-form toggler).
 function toggleBrainQA(){openNewBrainItem();}
 
-function qaAddHabit(){const n=document.getElementById('h-name')?.value?.trim();if(!n)return;S.habits.push({id:uid(),name:n,streak:0,lastDate:null,total:0,doneToday:false});svAll();rHabits();toggleQA('hab-qa');document.getElementById('h-name').value='';}
+// Back-compat shim — legacy callers go through the modal flow now.
+function qaAddHabit(){openNewHabitModal();}
 // Back-compat shim: legacy code paths or stale browser cache may still
 // reference qaAddTask. Forward to the unified modal flow.
 function qaAddTask(){openNewTaskModal();}
@@ -8222,6 +8354,22 @@ function openAIReviewEditor(ch,key,idx,refreshFn){
     });
     return;
   }
+  // Habit type — reuse the modal-based habit editor in synth mode.
+  if(key==='addHabits'){
+    const synth={id:'__habitaic_'+uid(),name:item.name||'',description:item.description||'',checkedDates:[],createdAt:tod(),notes:[],excludedDays:Array.isArray(item.excludedDays)?[...item.excludedDays]:[]};
+    openHabitModal(synth,{
+      onSave:(updated)=>{
+        ch[key][idx]={name:updated.name||'',...(updated.description?{description:updated.description}:{}),...(Array.isArray(updated.excludedDays)&&updated.excludedDays.length?{excludedDays:updated.excludedDays}:{})};
+        if(refreshFn)refreshFn();
+      },
+      onDelete:()=>{
+        ch[key].splice(idx,1);
+        if(!ch[key].length)delete ch[key];
+        if(refreshFn)refreshFn();
+      }
+    });
+    return;
+  }
   // Brain types — reuse the modal-based brain detail editor in synth mode
   // so the AI editor visually matches the manual + Add / edit flow.
   if(key==='addIdea'||key==='addNote'||key==='addResource'){
@@ -8729,7 +8877,14 @@ async function applyChanges(ch,prompt){
   });
   if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)t.done=true;});
   if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)S.tasks=S.tasks.filter(x=>x.id!==t.id);});
-  if(ch.addHabits?.length)ch.addHabits.forEach(h=>{if(!S.habits.some(x=>x.name.toLowerCase()===h.name.toLowerCase()))S.habits.push({id:uid(),name:h.name,checkedDates:[],createdAt:tod(),notes:[]});});
+  if(ch.addHabits?.length)ch.addHabits.forEach(h=>{
+    if(!h||!h.name)return;
+    if(S.habits.some(x=>x.name.toLowerCase()===h.name.toLowerCase()))return;
+    const newH={id:uid(),name:h.name,checkedDates:[],createdAt:tod(),notes:[]};
+    if(h.description)newH.description=String(h.description);
+    if(Array.isArray(h.excludedDays)&&h.excludedDays.length)newH.excludedDays=h.excludedDays.filter(d=>typeof d==='number'&&d>=0&&d<=6);
+    S.habits.push(newH);
+  });
   if(ch.completeHabits?.length)ch.completeHabits.forEach(r=>{
     // Two shapes for backwards compat:
     //   "gym"                              → tick TODAY for the matching habit
