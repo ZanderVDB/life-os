@@ -1171,6 +1171,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
 /* ━━━ BUILDS ━━━ */
 .bg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+/* Projects route wraps page-hdr + bg-grid in a #projects-list-view div,
+   which breaks the route-level gap:26px between siblings. Restore the
+   same flex-column gap inside the wrapper so the breathing room matches
+   the Habits page (and every other route). */
+#projects-list-view{display:flex;flex-direction:column;gap:26px}
 .bc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px;border-top:3px solid;cursor:pointer;transition:border-color .15s;display:flex;flex-direction:column}
 .bc:hover{border-color:var(--border-strong)}
 .bc.active{border-top-color:var(--peach)}
@@ -2689,7 +2694,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v125';
+const APP_VERSION='v126';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
