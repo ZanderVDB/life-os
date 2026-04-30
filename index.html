@@ -2320,7 +2320,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="page-sub" id="brain-cnt" style="align-self:flex-end;padding-bottom:6px"></div>
           <div class="page-actions">
             <input type="search" id="brain-search" class="input" placeholder="Search brain…" oninput="searchBrain(this.value)" style="width:200px;padding:7px 11px;font-size:12.5px">
-            <button class="btn btn-primary btn-sm" onclick="toggleBrainQA()">+ Add</button>
+            <button class="btn btn-primary btn-sm" onclick="openNewBrainItem()">+ Add</button>
           </div>
         </div>
         <div class="tabs" id="brain-tabs">
@@ -2328,47 +2328,9 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <button class="tab" data-tab="resources" onclick="setBrainTab('resources')">Resources</button>
           <button class="tab" data-tab="notes" onclick="setBrainTab('notes')">Knowledge</button>
         </div>
-
-        <div id="brain-ideas-panel">
-          <div id="idea-qa" style="display:none">
-            <div class="qa">
-              <div class="qa-row"><input class="input" id="id-title" placeholder="Idea title"></div>
-              <div class="qa-row"><textarea class="ta" id="id-desc" placeholder="Details..."></textarea></div>
-              <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddIdea()">Add idea</button><button class="btn btn-sm" onclick="toggleQA('idea-qa')">Cancel</button></div>
-            </div>
-          </div>
-          <div class="idea-list" id="ideas"></div>
-        </div>
-
-        <div id="brain-resources-panel" style="display:none">
-          <div id="res-qa" style="display:none">
-            <div class="qa">
-              <div class="qa-row">
-                <input class="input" id="r-title" placeholder="Title" style="flex:2">
-                <select class="select" id="r-tag"><option value="article">Article</option><option value="tool">Tool</option><option value="video">Video</option><option value="book">Book</option><option value="person">Person</option><option value="other">Other</option></select>
-              </div>
-              <div class="qa-row"><input class="input" id="r-url" placeholder="URL (optional)"></div>
-              <div class="qa-row"><input class="input" id="r-desc" placeholder="Notes..."></div>
-              <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddRes()">Save</button><button class="btn btn-sm" onclick="toggleQA('res-qa')">Cancel</button></div>
-            </div>
-          </div>
-          <div class="res-grid" id="resources"></div>
-        </div>
-
-        <div id="brain-notes-panel" style="display:none">
-          <div id="note-qa" style="display:none">
-            <div class="qa">
-              <div class="qa-row"><input class="input" id="n-title" placeholder="Title"></div>
-              <div class="qa-row"><textarea class="ta" id="n-body" placeholder="Content..." style="min-height:80px"></textarea></div>
-              <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddNote()">Add note</button><button class="btn btn-sm" onclick="toggleQA('note-qa')">Cancel</button></div>
-            </div>
-          </div>
-          <div class="nl-grid" id="notes"></div>
-        </div>
-        <!-- Brain item detail view (project-style). Shown via openBrainDetail
-             when the user taps an idea / resource / note. The list/tabs
-             above are hidden while this is up. -->
-        <div id="brain-detail-view" style="display:none"></div>
+        <div id="brain-ideas-panel"><div class="idea-list" id="ideas"></div></div>
+        <div id="brain-resources-panel" style="display:none"><div class="res-grid" id="resources"></div></div>
+        <div id="brain-notes-panel" style="display:none"><div class="nl-grid" id="notes"></div></div>
       </div>
 
       <!-- NOTEBOOK -->
@@ -2747,7 +2709,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v122';
+const APP_VERSION='v123';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6345,16 +6307,26 @@ function toggleQA(id){
   if(id==='task-qa'&&UI.taskTab==='completed')setTaskTab('active');
   const el=document.getElementById(id);if(!el)return;const vis=el.style.display!=='none';el.style.display=vis?'none':'block';if(!vis){const inp=el.querySelector('input,textarea');if(inp)setTimeout(()=>inp.focus(),50);}
 }
-function toggleBrainQA(){const map={ideas:'idea-qa',resources:'res-qa',notes:'note-qa'};toggleQA(map[UI.brainTab]);}
+// "+ Add" in the Brain section opens the modal for whichever tab is
+// currently active. Replaces the old inline qa-form toggle.
+function openNewBrainItem(){
+  if(UI.brainTab==='resources')openNewResourceModal();
+  else if(UI.brainTab==='notes')openNewNoteModal();
+  else openNewIdeaModal();
+}
+// Back-compat alias for any leftover callers (toggleBrainQA was the
+// previous inline-form toggler).
+function toggleBrainQA(){openNewBrainItem();}
 
 function qaAddHabit(){const n=document.getElementById('h-name')?.value?.trim();if(!n)return;S.habits.push({id:uid(),name:n,streak:0,lastDate:null,total:0,doneToday:false});svAll();rHabits();toggleQA('hab-qa');document.getElementById('h-name').value='';}
 // Back-compat shim: legacy code paths or stale browser cache may still
 // reference qaAddTask. Forward to the unified modal flow.
 function qaAddTask(){openNewTaskModal();}
 function qaAddBuild(){const t=document.getElementById('b-title')?.value?.trim();if(!t)return;const desc=document.getElementById('b-desc')?.value?.trim()||'';const st=document.getElementById('b-status')?.value||'future';S.builds.push({id:uid(),title:t,desc,status:st,date:tod()});svAll();rBuilds();toggleQA('build-qa');['b-title','b-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
-function qaAddIdea(){const t=document.getElementById('id-title')?.value?.trim();if(!t)return;S.ideas.push({id:uid(),title:t,desc:document.getElementById('id-desc')?.value?.trim()||'',date:tod()});svAll();rIdeas();toggleQA('idea-qa');['id-title','id-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
-function qaAddRes(){const t=document.getElementById('r-title')?.value?.trim();if(!t)return;S.resources.push({id:uid(),title:t,url:document.getElementById('r-url')?.value?.trim()||'',desc:document.getElementById('r-desc')?.value?.trim()||'',tag:document.getElementById('r-tag')?.value||'other',date:tod()});svAll();rResources();toggleQA('res-qa');['r-title','r-url','r-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
-function qaAddNote(){const t=document.getElementById('n-title')?.value?.trim();if(!t)return;S.notes.push({id:uid(),title:t,body:document.getElementById('n-body')?.value?.trim()||'',date:tod()});svAll();rNotes();toggleQA('note-qa');['n-title','n-body'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
+// Back-compat shims for legacy call sites — forward to the unified modals.
+function qaAddIdea(){openNewIdeaModal();}
+function qaAddRes(){openNewResourceModal();}
+function qaAddNote(){openNewNoteModal();}
 
 // HABITS
 function toggleHabit(id){toggleHabitDate(id,tod());}
@@ -7077,72 +7049,58 @@ function rNotes(){const el=document.getElementById('notes');if(!el)return;const 
 // auto-growing description textarea below, and Save/Delete actions.
 // Replaces the inline-expand `ex` pattern that pushed everything else
 // on the page down when opened.
-function openBrainDetail(type,id){
+// ─── Brain detail modal (idea / resource / note) ───
+// Pops out as a true modal overlay (not an in-page panel swap) so the
+// list stays visible behind it and the modal feels consistent with the
+// task / event / AI-review modals. Two callable shapes:
+//   openBrainDetail(type, id)         — edit an existing S.{ideas|resources|notes} item
+//   openBrainDetail(type, obj, opts)  — synthetic item, opts.onSave
+//                                       and opts.onDelete fire instead of
+//                                       writing to S. Used by both the
+//                                       "+ Add" buttons and the AI review
+//                                       editor for addIdea / addNote /
+//                                       addResource cards.
+let _brainSyntheticItem=null;
+let _brainSaveCallback=null;
+let _brainDeleteCallback=null;
+function _isBrainSynthMode(){return !!_brainSyntheticItem;}
+function _findBrainItem(type,id){
+  if(_brainSyntheticItem&&_brainSyntheticItem.id===id)return _brainSyntheticItem;
+  if(type==='idea')return S.ideas.find(x=>x.id===id);
+  if(type==='resource')return S.resources.find(x=>x.id===id);
+  if(type==='note')return S.notes.find(x=>x.id===id);
+  return null;
+}
+function openBrainDetail(type,idOrObj,opts){
+  let item,id,isSynth=false,isNew=false;
+  if(typeof idOrObj==='string'){
+    id=idOrObj;
+    item=_findBrainItem(type,id);
+    if(!item)return;
+    _brainSyntheticItem=null;_brainSaveCallback=null;_brainDeleteCallback=null;
+  } else if(idOrObj&&typeof idOrObj==='object'){
+    item=idOrObj;
+    if(!item.id)item.id='__brain_'+uid();
+    id=item.id;
+    isSynth=true;
+    isNew=!String(item.title||'').trim();
+    _brainSyntheticItem=item;
+    _brainSaveCallback=(opts&&opts.onSave)||null;
+    _brainDeleteCallback=(opts&&opts.onDelete)||null;
+  } else return;
   UI.brainDetail={type,id};
-  document.querySelectorAll('#brain-tabs,#brain-ideas-panel,#brain-resources-panel,#brain-notes-panel').forEach(el=>{if(el)el.style.display='none';});
-  // Hide quick-add forms too — they live inside the panels we just hid
-  // but their parent panel might've been display:block when toggled.
-  document.querySelectorAll('#idea-qa,#res-qa,#note-qa').forEach(el=>{if(el)el.style.display='none';});
-  const dv=document.getElementById('brain-detail-view');if(dv)dv.style.display='block';
-  // Hide page header's tabs counter since it's wrong while in detail
-  const sa=document.querySelector('.route[data-route="brain"] .page-actions');
-  if(sa)sa.style.visibility='hidden';
-  renderBrainDetail();
-  window.scrollTo({top:0,behavior:'instant'});
-}
-function closeBrainDetail(){
-  // Auto-save any pending edits before closing — user explicitly asked
-  // for click-out-to-save behaviour.
-  saveBrainDetailQuiet();
-  UI.brainDetail=null;
-  const dv=document.getElementById('brain-detail-view');if(dv){dv.style.display='none';dv.innerHTML='';}
-  document.getElementById('brain-tabs').style.display='';
-  setBrainTab(UI.brainTab);
-  const sa=document.querySelector('.route[data-route="brain"] .page-actions');
-  if(sa)sa.style.visibility='';
-  window.scrollTo({top:0,behavior:'instant'});
-}
-// Save the in-flight detail-view edits without closing or re-rendering.
-// Called from closeBrainDetail and on input blur for instant persistence.
-function saveBrainDetailQuiet(){
-  if(!UI.brainDetail)return;
-  const {type,id}=UI.brainDetail;
-  const ti=document.getElementById('bd-title');
-  const de=document.getElementById('bd-desc');
-  const ur=document.getElementById('bd-url');
-  const tg=document.getElementById('bd-tag');
-  let item;
-  if(type==='idea')item=S.ideas.find(x=>x.id===id);
-  else if(type==='resource')item=S.resources.find(x=>x.id===id);
-  else if(type==='note')item=S.notes.find(x=>x.id===id);
-  if(!item)return;
-  let dirty=false;
-  const newTitle=ti?.value?.trim();
-  if(newTitle&&newTitle!==item.title){item.title=newTitle;dirty=true;}
-  const descField=type==='note'?'body':'desc';
-  if(de&&de.value!==(item[descField]||'')){item[descField]=de.value;dirty=true;}
-  if(ur&&ur.value.trim()!==(item.url||'')){item.url=ur.value.trim();dirty=true;}
-  if(tg&&tg.value!==item.tag){item.tag=tg.value;dirty=true;}
-  if(dirty){
-    svAll();
-    // Refresh the matching list section so the change shows after close
-    if(type==='idea')rIdeas();
-    else if(type==='resource')rResources();
-    else rNotes();
-  }
-}
-function renderBrainDetail(){
-  const dv=document.getElementById('brain-detail-view');if(!dv||!UI.brainDetail)return;
-  const {type,id}=UI.brainDetail;
-  const item=type==='idea'?S.ideas.find(x=>x.id===id):type==='resource'?S.resources.find(x=>x.id===id):S.notes.find(x=>x.id===id);
-  if(!item){closeBrainDetail();return;}
-  const typeLabel={idea:'Idea',resource:'Resource',note:'Note'}[type];
+  closeBrainDetail({skipSave:true});
+  // Re-set synthetic refs (closeBrainDetail clears them if no skipSave).
+  if(isSynth){_brainSyntheticItem=item;_brainSaveCallback=(opts&&opts.onSave)||null;_brainDeleteCallback=(opts&&opts.onDelete)||null;}
+  UI.brainDetail={type,id};
+  const overlay=document.createElement('div');
+  overlay.className='modal';overlay.style.display='flex';overlay.id='brain-modal';
+  // Stack above the AI confirm modal when invoked from AI review.
+  if(isSynth)overlay.style.zIndex='120';
+  const typeLabel={idea:'Idea',resource:'Resource',note:'Note'}[type]||'Item';
   const descField=type==='note'?'body':'desc';
   const descLabel=type==='note'?'Content':'Description';
   const descValue=item[descField]||'';
-  const saveFn=type==='idea'?'saveIdea':type==='resource'?'saveRes':'saveNote';
-  const delFn=type==='idea'?'delIdea':type==='resource'?'delRes':'delNote';
-  // Resource has extra URL + tag fields. Both auto-save on blur/change.
   const extraFields=type==='resource'?`
     <div class="bd-field">
       <label class="bd-lbl">URL</label>
@@ -7154,30 +7112,126 @@ function renderBrainDetail(){
         ${['article','tool','video','book','person','other'].map(t=>`<option value="${t}"${item.tag===t?' selected':''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('')}
       </select>
     </div>`:'';
-  dv.innerHTML=`
-    <div class="bd-hdr">
-      <button class="btn btn-ghost btn-sm bd-back" onclick="closeBrainDetail()">← Back</button>
-      <span class="bd-typetag">${typeLabel}</span>
-      <span class="bd-date">${item.date?fmt(item.date):''}</span>
-    </div>
-    <div class="bd-field">
-      <label class="bd-lbl">Title</label>
-      <input id="bd-title" class="input bd-title-input" value="${esc(item.title||'')}" placeholder="Title" onblur="saveBrainDetailQuiet()">
-    </div>
-    ${extraFields}
-    <div class="bd-field">
-      <label class="bd-lbl">${descLabel}</label>
-      <textarea id="bd-desc" class="ta bd-desc-ta" placeholder="${type==='note'?'Write the note…':'Add a longer description…'}" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'" onblur="saveBrainDetailQuiet()">${esc(descValue)}</textarea>
-    </div>
-    <div class="bd-actions">
-      <button class="btn btn-danger btn-sm" onclick="${delFn}('${id}')">Delete</button>
-      <!-- Edits auto-save on blur and on close. The Done button just
-           closes the detail view; no explicit Save needed. -->
-      <button class="btn btn-primary btn-sm" onclick="closeBrainDetail()">Done</button>
+  overlay.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:520px">
+      <div class="bd-hdr" style="margin-bottom:14px">
+        <span class="bd-typetag">${typeLabel}</span>
+        <span class="bd-date">${isNew?'New '+typeLabel.toLowerCase():(item.date?fmt(item.date):'')}</span>
+      </div>
+      <div class="bd-field">
+        <label class="bd-lbl">Title</label>
+        <input id="bd-title" class="input bd-title-input" value="${esc(item.title||'')}" placeholder="Title" onblur="saveBrainDetailQuiet()">
+      </div>
+      ${extraFields}
+      <div class="bd-field">
+        <label class="bd-lbl">${descLabel}</label>
+        <textarea id="bd-desc" class="ta bd-desc-ta" placeholder="${type==='note'?'Write the note…':'Add a longer description…'}" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'" onblur="saveBrainDetailQuiet()">${esc(descValue)}</textarea>
+      </div>
+      <div class="bd-actions modal-actions" style="margin-top:18px">
+        <button class="btn btn-danger btn-sm" onclick="delBrainItem()">${isNew?'Cancel':'Delete'}</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary btn-sm" onclick="closeBrainDetail()">${isNew?'Add '+typeLabel.toLowerCase():'Done'}</button>
+      </div>
     </div>`;
-  // Auto-size the description textarea after mount so existing content
-  // expands to fit instead of starting at the default rows="2" height.
+  document.body.appendChild(overlay);_syncBodyLock();
+  // Auto-size description after mount.
   setTimeout(()=>{const ta=document.getElementById('bd-desc');if(ta){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}},0);
+  // Auto-focus title on desktop (skip touch to avoid keyboard pop).
+  if(matchMedia('(hover: hover) and (pointer: fine)').matches){
+    setTimeout(()=>{const ti=document.getElementById('bd-title');if(ti){ti.focus();ti.setSelectionRange(ti.value.length,ti.value.length);}},80);
+  }
+  overlay.addEventListener('click',e=>{
+    if(e.target.closest('.modal-bd'))closeBrainDetail();
+  });
+}
+function closeBrainDetail(opts){
+  if(!opts||!opts.skipSave)saveBrainDetailQuiet();
+  UI.brainDetail=null;
+  const m=document.getElementById('brain-modal');
+  if(m){m.remove();_syncBodyLock();}
+  // Synthetic mode: emit the (possibly-edited) item to the caller's onSave
+  // so they can decide what to do (push to S, write to ch, etc.).
+  if(_isBrainSynthMode()){
+    if(_brainSaveCallback)_brainSaveCallback({..._brainSyntheticItem});
+    _brainSyntheticItem=null;_brainSaveCallback=null;_brainDeleteCallback=null;
+  }
+}
+function delBrainItem(){
+  if(!UI.brainDetail)return;
+  const {type,id}=UI.brainDetail;
+  if(_isBrainSynthMode()){
+    if(!confirm('Cancel this proposal?'))return;
+    const cb=_brainDeleteCallback;
+    _brainSyntheticItem=null;_brainSaveCallback=null;_brainDeleteCallback=null;
+    UI.brainDetail=null;
+    const m=document.getElementById('brain-modal');if(m){m.remove();_syncBodyLock();}
+    if(cb)cb();
+    return;
+  }
+  if(type==='idea'){if(!confirm('Delete this idea?'))return;S.ideas=S.ideas.filter(x=>x.id!==id);svAll();}
+  else if(type==='resource'){if(!confirm('Delete this resource?'))return;S.resources=S.resources.filter(x=>x.id!==id);svAll();}
+  else if(type==='note'){if(!confirm('Delete this note?'))return;S.notes=S.notes.filter(x=>x.id!==id);svAll();}
+  UI.brainDetail=null;
+  const m=document.getElementById('brain-modal');if(m){m.remove();_syncBodyLock();}
+  if(type==='idea')rIdeas();else if(type==='resource')rResources();else rNotes();
+}
+// Save the in-flight detail-view edits without closing or re-rendering.
+// Called on input blur for instant persistence.
+function saveBrainDetailQuiet(){
+  if(!UI.brainDetail)return;
+  const {type,id}=UI.brainDetail;
+  const ti=document.getElementById('bd-title');
+  const de=document.getElementById('bd-desc');
+  const ur=document.getElementById('bd-url');
+  const tg=document.getElementById('bd-tag');
+  const item=_findBrainItem(type,id);
+  if(!item)return;
+  let dirty=false;
+  const newTitle=ti?.value?.trim();
+  if(newTitle&&newTitle!==item.title){item.title=newTitle;dirty=true;}
+  const descField=type==='note'?'body':'desc';
+  if(de&&de.value!==(item[descField]||'')){item[descField]=de.value;dirty=true;}
+  if(ur&&ur.value.trim()!==(item.url||'')){item.url=ur.value.trim();dirty=true;}
+  if(tg&&tg.value!==item.tag){item.tag=tg.value;dirty=true;}
+  if(dirty&&!_isBrainSynthMode()){
+    svAll();
+    if(type==='idea')rIdeas();
+    else if(type==='resource')rResources();
+    else rNotes();
+  }
+}
+// New-item entry-points for the "+ Add" buttons in the brain section.
+// All three open the same modal in synthetic mode; on close the item
+// is pushed into S only if the user actually entered a title.
+function openNewIdeaModal(){
+  openBrainDetail('idea',{title:'',desc:'',date:tod()},{
+    onSave:(it)=>{
+      const t=String(it.title||'').trim();if(!t)return;
+      S.ideas.push({id:uid(),title:t,desc:String(it.desc||'').trim(),date:tod()});
+      svAll();rIdeas();
+    },
+    onDelete:()=>{}
+  });
+}
+function openNewResourceModal(){
+  openBrainDetail('resource',{title:'',url:'',desc:'',tag:'other',date:tod()},{
+    onSave:(it)=>{
+      const t=String(it.title||'').trim();if(!t)return;
+      S.resources.push({id:uid(),title:t,url:String(it.url||'').trim(),desc:String(it.desc||'').trim(),tag:it.tag||'other',date:tod()});
+      svAll();rResources();
+    },
+    onDelete:()=>{}
+  });
+}
+function openNewNoteModal(){
+  openBrainDetail('note',{title:'',body:'',date:tod()},{
+    onSave:(it)=>{
+      const t=String(it.title||'').trim();if(!t)return;
+      S.notes.push({id:uid(),title:t,body:String(it.body||'').trim(),date:tod()});
+      svAll();rNotes();
+    },
+    onDelete:()=>{}
+  });
 }
 
 function setBrainTab(t){UI.brainTab=t;document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['ideas','resources','notes'].forEach(x=>{const el=document.getElementById('brain-'+x+'-panel');if(el)el.style.display=x===t?'block':'none';});const brainCnt=document.getElementById('brain-cnt');if(brainCnt)brainCnt.textContent=t==='ideas'?`${S.ideas.length} ideas`:t==='resources'?`${S.resources.length} resources`:`${S.notes.length} notes`;const s=document.getElementById('brain-search');if(s&&s.value)searchBrain(s.value);}
@@ -8158,6 +8212,36 @@ function openAIReviewEditor(ch,key,idx,refreshFn){
           if(!out.steps.length)delete out.steps;
         }
         ch[key][idx]=out;
+        if(refreshFn)refreshFn();
+      },
+      onDelete:()=>{
+        ch[key].splice(idx,1);
+        if(!ch[key].length)delete ch[key];
+        if(refreshFn)refreshFn();
+      }
+    });
+    return;
+  }
+  // Brain types — reuse the modal-based brain detail editor in synth mode
+  // so the AI editor visually matches the manual + Add / edit flow.
+  if(key==='addIdea'||key==='addNote'||key==='addResource'){
+    const brainType=key==='addIdea'?'idea':key==='addNote'?'note':'resource';
+    const synth={
+      id:'__brainaic_'+uid(),
+      title:item.title||'',
+      desc:item.desc||'',
+      body:item.body||'',
+      url:item.url||'',
+      tag:item.tag||'other',
+      date:item.date||tod()
+    };
+    openBrainDetail(brainType,synth,{
+      onSave:(updated)=>{
+        // Strip runtime-only fields and write back to ch in the
+        // schema-correct shape for each type.
+        if(key==='addIdea')ch[key][idx]={title:updated.title||'',desc:updated.desc||''};
+        else if(key==='addNote')ch[key][idx]={title:updated.title||'',body:updated.body||''};
+        else if(key==='addResource')ch[key][idx]={title:updated.title||'',url:updated.url||'',desc:updated.desc||'',tag:updated.tag||'other'};
         if(refreshFn)refreshFn();
       },
       onDelete:()=>{
