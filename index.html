@@ -2279,14 +2279,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             <div class="page-title">Projects</div>
             <div class="page-sub" id="bc-cnt" style="align-self:flex-end;padding-bottom:6px"></div>
             <div class="page-actions">
-              <button class="btn btn-primary btn-sm" onclick="toggleQA('build-qa')">+ Add project</button>
-            </div>
-          </div>
-          <div id="build-qa" style="display:none">
-            <div class="qa">
-              <div class="qa-row"><input class="input" id="b-title" placeholder="Project name" style="flex:2"><select class="select" id="b-status"><option value="active">Building now</option><option value="future">Future</option><option value="background">Background</option></select></div>
-              <div class="qa-row"><textarea class="ta" id="b-desc" placeholder="Describe the project..."></textarea></div>
-              <div class="qa-actions"><button class="btn btn-primary btn-sm" onclick="qaAddBuild()">Add project</button><button class="btn btn-sm" onclick="toggleQA('build-qa')">Cancel</button></div>
+              <button class="btn btn-primary btn-sm" onclick="openNewProjectModal()">+ Add project</button>
             </div>
           </div>
           <div class="bg-grid" id="builds"></div>
@@ -2696,7 +2689,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v124';
+const APP_VERSION='v125';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6454,7 +6447,134 @@ function qaAddHabit(){openNewHabitModal();}
 // Back-compat shim: legacy code paths or stale browser cache may still
 // reference qaAddTask. Forward to the unified modal flow.
 function qaAddTask(){openNewTaskModal();}
-function qaAddBuild(){const t=document.getElementById('b-title')?.value?.trim();if(!t)return;const desc=document.getElementById('b-desc')?.value?.trim()||'';const st=document.getElementById('b-status')?.value||'future';S.builds.push({id:uid(),title:t,desc,status:st,date:tod()});svAll();rBuilds();toggleQA('build-qa');['b-title','b-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});}
+// Back-compat shim — legacy callers go through the modal flow now.
+function qaAddBuild(){openNewProjectModal();}
+// ─── Project modal (add new / AI synth) ───
+// Pop-out for adding a project from + Add and from the AI review queue's
+// addBuild card. The full project DETAIL VIEW (notes, AI structure,
+// status changes, etc.) still uses its own dedicated page — this modal
+// is just for the lightweight "create a project" form, mirroring what
+// the inline qa-form used to do.
+let _projectSyntheticItem=null;
+let _projectSaveCallback=null;
+let _projectDeleteCallback=null;
+function _isProjectSynthMode(){return !!_projectSyntheticItem;}
+function openProjectModal(idOrObj,opts){
+  let p,id,isSynth=false,isNew=false;
+  if(typeof idOrObj==='string'){
+    p=S.builds.find(x=>x.id===idOrObj);
+    if(!p)return;
+    id=idOrObj;
+    _projectSyntheticItem=null;_projectSaveCallback=null;_projectDeleteCallback=null;
+  } else if(idOrObj&&typeof idOrObj==='object'){
+    p=idOrObj;
+    if(!p.id)p.id='__proj_'+uid();
+    id=p.id;
+    isSynth=true;
+    isNew=!String(p.title||'').trim();
+    _projectSyntheticItem=p;
+    _projectSaveCallback=(opts&&opts.onSave)||null;
+    _projectDeleteCallback=(opts&&opts.onDelete)||null;
+  } else return;
+  closeProjectModal({skipSave:true});
+  if(isSynth){_projectSyntheticItem=p;_projectSaveCallback=(opts&&opts.onSave)||null;_projectDeleteCallback=(opts&&opts.onDelete)||null;}
+  UI._projectModalId=id;
+  const overlay=document.createElement('div');
+  overlay.className='modal';overlay.style.display='flex';overlay.id='project-modal';
+  if(isSynth)overlay.style.zIndex='120';
+  const status=p.status||'active';
+  overlay.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:480px">
+      <div class="bd-hdr" style="margin-bottom:14px">
+        <span class="bd-typetag">Project</span>
+        <span class="bd-date">${isNew?'New project':(p.date?fmt(p.date):'')}</span>
+      </div>
+      <div class="bd-field">
+        <label class="bd-lbl">Project name</label>
+        <input id="pm-title" class="input" value="${esc(p.title||'')}" placeholder="Project name">
+      </div>
+      <div class="bd-field">
+        <label class="bd-lbl">Status</label>
+        <select id="pm-status" class="input">
+          <option value="active"${status==='active'?' selected':''}>Building now</option>
+          <option value="future"${status==='future'?' selected':''}>Future</option>
+          <option value="background"${status==='background'?' selected':''}>Background</option>
+        </select>
+      </div>
+      <div class="bd-field">
+        <label class="bd-lbl">Description</label>
+        <textarea id="pm-desc" class="ta" rows="3" placeholder="Describe the project...">${esc(p.desc||'')}</textarea>
+      </div>
+      <div class="modal-actions" style="margin-top:18px">
+        <button class="btn btn-danger btn-sm" onclick="delProjectModal()">${isNew?'Cancel':'Delete'}</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary btn-sm" onclick="closeProjectModal()">${isNew?'Add project':'Done'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);_syncBodyLock();
+  if(matchMedia('(hover: hover) and (pointer: fine)').matches){
+    setTimeout(()=>{const ti=document.getElementById('pm-title');if(ti){ti.focus();ti.setSelectionRange(ti.value.length,ti.value.length);}},80);
+  }
+  overlay.addEventListener('click',e=>{
+    if(e.target.closest('.modal-bd'))closeProjectModal();
+  });
+}
+function closeProjectModal(opts){
+  const m=document.getElementById('project-modal');
+  if(m&&(!opts||!opts.skipSave)){
+    const id=UI._projectModalId;
+    if(id){
+      const target=_projectSyntheticItem||S.builds.find(x=>x.id===id);
+      if(target){
+        const ti=document.getElementById('pm-title');
+        const st=document.getElementById('pm-status');
+        const ds=document.getElementById('pm-desc');
+        if(ti&&ti.value.trim())target.title=ti.value.trim();
+        if(st&&st.value)target.status=st.value;
+        if(ds)target.desc=ds.value;
+      }
+      if(_isProjectSynthMode()){
+        const cb=_projectSaveCallback;
+        const synthCopy={..._projectSyntheticItem};
+        if(cb)cb(synthCopy);
+      } else {
+        svAll();rBuilds();
+      }
+    }
+  }
+  if(m){m.remove();_syncBodyLock();}
+  UI._projectModalId=null;
+  _projectSyntheticItem=null;
+  _projectSaveCallback=null;
+  _projectDeleteCallback=null;
+}
+function delProjectModal(){
+  const id=UI._projectModalId;
+  if(_isProjectSynthMode()){
+    if(!confirm('Cancel this proposal?'))return;
+    const cb=_projectDeleteCallback;
+    UI._projectModalId=null;
+    _projectSyntheticItem=null;_projectSaveCallback=null;_projectDeleteCallback=null;
+    const m=document.getElementById('project-modal');if(m){m.remove();_syncBodyLock();}
+    if(cb)cb();
+    return;
+  }
+  if(!confirm('Delete this project? Notes and history will be lost.'))return;
+  S.builds=S.builds.filter(x=>x.id!==id);svAll();
+  UI._projectModalId=null;
+  const m=document.getElementById('project-modal');if(m){m.remove();_syncBodyLock();}
+  rBuilds();
+}
+function openNewProjectModal(){
+  openProjectModal({title:'',desc:'',status:'active',date:tod()},{
+    onSave:(it)=>{
+      const t=String(it.title||'').trim();if(!t)return;
+      S.builds.push({id:uid(),title:t,desc:String(it.desc||'').trim(),status:it.status||'active',date:tod(),notes:''});
+      svAll();rBuilds();
+    },
+    onDelete:()=>{}
+  });
+}
 // Back-compat shims for legacy call sites — forward to the unified modals.
 function qaAddIdea(){openNewIdeaModal();}
 function qaAddRes(){openNewResourceModal();}
@@ -8344,6 +8464,22 @@ function openAIReviewEditor(ch,key,idx,refreshFn){
           if(!out.steps.length)delete out.steps;
         }
         ch[key][idx]=out;
+        if(refreshFn)refreshFn();
+      },
+      onDelete:()=>{
+        ch[key].splice(idx,1);
+        if(!ch[key].length)delete ch[key];
+        if(refreshFn)refreshFn();
+      }
+    });
+    return;
+  }
+  // Project (addBuild) — reuse the project modal in synth mode.
+  if(key==='addBuild'){
+    const synth={id:'__projaic_'+uid(),title:item.title||'',desc:item.desc||'',status:item.status||'active',date:tod()};
+    openProjectModal(synth,{
+      onSave:(updated)=>{
+        ch[key][idx]={title:updated.title||'',desc:updated.desc||'',status:updated.status||'active'};
         if(refreshFn)refreshFn();
       },
       onDelete:()=>{
