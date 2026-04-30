@@ -1339,7 +1339,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 @keyframes fade-in{from{opacity:0}to{opacity:1}}
 @keyframes modal-body-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 /* AI confirm modal — rich interactive summary with per-item remove buttons */
-.aic-body{display:flex;flex-direction:column;gap:14px;max-height:55vh;overflow-y:auto;margin-bottom:6px}
+/* aic-body grows naturally and lets the parent .modal-body handle the
+   actual scrolling. The previous double-overflow setup (max-height:55vh
+   + inner scroll) was cramped on phones and made the modal feel like a
+   tiny box even when the screen had plenty of room. */
+.aic-body{display:flex;flex-direction:column;gap:14px;margin-bottom:6px}
 .aic-sec{display:flex;flex-direction:column;gap:4px}
 .aic-sec-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:2px}
 .aic-row{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font-size:12.5px;line-height:1.4}
@@ -2755,7 +2759,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v120';
+const APP_VERSION='v121';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -7442,7 +7446,15 @@ async function _aiTurn(){
   // overwriting anything.
   const ctx={
     tasks:S.tasks.filter(t=>!t.done).map(t=>({id:t.id,text:t.text,area:t.area,project:t.project,priority:t.priority})),
-    habits:S.habits.map(h=>{const s=computeHabitStats(h);return{id:h.id,name:h.name,streak:s.current,doneToday:(h.checkedDates||[]).includes(tod())};}),
+    habits:S.habits.map(h=>{
+      const s=computeHabitStats(h);
+      // Surface excludedDays (rest-day weekdays, 0=Sun..6=Sat) so the AI
+      // can correctly skip them when bulk-ticking past dates ("I did all
+      // my habits last week — but my habits' rest days").
+      const out={id:h.id,name:h.name,streak:s.current,doneToday:(h.checkedDates||[]).includes(tod())};
+      if(Array.isArray(h.excludedDays)&&h.excludedDays.length)out.restDays=h.excludedDays;
+      return out;
+    }),
     builds:S.builds.map(b=>({id:b.id,title:b.title,status:b.status,entries:(b.entries||[]).length})),
     ideas:S.ideas.map(i=>({id:i.id,title:i.title})),
     resources:S.resources.map(r=>({id:r.id,title:r.title})),
@@ -7495,6 +7507,15 @@ TASK SCHEDULING — when the user mentions a task with any time hint, ALWAYS fil
 
 MULTI-STEP TASKS — addTasks supports an optional "steps" array of {text}. Use steps ONLY when the user describes a task that genuinely has multiple distinct sub-actions ("plan dad's birthday — book restaurant, buy gift, organise people", "ship the new feature: write code, write tests, deploy"). DO NOT auto-decompose simple tasks into steps just because you can — most tasks are single-action and should NOT have steps. A task with steps locks the main checkbox until every step is ticked, so adding steps to a one-shot task makes it harder to complete. When you do use steps, list them in execution order, keep each step short and concrete, and limit to 2–6 steps unless the user explicitly enumerated more.
 
+BULK-TICK HABITS — completeHabits accepts EITHER a string (ticks today) OR an object {match, dates:[YYYY-MM-DD,...]} (ticks each listed date). Use the object form when the user describes ticking habits across multiple past days:
+- "I did gym all last week" → {match:"gym", dates:[<7 ISO dates of last week>]}
+- "I did all my habits yesterday" → one object per habit in state.habits, each with dates:[<yesterday>]
+- "I did gym every day this month" → list every date from the 1st of this month through today
+- "I did gym all last week except Saturday and Sunday" → list weekday dates only (skip 0/Sun, 6/Sat)
+- "I did all my habits for the days they're meant for" → for each habit in state.habits, generate dates that EXCLUDE its restDays (state.habits[i].restDays is an array of weekday numbers 0=Sun..6=Sat; only include dates whose weekday is NOT in that array)
+- "I did all my habits except [name]" → tick all EXCEPT the named one
+The "dates" array can be in any order. Don't include future dates. Never go further back than the habit's createdAt (state doesn't include createdAt; cap at 60 days back as a safety). Today is ${tod()}.
+
 Calendar defaults — apply these automatically unless the user explicitly says otherwise. These come from the user's own Settings and may be empty (no reminders by default):
 - Birthday events: allDay:true, repeat:"yearly", reminderMin:${JSON.stringify(S.calendarDefaults?.birthdayReminders||[1440,0])}
 - Timed events / meetings / appointments: reminderMin:${JSON.stringify(S.calendarDefaults?.timedReminders||[60,10])}
@@ -7511,7 +7532,7 @@ CRITICAL for removeEvent / updateEvent:
 - If no event in upcomingEvents matches the user's request, leave the remove/update arrays empty and tell them in "message": "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title).
 
 Respond ONLY raw JSON:
-{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
+{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 User:"${msg}"`;
   try{
@@ -7683,7 +7704,15 @@ function formatAIChangesDetailed(ch){
 
   const habitLines=[];
   (ch.addHabits||[]).forEach(h=>habitLines.push(`  • Add habit "${h.name||'(untitled)'}"`));
-  (ch.completeHabits||[]).forEach(h=>habitLines.push(`  • Tick today: "${h}"`));
+  (ch.completeHabits||[]).forEach(h=>{
+    if(typeof h==='string'){habitLines.push(`  • Tick today: "${h}"`);}
+    else if(h&&typeof h==='object'){
+      const n=h.match||h.name||'?';
+      const ds=Array.isArray(h.dates)?h.dates:[];
+      if(ds.length<=1)habitLines.push(`  • Tick "${n}"${ds[0]?' on '+ds[0]:' today'}`);
+      else habitLines.push(`  • Tick "${n}" for ${ds.length} day${ds.length===1?'':'s'}: ${ds.slice(0,4).join(', ')}${ds.length>4?`, +${ds.length-4} more`:''}`);
+    }
+  });
   if(ch.logLearning?.length)ch.logLearning.forEach(l=>habitLines.push(`  • Log learning under "${l.skill||'?'}"${l.content?': '+l.content.slice(0,60):''}`));
   if(habitLines.length)sections.push('HABITS\n'+habitLines.join('\n'));
 
@@ -7861,7 +7890,16 @@ function _aicSummary(key,item){
       break;
     }
     case 'addHabits':title=`Add habit "${esc(item.name||'')}"`;break;
-    case 'completeHabits':title=`Tick today: "${esc(item||'')}"`;break;
+    case 'completeHabits':{
+      if(typeof item==='string'){title=`Tick today: "${esc(item)}"`;}
+      else if(item&&typeof item==='object'){
+        const n=item.match||item.name||'?';
+        const ds=Array.isArray(item.dates)?item.dates:[];
+        if(ds.length<=1){title=`Tick "${esc(n)}"${ds[0]?' on '+esc(ds[0]):' today'}`;}
+        else{title=`Tick "${esc(n)}" for ${ds.length} days`;meta.push(esc(ds.slice(0,4).join(', '))+(ds.length>4?` +${ds.length-4} more`:''));}
+      }
+      break;
+    }
     case 'logLearning':{
       title=`Log under "${esc(item.skill||'?')}"`;
       if(item.content)meta.push(esc(item.content.slice(0,60)));
@@ -8163,8 +8201,19 @@ function _aicBuildForm(key,it){
           <div class="aic-edit-steps">${stepsHTML}<button type="button" class="aic-edit-step-add" data-action="add-step">+ Add a step</button></div>
         </div>`;
     }
-    case 'completeTasks':case 'removeTasks':case 'completeHabits':
+    case 'completeTasks':case 'removeTasks':
       return `<div class="aic-edit-field"><label>Match</label><input data-f="_string" value="${v(it)}" placeholder="Partial title to match"></div>`;
+    case 'completeHabits':{
+      // Two shapes: simple string (tick today) or object with explicit
+      // dates. Let the user edit either; we read it back as the same shape.
+      if(typeof it==='string'){
+        return `<div class="aic-edit-field"><label>Match (partial habit name)</label><input data-f="_string" value="${v(it)}" placeholder="e.g. gym"></div>
+          <div class="aic-edit-field"><label>Dates (one per line, YYYY-MM-DD; leave blank to tick today only)</label><textarea data-f="_dates" rows="3" placeholder="2026-04-21\n2026-04-22"></textarea></div>`;
+      }
+      const ds=(Array.isArray(it.dates)?it.dates:[]).join('\n');
+      return `<div class="aic-edit-field"><label>Match (partial habit name)</label><input data-f="match" value="${v(it.match||'')}" placeholder="e.g. gym"></div>
+        <div class="aic-edit-field"><label>Dates (one per line, YYYY-MM-DD)</label><textarea data-f="_dates" rows="${Math.max(3,Math.min(10,ds.split('\n').length))}">${esc(ds)}</textarea></div>`;
+    }
     case 'addEvent':{
       const remList=Array.isArray(it.reminderMin)?it.reminderMin.join(', '):(it.reminderMin!=null?String(it.reminderMin):'');
       return `
@@ -8238,8 +8287,21 @@ function _aicReadForm(key,formEl,orig){
       if(steps.length)out.steps=steps;else delete out.steps;
       return out;
     }
-    case 'completeTasks':case 'removeTasks':case 'completeHabits':
+    case 'completeTasks':case 'removeTasks':
       return trim(get('_string'));
+    case 'completeHabits':{
+      // Read either the (legacy string) form or the (match + dates) form
+      // back into the matching shape. If the user supplied dates, return
+      // the object form so the bulk-tick handler picks them up.
+      const datesRaw=trim(get('_dates'));
+      const dates=datesRaw?datesRaw.split(/\n+/).map(s=>s.trim()).filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(s)):[];
+      if(typeof orig==='string'){
+        const stringMatch=trim(get('_string'));
+        if(dates.length)return {match:stringMatch,dates};
+        return stringMatch;
+      }
+      return {...orig,match:trim(get('match')),dates};
+    }
     case 'addEvent':{
       const remRaw=trim(get('reminderMin'));
       const reminderMin=remRaw?remRaw.split(',').map(s=>Number(s.trim())).filter(n=>!isNaN(n)):[];
@@ -8529,7 +8591,26 @@ async function applyChanges(ch,prompt){
   if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)t.done=true;});
   if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)S.tasks=S.tasks.filter(x=>x.id!==t.id);});
   if(ch.addHabits?.length)ch.addHabits.forEach(h=>{if(!S.habits.some(x=>x.name.toLowerCase()===h.name.toLowerCase()))S.habits.push({id:uid(),name:h.name,checkedDates:[],createdAt:tod(),notes:[]});});
-  if(ch.completeHabits?.length)ch.completeHabits.forEach(r=>{const h=S.habits.find(x=>x.name.toLowerCase().includes((r||'').toLowerCase()));if(h){h.checkedDates=h.checkedDates||[];if(!h.checkedDates.includes(tod()))h.checkedDates.push(tod());}});
+  if(ch.completeHabits?.length)ch.completeHabits.forEach(r=>{
+    // Two shapes for backwards compat:
+    //   "gym"                              → tick TODAY for the matching habit
+    //   {match:"gym", dates:[YYYY-MM-DD,...]} → tick each listed date
+    let needle,dates;
+    if(typeof r==='string'){needle=r;dates=[tod()];}
+    else if(r&&typeof r==='object'){
+      needle=r.match||r.name||'';
+      dates=Array.isArray(r.dates)&&r.dates.length?r.dates:[tod()];
+    } else return;
+    const h=S.habits.find(x=>x.name.toLowerCase().includes((needle||'').toLowerCase()));
+    if(!h)return;
+    h.checkedDates=h.checkedDates||[];
+    // Validate / dedupe / cap dates. Keep only ISO YYYY-MM-DD strings,
+    // discard duplicates already in the set, and ignore anything in the
+    // future (we never tick a habit ahead of time).
+    const today=tod();
+    const validDates=dates.filter(d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&d<=today);
+    validDates.forEach(d=>{if(!h.checkedDates.includes(d))h.checkedDates.push(d);});
+  });
   if(ch.addBuild?.length)ch.addBuild.forEach(b=>S.builds.push({id:uid(),title:b.title,desc:b.desc||'',status:b.status||'future',date:tod(),notes:''}));
   if(ch.addBuildNote?.length)ch.addBuildNote.forEach(n=>{const b=S.builds.find(x=>x.title.toLowerCase().includes((n.project||'').toLowerCase()));if(b&&n.content){const prefix=`[${fmt(tod())}] `;b.notes=prefix+n.content+(b.notes?'\n\n'+b.notes:'');if(UI.projectDetail===b.id){const ta=document.getElementById('pd-notes-'+b.id);if(ta)ta.value=b.notes;}}});
   if(ch.logLearning?.length)ch.logLearning.forEach(lg=>{let h=S.habits.find(x=>x.name.toLowerCase().includes((lg.skill||'').toLowerCase()));if(!h){h={id:uid(),name:lg.skill,checkedDates:[],createdAt:tod(),notes:[]};S.habits.push(h);}if(lg.type==='session'||!lg.type){h.checkedDates=h.checkedDates||[];if(!h.checkedDates.includes(tod()))h.checkedDates.push(tod());}h.notes=h.notes||[];if(lg.content)h.notes.push({date:tod(),content:lg.content});});
