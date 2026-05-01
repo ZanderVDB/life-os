@@ -2694,7 +2694,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v126';
+const APP_VERSION='v127';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3800,7 +3800,15 @@ function handleSnapshot(snap){
     }
 }
 function _buildSavePayload(){
-  const payload={tasks:S.tasks,builds:S.builds,learning:S.learning,ideas:S.ideas,notes:S.notes,customEvents:S.customEvents||[],habits:S.habits||[],resources:S.resources||[],dayNotes:S.dayNotes||{},updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  // Strip transient/derived fields from habits before saving. doneToday /
+  // lastDate / streak / total are computed off checkedDates at render
+  // time; persisting them caused habits to auto-tick the next day (a
+  // stale doneToday=true would trip migrateHabits' legacy merge).
+  const cleanHabits=(S.habits||[]).map(h=>{
+    const{doneToday,lastDate,streak,total,...rest}=h;
+    return rest;
+  });
+  const payload={tasks:S.tasks,builds:S.builds,learning:S.learning,ideas:S.ideas,notes:S.notes,customEvents:S.customEvents||[],habits:cleanHabits,resources:S.resources||[],dayNotes:S.dayNotes||{},updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
   if(S.todaysTip!==undefined)payload.todaysTip=S.todaysTip||null;
   if(S.growthFocus!==undefined)payload.growthFocus=S.growthFocus||null;
   if(S.lifeRhythm!==undefined)payload.lifeRhythm=S.lifeRhythm||'';
@@ -3917,16 +3925,21 @@ function migrateHabits(){
     S.learning=[];
   }
   (S.habits||[]).forEach(h=>{if(!h.checkedDates)h.checkedDates=[];});
-  // One-shot legacy merge: some really old habits carried doneToday/lastDate
-  // without checkedDates. Seed those on FIRST run of this session only so we
-  // don't fight with the user unticking on another device.
-  if(!_habitLegacyMigrated){
-    _habitLegacyMigrated=true;
-    (S.habits||[]).forEach(h=>{
-      if(h.lastDate&&!h.checkedDates.includes(h.lastDate))h.checkedDates.push(h.lastDate);
-      if(h.doneToday&&!h.checkedDates.includes(tod()))h.checkedDates.push(tod());
-    });
-  }
+  // Strip transient/derived fields that older app versions persisted.
+  // doneToday in particular caused habits to auto-tick on the next day:
+  // rHabits used to write doneToday=true into S.habits, that got saved
+  // to Firestore, then on the next session this migration treated it
+  // as "user ticked today" and pushed today's date into checkedDates —
+  // even though it was actually stale from yesterday. lastDate / streak
+  // / total were similarly transient legacy fields. We no longer trust
+  // them; checkedDates is the single source of truth.
+  (S.habits||[]).forEach(h=>{
+    if('doneToday' in h)delete h.doneToday;
+    if('lastDate' in h)delete h.lastDate;
+    if('streak' in h)delete h.streak;
+    if('total' in h)delete h.total;
+  });
+  _habitLegacyMigrated=true;
 }
 function habitCheckedSet(h){return new Set(h.checkedDates||[]);}
 // Days the user has marked as "rest days" for this habit (e.g. Saturday
@@ -6589,8 +6602,18 @@ function qaAddNote(){openNewNoteModal();}
 function toggleHabit(id){toggleHabitDate(id,tod());}
 function rHabits(){
   const t=tod();
-  S.habits.forEach(h=>{h.doneToday=(h.checkedDates||[]).includes(t);});
-  const done=S.habits.filter(h=>h.doneToday).length;
+  // CRITICAL: do NOT mutate h.doneToday here. That field is transient
+  // (derived from checkedDates against today's date) but persists into
+  // Firestore as part of the habit object. On the next day, a stale
+  // doneToday=true would trip migrateHabits' legacy merge into adding
+  // today's date to checkedDates — auto-ticking habits the user never
+  // touched. Compute it as a local map for rendering only.
+  const doneToday={};S.habits.forEach(h=>{doneToday[h.id]=(h.checkedDates||[]).includes(t);});
+  // Defensively strip any leftover transient fields that may have been
+  // saved by older app versions. The svAll path will write the cleaned
+  // habits back to Firestore on the next save.
+  S.habits.forEach(h=>{if('doneToday' in h)delete h.doneToday;if('lastDate' in h)delete h.lastDate;if('streak' in h)delete h.streak;if('total' in h)delete h.total;});
+  const done=S.habits.filter(h=>doneToday[h.id]).length;
   const cnt=document.getElementById('hab-cnt');if(cnt)cnt.textContent=`${done}/${S.habits.length}`;
   // Right-rail compact list with tier badges
   const el=document.getElementById('habits-list');
@@ -6598,8 +6621,9 @@ function rHabits(){
     el.innerHTML=S.habits.length?S.habits.map(h=>{
       const stats=computeHabitStats(h);
       const tier=tierFor(stats.current);
-      return `<div class="hc${h.doneToday?' done':''}" onclick="toggleHabit('${h.id}')">
-        <div class="hc-tick">${h.doneToday?'✓':''}</div>
+      const dt=doneToday[h.id];
+      return `<div class="hc${dt?' done':''}" onclick="toggleHabit('${h.id}')">
+        <div class="hc-tick">${dt?'✓':''}</div>
         <div class="hc-name">${esc(h.name)}${tier?` <span class="tier-badge ${tier.cls}" style="font-size:9px;padding:1px 6px">${tier.icon}</span>`:''}</div>
         <div class="hc-streak">${stats.current?stats.current+'🔥':'–'}</div>
       </div>`;
@@ -10519,7 +10543,27 @@ if('serviceWorker' in navigator){
       window.addEventListener('focus',()=>{reg.update().catch(()=>{});});
     }).catch(e=>{console.warn('[sw] register failed:',e.message);});
     let reloaded=false;
-    navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloaded)return;reloaded=true;window.location.reload();});
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(reloaded)return;reloaded=true;
+      // SW auto-skipWaiting now triggers controllerchange unprompted.
+      // To avoid yanking the page out from under a user mid-edit, delay
+      // the reload until either: the tab is backgrounded, OR no modal /
+      // textarea is currently focused. Worst case the reload happens
+      // when they next switch away — the new code is then ready when
+      // they switch back. Always reload after 30s as a safety net.
+      const safelyReload=()=>{window.location.reload();};
+      const isBusy=()=>{
+        if(document.querySelector('.modal'))return true;
+        const ae=document.activeElement;
+        if(ae&&(ae.tagName==='TEXTAREA'||ae.tagName==='INPUT'||ae.isContentEditable))return true;
+        return false;
+      };
+      if(!isBusy()){safelyReload();return;}
+      const onHidden=()=>{if(document.visibilityState==='hidden'){safelyReload();}};
+      document.addEventListener('visibilitychange',onHidden);
+      // Hard fallback so phones that never go to background still get the fix.
+      setTimeout(()=>{if(!isBusy())safelyReload();},30000);
+    });
   });
 }
 // Manual "check for updates" — triggered by the button in Settings → About
