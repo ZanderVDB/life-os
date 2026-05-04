@@ -2654,6 +2654,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <button class="btn btn-danger btn-sm" onclick="resetDeviceState()">Reset device</button>
             </div>
           </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Diagnostic log</div>
+              <div class="setting-desc">View the last few hundred console messages from this session. Useful for debugging — every console.log / warn / error gets captured in a ring buffer so you can read it on phone without dev tools.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-sm" onclick="openDiagLog()">View log</button>
+            </div>
+          </div>
         </div>
 
         <div>
@@ -2782,7 +2791,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v137';
+const APP_VERSION='v138';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2809,6 +2818,36 @@ function setKey(k){
     else localStorage.setItem(AK,k);
   }catch(e){}
 }
+// ─── Diagnostic log capture ───
+// Mobile users can't easily open browser dev tools to see console output,
+// which has made debugging the phone-specific auth/sync issues impossible.
+// Mirror every console.log/warn/error to an in-memory ring buffer the
+// user can view via Settings → About → "Diagnostic log".
+const _diagLog=[];
+const _diagMax=400;
+function _diagPush(level,args){
+  try{
+    const ts=new Date().toISOString().slice(11,23);
+    const msg=Array.from(args).map(a=>{
+      if(a instanceof Error)return a.message+(a.stack?'\n'+a.stack.split('\n').slice(0,2).join('\n'):'');
+      if(typeof a==='object')try{return JSON.stringify(a).slice(0,200);}catch(_){return String(a);}
+      return String(a);
+    }).join(' ');
+    _diagLog.push(`[${ts}] ${level} ${msg}`);
+    if(_diagLog.length>_diagMax)_diagLog.splice(0,_diagLog.length-_diagMax);
+  }catch(_){}
+}
+(function(){
+  const _l=console.log,_w=console.warn,_e=console.error;
+  console.log=function(){_diagPush('LOG',arguments);_l.apply(console,arguments);};
+  console.warn=function(){_diagPush('WARN',arguments);_w.apply(console,arguments);};
+  console.error=function(){_diagPush('ERR',arguments);_e.apply(console,arguments);};
+  window.addEventListener('error',e=>{_diagPush('UNCAUGHT',[e.message,e.filename+':'+e.lineno]);});
+  window.addEventListener('unhandledrejection',e=>{_diagPush('UNHANDLED',[e.reason&&(e.reason.message||e.reason)||e]);});
+})();
+console.log('[diag] log capture active, version='+'see APP_VERSION below');
+console.log('[diag] UA=',navigator.userAgent);
+console.log('[diag] storage:',{localStorage:!!window.localStorage,sessionStorage:!!window.sessionStorage,indexedDB:!!window.indexedDB,serviceWorker:!!navigator.serviceWorker,caches:!!window.caches});
 firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth(),db=firebase.firestore();
 // Persist the Firebase session in IndexedDB so closing and reopening the app
@@ -11080,6 +11119,36 @@ if('serviceWorker' in navigator){
       // Hard fallback so phones that never go to background still get the fix.
       setTimeout(()=>{if(!isBusy())safelyReload();},30000);
     });
+  });
+}
+// Open a modal showing the captured diagnostic log. User can copy the
+// text and share it with the developer to debug phone-specific issues.
+function openDiagLog(){
+  const m=document.createElement('div');
+  m.className='modal';m.id='diag-modal';m.style.display='flex';
+  const text=_diagLog.length?_diagLog.join('\n'):'(empty)';
+  m.innerHTML=`<div class="modal-bd" onclick="document.getElementById('diag-modal').remove();_syncBodyLock();"></div>
+    <div class="modal-body" style="max-width:640px;display:flex;flex-direction:column;max-height:calc(100vh - 2rem)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <h3 style="margin:0;flex:1">Diagnostic log</h3>
+        <button class="btn btn-sm" id="diag-copy">Copy</button>
+        <button class="btn btn-sm" id="diag-clear">Clear</button>
+      </div>
+      <textarea id="diag-text" style="flex:1;min-height:300px;width:100%;font-family:monospace;font-size:10.5px;line-height:1.4;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);white-space:pre;overflow:auto;resize:none" readonly>${esc(text)}</textarea>
+      <div class="modal-actions"><div class="spacer"></div><button class="btn btn-primary btn-sm" onclick="document.getElementById('diag-modal').remove();_syncBodyLock();">Close</button></div>
+    </div>`;
+  document.body.appendChild(m);_syncBodyLock();
+  m.querySelector('#diag-copy').addEventListener('click',async()=>{
+    const ta=m.querySelector('#diag-text');
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(ta.value);}
+      else{ta.select();document.execCommand('copy');}
+      const btn=m.querySelector('#diag-copy');const orig=btn.textContent;btn.textContent='Copied!';setTimeout(()=>{btn.textContent=orig;},1200);
+    }catch(e){alert('Couldn\'t copy. Long-press in the textarea to select all and copy manually.');}
+  });
+  m.querySelector('#diag-clear').addEventListener('click',()=>{
+    _diagLog.length=0;
+    m.querySelector('#diag-text').value='(empty)';
   });
 }
 // Hard "start over" - signs out, wipes EVERY local store (localStorage,
