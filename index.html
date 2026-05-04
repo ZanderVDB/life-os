@@ -2645,6 +2645,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <button class="btn btn-danger btn-sm" onclick="forceUpdate()">Force update</button>
             </div>
           </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Reset device state</div>
+              <div class="setting-desc">Sign out, wipe ALL local storage (auth, cache, IndexedDB, service worker), and reload. Use only if the app is genuinely stuck in a broken state (login loops, phantom popups, sync that won't settle). Your data on Firestore is untouched — you'll need to sign in again to load it.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-danger btn-sm" onclick="resetDeviceState()">Reset device</button>
+            </div>
+          </div>
         </div>
 
         <div>
@@ -2773,7 +2782,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v136';
+const APP_VERSION='v137';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2946,13 +2955,23 @@ function showSplash(){
 }
 // Update the loading-bar % and message under the logo. Caller-driven so
 // the auth + sync flow can advance through stages without spinning a
-// clock-wise indeterminate animation forever.
+// clock-wise indeterminate animation forever. STRICTLY MONOTONIC: once
+// we've reached a higher % we never go backwards (auth listener may
+// fire multiple times during a session and each fire used to reset the
+// bar to 45%, causing visible jitter).
+let _maxSplashStage=0;
 function setSplashStage(percent,message){
+  const p=Math.max(0,Math.min(100,percent));
+  if(p<_maxSplashStage)return;
+  _maxSplashStage=p;
   const fill=document.getElementById('splash-bar-fill');
-  if(fill)fill.style.width=Math.max(0,Math.min(100,percent))+'%';
+  if(fill)fill.style.width=p+'%';
   const lbl=document.getElementById('splash-bar-label');
   if(lbl&&typeof message==='string')lbl.textContent=message;
 }
+// Reset stage tracking — used when re-showing splash for a fresh sign-in
+// (need to start from 0 again since the previous user's sync completed).
+function resetSplashStage(){_maxSplashStage=0;}
 // Initial bar at app boot so it doesn't sit at 0% before auth resolves.
 setSplashStage(15,'Connecting…');
 auth.onAuthStateChanged(u=>{
@@ -2981,20 +3000,29 @@ auth.onAuthStateChanged(u=>{
     document.getElementById('app').style.display='grid';
     document.getElementById('btm').style.display='block';
     SP=document.getElementById('sp');
-    // Fresh sign-in → welcome chord. onAuthStateChanged also fires on session
-    // restore (page refresh), so gate on wasSignedOut to avoid a chord every
-    // single page load.
-    if(wasSignedOut){
-      setTimeout(()=>playSound('login'),250);
+    // Only run the sync setup + splash dance for "real" auth changes —
+    // either a fresh sign-in (was signed out), a UID change, or the
+    // very first time we see this user this session. onAuthStateChanged
+    // can fire multiple times (token refresh, session restore re-fires)
+    // and we don't want each fire to re-show the splash, restart sync,
+    // or jump the loading bar around.
+    const isInitialAuth=wasSignedOut||uidChanged||!_initialSyncDone;
+    if(isInitialAuth){
+      if(wasSignedOut)setTimeout(()=>playSound('login'),250);
       // Fresh sign-in (came from the login screen) — splash was hidden.
-      // Show it again with a stage that reflects we're now loading data,
-      // so the user gets a clean "loading" state instead of the empty
-      // app shell flashing through during sync.
-      showSplash();
+      // Show it again with a clean stage so the user gets a "loading"
+      // state instead of the empty app shell flashing through during sync.
+      if(wasSignedOut&&!_initialSyncDone){
+        resetSplashStage();
+        showSplash();
+        setSplashStage(15,'Connecting…');
+      }
+      setSplashStage(45,'Restoring your session…');
+      loadData();
+      initRouter();
+    } else {
+      console.log('[auth] subsequent fire for same user — skipping reload');
     }
-    setSplashStage(45,'Restoring your session…');
-    loadData();
-    initRouter();
   } else {
     CU=null;
     stopSync();
@@ -11053,6 +11081,40 @@ if('serviceWorker' in navigator){
       setTimeout(()=>{if(!isBusy())safelyReload();},30000);
     });
   });
+}
+// Hard "start over" - signs out, wipes EVERY local store (localStorage,
+// sessionStorage, IndexedDB, SW, caches), and reloads. Use when the
+// device is genuinely stuck (login loops, phantom popups, can't get
+// in). Firestore data is untouched - signing back in re-loads it.
+async function resetDeviceState(){
+  if(!confirm('Reset device state?\n\nThis signs you out and wipes all local storage on this device:\n• Auth session\n• Cached app assets\n• IndexedDB (Firebase\'s local cache)\n• Service worker registration\n\nYour data on Firestore is NOT touched — sign back in and it\'ll all load. Use only if the app is genuinely broken.'))return;
+  try{
+    // Sign out first so Firebase has a chance to invalidate cleanly
+    if(typeof auth!=='undefined'&&auth.currentUser){await auth.signOut().catch(()=>{});}
+  }catch(_){}
+  try{localStorage.clear();}catch(_){}
+  try{sessionStorage.clear();}catch(_){}
+  try{
+    if(window.indexedDB&&indexedDB.databases){
+      const dbs=await indexedDB.databases().catch(()=>[]);
+      await Promise.all((dbs||[]).filter(d=>d&&d.name).map(d=>new Promise(r=>{const req=indexedDB.deleteDatabase(d.name);req.onsuccess=req.onerror=req.onblocked=()=>r();})));
+    }
+  }catch(e){console.warn('[reset] IDB wipe',e&&e.message||e);}
+  try{
+    if(navigator.serviceWorker){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister().catch(()=>{})));
+    }
+  }catch(_){}
+  try{
+    if(window.caches){
+      const keys=await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k).catch(()=>{})));
+    }
+  }catch(_){}
+  const u=new URL(window.location.href);
+  u.searchParams.set('_reset',String(Date.now()));
+  window.location.replace(u.toString());
 }
 // Nuclear update — unregister all service workers, delete all caches,
 // and hard-reload. Use when Relaunch / auto-update are stuck (typically
