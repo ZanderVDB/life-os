@@ -2629,6 +2629,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <button class="btn btn-sm" onclick="checkForUpdate()">↻ Check</button>
             </div>
           </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Force update</div>
+              <div class="setting-desc">Nuclear option — unregisters the service worker, clears all cached assets, and reloads from the network. Use this if the Relaunch button isn't working (typically iOS Safari clinging to a stale cached version).</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-danger btn-sm" onclick="forceUpdate()">Force update</button>
+            </div>
+          </div>
         </div>
 
         <div>
@@ -2757,7 +2766,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v132';
+const APP_VERSION='v133';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3805,13 +3814,8 @@ function hideSyncWaitingBanner(){
   if(el)el.remove();
 }
 function handleSnapshot(snap){
-    // Always apply. Filtering hasPendingWrites caused the initial snapshot to
-    // be skipped if the local cache had any pending local writes, leaving the
-    // app stuck with empty state. Self-mirror snapshots are no-ops anyway
-    // because our local S was already mutated before svAll.
-    // We've now received a real Firestore reply — saves can be unblocked
-    // and the "still syncing" banner removed (if it was showing).
-    hideSyncWaitingBanner();
+    const fromCache=snap.metadata.fromCache;
+    if(!fromCache)hideSyncWaitingBanner();
     if(!snap.exists){
       // Genuinely-new user: their Firestore doc doesn't exist yet. seed()
       // creates it with empty arrays. fromCache=true means this came from
@@ -3819,7 +3823,7 @@ function handleSnapshot(snap){
       // that case — wait for the authoritative server reply. (Cache can
       // legitimately say "doesn't exist" for a doc that does exist server-
       // side if the cache was never warmed.)
-      if(!_initialSyncDone&&!snap.metadata.fromCache){
+      if(!_initialSyncDone&&!fromCache){
         _initialSyncDone=true;seed();render();loadDailyNote();loadTip(false);if(!getKey())promptKey();
       }
       return;
@@ -3888,6 +3892,18 @@ function handleSnapshot(snap){
     migrateHabits();
     migrateProjects();
     if(!_initialSyncDone){
+      // CRITICAL: only flip _initialSyncDone on a SERVER-confirmed snapshot.
+      // Cache snapshots can return stale or empty data from a previous
+      // session that got wiped — unblocking svAll on top of empty cache
+      // data is exactly how Zander's data was being repeatedly wiped from
+      // phone (cache empty → svAll fires with empty → Firestore overwritten
+      // → computer reads empty). Cache snapshots paint the UI but saves
+      // stay blocked until the server confirms what's actually there.
+      if(fromCache){
+        try{render();}catch(_){}
+        showSyncWaitingBanner();
+        return;
+      }
       _initialSyncDone=true;
       render();loadDailyNote();loadTip(false);
       if(!getKey())promptKey();
@@ -10910,6 +10926,31 @@ if('serviceWorker' in navigator){
       setTimeout(()=>{if(!isBusy())safelyReload();},30000);
     });
   });
+}
+// Nuclear update — unregister all service workers, delete all caches,
+// and hard-reload. Use when Relaunch / auto-update are stuck (typically
+// iOS Safari clinging to a stale cached SW that won't update via the
+// normal lifecycle). Confirms first since this momentarily takes the
+// app offline-only.
+async function forceUpdate(){
+  if(!confirm('Force update?\n\nThis clears the local cache and reloads the app from the network. Any unsaved typing in modals will be lost. Use this if the Relaunch button isn\'t working.'))return;
+  try{
+    // Unregister every SW for this scope
+    if(navigator.serviceWorker){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister().catch(()=>{})));
+    }
+    // Wipe every cache (including the lifeos-vXX one)
+    if(window.caches){
+      const keys=await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k).catch(()=>{})));
+    }
+  }catch(e){console.warn('[forceUpdate]',e&&e.message||e);}
+  // Hard reload from network. ?nocache=Date.now() busts any HTTP-layer
+  // cache too (Cloudflare Pages, Safari's own cache).
+  const u=new URL(window.location.href);
+  u.searchParams.set('_nocache',String(Date.now()));
+  window.location.replace(u.toString());
 }
 // Manual "check for updates" — triggered by the button in Settings → About
 async function checkForUpdate(){
