@@ -1470,6 +1470,29 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 /* "New version available" toast — appears top-centre when a waiting SW is
    detected. Dismissable or acted on via the Relaunch button. */
 .update-toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border-strong);border-radius:24px;padding:8px 14px 8px 16px;display:flex;align-items:center;gap:10px;z-index:60;box-shadow:var(--shadow-lift);font-size:12.5px;color:var(--text);animation:update-toast-in .24s ease-out;max-width:calc(100vw - 28px)}
+/* ─── In-app toast stack ───
+   Used by motivational nudges and calendar event reminders. Sits at the
+   bottom-right on desktop, full-width pill at the bottom on mobile so
+   they don't overlap the AI bar. Each toast is dismissable (× button)
+   and auto-fades after a configurable duration. */
+.iar-stack{position:fixed;bottom:120px;right:18px;display:flex;flex-direction:column;gap:10px;z-index:80;max-width:340px;pointer-events:none}
+.iar-stack .iar-toast{pointer-events:auto}
+.iar-toast{background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;padding:11px 14px 11px 13px;display:flex;align-items:flex-start;gap:10px;box-shadow:0 6px 20px rgba(0,0,0,.18);animation:iar-toast-in .25s cubic-bezier(.25,.8,.25,1);font-size:12.5px;line-height:1.45;color:var(--text);font-family:'Inter',system-ui,sans-serif}
+.iar-toast.fading{animation:iar-toast-out .35s ease forwards}
+.iar-toast-icon{flex-shrink:0;width:32px;height:32px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:15px}
+.iar-toast.motivation .iar-toast-icon{background:var(--peach-bg,rgba(232,168,124,.2));color:var(--peach,#e8a87c)}
+.iar-toast.event .iar-toast-icon{background:var(--blue-bg,rgba(120,158,216,.2));color:var(--blue,#789ed8)}
+.iar-toast-body{flex:1;min-width:0}
+.iar-toast-title{font-weight:600;font-size:12.5px;color:var(--text);margin-bottom:2px;display:flex;align-items:center;gap:6px}
+.iar-toast-title .iar-toast-when{color:var(--muted);font-weight:500;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+.iar-toast-msg{color:var(--text-2);word-break:break-word;line-height:1.5}
+.iar-toast-x{flex-shrink:0;width:24px;height:24px;border-radius:50%;border:none;background:transparent;color:var(--muted);font-size:15px;line-height:1;cursor:pointer;padding:0;align-self:flex-start}
+.iar-toast-x:hover{background:var(--surface-2);color:var(--text)}
+@keyframes iar-toast-in{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes iar-toast-out{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(8px) scale(.96)}}
+@media(max-width:700px){
+  .iar-stack{right:10px;left:10px;bottom:calc(96px + env(safe-area-inset-bottom,0));max-width:none}
+}
 .update-toast span{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .update-toast-x{background:transparent;border:none;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;padding:0 2px 0 6px}
 .update-toast-x:hover{color:var(--text)}
@@ -2510,6 +2533,42 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <label class="switch"><input type="checkbox" id="notif-toggle" onchange="toggleNotifEnabled(this.checked)"><span class="slider"></span></label>
             </div>
           </div>
+          <!-- In-app toasts: motivational nudges (rotating context-aware
+               messages every X minutes) + event reminders (toast when a
+               calendar event's reminderMin is due, while the app is open). -->
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">In-app reminders</div>
+              <div class="setting-desc">Master switch for motivational nudges and event reminders that pop up inside the app while it's open.</div>
+            </div>
+            <div class="setting-right">
+              <label class="switch"><input type="checkbox" id="iar-master" onchange="setIAR('enabled',this.checked)"><span class="slider"></span></label>
+            </div>
+          </div>
+          <div class="setting-row setting-row-stack">
+            <div>
+              <div class="setting-label">Motivational nudge frequency</div>
+              <div class="setting-desc">A short AI-written message that references your habits left to do today and your urgent tasks. Off disables nudges; the master toggle above controls everything.</div>
+            </div>
+            <div class="setting-right">
+              <div class="theme-toggle" id="iar-freq-toggle">
+                <button data-iar-freq="0" onclick="setIAR('motivationFreq',0)">Off</button>
+                <button data-iar-freq="30" onclick="setIAR('motivationFreq',30)">30 min</button>
+                <button data-iar-freq="60" onclick="setIAR('motivationFreq',60)">1 hr</button>
+                <button data-iar-freq="120" onclick="setIAR('motivationFreq',120)">2 hr</button>
+                <button data-iar-freq="240" onclick="setIAR('motivationFreq',240)">4 hr</button>
+              </div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Event reminder toasts</div>
+              <div class="setting-desc">When a calendar event's reminder is due (e.g. 1 hr before, 1 day before), pop a toast in the app. Only fires while the app is open.</div>
+            </div>
+            <div class="setting-right">
+              <label class="switch"><input type="checkbox" id="iar-events" onchange="setIAR('eventToasts',this.checked)"><span class="slider"></span></label>
+            </div>
+          </div>
           <div class="setting-row">
             <div>
               <div class="setting-label">Install app</div>
@@ -2694,7 +2753,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v127';
+const APP_VERSION='v128';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -7560,6 +7619,8 @@ function rSettings(){
     }
   }
   document.querySelectorAll('#ai-confirm-toggle button').forEach(b=>b.classList.toggle('on',b.dataset.aiMode===(S.aiConfirmMode||'calendar')));
+  // In-app reminders settings — sync the toggles + frequency chips.
+  try{_iarSyncSettingsUI();}catch(_){}
   // Version + update banner
   const vn=document.getElementById('version-num');if(vn)vn.textContent=APP_VERSION;
   const vd=document.getElementById('version-desc');
@@ -10480,6 +10541,245 @@ setInterval(checkNotifSchedule,60000);
 // Also check once on load — if user opens the app right at the trigger
 // minute, we don't want them to miss the slot waiting for the 60s tick.
 setTimeout(checkNotifSchedule,1500);
+
+// ──────────── IN-APP REMINDERS (toast stack) ────────────
+// Motivational nudges + calendar event reminders that show as toasts in
+// the corner of the app while it's open. Independent of the OS-level
+// daily reminders above (which fire only at 9am/6pm and require
+// browser permission). All toasts here are pure DOM — no permission
+// needed, no impact on phone-locked notifications.
+function _iarLoad(){
+  const def={enabled:false,motivationFreq:60,eventToasts:true};
+  try{
+    const raw=localStorage.getItem('los_iar');
+    if(!raw)return def;
+    const p=JSON.parse(raw);
+    return {
+      enabled:!!p.enabled,
+      motivationFreq:[0,30,60,120,240].includes(Number(p.motivationFreq))?Number(p.motivationFreq):60,
+      eventToasts:p.eventToasts!==false
+    };
+  }catch(e){return def;}
+}
+function _iarSave(){try{localStorage.setItem('los_iar',JSON.stringify(_iarConfig));}catch(e){}}
+let _iarConfig=_iarLoad();
+function setIAR(field,value){
+  if(field==='enabled')_iarConfig.enabled=!!value;
+  else if(field==='motivationFreq')_iarConfig.motivationFreq=Number(value)||0;
+  else if(field==='eventToasts')_iarConfig.eventToasts=!!value;
+  _iarSave();
+  _iarSyncSettingsUI();
+  _iarRescheduleMotivation();
+}
+function _iarSyncSettingsUI(){
+  const m=document.getElementById('iar-master');if(m)m.checked=_iarConfig.enabled;
+  const e=document.getElementById('iar-events');if(e)e.checked=_iarConfig.eventToasts;
+  document.querySelectorAll('#iar-freq-toggle button').forEach(b=>b.classList.toggle('on',Number(b.dataset.iarFreq)===_iarConfig.motivationFreq));
+}
+// ─── Toast renderer ───
+function _iarStack(){
+  let s=document.getElementById('iar-stack');
+  if(!s){s=document.createElement('div');s.id='iar-stack';s.className='iar-stack';document.body.appendChild(s);}
+  return s;
+}
+function showInAppToast(opts){
+  if(!_iarConfig.enabled)return;
+  const {title,body,icon,type,duration,when}=Object.assign({type:'motivation',duration:30000,icon:'💪',title:'Reminder'},opts||{});
+  const stack=_iarStack();
+  const el=document.createElement('div');
+  el.className=`iar-toast ${type}`;
+  el.innerHTML=`<div class="iar-toast-icon">${icon}</div>
+    <div class="iar-toast-body">
+      <div class="iar-toast-title">${esc(title)}${when?`<span class="iar-toast-when">${esc(when)}</span>`:''}</div>
+      <div class="iar-toast-msg">${esc(body||'')}</div>
+    </div>
+    <button class="iar-toast-x" aria-label="Dismiss">×</button>`;
+  stack.appendChild(el);
+  const dismiss=()=>{
+    if(el._dismissed)return;el._dismissed=true;
+    el.classList.add('fading');
+    setTimeout(()=>{if(el.parentNode)el.parentNode.removeChild(el);},340);
+  };
+  el.querySelector('.iar-toast-x').addEventListener('click',dismiss);
+  if(duration>0)setTimeout(dismiss,duration);
+  return el;
+}
+// ─── Motivational nudges ───
+let _iarMotivationTimer=null;
+let _iarLastMotivationAt=0;
+function _iarRescheduleMotivation(){
+  if(_iarMotivationTimer){clearInterval(_iarMotivationTimer);_iarMotivationTimer=null;}
+  const freq=_iarConfig.motivationFreq;
+  if(!_iarConfig.enabled||!freq)return;
+  // Reset the "last fire" mark so the first nudge waits one full
+  // interval — flipping the toggle shouldn't punch a toast in the
+  // user's face immediately.
+  _iarLastMotivationAt=Date.now();
+  // Check every minute for due-time so we tick even if the user opens
+  // the app right at the boundary.
+  _iarMotivationTimer=setInterval(_iarMotivationTick,60000);
+}
+async function _iarMotivationTick(){
+  if(!_iarConfig.enabled||!_iarConfig.motivationFreq)return;
+  if(document.visibilityState!=='visible')return;
+  const since=Date.now()-_iarLastMotivationAt;
+  if(since<_iarConfig.motivationFreq*60000-15000)return;
+  _iarLastMotivationAt=Date.now();
+  // Build the context. The AI gets habits left to do today, urgent /
+  // high tasks, and a couple of events happening today (so it can
+  // weave them in if they fit). Nothing is mandatory — the message
+  // can reference one item or none.
+  const today=tod();
+  const habitsLeft=(S.habits||[]).filter(h=>!(h.checkedDates||[]).includes(today)).map(h=>h.name);
+  const urgentTasks=(S.tasks||[]).filter(t=>!t.done&&(t.priority==='urgent'||t.priority==='hi')).map(t=>t.text);
+  const ctx={habitsLeft:habitsLeft.slice(0,8),urgentTasks:urgentTasks.slice(0,5)};
+  // Empty-context fallback — no point pinging the API to say nothing.
+  if(!ctx.habitsLeft.length&&!ctx.urgentTasks.length){
+    const fallbacks=['Solid morning so far. Anything left worth knocking out?','Clean board. Keep it that way.','Nothing on fire — small wins still count.'];
+    showInAppToast({type:'motivation',icon:'💪',title:'Quick check-in',body:fallbacks[Math.floor(Math.random()*fallbacks.length)],duration:30000});
+    return;
+  }
+  const key=getKey();
+  if(!key){
+    // No API key — show a templated message instead.
+    const items=[...ctx.habitsLeft,...ctx.urgentTasks];
+    const pick=items[Math.floor(Math.random()*items.length)];
+    showInAppToast({type:'motivation',icon:'💪',title:'Quick nudge',body:pick?`${pick} — keep moving on it.`:'Stay sharp.',duration:30000});
+    return;
+  }
+  const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'';
+  const prompt=`Write ONE short motivational nudge for ${firstName||'the user'} - max 1-2 sentences, ~25 words. Reference ONE specific item from the lists below (pick whichever feels most useful right now), with a concrete reason it's worth doing. Direct, encouraging, no fluff, no exclamation marks except at most one.
+
+Habits left to do today: ${ctx.habitsLeft.join(', ')||'(none)'}
+Urgent / high-priority tasks open: ${ctx.urgentTasks.join(', ')||'(none)'}
+
+Respond with ONLY the message text, no quotes, no preamble.`;
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:120,messages:[{role:'user',content:prompt}]})});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const data=await r.json();
+    const msg=(data.content?.[0]?.text||'').trim().replace(/^["']|["']$/g,'');
+    if(!msg)return;
+    showInAppToast({type:'motivation',icon:'💪',title:'Quick nudge',body:msg,duration:35000});
+  }catch(e){
+    // Silent fail — no toast. We don't want to spam errors every hour.
+    console.warn('[iar-motivation]',e.message);
+  }
+}
+// ─── Event reminder watcher ───
+// Keeps a rolling window of upcoming events with reminder offsets, and
+// fires a toast when each reminder's due time is crossed. Fired tuples
+// (eventId+reminderMin) get persisted to localStorage so reloads don't
+// re-fire the same reminder. Old entries (>2 days) are pruned.
+function _iarFiredKey(eventId,reminderMin){return `${eventId}::${reminderMin}`;}
+function _iarLoadFired(){
+  try{const raw=localStorage.getItem('los_iar_fired');if(!raw)return {};const p=JSON.parse(raw);if(p&&typeof p==='object')return p;}catch(e){}
+  return {};
+}
+function _iarSaveFired(map){
+  // Prune entries older than 2 days
+  const cutoff=Date.now()-2*24*3600*1000;
+  Object.keys(map).forEach(k=>{if(!map[k]||map[k]<cutoff)delete map[k];});
+  try{localStorage.setItem('los_iar_fired',JSON.stringify(map));}catch(e){}
+}
+let _iarFired=_iarLoadFired();
+let _iarEventTimer=null;
+// Cache of upcoming events with reminder data. Refreshed only every
+// few minutes so we don't hit GCal every 30 seconds — the toast tick
+// runs against the cache, the API does the heavier lifting on its own
+// schedule.
+let _iarEventCache={fetchedAt:0,events:[]};
+async function _iarRefreshEventCache(force){
+  const now=Date.now();
+  if(!force&&now-_iarEventCache.fetchedAt<3*60*1000)return _iarEventCache.events;
+  if(!getGCalToken())return _iarEventCache.events;
+  try{
+    const horizon=new Date(now+25*3600*1000).toISOString();
+    const start=new Date(now-5*60*1000).toISOString();
+    const evs=await fetchGCalWithReminders(start,horizon);
+    _iarEventCache={fetchedAt:now,events:evs};
+  }catch(e){console.warn('[iar-events] fetch failed',e.message);}
+  return _iarEventCache.events;
+}
+async function _iarEventTick(){
+  if(!_iarConfig.enabled||!_iarConfig.eventToasts)return;
+  if(document.visibilityState!=='visible')return;
+  if(!getGCalToken())return;
+  const now=Date.now();
+  const events=await _iarRefreshEventCache();
+  let dirty=false;
+  for(const ev of events){
+    if(ev.allDay)continue;  // skip all-day for the in-app reminder watcher
+    if(!ev.time||!ev.date)continue;
+    // Build a Date for the event's start (HH:mm in local time).
+    const [h,m]=String(ev.time).split(':').map(Number);
+    const startDate=new Date(ev.date+'T00:00:00');
+    startDate.setHours(h||0,m||0,0,0);
+    const reminders=Array.isArray(ev.reminderMin)?ev.reminderMin:(typeof ev.reminderMin==='number'?[ev.reminderMin]:[]);
+    if(!reminders.length)continue;
+    for(const rMin of reminders){
+      const fireAt=startDate.getTime()-rMin*60*1000;
+      // Fire if we've crossed the due time within the last 90 seconds
+      // and haven't already fired this (eventId, rMin) tuple.
+      if(now>=fireAt&&now-fireAt<=90000){
+        const key=_iarFiredKey(ev.id,rMin);
+        if(_iarFired[key])continue;
+        _iarFired[key]=now;dirty=true;
+        const minsUntil=Math.max(0,Math.round((startDate.getTime()-now)/60000));
+        const when=minsUntil===0?'starting now':minsUntil<60?`in ${minsUntil} min`:minsUntil<1440?`in ${Math.round(minsUntil/60)} hr`:`in ${Math.round(minsUntil/1440)} day${Math.round(minsUntil/1440)===1?'':'s'}`;
+        showInAppToast({type:'event',icon:'📅',title:ev.title||'Upcoming event',body:`${when}${ev.time?' · '+ev.time:''}`,duration:90000,when:''});
+      }
+    }
+  }
+  if(dirty)_iarSaveFired(_iarFired);
+}
+// Wrapper around fetchGCal that also requests reminder data per event.
+// We need this because the base fetchGCal strips reminder.overrides,
+// and the in-app reminder watcher relies on per-event override values
+// (or a fallback to S.calendarDefaults based on the event's "kind").
+async function fetchGCalWithReminders(start,end){
+  const tok=getGCalToken();if(!tok)return[];
+  const cals=await fetchCalendarList();
+  if(!cals.length)return[];
+  const disabled=new Set(Array.isArray(S.disabledCalendars)?S.disabledCalendars:[]);
+  const activeCals=cals.filter(c=>c.primary||!disabled.has(c.id));
+  const fields='items(id,summary,start,end,allDayEvent,reminders,recurringEventId)';
+  const results=await Promise.all(activeCals.map(cal=>(async()=>{
+    try{
+      const url=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime&maxResults=80&fields=${encodeURIComponent(fields)}`;
+      const r=await fetch(url,{headers:{Authorization:'Bearer '+tok}});
+      if(!r.ok)return[];
+      const d=await r.json();
+      return (d.items||[]).map(ev=>{
+        const allDay=!!ev.start.date;
+        const date=(ev.start.dateTime||ev.start.date||'').slice(0,10);
+        const time=ev.start.dateTime?ev.start.dateTime.slice(11,16):'';
+        let reminderMin=[];
+        if(ev.reminders&&ev.reminders.overrides&&ev.reminders.overrides.length){
+          reminderMin=ev.reminders.overrides.map(o=>Number(o.minutes)).filter(n=>!isNaN(n));
+        } else if(ev.reminders&&ev.reminders.useDefault){
+          // Fall back to user's app-level default for the event type.
+          const lookingLikeBirthday=/birthday|bday|🎂/i.test(ev.summary||'');
+          reminderMin=lookingLikeBirthday?(S.calendarDefaults?.birthdayReminders||[]):(allDay?(S.calendarDefaults?.allDayReminders||[]):(S.calendarDefaults?.timedReminders||[]));
+        }
+        return {id:ev.id,title:ev.summary||'(No title)',date,time,allDay,reminderMin};
+      });
+    }catch(e){return[];}
+  })()));
+  return results.flat();
+}
+// Kick off both engines after auth resolves. The motivation timer is
+// internally gated on _iarConfig.enabled and motivationFreq, so safe
+// to start unconditionally — it'll no-op if disabled.
+_iarRescheduleMotivation();
+// Event ticker runs every 60 seconds against a 3-minute-cached event
+// list (so we hit GCal at most once every 3 min, but can still catch
+// reminders within ~1 minute of their due time).
+_iarEventTimer=setInterval(_iarEventTick,60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){_iarRefreshEventCache(true).then(_iarEventTick);}});
+// First tick a couple seconds after load so any due-now reminder gets
+// shown immediately on app open.
+setTimeout(_iarEventTick,3000);
 // Pull the tip card from current S state. Runs on every render — so when a
 // Firestore snapshot delivers a newer plan generated on another device, the
 // local tip card refreshes instead of staying on whatever was shown before.
