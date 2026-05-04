@@ -2766,7 +2766,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v134';
+const APP_VERSION='v135';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2946,6 +2946,11 @@ auth.onAuthStateChanged(u=>{
     // snapshot lands — and the user just complained that their old account's
     // data flashed across when they signed into a different email.
     if(uidChanged||wasSignedOut)resetStateForNewUser();
+    // Cache the UID so the patient-splash logic knows on next launch
+    // that this user has been signed in here before — and shouldn't
+    // show the login screen prematurely while we wait for Firebase to
+    // restore the session from IndexedDB.
+    try{localStorage.setItem('los_last_uid',u.uid);}catch(_){}
     document.getElementById('login').style.display='none';
     document.getElementById('app').style.display='grid';
     document.getElementById('btm').style.display='block';
@@ -2966,6 +2971,9 @@ auth.onAuthStateChanged(u=>{
     document.getElementById('btm').style.display='none';
     const loginEl=document.getElementById('login');
     if(loginEl)loginEl.style.display='flex';
+    // Genuinely signed out — drop the cached UID so we don't keep
+    // pretending the user has a session if they explicitly signed out.
+    try{localStorage.removeItem('los_last_uid');}catch(_){}
     // If we've been flipped signed-in -> signed-out 3+ times in 30s, the
     // browser/extension is almost certainly blocking auth storage. Show a
     // diagnostic banner instead of letting the user loop.
@@ -2978,15 +2986,14 @@ auth.onAuthStateChanged(u=>{
 });
 // Safety nets for slow auth resolution. Phone (iOS Safari especially)
 // can take longer than desktop to restore the persisted session from
-// IndexedDB, particularly on cold cache or weak connection. The old
-// 5-second fallback was firing prematurely — users saw the login
-// screen, instinctively tapped sign-in, and re-authenticated even
-// though their saved session was still about to come back. Now:
-//   - At 6s: still on splash, but add a small "Still checking…" hint
-//     and a manual "Sign in" fallback button. Auth listener will
-//     auto-dismiss the splash if it resolves later.
-//   - At 15s: hard timeout, drop to login screen. If auth hasn't
-//     resolved by then it's almost certainly genuinely signed out.
+// IndexedDB, particularly on cold cache or weak connection.
+// los_last_uid is set whenever onAuthStateChanged fires with a user.
+// If it's present, we KNOW this user has been signed in on this
+// device before — Firebase should restore the session shortly. We
+// stay on the splash patiently rather than show login (which would
+// trigger a fresh sign-in flow / phantom Google picker, even though
+// the actual session is about to come back).
+const _hasCachedUid=()=>{try{return !!localStorage.getItem('los_last_uid');}catch(_){return false;}};
 setTimeout(()=>{
   if(authResolved)return;
   const splash=document.getElementById('splash');
@@ -2994,15 +3001,48 @@ setTimeout(()=>{
   const fb=document.createElement('div');
   fb.id='splash-late';
   fb.style.cssText='margin-top:24px;display:flex;flex-direction:column;align-items:center;gap:10px;font-family:Inter,system-ui,sans-serif';
-  fb.innerHTML=`<div style="font-size:11.5px;color:var(--muted)">Still restoring your session…</div>
-    <button class="btn btn-sm" style="margin-top:4px" onclick="document.getElementById('login').style.display='flex';hideSplash();">Sign in manually</button>`;
+  // For known-signed-in users, just say "still restoring" — no manual
+  // sign-in button to tempt them into triggering a fresh auth flow.
+  // For genuinely-signed-out users (no cached UID), the manual fallback
+  // is helpful since we ARE waiting on real sign-in.
+  if(_hasCachedUid()){
+    fb.innerHTML=`<div style="font-size:11.5px;color:var(--muted)">Restoring your session…</div>`;
+  } else {
+    fb.innerHTML=`<div style="font-size:11.5px;color:var(--muted)">Still checking your session…</div>
+      <button class="btn btn-sm" style="margin-top:4px" onclick="document.getElementById('login').style.display='flex';hideSplash();">Sign in manually</button>`;
+  }
   splash.querySelector('div').appendChild(fb);
 },6000);
 setTimeout(()=>{
   if(authResolved)return;
+  // Hard timeout fallback: only drop to login if we have NO cached
+  // UID (i.e. genuinely no prior session). For users who have been
+  // signed in before, keep waiting — the alternative is a fresh
+  // sign-in flow that pops Google's account picker even though the
+  // saved session is just slow to restore.
+  if(_hasCachedUid()){
+    console.warn('[auth] 15s elapsed but cached UID exists — staying on splash');
+    return;
+  }
   console.warn('[auth] hard timeout — showing login');
   document.getElementById('login').style.display='flex';hideSplash();
 },15000);
+// Backstop for the cached-UID-but-stuck case: 45s is generous enough
+// to cover even very cold IndexedDB on iOS PWA. If auth STILL hasn't
+// resolved by then, surface a diagnostic banner with both "wait more"
+// and "sign out and start fresh" options.
+setTimeout(()=>{
+  if(authResolved)return;
+  if(!_hasCachedUid())return;
+  const splash=document.getElementById('splash');
+  if(!splash||splash.querySelector('#splash-stuck'))return;
+  const fb=document.createElement('div');
+  fb.id='splash-stuck';
+  fb.style.cssText='margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:10px;font-family:Inter,system-ui,sans-serif;max-width:300px;text-align:center';
+  fb.innerHTML=`<div style="font-size:11px;color:var(--red);line-height:1.5">Session restore is taking longer than expected. This usually clears itself in a few seconds — but if you'd rather start fresh, you can sign in again.</div>
+    <button class="btn btn-sm" onclick="try{localStorage.removeItem('los_last_uid');}catch(_){};document.getElementById('login').style.display='flex';hideSplash();">Sign in again</button>`;
+  splash.querySelector('div').appendChild(fb);
+},45000);
 
 // GOOGLE CALENDAR
 let gTok=null;let gcCache={key:'',events:[]};
