@@ -2791,7 +2791,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v138';
+const APP_VERSION='v139';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3312,12 +3312,14 @@ function initGISTokenClient(){
   // If we have a cached token already, schedule a conservative refresh
   // (we don't know the exact expiry of the cached one). 50 min = safely
   // before the 1hr boundary even if the cache is fresh.
+  // Note: NO immediate-on-load silent refresh. That used to fire 500ms
+  // after init and was the actual cause of the "choose an account"
+  // picker on every app open — Android Chrome with multiple Google
+  // accounts pops the picker for prompt:'' regardless of "silent" intent.
+  // The cached token works for up to an hour; if it's expired the 401
+  // handler in fetchCalendarList will surface the disconnect banner.
   if(gTok||(function(){try{return localStorage.getItem('los_gat');}catch(e){return null;}}())){
     _scheduleTokenRefresh(3000);
-    // Also do an immediate silent attempt in case the cached token is
-    // already expired (probeGCalLive will catch it via 401 too, but
-    // this is faster).
-    setTimeout(()=>silentRefreshGCalToken(),500);
   }
   return true;
 }
@@ -3329,22 +3331,27 @@ function _scheduleTokenRefresh(secondsValid){
   _gisRefreshTimer=setTimeout(()=>silentRefreshGCalToken(),refreshInMs);
   console.log('[gis] next silent refresh in '+(refreshInMs/1000|0)+'s');
 }
-// iOS detection — Apple restricts WebKit on iOS so all browsers (Safari,
-// Chrome iOS, Firefox iOS) behave the same with respect to Intelligent
-// Tracking Prevention. ITP blocks silent OAuth flows: GIS's
-// requestAccessToken({prompt:''}) ends up popping the account picker
-// instead of refreshing silently. That popup is what users were seeing
-// as a "phantom login screen" every time they opened the app on phone.
-function _isIOS(){
+// Mobile detection — silent OAuth via GIS's requestAccessToken({prompt:''})
+// is not actually silent on mobile browsers. iOS Safari has ITP; Android
+// Chrome with multiple Google accounts pops an account picker; both
+// produce the "phantom login screen" users see on every app open.
+// Disable silent refresh on ALL mobile, regardless of platform. Calendar
+// token will expire naturally; the disconnect banner appears and the user
+// taps to reconnect explicitly (which is a true user-gesture flow that
+// mobile browsers DO allow without weird picker behaviour).
+function _isMobile(){
   const ua=navigator.userAgent||'';
-  return /iPad|iPhone|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  if(/Mobile|Android|iPhone|iPad|iPod/i.test(ua))return true;
+  // iPadOS 13+ spoofs MacIntel + multi-touch
+  if(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)return true;
+  return false;
 }
+// Back-compat: any earlier callers of _isIOS now route through _isMobile.
+function _isIOS(){return _isMobile();}
 function silentRefreshGCalToken(){
-  // Hard-skip on iOS — prompt:'' isn't actually silent there. Better to
-  // let the token expire naturally and surface the disconnect banner;
-  // the user can tap to reconnect explicitly via a real user gesture.
-  if(_isIOS()){
-    console.log('[gis] silent refresh skipped on iOS (ITP blocks silent OAuth)');
+  // Hard-skip on mobile — prompt:'' isn't reliably silent there.
+  if(_isMobile()){
+    console.log('[gis] silent refresh skipped on mobile (picker would pop)');
     return false;
   }
   if(!_gisInitialized){if(!initGISTokenClient())return false;}
