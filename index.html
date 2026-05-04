@@ -2766,7 +2766,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v133';
+const APP_VERSION='v134';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -2804,7 +2804,7 @@ const persistenceReady=auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
 // Firestore offline cache so data loads even with flaky network
 try{db.enablePersistence().catch(e=>console.warn('[db] persistence:',e.code||e.message));}catch(e){}
 let CU=null,ST=null,SP=null,authResolved=false,authFlipCount=0,lastAuthFlip=0;
-let _unsubscribeDoc=null;let _initialSyncDone=false;
+let _unsubscribeDoc=null;let _initialSyncDone=false;let _cacheFallbackTimer=null;
 
 // THEME
 function setTheme(t){
@@ -3892,18 +3892,41 @@ function handleSnapshot(snap){
     migrateHabits();
     migrateProjects();
     if(!_initialSyncDone){
+      console.log('[sync] snapshot fromCache='+fromCache+' tasks='+(S.tasks||[]).length+' habits='+(S.habits||[]).length+' builds='+(S.builds||[]).length+' ideas='+(S.ideas||[]).length+' notes='+(S.notes||[]).length);
       // CRITICAL: only flip _initialSyncDone on a SERVER-confirmed snapshot.
       // Cache snapshots can return stale or empty data from a previous
       // session that got wiped — unblocking svAll on top of empty cache
-      // data is exactly how Zander's data was being repeatedly wiped from
-      // phone (cache empty → svAll fires with empty → Firestore overwritten
-      // → computer reads empty). Cache snapshots paint the UI but saves
-      // stay blocked until the server confirms what's actually there.
+      // data is how phone was repeatedly wiping Firestore (cache empty →
+      // svAll fires with empty → Firestore overwritten → computer reads
+      // empty). Cache snapshots paint the UI but saves stay blocked.
       if(fromCache){
         try{render();}catch(_){}
         showSyncWaitingBanner();
+        // Fallback: if the server NEVER confirms (flaky network, ITP
+        // blocking firestore.googleapis.com, etc.) we'd be stuck on
+        // "Connecting…" forever. After 25 seconds, if the local cache
+        // contains REAL data (any non-empty collection), accept it as
+        // authoritative — better than blocking the user indefinitely.
+        // Empty cache is suspicious (could be wipe residue) so we keep
+        // it blocked rather than risk overwriting good cloud data.
+        if(!_cacheFallbackTimer){
+          _cacheFallbackTimer=setTimeout(()=>{
+            if(_initialSyncDone)return;
+            const nonEmpty=(S.tasks||[]).length||(S.habits||[]).length||(S.builds||[]).length||(S.ideas||[]).length||(S.notes||[]).length||(S.resources||[]).length||(S.notebook&&S.notebook.sections&&S.notebook.sections.length);
+            if(nonEmpty){
+              console.warn('[sync] no server snapshot in 25s — accepting cache (has real data)');
+              _initialSyncDone=true;
+              hideSyncWaitingBanner();
+              try{render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}catch(_){}
+            } else {
+              console.warn('[sync] no server snapshot in 25s and cache is empty — staying blocked to protect cloud data');
+            }
+          },25000);
+        }
         return;
       }
+      // Server-confirmed first read — clear any pending cache-fallback timer.
+      if(_cacheFallbackTimer){clearTimeout(_cacheFallbackTimer);_cacheFallbackTimer=null;}
       _initialSyncDone=true;
       render();loadDailyNote();loadTip(false);
       if(!getKey())promptKey();
