@@ -2791,7 +2791,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v139';
+const APP_VERSION='v140';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3938,34 +3938,37 @@ function loadData(){
   // route that fetches GCal. Async, doesn't block sync.
   probeGCalLive();
   const docRef=db.collection('users').doc(CU.uid).collection('data').doc('main');
-  // Safety net: if no snapshot has arrived in 8s, render the empty UI so
-  // the user isn't staring at a loader. CRITICALLY do NOT flip
-  // _initialSyncDone — that would unblock svAll, and any user action on
-  // the empty UI (typing, ticking, navigating, anything that triggers a
-  // save) would write that empty state to Firestore and OVERWRITE the
-  // real data when the slow snapshot finally arrives. This is the bug
-  // that ate Zander's tasks. Saves stay BLOCKED until handleSnapshot
-  // confirms a real Firestore read.
   _emptyFallbackRendered=false;
   setTimeout(()=>{
     if(!_initialSyncDone&&!_emptyFallbackRendered){
       _emptyFallbackRendered=true;
-      console.warn('[sync] no snapshot after 8s — bumping splash bar, saves stay BLOCKED until snapshot arrives');
-      // Don't reveal the app shell — keep the user on the splash with
-      // an updated stage. The 25s cache-fallback (or eventual server
-      // snapshot) will hide the splash. If neither arrives, the splash
-      // stays visible with "Loading your data…" until something does.
+      console.warn('[sync] no snapshot after 4s — bumping splash bar');
       setSplashStage(60,'Loading your data…');
     }
-  },8000);
+  },4000);
+  // Force a server-only get() in parallel. The onSnapshot listener fires
+  // cache then server, but the server fire can take ages on flaky
+  // networks. A direct get({source:'server'}) demands an authoritative
+  // response immediately — whichever arrives first (this or the
+  // listener's server snapshot) unblocks _initialSyncDone via
+  // handleSnapshot. If the network is genuinely offline, this rejects
+  // quickly and we fall back to the cache-snapshot path.
+  docRef.get({source:'server'}).then(snap=>{
+    if(_initialSyncDone)return;
+    if(!snap.exists)return; // let the listener handle the new-user path
+    console.log('[sync] forced server get() returned first — using');
+    // Forge a synthetic snapshot with fromCache=false so handleSnapshot
+    // treats it as authoritative. The listener will fire its own server
+    // snapshot shortly with identical data; the _initialSyncDone guard
+    // makes that a no-op.
+    handleSnapshot({exists:true,data:()=>snap.data(),metadata:{fromCache:false,hasPendingWrites:false}});
+  }).catch(e=>{
+    console.warn('[sync] forced server get() failed:',e.code||e.message);
+  });
   _unsubscribeDoc=docRef.onSnapshot(snap=>{
     try{handleSnapshot(snap);}
     catch(e){
       console.error('[sync] snapshot handler error:',e);
-      // Render-side recovery only — do NOT call seed() and do NOT flip
-      // _initialSyncDone. seed() calls svAll on empty arrays, which
-      // would overwrite the real data the user has in Firestore. Better
-      // to show an empty app and keep saves blocked than to nuke data.
       if(!_initialSyncDone){
         try{render();}catch(e2){}
         showSyncWaitingBanner();
@@ -4076,29 +4079,35 @@ function handleSnapshot(snap){
       if(fromCache){
         try{render();}catch(_){}
         // Advance the splash bar to show progress without leaving the
-        // splash. The "Connecting to your data…" banner is no longer
-        // needed because the splash IS the loading state now.
+        // splash.
         setSplashStage(75,'Loading your data…');
-        // Fallback: if the server NEVER confirms (flaky network, ITP
-        // blocking firestore.googleapis.com, etc.) we'd be stuck on
-        // the splash forever. After 25 seconds, if the local cache
-        // contains REAL data (any non-empty collection), accept it as
-        // authoritative. Empty cache is suspicious so we keep it
-        // blocked rather than risk overwriting good cloud data.
+        // Fallback: if the server NEVER confirms (flaky network, etc.)
+        // we'd be stuck on the splash forever. Two-tier timer:
+        //   - Non-empty cache: 3 seconds. Cache has real data, server
+        //     usually agrees, the fallback is just a safety net for
+        //     slow networks. Accepting cache risks one stale-overwrite
+        //     edge case in multi-device scenarios but the speed-up is
+        //     enormous (was 25s).
+        //   - Empty cache: 20 seconds. The wipe-protection scenario.
+        //     If cache is empty AND server can't confirm, blocking
+        //     writes is the only safe option — we'd otherwise risk
+        //     writing the empty state back to Firestore.
         if(!_cacheFallbackTimer){
+          const nonEmpty=(S.tasks||[]).length||(S.habits||[]).length||(S.builds||[]).length||(S.ideas||[]).length||(S.notes||[]).length||(S.resources||[]).length||(S.notebook&&S.notebook.sections&&S.notebook.sections.length);
+          const delay=nonEmpty?3000:20000;
           _cacheFallbackTimer=setTimeout(()=>{
             if(_initialSyncDone)return;
-            const nonEmpty=(S.tasks||[]).length||(S.habits||[]).length||(S.builds||[]).length||(S.ideas||[]).length||(S.notes||[]).length||(S.resources||[]).length||(S.notebook&&S.notebook.sections&&S.notebook.sections.length);
-            if(nonEmpty){
-              console.warn('[sync] no server snapshot in 25s — accepting cache (has real data)');
+            const stillNonEmpty=(S.tasks||[]).length||(S.habits||[]).length||(S.builds||[]).length||(S.ideas||[]).length||(S.notes||[]).length||(S.resources||[]).length||(S.notebook&&S.notebook.sections&&S.notebook.sections.length);
+            if(stillNonEmpty){
+              console.warn('[sync] no server snapshot in '+(delay/1000)+'s — accepting cache (has real data)');
               _initialSyncDone=true;
               setSplashStage(100,'Ready');setTimeout(hideSplash,250);
               try{render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}catch(_){}
             } else {
-              console.warn('[sync] no server snapshot in 25s and cache is empty — staying blocked to protect cloud data');
+              console.warn('[sync] no server snapshot in '+(delay/1000)+'s and cache is empty — staying blocked to protect cloud data');
               setSplashStage(85,'Waiting for the server…');
             }
-          },25000);
+          },delay);
         }
         return;
       }
