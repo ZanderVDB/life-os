@@ -969,6 +969,18 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .col-lbl.pers{color:var(--peach)}
 .proj-g{margin-bottom:12px}
 .proj-hdr{display:flex;align-items:center;gap:7px;margin-bottom:6px;padding-left:2px}
+/* Multi-column flow for the Tasks page Areas. Cards fill column 1
+   top-to-bottom then continue in column 2 (or 3 on wide). break-inside
+   keeps tall cards intact. Order on the page matches the user's
+   drag-sorted Area list. */
+.areas-grid{column-count:2;column-gap:18px}
+.area-card{break-inside:avoid;margin-bottom:18px;display:block}
+.area-hdr{display:flex;align-items:center;gap:7px;margin-bottom:6px;padding-left:2px}
+.area-hdr .pdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.area-hdr .pnm{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-2)}
+.area-cnt{font-size:10px;font-weight:600;color:var(--muted);background:var(--surface-2);padding:1px 7px;border-radius:5px;margin-left:auto}
+@media(max-width:900px){.areas-grid{column-count:1}}
+@media(min-width:1400px){.areas-grid{column-count:3}}
 .pdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .pnm{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .tcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
@@ -1312,8 +1324,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .switch input:checked + .slider::before{transform:translateX(16px)}
 .switch input:focus-visible + .slider{box-shadow:0 0 0 2px var(--accent-bg,var(--border))}
 /* Work-area editor rows (Settings) — clickable colour dot + name input + × */
-.wp-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);min-width:0}
+.wp-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);min-width:0;cursor:grab}
 .wp-row:last-child{border-bottom:none}
+.wp-row-dragging{opacity:.4;cursor:grabbing}
+.wp-row-dragover{box-shadow:inset 0 -2px 0 var(--accent,var(--peach))}
+.wp-drag{flex-shrink:0;color:var(--muted-2);font-size:13px;letter-spacing:-2px;cursor:grab;user-select:none;padding:0 2px}
 .wp-dot-btn{width:22px;height:22px;border-radius:50%;flex-shrink:0;border:2px solid var(--border);cursor:pointer;padding:0;transition:transform .12s,border-color .12s;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
 .wp-dot-btn:hover{transform:scale(1.1);border-color:var(--border-strong)}
 .wp-name{flex:1;min-width:0;padding:6px 10px;font-size:13px}
@@ -2571,8 +2586,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="setting-row setting-row-stack" style="align-items:stretch">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
               <div>
-                <div class="setting-label">Work areas</div>
-                <div class="setting-desc">Your businesses, clients, or companies — anything you want to group work tasks under. Tasks that don't match any area default to "General."</div>
+                <div class="setting-label">Areas</div>
+                <div class="setting-desc">Group your tasks under any topic — Personal, Work, Food, University, Shopping, whatever. Drag the handle on the left to reorder; the order here matches the order on the Tasks page.</div>
               </div>
               <button class="btn btn-ghost btn-sm" onclick="addWorkProject()">+ Add</button>
             </div>
@@ -2810,7 +2825,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v142';
+const APP_VERSION='v143';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -4051,6 +4066,8 @@ function handleSnapshot(snap){
     S.disabledCalendars=Array.isArray(d.disabledCalendars)?d.disabledCalendars:[];
     S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
     S.workProjects=Array.isArray(d.workProjects)?d.workProjects:[];
+    if(typeof d._personalOrder==='number')S._personalOrder=d._personalOrder;else delete S._personalOrder;
+    if(typeof d._workOrder==='number')S._workOrder=d._workOrder;else delete S._workOrder;
     // Notebook: free-form chaos space. Deliberately NOT included in the AI
     // bot's context (see buildAIContext / doUpdate) — the only code path
     // that sends notebook content to Claude is the per-page Refine button.
@@ -4165,6 +4182,9 @@ function _buildSavePayload(){
   if(S.aiHistory!==undefined)payload.aiHistory=Array.isArray(S.aiHistory)?S.aiHistory:[];
   if(S.aiConfirmMode!==undefined)payload.aiConfirmMode=S.aiConfirmMode;
   if(S.workProjects!==undefined)payload.workProjects=Array.isArray(S.workProjects)?S.workProjects:[];
+  // Drag-to-reorder positions for the built-in Personal / Work areas.
+  if(typeof S._personalOrder==='number')payload._personalOrder=S._personalOrder;
+  if(typeof S._workOrder==='number')payload._workOrder=S._workOrder;
   if(S.calendarDefaults!==undefined)payload.calendarDefaults=S.calendarDefaults;
   if(S.notebook!==undefined)payload.notebook=S.notebook||{sections:[]};
   return payload;
@@ -4221,6 +4241,28 @@ function rebuildPROJ(){
     if(!p||!p.id||!p.name)return;
     PROJ[p.id]={n:p.name,h:p.color||PROJ_COLOR_OPTIONS[i%PROJ_COLOR_OPTIONS.length]};
   });
+}
+// Areas helper — returns the full ordered list of Areas the user has,
+// including the implicit Personal and Work entries plus their custom
+// workProjects. Custom Areas honour their `order` field for drag-to-
+// reorder; Personal/Work default to the top unless reordered.
+function getOrderedAreaList(){
+  const out=[
+    {id:'personal',name:'Personal',color:'var(--sage)',order:(typeof S._personalOrder==='number'?S._personalOrder:0),builtin:true},
+    {id:'work',name:'Work',color:'var(--blue)',order:(typeof S._workOrder==='number'?S._workOrder:1),builtin:true}
+  ];
+  (S.workProjects||[]).forEach((p,i)=>{
+    if(!p||!p.id||!p.name)return;
+    out.push({id:p.id,name:p.name,color:p.color||PROJ_COLOR_OPTIONS[i%PROJ_COLOR_OPTIONS.length],order:typeof p.order==='number'?p.order:(2+i),builtin:false});
+  });
+  out.sort((a,b)=>(a.order??99)-(b.order??99));
+  return out;
+}
+// Resolve a task's effective area id — picks the project if it's a real
+// custom Area, otherwise the binary area (work/personal) becomes the id.
+function effectiveAreaId(t){
+  if(t.project&&t.project!=='gen'&&PROJ[t.project])return t.project;
+  return t.area||'personal';
 }
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
@@ -7141,13 +7183,16 @@ function saveTask(id){
   const modalTa=document.getElementById('tm-text');
   const modalTi=document.getElementById('tm-time');
   const modalAr=document.getElementById('tm-area');
-  const modalPr=document.getElementById('tm-project');
   if(modalTa&&UI._taskModalId===id){if(modalTa.value.trim())t.text=modalTa.value.trim();}
   else{const ta=document.getElementById('exp-ta-'+id);if(ta?.value?.trim())t.text=ta.value.trim();}
   if(modalTi&&UI._taskModalId===id)t.scheduledTime=modalTi.value;
   else{const ti=document.getElementById('exp-ti-'+id);if(ti)t.scheduledTime=ti.value;}
-  if(modalAr&&UI._taskModalId===id&&modalAr.value)t.area=modalAr.value;
-  if(modalPr&&UI._taskModalId===id&&modalPr.value)t.project=modalPr.value;
+  if(modalAr&&UI._taskModalId===id&&modalAr.value){
+    const v=modalAr.value;
+    if(v==='personal'){t.area='personal';t.project='gen';}
+    else if(v==='work'){t.area='work';t.project='gen';}
+    else{t.area='work';t.project=v;}
+  }
   if(!_isSyntheticTaskMode())svAll();
   ex={id:null,type:null};
   closeTaskModal();
@@ -7243,16 +7288,11 @@ function openTaskModal(idOrTask,opts){
       </div>
       <label class="tm-lbl" for="tm-text">Task</label>
       <textarea id="tm-text" class="ta tm-text-ta" rows="2" placeholder="What needs doing?">${esc(t.text||'')}</textarea>
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <div style="flex:1">
-          <label class="tm-lbl" for="tm-area">Area</label>
-          <select id="tm-area" class="input"><option value="personal"${(t.area||'personal')==='personal'?' selected':''}>Personal</option><option value="work"${t.area==='work'?' selected':''}>Work</option></select>
-        </div>
-        <div style="flex:1">
-          <label class="tm-lbl" for="tm-project">Project</label>
-          <select id="tm-project" class="input">${projOpts}</select>
-        </div>
-      </div>
+      <label class="tm-lbl" for="tm-area">Area</label>
+      <select id="tm-area" class="input">${(function(){
+        const cur=effectiveAreaId(t);
+        return getOrderedAreaList().map(a=>`<option value="${esc(a.id)}"${a.id===cur?' selected':''}>${esc(a.name)}</option>`).join('');
+      })()}</select>
       <label class="tm-lbl" for="tm-time">Scheduled time</label>
       <input id="tm-time" class="input" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am">
       <label class="tm-lbl">Steps</label>
@@ -7355,11 +7395,19 @@ function closeTaskModal(){
         const ta=document.getElementById('tm-text');
         const ti=document.getElementById('tm-time');
         const ar=document.getElementById('tm-area');
-        const pr=document.getElementById('tm-project');
         if(ta&&ta.value.trim()&&ta.value.trim()!==t.text)t.text=ta.value.trim();
         if(ti&&ti.value!==t.scheduledTime)t.scheduledTime=ti.value;
-        if(ar&&ar.value)t.area=ar.value;
-        if(pr&&pr.value)t.project=pr.value;
+        // Single Area dropdown maps to the legacy area/project pair so
+        // existing data stays compatible. Personal/Work go to area=...,
+        // project='gen'; any custom area id is stored in project with
+        // area='work' so the old binary classifier still groups it as
+        // non-personal work.
+        if(ar&&ar.value){
+          const v=ar.value;
+          if(v==='personal'){t.area='personal';t.project='gen';}
+          else if(v==='work'){t.area='work';t.project='gen';}
+          else{t.area='work';t.project=v;}
+        }
         if(_isSyntheticTaskMode()){
           // Hand the synthetic back to the AI review queue / new-task
           // creator without touching S or Firestore.
@@ -7429,18 +7477,17 @@ function mkPriRow(t){
 function rTasks(){
   const el=document.getElementById('tasks-sec');if(!el)return;
   const visible=S.tasks.filter(isTaskVisible);
-  const wt=visible.filter(t=>t.area==='work'),pt=visible.filter(t=>t.area==='personal');
-  // Build the group map dynamically from PROJ so new user-defined work areas
-  // show up automatically. Keys are project IDs; values are arrays of tasks.
-  const grps={};Object.keys(PROJ).forEach(k=>{grps[k]=[];});
-  wt.forEach(t=>{const k=grps[t.project]!==undefined?t.project:'gen';grps[k].push(t);});
-  // Refresh the quick-add dropdown options to match current PROJ
-  const taSel=document.getElementById('t-proj');
-  if(taSel){
-    const curVal=taSel.value;
-    taSel.innerHTML=Object.entries(PROJ).filter(([k])=>k!=='gen').map(([k,p])=>`<option value="${esc(k)}">${esc(p.n)}</option>`).join('')+`<option value="gen">General</option>`;
-    if(curVal&&PROJ[curVal])taSel.value=curVal;
-  }
+  // Group ALL visible tasks by their effective area (project id if set
+  // and !=gen, else the binary area work/personal). The work/personal
+  // split is gone — every Area sits as a peer, ordered per the user's
+  // drag-sorted list in Settings.
+  const orderedAreas=getOrderedAreaList();
+  const grps={};orderedAreas.forEach(a=>{grps[a.id]=[];});
+  visible.forEach(t=>{
+    const ek=effectiveAreaId(t);
+    if(grps[ek])grps[ek].push(t);
+    else (grps['personal']=grps['personal']||[]).push(t);
+  });
   // Priority sort. IMPORTANT: PO['urgent'] is 0, and `0||fallback` evaluates
   // to the fallback in JS — that bug used to push urgent tasks to the
   // position of "lo" (3). We use ?? so 0 stays 0.
@@ -7490,11 +7537,22 @@ function rTasks(){
     html+=`</div>`;
     return html;
   };
-  let wh='<div class="col-lbl work">Work</div>',hw=false;
-  Object.entries(grps).forEach(([k,ts])=>{if(!ts.length)return;hw=true;const p=PROJ[k];wh+=`<div class="proj-g"><div class="proj-hdr"><span class="pdot" style="background:${p.h}"></span><span class="pnm">${p.n}</span></div><div class="tcard">${srt(ts).map(mkTi).join('')}</div></div>`;});
-  if(!hw)wh+=`<div class="no-t">Clear board.</div>`;
-  const ps=srt(pt);
-  el.innerHTML=`<div class="tgrid"><div>${wh}</div><div><div class="col-lbl pers">Personal</div>${ps.length?`<div class="tcard">${ps.map(mkTi).join('')}</div>`:'<div class="no-t">Nothing personal.</div>'}</div></div>`;
+  // CSS multi-column layout. Each Area card flows top-to-bottom in
+  // column 1, then continues in column 2 (and 3 on wide screens).
+  // break-inside:avoid on each card (set in CSS) keeps a tall Area
+  // from being chopped across columns. Empty Areas are hidden so the
+  // page isn't littered with "no tasks" placeholders.
+  const cards=orderedAreas.map(a=>{
+    const ts=grps[a.id];
+    if(!ts||!ts.length)return '';
+    const tinted=a.color||'var(--peach)';
+    return `<div class="area-card"><div class="area-hdr"><span class="pdot" style="background:${tinted}"></span><span class="pnm">${esc(a.name)}</span><span class="area-cnt">${ts.length}</span></div><div class="tcard">${srt(ts).map(mkTi).join('')}</div></div>`;
+  }).filter(Boolean).join('');
+  if(!cards){
+    el.innerHTML=`<div class="no-t">Clear board.</div>`;
+  } else {
+    el.innerHTML=`<div class="areas-grid">${cards}</div>`;
+  }
   // Tab visibility — Active shows the live lists + add form, History shows
   // the completed archive only.
   // Tasks page is single-purpose now — just shows active items. The
@@ -7913,25 +7971,86 @@ async function renderCalendarList(){
     return `<div style="padding:6px 0;display:flex;align-items:center;min-width:0;gap:4px">${dot}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${name}${badge}</span>${toggle}</div>`;
   }).join('');
 }
-// ───────── WORK AREAS (user-configurable PROJ entries) ─────────
+// ───────── AREAS (the unified Personal / Work / custom-topic list) ─────────
 function renderWorkProjects(){
   const el=document.getElementById('work-projects-list');if(!el)return;
-  const projects=S.workProjects||[];
-  if(!projects.length){
-    el.innerHTML=`<div style="padding:10px 0;color:var(--muted);font-size:12px;font-style:italic">No work areas yet. Tap "+ Add" to create one — e.g. a business you run or a client you freelance for.</div>`;
-    return;
-  }
-  el.innerHTML=projects.map((p,i)=>{
-    const color=p.color||PROJ_COLOR_OPTIONS[i%PROJ_COLOR_OPTIONS.length];
-    // Colour dot is now a BUTTON that opens a small popover with the six
-    // swatches (instead of always showing the full palette inline, which
-    // looked cluttered). Click elsewhere to dismiss.
-    return `<div class="wp-row" data-wp-row="${esc(p.id)}">
-      <button class="wp-dot-btn" style="background:${color}" onclick="toggleWorkProjectColorPicker('${esc(p.id)}',event)" aria-label="Change colour"></button>
-      <input class="input wp-name" data-wp-id="${esc(p.id)}" value="${esc(p.name)}" placeholder="Name" oninput="onWorkProjectNameChange('${esc(p.id)}',this.value)">
-      <button class="btn btn-ghost btn-sm wp-del" onclick="deleteWorkProject('${esc(p.id)}')" title="Remove">×</button>
+  const areas=getOrderedAreaList();
+  // Render every Area, including the implicit Personal and Work entries.
+  // Personal/Work are flagged builtin so their colour/name aren't editable
+  // and the delete button is hidden, but they CAN be reordered via drag.
+  el.innerHTML=areas.map((a,i)=>{
+    const tasksHere=(S.tasks||[]).filter(t=>!t.done&&effectiveAreaId(t)===a.id).length;
+    const dragCue=`<span class="wp-drag" title="Drag to reorder" aria-label="Drag handle">⋮⋮</span>`;
+    if(a.builtin){
+      return `<div class="wp-row" data-area-id="${esc(a.id)}" draggable="true">
+        ${dragCue}
+        <span class="wp-dot-btn" style="background:${a.color};cursor:default"></span>
+        <span class="input wp-name" style="background:transparent;border:none;font-style:italic;color:var(--text-2)">${esc(a.name)}<span style="font-size:10px;color:var(--muted);margin-left:8px">built-in${tasksHere?' · '+tasksHere+' task'+(tasksHere===1?'':'s'):''}</span></span>
+      </div>`;
+    }
+    return `<div class="wp-row" data-area-id="${esc(a.id)}" draggable="true">
+      ${dragCue}
+      <button class="wp-dot-btn" style="background:${a.color}" onclick="toggleWorkProjectColorPicker('${esc(a.id)}',event)" aria-label="Change colour"></button>
+      <input class="input wp-name" data-wp-id="${esc(a.id)}" value="${esc(a.name)}" placeholder="Name" oninput="onWorkProjectNameChange('${esc(a.id)}',this.value)">
+      <button class="btn btn-ghost btn-sm wp-del" onclick="deleteWorkProject('${esc(a.id)}')" title="Remove">×</button>
     </div>`;
   }).join('');
+  _wireAreaDragReorder(el);
+}
+// Native HTML5 drag-and-drop for reordering Areas. On drop, recompute
+// `order` for each Area: builtins (personal/work) get _personalOrder /
+// _workOrder on S; custom areas get a numeric `order` field on their
+// workProjects entry. Everything is then resorted at render time.
+function _wireAreaDragReorder(container){
+  let draggingEl=null;
+  container.querySelectorAll('.wp-row').forEach(row=>{
+    row.addEventListener('dragstart',e=>{
+      draggingEl=row;row.classList.add('wp-row-dragging');
+      try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',row.dataset.areaId);}catch(_){}
+    });
+    row.addEventListener('dragend',()=>{
+      if(draggingEl)draggingEl.classList.remove('wp-row-dragging');
+      draggingEl=null;
+      container.querySelectorAll('.wp-row-dragover').forEach(r=>r.classList.remove('wp-row-dragover'));
+    });
+    row.addEventListener('dragover',e=>{
+      if(!draggingEl||row===draggingEl)return;
+      e.preventDefault();
+      try{e.dataTransfer.dropEffect='move';}catch(_){}
+      const r=row.getBoundingClientRect();
+      const before=(e.clientY-r.top)<r.height/2;
+      container.querySelectorAll('.wp-row-dragover').forEach(r=>r.classList.remove('wp-row-dragover'));
+      row.classList.add('wp-row-dragover');
+      row._dropBefore=before;
+    });
+    row.addEventListener('drop',e=>{
+      e.preventDefault();
+      if(!draggingEl||row===draggingEl)return;
+      const dragId=draggingEl.dataset.areaId;
+      const targetId=row.dataset.areaId;
+      const before=row._dropBefore;
+      _reorderArea(dragId,targetId,before);
+    });
+  });
+}
+function _reorderArea(dragId,targetId,beforeTarget){
+  const areas=getOrderedAreaList();
+  const dragIdx=areas.findIndex(a=>a.id===dragId);
+  const targetIdx=areas.findIndex(a=>a.id===targetId);
+  if(dragIdx<0||targetIdx<0)return;
+  const [moved]=areas.splice(dragIdx,1);
+  let insertAt=areas.findIndex(a=>a.id===targetId);
+  if(!beforeTarget)insertAt+=1;
+  areas.splice(insertAt,0,moved);
+  // Persist new order. Builtins (personal/work) get their order written
+  // to S._personalOrder / S._workOrder; custom areas write `order` on
+  // their S.workProjects entry.
+  areas.forEach((a,i)=>{
+    if(a.id==='personal')S._personalOrder=i;
+    else if(a.id==='work')S._workOrder=i;
+    else{const p=(S.workProjects||[]).find(x=>x.id===a.id);if(p)p.order=i;}
+  });
+  rebuildPROJ();svAll();renderWorkProjects();rTasks();
 }
 // Popover color picker — appears next to the clicked dot with six swatches.
 // Dismissed by selecting a colour or clicking outside.
@@ -7965,11 +8084,12 @@ function _genWPId(name){
 }
 function addWorkProject(){
   S.workProjects=S.workProjects||[];
-  if(S.workProjects.length>=8){alert('Keep it to 8 work areas or fewer — the task view gets noisy beyond that.');return;}
-  const name=prompt('Name of the work area (e.g. your business or a client):');
+  const name=prompt('Name of the area (e.g. Food, University, Shopping, a business or client):');
   if(!name||!name.trim())return;
   const color=PROJ_COLOR_OPTIONS[S.workProjects.length%PROJ_COLOR_OPTIONS.length];
-  S.workProjects.push({id:_genWPId(name.trim()),name:name.trim(),color});
+  // Order = max+1 so new entries land at the bottom.
+  const maxOrder=Math.max(1,...((S.workProjects||[]).map(p=>p.order||0)));
+  S.workProjects.push({id:_genWPId(name.trim()),name:name.trim(),color,order:maxOrder+1});
   rebuildPROJ();svAll();renderWorkProjects();rTasks();
 }
 function onWorkProjectNameChange(id,newName){
