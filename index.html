@@ -2861,7 +2861,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v147';
+const APP_VERSION='v148';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -8773,6 +8773,11 @@ CLARIFY WHEN GENUINELY UNCERTAIN — instead of guessing on truly ambiguous inpu
 
 TASK SCHEDULING — when the user mentions a task with any time hint, ALWAYS fill scheduledTime. Even soft hints like "tomorrow" / "later" / "next week" should resolve to a sensible default time (use 11am for "morning"/"tomorrow"/no specific hint, 2pm for "afternoon", 7pm for "evening", and the literal time when one is given e.g. "at 3pm"). Format scheduledTime as a human-readable 12-hour string like "11am" or "3:30pm". Skip scheduledTime ONLY if the user is clearly adding a free-form to-do with no time intent at all ("buy groceries some day"). Default to giving a time over leaving it blank.
 
+DAILY vs GENERAL — Tasks live in either the Daily list (today's focus) or the General backlog. They are mutually exclusive.
+- Set "daily":true when the user EXPLICITLY says "daily", "today", "for today", "to my daily list", "on my daily", "do today", or otherwise signals this belongs on today's focused list.
+- Omit "daily" (or set false) when the user says "add to general", "for later", "someday", or doesn't mention daily/today at all — those go on the General backlog.
+- "daily":true does NOT imply scheduledTime; the user can have a daily task with no time. Never invent a scheduledTime just because daily is true.
+
 MULTI-STEP TASKS — addTasks supports an optional "steps" array of {text}. Use steps ONLY when the user describes a task that genuinely has multiple distinct sub-actions ("plan dad's birthday — book restaurant, buy gift, organise people", "ship the new feature: write code, write tests, deploy"). DO NOT auto-decompose simple tasks into steps just because you can — most tasks are single-action and should NOT have steps. A task with steps locks the main checkbox until every step is ticked, so adding steps to a one-shot task makes it harder to complete. When you do use steps, list them in execution order, keep each step short and concrete, and limit to 2–6 steps unless the user explicitly enumerated more.
 
 BULK-TICK HABITS — completeHabits accepts EITHER a string (ticks today) OR an object {match, dates:[YYYY-MM-DD,...]} (ticks each listed date). Use the object form when the user describes ticking habits across multiple past days:
@@ -8810,7 +8815,7 @@ REMINDERS vs TASKS vs EVENTS — pick the right surface:
   - yearly: {"type":"yearly","month":2,"day":15} (month 0-11; March 15 = month:2, day:15)
 
 Respond ONLY raw JSON:
-{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"addReminders":[{"text":"...","recurrence":{"type":"daily|weekly|monthly|yearly","weekdays":"[0-6 array, only if weekly]","dayOfMonth":"1-31, only if monthly","month":"0-11, only if yearly","day":"1-31, only if yearly"}}],"message":"1 sentence"}
+{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","daily":"true if user wants this on the Daily list, omit/false for General","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"addReminders":[{"text":"...","recurrence":{"type":"daily|weekly|monthly|yearly","weekdays":"[0-6 array, only if weekly]","dayOfMonth":"1-31, only if monthly","month":"0-11, only if yearly","day":"1-31, only if yearly"}}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 User:"${msg}"`;
   try{
@@ -8969,7 +8974,7 @@ function formatAIChangesDetailed(ch){
   const sections=[];
   const taskLines=[];
   (ch.addTasks||[]).forEach(t=>{
-    const bits=[];if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);
+    const bits=[];if(t.daily)bits.push('Daily');if(t.area)bits.push(t.area);if(t.project&&t.project!=='gen')bits.push(t.project);if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push('at '+t.scheduledTime);
     taskLines.push(`  • Add "${t.text||'(untitled)'}"${bits.length?' — '+bits.join(', '):''}`);
     // Show step breakdown if AI proposed one, indented under its parent.
     if(Array.isArray(t.steps)&&t.steps.length){
@@ -9024,6 +9029,29 @@ function formatAIChangesDetailed(ch){
     calLines.push(`  • Update "${e.match||'?'}" — ${changes.join(', ')||'(no changes specified)'}`);
   });
   if(calLines.length)sections.push('CALENDAR\n'+calLines.join('\n'));
+
+  // REMINDERS — recurring re-surfacing items. Without this section the
+  // confirm modal's gate `formatAIChangesDetailed(ch)` returns empty for
+  // reminder-only changes, which silently bypasses the "Confirm before
+  // applying" setting. Always include reminders here so the gate fires.
+  const remLines=[];
+  (ch.addReminders||[]).forEach(r=>{
+    const rc=r.recurrence||{};
+    let when='—';
+    if(rc.type==='daily')when='daily';
+    else if(rc.type==='weekly'){
+      const names=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      const ds=Array.isArray(rc.weekdays)?rc.weekdays.map(d=>names[d]).filter(Boolean):[];
+      when=ds.length?'weekly · '+ds.join(', '):'weekly';
+    }
+    else if(rc.type==='monthly')when=`monthly · day ${rc.dayOfMonth||1}`;
+    else if(rc.type==='yearly'){
+      const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      when=`yearly · ${months[rc.month||0]} ${rc.day||1}`;
+    }
+    remLines.push(`  • Add reminder "${r.text||'(untitled)'}" — ${when}`);
+  });
+  if(remLines.length)sections.push('REMINDERS\n'+remLines.join('\n'));
 
   return sections.length?sections.join('\n\n'):'';
 }
@@ -9134,6 +9162,7 @@ function _aicSummary(key,item){
   switch(key){
     case 'addTasks':{
       title=`Add "${esc(item.text||'(untitled)')}"`;
+      if(item.daily)meta.push('Daily');
       if(item.area)meta.push(esc(item.area));
       if(item.project&&item.project!=='gen')meta.push(esc(PROJ[item.project]?.n||item.project));
       if(item.priority)meta.push(esc(item.priority));
@@ -9566,6 +9595,7 @@ function _aicBuildForm(key,it){
           <div class="aic-edit-field"><label>Priority</label><select data-f="priority" data-fselect="${v(it.priority||'med')}"><option value="urgent">Urgent</option><option value="hi">High</option><option value="med">Medium</option><option value="lo">Low</option><option value="someday">Someday</option></select></div>
           <div class="aic-edit-field"><label>Time</label><input data-f="scheduledTime" placeholder="e.g. 11am" value="${v(it.scheduledTime)}"></div>
         </div>
+        <label class="aic-edit-checkbox"><input type="checkbox" data-f="daily" ${it.daily?'checked':''}>Add to Daily list</label>
         <div class="aic-edit-field">
           <label>Steps (optional)</label>
           <div class="aic-edit-steps">${stepsHTML}<button type="button" class="aic-edit-step-add" data-action="add-step">+ Add a step</button></div>
@@ -9681,7 +9711,7 @@ function _aicReadForm(key,formEl,orig){
     case 'addTasks':{
       const stepEls=formEl.querySelectorAll('.aic-edit-step input');
       const steps=Array.from(stepEls).map(el=>trim(el.value)).filter(Boolean).map(text=>({text}));
-      const out={...orig,text:trim(get('text')),area:get('area'),project:get('project'),priority:get('priority'),scheduledTime:trim(get('scheduledTime'))};
+      const out={...orig,text:trim(get('text')),area:get('area'),project:get('project'),priority:get('priority'),scheduledTime:trim(get('scheduledTime')),daily:!!get('daily')};
       if(steps.length)out.steps=steps;else delete out.steps;
       return out;
     }
@@ -10055,6 +10085,10 @@ async function applyChanges(ch,prompt){
   const detailed=formatAIChangesDetailed(ch);
   if(ch.addTasks?.length)ch.addTasks.forEach(t=>{
     const newT={id:uid(),text:t.text,area:t.area||'personal',project:t.project||'gen',priority:t.priority||'lo',scheduledTime:t.scheduledTime||'',done:false,date:tod()};
+    // Daily list flag — when the AI (or the user via the editor) flags a task
+    // as daily, set dailyDate=today so it surfaces on the Daily tab. Without
+    // this field set the task lands on General. Mutually exclusive by design.
+    if(t.daily===true||t.daily==='true')newT.dailyDate=tod();
     // Optional multi-step breakdown — only attached when AI returns 2+
     // genuine sub-actions (single-step tasks would just lock the
     // checkbox for no benefit, so the prompt warns against that).
