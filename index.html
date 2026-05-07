@@ -2861,7 +2861,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v148';
+const APP_VERSION='v149';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3781,25 +3781,31 @@ function applyAdvancedFields(body,opts){
     const rule=buildRRule(opts.recurrence,opts.date);
     if(rule)body.recurrence=[rule];
   }
-  // reminderMin can be: single number/string, array of numbers, 'none'/null.
-  // Always set useDefault:false to prevent the calendar's default reminder
-  // (often 10 min) being silently added alongside our explicit overrides —
-  // that was the "I set 60 but phone shows 70" mystery.
-  if(opts.reminderMin!==null&&opts.reminderMin!==undefined&&opts.reminderMin!==''&&opts.reminderMin!=='none'){
-    const arr=Array.isArray(opts.reminderMin)?opts.reminderMin:[opts.reminderMin];
-    const overrides=arr
-      .map(m=>Number(m))
-      .filter(m=>!isNaN(m)&&m>=0&&m!=='none')
-      // De-dupe so asking for [60, 60] doesn't give you two identical popups
-      .filter((m,i,a)=>a.indexOf(m)===i)
-      .slice(0,5)  // Google caps at 5 reminders per event
-      .map(m=>({method:'popup',minutes:m}));
-    if(overrides.length)body.reminders={useDefault:false,overrides};
-    else body.reminders={useDefault:false,overrides:[]};
-  } else {
-    // Explicit "None" — clear reminders entirely, don't let the calendar default resurface
-    body.reminders={useDefault:false,overrides:[]};
+  // reminderMin handling. THREE distinct cases:
+  //   (a) key not in opts at all  → leave existing reminders untouched
+  //       (this is what AI updateEvent wants — the AI didn't ask to change
+  //       reminders, so PATCH must not clobber them)
+  //   (b) key present and explicitly 'none'/null/'' → clear all reminders
+  //       (manual edit chose "No reminders")
+  //   (c) key present with values → write the override list
+  // Always set useDefault:false in (b) and (c) to prevent the calendar's
+  // own default reminder being silently added on top — that was the
+  // "I set 60 but phone shows 70" mystery.
+  if(!('reminderMin' in opts))return; // (a) — preserve whatever's there
+  const v=opts.reminderMin;
+  if(v===null||v===undefined||v===''||v==='none'){
+    body.reminders={useDefault:false,overrides:[]}; // (b)
+    return;
   }
+  // (c) — at least one value provided
+  const arr=Array.isArray(v)?v:[v];
+  const overrides=arr
+    .map(m=>Number(m))
+    .filter(m=>!isNaN(m)&&m>=0)
+    .filter((m,i,a)=>a.indexOf(m)===i) // de-dupe
+    .slice(0,5)                         // Google caps at 5 reminders per event
+    .map(m=>({method:'popup',minutes:m}));
+  body.reminders={useDefault:false,overrides};
 }
 async function createGCEvent(title,date,time,desc='',endTime='',opts={}){
   const tok=getGCalToken();if(!tok)return null;
@@ -3850,7 +3856,15 @@ async function deleteGCEvent(id,calId){
 function p2hhmm(s){const m=(s||'').match(/(\d+)(?::(\d+))?\s*(am|pm)/i);if(!m){const m2=(s||'').match(/^(\d{1,2}):(\d{2})$/);if(m2)return`${m2[1].padStart(2,'0')}:${m2[2]}`;return'10:00';}let h=parseInt(m[1]),min=parseInt(m[2]||'0');if(m[3].toLowerCase()==='pm'&&h!==12)h+=12;if(m[3].toLowerCase()==='am'&&h===12)h=0;return`${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`;}
 function endHH(hh){const[h,m]=hh.split(':').map(Number);const eh=(h+1)%24;return`${String(eh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;}
 
-function stopSync(){if(_unsubscribeDoc){try{_unsubscribeDoc();}catch(e){}_unsubscribeDoc=null;}_initialSyncDone=false;stopPresence();}
+function stopSync(){
+  if(_unsubscribeDoc){try{_unsubscribeDoc();}catch(e){}_unsubscribeDoc=null;}
+  // Clear any pending cache-fallback timer so a rapid sign-out/sign-in
+  // (account swap) doesn't have a stale timer fire mid-new-sign-in and
+  // advance the splash for the wrong user.
+  if(_cacheFallbackTimer){clearTimeout(_cacheFallbackTimer);_cacheFallbackTimer=null;}
+  _initialSyncDone=false;
+  stopPresence();
+}
 // Blank the in-memory state object so a fresh user sign-in doesn't paint
 // the previous user's data during the gap before Firestore snapshot arrives.
 // We mutate S in place (it's declared const) rather than replacing the
@@ -4085,8 +4099,17 @@ function handleSnapshot(snap){
     const focVal=focEditable?focused.value:null;
     let focStart=null,focEnd=null;
     if(focEditable){try{focStart=focused.selectionStart;focEnd=focused.selectionEnd;}catch(_){}}
-    // Pull arrays / objects into local state
-    ['tasks','builds','learning','ideas','notes','habits','resources','reminders'].forEach(k=>{if(d[k]!==undefined)S[k]=d[k];});
+    // Pull arrays / objects into local state with TYPE GUARDS — a single
+    // corrupt write (different build, manual Firestore edit, sync glitch)
+    // used to brick the app on next sign-in because S.tasks.filter(...)
+    // would throw if d.tasks happened to be a string/number/object. Now
+    // anything non-array gets coerced to [] with a console.warn so the
+    // user can still load the app and we can spot the bad write.
+    ['tasks','builds','learning','ideas','notes','habits','resources','reminders'].forEach(k=>{
+      if(d[k]===undefined)return;
+      if(Array.isArray(d[k]))S[k]=d[k];
+      else{console.warn('[snapshot] expected array for',k,'got',typeof d[k],'— coerced to []');S[k]=[];}
+    });
     // customEvents was a fallback for GCal-create failures and now produces
     // ghost entries on the calendar (visible in some views, missing from
     // others, undeletable). The new GCal hard-gate prevents new ones, but
@@ -4139,8 +4162,29 @@ function handleSnapshot(snap){
     // so this line also enforces the per-user scoping — account B's snapshot
     // will only ever populate account B's per-user key slot.
     if(!getKey()&&d.ak)setKey(d.ak);
-    migrateHabits();
-    migrateProjects();
+    // ─── Migration gating ───
+    // Each migration is now version-gated. Once the doc has been upgraded
+    // to the current SCHEMA_VERSION it skips the work entirely, so cold-
+    // launch isn't burning CPU on legacy code paths that already ran. The
+    // version is written back to Firestore as `_schemaVersion`. Set
+    // `forceMigrate` (e.g. via a Settings → Reset button) if you ever
+    // need to re-run migrations on a doc that's already at-version.
+    const docSchemaVersion=typeof d._schemaVersion==='number'?d._schemaVersion:0;
+    if(docSchemaVersion<SCHEMA_VERSION||window.__forceMigrate){
+      console.log('[migrate] running v'+docSchemaVersion+' → v'+SCHEMA_VERSION);
+      migrateHabits();
+      migrateProjects();
+      S._schemaVersion=SCHEMA_VERSION;
+      // Save the bumped version on next svAll. Don't trigger one here
+      // (we're inside the snapshot handler — svAll is gated on
+      // _initialSyncDone anyway).
+    } else {
+      // Cheap idempotent shape-fix for habits — covers the case where a
+      // brand-new habit was added on another device and didn't go through
+      // the legacy merge but might still need checkedDates seeded.
+      (S.habits||[]).forEach(h=>{if(!h.checkedDates)h.checkedDates=[];});
+      _habitLegacyMigrated=true;
+    }
     if(!_initialSyncDone){
       console.log('[sync] snapshot fromCache='+fromCache+' tasks='+(S.tasks||[]).length+' habits='+(S.habits||[]).length+' builds='+(S.builds||[]).length+' ideas='+(S.ideas||[]).length+' notes='+(S.notes||[]).length);
       // CRITICAL: only flip _initialSyncDone on a SERVER-confirmed snapshot.
@@ -4167,11 +4211,45 @@ function handleSnapshot(snap){
         if(!_cacheFallbackTimer){
           const nonEmpty=(S.tasks||[]).length||(S.habits||[]).length||(S.builds||[]).length||(S.ideas||[]).length||(S.notes||[]).length||(S.resources||[]).length||(S.notebook&&S.notebook.sections&&S.notebook.sections.length);
           const delay=nonEmpty?3000:20000;
-          _cacheFallbackTimer=setTimeout(()=>{
+          // Capture the cache's updatedAt so we can compare against the
+          // server before accepting it as authoritative. Multi-device race:
+          // laptop wrote at 12:00, phone has cache from 11:00. Without this
+          // check the phone's 3s fallback would accept the 11:00 cache,
+          // unblock svAll, and the next phone edit would overwrite the
+          // 12:00 laptop work.
+          const cacheUpdatedAtMs=d.updatedAt?(d.updatedAt.toMillis?d.updatedAt.toMillis():(d.updatedAt.seconds?d.updatedAt.seconds*1000:0)):0;
+          _cacheFallbackTimer=setTimeout(async()=>{
+            if(_initialSyncDone)return;
+            // Probe the server one more time before accepting cache. If
+            // the server has newer data than what's in cache, the
+            // onSnapshot listener will fire imminently with the fresh
+            // data — give it a 5s window. This costs one network round
+            // trip on cold-launch but only when cache fallback fires
+            // (i.e. slow networks), and it eliminates the stale-overwrite
+            // race entirely.
+            let serverIsNewer=false;
+            try{
+              const serverSnap=await Promise.race([
+                db.collection('users').doc(CU.uid).collection('data').doc('main').get({source:'server'}),
+                new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000))
+              ]);
+              if(serverSnap&&serverSnap.exists){
+                const sd=serverSnap.data();
+                const serverUpdatedAtMs=sd.updatedAt?(sd.updatedAt.toMillis?sd.updatedAt.toMillis():(sd.updatedAt.seconds?sd.updatedAt.seconds*1000:0)):0;
+                if(serverUpdatedAtMs>cacheUpdatedAtMs){
+                  console.warn('[sync] server is newer than cache (server '+new Date(serverUpdatedAtMs).toISOString()+' vs cache '+new Date(cacheUpdatedAtMs).toISOString()+') — letting onSnapshot deliver the fresh data');
+                  serverIsNewer=true;
+                  // The active onSnapshot listener will fire with the
+                  // server data within seconds. Stay blocked until then.
+                  setSplashStage(90,'Syncing latest changes…');
+                }
+              }
+            }catch(e){console.warn('[sync] server probe failed:',e.message);}
+            if(serverIsNewer)return;
             if(_initialSyncDone)return;
             const stillNonEmpty=(S.tasks||[]).length||(S.habits||[]).length||(S.builds||[]).length||(S.ideas||[]).length||(S.notes||[]).length||(S.resources||[]).length||(S.notebook&&S.notebook.sections&&S.notebook.sections.length);
             if(stillNonEmpty){
-              console.warn('[sync] no server snapshot in '+(delay/1000)+'s — accepting cache (has real data)');
+              console.warn('[sync] no server snapshot in '+(delay/1000)+'s — accepting cache (has real data, server agrees or unreachable)');
               _initialSyncDone=true;
               setSplashStage(100,'Ready');setTimeout(hideSplash,250);
               try{render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}catch(_){}
@@ -4223,6 +4301,10 @@ function _buildSavePayload(){
   if(typeof S._workOrder==='number')payload._workOrder=S._workOrder;
   if(S.calendarDefaults!==undefined)payload.calendarDefaults=S.calendarDefaults;
   if(S.notebook!==undefined)payload.notebook=S.notebook||{sections:[]};
+  // Persist the migration high-water-mark so we don't re-run legacy
+  // migrations on every cold launch. Once written, future loads see this
+  // and skip the migration block entirely (handleSnapshot gates on it).
+  if(typeof S._schemaVersion==='number')payload._schemaVersion=S._schemaVersion;
   return payload;
 }
 function svAll(){
@@ -4323,6 +4405,30 @@ function habitColor(h){
   const ix=list.findIndex(x=>x.id===h.id);
   return HABIT_COLORS[(ix<0?0:ix)%HABIT_COLORS.length];
 }
+// Reminder palette + colour resolver. A different palette to habits so the
+// two never collide visually (even though they're in different calendar
+// modes today, future side-by-side views are easier this way). Same
+// position-based stable mapping: each reminder ID consistently gets the
+// same colour across every calendar view (day / 3day / week / month).
+const REMINDER_COLORS=['#7a9aa8','#b37d6f','#9d8bb8','#5a8a6e','#d38a6f','#6a8ab5','#c46a6a','#89a589','#d9a484','#c9a94a','#e0b04f','#7fa186'];
+function reminderColor(rem){
+  const list=S.reminders||[];
+  const ix=list.findIndex(x=>x.id===rem.id);
+  return REMINDER_COLORS[(ix<0?0:ix)%REMINDER_COLORS.length];
+}
+// Lighter / tinted background that pairs with the reminder's solid
+// colour. Used for the chip backgrounds + expanded month bars so the
+// text stays readable in both Soft and Studio themes. ~25% alpha
+// matches the existing event-chip tinting (evInlineStyle uses 32%).
+function reminderBgColor(rem){
+  const c=reminderColor(rem);
+  // Hex → rgba with low alpha. Mirrors hexToRgba but inlined to keep this
+  // paragraph self-contained alongside the colour resolver.
+  const m=/^#([0-9a-f]{6})$/i.exec(c);
+  if(!m)return c;
+  const n=parseInt(m[1],16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},0.22)`;
+}
 const TIERS=[
   {days:1000,icon:'🌟',label:'Legendary',cls:'tier-8'},
   {days:400,icon:'👑',label:'Master',cls:'tier-7'},
@@ -4335,8 +4441,12 @@ const TIERS=[
 ];
 function tierFor(days){for(const t of TIERS){if(days>=t.days)return t;}return null;}
 let _habitLegacyMigrated=false;
+// CURRENT schema version. Bump this whenever you add a new migration so
+// old docs run it once. Migrations are gated by S._schemaVersion in
+// handleSnapshot so they don't burn CPU on every load forever.
+const SCHEMA_VERSION=1;
 function migrateHabits(){
-  // Merge learning items into habits
+  // Merge legacy learning items into habits (run-once for v0 → v1).
   if(S.learning&&S.learning.length){
     S.learning.forEach(l=>{
       if(!S.habits.some(h=>h.name?.toLowerCase()===l.skill?.toLowerCase())){
@@ -4360,6 +4470,8 @@ function migrateHabits(){
   // even though it was actually stale from yesterday. lastDate / streak
   // / total were similarly transient legacy fields. We no longer trust
   // them; checkedDates is the single source of truth.
+  // NOTE: this strip ALSO runs in _buildSavePayload, so keeping it here
+  // is belt-and-braces — schemaVersion gating is safe.
   (S.habits||[]).forEach(h=>{
     if('doneToday' in h)delete h.doneToday;
     if('lastDate' in h)delete h.lastDate;
@@ -6012,9 +6124,12 @@ function _remindersForDay(date){
 function _remChip(rem,opts){
   // Event-chip styled bar showing the reminder text. Always full-width inside
   // its container so multiple stack vertically like cv-ev-chips do.
+  // Colour is stable per-reminder-id across all views (see reminderColor).
   const cls=opts&&opts.cls?opts.cls:'cv-ev-chip task';
   const safe=esc(rem.text||'(reminder)');
-  return `<div class="${cls}" style="background:var(--gold-bg);color:var(--gold);border-left:3px solid var(--gold);padding-left:8px;cursor:pointer" onclick="event.stopPropagation();openReminderModal('${rem.id}')" title="${safe}"><span class="t">⏰</span><span class="n">${safe}</span></div>`;
+  const col=reminderColor(rem);
+  const bg=reminderBgColor(rem);
+  return `<div class="${cls}" style="background:${bg};color:${col};border-left:3px solid ${col};padding-left:8px;cursor:pointer" onclick="event.stopPropagation();openReminderModal('${rem.id}')" title="${safe}"><span class="t" style="color:${col}">⏰</span><span class="n">${safe}</span></div>`;
 }
 function buildRemindersDayView(dates){
   const {ds,date,isToday}=dates[0];
@@ -6031,7 +6146,8 @@ function buildRemindersDayView(dates){
   } else {
     reminders.forEach(r=>{
       const safe=esc(r.text||'(reminder)');
-      h+=`<div class="td-event" style="border-left:3px solid var(--gold);padding-left:10px;cursor:pointer" onclick="openReminderModal('${r.id}')"><span class="td-ev-time" style="color:var(--gold)">⏰</span><span class="td-ev-title">${safe}</span></div>`;
+      const col=reminderColor(r);
+      h+=`<div class="td-event" style="border-left:3px solid ${col};padding-left:10px;cursor:pointer" onclick="openReminderModal('${r.id}')"><span class="td-ev-time" style="color:${col}">⏰</span><span class="td-ev-title">${safe}</span></div>`;
     });
   }
   h+=`</div></div>`;
@@ -6076,10 +6192,12 @@ function buildRemindersMonthView(y,m,today){
       visible.forEach((rem,i)=>{
         const safe=esc(rem.text||'(reminder)');
         const fadedCls=faded?' mv-bar-faded':'';
+        const col=reminderColor(rem);
+        const bg=reminderBgColor(rem);
         if(detail){
-          h+=`<div class="mv-bar mv-bar-exp both${fadedCls}" style="grid-column:${idx+1}/${idx+2};grid-row:${i+2};background:var(--gold-bg);color:var(--gold);border-left:3px solid var(--gold);cursor:pointer" onclick="event.stopPropagation();openReminderModal('${rem.id}')" title="${safe}"><span class="mv-bar-txt">${safe}</span></div>`;
+          h+=`<div class="mv-bar mv-bar-exp both${fadedCls}" style="grid-column:${idx+1}/${idx+2};grid-row:${i+2};background:${bg};color:${col};border-left:3px solid ${col};cursor:pointer" onclick="event.stopPropagation();openReminderModal('${rem.id}')" title="${safe}"><span class="mv-bar-txt">${safe}</span></div>`;
         } else {
-          h+=`<div class="mv-bar both${fadedCls}" style="grid-column:${idx+1}/${idx+2};grid-row:${i+2};background:var(--gold);color:#fff" title="${safe}"><span class="mv-bar-txt">${safe}</span></div>`;
+          h+=`<div class="mv-bar both${fadedCls}" style="grid-column:${idx+1}/${idx+2};grid-row:${i+2};background:${col};color:#fff" title="${safe}"><span class="mv-bar-txt">${safe}</span></div>`;
         }
       });
       if(extra>0&&!detail){
@@ -10056,6 +10174,26 @@ function playSound(kind){
   else if(kind==='confirm'){tone(1047,0,0.1,0.06);}
 }
 
+// Strict matcher used by every AI op that resolves a "partial title" needle to
+// a real item. Was previously substring `includes()` which made "bible" tick
+// the FIRST item containing "bible" — including "Caitlin from bible study".
+// Now: exact case-insensitive match first, then startsWith as a fallback,
+// then prefix-of-needle as a last resort. NEVER contains/substring.
+function _aiFindStrict(list,getStr,needleRaw){
+  if(!Array.isArray(list)||!list.length)return null;
+  const needle=String(needleRaw||'').toLowerCase().trim();
+  if(!needle)return null;
+  const norm=x=>String(getStr(x)||'').toLowerCase().trim();
+  let hit=list.find(x=>norm(x)===needle);
+  if(hit)return hit;
+  hit=list.find(x=>norm(x).startsWith(needle));
+  if(hit)return hit;
+  // Last resort: needle starts with the item title (e.g. AI sent "buy
+  // groceries from Pick n Pay" but the task is just "buy groceries"). Only
+  // accept if the title is at least 4 chars to avoid catastrophic matches.
+  hit=list.find(x=>{const n=norm(x);return n.length>=4&&needle.startsWith(n);});
+  return hit||null;
+}
 async function applyChanges(ch,prompt){
   // aiConfirmMode — Settings → AI behaviour → Confirm before applying
   //   'calendar' : tasks/habits/etc apply now; calendar needs OK (default)
@@ -10097,8 +10235,8 @@ async function applyChanges(ch,prompt){
     }
     S.tasks.push(newT);
   });
-  if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)t.done=true;});
-  if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=S.tasks.find(x=>x.text.toLowerCase().includes((r||'').toLowerCase()));if(t)S.tasks=S.tasks.filter(x=>x.id!==t.id);});
+  if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=_aiFindStrict(S.tasks,x=>x.text,r);if(t)t.done=true;});
+  if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=_aiFindStrict(S.tasks,x=>x.text,r);if(t)S.tasks=S.tasks.filter(x=>x.id!==t.id);});
   if(ch.addHabits?.length)ch.addHabits.forEach(h=>{
     if(!h||!h.name)return;
     if(S.habits.some(x=>x.name.toLowerCase()===h.name.toLowerCase()))return;
@@ -10117,7 +10255,7 @@ async function applyChanges(ch,prompt){
       needle=r.match||r.name||'';
       dates=Array.isArray(r.dates)&&r.dates.length?r.dates:[tod()];
     } else return;
-    const h=S.habits.find(x=>x.name.toLowerCase().includes((needle||'').toLowerCase()));
+    const h=_aiFindStrict(S.habits,x=>x.name,needle);
     if(!h)return;
     h.checkedDates=h.checkedDates||[];
     // Validate / dedupe / cap dates. Keep only ISO YYYY-MM-DD strings,
@@ -10128,8 +10266,8 @@ async function applyChanges(ch,prompt){
     validDates.forEach(d=>{if(!h.checkedDates.includes(d))h.checkedDates.push(d);});
   });
   if(ch.addBuild?.length)ch.addBuild.forEach(b=>S.builds.push({id:uid(),title:b.title,desc:b.desc||'',status:b.status||'future',date:tod(),notes:''}));
-  if(ch.addBuildNote?.length)ch.addBuildNote.forEach(n=>{const b=S.builds.find(x=>x.title.toLowerCase().includes((n.project||'').toLowerCase()));if(b&&n.content){const prefix=`[${fmt(tod())}] `;b.notes=prefix+n.content+(b.notes?'\n\n'+b.notes:'');if(UI.projectDetail===b.id){const ta=document.getElementById('pd-notes-'+b.id);if(ta)ta.value=b.notes;}}});
-  if(ch.logLearning?.length)ch.logLearning.forEach(lg=>{let h=S.habits.find(x=>x.name.toLowerCase().includes((lg.skill||'').toLowerCase()));if(!h){h={id:uid(),name:lg.skill,checkedDates:[],createdAt:tod(),notes:[]};S.habits.push(h);}if(lg.type==='session'||!lg.type){h.checkedDates=h.checkedDates||[];if(!h.checkedDates.includes(tod()))h.checkedDates.push(tod());}h.notes=h.notes||[];if(lg.content)h.notes.push({date:tod(),content:lg.content});});
+  if(ch.addBuildNote?.length)ch.addBuildNote.forEach(n=>{const b=_aiFindStrict(S.builds,x=>x.title,n.project);if(b&&n.content){const prefix=`[${fmt(tod())}] `;b.notes=prefix+n.content+(b.notes?'\n\n'+b.notes:'');if(UI.projectDetail===b.id){const ta=document.getElementById('pd-notes-'+b.id);if(ta)ta.value=b.notes;}}});
+  if(ch.logLearning?.length)ch.logLearning.forEach(lg=>{let h=_aiFindStrict(S.habits,x=>x.name,lg.skill);if(!h){h={id:uid(),name:lg.skill,checkedDates:[],createdAt:tod(),notes:[]};S.habits.push(h);}if(lg.type==='session'||!lg.type){h.checkedDates=h.checkedDates||[];if(!h.checkedDates.includes(tod()))h.checkedDates.push(tod());}h.notes=h.notes||[];if(lg.content)h.notes.push({date:tod(),content:lg.content});});
   if(ch.addIdea?.length)ch.addIdea.forEach(i=>S.ideas.push({id:uid(),title:i.title,desc:i.desc||'',date:tod()}));
   if(ch.addResource?.length)ch.addResource.forEach(r=>S.resources.push({id:uid(),title:r.title,url:r.url||'',desc:r.desc||'',tag:r.tag||'other',date:tod()}));
   if(ch.addNote?.length)ch.addNote.forEach(n=>S.notes.push({id:uid(),title:n.title,body:n.body,date:tod()}));
@@ -10248,13 +10386,21 @@ async function confirmCalendarOps(ops,preConfirmed){
           if(!ok)console.warn('[ai-calendar] delete failed for',id);
         }
       } else if(op.kind==='update'){
-        const needle=(op.ev.match||'').toLowerCase();
+        const needle=(op.ev.match||'').toLowerCase().trim();
         if(!needle)continue;
         let pool=(gcCache.events||[]);
         if(!pool.length){const now=new Date();pool=await fetchGCal(new Date(now.getFullYear(),now.getMonth()-1,1).toISOString(),new Date(now.getFullYear(),now.getMonth()+3,0).toISOString());}
-        const target=pool.find(e=>(e.title||'').toLowerCase().includes(needle)&&(!op.ev.date||e.date===op.ev.date));
+        // STRICT matching, mirrors the removeEvent fix:
+        //   1. exact case-insensitive title match
+        //   2. fall back to startsWith if nothing exact
+        //   3. never substring/contains (was rewriting wrong events
+        //      e.g. "Bible study" updating "Bible study Mon" by accident)
+        let target=pool.find(e=>(e.title||'').toLowerCase().trim()===needle&&(!op.ev.date||e.date===op.ev.date));
+        if(!target)target=pool.find(e=>(e.title||'').toLowerCase().trim().startsWith(needle)&&(!op.ev.date||e.date===op.ev.date));
         if(target){
           await updateGCEvent(target.id,op.ev.newTitle||target.title,op.ev.newDate||target.date,op.ev.newTime||target.time||'',target.description||'',target.endTime||'',{allDay:target.allDay,calendarId:target.calendarId});
+        } else {
+          console.warn('[ai-calendar] no exact match to update for',needle);
         }
       }
     }catch(err){console.warn('[ai-calendar]',op.kind,err.message);}
