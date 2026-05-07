@@ -1004,6 +1004,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .rem-wdrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 .rem-wd{font-size:11px;font-weight:600;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;font-family:inherit}
 .rem-wd.on{background:var(--accent,var(--peach));color:var(--accent-ink,#fff);border-color:var(--accent,var(--peach))}
+.rem-overdue{border-left-color:var(--red)!important}
+/* Calendar overlay: reminders due on a day get a small dot indicator
+   on that day's cell when the user has selected the Reminders mode. */
+.cm-rem-dot{position:absolute;bottom:3px;right:5px;width:6px;height:6px;border-radius:50%;background:var(--peach,var(--accent));pointer-events:none}
 .pdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .pnm{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .tcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
@@ -2351,6 +2355,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <div class="cv-row cv-mode-row">
                 <button class="cv" data-cm="events" onclick="setCalMode('events')">Events</button>
                 <button class="cv" data-cm="habits" onclick="setCalMode('habits')">Habits</button>
+                <button class="cv" data-cm="reminders" onclick="setCalMode('reminders')">Reminders</button>
               </div>
               <div class="cv-row">
                 <button class="cv" onclick="setCV('day')">Day</button>
@@ -2856,7 +2861,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v145';
+const APP_VERSION='v146';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -7734,10 +7739,6 @@ function rTasks(){
   const generalTasks=visible.filter(t=>!t.dailyDate);
   // ── Daily view ──
   if(UI.taskTab==='daily'){
-    if(!dailyTasks.length){
-      el.innerHTML=`<div class="no-t">No daily tasks yet. <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openNewTaskModal({daily:true})">+ Add task</button> or switch to General to pull one in.</div>`;
-      return;
-    }
     const todayItems=dailyTasks.filter(t=>t.dailyDate===today);
     const yesterdayItems=dailyTasks.filter(t=>t.dailyDate&&t.dailyDate<today);
     const sort=arr=>[...arr].sort((a,b)=>(PO[a.priority]??99)-(PO[b.priority]??99));
@@ -7760,12 +7761,31 @@ function rTasks(){
         <button class="ti-move" title="Send to General" onclick="event.stopPropagation();moveTaskToGeneral('${t.id}')">→ Gen</button>
       </div>`;
     };
+    // Reminders due today — auto-surface in Daily so the user doesn't
+    // have to navigate to Calendar to see them. Ticking the checkbox
+    // advances nextDue (handled by tickReminder).
+    const dueReminders=(S.reminders||[]).filter(r=>r.nextDue&&r.nextDue<=today).sort((a,b)=>(a.nextDue||'').localeCompare(b.nextDue||''));
+    const remRow=r=>{
+      const overdue=r.nextDue<today;
+      return `<div class="ti pn${overdue?' rem-overdue':''}" style="cursor:pointer" onclick="openReminderModal('${r.id}')">
+        <input type="checkbox" onclick="event.stopPropagation();tickReminder('${r.id}')" title="Mark done & advance to next">
+        <span class="tit" style="flex:1">${esc(r.text||'')}</span>
+        <span class="ti-area-badge" style="--abg:var(--peach)">${overdue?'Overdue':'Reminder'}</span>
+      </div>`;
+    };
     let html='';
+    if(dueReminders.length){
+      html+=`<div class="daily-yesterday-hdr" style="color:var(--peach,var(--accent))">Reminders due</div><div class="tcard" style="margin-bottom:14px">${dueReminders.map(remRow).join('')}</div>`;
+    }
     if(yesterdayItems.length){
       html+=`<div class="daily-yesterday-hdr">From yesterday<button class="btn btn-ghost btn-sm" style="float:right;font-size:10.5px" onclick="rollAllYesterdayForward()">Roll all → today</button></div><div class="tcard" style="margin-bottom:14px">${sort(yesterdayItems).map(dailyMkTi).join('')}</div>`;
     }
     if(todayItems.length){
       html+=`<div class="tcard">${sort(todayItems).map(dailyMkTi).join('')}</div>`;
+    }
+    if(!html){
+      el.innerHTML=`<div class="no-t">No daily tasks yet. <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openNewTaskModal({daily:true})">+ Add task</button> or switch to General to pull one in.</div>`;
+      return;
     }
     el.innerHTML=html;
     return;
