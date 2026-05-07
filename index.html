@@ -2354,8 +2354,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
                    week/month) — different data layer. -->
               <div class="cv-row cv-mode-row">
                 <button class="cv" data-cm="events" onclick="setCalMode('events')">Events</button>
-                <button class="cv" data-cm="habits" onclick="setCalMode('habits')">Habits</button>
                 <button class="cv" data-cm="reminders" onclick="setCalMode('reminders')">Reminders</button>
+                <button class="cv" data-cm="habits" onclick="setCalMode('habits')">Habits</button>
               </div>
               <div class="cv-row">
                 <button class="cv" onclick="setCV('day')">Day</button>
@@ -2861,7 +2861,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v146';
+const APP_VERSION='v147';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -4599,7 +4599,7 @@ function delHabit(id){if(!confirm('Delete this habit? Streak history will be los
 // patterns at a glance and audit past completion. Events mode is the
 // default Google Calendar / reminders view.
 function setCalMode(mode){
-  if(mode!=='events'&&mode!=='habits')mode='events';
+  if(mode!=='events'&&mode!=='habits'&&mode!=='reminders')mode='events';
   UI.calMode=mode;
   UI.monthExpandedDs=null;
   rCal();
@@ -5414,27 +5414,28 @@ async function rCal(){
   {const seen=new Set();gcEvs=gcEvs.filter(e=>{if(seen.has(e.id))return false;seen.add(e.id);return true;});}
   const gcForDate=ds=>(gcEvs||[]).filter(e=>e.date===ds);
   const habitsMode=UI.calMode==='habits';
+  const remindersMode=UI.calMode==='reminders';
   if(UI.calView==='day'){
     const ds=localDs(UI.calDate);
     const isToday=UI.calDate.toDateString()===today.toDateString();
     const dates=[{date:UI.calDate,ds,isToday}];
-    el.innerHTML=habitsMode?buildHabitsDayView(dates):buildDayView(dates,gcEvs);
+    el.innerHTML=remindersMode?buildRemindersDayView(dates):(habitsMode?buildHabitsDayView(dates):buildDayView(dates,gcEvs));
     el.onclick=null;
   } else if(UI.calView==='3day'){
     const dates=Array.from({length:3},(_,i)=>{const d=new Date(UI.calDate);d.setDate(UI.calDate.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
-    el.innerHTML=habitsMode?buildHabitsMultiDayView(dates):buildThreeDayView(dates,gcEvs);
+    el.innerHTML=remindersMode?buildRemindersMultiDayView(dates):(habitsMode?buildHabitsMultiDayView(dates):buildThreeDayView(dates,gcEvs));
     el.onclick=null;
   } else if(UI.calView==='week'){
     const s=new Date(UI.calDate);const dow=UI.calDate.getDay();s.setDate(UI.calDate.getDate()+(dow===0?-6:1-dow));
     const dates=Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
-    el.innerHTML=habitsMode?buildHabitsWeekView(dates):buildWeekView(dates,gcEvs);
+    el.innerHTML=remindersMode?buildRemindersWeekView(dates):(habitsMode?buildHabitsWeekView(dates):buildWeekView(dates,gcEvs));
     el.onclick=null;
   } else {
     // MONTH
     let gcExtra=[];try{gcExtra=await getGCForMonth(y,m+1);}catch(e){}
     let gcPrev=[];try{gcPrev=await getGCForMonth(y,m-1);}catch(e){}
     const allGc=[...gcEvs,...gcExtra,...gcPrev];
-    el.innerHTML=habitsMode?buildHabitsMonthView(y,m,today):buildMonthView(y,m,today,allGc);
+    el.innerHTML=remindersMode?buildRemindersMonthView(y,m,today):(habitsMode?buildHabitsMonthView(y,m,today):buildMonthView(y,m,today,allGc));
     el.onclick=null;
   }
   renderComingUp();
@@ -5995,6 +5996,118 @@ function buildHabitsMonthView(y,m,today){
   },0);
   return h;
 }
+
+// ─────── REMINDERS MODE BUILDERS ───────
+// Same outer DOM as Events / Habits modes so the cell-tap → modal and view-
+// switch flows keep working. Reminders are rendered as event-style chips
+// showing the reminder text on every date their recurrence rule matches —
+// gold to match the existing Reminder category palette. Tapping a chip
+// opens openReminderModal(id) for inline edit. Tapping empty space falls
+// back to the same handlers as the events mode (open day modal / + add).
+function _remindersForDay(date){
+  const list=S.reminders||[];
+  if(!list.length)return [];
+  return list.filter(r=>reminderFiresOn(r,date));
+}
+function _remChip(rem,opts){
+  // Event-chip styled bar showing the reminder text. Always full-width inside
+  // its container so multiple stack vertically like cv-ev-chips do.
+  const cls=opts&&opts.cls?opts.cls:'cv-ev-chip task';
+  const safe=esc(rem.text||'(reminder)');
+  return `<div class="${cls}" style="background:var(--gold-bg);color:var(--gold);border-left:3px solid var(--gold);padding-left:8px;cursor:pointer" onclick="event.stopPropagation();openReminderModal('${rem.id}')" title="${safe}"><span class="t">⏰</span><span class="n">${safe}</span></div>`;
+}
+function buildRemindersDayView(dates){
+  const {ds,date,isToday}=dates[0];
+  const reminders=_remindersForDay(date);
+  let h=`<div class="threeday-list">`;
+  h+=`<div class="td-day-card${isToday?' today':''}">
+    <div class="td-day-hdr">
+      <span class="td-day-name">${isToday?'Today':DAYS[date.getDay()]}</span>
+      <span class="td-day-date">${date.getDate()} ${date.toLocaleDateString('en-ZA',{month:'long'})}</span>
+      <button class="td-add-btn" onclick="event.stopPropagation();openReminderModal()">+ Add reminder</button>
+    </div>`;
+  if(!reminders.length){
+    h+=`<div class="td-empty">No reminders for this day.</div>`;
+  } else {
+    reminders.forEach(r=>{
+      const safe=esc(r.text||'(reminder)');
+      h+=`<div class="td-event" style="border-left:3px solid var(--gold);padding-left:10px;cursor:pointer" onclick="openReminderModal('${r.id}')"><span class="td-ev-time" style="color:var(--gold)">⏰</span><span class="td-ev-title">${safe}</span></div>`;
+    });
+  }
+  h+=`</div></div>`;
+  return h;
+}
+function _buildRemindersColumns(dates){
+  let h=`<div class="cv-grid-7" style="grid-template-columns:repeat(${dates.length},1fr)">`;
+  dates.forEach(({date,ds,isToday})=>{
+    const reminders=_remindersForDay(date);
+    h+=`<div class="cv-gcol${isToday?' today':''}" style="cursor:pointer" onclick="UI.calDate=new Date(${date.getFullYear()},${date.getMonth()},${date.getDate()});UI.calView='day';rCal()" title="Open day"><div class="cv-gcol-hdr"><span><span class="cv-gcol-dname">${DAYS[date.getDay()]}</span><span class="cv-gcol-dnum" style="margin-left:6px">${date.getDate()}</span></span><button class="cv-add-btn" style="padding:2px 6px;font-size:10px" onclick="event.stopPropagation();openReminderModal()">+</button></div>${reminders.length?reminders.map(r=>_remChip(r)).join(''):'<div class="cv-empty" style="font-size:11px">—</div>'}</div>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+function buildRemindersMultiDayView(dates){return _buildRemindersColumns(dates);}
+function buildRemindersWeekView(dates){return _buildRemindersColumns(dates);}
+// Month view — reuses the events month grid (.cv-weeks / .mv-wk / .mcw-cell
+// / .mv-bar / .mv-bar-exp) so cell sizing matches exactly. Each reminder
+// firing on a day becomes one bar in that day's column.
+function buildRemindersMonthView(y,m,today){
+  const cells=_monthCells(y,m);
+  let lastWeek=0;for(let i=0;i<cells.length;i++)if(!cells[i].faded)lastWeek=Math.floor(i/7);
+  const showWeeks=lastWeek+1;
+  const detail=!!UI.monthDetail;
+  const MAX_ROWS=detail?6:4;
+  let h=`<div class="mv-toolbar"><button class="btn btn-ghost btn-sm" onclick="toggleMonthDetail()">${detail?'▦ Bars':'☰ Expand all'}</button></div>`;
+  h+=`<div class="cv-weeks${detail?' detail':''}">`;
+  h+=`<div class="cv-week-row cv-week-hdr">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="cv-week-dayname">${d}</div>`).join('')}</div>`;
+  for(let wk=0;wk<showWeeks;wk++){
+    const weekCells=cells.slice(wk*7,wk*7+7);
+    h+=`<div class="cv-week-row mv-wk" style="--wk-rows:${MAX_ROWS}">`;
+    weekCells.forEach(({y:cy,m:cm,d:cd,faded},idx)=>{
+      const isT=today.getFullYear()===cy&&today.getMonth()===cm&&today.getDate()===cd;
+      h+=`<div class="mcw-cell${faded?' faded':''}${isT?' today':''}" data-cd="${cy},${cm},${cd}" style="grid-column:${idx+1};grid-row:1/-1"><div class="mcw-top"><div class="mcw-num">${cd}</div></div></div>`;
+    });
+    weekCells.forEach(({y:cy,m:cm,d:cd,faded},idx)=>{
+      const dt=new Date(cy,cm,cd);
+      const dayRems=_remindersForDay(dt);
+      const showCount=Math.min(MAX_ROWS,dayRems.length);
+      const visible=dayRems.slice(0,showCount);
+      const extra=dayRems.length-visible.length;
+      visible.forEach((rem,i)=>{
+        const safe=esc(rem.text||'(reminder)');
+        const fadedCls=faded?' mv-bar-faded':'';
+        if(detail){
+          h+=`<div class="mv-bar mv-bar-exp both${fadedCls}" style="grid-column:${idx+1}/${idx+2};grid-row:${i+2};background:var(--gold-bg);color:var(--gold);border-left:3px solid var(--gold);cursor:pointer" onclick="event.stopPropagation();openReminderModal('${rem.id}')" title="${safe}"><span class="mv-bar-txt">${safe}</span></div>`;
+        } else {
+          h+=`<div class="mv-bar both${fadedCls}" style="grid-column:${idx+1}/${idx+2};grid-row:${i+2};background:var(--gold);color:#fff" title="${safe}"><span class="mv-bar-txt">${safe}</span></div>`;
+        }
+      });
+      if(extra>0&&!detail){
+        h+=`<div class="mv-bar mv-bar-more${faded?' mv-bar-faded':''}" style="grid-column:${idx+1}/${idx+2};grid-row:${MAX_ROWS+1};background:transparent;color:var(--muted);font-size:9px;font-weight:700;justify-content:flex-end;padding-right:4px" title="+${extra} more">+${extra}</div>`;
+      }
+    });
+    h+=`</div>`;
+  }
+  h+=`</div>`;
+  setTimeout(()=>{
+    const cal=document.getElementById('cal');if(!cal)return;
+    cal.onmouseover=null;cal.onmouseout=null;hideMcwPopover();
+    // Cell tap → jump to Day view for that date (collapsed) so the user can
+    // see the full list. Expanded mode already shows the names — bar clicks
+    // open openReminderModal directly via inline onclick. Cell taps in
+    // expanded mode also drop to Day view.
+    cal.onclick=e=>{
+      if(e.target.closest('.mv-bar-exp')||e.target.closest('[data-rem-id]'))return;
+      const c=e.target.closest('[data-cd]');if(!c)return;
+      const[cy,cm,cd]=c.dataset.cd.split(',').map(Number);
+      UI.calDate=new Date(cy,cm,cd);
+      UI.calView='day';
+      rCal();
+    };
+  },0);
+  return h;
+}
+
 // Habits-month hover popover. Listed habits ticked that day, mirroring
 // the events month's hover preview but with habit content.
 function attachHabitsMonthHover(cal){
@@ -7252,6 +7365,33 @@ function computeReminderNextDue(rem,fromIso){
     return _isoFromDate(d);
   }
   return _isoFromDate(from);
+}
+// Does a reminder's recurrence rule fire on the given Date? Used by the
+// Reminders calendar view to render reminder names on every matching day
+// (independent of the rolling nextDue, so users see ALL future occurrences,
+// not just the next pending one).
+function reminderFiresOn(rem,d){
+  const rc=rem.recurrence||{type:'daily'};
+  if(rc.type==='daily')return true;
+  if(rc.type==='weekly'){
+    const days=Array.isArray(rc.weekdays)?rc.weekdays:[];
+    if(!days.length)return false;
+    return days.includes(d.getDay());
+  }
+  if(rc.type==='monthly'){
+    const dom=Math.max(1,Math.min(31,Number(rc.dayOfMonth||1)));
+    const lastDay=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+    // Clamp dayOfMonth to last day of the month — same logic as
+    // computeReminderNextDue, so e.g. day-31 fires on Feb 28/29.
+    const target=Math.min(dom,lastDay);
+    return d.getDate()===target;
+  }
+  if(rc.type==='yearly'){
+    const m=Math.max(0,Math.min(11,Number(rc.month||0)));
+    const dom=Math.max(1,Math.min(31,Number(rc.day||1)));
+    return d.getMonth()===m&&d.getDate()===dom;
+  }
+  return false;
 }
 // Recompute nextDue for a reminder relative to today. Used after
 // completing one (advances forward) or when first creating one.
@@ -8659,8 +8799,18 @@ CRITICAL for removeEvent / updateEvent:
 - If the user's request is ambiguous (e.g. multiple different-titled events could fit), pick the single closest and mention the others in the "message" field: "Deleted X; you also have Y and Z — should I remove those too?"
 - If no event in upcomingEvents matches the user's request, leave the remove/update arrays empty and tell them in "message": "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title).
 
+REMINDERS vs TASKS vs EVENTS — pick the right surface:
+- Use addReminders for things that RECUR on a schedule with no specific time of day: "pay rent on the 25th of each month", "take out trash every Tuesday", "renew car license yearly in March". They don't belong on the calendar (would clog the timeline) and don't belong as tasks (tasks die when ticked, reminders re-surface).
+- Use addEvent for time-bound things tied to a specific date and (usually) a specific time: meetings, appointments, birthdays. Even recurring meetings go on the calendar with repeat:"weekly" — the calendar is the right home for time-of-day-sensitive things.
+- Use addTasks for one-off action items the user wants to do once and check off.
+- Recurrence shape for addReminders:
+  - daily: {"type":"daily"}
+  - weekly: {"type":"weekly","weekdays":[1,3,5]} (0=Sun..6=Sat — pick which days)
+  - monthly: {"type":"monthly","dayOfMonth":25} (1-31; auto-clamps for short months)
+  - yearly: {"type":"yearly","month":2,"day":15} (month 0-11; March 15 = month:2, day:15)
+
 Respond ONLY raw JSON:
-{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"message":"1 sentence"}
+{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"addReminders":[{"text":"...","recurrence":{"type":"daily|weekly|monthly|yearly","weekdays":"[0-6 array, only if weekly]","dayOfMonth":"1-31, only if monthly","month":"0-11, only if yearly","day":"1-31, only if yearly"}}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 User:"${msg}"`;
   try{
@@ -8955,7 +9105,8 @@ const AIC_TYPES={
   addBuildNote:{icon:'✎',label:'Project note'},
   addIdea:{icon:'💡',label:'Idea'},
   addNote:{icon:'▤',label:'Note'},
-  addResource:{icon:'🔗',label:'Resource'}
+  addResource:{icon:'🔗',label:'Resource'},
+  addReminders:{icon:'⏰',label:'Reminder'}
 };
 function _aicFmtReminder(r){if(r==null||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (m/60)+' hr';if(m===1440)return '1 day';return (m/1440)+' day';}).filter(Boolean);return names.length?names.join(' + '):null;}
 // Preview the real events a remove/update match string will hit. Uses
@@ -9060,6 +9211,15 @@ function _aicSummary(key,item){
       if(item.url)meta.push(esc(item.url.slice(0,40)));
       break;
     }
+    case 'addReminders':{
+      title=`Add reminder "${esc(item.text||'')}"`;
+      const rc=item.recurrence||{};
+      if(rc.type==='daily')meta.push('Daily');
+      else if(rc.type==='weekly'){const names=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];meta.push('Weekly · '+(rc.weekdays||[]).map(d=>names[d]).join(', '));}
+      else if(rc.type==='monthly')meta.push('Monthly · day '+(rc.dayOfMonth||1));
+      else if(rc.type==='yearly'){const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];meta.push('Yearly · '+months[rc.month||0]+' '+(rc.day||1));}
+      break;
+    }
     default:title=esc(JSON.stringify(item).slice(0,60));
   }
   return {title,meta:meta.join(' · '),stepsHTML};
@@ -9097,6 +9257,7 @@ function renderAIChangesInteractive(ch,eventPool){
   const projKeys=['addBuild','addBuildNote'];
   const brainKeys=['addIdea','addNote','addResource'];
   const calKeys=['addEvent','removeEvent','updateEvent'];
+  const remKeys=['addReminders'];
   const buildSection=(label,keys,opts)=>{
     const cards=[];
     keys.forEach(k=>{
@@ -9119,6 +9280,7 @@ function renderAIChangesInteractive(ch,eventPool){
   buildSection('Projects',projKeys);
   buildSection('Brain',brainKeys);
   buildSection('Calendar',calKeys,{matchPreviewKeys:['removeEvent','updateEvent']});
+  buildSection('Reminders',remKeys);
   return sections.length?sections.join(''):`<div class="aic-empty">Nothing left — hit Cancel or Redo.</div>`;
 }
 
@@ -9351,6 +9513,24 @@ function openAIReviewEditor(ch,key,idx,refreshFn){
     };
     allDayBox.addEventListener('change',sync);sync();
   }
+  // Auto-toggle weekly / monthly / yearly conditional fields on the
+  // reminder editor when the recurrence type select changes. Plus wire
+  // weekday-chip clicks to toggle .on for the same dataset the reader
+  // collects from.
+  const rmTypeSel=overlay.querySelector('[data-f="rmType"]');
+  if(rmTypeSel){
+    const syncRm=()=>{
+      const v=rmTypeSel.value;
+      overlay.querySelectorAll('[data-rm-cond]').forEach(el=>{
+        const want=el.getAttribute('data-rm-cond');
+        el.style.display=v===want?(want==='yearly'?'flex':'block'):'none';
+      });
+    };
+    rmTypeSel.addEventListener('change',syncRm);syncRm();
+    overlay.querySelectorAll('.rem-wd').forEach(b=>{
+      b.addEventListener('click',()=>b.classList.toggle('on'));
+    });
+  }
   overlay.addEventListener('click',e=>{
     const a=e.target.dataset.action;
     if(a==='cancel'||e.target.closest('.modal-bd')){closeAIReviewEditor();return;}
@@ -9461,6 +9641,34 @@ function _aicBuildForm(key,it){
         <div class="aic-edit-field"><label>URL</label><input data-f="url" value="${v(it.url)}" placeholder="https://..."></div>
         <div class="aic-edit-field"><label>Description</label><textarea data-f="desc" rows="2">${v(it.desc)}</textarea></div>
         <div class="aic-edit-field"><label>Tag</label><select data-f="tag" data-fselect="${v(it.tag||'other')}"><option value="article">Article</option><option value="tool">Tool</option><option value="video">Video</option><option value="book">Book</option><option value="person">Person</option><option value="other">Other</option></select></div>`;
+    case 'addReminders':{
+      const rc=it.recurrence||{type:'daily'};
+      const wd=Array.isArray(rc.weekdays)?rc.weekdays:[];
+      const wdChips=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((n,i)=>`<button type="button" class="rem-wd${wd.includes(i)?' on':''}" data-wd="${i}">${n}</button>`).join('');
+      const monthOpts=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((n,i)=>`<option value="${i}"${(rc.month||0)===i?' selected':''}>${n}</option>`).join('');
+      return `
+        <div class="aic-edit-field"><label>Reminder</label><input data-f="text" value="${v(it.text)}" placeholder="e.g. Pay rent, Take out trash"></div>
+        <div class="aic-edit-field"><label>Recurrence</label>
+          <select data-f="rmType" data-fselect="${v(rc.type||'daily')}">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <div class="aic-edit-field" data-rm-cond="weekly"${rc.type==='weekly'?'':' style="display:none"'}>
+          <label>Days of the week</label>
+          <div class="rem-wdrow">${wdChips}</div>
+        </div>
+        <div class="aic-edit-field" data-rm-cond="monthly"${rc.type==='monthly'?'':' style="display:none"'}>
+          <label>Day of the month (1–31)</label>
+          <input data-f="rmDom" type="number" min="1" max="31" value="${rc.dayOfMonth||1}">
+        </div>
+        <div class="aic-edit-row" data-rm-cond="yearly"${rc.type==='yearly'?'':' style="display:none"'}>
+          <div class="aic-edit-field"><label>Month</label><select data-f="rmMonth">${monthOpts}</select></div>
+          <div class="aic-edit-field"><label>Day</label><input data-f="rmDay" type="number" min="1" max="31" value="${rc.day||1}"></div>
+        </div>`;
+    }
     default:
       return `<div class="aic-edit-field"><label>Raw JSON (advanced)</label><textarea data-f="_json" rows="6">${v(JSON.stringify(it,null,2))}</textarea></div>`;
   }
@@ -9517,6 +9725,17 @@ function _aicReadForm(key,formEl,orig){
       return {...orig,title:trim(get('title')),body:trim(get('body'))};
     case 'addResource':
       return {...orig,title:trim(get('title')),url:trim(get('url')),desc:trim(get('desc')),tag:get('tag')};
+    case 'addReminders':{
+      const type=get('rmType')||'daily';
+      const rc={type};
+      if(type==='weekly'){
+        rc.weekdays=Array.from(formEl.querySelectorAll('.rem-wd.on')).map(b=>Number(b.dataset.wd));
+        if(!rc.weekdays.length)rc.type='daily';
+      }
+      if(type==='monthly')rc.dayOfMonth=Math.max(1,Math.min(31,Number(get('rmDom'))||1));
+      if(type==='yearly'){rc.month=Math.max(0,Math.min(11,Number(get('rmMonth'))||0));rc.day=Math.max(1,Math.min(31,Number(get('rmDay'))||1));}
+      return {...orig,text:trim(get('text')),recurrence:rc};
+    }
     default:
       try{return JSON.parse(get('_json'));}catch(_){return orig;}
   }
@@ -9531,7 +9750,8 @@ const AIC_DEFAULTS={
   addNote:t=>({title:t,body:''}),
   addResource:t=>({title:t,url:'',desc:'',tag:'other'}),
   addBuild:t=>({title:t,desc:'',status:'active'}),
-  addHabits:t=>({name:t})
+  addHabits:t=>({name:t}),
+  addReminders:t=>({text:t,recurrence:{type:'monthly',dayOfMonth:1}})
 };
 const AIC_CANONICAL_TEXT={
   addTasks:t=>t.text||'',
@@ -9540,7 +9760,8 @@ const AIC_CANONICAL_TEXT={
   addNote:n=>n.title||'',
   addResource:r=>r.title||'',
   addBuild:b=>b.title||'',
-  addHabits:h=>h.name||''
+  addHabits:h=>h.name||'',
+  addReminders:r=>r.text||''
 };
 function convertChangeType(ch,srcKey,srcIdx,dstKey){
   if(srcKey===dstKey)return null;
@@ -9878,6 +10099,24 @@ async function applyChanges(ch,prompt){
   if(ch.addIdea?.length)ch.addIdea.forEach(i=>S.ideas.push({id:uid(),title:i.title,desc:i.desc||'',date:tod()}));
   if(ch.addResource?.length)ch.addResource.forEach(r=>S.resources.push({id:uid(),title:r.title,url:r.url||'',desc:r.desc||'',tag:r.tag||'other',date:tod()}));
   if(ch.addNote?.length)ch.addNote.forEach(n=>S.notes.push({id:uid(),title:n.title,body:n.body,date:tod()}));
+  // AI-proposed reminders. Validate the recurrence shape, then compute
+  // nextDue so the new reminder slots into the Calendar panel + the
+  // Daily auto-surface immediately.
+  if(ch.addReminders?.length)ch.addReminders.forEach(r=>{
+    if(!r||!r.text||!String(r.text).trim())return;
+    const rc=r.recurrence||{type:'daily'};
+    const safe={type:['daily','weekly','monthly','yearly'].includes(rc.type)?rc.type:'daily'};
+    if(safe.type==='weekly'){
+      safe.weekdays=Array.isArray(rc.weekdays)?rc.weekdays.filter(d=>typeof d==='number'&&d>=0&&d<=6):[];
+      if(!safe.weekdays.length)safe.type='daily';
+    }
+    if(safe.type==='monthly')safe.dayOfMonth=Math.max(1,Math.min(31,Number(rc.dayOfMonth)||1));
+    if(safe.type==='yearly'){safe.month=Math.max(0,Math.min(11,Number(rc.month)||0));safe.day=Math.max(1,Math.min(31,Number(rc.day)||1));}
+    const newRem={id:uid(),text:String(r.text).trim(),recurrence:safe,createdAt:tod(),lastCompleted:null};
+    _refreshReminderDue(newRem,tod());
+    S.reminders=S.reminders||[];
+    S.reminders.push(newRem);
+  });
   svAll();render();
   // Calendar execution decision:
   //   mode='all'     → already approved in the review queue above, run directly
