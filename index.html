@@ -981,6 +981,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .area-cnt{font-size:10px;font-weight:600;color:var(--muted);background:var(--surface-2);padding:1px 7px;border-radius:5px;margin-left:auto}
 @media(max-width:900px){.areas-grid{column-count:1}}
 @media(min-width:1400px){.areas-grid{column-count:3}}
+/* Daily view: flat list, area badge inline, → Today / → Gen quick-move
+   buttons inline on each row. Yesterday-leftover header has its own
+   small label so the user knows which items rolled over. */
+.daily-yesterday-hdr{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px;padding-left:2px}
+.ti-area-badge{font-size:10px;font-weight:600;color:var(--text-2);background:var(--surface-2);border-left:2px solid var(--abg,var(--peach));padding:1px 7px;border-radius:4px;flex-shrink:0;margin-top:1px;letter-spacing:.02em}
+.ti-move{font-size:10px;font-weight:600;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:5px;padding:2px 7px;cursor:pointer;flex-shrink:0;margin-top:1px;font-family:inherit;letter-spacing:.02em}
+.ti-move:hover{background:var(--surface-2);color:var(--text);border-color:var(--border-strong)}
 .pdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .pnm{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .tcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
@@ -2252,8 +2259,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <button class="btn btn-primary btn-sm" onclick="openNewTaskModal()">+ Add task</button>
             </div>
           </div>
-          <!-- Active tasks only. History moved to Settings → History so the
-               Tasks page is single-purpose: what you're working on right now. -->
+          <!-- Daily = today only, mutually exclusive with General. Tasks
+               carry a dailyDate field that gets set/cleared when moving
+               between the two. History moved to Settings → History. -->
+          <div class="tabs" id="task-tabs" style="margin-bottom:12px">
+            <button class="tab on" data-ttab="daily" onclick="setTaskTab('daily')">Daily</button>
+            <button class="tab" data-ttab="general" onclick="setTaskTab('general')">General</button>
+          </div>
           <div id="tasks-sec"></div>
         </section>
 
@@ -2825,7 +2837,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v143';
+const APP_VERSION='v144';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -4279,7 +4291,7 @@ try{
   // Back-compat: the old boolean toggle stored '1' / '0' at los_confirm_ai
   else{const legacy=localStorage.getItem('los_confirm_ai');if(legacy==='1')S.aiConfirmMode='all';}
 }catch(e){}
-const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false,taskTab:'active'};
+const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false,taskTab:'daily'};
 try{UI.monthDetail=localStorage.getItem('los_month_detail')==='1';}catch(e){}
 const HABIT_COLORS=['#c46a6a','#d9a484','#c9a94a','#7fa186','#6a8ab5','#9d8bb8','#5a8a6e','#e0b04f','#b37d6f','#7a9aa8','#d38a6f','#89a589'];
 function habitColor(h){
@@ -7146,12 +7158,30 @@ function _fadeAndCompleteStep(checkboxEl,taskId,stepId){
   if(row)row.classList.add('fading');
   setTimeout(()=>toggleTaskStep(taskId,stepId,true),320);
 }
-// Back-compat shims for legacy callers. The Active / History sub-tabs are
-// gone — the Tasks page now only renders active items, and history lives
-// in Settings → History → Tasks history. These no-ops keep older code
-// paths and any stale browser cache from throwing.
-function setTaskTab(){}
+// Daily / General tabs. UI.taskTab is 'daily' (default) or 'general'.
+// Daily = tasks with dailyDate set (today or yesterday's leftovers).
+// General = tasks without dailyDate. Mutually exclusive.
+function setTaskTab(which){
+  UI.taskTab=which==='general'?'general':'daily';
+  document.querySelectorAll('#task-tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.ttab===UI.taskTab));
+  rTasks();
+}
 function toggleCompleted(){openTasksHistoryModal();}
+// Move a task between Daily and General by toggling its dailyDate.
+function moveTaskToDaily(id){
+  const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  t.dailyDate=tod();svAll();rTasks();rAttention();
+}
+function moveTaskToGeneral(id){
+  const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  delete t.dailyDate;svAll();rTasks();rAttention();
+}
+// Bulk-roll yesterday's leftover daily tasks into today.
+function rollAllYesterdayForward(){
+  const today=tod();let n=0;
+  S.tasks.forEach(t=>{if(t.dailyDate&&t.dailyDate<today&&!t.done){t.dailyDate=today;n++;}});
+  if(n){svAll();rTasks();rAttention();}
+}
 function isTaskVisible(t){
   if(!t.done)return true;
   if(!t.doneAt)return false;
@@ -7477,13 +7507,54 @@ function mkPriRow(t){
 function rTasks(){
   const el=document.getElementById('tasks-sec');if(!el)return;
   const visible=S.tasks.filter(isTaskVisible);
-  // Group ALL visible tasks by their effective area (project id if set
-  // and !=gen, else the binary area work/personal). The work/personal
-  // split is gone — every Area sits as a peer, ordered per the user's
-  // drag-sorted list in Settings.
+  // Make sure UI.taskTab is one of our two views.
+  if(UI.taskTab!=='daily'&&UI.taskTab!=='general')UI.taskTab='daily';
+  document.querySelectorAll('#task-tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.ttab===UI.taskTab));
   const orderedAreas=getOrderedAreaList();
+  const today=tod();
+  const dailyTasks=visible.filter(t=>t.dailyDate);
+  const generalTasks=visible.filter(t=>!t.dailyDate);
+  // ── Daily view ──
+  if(UI.taskTab==='daily'){
+    if(!dailyTasks.length){
+      el.innerHTML=`<div class="no-t">No daily tasks yet. <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openNewTaskModal({daily:true})">+ Add task</button> or switch to General to pull one in.</div>`;
+      return;
+    }
+    const todayItems=dailyTasks.filter(t=>t.dailyDate===today);
+    const yesterdayItems=dailyTasks.filter(t=>t.dailyDate&&t.dailyDate<today);
+    const sort=arr=>[...arr].sort((a,b)=>(PO[a.priority]??99)-(PO[b.priority]??99));
+    const dailyMkTi=t=>{
+      const fading=t.done&&t.doneAt;
+      const areaId=effectiveAreaId(t);
+      const area=orderedAreas.find(a=>a.id===areaId)||{name:'',color:'var(--muted)'};
+      let fadeStyle='';
+      if(fading){const startedAt=_taskFadeStarts.get(t.id);if(startedAt){const elapsed=Date.now()-startedAt;if(elapsed>20&&elapsed<TASK_FADE_MS)fadeStyle=` style="animation-delay:-${elapsed}ms"`;}}
+      const stepBadge=Array.isArray(t.steps)&&t.steps.length?`<span class="ti-steps" title="${t.steps.filter(s=>s.done).length} of ${t.steps.length} steps done">${t.steps.filter(s=>s.done).length}/${t.steps.length}</span>`:'';
+      const hasOpenSteps=Array.isArray(t.steps)&&t.steps.some(s=>!s.done);
+      const lock=t.done?false:hasOpenSteps;
+      const checkboxAttrs=lock?' disabled title="Complete the steps below first"':'';
+      return `<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${lock?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')">
+        <input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)">
+        <span class="tit${t.done?' dn':''}">${esc(t.text)}</span>
+        <span class="ti-area-badge" style="--abg:${area.color}">${esc(area.name)}</span>
+        ${stepBadge}
+        ${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}
+        <button class="ti-move" title="Send to General" onclick="event.stopPropagation();moveTaskToGeneral('${t.id}')">→ Gen</button>
+      </div>`;
+    };
+    let html='';
+    if(yesterdayItems.length){
+      html+=`<div class="daily-yesterday-hdr">From yesterday<button class="btn btn-ghost btn-sm" style="float:right;font-size:10.5px" onclick="rollAllYesterdayForward()">Roll all → today</button></div><div class="tcard" style="margin-bottom:14px">${sort(yesterdayItems).map(dailyMkTi).join('')}</div>`;
+    }
+    if(todayItems.length){
+      html+=`<div class="tcard">${sort(todayItems).map(dailyMkTi).join('')}</div>`;
+    }
+    el.innerHTML=html;
+    return;
+  }
+  // ── General view (existing multi-column-by-area rendering) ──
   const grps={};orderedAreas.forEach(a=>{grps[a.id]=[];});
-  visible.forEach(t=>{
+  generalTasks.forEach(t=>{
     const ek=effectiveAreaId(t);
     if(grps[ek])grps[ek].push(t);
     else (grps['personal']=grps['personal']||[]).push(t);
@@ -7519,7 +7590,7 @@ function rTasks(){
     }
     const showSubstep=nextStep&&!t.done;
     let html=`<div class="ti-wrap${showSubstep?' has-substep':''}">`;
-    html+=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${mainLocked?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')"><input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}</div>`;
+    html+=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${mainLocked?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')"><input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}<button class="ti-move" title="Pull into Daily" onclick="event.stopPropagation();moveTaskToDaily('${t.id}')">→ Today</button></div>`;
     // Inline sub-row: shows the NEXT undone step. Tapping its checkbox
     // fades the row out, then marks the step done — which auto-shows
     // the next step on the next render (or auto-completes the parent
