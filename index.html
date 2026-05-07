@@ -2237,15 +2237,9 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <button class="btn btn-primary btn-sm" onclick="openNewTaskModal()">+ Add task</button>
             </div>
           </div>
-          <!-- Active vs History tab switcher — makes the completed list feel
-               like a distinct view rather than a lump at the bottom of the
-               same panel. The (N) count on History comes from renderTaskTabs. -->
-          <div class="tabs" id="task-tabs" style="margin-bottom:12px">
-            <button class="tab on" data-ttab="active" onclick="setTaskTab('active')">Active</button>
-            <button class="tab" data-ttab="completed" onclick="setTaskTab('completed')" id="task-tab-completed">History</button>
-          </div>
+          <!-- Active tasks only. History moved to Settings → History so the
+               Tasks page is single-purpose: what you're working on right now. -->
           <div id="tasks-sec"></div>
-          <div id="completed-sec" style="display:none"></div>
         </section>
 
         <section>
@@ -2447,90 +2441,6 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         </div>
 
         <div>
-          <div class="section-hdr"><h2>Integrations</h2></div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Anthropic API key</div>
-              <div class="setting-desc">For the AI planner and update bar.</div>
-            </div>
-            <div class="setting-right">
-              <span class="key-mask" id="key-mask">—</span>
-              <button class="btn btn-sm" onclick="promptKey()">Change</button>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Google Calendar</div>
-              <div class="setting-desc">Events + reminders (Google Tasks) across all your calendars.</div>
-            </div>
-            <div class="setting-right">
-              <span class="key-mask" id="gcal-status">—</span>
-              <button class="btn btn-sm" id="gcal-connect-btn" onclick="reconnectGCalAndRefresh()">Connect</button>
-            </div>
-          </div>
-          <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:8px" id="gcal-cal-row">
-            <div style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px">
-              <div class="setting-label" style="font-size:12px">Calendars</div>
-              <button class="btn btn-ghost btn-sm" onclick="refreshCalendarList()">↻ Refresh</button>
-            </div>
-            <div id="gcal-cal-list" style="font-size:12px;color:var(--text-2);line-height:1.5">—</div>
-          </div>
-        </div>
-
-        <div>
-          <div class="section-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-            <h2>Work areas</h2>
-            <button class="btn btn-ghost btn-sm" onclick="addWorkProject()">+ Add</button>
-          </div>
-          <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:8px;padding:12px">
-            <div class="setting-desc" style="margin-bottom:4px">Your businesses, clients, or companies — anything you want to group work tasks under. Tasks that don't match any area default to "General."</div>
-            <div id="work-projects-list"></div>
-          </div>
-        </div>
-
-        <div>
-          <div class="section-hdr"><h2>Calendar defaults</h2></div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Timed events</div>
-              <div class="setting-desc">Default reminders for meetings & appointments.</div>
-            </div>
-            <div class="setting-right">
-              <div class="reminder-chips cd-chips" id="cd-timed"></div>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">All-day events</div>
-              <div class="setting-desc">Default reminders for all-day events.</div>
-            </div>
-            <div class="setting-right">
-              <div class="reminder-chips cd-chips" id="cd-allday"></div>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Birthdays</div>
-              <div class="setting-desc">Default reminders for birthday events.</div>
-            </div>
-            <div class="setting-right">
-              <div class="reminder-chips cd-chips" id="cd-bday"></div>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <div class="section-hdr"><h2>Weekly rhythm</h2></div>
-          <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:10px">
-            <div style="width:100%">
-              <div class="setting-label">What does a normal week look like?</div>
-              <div class="setting-desc">Context for the AI planner — wake/sleep times, work-start, standing commitments, etc.</div>
-            </div>
-            <textarea id="life-rhythm-ta" class="exp-ta xl" style="width:100%;min-height:120px" placeholder="Wake 6am weekdays / 7am weekends. Work 9am. Gym Mon–Fri ~1hr. Bible study Mon 7–9pm. Off screens by 10pm…" onblur="saveLifeRhythm()"></textarea>
-          </div>
-        </div>
-
-        <div>
           <div class="section-hdr"><h2>Appearance</h2></div>
           <div class="setting-row">
             <div>
@@ -2613,6 +2523,64 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         </div>
 
         <div>
+          <div class="section-hdr"><h2>Calendar</h2></div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Google Calendar</div>
+              <div class="setting-desc">Events + reminders (Google Tasks) across all your calendars.</div>
+            </div>
+            <div class="setting-right">
+              <span class="key-mask" id="gcal-status">—</span>
+              <button class="btn btn-sm" id="gcal-connect-btn" onclick="reconnectGCalAndRefresh()">Connect</button>
+            </div>
+          </div>
+          <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:8px" id="gcal-cal-row">
+            <div style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px">
+              <div class="setting-label" style="font-size:12px">Calendars</div>
+              <button class="btn btn-ghost btn-sm" onclick="refreshCalendarList()">↻ Refresh</button>
+            </div>
+            <div id="gcal-cal-list" style="font-size:12px;color:var(--text-2);line-height:1.5">—</div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Default reminders · timed events</div>
+              <div class="setting-desc">For meetings & appointments.</div>
+            </div>
+            <div class="setting-right">
+              <div class="reminder-chips cd-chips" id="cd-timed"></div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Default reminders · all-day events</div>
+              <div class="setting-desc">For all-day events.</div>
+            </div>
+            <div class="setting-right">
+              <div class="reminder-chips cd-chips" id="cd-allday"></div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Default reminders · birthdays</div>
+              <div class="setting-desc">For birthday events.</div>
+            </div>
+            <div class="setting-right">
+              <div class="reminder-chips cd-chips" id="cd-bday"></div>
+            </div>
+          </div>
+          <div class="setting-row setting-row-stack" style="align-items:stretch">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div>
+                <div class="setting-label">Work areas</div>
+                <div class="setting-desc">Your businesses, clients, or companies — anything you want to group work tasks under. Tasks that don't match any area default to "General."</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="addWorkProject()">+ Add</button>
+            </div>
+            <div id="work-projects-list" style="margin-top:8px"></div>
+          </div>
+        </div>
+
+        <div>
           <div class="section-hdr"><h2>AI</h2></div>
           <div class="setting-row setting-row-stack">
             <div>
@@ -2624,6 +2592,36 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
                 <button data-ai-mode="calendar" onclick="setAIConfirmMode('calendar')">Calendar</button>
                 <button data-ai-mode="all" onclick="setAIConfirmMode('all')">All</button>
               </div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Anthropic API key</div>
+              <div class="setting-desc">For the AI planner and update bar.</div>
+            </div>
+            <div class="setting-right">
+              <span class="key-mask" id="key-mask">—</span>
+              <button class="btn btn-sm" onclick="promptKey()">Change</button>
+            </div>
+          </div>
+          <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:10px">
+            <div style="width:100%">
+              <div class="setting-label">Weekly rhythm</div>
+              <div class="setting-desc">Context for the AI planner — wake/sleep times, work-start, standing commitments, etc.</div>
+            </div>
+            <textarea id="life-rhythm-ta" class="exp-ta xl" style="width:100%;min-height:120px" placeholder="Wake 6am weekdays / 7am weekends. Work 9am. Gym Mon–Fri ~1hr. Bible study Mon 7–9pm. Off screens by 10pm…" onblur="saveLifeRhythm()"></textarea>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-hdr"><h2>History</h2></div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Tasks history</div>
+              <div class="setting-desc" id="tasks-history-count">Tasks you've completed, latest 50.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-sm" onclick="openTasksHistoryModal()">Open →</button>
             </div>
           </div>
           <div class="setting-row">
@@ -2812,7 +2810,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v141';
+const APP_VERSION='v142';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6795,9 +6793,6 @@ async function applyRecurringDelete(d,mode){
 
 // QUICK ADD
 function toggleQA(id){
-  // If the user clicks "+ Add task" while on the History tab, hop back to
-  // Active first so the QA form isn't buried under a hidden section.
-  if(id==='task-qa'&&UI.taskTab==='completed')setTaskTab('active');
   const el=document.getElementById(id);if(!el)return;const vis=el.style.display!=='none';el.style.display=vis?'none':'block';if(!vis){const inp=el.querySelector('input,textarea');if(inp)setTimeout(()=>inp.focus(),50);}
 }
 // "+ Add" in the Brain section opens the modal for whichever tab is
@@ -7109,16 +7104,12 @@ function _fadeAndCompleteStep(checkboxEl,taskId,stepId){
   if(row)row.classList.add('fading');
   setTimeout(()=>toggleTaskStep(taskId,stepId,true),320);
 }
-// Tab switcher for the Tasks section — 'active' shows open tasks + the add
-// form, 'completed' shows the history list only. Replaces the old "Show
-// completed" toggle which just appended the history under the live list.
-function setTaskTab(which){
-  UI.taskTab=which==='completed'?'completed':'active';
-  document.querySelectorAll('#task-tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.ttab===UI.taskTab));
-  rTasks();
-}
-// Back-compat shim for any leftover call sites.
-function toggleCompleted(){setTaskTab(UI.taskTab==='completed'?'active':'completed');}
+// Back-compat shims for legacy callers. The Active / History sub-tabs are
+// gone — the Tasks page now only renders active items, and history lives
+// in Settings → History → Tasks history. These no-ops keep older code
+// paths and any stale browser cache from throwing.
+function setTaskTab(){}
+function toggleCompleted(){openTasksHistoryModal();}
 function isTaskVisible(t){
   if(!t.done)return true;
   if(!t.doneAt)return false;
@@ -7393,9 +7384,6 @@ function closeTaskModal(){
 // "manual add" with "manual edit" and "AI review" — one form, three
 // entry points, no duplication.
 function openNewTaskModal(prefill){
-  // If the user clicks "+ Add task" while on the History tab, hop back
-  // to Active so the freshly-added task is actually visible.
-  if(UI.taskTab==='completed')setTaskTab('active');
   const synth={
     text:'',
     area:(prefill&&prefill.area)||'personal',
@@ -7509,47 +7497,9 @@ function rTasks(){
   el.innerHTML=`<div class="tgrid"><div>${wh}</div><div><div class="col-lbl pers">Personal</div>${ps.length?`<div class="tcard">${ps.map(mkTi).join('')}</div>`:'<div class="no-t">Nothing personal.</div>'}</div></div>`;
   // Tab visibility — Active shows the live lists + add form, History shows
   // the completed archive only.
-  const onCompletedTab=UI.taskTab==='completed';
-  el.style.display=onCompletedTab?'none':'';
-  const qa=document.getElementById('task-qa');
-  if(qa&&onCompletedTab)qa.style.display='none';
-  // Completed history section
-  const compEl=document.getElementById('completed-sec');
-  const completed=S.tasks.filter(t=>t.done&&!isTaskVisible(t));
-  // Update the History tab label with the live count so users can see how
-  // many archived tasks are there without switching tabs.
-  const histTabBtn=document.getElementById('task-tab-completed');
-  if(histTabBtn)histTabBtn.textContent=completed.length?`History (${completed.length})`:'History';
-  if(compEl){
-    if(!onCompletedTab){compEl.style.display='none';}
-    else if(!completed.length){
-      compEl.style.display='block';
-      compEl.innerHTML=`<div class="no-t">No completed tasks yet — ticking one will land it here.</div>`;
-    }
-    else {
-      compEl.style.display='block';
-      // Sort newest-ticked first so the most recently-completed task sits at
-      // the top of the history list. Also enforce the 50-item render cap as
-      // a belt-and-braces guard in case storage wasn't pruned (e.g. legacy
-      // Firestore docs from before the prune landed). All tasks land in ONE
-      // chronological list — no per-day headers (those bloat the page once
-      // you've been ticking tasks for months) and no priority colours
-      // (history doesn't need urgency cues, every row reads as "done").
-      const sortedCompleted=[...completed].sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,MAX_COMPLETED_HISTORY);
-      const fmtCompletedAt=ts=>{if(!ts)return 'unknown';try{return new Date(ts).toLocaleString('en-ZA',{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});}catch(e){return '—';}};
-      const priLabel=p=>({urgent:'Urgent',hi:'High',med:'Medium',lo:'Low',someday:'Someday'})[p]||'Low';
-      compEl.innerHTML=`<div class="tcard">${sortedCompleted.map(t=>{
-        const isEx=ex.id===t.id&&ex.type==='task-done';
-        let row=`<div class="ti pn" style="opacity:.78;cursor:pointer" onclick="toggleEx('task-done','${t.id}')"><span style="width:19px;height:19px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="color:#fff;font-size:11px">✓</span></span><span class="tit dn" style="flex:1">${esc(t.text)}</span><button class="btn btn-ghost btn-sm" onclick="undoTask('${t.id}');event.stopPropagation()">Undo</button><button class="btn btn-danger btn-sm" onclick="delTask('${t.id}');event.stopPropagation()">×</button></div>`;
-        if(isEx){
-          const added=t.date?fmt(t.date):'unknown';
-          const done=fmtCompletedAt(t.doneAt);
-          row+=`<div class="exp-p" style="font-size:12px;color:var(--text-2);line-height:1.7"><div><strong>Added:</strong> ${esc(added)}</div><div><strong>Completed:</strong> ${esc(done)}</div><div><strong>Priority:</strong> ${esc(priLabel(t.priority||'lo'))}</div>${t.area?`<div><strong>Area:</strong> ${esc(t.area)}</div>`:''}${t.scheduledTime?`<div><strong>Scheduled:</strong> ${esc(t.scheduledTime)}</div>`:''}</div>`;
-        }
-        return row;
-      }).join('')}</div>`;
-    }
-  }
+  // Tasks page is single-purpose now — just shows active items. The
+  // completed history moved to Settings → History → Tasks history.
+  el.style.display='';
 }
 
 // BUILDS
@@ -7934,6 +7884,12 @@ function rSettings(){
   // AI history moved to a modal — just show the count here
   const cntEl=document.getElementById('ai-history-count');
   if(cntEl){const n=(S.aiHistory||[]).length;cntEl.textContent=n?`${n} entr${n===1?'y':'ies'} · searchable`:'Every AI update will show up here.';}
+  // Tasks history count — moved from sub-tab on Tasks page to Settings → History.
+  const thCntEl=document.getElementById('tasks-history-count');
+  if(thCntEl){
+    const completed=(S.tasks||[]).filter(t=>t.done&&!isTaskVisible(t)).length;
+    thCntEl.textContent=completed?`${completed} task${completed===1?'':'s'} completed · searchable`:'Tasks you\'ve completed will show up here.';
+  }
 }
 async function renderCalendarList(){
   const el=document.getElementById('gcal-cal-list');if(!el)return;
@@ -9321,6 +9277,70 @@ function clearAIHistory(){
   if(!confirm('Clear all AI history? This can\'t be undone.'))return;
   S.aiHistory=[];svAll();rAIHistory();
   const cntEl=document.getElementById('ai-history-count');if(cntEl)cntEl.textContent='Every AI update, searchable.';
+}
+
+// ─────── TASKS HISTORY MODAL ───────
+// Moved out of the Tasks page (used to be an Active / History sub-tab)
+// and into Settings → History so the Tasks page is single-purpose. The
+// data still lives in S.tasks (filtered by .done = true). Modal pattern
+// mirrors openAIHistoryModal so they feel like siblings.
+function openTasksHistoryModal(){
+  closeTasksHistoryModal();
+  const modal=document.createElement('div');
+  modal.className='modal';modal.id='tasks-history-modal';modal.style.display='flex';
+  modal.innerHTML=`<div class="modal-bd" onclick="closeTasksHistoryModal()"></div>
+    <div class="modal-body" style="max-width:640px;display:flex;flex-direction:column;max-height:calc(100vh - 2rem)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <h3 style="margin:0">Tasks history</h3>
+        <button class="btn btn-ghost btn-sm" onclick="clearTasksHistory()">Clear all</button>
+      </div>
+      <input class="input" id="tasks-history-search" placeholder="Search by text…" oninput="rTasksHistory()" style="width:100%;margin-bottom:12px">
+      <div id="tasks-history-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);min-height:200px"></div>
+      <div class="modal-actions"><div class="spacer"></div><button class="btn btn-primary btn-sm" onclick="closeTasksHistoryModal()">Close</button></div>
+    </div>`;
+  document.body.appendChild(modal);_syncBodyLock();
+  rTasksHistory();
+  setTimeout(()=>{const s=document.getElementById('tasks-history-search');if(s&&window.innerWidth>700)s.focus();},50);
+}
+function closeTasksHistoryModal(){const m=document.getElementById('tasks-history-modal');if(m)m.remove();_syncBodyLock();}
+function rTasksHistory(){
+  const el=document.getElementById('tasks-history-list');if(!el)return;
+  const q=(document.getElementById('tasks-history-search')?.value||'').toLowerCase().trim();
+  const completed=S.tasks.filter(t=>t.done&&!isTaskVisible(t));
+  const filtered=q?completed.filter(t=>(t.text||'').toLowerCase().includes(q)):completed;
+  if(!filtered.length){el.innerHTML=`<div style="padding:14px;color:var(--muted);font-size:12px">${q?'No matches.':'No completed tasks yet — ticking one will land it here.'}</div>`;return;}
+  // Sort newest-ticked first; cap at the configured history size.
+  const sorted=[...filtered].sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,MAX_COMPLETED_HISTORY);
+  const fmtCompletedAt=ts=>{if(!ts)return 'unknown';try{return new Date(ts).toLocaleString('en-ZA',{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});}catch(e){return '—';}};
+  const priLabel=p=>({urgent:'Urgent',hi:'High',med:'Medium',lo:'Low',someday:'Someday'})[p]||'Low';
+  el.innerHTML=sorted.map(t=>{
+    const isEx=ex.id===t.id&&ex.type==='task-done';
+    const added=t.date?fmt(t.date):'unknown';
+    const done=fmtCompletedAt(t.doneAt);
+    return `<div style="border-bottom:1px solid var(--border);padding:10px 12px;font-size:12.5px;line-height:1.45">
+      <div style="display:flex;align-items:center;gap:9px;cursor:pointer" onclick="toggleEx('task-done','${t.id}');rTasksHistory();">
+        <span style="width:18px;height:18px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="color:#fff;font-size:10px">✓</span></span>
+        <span style="flex:1;color:var(--text-2);text-decoration:line-through">${esc(t.text)}</span>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();undoTask('${t.id}');rTasksHistory()">Undo</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();delTask('${t.id}');rTasksHistory()">×</button>
+      </div>
+      ${isEx?`<div style="font-size:11.5px;color:var(--text-2);line-height:1.7;margin-top:6px;padding-left:27px">
+        <div><strong>Added:</strong> ${esc(added)}</div>
+        <div><strong>Completed:</strong> ${esc(done)}</div>
+        <div><strong>Priority:</strong> ${esc(priLabel(t.priority||'lo'))}</div>
+        ${t.area?`<div><strong>Area:</strong> ${esc(t.area)}</div>`:''}
+        ${t.scheduledTime?`<div><strong>Scheduled:</strong> ${esc(t.scheduledTime)}</div>`:''}
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+function clearTasksHistory(){
+  const completed=S.tasks.filter(t=>t.done&&!isTaskVisible(t));
+  if(!completed.length){alert('Nothing to clear.');return;}
+  if(!confirm(`Permanently delete all ${completed.length} completed task${completed.length===1?'':'s'}? This can't be undone.`))return;
+  const completedIds=new Set(completed.map(t=>t.id));
+  S.tasks=S.tasks.filter(t=>!completedIds.has(t.id));
+  svAll();rTasksHistory();rTasks();
 }
 
 // ─────── SOUND SYSTEM ───────
