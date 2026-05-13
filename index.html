@@ -11781,7 +11781,7 @@ function _peopleSort(list){
     const dated=proms.filter(x=>x.date).map(x=>x.date).sort();
     const undated=proms.filter(x=>!x.date).map(x=>x.addedAt||'9999').sort();
     if(dated.length)return {dateRank:dated[0],addedRank:undated[0]||'9999'};
-    return {dateRank:'~',addedRank:undated[0]||'9999'};
+    return {dateRank:'9999-12-31',addedRank:undated[0]||'9999'};
   };
   const cmp={
     promise:(a,b)=>{
