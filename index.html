@@ -834,6 +834,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .people-card .pc-promise-empty{font-size:11px;color:var(--muted);font-style:italic;padding:4px 0}
 .people-card .pc-promise-more{font-size:10px;color:var(--muted);text-align:right;margin-top:3px;padding-right:4px}
 
+/* Person detail modal — sections, inline contact rows, notes textarea */
+.pm-section{margin:0 0 14px 0}
+.pm-sec-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.pm-row{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:6px;color:var(--text-2)}
+.pm-icon{width:14px;color:var(--muted);flex-shrink:0}
+.pm-add{font-size:11px;color:var(--muted);background:transparent;border:1px dashed var(--border-strong);padding:5px 10px;border-radius:5px;cursor:pointer}
+.pm-add:hover{color:var(--text);border-color:var(--gold)}
+.pm-notes{width:100%;min-height:60px;font-family:inherit;font-size:13px;padding:9px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical}
+
 /* Spanning bars — every bar fills its grid row uniformly so the "expand all"
    layout stays rigid regardless of event count */
 .mv-bar{
@@ -2512,7 +2521,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <div class="page-hdr">
           <div class="page-title">People</div>
           <div class="page-actions">
-            <button class="btn btn-primary btn-sm" onclick="openPersonModal()">+ Add person</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddPersonModal()">+ Add person</button>
           </div>
         </div>
         <div id="people-toolbar"></div>
@@ -11759,7 +11768,7 @@ function rPeople(){
   const grid=document.getElementById('people-grid');if(!grid)return;
   const list=S.people||[];
   if(!list.length){
-    grid.innerHTML=`<div class="no-t">Track the people you care about. <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openPersonModal()">+ Add your first person</button></div>`;
+    grid.innerHTML=`<div class="no-t">Track the people you care about. <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openAddPersonModal()">+ Add your first person</button></div>`;
     grid.className='';
     return;
   }
@@ -11782,28 +11791,21 @@ function rPeople(){
     </div>`;
   }).join('');
 }
-function openPersonModal(idOrNull){
-  const id=idOrNull||null;
-  const editing=!!id;
-  const p=editing?(S.people||[]).find(x=>x.id===id):null;
-  if(editing&&!p)return;
+// Compact modal for ADDING a new person — just name + metAt. After save,
+// auto-opens the rich detail modal so the user can fill in the rest if
+// they want.
+function openAddPersonModal(){
   const old=document.getElementById('person-modal');if(old)old.remove();
   const m=document.createElement('div');
   m.className='modal';m.id='person-modal';m.style.display='flex';
   m.innerHTML=`<div class="modal-bd"></div>
-    <div class="modal-body" style="max-width:440px">
-      <h3 style="margin-bottom:12px">${editing?'Edit person':'Add person'}</h3>
-      <div class="aic-edit-field"><label>Name</label><input id="pm-name" value="${esc(p?.name||'')}" placeholder="Full name"></div>
-      <div class="aic-edit-field"><label>Where you met</label><input id="pm-met" value="${esc(p?.metAt||'')}" placeholder="e.g. University, Gym, Hennie's wedding"></div>
-      <div class="aic-edit-row">
-        <div class="aic-edit-field"><label>Phone</label><input id="pm-phone" value="${esc(p?.phone||'')}" placeholder="Optional"></div>
-        <div class="aic-edit-field"><label>Email</label><input id="pm-email" value="${esc(p?.email||'')}" placeholder="Optional"></div>
-      </div>
-      <div class="aic-edit-field"><label>Notes</label><textarea id="pm-notes" rows="3" placeholder="Anything worth remembering — context, shared interests, etc.">${esc(p?.notes||'')}</textarea></div>
+    <div class="modal-body" style="max-width:380px">
+      <h3 style="margin-bottom:12px">Add person</h3>
+      <div class="aic-edit-field"><label>Name</label><input id="pm-name" placeholder="Full name"></div>
+      <div class="aic-edit-field"><label>Where you met</label><input id="pm-met" placeholder="e.g. University, Hennie's wedding"></div>
       <div class="modal-actions" style="margin-top:14px">
-        ${editing?`<button class="btn btn-ghost btn-sm" data-action="delete" style="color:var(--red,#c46a6a)">Delete</button>`:''}
-        <div class="spacer"></div>
         <button class="btn btn-sm" data-action="cancel">Cancel</button>
+        <div class="spacer"></div>
         <button class="btn btn-primary btn-sm" data-action="save">Save</button>
       </div>
     </div>`;
@@ -11815,39 +11817,125 @@ function openPersonModal(idOrNull){
     if(a==='save'){
       const name=document.getElementById('pm-name').value.trim();
       if(!name){alert('Name is required.');return;}
-      const data={
+      const newP={
+        id:uid(),
         name,
         metAt:document.getElementById('pm-met').value.trim(),
-        phone:document.getElementById('pm-phone').value.trim(),
-        email:document.getElementById('pm-email').value.trim(),
-        notes:document.getElementById('pm-notes').value.trim()
+        phone:'',email:'',notes:'',
+        level:{major:1,minor:1},
+        tagIds:[],
+        promises:[],
+        lastTogether:null,
+        createdAt:tod()
       };
-      if(editing){
-        Object.assign(p,data);
-      } else {
-        S.people=S.people||[];
-        S.people.push({
-          id:uid(),
-          ...data,
-          level:{major:1,minor:1},
-          tagIds:[],
-          promises:[],
-          lastTogether:null,
-          createdAt:tod()
-        });
-      }
+      S.people=S.people||[];
+      S.people.push(newP);
       svAll();rPeople();
       m.remove();_syncBodyLock();
-      return;
+      // Open the detail modal so the user can fill in the rest if they want
+      openPersonModal(newP.id);
+    }
+  });
+}
+
+// Rich detail modal — opens for an existing person id and shows all
+// sections. Future tasks (7+) add Tags, Level, Promises, etc. via
+// renderPersonModalBody. This task ships the baseline: header (name +
+// metAt + pin toggle), contact rows (phone, email), Notes, and a
+// Delete-person button at the bottom.
+function openPersonModal(id){
+  const p=(S.people||[]).find(x=>x.id===id);
+  if(!p)return;
+  const old=document.getElementById('person-modal');if(old)old.remove();
+  const m=document.createElement('div');
+  m.className='modal';m.id='person-modal';m.style.display='flex';
+  m.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:440px;max-height:90vh;overflow-y:auto">
+      <div id="pm-body"></div>
+    </div>`;
+  document.body.appendChild(m);_syncBodyLock();
+  m.addEventListener('click',e=>{
+    if(e.target.closest('.modal-bd')){m.remove();_syncBodyLock();return;}
+  });
+  renderPersonModalBody(p);
+}
+
+// Renders the inner body of the detail modal. Called on open and after any
+// inline mutation so the view stays in sync without closing/reopening.
+function renderPersonModalBody(p){
+  const body=document.getElementById('pm-body');if(!body)return;
+  const pinned=!!p.pinned;
+  body.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:18px;font-weight:700">${esc(p.name||'')}</div>
+        ${p.metAt?`<div style="font-size:11px;color:var(--muted)">Met at: ${esc(p.metAt)}</div>`:''}
+      </div>
+      <button class="btn btn-ghost btn-sm" data-pm-action="toggle-pin" style="color:${pinned?'var(--gold)':'var(--muted)'};font-weight:${pinned?'600':'400'}">${pinned?'📌 Pinned':'📌 Pin'}</button>
+    </div>
+
+    <div class="pm-section">
+      <div class="pm-row" data-field="phone">${p.phone?`<span class="pm-icon">📱</span> <span class="pm-val">${esc(p.phone)}</span>`:`<button class="pm-add" data-pm-edit="phone">+ Add phone</button>`}</div>
+      <div class="pm-row" data-field="email">${p.email?`<span class="pm-icon">✉️</span> <span class="pm-val">${esc(p.email)}</span>`:`<button class="pm-add" data-pm-edit="email">+ Add email</button>`}</div>
+    </div>
+
+    <div class="pm-section">
+      <div class="pm-sec-lbl">Notes</div>
+      <textarea class="pm-notes" data-pm-field="notes" rows="3" placeholder="Anything worth remembering">${esc(p.notes||'')}</textarea>
+    </div>
+
+    <div class="pm-section" style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px">
+      <button class="btn btn-ghost btn-sm" data-pm-action="delete" style="color:var(--red,#c46a6a)">Delete person</button>
+    </div>
+  `;
+  attachPersonModalHandlers(p);
+}
+
+function attachPersonModalHandlers(p){
+  const body=document.getElementById('pm-body');if(!body)return;
+  body.onclick=e=>{
+    const a=e.target.dataset?.pmAction;
+    if(a==='toggle-pin'){
+      p.pinned=!p.pinned||undefined;
+      if(p.pinned===false)delete p.pinned;
+      svAll();rPeople();renderPersonModalBody(p);return;
     }
     if(a==='delete'){
-      // Confirm-and-delete. Cascade for linked tasks lands in Task 11
-      // when promises and task-links exist. For now: simple confirm + remove.
       if(!confirm(`Delete ${p.name}?`))return;
       S.people=(S.people||[]).filter(x=>x.id!==p.id);
       svAll();rPeople();
-      m.remove();_syncBodyLock();
+      document.getElementById('person-modal')?.remove();_syncBodyLock();return;
     }
+    const editField=e.target.dataset?.pmEdit;
+    if(editField){
+      const cur=p[editField]||'';
+      const val=prompt(editField==='phone'?'Phone number':'Email address',cur);
+      if(val===null)return;
+      p[editField]=val.trim();
+      svAll();rPeople();renderPersonModalBody(p);
+    }
+  };
+  // Notes autosave on blur
+  const notes=body.querySelector('[data-pm-field="notes"]');
+  if(notes){
+    notes.addEventListener('blur',()=>{
+      const v=notes.value;
+      if(v===p.notes)return;
+      p.notes=v;svAll();
+    });
+  }
+  // Inline edit for existing phone / email — tapping the value lets you edit
+  body.querySelectorAll('.pm-row[data-field]').forEach(row=>{
+    const field=row.dataset.field;
+    const val=row.querySelector('.pm-val');
+    if(!val)return;
+    val.style.cursor='text';
+    val.onclick=()=>{
+      const newVal=prompt(field==='phone'?'Phone number':'Email address',p[field]||'');
+      if(newVal===null)return;
+      p[field]=newVal.trim();
+      svAll();rPeople();renderPersonModalBody(p);
+    };
   });
 }
 function render(){
