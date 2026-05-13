@@ -2190,6 +2190,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
         <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
+        <a href="#people" data-route-link="people"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span class="label">People</span><span class="dot"></span></a>
         <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
         <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
       </nav>
@@ -2226,6 +2227,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <a href="#calendar" data-route-link="calendar" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span>Calendar</span></a>
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
       <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
+      <a href="#people" data-route-link="people" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span>People</span></a>
       <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
       <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
       <div class="m-drawer-foot">
@@ -2482,6 +2484,18 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <button class="nb-arrow nb-prev" onclick="nbPrevPage()" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6 L9 12 L15 18"/></svg></button>
           <button class="nb-arrow nb-next" onclick="nbNextPage()" aria-label="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 L15 12 L9 18"/></svg></button>
         </div>
+      </div>
+
+      <!-- PEOPLE -->
+      <div class="route" data-route="people">
+        <div class="page-hdr">
+          <div class="page-title">People</div>
+          <div class="page-actions">
+            <button class="btn btn-primary btn-sm" onclick="openPersonModal()">+ Add person</button>
+          </div>
+        </div>
+        <div id="people-toolbar"></div>
+        <div id="people-grid"></div>
       </div>
 
       <!-- SETTINGS -->
@@ -2964,8 +2978,8 @@ function setTheme(t){
 // one-third down the screen" symptom caused by browser auto-scroll to
 // elements whose id happened to match the route hash.
 try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}
-const ROUTES=['today','calendar','projects','habits','brain','notebook','settings'];
-const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',brain:'Brain',notebook:'Notebook',settings:'Settings'};
+const ROUTES=['today','calendar','projects','habits','people','brain','notebook','settings'];
+const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',notebook:'Notebook',settings:'Settings'};
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
@@ -11695,6 +11709,19 @@ window.addEventListener('keydown',e=>{
   else if(e.key==='ArrowRight'){e.preventDefault();nbNextPage();}
 });
 
+function rPeople(){
+  const grid=document.getElementById('people-grid');if(!grid)return;
+  const list=S.people||[];
+  if(!list.length){
+    grid.innerHTML=`<div class="no-t">Track the people you care about. <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openPersonModal()">+ Add your first person</button></div>`;
+    return;
+  }
+  grid.innerHTML=list.map(p=>`<div class="people-card-stub" style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px"><b>${esc(p.name||'(no name)')}</b><br><small>${esc(p.metAt||'')}</small></div>`).join('');
+}
+function openPersonModal(idOrNull){
+  // Placeholder — full implementation lands in Task 3.
+  alert('Coming in Task 3');
+}
 function render(){
   const g=document.getElementById('gr'),d=document.getElementById('ds');
   if(g)g.textContent=gTxt();if(d)d.textContent=dTxt();
@@ -11704,6 +11731,7 @@ function render(){
   refreshGCalWarn();
   if(currentRoute==='settings')rSettings();
   if(currentRoute==='notebook')rNotebook();
+  if(currentRoute==='people')rPeople();
 }
 // Show / hide the prominent "GCal not connected" banner based on whether
 // we have a live token. Called from render() on every snapshot. Also
