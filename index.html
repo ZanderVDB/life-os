@@ -813,6 +813,27 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .hab-modal-check{flex:0 0 auto;font-size:14px;font-weight:700;color:var(--sage,var(--accent));min-width:18px;text-align:right}
 .mcw-more-note{font-size:9px;color:var(--muted);font-weight:600;text-align:center;padding:1px 2px;pointer-events:none;align-self:end}
 
+/* People tab — card grid. CSS grid with auto-fill so cards reflow to
+   1/2/3/4 columns based on viewport. Cards reuse the existing
+   --surface / --border palette so themes work without overrides. */
+.people-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+@media (max-width:460px){.people-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}
+.people-card{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px 14px;cursor:pointer;transition:border-color .15s,background .15s}
+.people-card:hover{border-color:var(--border-strong)}
+.people-card.overdue{background:#fef5f3}
+[data-theme="studio"] .people-card.overdue{background:#3a2826}
+.people-card .pc-pin{position:absolute;top:8px;left:10px;font-size:11px;color:var(--gold)}
+.people-card .pc-lvl{position:absolute;top:8px;right:10px;font-size:9.5px;font-weight:700;letter-spacing:.05em;background:var(--gold-bg);color:var(--gold);padding:2px 7px;border-radius:6px}
+.people-card .pc-name{font-size:15px;font-weight:700;margin-bottom:3px;padding:0 60px 0 0;color:var(--text)}
+.people-card.has-pin .pc-name{padding-left:18px}
+.people-card .pc-met{font-size:11px;color:var(--muted);margin-bottom:8px}
+.people-card.has-pin .pc-met{padding-left:18px}
+.people-card .pc-last{position:absolute;bottom:8px;right:11px;font-size:9.5px;color:var(--muted);font-weight:500}
+.people-card.overdue .pc-last{color:#c46a6a;font-weight:700}
+.people-card .pc-promise{font-size:11.5px;background:var(--surface-2);border-left:3px solid var(--sage,#7fa186);padding:5px 9px;border-radius:5px;display:flex;align-items:center;gap:5px;margin-top:4px;color:var(--text)}
+.people-card .pc-promise-empty{font-size:11px;color:var(--muted);font-style:italic;padding:4px 0}
+.people-card .pc-promise-more{font-size:10px;color:var(--muted);text-align:right;margin-top:3px;padding-right:4px}
+
 /* Spanning bars — every bar fills its grid row uniformly so the "expand all"
    layout stays rigid regardless of event count */
 .mv-bar{
@@ -11709,14 +11730,57 @@ window.addEventListener('keydown',e=>{
   else if(e.key==='ArrowRight'){e.preventDefault();nbNextPage();}
 });
 
+// Format the level object as a compact "L4.3" string for the card badge.
+function _peopleLevelLabel(level){
+  const M=(level&&level.major)||1;
+  const m=(level&&level.minor)||1;
+  return `L${M}.${m}`;
+}
+// Compute the last-seen badge from lastTogether.doneAt — returns label + days.
+// null doneAt → "—" with days=null (no overdue tint)
+// 0 days → "today"
+// 1-6 days → "Nd"
+// 7-29 days → "Nw"
+// 30-179 days → "Nmo"
+// 180+ days → "Ny"
+function _peopleLastSeen(person){
+  if(!person.lastTogether||!person.lastTogether.doneAt)return {label:'—',days:null};
+  const today=new Date();today.setHours(0,0,0,0);
+  const [y,m,d]=person.lastTogether.doneAt.split('-').map(Number);
+  const then=new Date(y,m-1,d);then.setHours(0,0,0,0);
+  const days=Math.round((today-then)/86400000);
+  if(days<=0)return{label:'today',days:0};
+  if(days<7)return{label:`${days}d`,days};
+  if(days<30)return{label:`${Math.round(days/7)}w`,days};
+  if(days<180)return{label:`${Math.round(days/30)}mo`,days};
+  return{label:`${Math.round(days/365)}y`,days};
+}
 function rPeople(){
   const grid=document.getElementById('people-grid');if(!grid)return;
   const list=S.people||[];
   if(!list.length){
     grid.innerHTML=`<div class="no-t">Track the people you care about. <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openPersonModal()">+ Add your first person</button></div>`;
+    grid.className='';
     return;
   }
-  grid.innerHTML=list.map(p=>`<div class="people-card-stub" style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="openPersonModal('${p.id}')"><b>${esc(p.name||'(no name)')}</b>${p.metAt?`<br><small style="color:var(--muted)">${esc(p.metAt)}</small>`:''}</div>`).join('');
+  grid.className='people-grid';
+  grid.innerHTML=list.map(p=>{
+    const ls=_peopleLastSeen(p);
+    const overdue=ls.days!==null&&ls.days>90;
+    const hasPin=!!p.pinned;
+    const promises=Array.isArray(p.promises)?p.promises:[];
+    const topPromise=promises[0];
+    const more=promises.length-1;
+    return `<div class="people-card${overdue?' overdue':''}${hasPin?' has-pin':''}" onclick="openPersonModal('${p.id}')">
+      ${hasPin?`<div class="pc-pin">📌</div>`:''}
+      <div class="pc-lvl">${_peopleLevelLabel(p.level)}</div>
+      <div class="pc-name">${esc(p.name||'(no name)')}</div>
+      ${p.metAt?`<div class="pc-met">${esc(p.metAt)}</div>`:''}
+      ${topPromise?`<div class="pc-promise"><span>🤝</span> ${esc(topPromise.text||'')}</div>`:`<div class="pc-promise-empty">— no promises</div>`}
+      ${more>0?`<div class="pc-promise-more">+ ${more} more promise${more===1?'':'s'}</div>`:''}
+      <div class="pc-last">${esc(ls.label)}</div>
+    </div>`;
+  }).join('');
 }
 function openPersonModal(idOrNull){
   const id=idOrNull||null;
