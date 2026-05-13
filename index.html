@@ -879,6 +879,26 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .tp-foot{display:flex;justify-content:flex-end}
 .tp-foot button{font-size:11px;background:transparent;border:none;color:var(--muted);cursor:pointer}
 
+.pm-lvl-widget{background:var(--surface-2);border-radius:8px;padding:10px 12px;margin-top:4px}
+.pm-lvl-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.pm-lvl-label{font-size:13px;font-weight:700;color:var(--text)}
+.pm-lvl-name{font-size:11px;color:var(--muted);font-weight:500;margin-left:4px}
+.pm-lvl-arrows{display:flex;gap:4px}
+.pm-lvl-arrows button{width:24px;height:22px;border:1px solid var(--gold);background:var(--surface);color:var(--gold);border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit}
+.pm-lvl-arrows button:disabled{opacity:.35;cursor:default}
+.pm-lvl-bar{display:flex;gap:3px;margin-bottom:3px}
+.pm-lvl-block{display:flex;gap:1px;flex:1}
+.pm-lvl-slot{flex:1;height:9px;background:var(--border);border-radius:1px}
+.pm-lvl-slot.below{background:var(--gold-bg)}
+.pm-lvl-slot.on{background:var(--gold)}
+.pm-lvl-axis{display:flex;justify-content:space-between;font-size:8px;color:var(--muted);font-weight:600;margin-bottom:8px;padding:0 2px}
+.pm-lvl-picker{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.pm-lvl-pick{background:var(--surface);border:1px solid var(--border);padding:5px 8px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit;display:flex;justify-content:space-between;align-items:center;gap:6px;color:var(--text)}
+.pm-lvl-pick:hover{border-color:var(--gold)}
+.pm-lvl-pick.cur{background:var(--gold-bg);border-color:var(--gold);color:var(--text)}
+.pm-lvl-pick-n{font-weight:700}
+.pm-lvl-pick-name{color:var(--muted);font-size:10px}
+
 /* Spanning bars — every bar fills its grid row uniformly so the "expand all"
    layout stays rigid regardless of event count */
 .mv-bar{
@@ -11781,6 +11801,41 @@ function _peopleLevelLabel(level){
   const m=(level&&level.minor)||1;
   return `L${M}.${m}`;
 }
+function _peopleLevelWidget(p){
+  const M=(p.level?.major)||1;
+  const m=(p.level?.minor)||1;
+  const names=S.peopleLevelNames||['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
+  const upDisabled=M===5&&m===5;
+  const downDisabled=M===1&&m===1;
+  // 25-slot bar
+  let bar='';
+  for(let lv=1;lv<=5;lv++){
+    let block='';
+    for(let s=1;s<=5;s++){
+      const fill=(lv<M)?'below':(lv===M&&s<=m)?'on':'';
+      block+=`<div class="pm-lvl-slot ${fill}"></div>`;
+    }
+    bar+=`<div class="pm-lvl-block">${block}</div>`;
+  }
+  // Picker pills
+  const picker=names.map((n,i)=>{
+    const cur=(i+1)===M;
+    return `<button class="pm-lvl-pick${cur?' cur':''}" data-pm-lvl-jump="${i+1}"><span class="pm-lvl-pick-n">L${i+1}</span><span class="pm-lvl-pick-name">${esc(n)}</span></button>`;
+  }).join('');
+  return `
+    <div class="pm-lvl-widget">
+      <div class="pm-lvl-top">
+        <div class="pm-lvl-label">L${M}.${m} <span class="pm-lvl-name">· ${esc(names[M-1])} (${m}/5)</span></div>
+        <div class="pm-lvl-arrows">
+          <button data-pm-action="lvl-down" ${downDisabled?'disabled':''}>▼</button>
+          <button data-pm-action="lvl-up" ${upDisabled?'disabled':''}>▲</button>
+        </div>
+      </div>
+      <div class="pm-lvl-bar">${bar}</div>
+      <div class="pm-lvl-axis"><span>L1</span><span>L2</span><span>L3</span><span>L4</span><span>L5</span></div>
+      <div class="pm-lvl-picker">${picker}</div>
+    </div>`;
+}
 // Compute the last-seen badge from lastTogether.doneAt — returns label + days.
 // null doneAt → "—" with days=null (no overdue tint)
 // 0 days → "today"
@@ -12021,6 +12076,11 @@ function renderPersonModalBody(p){
     </div>
 
     <div class="pm-section">
+      <div class="pm-sec-lbl">Friendship level</div>
+      ${_peopleLevelWidget(p)}
+    </div>
+
+    <div class="pm-section">
       <div class="pm-sec-lbl">Notes</div>
       <textarea class="pm-notes" data-pm-field="notes" rows="3" placeholder="Anything worth remembering">${esc(p.notes||'')}</textarea>
     </div>
@@ -12058,6 +12118,25 @@ function attachPersonModalHandlers(p){
     if(a==='add-tag'){
       openTagPicker(p,e.target);
       return;
+    }
+    if(a==='lvl-up'){
+      const M=p.level?.major||1, m=p.level?.minor||1;
+      if(M===5&&m===5)return;
+      if(m<5)p.level={major:M,minor:m+1};
+      else p.level={major:M+1,minor:1};
+      svAll();rPeople();renderPersonModalBody(p);return;
+    }
+    if(a==='lvl-down'){
+      const M=p.level?.major||1, m=p.level?.minor||1;
+      if(M===1&&m===1)return;
+      if(m>1)p.level={major:M,minor:m-1};
+      else p.level={major:M-1,minor:5};
+      svAll();rPeople();renderPersonModalBody(p);return;
+    }
+    const jump=parseInt(e.target.closest('[data-pm-lvl-jump]')?.dataset.pmLvlJump||'');
+    if(!isNaN(jump)&&jump>=1&&jump<=5){
+      p.level={major:jump,minor:3};
+      svAll();rPeople();renderPersonModalBody(p);return;
     }
     const editField=e.target.dataset?.pmEdit;
     if(editField){
