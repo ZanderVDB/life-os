@@ -841,6 +841,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pm-icon{width:14px;color:var(--muted);flex-shrink:0}
 .pm-add{font-size:11px;color:var(--muted);background:transparent;border:1px dashed var(--border-strong);padding:5px 10px;border-radius:5px;cursor:pointer}
 .pm-add:hover{color:var(--text);border-color:var(--gold)}
+.pm-bday{background:var(--pink-bg);color:var(--pink);padding:2px 8px;border-radius:5px;font-size:11.5px;font-weight:600}
 .pm-notes{width:100%;min-height:60px;font-family:inherit;font-size:13px;padding:9px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical}
 .people-sort-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .people-sort-chip{font-size:11px;padding:4px 9px;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;font-family:inherit}
@@ -11944,6 +11945,31 @@ function _peopleLastSeen(person){
   if(days<180)return{label:`${Math.round(days/30)}mo`,days};
   return{label:`${Math.round(days/365)}y`,days};
 }
+// Find a Google Calendar event whose title looks like a birthday for this
+// person. Uses the existing isBirthdayEv() helper + the same regex used
+// in the morning brief flow. Returns {date, eventTitle} or null.
+function _peopleFindBirthday(person){
+  if(!person.name)return null;
+  const pool=(gcCache.events||[]).filter(e=>isBirthdayEv(e));
+  if(!pool.length)return null;
+  const needle=person.name.toLowerCase().trim();
+  const firstWord=needle.split(/\s+/)[0];
+  for(const e of pool){
+    const m=(e.title||'').match(/^(.+?)(?:'s)?\s*(?:birthday|bday)\b/i);
+    if(!m)continue;
+    const bdayName=m[1].toLowerCase().trim();
+    if(bdayName===needle||bdayName===firstWord||needle.startsWith(bdayName)){
+      return {date:e.date,eventTitle:e.title};
+    }
+  }
+  return null;
+}
+function _peopleFmtBirthday(iso){
+  if(!iso)return '';
+  const [y,m,d]=iso.split('-').map(Number);
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[m-1]} ${d}`;
+}
 const PEOPLE_TAG_COLORS=['blue','green','pink','gold','lavender','sage','peach','red'];
 function _peopleTagById(id){return (S.peopleTags||[]).find(t=>t.id===id);}
 function _peopleNextTagColor(){
@@ -12154,6 +12180,13 @@ function renderPersonModalBody(p){
     <div class="pm-section">
       <div class="pm-row" data-field="phone">${p.phone?`<span class="pm-icon">📱</span> <span class="pm-val">${esc(p.phone)}</span>`:`<button class="pm-add" data-pm-edit="phone">+ Add phone</button>`}</div>
       <div class="pm-row" data-field="email">${p.email?`<span class="pm-icon">✉️</span> <span class="pm-val">${esc(p.email)}</span>`:`<button class="pm-add" data-pm-edit="email">+ Add email</button>`}</div>
+      ${(()=>{
+        const bday=_peopleFindBirthday(p);
+        if(bday){
+          return `<div class="pm-row"><span class="pm-icon">🎂</span> <span class="pm-val pm-bday">${esc(_peopleFmtBirthday(bday.date))}</span> <span style="font-size:10px;color:var(--muted);margin-left:4px">from Google Calendar</span></div>`;
+        }
+        return `<div class="pm-row"><button class="pm-add" data-pm-action="add-bday">🎂 + Add birthday</button></div>`;
+      })()}
     </div>
 
     <div class="pm-section">
@@ -12197,6 +12230,33 @@ function attachPersonModalHandlers(p){
   const body=document.getElementById('pm-body');if(!body)return;
   body.onclick=e=>{
     const a=e.target.dataset?.pmAction;
+    if(a==='add-bday'){
+      // Reuse the existing event create modal with birthday-shaped defaults.
+      // openNewEvent natively handles date/time/endTime; we apply the
+      // title + all-day + yearly recurrence + birthday reminders after the
+      // modal opens. The existing _bdayWatch on the title input would also
+      // pick these up if the user typed "birthday" themselves — we just
+      // do it pre-emptively here.
+      if(typeof openNewEvent==='function'){
+        openNewEvent({date:tod()});
+        setTimeout(()=>{
+          try{
+            const tEl=document.getElementById('em-t');
+            if(tEl)tEl.value=`${p.name}'s birthday`;
+            const ad=document.getElementById('em-allday');
+            if(ad&&!ad.checked){ad.checked=true;if(typeof toggleEmAllDay==='function')toggleEmAllDay();}
+            const rep=document.getElementById('em-repeat');
+            if(rep)rep.value='yearly';
+            if(typeof setEmReminderValues==='function'){
+              setEmReminderValues((S.calendarDefaults?.birthdayReminders)||[1440,0]);
+            }
+          }catch(_){}
+        },60);
+      } else {
+        alert('Birthday creation needs the calendar modal. Open the Calendar tab and add a yearly all-day event titled "'+p.name+'\'s birthday".');
+      }
+      return;
+    }
     if(a==='toggle-pin'){
       p.pinned=!p.pinned||undefined;
       if(p.pinned===false)delete p.pinned;
