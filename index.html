@@ -846,6 +846,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .people-sort-chip{font-size:11px;padding:4px 9px;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;font-family:inherit}
 .people-sort-chip:hover{border-color:var(--border-strong)}
 .people-sort-chip.on{background:var(--gold);color:#fff;border-color:var(--gold)}
+.people-tag-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.people-tag-chip{font-size:10.5px;padding:4px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);cursor:pointer;font-family:inherit;font-weight:500}
+.people-tag-chip.on{outline:2px solid var(--gold);outline-offset:-2px}
+.people-tag-chip.pm-tag-blue.on,.people-tag-chip.pm-tag-green.on,.people-tag-chip.pm-tag-pink.on,.people-tag-chip.pm-tag-gold.on,.people-tag-chip.pm-tag-lavender.on,.people-tag-chip.pm-tag-sage.on,.people-tag-chip.pm-tag-peach.on,.people-tag-chip.pm-tag-red.on{outline:2px solid var(--text);outline-offset:-2px}
 .pm-tags-row{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .pm-tag{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:5px;cursor:pointer}
 .pm-tag-blue{background:var(--blue-bg);color:var(--blue)}
@@ -4502,7 +4506,7 @@ try{
   // Back-compat: the old boolean toggle stored '1' / '0' at los_confirm_ai
   else{const legacy=localStorage.getItem('los_confirm_ai');if(legacy==='1')S.aiConfirmMode='all';}
 }catch(e){}
-const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false,taskTab:'daily'};
+const UI={calView:'week',calDate:new Date(),brainTab:'ideas',calMode:'events',monthDetail:false,taskTab:'daily',peopleFilterTag:null};
 try{UI.monthDetail=localStorage.getItem('los_month_detail')==='1';}catch(e){}
 const HABIT_COLORS=['#c46a6a','#d9a484','#c9a94a','#7fa186','#6a8ab5','#9d8bb8','#5a8a6e','#e0b04f','#b37d6f','#7a9aa8','#d38a6f','#89a589'];
 function habitColor(h){
@@ -11860,20 +11864,32 @@ function rPeople(){
       toolbar.innerHTML='';
     } else {
       const sort=S.peopleSettings?.defaultSort||'promise';
-      const opts=[
+      const sortOpts=[
         ['promise','Promise date ↑'],
         ['level','Level ↓'],
         ['lastSeen','Last seen ↑'],
         ['name','Name A–Z'],
         ['recent','Recently added']
       ];
-      toolbar.innerHTML=`<div class="people-sort-row">${opts.map(([k,lbl])=>`<button class="people-sort-chip${sort===k?' on':''}" data-sort="${k}">${esc(lbl)}</button>`).join('')}</div>`;
+      const tags=S.peopleTags||[];
+      const activeTag=UI.peopleFilterTag;
+      const tagRow=tags.length?`<div class="people-tag-row">
+        <button class="people-tag-chip${!activeTag?' on':''}" data-filter-tag="">All</button>
+        ${tags.map(t=>`<button class="people-tag-chip pm-tag-${esc(t.color)}${activeTag===t.id?' on':''}" data-filter-tag="${t.id}">${esc(t.name)}</button>`).join('')}
+      </div>`:'';
+      toolbar.innerHTML=tagRow+`<div class="people-sort-row">${sortOpts.map(([k,lbl])=>`<button class="people-sort-chip${sort===k?' on':''}" data-sort="${k}">${esc(lbl)}</button>`).join('')}</div>`;
       toolbar.onclick=e=>{
         const s=e.target.dataset.sort;
-        if(!s)return;
-        S.peopleSettings=S.peopleSettings||{};
-        S.peopleSettings.defaultSort=s;
-        svAll();rPeople();
+        if(s){
+          S.peopleSettings=S.peopleSettings||{};
+          S.peopleSettings.defaultSort=s;
+          svAll();rPeople();return;
+        }
+        const tgt=e.target.dataset.filterTag;
+        if(tgt!==undefined){
+          UI.peopleFilterTag=tgt||null;
+          rPeople();return;
+        }
       };
     }
   }
@@ -11883,7 +11899,12 @@ function rPeople(){
     return;
   }
   grid.className='people-grid';
-  const sorted=_peopleSort(list);
+  const filtered=UI.peopleFilterTag?list.filter(p=>(p.tagIds||[]).includes(UI.peopleFilterTag)):list;
+  if(!filtered.length){
+    grid.innerHTML=`<div class="no-t" style="grid-column:1/-1">No people match this filter.</div>`;
+    return;
+  }
+  const sorted=_peopleSort(filtered);
   grid.innerHTML=sorted.map(p=>{
     const ls=_peopleLastSeen(p);
     const overdue=ls.days!==null&&ls.days>90;
