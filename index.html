@@ -842,6 +842,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pm-add{font-size:11px;color:var(--muted);background:transparent;border:1px dashed var(--border-strong);padding:5px 10px;border-radius:5px;cursor:pointer}
 .pm-add:hover{color:var(--text);border-color:var(--gold)}
 .pm-notes{width:100%;min-height:60px;font-family:inherit;font-size:13px;padding:9px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical}
+.people-sort-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.people-sort-chip{font-size:11px;padding:4px 9px;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;font-family:inherit}
+.people-sort-chip:hover{border-color:var(--border-strong)}
+.people-sort-chip.on{background:var(--gold);color:#fff;border-color:var(--gold)}
 
 /* Spanning bars — every bar fills its grid row uniformly so the "expand all"
    layout stays rigid regardless of event count */
@@ -11764,16 +11768,83 @@ function _peopleLastSeen(person){
   if(days<180)return{label:`${Math.round(days/30)}mo`,days};
   return{label:`${Math.round(days/365)}y`,days};
 }
+// Sort the people array per S.peopleSettings.defaultSort. Pinned people
+// always float to the top, regardless of selected sort. Within pinned and
+// within unpinned, the chosen sort order applies.
+function _peopleSort(list){
+  const sort=S.peopleSettings?.defaultSort||'promise';
+  const pinScore=p=>p.pinned?0:1;
+  const earliestPromise=p=>{
+    const proms=Array.isArray(p.promises)?p.promises:[];
+    if(!proms.length)return {dateRank:Infinity,addedRank:Infinity};
+    // Dated promises sort first by date; undated sort second by addedAt
+    const dated=proms.filter(x=>x.date).map(x=>x.date).sort();
+    const undated=proms.filter(x=>!x.date).map(x=>x.addedAt||'9999').sort();
+    if(dated.length)return {dateRank:dated[0],addedRank:undated[0]||'9999'};
+    return {dateRank:'~',addedRank:undated[0]||'9999'};
+  };
+  const cmp={
+    promise:(a,b)=>{
+      const pa=earliestPromise(a),pb=earliestPromise(b);
+      if(pa.dateRank!==pb.dateRank)return String(pa.dateRank).localeCompare(String(pb.dateRank));
+      return String(pa.addedRank).localeCompare(String(pb.addedRank));
+    },
+    level:(a,b)=>{
+      const score=p=>(p.level?.major||1)*5+(p.level?.minor||1);
+      return score(b)-score(a);
+    },
+    lastSeen:(a,b)=>{
+      const days=p=>{
+        if(!p.lastTogether?.doneAt)return Infinity;
+        const [y,m,d]=p.lastTogether.doneAt.split('-').map(Number);
+        const then=new Date(y,m-1,d);
+        return (Date.now()-then.getTime())/86400000;
+      };
+      return days(b)-days(a);
+    },
+    name:(a,b)=>(a.name||'').localeCompare(b.name||''),
+    recent:(a,b)=>(b.createdAt||'').localeCompare(a.createdAt||'')
+  };
+  return [...list].sort((a,b)=>{
+    const ps=pinScore(a)-pinScore(b);
+    if(ps!==0)return ps;
+    return (cmp[sort]||cmp.promise)(a,b);
+  });
+}
 function rPeople(){
   const grid=document.getElementById('people-grid');if(!grid)return;
+  const toolbar=document.getElementById('people-toolbar');
   const list=S.people||[];
+  if(toolbar){
+    if(!list.length){
+      toolbar.innerHTML='';
+    } else {
+      const sort=S.peopleSettings?.defaultSort||'promise';
+      const opts=[
+        ['promise','Promise date ↑'],
+        ['level','Level ↓'],
+        ['lastSeen','Last seen ↑'],
+        ['name','Name A–Z'],
+        ['recent','Recently added']
+      ];
+      toolbar.innerHTML=`<div class="people-sort-row">${opts.map(([k,lbl])=>`<button class="people-sort-chip${sort===k?' on':''}" data-sort="${k}">${esc(lbl)}</button>`).join('')}</div>`;
+      toolbar.onclick=e=>{
+        const s=e.target.dataset.sort;
+        if(!s)return;
+        S.peopleSettings=S.peopleSettings||{};
+        S.peopleSettings.defaultSort=s;
+        svAll();rPeople();
+      };
+    }
+  }
   if(!list.length){
     grid.innerHTML=`<div class="no-t">Track the people you care about. <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openAddPersonModal()">+ Add your first person</button></div>`;
     grid.className='';
     return;
   }
   grid.className='people-grid';
-  grid.innerHTML=list.map(p=>{
+  const sorted=_peopleSort(list);
+  grid.innerHTML=sorted.map(p=>{
     const ls=_peopleLastSeen(p);
     const overdue=ls.days!==null&&ls.days>90;
     const hasPin=!!p.pinned;
