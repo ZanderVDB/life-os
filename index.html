@@ -842,6 +842,20 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pm-add{font-size:11px;color:var(--muted);background:transparent;border:1px dashed var(--border-strong);padding:5px 10px;border-radius:5px;cursor:pointer}
 .pm-add:hover{color:var(--text);border-color:var(--gold)}
 .pm-bday{background:var(--pink-bg);color:var(--pink);padding:2px 8px;border-radius:5px;font-size:11.5px;font-weight:600}
+/* Birthday section — manual-connect model. The pm-row-stack modifier
+   makes the row a vertical flex so suggestion buttons can stack below
+   the header. */
+.pm-row-stack{flex-direction:column;align-items:stretch;gap:5px}
+.pm-bday-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pm-bday-source{font-size:10px;color:var(--muted);margin-left:4px;font-style:italic}
+.pm-bday-block{background:var(--surface-2);padding:8px 10px;border-radius:6px;margin:0;border-left:3px solid var(--pink,#a85365)}
+.pm-bday-hdr{font-size:11px;color:var(--text-2);font-weight:500;margin-bottom:4px;display:flex;align-items:center;gap:5px}
+.pm-bday-cands{display:flex;flex-direction:column;gap:3px}
+.pm-bday-cand{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-family:inherit;font-size:12px;text-align:left;color:var(--text)}
+.pm-bday-cand:hover{border-color:var(--pink,#a85365);background:var(--pink-bg)}
+.pm-bday-cand-name{flex:1;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-bday-cand-date{font-size:10.5px;color:var(--muted);flex-shrink:0}
+.pm-bday-cand-connect{font-size:10px;color:var(--pink,#a85365);font-weight:600;flex-shrink:0}
 .pm-notes{width:100%;min-height:60px;font-family:inherit;font-size:13px;padding:9px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical}
 .people-sort-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .people-sort-chip{font-size:11px;padding:4px 9px;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;font-family:inherit}
@@ -3005,7 +3019,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v152';
+const APP_VERSION='v153';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -9292,7 +9306,7 @@ REMINDERS vs TASKS vs EVENTS — pick the right surface:
   - monthly: {"type":"monthly","dayOfMonth":25} (1-31; auto-clamps for short months)
   - yearly: {"type":"yearly","month":2,"day":15} (month 0-11; March 15 = month:2, day:15)
 
-PEOPLE — when the user mentions a NEW person they want to remember (not someone already in state.people), use addPerson. Required: name. Everything else is optional. Tags are referenced by name; unknown tag names auto-create. level defaults to {major:1,minor:1}. Don't infer a level unless the user is explicit ("she's a close friend" → {major:4,minor:3}). For addPromise: "person" is matched STRICTLY against state.people by name (exact, then startsWith). If the person doesn't exist, prefer addPerson first. The "text" is the action verb-phrase ("go for coffee", "play paddle"). Date is optional — use only when explicit.
+PEOPLE — VERY RESTRICTIVE. Only use addPerson when the user EXPLICITLY asks to add/track/remember a person by name. Trigger phrases: "add [name] to my people", "remember [name]", "I met [name]", "track [name]". Do NOT use addPerson just because a name appears in an event title, task, or other context. Do NOT use addPerson when the user is drafting a plan, asking for advice, or doing anything that isn't an explicit instruction to track a person. If a name appears casually in conversation (e.g. "coffee with Jack at 3pm"), leave it alone — Jack does not become a person record unless the user says "add Jack to my people". Required: name. Everything else is optional. Tags are referenced by name; unknown tag names auto-create. level defaults to {major:1,minor:1}. Don't infer a level unless the user is explicit ("she's a close friend" → {major:4,minor:3}). For addPromise: ONLY when the user explicitly says they made a promise/plan with a person ("I told Jack we'd grab coffee", "Andrew and I are playing paddle Friday"). "person" is matched STRICTLY against state.people by name (exact, then startsWith). If the named person doesn't exist in state.people, do NOT auto-create them — return an empty addPromise array and mention in "message" that the person isn't tracked yet. The "text" is the action verb-phrase ("go for coffee", "play paddle"). Date is optional — use only when explicit.
 
 Respond ONLY raw JSON:
 {"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","daily":"true if user wants this on the Daily list, omit/false for General","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"addReminders":[{"text":"...","recurrence":{"type":"daily|weekly|monthly|yearly","weekdays":"[0-6 array, only if weekly]","dayOfMonth":"1-31, only if monthly","month":"0-11, only if yearly","day":"1-31, only if yearly"}}],"addPerson":[{"name":"...","metAt":"optional where you met","phone":"optional","email":"optional","notes":"optional","tags":["optional tag names"],"level":{"major":1-5,"minor":1-5}}],"addPromise":[{"person":"partial name of an existing person","text":"what you said you'd do","date":"YYYY-MM-DD|optional"}],"message":"1 sentence"}
@@ -10625,7 +10639,14 @@ async function applyChanges(ch,prompt){
   //   'calendar' : tasks/habits/etc apply now; calendar needs OK (default)
   //   'all'      : every AI change goes through the review queue
   const mode=S.aiConfirmMode||'calendar';
-  if(mode==='all'&&formatAIChangesDetailed(ch)){
+  // People ops (addPerson / addPromise) ALWAYS require confirmation
+  // regardless of mode. The AI tends to over-eagerly create people from
+  // mentioned names in event titles ("Coffee with Jack" → creates Jack)
+  // which is way too aggressive for a list the user expects to curate
+  // themselves. Forcing confirmation makes People a manual-only tab even
+  // when the AI suggests an addition.
+  const hasPeopleOp=(ch.addPerson?.length>0)||(ch.addPromise?.length>0);
+  if((mode==='all'||hasPeopleOp)&&formatAIChangesDetailed(ch)){
     const result=await showAIConfirmModal(ch,prompt,'all');
     if(result.action==='cancel'){
       const st=document.getElementById('btm-st');
@@ -12177,21 +12198,55 @@ function _peopleLastSeen(person){
 // Find a Google Calendar event whose title looks like a birthday for this
 // person. Uses the existing isBirthdayEv() helper + the same regex used
 // in the morning brief flow. Returns {date, eventTitle} or null.
-function _peopleFindBirthday(person){
-  if(!person.name)return null;
+// Returns the GCal event explicitly connected to this person via the
+// stored birthdayEventId. Looks up by recurringEventId (so the link
+// survives across yearly recurrences) or instance id.
+function _peopleConnectedBirthday(person){
+  if(!person.birthdayEventId)return null;
+  const id=person.birthdayEventId;
+  const evs=(gcCache.events||[]);
+  // Match by recurringEventId first (yearly birthdays share a series id);
+  // fall back to direct id match.
+  return evs.find(e=>(e.recurringEventId||e.id)===id)||evs.find(e=>e.id===id)||null;
+}
+// Returns the stable id we use to remember the connection — prefer the
+// recurring series id so the link survives next year's recurrence.
+function _peopleEventLinkId(ev){
+  return ev&&(ev.recurringEventId||ev.id)||null;
+}
+// Returns an array of POSSIBLE birthday event matches for this person,
+// using word-level matching so "Ben from church's birthday" matches a
+// person named "Ben". User must explicitly Connect — no auto-matching.
+function _peopleBirthdayCandidates(person){
+  if(!person.name)return [];
   const pool=(gcCache.events||[]).filter(e=>isBirthdayEv(e));
-  if(!pool.length)return null;
-  const needle=person.name.toLowerCase().trim();
-  const firstWord=needle.split(/\s+/)[0];
+  if(!pool.length)return [];
+  // Person's words → set of lowercase word tokens, skip 1-char tokens
+  // and skip ultra-common particles. "Ben" → {"ben"}. "Mary Jane Smith"
+  // → {"mary","jane","smith"}.
+  const STOP=new Set(['from','at','of','the','my','a','and']);
+  const personWords=new Set(person.name.toLowerCase().split(/\s+/).filter(w=>w.length>1&&!STOP.has(w)));
+  if(!personWords.size)return [];
+  // De-dupe by stable link id so two instances of the same recurring
+  // birthday don't both show up as separate suggestions.
+  const seen=new Set();
+  const out=[];
   for(const e of pool){
     const m=(e.title||'').match(/^(.+?)(?:'s)?\s*(?:birthday|bday)\b/i);
     if(!m)continue;
-    const bdayName=m[1].toLowerCase().trim();
-    if(bdayName===needle||bdayName===firstWord||needle.startsWith(bdayName)){
-      return {date:e.date,eventTitle:e.title};
-    }
+    const eventWords=new Set(m[1].toLowerCase().split(/\s+/).filter(w=>w.length>1&&!STOP.has(w)));
+    // Match if ANY word overlaps. "Ben" matches "Ben from church".
+    let overlap=false;
+    for(const w of personWords)if(eventWords.has(w)){overlap=true;break;}
+    if(!overlap)continue;
+    const linkId=_peopleEventLinkId(e);
+    if(linkId&&seen.has(linkId))continue;
+    if(linkId)seen.add(linkId);
+    out.push({event:e,linkId,extractedName:m[1].trim(),date:e.date,title:e.title});
   }
-  return null;
+  // Sort by date ascending so the soonest birthday is on top
+  out.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  return out;
 }
 function _peopleFmtBirthday(iso){
   if(!iso)return '';
@@ -12410,9 +12465,32 @@ function renderPersonModalBody(p){
       <div class="pm-row" data-field="phone">${p.phone?`<span class="pm-icon">📱</span> <span class="pm-val">${esc(p.phone)}</span>`:`<button class="pm-add" data-pm-edit="phone">+ Add phone</button>`}</div>
       <div class="pm-row" data-field="email">${p.email?`<span class="pm-icon">✉️</span> <span class="pm-val">${esc(p.email)}</span>`:`<button class="pm-add" data-pm-edit="email">+ Add email</button>`}</div>
       ${(()=>{
-        const bday=_peopleFindBirthday(p);
-        if(bday){
-          return `<div class="pm-row"><span class="pm-icon">🎂</span> <span class="pm-val pm-bday">${esc(_peopleFmtBirthday(bday.date))}</span> <span style="font-size:10px;color:var(--muted);margin-left:4px">from Google Calendar</span></div>`;
+        // Birthday section. Manual-connect model — never auto-link.
+        //  (a) Connected: show date + event title + Disconnect.
+        //      Date comes from gcCache if present, else from the snapshot
+        //      stored on the person at connect time.
+        //  (b) Has candidates: list them as Connect options + Add new fallback
+        //  (c) No candidates: just + Add new birthday
+        if(p.birthdayEventId){
+          const liveEv=_peopleConnectedBirthday(p);
+          const date=liveEv?liveEv.date:p.birthdayDate;
+          let sourceName=p.birthdaySourceName||'';
+          if(liveEv){
+            const m=(liveEv.title||'').match(/^(.+?)(?:'s)?\s*(?:birthday|bday)\b/i);
+            if(m)sourceName=m[1].trim();
+          }
+          if(date){
+            const sourceTxt=sourceName?`from "${esc(sourceName)}'s" event`:`connected to a calendar event`;
+            return `<div class="pm-row pm-row-stack"><div class="pm-bday-row"><span class="pm-icon">🎂</span><span class="pm-val pm-bday">${esc(_peopleFmtBirthday(date))}</span><span class="pm-bday-source">${sourceTxt}</span><button class="pm-icon-btn" data-pm-action="disconnect-bday" title="Disconnect">✕</button></div></div>`;
+          }
+          // Connected but neither cache nor snapshot has the date — show a
+          // minimal connected pill with a disconnect option.
+          return `<div class="pm-row"><span class="pm-icon">🎂</span><span class="pm-val pm-bday" style="background:var(--surface-2);color:var(--muted)">Birthday connected · open Calendar to load date</span><button class="pm-icon-btn" data-pm-action="disconnect-bday" title="Disconnect" style="margin-left:6px">✕</button></div>`;
+        }
+        const cands=_peopleBirthdayCandidates(p);
+        if(cands.length){
+          const list=cands.slice(0,5).map(c=>`<button class="pm-bday-cand" data-pm-action="connect-bday" data-pm-link="${esc(c.linkId)}"><span class="pm-bday-cand-name">${esc(c.extractedName)}</span><span class="pm-bday-cand-date">${esc(_peopleFmtBirthday(c.date))}</span><span class="pm-bday-cand-connect">Connect →</span></button>`).join('');
+          return `<div class="pm-row pm-row-stack pm-bday-block"><div class="pm-bday-hdr"><span class="pm-icon">🎂</span> Connect a birthday from Google Calendar:</div><div class="pm-bday-cands">${list}</div><button class="pm-add" data-pm-action="add-bday" style="margin-top:4px">+ None of these — add a new birthday for ${esc(p.name)}</button></div>`;
         }
         return `<div class="pm-row"><button class="pm-add" data-pm-action="add-bday">🎂 + Add birthday</button></div>`;
       })()}
@@ -12458,7 +12536,32 @@ function renderPersonModalBody(p){
 function attachPersonModalHandlers(p){
   const body=document.getElementById('pm-body');if(!body)return;
   body.onclick=e=>{
-    const a=e.target.dataset?.pmAction;
+    // Resolve the action via closest() so clicks on inner spans (e.g.
+    // pm-bday-cand has 3 child spans) still find the button's dataset.
+    const aEl=e.target.closest('[data-pm-action]');
+    const a=aEl?aEl.dataset.pmAction:e.target.dataset?.pmAction;
+    if(a==='connect-bday'){
+      const btn=e.target.closest('[data-pm-link]');
+      const linkId=btn?.dataset.pmLink;
+      if(!linkId)return;
+      p.birthdayEventId=linkId;
+      // Snapshot the date + title at connect time so the connected state
+      // still renders even when gcCache.events is empty (e.g. user opens
+      // People tab on a fresh load before visiting the Calendar tab).
+      const cands=_peopleBirthdayCandidates(p);
+      const match=cands.find(c=>c.linkId===linkId);
+      if(match){
+        p.birthdayDate=match.date;
+        p.birthdaySourceName=match.extractedName;
+      }
+      svAll();rPeople();renderPersonModalBody(p);return;
+    }
+    if(a==='disconnect-bday'){
+      delete p.birthdayEventId;
+      delete p.birthdayDate;
+      delete p.birthdaySourceName;
+      svAll();rPeople();renderPersonModalBody(p);return;
+    }
     if(a==='add-bday'){
       // Reuse the existing event create modal with birthday-shaped defaults.
       // openNewEvent natively handles date/time/endTime; we apply the
