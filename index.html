@@ -2578,6 +2578,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <label class="switch"><input type="checkbox" id="iar-events" onchange="setIAR('eventToasts',this.checked)"><span class="slider"></span></label>
             </div>
           </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Daily habit catch-up</div>
+              <div class="setting-desc">Show yesterday's habits the first time you open the app each day so you can tick anything you forgot.</div>
+            </div>
+            <div class="setting-right">
+              <label class="switch"><input type="checkbox" id="habit-catchup-toggle" onchange="toggleHabitCatchup(this.checked)"><span class="slider"></span></label>
+            </div>
+          </div>
         </div>
 
         <div>
@@ -4165,6 +4174,7 @@ function handleSnapshot(snap){
     if(d.aiConfirmMode==='calendar'||d.aiConfirmMode==='all')S.aiConfirmMode=d.aiConfirmMode;
     else if(d.aiConfirmMode==='off')S.aiConfirmMode='calendar';
     else if(typeof d.confirmAllAI==='boolean')S.aiConfirmMode=d.confirmAllAI?'all':'calendar';
+    S.habitCatchupEnabled=typeof d.habitCatchupEnabled==='boolean'?d.habitCatchupEnabled:true;
     // Each account's Anthropic key lives in Firestore under their own doc,
     // so this line also enforces the per-user scoping — account B's snapshot
     // will only ever populate account B's per-user key slot.
@@ -4308,6 +4318,7 @@ function _buildSavePayload(){
   if(typeof S._workOrder==='number')payload._workOrder=S._workOrder;
   if(S.calendarDefaults!==undefined)payload.calendarDefaults=S.calendarDefaults;
   if(S.notebook!==undefined)payload.notebook=S.notebook||{sections:[]};
+  payload.habitCatchupEnabled=typeof S.habitCatchupEnabled==='boolean'?S.habitCatchupEnabled:true;
   // Persist the migration high-water-mark so we don't re-run legacy
   // migrations on every cold launch. Once written, future loads see this
   // and skip the migration block entirely (handleSnapshot gates on it).
@@ -4391,7 +4402,7 @@ function effectiveAreaId(t){
 }
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]}};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
 // or 'all' (every AI change opens the review queue). Legacy 'off' is no
@@ -8500,6 +8511,7 @@ function rSettings(){
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
+  const hcTog=document.getElementById('habit-catchup-toggle');if(hcTog)hcTog.checked=S.habitCatchupEnabled!==false;
   // Daily reminder toggle reflects both the user preference AND the
   // browser permission state, since either being off means no notifs fire.
   const ntTog=document.getElementById('notif-toggle');
@@ -8771,6 +8783,12 @@ function toggleSounds(on){
   try{localStorage.setItem('los_sounds',on?'1':'0');}catch(e){}
   svAll();
   if(on)playSound('confirm');
+}
+// Daily habit catch-up popup: shows yesterday's habits the first time you
+// open the app each day. Task 3 will add the trigger that reads this flag.
+function toggleHabitCatchup(on){
+  S.habitCatchupEnabled=!!on;
+  svAll();
 }
 function setAIConfirmMode(mode){
   // 'off' is no longer allowed — the AI must always pause for review on
