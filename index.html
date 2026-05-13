@@ -907,6 +907,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pm-promise-ctrls{display:flex;gap:3px;flex-shrink:0}
 .pm-icon-btn{background:transparent;border:none;font-size:11px;color:var(--muted);cursor:pointer;padding:2px 5px;border-radius:3px}
 .pm-icon-btn:hover{background:var(--surface);color:var(--text)}
+.pm-link-btn{font-size:10.5px;background:transparent;border:1px solid var(--gold);color:var(--gold);padding:2px 7px;border-radius:4px;font-weight:600;cursor:pointer;font-family:inherit}
+.pm-link-btn:hover{background:var(--gold-bg)}
+.pm-link-badge{font-size:10.5px;background:var(--sage,#7fa186);color:#fff;padding:2px 7px;border-radius:4px;font-weight:600;cursor:pointer;border:none;font-family:inherit}
+.pm-link-badge:hover{filter:brightness(.95)}
 .pm-add-promise{font-size:11px;color:var(--sage,#7fa186);background:transparent;border:1px dashed var(--sage,#7fa186);padding:6px 10px;border-radius:5px;cursor:pointer;width:100%;margin-top:3px;font-weight:600;font-family:inherit}
 .pm-last-box{background:var(--surface-2);padding:7px 10px;border-radius:5px;font-size:11.5px;color:var(--text-2);font-style:italic}
 .pm-last-when{font-style:normal;color:var(--muted);font-size:10.5px}
@@ -7588,6 +7592,12 @@ function chk(id,e){
     delete t.doneAt;
     _taskFadeStarts.delete(t.id);
   }
+  // If this task was linked to a person's promise, complete the promise
+  // and delete the task entirely (no history — keeps Daily clean).
+  if(t.done&&_peopleHandleTaskTick(t)){
+    S.tasks=S.tasks.filter(x=>x.id!==t.id);
+    if(typeof rPeople==='function')rPeople();
+  }
   svAllNow();rTasks();rAttention();
   if(t.done){
     clearTimeout(_taskFadeTimer);
@@ -7910,6 +7920,10 @@ function delTask(id){
     return;
   }
   if(!confirm('Delete this task?'))return;
+  const _delTask=S.tasks.find(x=>x.id===id);
+  if(_delTask&&_peopleHandleTaskDelete(_delTask)){
+    if(typeof rPeople==='function')rPeople();
+  }
   S.tasks=S.tasks.filter(x=>x.id!==id);svAll();ex={id:null,type:null};
   closeTaskModal();
   rTasks();rAttention();
@@ -8071,6 +8085,12 @@ function toggleTaskStep(taskId,stepId,done){
       clearTimeout(_taskFadeTimer);
       _taskFadeTimer=setTimeout(()=>{rTasks();},TASK_FADE_MS+100);
       pruneCompletedHistory();
+      // Same cascade as chk(): if linked to a promise, complete it and
+      // remove the task from S.tasks so it doesn't linger after the fade.
+      if(_peopleHandleTaskTick(t)){
+        S.tasks=S.tasks.filter(x=>x.id!==t.id);
+        if(typeof rPeople==='function')rPeople();
+      }
     }
     svAll();
   }
@@ -10350,8 +10370,13 @@ function clearTasksHistory(){
   if(!completed.length){alert('Nothing to clear.');return;}
   if(!confirm(`Permanently delete all ${completed.length} completed task${completed.length===1?'':'s'}? This can't be undone.`))return;
   const completedIds=new Set(completed.map(t=>t.id));
+  // Promise-link cascade: bulk delete should clear back-references on any
+  // linked promises so they aren't left pointing at a tombstoned task id.
+  let _anyLinked=false;
+  completed.forEach(t=>{if(_peopleHandleTaskDelete(t))_anyLinked=true;});
   S.tasks=S.tasks.filter(t=>!completedIds.has(t.id));
   svAll();rTasksHistory();rTasks();
+  if(_anyLinked&&typeof rPeople==='function')rPeople();
 }
 
 // ─────── SOUND SYSTEM ───────
@@ -10448,8 +10473,8 @@ async function applyChanges(ch,prompt){
     }
     S.tasks.push(newT);
   });
-  if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=_aiFindStrict(S.tasks,x=>x.text,r);if(t)t.done=true;});
-  if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=_aiFindStrict(S.tasks,x=>x.text,r);if(t)S.tasks=S.tasks.filter(x=>x.id!==t.id);});
+  if(ch.completeTasks?.length)ch.completeTasks.forEach(r=>{const t=_aiFindStrict(S.tasks,x=>x.text,r);if(t){t.done=true;t.doneAt=t.doneAt||Date.now();if(_peopleHandleTaskTick(t))S.tasks=S.tasks.filter(x=>x.id!==t.id);}});
+  if(ch.removeTasks?.length)ch.removeTasks.forEach(r=>{const t=_aiFindStrict(S.tasks,x=>x.text,r);if(t){_peopleHandleTaskDelete(t);S.tasks=S.tasks.filter(x=>x.id!==t.id);}});
   if(ch.addHabits?.length)ch.addHabits.forEach(h=>{
     if(!h||!h.name)return;
     if(S.habits.some(x=>x.name.toLowerCase()===h.name.toLowerCase()))return;
@@ -11849,13 +11874,43 @@ function _peopleLevelWidget(p){
     </div>`;
 }
 function _peoplePromiseRow(pr,i){
+  const linked=!!pr.linkedTaskId;
   return `<div class="pm-promise-row" data-pi="${i}">
     <div class="pm-promise-text">🤝 <span class="pm-promise-label">${esc(pr.text||'')}</span>${pr.date?`<span class="pm-promise-date">· ${esc(pr.date)}</span>`:''}</div>
     <div class="pm-promise-ctrls">
+      ${linked?`<button class="pm-link-badge" data-pm-action="unlink-promise" data-pi="${i}" title="Unlink and delete the task">🔗 Linked</button>`:`<button class="pm-link-btn" data-pm-action="link-promise" data-pi="${i}" title="Create a task on Daily">→ Link</button>`}
       <button class="pm-icon-btn" data-pm-action="edit-promise" data-pi="${i}" title="Edit">✎</button>
       <button class="pm-icon-btn" data-pm-action="delete-promise" data-pi="${i}" title="Delete">🗑</button>
     </div>
   </div>`;
+}
+// Called when a linked task is ticked. Finds the person + promise via the
+// task's back-link fields, moves the promise's text into lastTogether (the
+// single "last did together" slot — no history per spec), and removes the
+// promise from the person's list. Returns true if a link was found and
+// processed, so the caller can also delete the task from S.tasks.
+function _peopleHandleTaskTick(task){
+  if(!task||!task.linkedPersonId||!task.linkedPromiseId)return false;
+  const p=(S.people||[]).find(x=>x.id===task.linkedPersonId);
+  if(!p)return false;
+  const i=(p.promises||[]).findIndex(pr=>pr.id===task.linkedPromiseId);
+  if(i<0)return false;
+  const promise=p.promises[i];
+  p.lastTogether={text:promise.text,doneAt:tod()};
+  p.promises.splice(i,1);
+  return true;
+}
+// Called when a linked task is deleted (without being ticked). Clears the
+// linkedTaskId on the promise so the user can re-link it. Promise itself
+// stays.
+function _peopleHandleTaskDelete(task){
+  if(!task||!task.linkedPersonId||!task.linkedPromiseId)return false;
+  const p=(S.people||[]).find(x=>x.id===task.linkedPersonId);
+  if(!p)return false;
+  const promise=(p.promises||[]).find(pr=>pr.id===task.linkedPromiseId);
+  if(!promise)return false;
+  delete promise.linkedTaskId;
+  return true;
 }
 function _peoplePastWhen(iso){
   if(!iso)return '';
@@ -12148,7 +12203,15 @@ function attachPersonModalHandlers(p){
       svAll();rPeople();renderPersonModalBody(p);return;
     }
     if(a==='delete'){
-      if(!confirm(`Delete ${p.name}?`))return;
+      const linkedCount=(p.promises||[]).filter(pr=>pr.linkedTaskId).length;
+      const note=linkedCount?` This also deletes ${linkedCount} linked task${linkedCount===1?'':'s'}.`:'';
+      if(!confirm(`Delete ${p.name}?${note} This cannot be undone.`))return;
+      // Cascade: remove any tasks linked to this person's promises
+      const taskIds=new Set((p.promises||[]).map(pr=>pr.linkedTaskId).filter(Boolean));
+      if(taskIds.size){
+        S.tasks=(S.tasks||[]).filter(x=>!taskIds.has(x.id));
+        if(typeof rTasks==='function')rTasks();
+      }
       S.people=(S.people||[]).filter(x=>x.id!==p.id);
       svAll();rPeople();
       document.getElementById('person-modal')?.remove();_syncBodyLock();return;
@@ -12208,10 +12271,48 @@ function attachPersonModalHandlers(p){
     if(a==='delete-promise'){
       const i=parseInt(e.target.dataset.pi);
       const pr=p.promises[i];if(!pr)return;
-      if(!confirm(`Delete this promise? "${pr.text}"`))return;
-      // Task-link cascade lands in Task 11. For now just remove the promise.
+      const linkedNote=pr.linkedTaskId?' Any linked task will also be removed.':'';
+      if(!confirm(`Delete this promise? "${pr.text}".${linkedNote}`))return;
+      if(pr.linkedTaskId){
+        S.tasks=(S.tasks||[]).filter(x=>x.id!==pr.linkedTaskId);
+        if(typeof rTasks==='function')rTasks();
+      }
       p.promises.splice(i,1);
       svAll();rPeople();renderPersonModalBody(p);return;
+    }
+    if(a==='link-promise'){
+      const i=parseInt(e.target.dataset.pi);
+      const pr=p.promises[i];if(!pr)return;
+      if(pr.linkedTaskId)return; // double-click guard
+      const task={
+        id:uid(),
+        text:`${p.name}: ${pr.text}`,
+        area:'personal',
+        project:'gen',
+        priority:'med',
+        scheduledTime:'',
+        daily:true,
+        dailyDate:tod(),
+        done:false,
+        date:tod(),
+        linkedPersonId:p.id,
+        linkedPromiseId:pr.id
+      };
+      S.tasks=S.tasks||[];S.tasks.push(task);
+      pr.linkedTaskId=task.id;
+      svAll();rPeople();renderPersonModalBody(p);
+      if(typeof rTasks==='function')rTasks();
+      return;
+    }
+    if(a==='unlink-promise'){
+      const i=parseInt(e.target.dataset.pi);
+      const pr=p.promises[i];if(!pr||!pr.linkedTaskId)return;
+      if(!confirm('Unlink this task? The task on Daily will be deleted.'))return;
+      S.tasks=(S.tasks||[]).filter(x=>x.id!==pr.linkedTaskId);
+      delete pr.linkedTaskId;
+      svAll();rPeople();renderPersonModalBody(p);
+      if(typeof rTasks==='function')rTasks();
+      return;
     }
     if(a==='forget-last'){
       if(!confirm('Forget the last thing you did together?'))return;
