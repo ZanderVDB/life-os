@@ -9292,10 +9292,10 @@ REMINDERS vs TASKS vs EVENTS — pick the right surface:
   - monthly: {"type":"monthly","dayOfMonth":25} (1-31; auto-clamps for short months)
   - yearly: {"type":"yearly","month":2,"day":15} (month 0-11; March 15 = month:2, day:15)
 
-PEOPLE — when the user mentions a NEW person they want to remember (not someone already in state.people), use addPerson. Required: name. Everything else is optional. Tags are referenced by name; unknown tag names auto-create. level defaults to {major:1,minor:1}. Don't infer a level unless the user is explicit ("she's a close friend" → {major:4,minor:3}).
+PEOPLE — when the user mentions a NEW person they want to remember (not someone already in state.people), use addPerson. Required: name. Everything else is optional. Tags are referenced by name; unknown tag names auto-create. level defaults to {major:1,minor:1}. Don't infer a level unless the user is explicit ("she's a close friend" → {major:4,minor:3}). For addPromise: "person" is matched STRICTLY against state.people by name (exact, then startsWith). If the person doesn't exist, prefer addPerson first. The "text" is the action verb-phrase ("go for coffee", "play paddle"). Date is optional — use only when explicit.
 
 Respond ONLY raw JSON:
-{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","daily":"true if user wants this on the Daily list, omit/false for General","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"addReminders":[{"text":"...","recurrence":{"type":"daily|weekly|monthly|yearly","weekdays":"[0-6 array, only if weekly]","dayOfMonth":"1-31, only if monthly","month":"0-11, only if yearly","day":"1-31, only if yearly"}}],"addPerson":[{"name":"...","metAt":"optional where you met","phone":"optional","email":"optional","notes":"optional","tags":["optional tag names"],"level":{"major":1-5,"minor":1-5}}],"message":"1 sentence"}
+{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","daily":"true if user wants this on the Daily list, omit/false for General","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"addReminders":[{"text":"...","recurrence":{"type":"daily|weekly|monthly|yearly","weekdays":"[0-6 array, only if weekly]","dayOfMonth":"1-31, only if monthly","month":"0-11, only if yearly","day":"1-31, only if yearly"}}],"addPerson":[{"name":"...","metAt":"optional where you met","phone":"optional","email":"optional","notes":"optional","tags":["optional tag names"],"level":{"major":1-5,"minor":1-5}}],"addPromise":[{"person":"partial name of an existing person","text":"what you said you'd do","date":"YYYY-MM-DD|optional"}],"message":"1 sentence"}
 State:${JSON.stringify(ctx)}
 User:"${msg}"`;
   try{
@@ -9541,6 +9541,9 @@ function formatAIChangesDetailed(ch){
     if(Array.isArray(pp.tags)&&pp.tags.length)bits.push('tags: '+pp.tags.join(', '));
     peopleLines.push(`  • Add person "${pp.name||'(untitled)'}"${bits.length?' — '+bits.join(', '):''}`);
   });
+  (ch.addPromise||[]).forEach(pr=>{
+    peopleLines.push(`  • Promise on "${pr.person||'?'}": "${pr.text||''}"${pr.date?' on '+pr.date:''}`);
+  });
   if(peopleLines.length)sections.push('PEOPLE\n'+peopleLines.join('\n'));
 
   return sections.length?sections.join('\n\n'):'';
@@ -9625,7 +9628,8 @@ const AIC_TYPES={
   addNote:{icon:'▤',label:'Note'},
   addResource:{icon:'🔗',label:'Resource'},
   addReminders:{icon:'⏰',label:'Reminder'},
-  addPerson:{icon:'👤',label:'Person'}
+  addPerson:{icon:'👤',label:'Person'},
+  addPromise:{icon:'🤝',label:'Promise'}
 };
 function _aicFmtReminder(r){if(r==null||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (m/60)+' hr';if(m===1440)return '1 day';return (m/1440)+' day';}).filter(Boolean);return names.length?names.join(' + '):null;}
 // Preview the real events a remove/update match string will hit. Uses
@@ -9747,6 +9751,12 @@ function _aicSummary(key,item){
       if(item.level)meta.push(`L${item.level.major||1}.${item.level.minor||1}`);
       break;
     }
+    case 'addPromise':{
+      title=`Promise on "${esc(item.person||'?')}"`;
+      meta.push(esc(item.text||''));
+      if(item.date)meta.push('on '+esc(item.date));
+      break;
+    }
     default:title=esc(JSON.stringify(item).slice(0,60));
   }
   return {title,meta:meta.join(' · '),stepsHTML};
@@ -9785,7 +9795,7 @@ function renderAIChangesInteractive(ch,eventPool){
   const brainKeys=['addIdea','addNote','addResource'];
   const calKeys=['addEvent','removeEvent','updateEvent'];
   const remKeys=['addReminders'];
-  const peopleKeys=['addPerson'];
+  const peopleKeys=['addPerson','addPromise'];
   const buildSection=(label,keys,opts)=>{
     const cards=[];
     keys.forEach(k=>{
@@ -10210,6 +10220,12 @@ function _aicBuildForm(key,it){
         <div class="aic-edit-field"><label>Tags (comma-separated)</label><input data-f="tags" value="${v(Array.isArray(it.tags)?it.tags.join(', '):'')}" placeholder="e.g. Uni, Family friend"></div>
         <div class="aic-edit-field"><label>Notes</label><textarea data-f="notes" rows="3" placeholder="Optional">${v(it.notes)}</textarea></div>`;
     }
+    case 'addPromise':{
+      return `
+        <div class="aic-edit-field"><label>Person (existing name)</label><input data-f="person" value="${v(it.person)}" placeholder="Jack"></div>
+        <div class="aic-edit-field"><label>Promise</label><input data-f="text" value="${v(it.text)}" placeholder="go for coffee"></div>
+        <div class="aic-edit-field"><label>Date (YYYY-MM-DD, optional)</label><input data-f="date" value="${v(it.date)}" placeholder="2026-05-20"></div>`;
+    }
     default:
       return `<div class="aic-edit-field"><label>Raw JSON (advanced)</label><textarea data-f="_json" rows="6">${v(JSON.stringify(it,null,2))}</textarea></div>`;
   }
@@ -10282,6 +10298,9 @@ function _aicReadForm(key,formEl,orig){
       const tags=tagsRaw?tagsRaw.split(',').map(s=>s.trim()).filter(Boolean):[];
       return {...orig,name:trim(get('name')),metAt:trim(get('metAt')),phone:trim(get('phone')),email:trim(get('email')),notes:trim(get('notes')),tags};
     }
+    case 'addPromise':{
+      return {...orig,person:trim(get('person')),text:trim(get('text')),date:trim(get('date'))};
+    }
     default:
       try{return JSON.parse(get('_json'));}catch(_){return orig;}
   }
@@ -10298,7 +10317,8 @@ const AIC_DEFAULTS={
   addBuild:t=>({title:t,desc:'',status:'active'}),
   addHabits:t=>({name:t}),
   addReminders:t=>({text:t,recurrence:{type:'monthly',dayOfMonth:1}}),
-  addPerson:t=>({name:t,metAt:'',phone:'',email:'',notes:'',tags:[],level:{major:1,minor:1}})
+  addPerson:t=>({name:t,metAt:'',phone:'',email:'',notes:'',tags:[],level:{major:1,minor:1}}),
+  addPromise:t=>({person:'',text:t,date:''})
 };
 const AIC_CANONICAL_TEXT={
   addTasks:t=>t.text||'',
@@ -10309,7 +10329,8 @@ const AIC_CANONICAL_TEXT={
   addBuild:b=>b.title||'',
   addHabits:h=>h.name||'',
   addReminders:r=>r.text||'',
-  addPerson:p=>p.name||''
+  addPerson:p=>p.name||'',
+  addPromise:p=>p.text||''
 };
 function convertChangeType(ch,srcKey,srcIdx,dstKey){
   if(srcKey===dstKey)return null;
@@ -10726,6 +10747,15 @@ async function applyChanges(ch,prompt){
       createdAt:tod()
     };
     S.people=S.people||[];S.people.push(newP);
+  });
+  if(ch.addPromise?.length)ch.addPromise.forEach(pr=>{
+    if(!pr||!pr.text||!String(pr.text).trim())return;
+    const p=_aiFindStrict(S.people,x=>x.name,pr.person);
+    if(!p){console.warn('[ai-promise] no match for person',pr.person);return;}
+    p.promises=p.promises||[];
+    const newPr={id:uid(),text:String(pr.text).trim(),addedAt:tod()};
+    if(pr.date&&/^\d{4}-\d{2}-\d{2}$/.test(String(pr.date).trim()))newPr.date=String(pr.date).trim();
+    p.promises.push(newPr);
   });
   svAll();render();
   // Calendar execution decision:
