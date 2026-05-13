@@ -4121,7 +4121,7 @@ function handleSnapshot(snap){
     // would throw if d.tasks happened to be a string/number/object. Now
     // anything non-array gets coerced to [] with a console.warn so the
     // user can still load the app and we can spot the bad write.
-    ['tasks','builds','learning','ideas','notes','habits','resources','reminders'].forEach(k=>{
+    ['tasks','builds','learning','ideas','notes','habits','resources','reminders','people','peopleTags','peopleLevelNames'].forEach(k=>{
       if(d[k]===undefined)return;
       if(Array.isArray(d[k]))S[k]=d[k];
       else{console.warn('[snapshot] expected array for',k,'got',typeof d[k],'— coerced to []');S[k]=[];}
@@ -4139,6 +4139,11 @@ function handleSnapshot(snap){
     S.growthFocus=d.growthFocus||null;
     S.lifeRhythm=d.lifeRhythm||'';
     S.disabledCalendars=Array.isArray(d.disabledCalendars)?d.disabledCalendars:[];
+    S.peopleSettings=d.peopleSettings&&typeof d.peopleSettings==='object'?d.peopleSettings:{defaultSort:'promise'};
+    // peopleLevelNames default if missing or malformed
+    if(!Array.isArray(S.peopleLevelNames)||S.peopleLevelNames.length!==5){
+      S.peopleLevelNames=['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
+    }
     S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
     S.workProjects=Array.isArray(d.workProjects)?d.workProjects:[];
     if(typeof d._personalOrder==='number')S._personalOrder=d._personalOrder;else delete S._personalOrder;
@@ -4191,6 +4196,7 @@ function handleSnapshot(snap){
       console.log('[migrate] running v'+docSchemaVersion+' → v'+SCHEMA_VERSION);
       migrateHabits();
       migrateProjects();
+      migratePeople();
       S._schemaVersion=SCHEMA_VERSION;
       // Save the bumped version on next svAll. Don't trigger one here
       // (we're inside the snapshot handler — svAll is gated on
@@ -4323,6 +4329,10 @@ function _buildSavePayload(){
   // Persist the migration high-water-mark so we don't re-run legacy
   // migrations on every cold launch. Once written, future loads see this
   // and skip the migration block entirely (handleSnapshot gates on it).
+  payload.people=Array.isArray(S.people)?S.people:[];
+  payload.peopleTags=Array.isArray(S.peopleTags)?S.peopleTags:[];
+  payload.peopleLevelNames=Array.isArray(S.peopleLevelNames)&&S.peopleLevelNames.length===5?S.peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
+  payload.peopleSettings=S.peopleSettings&&typeof S.peopleSettings==='object'?S.peopleSettings:{defaultSort:'promise'};
   if(typeof S._schemaVersion==='number')payload._schemaVersion=S._schemaVersion;
   return payload;
 }
@@ -4403,7 +4413,7 @@ function effectiveAreaId(t){
 }
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
 // or 'all' (every AI change opens the review queue). Legacy 'off' is no
@@ -4463,7 +4473,7 @@ let _habitLegacyMigrated=false;
 // CURRENT schema version. Bump this whenever you add a new migration so
 // old docs run it once. Migrations are gated by S._schemaVersion in
 // handleSnapshot so they don't burn CPU on every load forever.
-const SCHEMA_VERSION=1;
+const SCHEMA_VERSION=2;
 function migrateHabits(){
   // Merge legacy learning items into habits (run-once for v0 → v1).
   if(S.learning&&S.learning.length){
@@ -8257,6 +8267,22 @@ function migrateProjects(){
     if(seeds.length)S.workProjects=seeds;
   }
   rebuildPROJ();
+}
+// v1 → v2 migration. People is a brand-new feature; this just guarantees
+// the field shapes are present so render code doesn't have to defensively
+// check on every read. No data transformation needed for existing users.
+function migratePeople(){
+  if(!Array.isArray(S.people))S.people=[];
+  if(!Array.isArray(S.peopleTags))S.peopleTags=[];
+  if(!Array.isArray(S.peopleLevelNames)||S.peopleLevelNames.length!==5){
+    S.peopleLevelNames=['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
+  }
+  if(!S.peopleSettings||typeof S.peopleSettings!=='object'){
+    S.peopleSettings={defaultSort:'promise'};
+  }
+  if(!['promise','level','lastSeen','name','recent'].includes(S.peopleSettings.defaultSort)){
+    S.peopleSettings.defaultSort='promise';
+  }
 }
 function delBuild(id){if(!confirm('Delete this project? All progress notes will be lost.'))return;S.builds=S.builds.filter(x=>x.id!==id);svAll();if(UI.projectDetail===id)closeProject();else rBuilds();}
 function renderProjectDetail(){
