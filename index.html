@@ -4269,7 +4269,7 @@ function handleSnapshot(snap){
               console.warn('[sync] no server snapshot in '+(delay/1000)+'s — accepting cache (has real data, server agrees or unreachable)');
               _initialSyncDone=true;
               setSplashStage(100,'Ready');setTimeout(hideSplash,250);
-              try{render();loadDailyNote();loadTip(false);if(!getKey())promptKey();}catch(_){}
+              try{render();loadDailyNote();loadTip(false);if(!getKey())promptKey();maybeShowHabitCatchup();}catch(_){}
             } else {
               console.warn('[sync] no server snapshot in '+(delay/1000)+'s and cache is empty — staying blocked to protect cloud data');
               setSplashStage(85,'Waiting for the server…');
@@ -4284,6 +4284,7 @@ function handleSnapshot(snap){
       setSplashStage(100,'Ready');setTimeout(hideSplash,250);
       render();loadDailyNote();loadTip(false);
       if(!getKey())promptKey();
+      maybeShowHabitCatchup();
     } else {
       render();
       // Restore focused input so the user's typing isn't clobbered by a sync
@@ -6316,6 +6317,32 @@ function _renderHabitDayModalChrome(overlay,date,opts){
   } else if(subEl){
     subEl.remove();
   }
+}
+// Open the catch-up variant of the day modal for yesterday. Reuses
+// openHabitDayModal with opts.catchup so the title and sub-line show
+// the "Habit catch-up" framing (introduced in v151 Task 1).
+function openHabitCatchupModal(){
+  const y=yest();
+  const [yy,ym,yd]=y.split('-').map(Number);
+  openHabitDayModal(yy,ym-1,yd,{catchup:true});
+}
+// Fires once per device per day to surface yesterday's habits. Gated by:
+//   - S.habitCatchupEnabled !== false (user can disable in Settings)
+//   - localStorage day-stamp (prevents re-fire after dismiss)
+//   - at least one habit exists AND was created on or before yesterday
+function maybeShowHabitCatchup(){
+  if(S.habitCatchupEnabled===false)return;
+  const today=tod();
+  let last=null;
+  try{last=localStorage.getItem('los_habit_catchup_lastShown');}catch(_){}
+  if(last===today)return;
+  if(!S.habits||S.habits.length===0)return;
+  const ydayIso=yest();
+  const eligible=S.habits.some(h=>(h.createdAt||tod())<=ydayIso);
+  if(!eligible)return;
+  // Stamp BEFORE opening so a tab-close / accidental dismiss doesn't re-fire
+  try{localStorage.setItem('los_habit_catchup_lastShown',today);}catch(_){}
+  openHabitCatchupModal();
 }
 function openHabitDayModal(cy,cm,cd,opts){
   // Kill any queued/visible hover preview so we don't get the modal
