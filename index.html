@@ -915,6 +915,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pm-add-promise{font-size:11px;color:var(--sage,#7fa186);background:transparent;border:1px dashed var(--sage,#7fa186);padding:6px 10px;border-radius:5px;cursor:pointer;width:100%;margin-top:3px;font-weight:600;font-family:inherit}
 .pm-last-box{background:var(--surface-2);padding:7px 10px;border-radius:5px;font-size:11.5px;color:var(--text-2);font-style:italic}
 .pm-last-when{font-style:normal;color:var(--muted);font-size:10.5px}
+.people-settings-tags,.people-settings-levels{display:flex;flex-direction:column;gap:5px}
+.ps-tag-row,.ps-level-row{display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--surface-2);border-radius:5px;font-size:12px}
+.ps-tag-count{font-size:10.5px;color:var(--muted);margin-left:auto}
+.ps-level-n{font-size:11px;font-weight:700;color:var(--gold);min-width:24px}
+.ps-level-name{flex:1}
+.ps-empty{font-size:11px;color:var(--muted);font-style:italic;padding:4px 6px}
 
 /* Spanning bars — every bar fills its grid row uniformly so the "expand all"
    layout stays rigid regardless of event count */
@@ -2795,6 +2801,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             </div>
             <textarea id="life-rhythm-ta" class="exp-ta xl" style="width:100%;min-height:120px" placeholder="Wake 6am weekdays / 7am weekends. Work 9am. Gym Mon–Fri ~1hr. Bible study Mon 7–9pm. Off screens by 10pm…" onblur="saveLifeRhythm()"></textarea>
           </div>
+        </div>
+
+        <div>
+          <div class="section-hdr"><h2>People</h2></div>
+          <div id="people-settings-body"></div>
         </div>
 
         <div>
@@ -8742,6 +8753,121 @@ function rSettings(){
   if(thCntEl){
     const completed=(S.tasks||[]).filter(t=>t.done&&!isTaskVisible(t)).length;
     thCntEl.textContent=completed?`${completed} task${completed===1?'':'s'} completed · searchable`:'Tasks you\'ve completed will show up here.';
+  }
+  // People settings — tags, level names, default sort. The shell HTML lives
+  // statically in the route; we populate #people-settings-body dynamically
+  // so add/rename/recolor/delete events can just call rSettings() to refresh.
+  const _psBody=document.getElementById('people-settings-body');
+  if(_psBody){
+    const tags=S.peopleTags||[];
+    const levelNames=Array.isArray(S.peopleLevelNames)&&S.peopleLevelNames.length===5
+      ? S.peopleLevelNames
+      : ['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
+    const defaultSort=S.peopleSettings?.defaultSort||'promise';
+    _psBody.innerHTML=`
+      <div class="setting-row setting-row-stack" style="align-items:stretch">
+        <div>
+          <div class="setting-label">Tags</div>
+          <div class="setting-desc">Used to group people on the People tab.</div>
+        </div>
+        <div class="people-settings-tags">
+          ${tags.length?tags.map(t=>{
+            const count=(S.people||[]).filter(p=>(p.tagIds||[]).includes(t.id)).length;
+            return `<div class="ps-tag-row"><span class="pm-tag pm-tag-${esc(t.color)}">${esc(t.name)}</span><span class="ps-tag-count">${count} ${count===1?'person':'people'}</span><button class="pm-icon-btn" data-ps-action="rename-tag" data-tid="${t.id}" title="Rename">✎</button><button class="pm-icon-btn" data-ps-action="recolor-tag" data-tid="${t.id}" title="Recolor">🎨</button><button class="pm-icon-btn" data-ps-action="delete-tag" data-tid="${t.id}" title="Delete">🗑</button></div>`;
+          }).join(''):'<div class="ps-empty">No tags yet.</div>'}
+          <button class="pm-add-promise" data-ps-action="add-tag" style="border-color:var(--gold);color:var(--gold)">+ Add tag</button>
+        </div>
+      </div>
+      <div class="setting-row setting-row-stack" style="align-items:stretch">
+        <div>
+          <div class="setting-label">Level names</div>
+          <div class="setting-desc">Rename the 5 friendship levels (L1-L5).</div>
+        </div>
+        <div class="people-settings-levels">
+          ${levelNames.map((n,i)=>`<div class="ps-level-row"><span class="ps-level-n">L${i+1}</span><span class="ps-level-name">${esc(n)}</span><button class="pm-icon-btn" data-ps-action="rename-level" data-li="${i}" title="Rename">✎</button></div>`).join('')}
+          <button class="pm-add-promise" data-ps-action="reset-levels" style="border-color:var(--muted);color:var(--muted)">Reset to defaults</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Default sort</div>
+          <div class="setting-desc">Which order people are listed in by default.</div>
+        </div>
+        <div class="setting-right">
+          <select class="select" data-ps-action="set-sort">
+            <option value="promise" ${defaultSort==='promise'?'selected':''}>Promise date ↑</option>
+            <option value="level" ${defaultSort==='level'?'selected':''}>Level ↓</option>
+            <option value="lastSeen" ${defaultSort==='lastSeen'?'selected':''}>Last seen ↑</option>
+            <option value="name" ${defaultSort==='name'?'selected':''}>Name A–Z</option>
+            <option value="recent" ${defaultSort==='recent'?'selected':''}>Recently added</option>
+          </select>
+        </div>
+      </div>
+    `;
+  }
+  // People settings handlers — bound once via attribute marker to avoid
+  // stacking on re-renders.
+  const _psRoot=document.querySelector('.route[data-route="settings"]');
+  if(_psRoot&&!_psRoot.dataset.psHandlersBound){
+    _psRoot.dataset.psHandlersBound='1';
+    _psRoot.addEventListener('click',e=>{
+      const a=e.target.dataset?.psAction;
+      if(!a)return;
+      if(a==='add-tag'){
+        const name=prompt('Tag name:');
+        if(!name||!name.trim())return;
+        _peopleCreateTag(name);
+        svAll();rSettings();
+        return;
+      }
+      if(a==='rename-tag'){
+        const tid=e.target.dataset.tid;
+        const t=_peopleTagById(tid);if(!t)return;
+        const name=prompt('Rename tag:',t.name);
+        if(name===null||!name.trim())return;
+        t.name=name.trim();svAll();rSettings();rPeople();return;
+      }
+      if(a==='recolor-tag'){
+        const tid=e.target.dataset.tid;
+        const t=_peopleTagById(tid);if(!t)return;
+        const c=prompt(`Pick a color: ${PEOPLE_TAG_COLORS.join(', ')}`,t.color);
+        if(!c||!PEOPLE_TAG_COLORS.includes(c.trim()))return;
+        t.color=c.trim();svAll();rSettings();rPeople();return;
+      }
+      if(a==='delete-tag'){
+        const tid=e.target.dataset.tid;
+        const t=_peopleTagById(tid);if(!t)return;
+        const using=(S.people||[]).filter(p=>(p.tagIds||[]).includes(tid)).length;
+        if(!confirm(`Delete tag "${t.name}"?${using?` ${using} people will lose this tag.`:''}`))return;
+        S.peopleTags=(S.peopleTags||[]).filter(x=>x.id!==tid);
+        (S.people||[]).forEach(p=>{if(p.tagIds)p.tagIds=p.tagIds.filter(x=>x!==tid);});
+        if(UI.peopleFilterTag===tid)UI.peopleFilterTag=null;
+        svAll();rSettings();rPeople();return;
+      }
+      if(a==='rename-level'){
+        const li=parseInt(e.target.dataset.li);
+        if(!Array.isArray(S.peopleLevelNames)||S.peopleLevelNames.length!==5){
+          S.peopleLevelNames=['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
+        }
+        const cur=S.peopleLevelNames[li]||'';
+        const name=prompt(`Rename Level ${li+1}:`,cur);
+        if(name===null||!name.trim())return;
+        S.peopleLevelNames[li]=name.trim();
+        svAll();rSettings();rPeople();return;
+      }
+      if(a==='reset-levels'){
+        if(!confirm('Reset all level names to defaults?'))return;
+        S.peopleLevelNames=['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
+        svAll();rSettings();rPeople();return;
+      }
+    });
+    _psRoot.addEventListener('change',e=>{
+      if(e.target.dataset?.psAction==='set-sort'){
+        S.peopleSettings=S.peopleSettings||{};
+        S.peopleSettings.defaultSort=e.target.value;
+        svAll();rPeople();
+      }
+    });
   }
 }
 async function renderCalendarList(){
