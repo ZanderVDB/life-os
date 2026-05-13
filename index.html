@@ -846,6 +846,34 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .people-sort-chip{font-size:11px;padding:4px 9px;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;font-family:inherit}
 .people-sort-chip:hover{border-color:var(--border-strong)}
 .people-sort-chip.on{background:var(--gold);color:#fff;border-color:var(--gold)}
+.pm-tags-row{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.pm-tag{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:5px;cursor:pointer}
+.pm-tag-blue{background:var(--blue-bg);color:var(--blue)}
+.pm-tag-green,.pm-tag-sage{background:var(--sage-bg,var(--emerald-bg));color:var(--sage,var(--emerald))}
+.pm-tag-pink{background:var(--pink-bg);color:var(--pink)}
+.pm-tag-gold{background:var(--gold-bg);color:var(--gold)}
+.pm-tag-lavender{background:var(--lavender-bg);color:var(--lavender)}
+.pm-tag-peach{background:var(--peach-bg);color:var(--peach)}
+.pm-tag-red{background:var(--red-bg,#fee0db);color:var(--red,#c46a6a)}
+.pm-tag-add{font-size:11px;color:var(--muted);background:transparent;border:1px dashed var(--border-strong);padding:3px 9px;border-radius:5px;cursor:pointer}
+.pm-tag-add:hover{color:var(--text);border-color:var(--gold)}
+.people-card .pc-tags{display:flex;flex-wrap:wrap;gap:3px;margin:3px 0 6px 0;padding-right:60px}
+.people-card.has-pin .pc-tags{padding-left:18px}
+.people-card .pc-tag{font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px}
+
+.tag-picker-pop{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;width:260px;max-height:380px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.18);z-index:200;font-family:Inter,sans-serif}
+.tp-hdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
+.tp-list{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.tp-row{display:flex;justify-content:space-between;align-items:center;padding:4px 6px;border-radius:4px;cursor:pointer}
+.tp-row:hover{background:var(--surface-2)}
+.tp-row.on{background:var(--surface-2)}
+.tp-empty{font-size:11px;color:var(--muted);font-style:italic;padding:4px 6px}
+.tp-check{font-size:13px;color:var(--gold);min-width:14px;text-align:right}
+.tp-create{display:flex;gap:4px;margin-bottom:8px}
+.tp-create input{flex:1;font-size:12px;padding:5px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+.tp-create button{background:var(--gold);color:#fff;border:none;width:28px;font-weight:700;border-radius:4px;cursor:pointer}
+.tp-foot{display:flex;justify-content:flex-end}
+.tp-foot button{font-size:11px;background:transparent;border:none;color:var(--muted);cursor:pointer}
 
 /* Spanning bars — every bar fills its grid row uniformly so the "expand all"
    layout stays rigid regardless of event count */
@@ -11768,6 +11796,18 @@ function _peopleLastSeen(person){
   if(days<180)return{label:`${Math.round(days/30)}mo`,days};
   return{label:`${Math.round(days/365)}y`,days};
 }
+const PEOPLE_TAG_COLORS=['blue','green','pink','gold','lavender','sage','peach','red'];
+function _peopleTagById(id){return (S.peopleTags||[]).find(t=>t.id===id);}
+function _peopleNextTagColor(){
+  const used=new Set((S.peopleTags||[]).map(t=>t.color));
+  return PEOPLE_TAG_COLORS.find(c=>!used.has(c))||'blue';
+}
+function _peopleCreateTag(name,color){
+  const tag={id:uid(),name:name.trim(),color:color||_peopleNextTagColor()};
+  S.peopleTags=S.peopleTags||[];
+  S.peopleTags.push(tag);
+  return tag;
+}
 // Sort the people array per S.peopleSettings.defaultSort. Pinned people
 // always float to the top, regardless of selected sort. Within pinned and
 // within unpinned, the chosen sort order applies.
@@ -11856,6 +11896,7 @@ function rPeople(){
       <div class="pc-lvl">${_peopleLevelLabel(p.level)}</div>
       <div class="pc-name">${esc(p.name||'(no name)')}</div>
       ${p.metAt?`<div class="pc-met">${esc(p.metAt)}</div>`:''}
+      ${(p.tagIds||[]).length?`<div class="pc-tags">${(p.tagIds||[]).slice(0,2).map(tid=>{const t=_peopleTagById(tid);return t?`<span class="pc-tag pm-tag-${esc(t.color)}">${esc(t.name)}</span>`:'';}).join('')}${(p.tagIds||[]).length>2?`<span class="pc-tag" style="background:var(--surface-2);color:var(--muted)">+${(p.tagIds||[]).length-2}</span>`:''}</div>`:''}
       ${topPromise?`<div class="pc-promise"><span>🤝</span> ${esc(topPromise.text||'')}</div>`:`<div class="pc-promise-empty">— no promises</div>`}
       ${more>0?`<div class="pc-promise-more">+ ${more} more promise${more===1?'':'s'}</div>`:''}
       <div class="pc-last">${esc(ls.label)}</div>
@@ -11951,6 +11992,14 @@ function renderPersonModalBody(p){
     </div>
 
     <div class="pm-section">
+      <div class="pm-sec-lbl">Tags</div>
+      <div class="pm-tags-row">
+        ${(p.tagIds||[]).map(tid=>{const t=_peopleTagById(tid);if(!t)return '';return `<span class="pm-tag pm-tag-${esc(t.color)}" data-pm-remove-tag="${t.id}" title="Click to remove">${esc(t.name)} ✕</span>`;}).join('')}
+        <button class="pm-tag-add" data-pm-action="add-tag">+ Tag</button>
+      </div>
+    </div>
+
+    <div class="pm-section">
       <div class="pm-sec-lbl">Notes</div>
       <textarea class="pm-notes" data-pm-field="notes" rows="3" placeholder="Anything worth remembering">${esc(p.notes||'')}</textarea>
     </div>
@@ -11976,6 +12025,18 @@ function attachPersonModalHandlers(p){
       S.people=(S.people||[]).filter(x=>x.id!==p.id);
       svAll();rPeople();
       document.getElementById('person-modal')?.remove();_syncBodyLock();return;
+    }
+    // Tag remove (click an existing tag chip)
+    const tagRemoveId=e.target.dataset?.pmRemoveTag;
+    if(tagRemoveId){
+      p.tagIds=(p.tagIds||[]).filter(id=>id!==tagRemoveId);
+      svAll();rPeople();renderPersonModalBody(p);
+      return;
+    }
+    // Tag add (click + Tag button)
+    if(a==='add-tag'){
+      openTagPicker(p,e.target);
+      return;
     }
     const editField=e.target.dataset?.pmEdit;
     if(editField){
@@ -12008,6 +12069,62 @@ function attachPersonModalHandlers(p){
       svAll();rPeople();renderPersonModalBody(p);
     };
   });
+}
+function openTagPicker(p,anchorBtn){
+  const existing=S.peopleTags||[];
+  const old=document.getElementById('tag-picker');if(old)old.remove();
+  const pop=document.createElement('div');
+  pop.id='tag-picker';pop.className='tag-picker-pop';
+  pop.innerHTML=`
+    <div class="tp-hdr">Tag this person</div>
+    <div class="tp-list">
+      ${existing.map(t=>{
+        const on=(p.tagIds||[]).includes(t.id);
+        return `<div class="tp-row${on?' on':''}" data-tp-id="${t.id}"><span class="pm-tag pm-tag-${esc(t.color)}" style="cursor:pointer">${esc(t.name)}</span><span class="tp-check">${on?'✓':''}</span></div>`;
+      }).join('')||'<div class="tp-empty">No tags yet — create one below.</div>'}
+    </div>
+    <div class="tp-create">
+      <input id="tp-new" placeholder="New tag name…" maxlength="30">
+      <button data-tp-action="create">+</button>
+    </div>
+    <div class="tp-foot"><button data-tp-action="close">Close</button></div>
+  `;
+  document.body.appendChild(pop);
+  // Position near the anchor button. Fall back to center if off-screen.
+  const r=anchorBtn?.getBoundingClientRect();
+  if(r){pop.style.position='fixed';pop.style.top=Math.min(window.innerHeight-380,r.bottom+8)+'px';pop.style.left=Math.max(8,Math.min(window.innerWidth-260,r.left))+'px';}
+  pop.addEventListener('click',e=>{
+    const id=e.target.closest('[data-tp-id]')?.dataset.tpId;
+    if(id){
+      p.tagIds=p.tagIds||[];
+      if(p.tagIds.includes(id))p.tagIds=p.tagIds.filter(x=>x!==id);
+      else p.tagIds.push(id);
+      svAll();rPeople();renderPersonModalBody(p);
+      pop.remove();return;
+    }
+    const a=e.target.dataset?.tpAction;
+    if(a==='close'){pop.remove();return;}
+    if(a==='create'){
+      const inp=document.getElementById('tp-new');
+      const name=inp.value.trim();
+      if(!name){inp.focus();return;}
+      const t=_peopleCreateTag(name);
+      p.tagIds=p.tagIds||[];
+      p.tagIds.push(t.id);
+      svAll();rPeople();renderPersonModalBody(p);
+      pop.remove();
+    }
+  });
+  // Close on outside click — delay registration so we don't catch the
+  // click that just opened the picker.
+  setTimeout(()=>{
+    document.addEventListener('click',function once(e){
+      if(!pop.contains(e.target)&&!anchorBtn?.contains(e.target)){
+        pop.remove();
+        document.removeEventListener('click',once);
+      }
+    },{once:false});
+  },10);
 }
 function render(){
   const g=document.getElementById('gr'),d=document.getElementById('ds');
