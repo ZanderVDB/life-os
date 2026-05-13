@@ -799,6 +799,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 }
 .mv-bar-more{pointer-events:none}
 /* Habit day modal */
+.hab-modal-sub{font-size:11px;color:var(--muted);margin-top:-6px;margin-bottom:10px;font-style:italic}
 .hab-modal-stat{font-size:12px;color:var(--muted);margin-bottom:14px;padding:6px 10px;background:var(--surface-2);border-radius:6px;display:inline-block}
 .hab-modal-sec{margin-bottom:12px}
 .hab-modal-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:6px}
@@ -6283,7 +6284,29 @@ function showHabitsMcwPopover(cell){
 // Lightweight day modal for habits mode. Lists habits done / not done on
 // the tapped day with a "Open in Day view" link to the full audit. Rows
 // are tappable to toggle the habit's tick on the focused date.
-function openHabitDayModal(cy,cm,cd){
+// Update the modal's title and (optional) subtitle on every call so they
+// reflect the currently-viewed day. Pre-existing openHabitDayModal only
+// set these in the `if(!overlay)` branch — opening for a different day
+// later left the title stuck on the first day's heading.
+function _renderHabitDayModalChrome(overlay,date,opts){
+  const titleEl=overlay.querySelector('h3.hab-modal-title');
+  const subEl=overlay.querySelector('.hab-modal-sub');
+  const dayLabel=date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'});
+  if(titleEl){
+    titleEl.textContent=opts&&opts.catchup?`Habit catch-up · ${dayLabel}`:dayLabel;
+  }
+  if(opts&&opts.catchup){
+    if(!subEl){
+      const newSub=document.createElement('div');
+      newSub.className='hab-modal-sub';
+      newSub.textContent='Tick anything you actually did. Already-ticked items are pre-filled.';
+      titleEl.parentNode.insertBefore(newSub,titleEl.nextSibling);
+    }
+  } else if(subEl){
+    subEl.remove();
+  }
+}
+function openHabitDayModal(cy,cm,cd,opts){
   // Kill any queued/visible hover preview so we don't get the modal
   // AND the popover on screen at the same time.
   clearTimeout(_mcwHoverTimer);hideMcwPopover();
@@ -6299,7 +6322,7 @@ function openHabitDayModal(cy,cm,cd){
     overlay.className='modal';overlay.style.display='flex';overlay.id='habit-day-modal';
     overlay.innerHTML=`<div class="modal-bd"></div>
       <div class="modal-body" style="max-width:440px">
-        <h3>${date.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'})}</h3>
+        <h3 class="hab-modal-title"></h3>
         <div class="hab-modal-stat"></div>
         <div class="hab-modal-body"></div>
         <div class="modal-actions" style="margin-top:14px">
@@ -6325,6 +6348,7 @@ function openHabitDayModal(cy,cm,cd){
     });
   }
   overlay.dataset.ds=`${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`;
+  _renderHabitDayModalChrome(overlay,date,opts);
   renderHabitDayModalBody(overlay,cy,cm,cd);
 }
 function renderHabitDayModalBody(overlay,cy,cm,cd){
