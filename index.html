@@ -964,6 +964,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 #people-settings-all{max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:4px}
 #people-settings-all::-webkit-scrollbar{width:6px}
 #people-settings-all::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:6px}
+/* The People-settings rows ALWAYS stack (label on top, grid below)
+   regardless of viewport width, so the grid below has the full row
+   width to wrap into multiple columns. Without this override, on
+   desktop the parent .setting-row is flex-row and squeezes the grid
+   into the narrow right-column, forcing it back to 1 col. */
+.setting-tab-pane[data-setting-tab="people"] > .setting-row.setting-row-stack,
+.setting-tab-pane[data-setting-tab="people"] .setting-row.setting-row-stack{
+  flex-direction:column;align-items:stretch;gap:10px;
+}
 .ps-tag-count{font-size:10.5px;color:var(--muted);margin-left:auto}
 .ps-level-n{font-size:11px;font-weight:700;color:var(--gold);min-width:24px}
 .ps-level-name{flex:1}
@@ -3072,7 +3081,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v156';
+const APP_VERSION='v157';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
