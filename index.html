@@ -856,6 +856,23 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pm-bday-cand-name{flex:1;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pm-bday-cand-date{font-size:10.5px;color:var(--muted);flex-shrink:0}
 .pm-bday-cand-connect{font-size:10px;color:var(--pink,#a85365);font-weight:600;flex-shrink:0}
+/* Birthday chooser option buttons — big, friendly two-line buttons. */
+.bdc-opt{display:flex;align-items:flex-start;gap:12px;width:100%;background:var(--surface);border:1px solid var(--border);padding:12px 14px;border-radius:8px;cursor:pointer;font-family:inherit;text-align:left;color:var(--text);margin-bottom:8px;transition:border-color .12s,background .12s}
+.bdc-opt:hover{border-color:var(--pink,#a85365);background:var(--pink-bg,#f9e8eb)}
+.bdc-opt-icon{font-size:18px;flex-shrink:0;line-height:1}
+.bdc-opt-text{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.bdc-opt-title{font-size:13px;font-weight:600;color:var(--text)}
+.bdc-opt-sub{font-size:11px;color:var(--muted);line-height:1.4}
+/* Settings sub-tabs — pill-style nav at the top of the Settings route.
+   Active tab gets a gold pill background. On narrow mobile the row
+   becomes horizontally scrollable rather than wrapping (cleaner). */
+.settings-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:14px 0 18px 0;padding-bottom:2px}
+@media (max-width:540px){.settings-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}.settings-tabs::-webkit-scrollbar{display:none}}
+.st-tab{font-size:12px;font-weight:600;padding:7px 13px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text-2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .12s,color .12s,border-color .12s}
+.st-tab:hover{background:var(--surface-2);color:var(--text)}
+.st-tab.on{background:var(--gold);color:#fff;border-color:var(--gold)}
+.setting-tab-pane{display:none}
+.setting-tab-pane.active{display:block}
 .pm-notes{width:100%;min-height:60px;font-family:inherit;font-size:13px;padding:9px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical}
 .people-sort-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .people-sort-chip{font-size:11px;padding:4px 9px;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;font-family:inherit}
@@ -2635,7 +2652,20 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
         </div>
 
-        <div>
+        <!-- Settings sub-tabs. Click a pill, the body swaps to that
+             section's contents. Active tab is persisted to localStorage
+             so the user lands where they left off. -->
+        <div class="settings-tabs">
+          <button class="st-tab on" data-st="general" onclick="setSettingsTab('general')">General</button>
+          <button class="st-tab" data-st="notifications" onclick="setSettingsTab('notifications')">Notifications</button>
+          <button class="st-tab" data-st="calendar" onclick="setSettingsTab('calendar')">Calendar</button>
+          <button class="st-tab" data-st="ai" onclick="setSettingsTab('ai')">AI</button>
+          <button class="st-tab" data-st="people" onclick="setSettingsTab('people')">People</button>
+          <button class="st-tab" data-st="history" onclick="setSettingsTab('history')">History</button>
+          <button class="st-tab" data-st="account" onclick="setSettingsTab('account')">Account</button>
+        </div>
+
+        <div class="setting-tab-pane active" data-setting-tab="general">
           <div class="section-hdr"><h2>Appearance</h2></div>
           <div class="setting-row">
             <div>
@@ -2668,7 +2698,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
         </div>
 
-        <div>
+        <div class="setting-tab-pane" data-setting-tab="notifications">
           <div class="section-hdr"><h2>Notifications</h2></div>
           <div class="setting-row">
             <div>
@@ -2726,7 +2756,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
         </div>
 
-        <div>
+        <div class="setting-tab-pane" data-setting-tab="calendar">
           <div class="section-hdr"><h2>Calendar</h2></div>
           <div class="setting-row">
             <div>
@@ -2784,7 +2814,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
         </div>
 
-        <div>
+        <div class="setting-tab-pane" data-setting-tab="ai">
           <div class="section-hdr"><h2>AI</h2></div>
           <div class="setting-row setting-row-stack">
             <div>
@@ -2817,12 +2847,19 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
         </div>
 
-        <div>
+        <div class="setting-tab-pane" data-setting-tab="people">
           <div class="section-hdr"><h2>People</h2></div>
           <div id="people-settings-body"></div>
+          <div class="setting-row setting-row-stack" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+            <div>
+              <div class="setting-label">All people</div>
+              <div class="setting-desc">Manage your full list. Useful if a card on the People tab won't open — you can still delete it from here.</div>
+            </div>
+            <div id="people-settings-all" style="margin-top:6px"></div>
+          </div>
         </div>
 
-        <div>
+        <div class="setting-tab-pane" data-setting-tab="history">
           <div class="section-hdr"><h2>History</h2></div>
           <div class="setting-row">
             <div>
@@ -2844,7 +2881,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
         </div>
 
-        <div>
+        <div class="setting-tab-pane" data-setting-tab="general">
           <div class="section-hdr"><h2>About</h2></div>
           <div class="setting-row">
             <div>
@@ -2893,7 +2930,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
         </div>
 
-        <div>
+        <div class="setting-tab-pane" data-setting-tab="account">
           <div class="section-hdr"><h2>Account</h2></div>
           <div class="setting-row">
             <div>
@@ -3019,7 +3056,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v154';
+const APP_VERSION='v155';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3141,7 +3178,7 @@ function setRoute(r,skipHash){
   // Close the task modal too so it doesn't linger over a different route
   if(UI._taskModalId)closeTaskModal();
   window.scrollTo({top:0,behavior:'instant'});
-  if(r==='settings')rSettings();
+  if(r==='settings'){rSettings();_restoreSettingsTab();}
   // Stop any live notebook voice recording when navigating away
   if(r!=='notebook'&&NB&&NB.voiceActive)nbStopVoice();
   if(r==='notebook')rNotebook();
@@ -3151,6 +3188,26 @@ function setRoute(r,skipHash){
   // People tab on first visit even when S.people has data; the grid
   // only populates after the first add/edit triggers rPeople().
   if(r==='people')rPeople();
+}
+// Settings sub-tab switching. Keeps the active tab persistent across
+// sessions so the user lands where they left off — but only within the
+// Settings route. Other routes are unaffected.
+const SETTING_TABS=['general','notifications','calendar','ai','people','history','account'];
+function setSettingsTab(t){
+  if(!SETTING_TABS.includes(t))t='general';
+  try{localStorage.setItem('los_settings_tab',t);}catch(e){}
+  document.querySelectorAll('.st-tab').forEach(b=>b.classList.toggle('on',b.dataset.st===t));
+  document.querySelectorAll('.setting-tab-pane').forEach(el=>el.classList.toggle('active',el.dataset.settingTab===t));
+  // Scroll the route container back to the top so the user sees the
+  // start of the new tab's content rather than a mid-scroll position
+  // left over from the previous tab.
+  try{window.scrollTo({top:0,behavior:'instant'});}catch(_){window.scrollTo(0,0);}
+}
+// Restore last-active tab when the Settings route is entered.
+function _restoreSettingsTab(){
+  let t='general';
+  try{const s=localStorage.getItem('los_settings_tab');if(s&&SETTING_TABS.includes(s))t=s;}catch(_){}
+  setSettingsTab(t);
 }
 function initRouter(){
   document.querySelectorAll('[data-route-link]').forEach(a=>{
@@ -7010,7 +7067,14 @@ function openNewEvent(prefill){
       }
     });
   }
-  document.getElementById('event-modal').style.display='flex';
+  const emEl=document.getElementById('event-modal');
+  // Move the static event-modal to the end of <body> so it stacks ABOVE
+  // any dynamically-created modal already open (e.g. the People detail
+  // modal). All modals share z-index:100, so DOM order decides who's
+  // on top — without this move, opening "Add birthday" from a person
+  // card would render the event editor BEHIND the person modal.
+  document.body.appendChild(emEl);
+  emEl.style.display='flex';
   _syncBodyLock();
   setTimeout(()=>{const el=document.getElementById('em-t');if(el)el.focus();},50);
 }
@@ -7098,7 +7162,15 @@ async function openEventEdit(payload){
     }catch(e){console.warn('[openEventEdit] GCal enrich failed:',e.message);}
   }
 }
-function closeEventModal(){document.getElementById('event-modal').style.display='none';editingEvent=null;_syncBodyLock();}
+function closeEventModal(){
+  document.getElementById('event-modal').style.display='none';
+  editingEvent=null;
+  // Clear any pending people-birthday auto-connect flag so cancelling
+  // the event editor (e.g. user changed their mind) doesn't leave the
+  // flag hanging around to fire on the next unrelated event creation.
+  if(window._pendingPersonBirthdayConnect)delete window._pendingPersonBirthdayConnect;
+  _syncBodyLock();
+}
 async function saveCurrentEvent(){
   if(!editingEvent)return;
   // Calendar must be connected for any create/edit. Previously the code
@@ -7141,6 +7213,24 @@ async function saveCurrentEvent(){
   if(editingEvent.mode==='new'){
     const res=await createGCEvent(title,date,time,desc,endTime,opts);
     if(!res){alert('Could not save to Google Calendar. The token may have expired — reconnect in Settings → Integrations.');return;}
+    // People auto-connect: if the user reached the event editor via
+    // "Create new birthday" on a person card, link the freshly-created
+    // GCal event to that person record so they don't have to manually
+    // connect it later.
+    if(window._pendingPersonBirthdayConnect){
+      const personId=window._pendingPersonBirthdayConnect;
+      delete window._pendingPersonBirthdayConnect;
+      const person=(S.people||[]).find(pp=>pp.id===personId);
+      if(person){
+        person.birthdayEventId=res.recurringEventId||res.id;
+        person.birthdayDate=res.start?.date||date;
+        const m=(title||'').match(/^(.+?)(?:'s)?\s*(?:birthday|bday)\b/i);
+        person.birthdaySourceName=m?m[1].trim():person.name;
+        // Re-open the person modal so the user sees the new connection
+        // immediately after the event editor closes.
+        setTimeout(()=>{openPersonModal(person.id);},150);
+      }
+    }
   } else if(editingEvent.type==='gc'){
     // Recurring events get the same 3-option prompt as delete — apply the
     // changes to just this instance / this and all future / the whole series.
@@ -8825,6 +8915,19 @@ function rSettings(){
       </div>
     `;
   }
+  // "All people" management list — every person in S.people with an
+  // Open + Delete button. This is the escape hatch for cards on the
+  // People tab that won't open for whatever reason (you can always
+  // delete them from here). Sorted by createdAt desc.
+  const _psAll=document.getElementById('people-settings-all');
+  if(_psAll){
+    const ppl=[...(S.people||[])].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    if(!ppl.length){
+      _psAll.innerHTML='<div class="ps-empty">No people yet.</div>';
+    } else {
+      _psAll.innerHTML=`<div class="people-settings-tags">${ppl.map(p=>`<div class="ps-tag-row"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="font-size:12.5px">${esc(p.name||'(no name)')}</b>${p.metAt?`<span style="font-size:10.5px;color:var(--muted);margin-left:6px">${esc(p.metAt)}</span>`:''}</span><button class="pm-icon-btn" data-ps-action="open-person" data-pid="${p.id}" title="Open">↗</button><button class="pm-icon-btn" data-ps-action="delete-person" data-pid="${p.id}" title="Delete">🗑</button></div>`).join('')}</div>`;
+    }
+  }
   // People settings handlers — bound once via attribute marker to avoid
   // stacking on re-renders.
   const _psRoot=document.querySelector('.route[data-route="settings"]');
@@ -8878,6 +8981,26 @@ function rSettings(){
       if(a==='reset-levels'){
         if(!confirm('Reset all level names to defaults?'))return;
         S.peopleLevelNames=['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
+        svAll();rSettings();rPeople();return;
+      }
+      // Manage-all-people escape hatch: open or delete a person record
+      // from the Settings page. Useful if a card on the People tab
+      // refuses to open for any reason.
+      if(a==='open-person'){
+        const pid=e.target.dataset.pid;
+        if(pid&&typeof openPersonModal==='function')openPersonModal(pid);
+        return;
+      }
+      if(a==='delete-person'){
+        const pid=e.target.dataset.pid;
+        const p=(S.people||[]).find(x=>x.id===pid);
+        if(!p)return;
+        const linkedCount=(p.promises||[]).filter(pr=>pr.linkedTaskId).length;
+        const note=linkedCount?` This also deletes ${linkedCount} linked task${linkedCount===1?'':'s'}.`:'';
+        if(!confirm(`Delete ${p.name||'(no name)'}?${note} This cannot be undone.`))return;
+        const taskIds=new Set((p.promises||[]).map(pr=>pr.linkedTaskId).filter(Boolean));
+        if(taskIds.size){S.tasks=(S.tasks||[]).filter(x=>!taskIds.has(x.id));if(typeof rTasks==='function')rTasks();}
+        S.people=(S.people||[]).filter(x=>x.id!==pid);
         svAll();rSettings();rPeople();return;
       }
     });
@@ -12101,7 +12224,7 @@ function _peopleLevelWidget(p){
   const names=S.peopleLevelNames||['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
   const upDisabled=M===5&&m===5;
   const downDisabled=M===1&&m===1;
-  // 25-slot bar
+  // 25-slot bar visualisation
   let bar='';
   for(let lv=1;lv<=5;lv++){
     let block='';
@@ -12111,11 +12234,9 @@ function _peopleLevelWidget(p){
     }
     bar+=`<div class="pm-lvl-block">${block}</div>`;
   }
-  // Picker pills
-  const picker=names.map((n,i)=>{
-    const cur=(i+1)===M;
-    return `<button class="pm-lvl-pick${cur?' cur':''}" data-pm-lvl-jump="${i+1}"><span class="pm-lvl-pick-n">L${i+1}</span><span class="pm-lvl-pick-name">${esc(n)}</span></button>`;
-  }).join('');
+  // Per user request, the 5 named-level picker pills are hidden. The only
+  // way to change level is via the ▲ / ▼ arrows, which step through all
+  // 25 slots one at a time and cross level boundaries naturally.
   return `
     <div class="pm-lvl-widget">
       <div class="pm-lvl-top">
@@ -12127,7 +12248,6 @@ function _peopleLevelWidget(p){
       </div>
       <div class="pm-lvl-bar">${bar}</div>
       <div class="pm-lvl-axis"><span>L1</span><span>L2</span><span>L3</span><span>L4</span><span>L5</span></div>
-      <div class="pm-lvl-picker">${picker}</div>
     </div>`;
 }
 function _peoplePromiseRow(pr,i){
@@ -12453,6 +12573,118 @@ function openPersonModal(id){
   renderPersonModalBody(p);
 }
 
+// Birthday chooser modal — opens ON TOP of the person modal (later in DOM
+// order so it stacks above with same z-index). Three states:
+//   (1) initial: "Find by date" / "Create new" / Cancel
+//   (2) find-by-date: date input → Search → results list with Connect
+//   (3) create-new: closes chooser + opens event editor with birthday
+//       prefills + sets _pendingPersonBirthdayConnect for auto-connect
+function openBirthdayChooser(personId){
+  const p=(S.people||[]).find(x=>x.id===personId);
+  if(!p)return;
+  const old=document.getElementById('bday-chooser-modal');if(old)old.remove();
+  const m=document.createElement('div');
+  m.className='modal';m.id='bday-chooser-modal';m.style.display='flex';
+  m.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:380px">
+      <div id="bdc-body"></div>
+    </div>`;
+  document.body.appendChild(m);_syncBodyLock();
+  let state='choose';
+  let pickedDate='';
+  const close=()=>{m.remove();_syncBodyLock();};
+  const render=()=>{
+    const body=document.getElementById('bdc-body');if(!body)return;
+    if(state==='choose'){
+      body.innerHTML=`
+        <h3 style="margin:0 0 4px 0">Add a birthday</h3>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">For ${esc(p.name)}</div>
+        <button class="bdc-opt" data-bdc="by-date"><span class="bdc-opt-icon">🔍</span><span class="bdc-opt-text"><span class="bdc-opt-title">Find by date</span><span class="bdc-opt-sub">Pick a date — see all birthdays on it and connect one</span></span></button>
+        <button class="bdc-opt" data-bdc="create-new"><span class="bdc-opt-icon">➕</span><span class="bdc-opt-text"><span class="bdc-opt-title">Create new</span><span class="bdc-opt-sub">Add a new birthday event to Google Calendar — gets auto-connected</span></span></button>
+        <div class="modal-actions" style="margin-top:14px"><div class="spacer"></div><button class="btn btn-sm" data-bdc="close">Cancel</button></div>`;
+    } else if(state==='by-date'){
+      body.innerHTML=`
+        <h3 style="margin:0 0 4px 0">Find by date</h3>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Pick a date — we'll show all birthday events on that day in your Google Calendar.</div>
+        <div class="aic-edit-field"><label>Date</label><input type="date" id="bdc-date" value="${esc(pickedDate||'')}"></div>
+        <div class="modal-actions" style="margin-top:14px"><button class="btn btn-sm" data-bdc="back">← Back</button><div class="spacer"></div><button class="btn btn-primary btn-sm" data-bdc="search">Search</button></div>`;
+      setTimeout(()=>{const d=document.getElementById('bdc-date');if(d)d.focus();},20);
+    } else if(state==='results'){
+      // Find all birthdays on the picked date
+      const pool=(gcCache.events||[]).filter(e=>isBirthdayEv(e)&&e.date===pickedDate);
+      // De-dupe by stable link id (recurring series share an id)
+      const seen=new Set();const matches=[];
+      for(const e of pool){
+        const linkId=_peopleEventLinkId(e);
+        if(linkId&&seen.has(linkId))continue;
+        if(linkId)seen.add(linkId);
+        const mm=(e.title||'').match(/^(.+?)(?:'s)?\s*(?:birthday|bday)\b/i);
+        matches.push({linkId,date:e.date,name:mm?mm[1].trim():e.title||'(birthday)'});
+      }
+      const dateLabel=_peopleFmtBirthday(pickedDate);
+      body.innerHTML=`
+        <h3 style="margin:0 0 4px 0">Birthdays on ${esc(dateLabel)}</h3>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">${matches.length} match${matches.length===1?'':'es'}. Tap one to connect to ${esc(p.name)}.</div>
+        ${matches.length?`<div class="pm-bday-cands">${matches.map(c=>`<button class="pm-bday-cand" data-bdc="pick" data-pm-link="${esc(c.linkId)}" data-pm-bday-date="${esc(c.date)}" data-pm-bday-name="${esc(c.name)}"><span class="pm-bday-cand-name">${esc(c.name)}</span><span class="pm-bday-cand-date">${esc(_peopleFmtBirthday(c.date))}</span><span class="pm-bday-cand-connect">Connect →</span></button>`).join('')}</div>`:`<div class="ps-empty" style="text-align:center;padding:12px">No birthday events found on ${esc(dateLabel)} in your Google Calendar.</div>`}
+        <div class="modal-actions" style="margin-top:14px"><button class="btn btn-sm" data-bdc="back-date">← Pick a different date</button><div class="spacer"></div><button class="btn btn-sm" data-bdc="close">Done</button></div>`;
+    }
+  };
+  m.addEventListener('click',e=>{
+    if(e.target.closest('.modal-bd')){close();return;}
+    const btn=e.target.closest('[data-bdc]');
+    if(!btn)return;
+    const a=btn.dataset.bdc;
+    if(a==='close'){close();return;}
+    if(a==='back'){state='choose';render();return;}
+    if(a==='back-date'){state='by-date';render();return;}
+    if(a==='by-date'){state='by-date';render();return;}
+    if(a==='search'){
+      const v=(document.getElementById('bdc-date')?.value||'').trim();
+      if(!v||!/^\d{4}-\d{2}-\d{2}$/.test(v)){alert('Pick a date first.');return;}
+      pickedDate=v;state='results';render();return;
+    }
+    if(a==='pick'){
+      const linkId=btn.dataset.pmLink;
+      const date=btn.dataset.pmBdayDate;
+      const name=btn.dataset.pmBdayName;
+      if(!linkId)return;
+      p.birthdayEventId=linkId;
+      p.birthdayDate=date||p.birthdayDate;
+      p.birthdaySourceName=name||p.name;
+      svAll();rPeople();
+      close();
+      // Refresh the underlying person modal so the connected state shows
+      if(document.getElementById('person-modal'))renderPersonModalBody(p);
+      return;
+    }
+    if(a==='create-new'){
+      // Set the pending-connect flag, close chooser, open event editor
+      // with birthday-shaped prefills. After saveEvent runs, the auto-
+      // connect hook in the save handler will set birthdayEventId.
+      window._pendingPersonBirthdayConnect=p.id;
+      close();
+      if(typeof openNewEvent==='function'){
+        openNewEvent({date:tod()});
+        setTimeout(()=>{
+          try{
+            const tEl=document.getElementById('em-t');
+            if(tEl)tEl.value=`${p.name}'s birthday`;
+            const ad=document.getElementById('em-allday');
+            if(ad&&!ad.checked){ad.checked=true;if(typeof toggleEmAllDay==='function')toggleEmAllDay();}
+            const rep=document.getElementById('em-repeat');
+            if(rep)rep.value='yearly';
+            if(typeof setEmReminderValues==='function'){
+              setEmReminderValues((S.calendarDefaults?.birthdayReminders)||[1440,0]);
+            }
+          }catch(_){}
+        },60);
+      }
+      return;
+    }
+  });
+  render();
+}
+
 // Renders the inner body of the detail modal. Called on open and after any
 // inline mutation so the view stays in sync without closing/reopening.
 function renderPersonModalBody(p){
@@ -12569,30 +12801,11 @@ function attachPersonModalHandlers(p){
       svAll();rPeople();renderPersonModalBody(p);return;
     }
     if(a==='add-bday'){
-      // Reuse the existing event create modal with birthday-shaped defaults.
-      // openNewEvent natively handles date/time/endTime; we apply the
-      // title + all-day + yearly recurrence + birthday reminders after the
-      // modal opens. The existing _bdayWatch on the title input would also
-      // pick these up if the user typed "birthday" themselves — we just
-      // do it pre-emptively here.
-      if(typeof openNewEvent==='function'){
-        openNewEvent({date:tod()});
-        setTimeout(()=>{
-          try{
-            const tEl=document.getElementById('em-t');
-            if(tEl)tEl.value=`${p.name}'s birthday`;
-            const ad=document.getElementById('em-allday');
-            if(ad&&!ad.checked){ad.checked=true;if(typeof toggleEmAllDay==='function')toggleEmAllDay();}
-            const rep=document.getElementById('em-repeat');
-            if(rep)rep.value='yearly';
-            if(typeof setEmReminderValues==='function'){
-              setEmReminderValues((S.calendarDefaults?.birthdayReminders)||[1440,0]);
-            }
-          }catch(_){}
-        },60);
-      } else {
-        alert('Birthday creation needs the calendar modal. Open the Calendar tab and add a yearly all-day event titled "'+p.name+'\'s birthday".');
-      }
+      // Open the chooser: Find by date / Create new. The chooser handles
+      // setting _pendingPersonBirthdayConnect + opening the event editor
+      // when the user picks "Create new", so the saved event auto-links
+      // back to this person.
+      openBirthdayChooser(p.id);
       return;
     }
     if(a==='toggle-pin'){
