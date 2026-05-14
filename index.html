@@ -3081,7 +3081,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v157';
+const APP_VERSION='v158';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -12611,32 +12611,56 @@ function openBirthdayChooser(personId){
   const m=document.createElement('div');
   m.className='modal';m.id='bday-chooser-modal';m.style.display='flex';
   m.innerHTML=`<div class="modal-bd"></div>
-    <div class="modal-body" style="max-width:380px">
+    <div class="modal-body" style="max-width:400px">
       <div id="bdc-body"></div>
     </div>`;
   document.body.appendChild(m);_syncBodyLock();
-  let state='choose';
-  let pickedDate='';
+  // Three states:
+  //  'name'    — auto-search by name, show matches or fall-through to date
+  //  'by-date' — day + month picker (no year; birthdays repeat yearly)
+  //  'results' — birthdays matching the picked month+day
+  let state='name';
+  let pickedMonth='';
+  let pickedDay='';
   const close=()=>{m.remove();_syncBodyLock();};
+  // Build the candidate-pick button HTML for any match list.
+  const cardFor=(c)=>`<button class="pm-bday-cand" data-bdc="pick" data-pm-link="${esc(c.linkId)}" data-pm-bday-date="${esc(c.date)}" data-pm-bday-name="${esc(c.name)}"><span class="pm-bday-cand-name">${esc(c.name)}</span><span class="pm-bday-cand-date">${esc(_peopleFmtBirthday(c.date))}</span><span class="pm-bday-cand-connect">Connect →</span></button>`;
   const render=()=>{
     const body=document.getElementById('bdc-body');if(!body)return;
-    if(state==='choose'){
+    if(state==='name'){
+      // Default state: search by name. If matches found, show them. If not,
+      // explain and offer date-search as fall-through.
+      const cands=_peopleBirthdayCandidates(p);
+      const matches=cands.map(c=>({linkId:c.linkId,date:c.date,name:c.extractedName}));
       body.innerHTML=`
-        <h3 style="margin:0 0 4px 0">Add a birthday</h3>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">For ${esc(p.name)}</div>
-        <button class="bdc-opt" data-bdc="by-date"><span class="bdc-opt-icon">🔍</span><span class="bdc-opt-text"><span class="bdc-opt-title">Find by date</span><span class="bdc-opt-sub">Pick a date — see all birthdays on it and connect one</span></span></button>
-        <button class="bdc-opt" data-bdc="create-new"><span class="bdc-opt-icon">➕</span><span class="bdc-opt-text"><span class="bdc-opt-title">Create new</span><span class="bdc-opt-sub">Add a new birthday event to Google Calendar — gets auto-connected</span></span></button>
+        <h3 style="margin:0 0 4px 0">Connect ${esc(p.name)}'s birthday</h3>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">${matches.length?`Possible matches in your Google Calendar:`:`No birthdays in your Google Calendar match the name "${esc(p.name)}".`}</div>
+        ${matches.length?`<div class="pm-bday-cands">${matches.map(cardFor).join('')}</div>`:''}
+        <button class="bdc-opt" data-bdc="by-date" style="margin-top:${matches.length?'10px':'0'}"><span class="bdc-opt-icon">🔍</span><span class="bdc-opt-text"><span class="bdc-opt-title">${matches.length?"None of these — search by date":"Search by date"}</span><span class="bdc-opt-sub">Pick the day + month — we'll show every birthday in your calendar on that day.</span></span></button>
+        <button class="bdc-opt" data-bdc="create-new"><span class="bdc-opt-icon">➕</span><span class="bdc-opt-text"><span class="bdc-opt-title">Create new</span><span class="bdc-opt-sub">Add a new birthday event to Google Calendar — gets auto-connected.</span></span></button>
         <div class="modal-actions" style="margin-top:14px"><div class="spacer"></div><button class="btn btn-sm" data-bdc="close">Cancel</button></div>`;
     } else if(state==='by-date'){
+      // Day + month picker (no year — birthdays are recurring annual events,
+      // so the year is meaningless for the search).
+      const days=Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,'0')}"${pickedDay===String(i+1).padStart(2,'0')?' selected':''}>${i+1}</option>`).join('');
+      const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const months=monthNames.map((mn,i)=>{const v=String(i+1).padStart(2,'0');return `<option value="${v}"${pickedMonth===v?' selected':''}>${mn}</option>`;}).join('');
       body.innerHTML=`
         <h3 style="margin:0 0 4px 0">Find by date</h3>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Pick a date — we'll show all birthday events on that day in your Google Calendar.</div>
-        <div class="aic-edit-field"><label>Date</label><input type="date" id="bdc-date" value="${esc(pickedDate||'')}"></div>
-        <div class="modal-actions" style="margin-top:14px"><button class="btn btn-sm" data-bdc="back">← Back</button><div class="spacer"></div><button class="btn btn-primary btn-sm" data-bdc="search">Search</button></div>`;
-      setTimeout(()=>{const d=document.getElementById('bdc-date');if(d)d.focus();},20);
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Pick the day + month. Year doesn't matter — birthdays repeat each year.</div>
+        <div class="aic-edit-row">
+          <div class="aic-edit-field"><label>Day</label><select id="bdc-day"><option value="">Day…</option>${days}</select></div>
+          <div class="aic-edit-field"><label>Month</label><select id="bdc-month"><option value="">Month…</option>${months}</select></div>
+        </div>
+        <div class="modal-actions" style="margin-top:14px"><button class="btn btn-sm" data-bdc="back-name">← Back</button><div class="spacer"></div><button class="btn btn-primary btn-sm" data-bdc="search">Search</button></div>`;
     } else if(state==='results'){
-      // Find all birthdays on the picked date
-      const pool=(gcCache.events||[]).filter(e=>isBirthdayEv(e)&&e.date===pickedDate);
+      // Match by MONTH-DAY across all cached birthdays (year-agnostic).
+      // GCal returns each birthday event with the date of its current
+      // instance (e.g. "2026-05-14"), so an exact-date match would only
+      // work if the user knew the year of the underlying event. Slice
+      // off the year to compare just "MM-DD".
+      const md=`${pickedMonth}-${pickedDay}`;
+      const pool=(gcCache.events||[]).filter(e=>isBirthdayEv(e)&&e.date&&e.date.slice(5)===md);
       // De-dupe by stable link id (recurring series share an id)
       const seen=new Set();const matches=[];
       for(const e of pool){
@@ -12646,12 +12670,15 @@ function openBirthdayChooser(personId){
         const mm=(e.title||'').match(/^(.+?)(?:'s)?\s*(?:birthday|bday)\b/i);
         matches.push({linkId,date:e.date,name:mm?mm[1].trim():e.title||'(birthday)'});
       }
-      const dateLabel=_peopleFmtBirthday(pickedDate);
+      const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const dateLabel=`${monthNames[parseInt(pickedMonth,10)-1]} ${parseInt(pickedDay,10)}`;
       body.innerHTML=`
         <h3 style="margin:0 0 4px 0">Birthdays on ${esc(dateLabel)}</h3>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">${matches.length} match${matches.length===1?'':'es'}. Tap one to connect to ${esc(p.name)}.</div>
-        ${matches.length?`<div class="pm-bday-cands">${matches.map(c=>`<button class="pm-bday-cand" data-bdc="pick" data-pm-link="${esc(c.linkId)}" data-pm-bday-date="${esc(c.date)}" data-pm-bday-name="${esc(c.name)}"><span class="pm-bday-cand-name">${esc(c.name)}</span><span class="pm-bday-cand-date">${esc(_peopleFmtBirthday(c.date))}</span><span class="pm-bday-cand-connect">Connect →</span></button>`).join('')}</div>`:`<div class="ps-empty" style="text-align:center;padding:12px">No birthday events found on ${esc(dateLabel)} in your Google Calendar.</div>`}
-        <div class="modal-actions" style="margin-top:14px"><button class="btn btn-sm" data-bdc="back-date">← Pick a different date</button><div class="spacer"></div><button class="btn btn-sm" data-bdc="close">Done</button></div>`;
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">${matches.length?`${matches.length} match${matches.length===1?'':'es'}. Tap one to connect to ${esc(p.name)}.`:`No birthday events found on ${esc(dateLabel)} in your Google Calendar.${(gcCache.events||[]).length===0?' (Try opening the Calendar tab first so birthdays load.)':''}`}</div>
+        ${matches.length?`<div class="pm-bday-cands">${matches.map(cardFor).join('')}</div>`:''}
+        <button class="bdc-opt" data-bdc="by-date" style="margin-top:${matches.length?'10px':'0'}"><span class="bdc-opt-icon">📅</span><span class="bdc-opt-text"><span class="bdc-opt-title">Pick a different date</span><span class="bdc-opt-sub">Search a different day + month.</span></span></button>
+        <button class="bdc-opt" data-bdc="create-new"><span class="bdc-opt-icon">➕</span><span class="bdc-opt-text"><span class="bdc-opt-title">Create new instead</span><span class="bdc-opt-sub">Add a new birthday event to Google Calendar — gets auto-connected.</span></span></button>
+        <div class="modal-actions" style="margin-top:14px"><div class="spacer"></div><button class="btn btn-sm" data-bdc="close">Done</button></div>`;
     }
   };
   m.addEventListener('click',e=>{
@@ -12660,13 +12687,15 @@ function openBirthdayChooser(personId){
     if(!btn)return;
     const a=btn.dataset.bdc;
     if(a==='close'){close();return;}
-    if(a==='back'){state='choose';render();return;}
-    if(a==='back-date'){state='by-date';render();return;}
+    if(a==='back-name'){state='name';render();return;}
     if(a==='by-date'){state='by-date';render();return;}
     if(a==='search'){
-      const v=(document.getElementById('bdc-date')?.value||'').trim();
-      if(!v||!/^\d{4}-\d{2}-\d{2}$/.test(v)){alert('Pick a date first.');return;}
-      pickedDate=v;state='results';render();return;
+      const dEl=document.getElementById('bdc-day');
+      const mEl=document.getElementById('bdc-month');
+      const d=dEl?.value||'';
+      const mo=mEl?.value||'';
+      if(!d||!mo){alert('Pick both a day and a month.');return;}
+      pickedDay=d;pickedMonth=mo;state='results';render();return;
     }
     if(a==='pick'){
       const linkId=btn.dataset.pmLink;
