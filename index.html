@@ -863,6 +863,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .bdc-opt-text{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
 .bdc-opt-title{font-size:13px;font-weight:600;color:var(--text)}
 .bdc-opt-sub{font-size:11px;color:var(--muted);line-height:1.4}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 /* Settings sub-tabs — pill-style nav at the top of the Settings route.
    Active tab gets a gold pill background. On narrow mobile the row
    becomes horizontally scrollable rather than wrapping (cleaner). */
@@ -3081,7 +3082,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v158';
+const APP_VERSION='v159';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -12604,7 +12605,7 @@ function openPersonModal(id){
 //   (2) find-by-date: date input → Search → results list with Connect
 //   (3) create-new: closes chooser + opens event editor with birthday
 //       prefills + sets _pendingPersonBirthdayConnect for auto-connect
-function openBirthdayChooser(personId){
+async function openBirthdayChooser(personId){
   const p=(S.people||[]).find(x=>x.id===personId);
   if(!p)return;
   const old=document.getElementById('bday-chooser-modal');if(old)old.remove();
@@ -12615,11 +12616,13 @@ function openBirthdayChooser(personId){
       <div id="bdc-body"></div>
     </div>`;
   document.body.appendChild(m);_syncBodyLock();
-  // Three states:
-  //  'name'    — auto-search by name, show matches or fall-through to date
-  //  'by-date' — day + month picker (no year; birthdays repeat yearly)
-  //  'results' — birthdays matching the picked month+day
-  let state='name';
+  // States:
+  //  'loading'  — fetching birthdays from GCal (shown briefly on open)
+  //  'no-token' — Google Calendar isn't connected; show CTA to Settings
+  //  'name'     — auto-search by name, show matches or fall-through to date
+  //  'by-date'  — day + month picker (no year; birthdays repeat yearly)
+  //  'results'  — birthdays matching the picked month+day
+  let state='loading';
   let pickedMonth='';
   let pickedDay='';
   const close=()=>{m.remove();_syncBodyLock();};
@@ -12627,6 +12630,22 @@ function openBirthdayChooser(personId){
   const cardFor=(c)=>`<button class="pm-bday-cand" data-bdc="pick" data-pm-link="${esc(c.linkId)}" data-pm-bday-date="${esc(c.date)}" data-pm-bday-name="${esc(c.name)}"><span class="pm-bday-cand-name">${esc(c.name)}</span><span class="pm-bday-cand-date">${esc(_peopleFmtBirthday(c.date))}</span><span class="pm-bday-cand-connect">Connect →</span></button>`;
   const render=()=>{
     const body=document.getElementById('bdc-body');if(!body)return;
+    if(state==='loading'){
+      body.innerHTML=`
+        <h3 style="margin:0 0 4px 0">Connect ${esc(p.name)}'s birthday</h3>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Loading birthdays from Google Calendar…</div>
+        <div style="display:flex;align-items:center;justify-content:center;padding:24px"><div class="spin" style="width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .9s linear infinite"></div></div>
+        <div class="modal-actions" style="margin-top:6px"><div class="spacer"></div><button class="btn btn-sm" data-bdc="close">Cancel</button></div>`;
+      return;
+    }
+    if(state==='no-token'){
+      body.innerHTML=`
+        <h3 style="margin:0 0 4px 0">Connect ${esc(p.name)}'s birthday</h3>
+        <div style="font-size:12px;color:var(--text-2);margin-bottom:14px">Google Calendar isn't connected, so we can't find birthdays. Connect it in <b>Settings → Calendar</b> and try again.</div>
+        <button class="bdc-opt" data-bdc="create-new"><span class="bdc-opt-icon">➕</span><span class="bdc-opt-text"><span class="bdc-opt-title">Create new event anyway</span><span class="bdc-opt-sub">This will open the event editor but it won't save until you connect Calendar.</span></span></button>
+        <div class="modal-actions" style="margin-top:14px"><div class="spacer"></div><button class="btn btn-sm" data-bdc="close">Cancel</button></div>`;
+      return;
+    }
     if(state==='name'){
       // Default state: search by name. If matches found, show them. If not,
       // explain and offer date-search as fall-through.
@@ -12736,6 +12755,35 @@ function openBirthdayChooser(personId){
       return;
     }
   });
+  render();
+
+  // Now fetch birthdays into the cache. gcCache.events typically holds
+  // events for whichever month the Calendar tab last viewed — which
+  // misses recurring birthdays on other dates. Pull a wide window so
+  // every recurring birthday returns at least one instance.
+  if(!getGCalToken()){
+    state='no-token';
+    render();
+    return;
+  }
+  try{
+    const now=new Date();
+    // 18 months: 6 back, 12 forward. Catches the user's recurring
+    // birthdays no matter what the current month is, and tolerates
+    // birthdays already passed in the current year.
+    const start=new Date(now.getFullYear(),now.getMonth()-6,1).toISOString();
+    const end=new Date(now.getFullYear(),now.getMonth()+12,1).toISOString();
+    const evs=await fetchGCal(start,end);
+    // Merge into existing gcCache rather than overwriting — other UI
+    // (the calendar grid) may be relying on a narrower already-loaded
+    // window, and we don't want to invalidate that.
+    const seenIds=new Set((gcCache.events||[]).map(e=>e.id));
+    const newEvs=(evs||[]).filter(e=>!seenIds.has(e.id));
+    gcCache.events=[...(gcCache.events||[]),...newEvs];
+  }catch(e){console.warn('[birthday-chooser] fetchGCal failed:',e.message);}
+  // If the user closed the modal mid-fetch, don't try to re-render.
+  if(!document.getElementById('bday-chooser-modal'))return;
+  state='name';
   render();
 }
 
