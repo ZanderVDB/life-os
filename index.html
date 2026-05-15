@@ -864,6 +864,25 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .bdc-opt-title{font-size:13px;font-weight:600;color:var(--text)}
 .bdc-opt-sub{font-size:11px;color:var(--muted);line-height:1.4}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+/* Daily check-in modal — sectioned nudge surface. */
+.ci-sec{margin-bottom:16px}
+.ci-sec-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:7px}
+.ci-row{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--surface-2);border-radius:6px;margin-bottom:5px;font-size:13px;cursor:pointer;transition:background .12s}
+.ci-row:hover{background:var(--surface-hover,var(--surface-2))}
+.ci-row .ci-check{width:18px;height:18px;border:1.5px solid var(--gold);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;line-height:1}
+.ci-row.ci-done .ci-check{background:var(--sage,#7fa186);border-color:var(--sage,#7fa186)}
+.ci-row.ci-done .ci-row-txt{text-decoration:line-through;color:var(--muted)}
+.ci-row-txt{flex:1;min-width:0}
+.ci-allgood{font-size:12px;color:var(--muted);font-style:italic;padding:6px 2px}
+.ci-card{background:var(--surface-2);border-radius:6px;padding:9px 11px;margin-bottom:5px}
+.ci-card-main{font-size:12.5px;color:var(--text);line-height:1.4;margin-bottom:7px}
+.ci-meta{color:var(--muted);font-size:11px}
+.ci-acts{display:flex;gap:6px;flex-wrap:wrap}
+.ci-act{font-size:11px;font-weight:600;padding:4px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);cursor:pointer;font-family:inherit}
+.ci-act:hover{border-color:var(--border-strong);color:var(--text)}
+.ci-act-go{border-color:var(--gold);color:var(--gold)}
+.ci-act-go:hover{background:var(--gold-bg)}
+.ci-act-mut{color:var(--muted)}
 /* Settings sub-tabs — pill-style nav at the top of the Settings route.
    Active tab gets a gold pill background. On narrow mobile the row
    becomes horizontally scrollable rather than wrapping (cleaner). */
@@ -2771,13 +2790,18 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <label class="switch"><input type="checkbox" id="iar-events" onchange="setIAR('eventToasts',this.checked)"><span class="slider"></span></label>
             </div>
           </div>
-          <div class="setting-row">
+          <div class="setting-row setting-row-stack">
             <div>
-              <div class="setting-label">Daily habit catch-up</div>
-              <div class="setting-desc">Show yesterday's habits the first time you open the app each day so you can tick anything you forgot.</div>
+              <div class="setting-label">Daily check-in</div>
+              <div class="setting-desc">A once-a-day modal on first open that sweeps up things you tend to forget. <strong>Off</strong> — never. <strong>Light</strong> — yesterday's habits only. <strong>Balanced</strong> — habits + promises you owe people + birthdays in 3 days + reminders due. <strong>Thorough</strong> — all that plus people you haven't seen in a while, stale tasks, an old idea, and birthdays up to a week out.</div>
             </div>
             <div class="setting-right">
-              <label class="switch"><input type="checkbox" id="habit-catchup-toggle" onchange="toggleHabitCatchup(this.checked)"><span class="slider"></span></label>
+              <div class="theme-toggle" id="checkin-level-toggle">
+                <button data-checkin="off" onclick="setCheckinLevel('off')">Off</button>
+                <button data-checkin="light" onclick="setCheckinLevel('light')">Light</button>
+                <button data-checkin="balanced" onclick="setCheckinLevel('balanced')">Balanced</button>
+                <button data-checkin="thorough" onclick="setCheckinLevel('thorough')">Thorough</button>
+              </div>
             </div>
           </div>
         </div>
@@ -3082,7 +3106,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v159';
+const APP_VERSION='v160';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -4411,6 +4435,11 @@ function handleSnapshot(snap){
     else if(d.aiConfirmMode==='off')S.aiConfirmMode='calendar';
     else if(typeof d.confirmAllAI==='boolean')S.aiConfirmMode=d.confirmAllAI?'all':'calendar';
     S.habitCatchupEnabled=typeof d.habitCatchupEnabled==='boolean'?d.habitCatchupEnabled:true;
+    // Daily check-in aggression level. Migrate from the old boolean:
+    // habitCatchupEnabled===false → 'off'; otherwise → 'balanced' (a
+    // deliberate upgrade — the whole point of the check-in revamp).
+    if(['off','light','balanced','thorough'].includes(d.checkinLevel))S.checkinLevel=d.checkinLevel;
+    else S.checkinLevel=(d.habitCatchupEnabled===false)?'off':'balanced';
     // Each account's Anthropic key lives in Firestore under their own doc,
     // so this line also enforces the per-user scoping — account B's snapshot
     // will only ever populate account B's per-user key slot.
@@ -4557,6 +4586,7 @@ function _buildSavePayload(){
   if(S.calendarDefaults!==undefined)payload.calendarDefaults=S.calendarDefaults;
   if(S.notebook!==undefined)payload.notebook=S.notebook||{sections:[]};
   payload.habitCatchupEnabled=typeof S.habitCatchupEnabled==='boolean'?S.habitCatchupEnabled:true;
+  payload.checkinLevel=['off','light','balanced','thorough'].includes(S.checkinLevel)?S.checkinLevel:'balanced';
   // Persist the migration high-water-mark so we don't re-run legacy
   // migrations on every cold launch. Once written, future loads see this
   // and skip the migration block entirely (handleSnapshot gates on it).
@@ -4644,7 +4674,7 @@ function effectiveAreaId(t){
 }
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
 const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself','Stand up for what is right','Take ownership of mistakes quickly'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy'],'Communication':['Listen to understand not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper more meaningful conversations'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience'],'Faith':['Let your faith shape your actions','Seek God first not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure not just in comfort'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively']};
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
 // or 'all' (every AI change opens the review queue). Legacy 'off' is no
@@ -6559,31 +6589,300 @@ function _renderHabitDayModalChrome(overlay,date,opts){
     subEl.remove();
   }
 }
-// Open the catch-up variant of the day modal for yesterday. Reuses
-// openHabitDayModal with opts.catchup so the title and sub-line show
-// the "Habit catch-up" framing (introduced in v151 Task 1).
-function openHabitCatchupModal(){
-  const y=yest();
-  const [yy,ym,yd]=y.split('-').map(Number);
-  openHabitDayModal(yy,ym-1,yd,{catchup:true});
+// ───────── DAILY CHECK-IN ─────────
+// Evolved from the v151 habit catch-up. A single sectioned modal that
+// fires once per day on first app open and nudges the user about things
+// they tend to forget. Each section only renders if it has content AND
+// the aggression level allows it. One dismiss closes everything.
+//
+// Aggression levels (Settings → Notifications):
+//   off       — never shows
+//   light     — habits only (exact old behaviour)
+//   balanced  — habits + overdue/aged promises + birthdays ≤3d + due reminders
+//   thorough  — all the above + reconnection decay + stale General tasks +
+//               one resurfaced idea, and birthdays ≤7d
+const CHECKIN_LEVELS=['off','light','balanced','thorough'];
+function _checkinLevel(){
+  if(CHECKIN_LEVELS.includes(S.checkinLevel))return S.checkinLevel;
+  // Migration fallback from the old boolean toggle.
+  if(S.habitCatchupEnabled===false)return 'off';
+  return 'balanced';
 }
-// Fires once per device per day to surface yesterday's habits. Gated by:
-//   - S.habitCatchupEnabled !== false (user can disable in Settings)
-//   - localStorage day-stamp (prevents re-fire after dismiss)
-//   - at least one habit exists AND was created on or before yesterday
-function maybeShowHabitCatchup(){
-  if(S.habitCatchupEnabled===false)return;
+function _daysBetweenIso(a,b){
+  // whole days from a → b (both YYYY-MM-DD, local midnight)
+  const [ay,am,ad]=a.split('-').map(Number);
+  const [by,bm,bd]=b.split('-').map(Number);
+  return Math.round((Date.UTC(by,bm-1,bd)-Date.UTC(ay,am-1,ad))/86400000);
+}
+// Next calendar occurrence (today or future) of a month-day taken from an
+// ISO date string. Returns {iso, days} or null.
+function _nextBirthdayOccurrence(iso){
+  if(!iso||!/^\d{4}-\d{2}-\d{2}$/.test(iso))return null;
+  const mm=iso.slice(5);                       // "MM-DD"
+  const t=tod();const ty=Number(t.slice(0,4));
+  let cand=`${ty}-${mm}`;
+  if(cand<t)cand=`${ty+1}-${mm}`;              // already passed this year
+  return {iso:cand,days:_daysBetweenIso(t,cand)};
+}
+// Build the list of sections (with their items) for the current level.
+function _checkinSections(){
+  const level=_checkinLevel();
+  if(level==='off')return [];
+  const today=tod();const yday=yest();
+  const sections=[];
+
+  // ── Habits (yesterday) — every level except off ──
+  if((S.habits||[]).length){
+    const dow=new Date(yday.slice(0,4),Number(yday.slice(5,7))-1,Number(yday.slice(8,10))).getDay();
+    const eligible=S.habits.filter(h=>(h.createdAt||today)<=yday);
+    const notDone=eligible.filter(h=>!(h.checkedDates||[]).includes(yday)&&!(h.excludedDays||[]).includes(dow));
+    const done=eligible.filter(h=>(h.checkedDates||[]).includes(yday));
+    if(eligible.length){
+      sections.push({kind:'habits',notDone,done,total:eligible.length});
+    }
+  }
+  if(level==='light')return sections; // light = habits only
+
+  const ppl=S.people||[];
+
+  // ── People: overdue / aged promises ──
+  const promiseItems=[];
+  ppl.forEach(p=>{
+    (p.promises||[]).forEach(pr=>{
+      if(pr.snoozeUntil&&pr.snoozeUntil>today)return;
+      const overdue=pr.date&&pr.date<today;
+      const aged=!pr.date&&pr.addedAt&&_daysBetweenIso(pr.addedAt,today)>=14;
+      if(overdue||aged){
+        promiseItems.push({personId:p.id,personName:p.name,promiseId:pr.id,text:pr.text||'',date:pr.date||'',overdue:!!overdue});
+      }
+    });
+  });
+  if(promiseItems.length)sections.push({kind:'promises',items:promiseItems});
+
+  // ── People: upcoming birthdays ──
+  const bdayWindow=level==='thorough'?7:3;
+  const ty=Number(today.slice(0,4));
+  const bdayItems=[];
+  ppl.forEach(p=>{
+    if(!p.birthdayEventId||!p.birthdayDate)return;
+    if(p.bdayTaskYear===ty)return; // already added a task this year
+    const nx=_nextBirthdayOccurrence(p.birthdayDate);
+    if(nx&&nx.days>=0&&nx.days<=bdayWindow){
+      bdayItems.push({personId:p.id,personName:p.name,iso:nx.iso,days:nx.days});
+    }
+  });
+  bdayItems.sort((a,b)=>a.days-b.days);
+  if(bdayItems.length)sections.push({kind:'birthdays',items:bdayItems});
+
+  // ── Reminders due ──
+  const dueRem=(S.reminders||[]).filter(r=>r.nextDue&&r.nextDue<=today).sort((a,b)=>(a.nextDue||'').localeCompare(b.nextDue||''));
+  if(dueRem.length)sections.push({kind:'reminders',items:dueRem.map(r=>({id:r.id,text:r.text||'',nextDue:r.nextDue}))});
+
+  if(level!=='thorough')return sections;
+
+  // ── People: reconnection decay (thorough only) ──
+  const reconItems=[];
+  ppl.forEach(p=>{
+    if(!p.lastTogether||!p.lastTogether.doneAt)return;
+    if(p.reconnectSnoozedUntil&&p.reconnectSnoozedUntil>today)return;
+    const days=_daysBetweenIso(p.lastTogether.doneAt,today);
+    if(days>90){
+      const lvl=(p.level?.major||1)*5+(p.level?.minor||1);
+      reconItems.push({personId:p.id,personName:p.name,days,lvl});
+    }
+  });
+  // Highest friendship level first, then longest gap. Cap at 3 so it
+  // never becomes a wall.
+  reconItems.sort((a,b)=>b.lvl-a.lvl||b.days-a.days);
+  if(reconItems.length)sections.push({kind:'reconnect',items:reconItems.slice(0,3)});
+
+  // ── Loose ends: stale General tasks + one resurfaced idea ──
+  const cutoff=addDaysToDateStr(today,-14);
+  const staleCount=(S.tasks||[]).filter(t=>!t.dailyDate&&!t.done&&(t.date||today)<cutoff).length;
+  // Pick the oldest idea not resurfaced in the last 30 days.
+  let resurfaced=null;
+  const ideas=[...(S.ideas||[])].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  for(const it of ideas){
+    if(it._resurfacedAt&&_daysBetweenIso(it._resurfacedAt,today)<30)continue;
+    resurfaced=it;break;
+  }
+  if(staleCount>0||resurfaced)sections.push({kind:'loose',staleCount,idea:resurfaced});
+
+  return sections;
+}
+// Fires once per day on first app open. Gated by level, the localStorage
+// day-stamp, and whether any section actually has content.
+function maybeShowDailyCheckin(){
+  if(_checkinLevel()==='off')return;
   const today=tod();
   let last=null;
-  try{last=localStorage.getItem('los_habit_catchup_lastShown');}catch(_){}
+  try{last=localStorage.getItem('los_checkin_lastShown');}catch(_){}
   if(last===today)return;
-  if(!S.habits||S.habits.length===0)return;
-  const ydayIso=yest();
-  const eligible=S.habits.some(h=>(h.createdAt||tod())<=ydayIso);
-  if(!eligible)return;
-  // Stamp BEFORE opening so a tab-close / accidental dismiss doesn't re-fire
-  try{localStorage.setItem('los_habit_catchup_lastShown',today);}catch(_){}
-  openHabitCatchupModal();
+  const sections=_checkinSections();
+  if(!sections.length)return; // nothing worth interrupting for — try again next open
+  // Stamp BEFORE opening so a tab-close / accidental dismiss doesn't re-fire.
+  try{localStorage.setItem('los_checkin_lastShown',today);}catch(_){}
+  openDailyCheckin();
+}
+// Back-compat shims — old names still referenced by the snapshot wire-ups.
+function maybeShowHabitCatchup(){return maybeShowDailyCheckin();}
+function openDailyCheckin(){
+  const old=document.getElementById('checkin-modal');if(old)old.remove();
+  const m=document.createElement('div');
+  m.className='modal';m.id='checkin-modal';m.style.display='flex';
+  m.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:440px;max-height:90vh;overflow-y:auto">
+      <div id="checkin-body"></div>
+    </div>`;
+  document.body.appendChild(m);_syncBodyLock();
+  const close=()=>{m.remove();_syncBodyLock();};
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtBdayWhen=(iso,days)=>{
+    const md=iso.slice(5).split('-');
+    const lbl=`${months[Number(md[0])-1]} ${Number(md[1])}`;
+    const when=days===0?'today':days===1?'tomorrow':`in ${days} days`;
+    return `${lbl} · ${when}`;
+  };
+  const render=()=>{
+    const body=document.getElementById('checkin-body');if(!body)return;
+    const sections=_checkinSections();
+    if(!sections.length){
+      body.innerHTML=`
+        <h3 style="margin:0 0 4px 0">All caught up 🎉</h3>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Nothing needs your attention right now. Have a good one.</div>
+        <div class="modal-actions"><div class="spacer"></div><button class="btn btn-primary btn-sm" data-ci="close">Done</button></div>`;
+      return;
+    }
+    const dayLabel=(()=>{const y=yest();const d=new Date(Number(y.slice(0,4)),Number(y.slice(5,7))-1,Number(y.slice(8,10)));return d.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'});})();
+    let html=`<h3 style="margin:0 0 2px 0">Daily check-in</h3>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px">A quick sweep so nothing slips. Tap to action, then Done.</div>`;
+    sections.forEach(sec=>{
+      if(sec.kind==='habits'){
+        const mkRow=(hb,doneState)=>`<div class="ci-row ci-habit${doneState?' ci-done':''}" data-ci="toggle-habit" data-hid="${hb.id}"><span class="ci-check">${doneState?'✓':''}</span><span class="ci-row-txt">${esc(hb.name)}</span></div>`;
+        html+=`<div class="ci-sec"><div class="ci-sec-lbl">Yesterday's habits · ${dayLabel}</div>
+          ${sec.done.map(h=>mkRow(h,true)).join('')}
+          ${sec.notDone.map(h=>mkRow(h,false)).join('')}
+          ${sec.notDone.length===0&&sec.done.length?'<div class="ci-allgood">All done yesterday 🙌</div>':''}
+        </div>`;
+      } else if(sec.kind==='promises'){
+        html+=`<div class="ci-sec"><div class="ci-sec-lbl">Promises to follow through on</div>
+          ${sec.items.map(it=>`<div class="ci-card">
+            <div class="ci-card-main">🤝 <b>${esc(it.personName)}</b> — ${esc(it.text)}${it.date?`<span class="ci-meta"> · was ${esc(it.date)}</span>`:`<span class="ci-meta"> · ${it.overdue?'overdue':'pending a while'}</span>`}</div>
+            <div class="ci-acts">
+              <button class="ci-act ci-act-go" data-ci="promise-did" data-pid="${it.personId}" data-prid="${it.promiseId}">✓ Did it</button>
+              <button class="ci-act" data-ci="promise-snooze" data-pid="${it.personId}" data-prid="${it.promiseId}">Snooze</button>
+              <button class="ci-act ci-act-mut" data-ci="promise-drop" data-pid="${it.personId}" data-prid="${it.promiseId}">Drop</button>
+            </div>
+          </div>`).join('')}
+        </div>`;
+      } else if(sec.kind==='birthdays'){
+        html+=`<div class="ci-sec"><div class="ci-sec-lbl">Birthdays coming up</div>
+          ${sec.items.map(it=>`<div class="ci-card">
+            <div class="ci-card-main">🎂 <b>${esc(it.personName)}</b><span class="ci-meta"> · ${fmtBdayWhen(it.iso,it.days)}</span></div>
+            <div class="ci-acts">
+              <button class="ci-act ci-act-go" data-ci="bday-task" data-pid="${it.personId}">+ Add a reminder task</button>
+            </div>
+          </div>`).join('')}
+        </div>`;
+      } else if(sec.kind==='reminders'){
+        html+=`<div class="ci-sec"><div class="ci-sec-lbl">Reminders due</div>
+          ${sec.items.map(it=>`<div class="ci-row ci-rem" data-ci="reminder-done" data-rid="${it.id}"><span class="ci-check"></span><span class="ci-row-txt">⏰ ${esc(it.text)}</span></div>`).join('')}
+        </div>`;
+      } else if(sec.kind==='reconnect'){
+        html+=`<div class="ci-sec"><div class="ci-sec-lbl">People you haven't seen in a while</div>
+          ${sec.items.map(it=>`<div class="ci-card">
+            <div class="ci-card-main">👋 <b>${esc(it.personName)}</b><span class="ci-meta"> · ${_peoplePastWhen(addDaysToDateStr(tod(),-it.days))}</span></div>
+            <div class="ci-acts">
+              <button class="ci-act ci-act-go" data-ci="recon-reach" data-pid="${it.personId}">Reach out</button>
+              <button class="ci-act ci-act-mut" data-ci="recon-dismiss" data-pid="${it.personId}">Not now</button>
+            </div>
+          </div>`).join('')}
+        </div>`;
+      } else if(sec.kind==='loose'){
+        html+=`<div class="ci-sec"><div class="ci-sec-lbl">Loose ends</div>`;
+        if(sec.staleCount>0){
+          html+=`<div class="ci-card"><div class="ci-card-main">🗂️ <b>${sec.staleCount}</b> task${sec.staleCount===1?'':'s'} have sat in General for 2+ weeks</div><div class="ci-acts"><button class="ci-act ci-act-go" data-ci="goto-tasks">Review them</button></div></div>`;
+        }
+        if(sec.idea){
+          html+=`<div class="ci-card"><div class="ci-card-main">💡 You once noted: <b>${esc(sec.idea.title||sec.idea.desc||'an idea')}</b></div><div class="ci-acts"><button class="ci-act ci-act-go" data-ci="goto-brain">Open Brain</button><button class="ci-act" data-ci="idea-keep" data-iid="${sec.idea.id}">Keep, remind later</button><button class="ci-act ci-act-mut" data-ci="idea-archive" data-iid="${sec.idea.id}">Archive</button></div></div>`;
+        }
+        html+=`</div>`;
+      }
+    });
+    html+=`<div class="modal-actions" style="margin-top:16px"><div class="spacer"></div><button class="btn btn-primary btn-sm" data-ci="close">Done</button></div>`;
+    body.innerHTML=html;
+  };
+  m.addEventListener('click',e=>{
+    if(e.target.closest('.modal-bd')){close();return;}
+    const el=e.target.closest('[data-ci]');
+    if(!el)return;
+    const a=el.dataset.ci;
+    if(a==='close'){close();return;}
+    if(a==='toggle-habit'){
+      const hid=el.dataset.hid;const y=yest();
+      if(typeof toggleHabitDate==='function')toggleHabitDate(hid,y);
+      render();return;
+    }
+    if(a==='reminder-done'){
+      const rid=el.dataset.rid;
+      if(typeof tickReminder==='function')tickReminder(rid);
+      render();return;
+    }
+    const pid=el.dataset.pid;
+    const person=pid?(S.people||[]).find(x=>x.id===pid):null;
+    if(a==='promise-did'){
+      if(!person)return;
+      const pr=(person.promises||[]).find(x=>x.id===el.dataset.prid);if(!pr)return;
+      person.lastTogether={text:pr.text,doneAt:tod()};
+      if(pr.linkedTaskId){S.tasks=(S.tasks||[]).filter(x=>x.id!==pr.linkedTaskId);if(typeof rTasks==='function')rTasks();}
+      person.promises=(person.promises||[]).filter(x=>x.id!==pr.id);
+      svAll();rPeople();render();return;
+    }
+    if(a==='promise-snooze'){
+      if(!person)return;
+      const pr=(person.promises||[]).find(x=>x.id===el.dataset.prid);if(!pr)return;
+      pr.snoozeUntil=addDaysToDateStr(tod(),7);
+      svAll();render();return;
+    }
+    if(a==='promise-drop'){
+      if(!person)return;
+      const pr=(person.promises||[]).find(x=>x.id===el.dataset.prid);if(!pr)return;
+      if(pr.linkedTaskId){S.tasks=(S.tasks||[]).filter(x=>x.id!==pr.linkedTaskId);if(typeof rTasks==='function')rTasks();}
+      person.promises=(person.promises||[]).filter(x=>x.id!==pr.id);
+      svAll();rPeople();render();return;
+    }
+    if(a==='bday-task'){
+      if(!person)return;
+      S.tasks=S.tasks||[];
+      S.tasks.push({id:uid(),text:`Wish ${person.name} a happy birthday 🎂`,area:'personal',project:'gen',priority:'med',scheduledTime:'',daily:true,dailyDate:tod(),done:false,date:tod()});
+      person.bdayTaskYear=Number(tod().slice(0,4));
+      svAll();if(typeof rTasks==='function')rTasks();render();return;
+    }
+    if(a==='recon-reach'){
+      if(!person)return;
+      S.tasks=S.tasks||[];
+      S.tasks.push({id:uid(),text:`Reach out to ${person.name}`,area:'personal',project:'gen',priority:'med',scheduledTime:'',daily:true,dailyDate:tod(),done:false,date:tod()});
+      person.reconnectSnoozedUntil=addDaysToDateStr(tod(),30);
+      svAll();if(typeof rTasks==='function')rTasks();render();return;
+    }
+    if(a==='recon-dismiss'){
+      if(!person)return;
+      person.reconnectSnoozedUntil=addDaysToDateStr(tod(),30);
+      svAll();render();return;
+    }
+    if(a==='idea-keep'){
+      const it=(S.ideas||[]).find(x=>x.id===el.dataset.iid);
+      if(it){it._resurfacedAt=tod();svAll();}
+      render();return;
+    }
+    if(a==='idea-archive'){
+      S.ideas=(S.ideas||[]).filter(x=>x.id!==el.dataset.iid);
+      svAll();render();return;
+    }
+    if(a==='goto-tasks'){close();if(typeof setRoute==='function')setRoute('today');return;}
+    if(a==='goto-brain'){close();if(typeof setRoute==='function')setRoute('brain');return;}
+  });
+  render();
 }
 function openHabitDayModal(cy,cm,cd,opts){
   // Kill any queued/visible hover preview so we don't get the modal
@@ -8844,7 +9143,7 @@ function rSettings(){
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
-  const hcTog=document.getElementById('habit-catchup-toggle');if(hcTog)hcTog.checked=S.habitCatchupEnabled!==false;
+  {const _cl=['off','light','balanced','thorough'].includes(S.checkinLevel)?S.checkinLevel:(S.habitCatchupEnabled===false?'off':'balanced');document.querySelectorAll('#checkin-level-toggle [data-checkin]').forEach(b=>b.classList.toggle('on',b.dataset.checkin===_cl));}
   // Daily reminder toggle reflects both the user preference AND the
   // browser permission state, since either being off means no notifs fire.
   const ntTog=document.getElementById('notif-toggle');
@@ -9268,8 +9567,19 @@ function toggleSounds(on){
 // Daily habit catch-up popup: shows yesterday's habits the first time you
 // open the app each day. Task 3 will add the trigger that reads this flag.
 function toggleHabitCatchup(on){
-  S.habitCatchupEnabled=!!on;
+  // Back-compat shim — old toggle mapped on/off; route through the new
+  // level system so both stay consistent.
+  setCheckinLevel(on?'balanced':'off');
+}
+function setCheckinLevel(level){
+  if(!['off','light','balanced','thorough'].includes(level))level='balanced';
+  S.checkinLevel=level;
+  // Keep the legacy boolean roughly in sync for any old code/devices.
+  S.habitCatchupEnabled=level!=='off';
   svAll();
+  document.querySelectorAll('#checkin-level-toggle [data-checkin]').forEach(b=>{
+    b.classList.toggle('on',b.dataset.checkin===level);
+  });
 }
 function setAIConfirmMode(mode){
   // 'off' is no longer allowed — the AI must always pause for review on
