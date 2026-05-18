@@ -1501,6 +1501,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pd-worked b{color:var(--text-2);font-weight:600}
 .pd-touch-btn{border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--text-2);cursor:pointer;transition:all .12s}
 .pd-touch-btn:hover{background:color-mix(in srgb,var(--peach) 16%,var(--surface));border-color:color-mix(in srgb,var(--peach) 40%,var(--border));color:var(--text)}
+.pd-touch-btn.on{background:color-mix(in srgb,var(--peach) 22%,var(--surface));border-color:color-mix(in srgb,var(--peach) 45%,var(--border));color:var(--text)}
 
 /* PROJECT DETAIL VIEW */
 .pd-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
@@ -3130,7 +3131,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v173';
+const APP_VERSION='v174';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -8905,7 +8906,17 @@ function _projSyncAuto(){
 function projectTouch(id,ev){
   if(ev&&ev.stopPropagation)ev.stopPropagation();
   const b=S.builds.find(x=>x.id===id);if(!b)return;
-  b.lastTouched=Date.now();
+  const touchedToday=Math.floor((Date.now()-_projTouchedMs(b))/86400000)<=0;
+  if(touchedToday){
+    // Un-mark: roll recency back to whatever it was before today's tap.
+    // 0 (not delete) so the unset survives Firestore's merge write;
+    // _projTouchedMs treats 0 as "none" and falls back to date/entries.
+    b.lastTouched=(typeof b.prevTouched==='number'&&b.prevTouched>0)?b.prevTouched:0;
+    b.prevTouched=0;
+  } else {
+    b.prevTouched=(typeof b.lastTouched==='number'&&b.lastTouched>0)?b.lastTouched:0;
+    b.lastTouched=Date.now();
+  }
   if(_projIsAuto(b))b.status=_projAutoStatus(b);
   svAll();
   if(UI.projectDetail===id)renderProjectDetail();else rBuilds();
@@ -9010,6 +9021,7 @@ function renderProjectDetail(){
   const b=S.builds.find(x=>x.id===UI.projectDetail);
   if(!b){closeProject();return;}
   const eff=_projEffStatus(b),auto=_projIsAuto(b);
+  const touchedToday=Math.floor((Date.now()-_projTouchedMs(b))/86400000)<=0;
   el.innerHTML=`
     <div class="pd-top">
       <button class="pd-back" onclick="closeProject()">← All projects</button>
@@ -9025,7 +9037,7 @@ function renderProjectDetail(){
       </div>
       <div class="pd-worked">
         <span>Last worked on <b>${_projLastWorkedLabel(b)}</b>${auto?' · phase set automatically':''}</span>
-        <button class="pd-touch-btn" onclick="projectTouch('${b.id}')">🔥 I worked on this today</button>
+        <button class="pd-touch-btn${touchedToday?' on':''}" onclick="projectTouch('${b.id}')">${touchedToday?'🔥 Worked on today — tap to undo':'🔥 I worked on this today'}</button>
       </div>
       <div class="pd-lbl">What this project does</div>
       <textarea class="pd-desc" id="pd-desc-${b.id}" placeholder="Core idea — one or two sentences about what this builds." onblur="saveProjectHead('${b.id}')">${esc(b.desc||'')}</textarea>
@@ -9052,7 +9064,7 @@ function rBuilds(){
     return `<div class="bc ${eff}" onclick="openProject('${b.id}')">
       <div class="bc-top">
         <span class="bc-tag">${lbl[eff]||'Future'}${auto?` <span class="bc-tag-auto">· Auto</span>`:''}</span>
-        <button class="bc-touch${touchedToday?' on':''}" onclick="projectTouch('${b.id}',event)" title="${touchedToday?'Worked on today':'Mark: I worked on this today'}">🔥</button>
+        <button class="bc-touch${touchedToday?' on':''}" onclick="projectTouch('${b.id}',event)" title="${touchedToday?'Worked on today — tap to undo':'Mark: I worked on this today'}">🔥</button>
       </div>
       <div class="bc-title">${esc(b.title)}</div>
       <div class="bc-desc">${esc((b.desc||'').slice(0,180))}${(b.desc||'').length>180?'…':''}</div>
