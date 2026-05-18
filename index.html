@@ -1252,14 +1252,21 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .pnm{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .tcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.ti{display:flex;align-items:flex-start;gap:10px;padding:10px 13px;border-bottom:1px solid var(--border);cursor:pointer;border-left:3px solid transparent;transition:background .1s}
+.ti{display:flex;align-items:flex-start;gap:10px;padding:10px 13px;border-bottom:1px solid var(--border);cursor:pointer;border-left:5px solid transparent;transition:background .1s}
 .ti:last-of-type{border-bottom:none}
 .ti:hover{background:var(--surface-hover)}
-.ti.pu{border-left-color:var(--red)}
-.ti.ph{border-left-color:var(--peach)}
-.ti.pm{border-left-color:var(--gold)}
+/* Priority cue: a saturated, clearly distinct left bar + a colored glow
+   that bleeds inward from the edge, so Urgent (true red) reads as plainly
+   different from High (orange) at a glance. box-shadow (not background) so
+   the :hover background still works on top. */
+.ti.pu{border-left-color:#d64545;box-shadow:inset 7px 0 16px -11px rgba(214,69,69,.78)}
+.ti.ph{border-left-color:#e8842b;box-shadow:inset 7px 0 16px -11px rgba(232,132,43,.72)}
+.ti.pm{border-left-color:var(--gold);box-shadow:inset 7px 0 16px -12px rgba(201,169,74,.55)}
 .ti.pl{border-left-color:var(--sage)}
 .ti.ps{border-left-color:var(--border);opacity:.55}
+[data-theme="studio"] .ti.pu{border-left-color:#ff7a7a;box-shadow:inset 7px 0 18px -10px rgba(255,122,122,.55)}
+[data-theme="studio"] .ti.ph{border-left-color:#f0a44a;box-shadow:inset 7px 0 18px -10px rgba(240,164,74,.5)}
+[data-theme="studio"] .ti.pm{border-left-color:var(--gold);box-shadow:inset 7px 0 18px -11px rgba(217,185,104,.4)}
 /* Neutral / "no priority" — used by History rows so completed work
    renders flat-grey regardless of urgency it had before being ticked. */
 .ti.pn{border-left-color:var(--border)}
@@ -1303,11 +1310,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pri-row-grid .pri-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:0}
 .pri-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
 .pri-buttons .pb{padding:7px 6px;font-size:11.5px;text-align:center;cursor:pointer}
-.pu-b{background:var(--red-bg);color:var(--red)}
-.ph-b{background:var(--peach-bg);color:var(--peach)}
+/* Picker colours mirror the task-list priority cue: Urgent = true red,
+   High = orange — deliberately different hues, not two warm neighbours. */
+.pu-b{background:#fbe1e1;color:#c0392b}
+.ph-b{background:#fdecd6;color:#c46a12}
 .pm-b{background:var(--gold-bg);color:var(--gold)}
 .pl-b{background:var(--sage-bg);color:var(--sage)}
 .ps-b{background:var(--surface-2);color:var(--muted)}
+[data-theme="studio"] .pu-b{background:rgba(255,122,122,.16);color:#ff8e8e}
+[data-theme="studio"] .ph-b{background:rgba(240,164,74,.16);color:#f3ad57}
 .exp-dt{font-size:11px;color:var(--muted-2);margin-top:8px}
 .no-t{background:var(--surface-2);border:1px dashed var(--border);border-radius:var(--radius);padding:18px;text-align:center;font-size:13px;color:var(--muted)}
 
@@ -3100,7 +3111,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v166';
+const APP_VERSION='v167';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
