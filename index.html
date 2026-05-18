@@ -2057,6 +2057,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .nb-cover-author{font-family:'Inter',system-ui,sans-serif;font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:500}
 .nb-cover-hint{font-family:'Inter',system-ui,sans-serif;font-size:12px;color:var(--muted-2);margin-top:auto;padding-top:36px;line-height:1.55;font-style:italic;max-width:340px}
 .nb-cover-hint strong{color:var(--text-2);font-style:normal;font-weight:600}
+/* When the cover sits beside page 1 in a desktop spread it only has half
+   the width — scale the title down so it doesn't crowd the binding. */
+.nb-book.spread .nb-cover-page .nb-cover{padding:40px 30px;gap:11px}
+.nb-book.spread .nb-cover-page .nb-cover-title{font-size:46px}
+.nb-book.spread .nb-cover-page .nb-cover-sub{font-size:14px}
+.nb-book.spread .nb-cover-page .nb-cover-hint{padding-top:26px;font-size:11.5px;max-width:280px}
 @media(max-width:700px){
   /* Mobile: scale down so it still feels like a cover but doesn't run
      off the screen. Phone notebook is already tight on space. */
@@ -3118,7 +3124,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v169';
+const APP_VERSION='v170';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -11420,7 +11426,11 @@ const NB_LAYOUT_CELLS={single:1,half:2,quad:4};
 // In-memory navigation + search state. Not persisted — the sections/pages
 // themselves are. Lost on reload, which is fine (you always start at the
 // first page of the first section).
-const NB={sectionIdx:0,pageIdx:0,lastFocused:null,searchQuery:'',matches:[],matchIdx:-1,voiceActive:false,_voiceRec:null,_voiceTarget:null,spread:false,font:'hand'};
+// cover: 0 = on a real page. 1 = "book opened" (spread → cover + page 1;
+// single → just the cover). 2 = "book closed" (spread only → the lone
+// cover page). Lets you flip back past page 1 of section 1 into the
+// title page, like opening the front of a real book.
+const NB={sectionIdx:0,pageIdx:0,lastFocused:null,searchQuery:'',matches:[],matchIdx:-1,voiceActive:false,_voiceRec:null,_voiceTarget:null,spread:false,font:'hand',cover:0};
 // Restore the viewing preferences from localStorage. Font and spread mode
 // are device-local (not synced) — one user might prefer the handwriting
 // look on their iPad but the clean font on their work laptop.
@@ -11538,6 +11548,9 @@ function renderNotebookMobileBars(){
   const top=document.getElementById('nb-mobile-top');
   const bot=document.getElementById('nb-mobile-bot');
   if(!top||!bot)return;
+  // On the cover there's no page to act on — clear the bars (the flip
+  // arrows live outside these bars, so the user can still turn forward).
+  if(NB.cover>0){top.innerHTML='';bot.innerHTML='';return;}
   const sec=nbCurrentSection();const page=nbCurrentPage();
   if(!sec||!page){top.innerHTML='';bot.innerHTML='';return;}
   const layoutBtns=[['single','▭','One cell'],['half','▯▯','Left / right split'],['quad','⊞','Four cells']]
@@ -11736,6 +11749,7 @@ function renderNotebookSub(){
   const sub=document.getElementById('nb-sub');if(!sub)return;
   const secs=S.notebook.sections;
   if(!secs.length){sub.textContent='';return;}
+  if(NB.cover>0){sub.textContent='Cover';return;}
   const sec=nbCurrentSection();const pages=sec?sec.pages.length:0;
   sub.textContent=`${sec?.title||'—'} · Page ${NB.pageIdx+1} of ${pages}`;
 }
@@ -11743,7 +11757,7 @@ function renderNotebookTabs(){
   const el=document.getElementById('nb-tabs');if(!el)return;
   const secs=S.notebook.sections;
   if(!secs.length){el.innerHTML=`<span class="nb-tab-empty">No sections yet — create one on the right →</span>`;return;}
-  el.innerHTML=secs.map((s,i)=>`<button class="nb-tab${i===NB.sectionIdx?' on':''}" data-col="${esc(s.color||'peach')}" onclick="nbGoSection(${i})" ondblclick="nbOpenSectionPopover(${i},event)" oncontextmenu="event.preventDefault();nbOpenSectionPopover(${i},event)" title="${esc(s.title||'Untitled')} — double-click to rename / recolour / delete"><span>${esc(s.title||'Untitled')}</span><span class="nb-tab-count">${s.pages.length}</span></button>`).join('');
+  el.innerHTML=secs.map((s,i)=>`<button class="nb-tab${i===NB.sectionIdx&&!NB.cover?' on':''}" data-col="${esc(s.color||'peach')}" onclick="nbGoSection(${i})" ondblclick="nbOpenSectionPopover(${i},event)" oncontextmenu="event.preventDefault();nbOpenSectionPopover(${i},event)" title="${esc(s.title||'Untitled')} — double-click to rename / recolour / delete"><span>${esc(s.title||'Untitled')}</span><span class="nb-tab-count">${s.pages.length}</span></button>`).join('');
 }
 // Resolve the (section, page) pair that sits at offset N from the current
 // position. Used by spread mode to find the "next" page, and by flow-past-
@@ -11921,6 +11935,43 @@ function nbUpdateToolbarStates(){
   setActive('h2',inH2);
 }
 document.addEventListener('selectionchange',nbUpdateToolbarStates);
+// The title-page markup. Reused by the brand-new empty state AND by the
+// "flip back past page 1" cover. The hint adapts: prompt to create a
+// section when there are none, otherwise nudge to turn the page forward.
+function nbCoverInner(){
+  const firstName=(typeof CU!=='undefined'&&CU&&CU.displayName||'').split(/\s+/)[0]||'you';
+  const year=new Date().getFullYear();
+  const n=S.notebook.sections.length;
+  const hint=n
+    ? `Turn the page to open your notebook — <strong>${n} section${n===1?'':'s'}</strong> inside.`
+    : `Tap <strong>+ New section</strong> in the top-right to begin your first chapter — Finance, Poems, Random, whatever's on your mind.`;
+  return `<div class="nb-cover">
+      <div class="nb-cover-flourish">❦</div>
+      <div class="nb-cover-pre">Life OS</div>
+      <h1 class="nb-cover-title">Notebook</h1>
+      <div class="nb-cover-sub">A space for thinking</div>
+      <div class="nb-cover-rule"></div>
+      <div class="nb-cover-author">by ${esc(firstName)} · ${year}</div>
+      <div class="nb-cover-hint">${hint}</div>
+    </div>`;
+}
+// Shared flip-animation wrapper: swap book.innerHTML with the proper
+// flipping-out / entering-in classes, or just set it directly.
+function nbSwapBook(book,html,flipDir){
+  if(flipDir==='left'||flipDir==='right'){
+    const curPages=book.querySelectorAll('.nb-page');
+    if(curPages.length){
+      curPages.forEach(p=>p.classList.add(flipDir==='left'?'flipping-left':'flipping-right'));
+      setTimeout(()=>{
+        book.innerHTML=html;
+        book.querySelectorAll('.nb-page').forEach(p=>p.classList.add(flipDir==='left'?'entering-left':'entering-right'));
+      },220);
+      return true;
+    }
+  }
+  book.innerHTML=html;
+  return false;
+}
 function renderNotebookPage(flipDir){
   const book=document.getElementById('nb-book');if(!book)return;
   // Apply font + spread classes on the book wrapper so CSS picks them up.
@@ -11929,20 +11980,21 @@ function renderNotebookPage(flipDir){
   const secs=S.notebook.sections;
   if(!secs.length){
     book.classList.remove('spread');
-    // Render a proper book-cover style title page when the notebook is
-    // brand-new. The single-line "Your notebook is empty" wasn't doing
-    // the page-flip metaphor any favours.
-    const firstName=(typeof CU!=='undefined'&&CU&&CU.displayName||'').split(/\s+/)[0]||'you';
-    const year=new Date().getFullYear();
-    book.innerHTML=`<div class="nb-page"><div class="nb-cover">
-      <div class="nb-cover-flourish">❦</div>
-      <div class="nb-cover-pre">Life OS</div>
-      <h1 class="nb-cover-title">Notebook</h1>
-      <div class="nb-cover-sub">A space for thinking</div>
-      <div class="nb-cover-rule"></div>
-      <div class="nb-cover-author">by ${esc(firstName)} · ${year}</div>
-      <div class="nb-cover-hint">Tap <strong>+ New section</strong> in the top-right to begin your first chapter — Finance, Poems, Random, whatever's on your mind.</div>
-    </div></div>`;
+    book.innerHTML=`<div class="nb-page nb-cover-page">${nbCoverInner()}</div>`;
+    return;
+  }
+  // Cover / "opening the book" state. cover===1 → open (spread shows the
+  // cover beside page 1; single shows just the cover). cover===2 → the
+  // lone closed cover (spread only — the extra flip-back step).
+  if(NB.cover>0){
+    const spreadOpen=NB.spread&&NB.cover===1;
+    if(!spreadOpen)book.classList.remove('spread');
+    let html=`<div class="nb-page nb-cover-page">${nbCoverInner()}</div>`;
+    if(spreadOpen){
+      const firstRef={sectionIdx:0,pageIdx:0,section:secs[0],page:secs[0].pages[0]};
+      html+=nbBuildPageHTML(firstRef,'right');
+    }
+    nbSwapBook(book,html,flipDir);
     return;
   }
   const leftRef={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,section:nbCurrentSection(),page:nbCurrentPage()};
@@ -11996,16 +12048,28 @@ function nbToggleFont(){
 }
 // Section nav — click a tab, hop there with the appropriate flip direction.
 function nbGoSection(i){
-  if(i===NB.sectionIdx)return;
+  // Tapping a tab always lands on a real page — bail out of the cover.
+  if(i===NB.sectionIdx&&!NB.cover)return;
   const dir=i>NB.sectionIdx?'left':'right';
+  NB.cover=0;
   NB.sectionIdx=i;NB.pageIdx=0;nbStopVoice();
-  renderNotebookTabs();renderNotebookPage(dir);renderNotebookSub();
+  renderNotebookTabs();renderNotebookPage(dir);renderNotebookSub();renderNotebookMobileBars();
 }
 // Continuous flow: past the last page of a section, roll into the first
 // page of the next. Past the first, back into the previous.
 function nbNextPage(){
   const secs=S.notebook.sections;if(!secs.length)return;
-  const sec=nbCurrentSection();nbStopVoice();nbResetUserZoom();
+  nbStopVoice();nbResetUserZoom();
+  // Flipping forward out of the cover, like turning the front page open.
+  // Spread: closed cover → open (cover + page 1) → first real spread.
+  // Single: cover → first page.
+  if(NB.cover>0){
+    if(NB.spread&&NB.cover===2)NB.cover=1;
+    else NB.cover=0;
+    renderNotebookPage('left');renderNotebookSub();renderNotebookMobileBars();
+    return;
+  }
+  const sec=nbCurrentSection();
   if(NB.pageIdx<sec.pages.length-1){NB.pageIdx++;}
   else if(NB.sectionIdx<secs.length-1){NB.sectionIdx++;NB.pageIdx=0;renderNotebookTabs();}
   else return;
@@ -12014,6 +12078,18 @@ function nbNextPage(){
 function nbPrevPage(){
   const secs=S.notebook.sections;if(!secs.length)return;
   nbStopVoice();nbResetUserZoom();
+  // Already at the cover. In spread, one more step back collapses the
+  // open spread (cover + page 1) down to just the closed cover. After
+  // that there's nowhere further back to go.
+  if(NB.cover>0){
+    if(NB.spread&&NB.cover===1){NB.cover=2;renderNotebookPage('right');renderNotebookSub();renderNotebookMobileBars();}
+    return;
+  }
+  // At the very first page of the first section → open the cover.
+  if(NB.sectionIdx===0&&NB.pageIdx===0){
+    NB.cover=1;renderNotebookPage('right');renderNotebookSub();renderNotebookMobileBars();
+    return;
+  }
   if(NB.pageIdx>0){NB.pageIdx--;}
   else if(NB.sectionIdx>0){NB.sectionIdx--;NB.pageIdx=S.notebook.sections[NB.sectionIdx].pages.length-1;renderNotebookTabs();}
   else return;
@@ -12025,7 +12101,7 @@ function nbAddSection(){
   nbPushHistory();
   const color=NB_COLORS[S.notebook.sections.length%NB_COLORS.length];
   S.notebook.sections.push({id:uid(),title:name.trim(),color,pages:[nbBlankPage()]});
-  NB.sectionIdx=S.notebook.sections.length-1;NB.pageIdx=0;
+  NB.cover=0;NB.sectionIdx=S.notebook.sections.length-1;NB.pageIdx=0;
   svAll();rNotebook();
 }
 function nbOpenSectionPopover(i,ev){
@@ -12281,9 +12357,10 @@ function nbUpdateSearchUI(){
 }
 function nbJumpToMatch(idx){
   const m=NB.matches[idx];if(!m)return;
-  const needRender=NB.sectionIdx!==m.sectionIdx||NB.pageIdx!==m.pageIdx;
+  const wasCover=NB.cover>0;
+  const needRender=wasCover||NB.sectionIdx!==m.sectionIdx||NB.pageIdx!==m.pageIdx;
   const dir=(m.sectionIdx>NB.sectionIdx||(m.sectionIdx===NB.sectionIdx&&m.pageIdx>NB.pageIdx))?'left':'right';
-  NB.sectionIdx=m.sectionIdx;NB.pageIdx=m.pageIdx;
+  NB.cover=0;NB.sectionIdx=m.sectionIdx;NB.pageIdx=m.pageIdx;
   if(needRender){renderNotebookTabs();renderNotebookPage(dir);renderNotebookSub();
     // Wait for flip-out + render before selecting the match
     setTimeout(()=>nbSelectMatch(m),300);
