@@ -3124,7 +3124,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v171';
+const APP_VERSION='v172';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -6799,15 +6799,22 @@ function routineToday(){UI.routineDate=tod();rRoutine();}
 function routineToggle(itemId){
   const iso=UI.routineDate||tod();
   const log=_routineDayLog(iso);
-  if(log.checks[itemId])delete log.checks[itemId];
-  else log.checks[itemId]=true;
+  // IMPORTANT: set false, don't `delete`. Saves use Firestore
+  // set(..,{merge:true}), which deep-merges nested maps and NEVER
+  // removes a key that's absent from the payload. A deleted key would
+  // stay `true` on the server, then the onSnapshot echo would re-check
+  // the item — exactly the "won't uncheck" bug. An explicit false is
+  // written through the merge and overwrites the server value.
+  log.checks[itemId]=!log.checks[itemId];
   svAll();rRoutine();
 }
 function routineJournal(key,val){
   const iso=UI.routineDate||tod();
   const log=_routineDayLog(iso);
-  if(val&&val.trim())log.journal[key]=val;
-  else delete log.journal[key];
+  // Same Firestore merge caveat as routineToggle: write '' instead of
+  // deleting, so clearing a journal field actually propagates instead
+  // of the server keeping the old text and the snapshot restoring it.
+  log.journal[key]=(val&&val.trim())?val:'';
   svAll();
 }
 function rRoutine(){
