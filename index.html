@@ -903,6 +903,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 [data-theme="studio"] .rt-focus-grid .rt-focus-item:nth-child(2){background:linear-gradient(135deg,color-mix(in srgb,var(--lavender) 24%,var(--surface)) 0%,color-mix(in srgb,var(--blue) 24%,var(--surface)) 100%)}
 .rt-focus-cat{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;opacity:.6;margin-bottom:8px}
 .rt-focus-txt{font-size:14px;line-height:1.55;font-family:'Playfair Display',serif;font-weight:500}
+.rt-focus-verse{margin-top:11px;padding-top:10px;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent);font-size:12px;line-height:1.5;font-style:italic;opacity:.82}
+.rt-focus-ref{margin-top:5px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;opacity:.55}
 .rt-cal{background:var(--surface-2);border-left:3px solid var(--blue,#5a8ab5);border-radius:6px;padding:9px 11px;margin-bottom:14px}
 .rt-cal-lbl{font-size:11px;font-weight:700;color:var(--text-2);margin-bottom:5px}
 .rt-cal-ev{font-size:12.5px;color:var(--text);margin-bottom:2px}
@@ -3098,7 +3100,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v165';
+const APP_VERSION='v166';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -4670,7 +4672,102 @@ function effectiveAreaId(t){
   return t.area||'personal';
 }
 const PO={urgent:0,hi:1,med:2,lo:3,someday:4};
-const GROWTH={'Core Principles':['Keep promises to yourself','Act the same in private as in public','Finish what you start consistently','Align daily actions with your future self','Take full responsibility without blaming others','Be the same person on hard days as on easy ones','Let your actions argue for you, not your words','Do what you said you would, when you said you would'],'Discipline':['Wake up at a consistent time','Do tasks even when you don\'t feel like it','Be comfortable being bored','Show up on low-motivation days','Stay consistent on weekends','Start before you feel ready','Do the hardest thing first','Discipline now buys freedom later','Motivation follows action — not the other way around'],'Integrity':['Close the gap between who you are and who you say you are','Be honest with yourself first','Stand up for what is right','Take ownership of mistakes quickly','Tell the truth even when it costs you','Don\'t let comfort make you dishonest','Keep your word when no one is checking'],'Boundaries':['Say no without over-explaining','Be okay with disappointing people','Handle conflict instead of avoiding it','Respect your own time and energy','Protect your mornings','Not every request deserves a yes','Guard your focus like it\'s your most valuable asset'],'Communication':['Listen to understand, not to reply','Speak clearly and concisely','Give honest feedback respectfully','Build deeper, more meaningful conversations','Ask the question you\'re avoiding','Say the kind thing out loud','Follow up — it\'s rarer than you think'],'Emotional Maturity':['Accept correction without ego','Stay calm under pressure','Be slow to anger','Build emotional resilience','Respond, don\'t react','Your feelings are real but not always right','Sit with discomfort instead of numbing it'],'Faith':['Let your faith shape your actions','Seek God first, not as a backup','Be intentional in prayer and Scripture','Practice faith under pressure, not just in comfort','Start the day before the day starts you','Gratitude before requests','Trust the process you can\'t fully see'],'Growth & Money':['Delay gratification financially','Be intentional with spending','Invest in personal growth','Seek mentorship actively','Spend on assets, not impressions','Track it or it controls you','Future-you is a real person — fund them'],'Sharp & Simple':['Do the hard thing first','Done beats perfect','You can do anything, not everything','Slow is smooth, smooth is fast','Small reps, every day','Show up. The rest follows.','Less noise, more signal','Win the morning','Tired is not a reason to quit','One thing at a time, all the way through','Be where your feet are','Make it easy to do the right thing']};
+// Each focus is a motivational principle paired with a Bible verse that
+// grounds it theologically. ~70 entries across 10 themes — two are shown
+// per day (from different themes), so the pool cycles for well over a
+// month without a repeat. Verse wording is standard (NIV-ish), kept short.
+const GROWTH={
+'Discipline & Diligence':[
+ {t:'Do the hard thing first — your future self is counting on it.',v:'"The plans of the diligent lead to profit as surely as haste leads to poverty."',r:'Proverbs 21:5'},
+ {t:'Show up even when you don’t feel like it.',v:'"Whatever you do, work at it with all your heart, as working for the Lord, not for human masters."',r:'Colossians 3:23'},
+ {t:'Small faithful steps compound.',v:'"Whoever is faithful in very little is also faithful in much."',r:'Luke 16:10'},
+ {t:'Discipline now buys freedom later.',v:'"No discipline seems pleasant at the time — later it produces a harvest of righteousness."',r:'Hebrews 12:11'},
+ {t:'Finish what you start.',v:'"Let us not become weary in doing good, for at the proper time we will reap a harvest if we do not give up."',r:'Galatians 6:9'},
+ {t:'Number your days; spend them well.',v:'"Teach us to number our days, that we may gain a heart of wisdom."',r:'Psalm 90:12'},
+ {t:'Work, don’t just wish.',v:'"In all toil there is profit, but mere talk tends only to poverty."',r:'Proverbs 14:23'}
+],
+'Integrity & Character':[
+ {t:'Be the same person in private as in public.',v:'"The integrity of the upright guides them, but the unfaithful are destroyed by their duplicity."',r:'Proverbs 11:3'},
+ {t:'Tell the truth even when it costs you.',v:'"The Lord detests lying lips, but he delights in people who are trustworthy."',r:'Proverbs 12:22'},
+ {t:'Keep your word, even when it hurts.',v:'"...who keeps an oath even when it hurts, and does not change their mind."',r:'Psalm 15:4'},
+ {t:'Character is built where no one is watching.',v:'"For there is nothing hidden that will not be disclosed."',r:'Luke 8:17'},
+ {t:'Let your yes be yes.',v:'"All you need to say is simply ‘Yes’ or ‘No’; anything beyond this comes from the evil one."',r:'Matthew 5:37'},
+ {t:'Walk straight; it steadies you.',v:'"Whoever walks in integrity walks securely, but whoever takes crooked paths will be found out."',r:'Proverbs 10:9'},
+ {t:'Guard your heart; it sets your course.',v:'"Above all else, guard your heart, for everything you do flows from it."',r:'Proverbs 4:23'}
+],
+'Perseverance & Trials':[
+ {t:'Tired is not a reason to quit.',v:'"Those who hope in the Lord will renew their strength... they will run and not grow weary."',r:'Isaiah 40:31'},
+ {t:'Trials are forging you, not breaking you.',v:'"Consider it pure joy whenever you face trials, because the testing of your faith produces perseverance."',r:'James 1:2-3'},
+ {t:'Endure — the reward outlasts the struggle.',v:'"Blessed is the one who perseveres under trial, having stood the test."',r:'James 1:12'},
+ {t:'Press on; don’t relive what’s behind.',v:'"Forgetting what is behind and straining toward what is ahead, I press on toward the goal."',r:'Philippians 3:13-14'},
+ {t:'You can do the hard thing.',v:'"I can do all this through him who gives me strength."',r:'Philippians 4:13'},
+ {t:'The night ends; joy comes.',v:'"Weeping may stay for the night, but rejoicing comes in the morning."',r:'Psalm 30:5'},
+ {t:'Stand firm.',v:'"Be on your guard; stand firm in the faith; be courageous; be strong."',r:'1 Corinthians 16:13'}
+],
+'Humility & Correction':[
+ {t:'Accept correction without ego.',v:'"Whoever loves discipline loves knowledge, but whoever hates correction is stupid."',r:'Proverbs 12:1'},
+ {t:'Stay low; God lifts the humble.',v:'"Humble yourselves before the Lord, and he will lift you up."',r:'James 4:10'},
+ {t:'Listen before you answer.',v:'"To answer before listening — that is folly and shame."',r:'Proverbs 18:13'},
+ {t:'Pride goes before the fall — stay grounded.',v:'"Pride goes before destruction, a haughty spirit before a fall."',r:'Proverbs 16:18'},
+ {t:'Own your mistakes quickly.',v:'"Whoever conceals their sins does not prosper, but whoever confesses and renounces them finds mercy."',r:'Proverbs 28:13'},
+ {t:'Value others above yourself.',v:'"In humility value others above yourselves."',r:'Philippians 2:3'},
+ {t:'The wise still take advice.',v:'"The way of fools seems right to them, but the wise listen to advice."',r:'Proverbs 12:15'}
+],
+'Faith & Trust':[
+ {t:'Seek God first, not as a backup.',v:'"But seek first his kingdom and his righteousness, and all these things will be given to you as well."',r:'Matthew 6:33'},
+ {t:'Trust the process you can’t fully see.',v:'"Trust in the Lord with all your heart and lean not on your own understanding."',r:'Proverbs 3:5'},
+ {t:'Don’t carry anxiety — pray it through.',v:'"Do not be anxious about anything, but in every situation, by prayer, present your requests to God."',r:'Philippians 4:6'},
+ {t:'He is working even when it’s quiet.',v:'"And we know that in all things God works for the good of those who love him."',r:'Romans 8:28'},
+ {t:'Hand over the weight you weren’t built to carry.',v:'"Cast all your anxiety on him because he cares for you."',r:'1 Peter 5:7'},
+ {t:'Start the day before the day starts you.',v:'"In the morning, Lord, you hear my voice; in the morning I lay my requests before you."',r:'Psalm 5:3'},
+ {t:'Be still; He is God.',v:'"Be still, and know that I am God."',r:'Psalm 46:10'}
+],
+'Work & Calling':[
+ {t:'Do your work as worship.',v:'"Whatever you do, work at it with all your heart, as working for the Lord."',r:'Colossians 3:23'},
+ {t:'Skill gets noticed.',v:'"Do you see someone skilled in their work? They will serve before kings."',r:'Proverbs 22:29'},
+ {t:'Commit the plan; He steadies the steps.',v:'"Commit to the Lord whatever you do, and he will establish your plans."',r:'Proverbs 16:3'},
+ {t:'Build on rock, not sand.',v:'"Everyone who hears these words of mine and puts them into practice is like a wise man who built his house on the rock."',r:'Matthew 7:24'},
+ {t:'Don’t despise small beginnings.',v:'"Who dares despise the day of small things?"',r:'Zechariah 4:10'},
+ {t:'Plant now; you’ll reap later.',v:'"A man reaps what he sows."',r:'Galatians 6:7'},
+ {t:'Use what you’ve been given.',v:'"From everyone who has been given much, much will be demanded."',r:'Luke 12:48'}
+],
+'Words & Relationships':[
+ {t:'Listen to understand, not to reply.',v:'"Everyone should be quick to listen, slow to speak and slow to become angry."',r:'James 1:19'},
+ {t:'Speak words that build.',v:'"Do not let any unwholesome talk come out of your mouths, but only what is helpful for building others up."',r:'Ephesians 4:29'},
+ {t:'A soft answer cools the room.',v:'"A gentle answer turns away wrath, but a harsh word stirs up anger."',r:'Proverbs 15:1'},
+ {t:'Forgive — you’ve been forgiven much.',v:'"Be kind and compassionate to one another, forgiving each other, just as in Christ God forgave you."',r:'Ephesians 4:32'},
+ {t:'Sharpen and be sharpened.',v:'"As iron sharpens iron, so one person sharpens another."',r:'Proverbs 27:17'},
+ {t:'Love is shown, not just said.',v:'"Let us not love with words or speech but with actions and in truth."',r:'1 John 3:18'},
+ {t:'Carry each other.',v:'"Carry each other’s burdens, and in this way you will fulfill the law of Christ."',r:'Galatians 6:2'}
+],
+'Contentment & Money':[
+ {t:'Be intentional, not impulsive, with money.',v:'"The plans of the diligent lead to profit as surely as haste leads to poverty."',r:'Proverbs 21:5'},
+ {t:'Contentment is its own wealth.',v:'"But godliness with contentment is great gain."',r:'1 Timothy 6:6'},
+ {t:'Don’t let stuff own you.',v:'"For where your treasure is, there your heart will be also."',r:'Matthew 6:21'},
+ {t:'Generosity multiplies.',v:'"One person gives freely, yet gains even more."',r:'Proverbs 11:24'},
+ {t:'Honour God with the firstfruits.',v:'"Honor the Lord with your wealth, with the firstfruits of all your crops."',r:'Proverbs 3:9'},
+ {t:'Don’t wear yourself out chasing riches.',v:'"Do not wear yourself out to get rich; do not trust your own cleverness."',r:'Proverbs 23:4'},
+ {t:'Be content with what you have.',v:'"Keep your lives free from the love of money and be content with what you have."',r:'Hebrews 13:5'}
+],
+'Courage & Boldness':[
+ {t:'Be strong and courageous.',v:'"Be strong and courageous. Do not be afraid; the Lord your God will be with you wherever you go."',r:'Joshua 1:9'},
+ {t:'Fear is not from Him.',v:'"For the Spirit God gave us does not make us timid, but gives us power, love and self-discipline."',r:'2 Timothy 1:7'},
+ {t:'Speak up for what is right.',v:'"Speak up for those who cannot speak for themselves."',r:'Proverbs 31:8'},
+ {t:'Knowing the right thing means doing it.',v:'"If anyone knows the good they ought to do and doesn’t do it, it is sin for them."',r:'James 4:17'},
+ {t:'Whom shall you fear?',v:'"The Lord is my light and my salvation — whom shall I fear?"',r:'Psalm 27:1'},
+ {t:'Act; don’t just intend.',v:'"Do not merely listen to the word... Do what it says."',r:'James 1:22'},
+ {t:'Move forward; He goes before you.',v:'"The Lord himself goes before you and will be with you; he will never leave you."',r:'Deuteronomy 31:8'}
+],
+'Renewal & Rest':[
+ {t:'Rest is obedience, not weakness.',v:'"Come to me, all you who are weary and burdened, and I will give you rest."',r:'Matthew 11:28'},
+ {t:'Renew your mind daily.',v:'"Be transformed by the renewing of your mind."',r:'Romans 12:2'},
+ {t:'Mercies are new every morning.',v:'"His compassions never fail. They are new every morning."',r:'Lamentations 3:22-23'},
+ {t:'Let quiet restore you.',v:'"He leads me beside quiet waters, he refreshes my soul."',r:'Psalm 23:2-3'},
+ {t:'Rest is a gift, not a reward.',v:'"The Sabbath was made for man, not man for the Sabbath."',r:'Mark 2:27'},
+ {t:'Wait well; strength returns.',v:'"Wait for the Lord; be strong and take heart and wait for the Lord."',r:'Psalm 27:14'},
+ {t:'Stay close; fruit follows.',v:'"Remain in me, as I also remain in you... apart from me you can do nothing."',r:'John 15:4-5'}
+]
+};
 const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',routineLog:{},people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
@@ -5300,14 +5397,15 @@ function setNotebookFromSearch(ds){
 function getDailyFocus(){
   const t=tod();
   // First, try the synced copy in S (shared across devices)
-  if(S.growthFocus&&S.growthFocus.date===t&&Array.isArray(S.growthFocus.items))return S.growthFocus.items;
+  if(S.growthFocus&&S.growthFocus.date===t&&Array.isArray(S.growthFocus.items)&&S.growthFocus.items.every(x=>x&&x.verse))return S.growthFocus.items;
   // Fall back to old per-device cache
-  try{const r=JSON.parse(localStorage.getItem('lf_f'));if(r&&r.date===t){S.growthFocus={date:t,items:r.items,off:r.off||0};svAll();return r.items;}}catch(e){}
+  try{const r=JSON.parse(localStorage.getItem('lf_f'));if(r&&r.date===t&&Array.isArray(r.items)&&r.items.every(x=>x&&x.verse)){S.growthFocus={date:t,items:r.items,off:r.off||0};svAll();return r.items;}}catch(e){}
   return genFocus(t,0);
 }
 function genFocus(t,off){
   const cats=Object.keys(GROWTH),h=t.split('').reduce((a,b)=>a+b.charCodeAt(0),0)+(off||0),i1=h%cats.length,i2=(h+3)%cats.length;
-  const f=[{text:GROWTH[cats[i1]][h%GROWTH[cats[i1]].length],cat:cats[i1]},{text:GROWTH[cats[i2]][(h+1)%GROWTH[cats[i2]].length],cat:cats[i2]}];
+  const pick=(ci,k)=>{const arr=GROWTH[cats[ci]];const it=arr[((k%arr.length)+arr.length)%arr.length];return {cat:cats[ci],text:it.t,verse:it.v,ref:it.r};};
+  const f=[pick(i1,h),pick(i2,h+1)];
   S.growthFocus={date:t,items:f,off:off||0};
   try{localStorage.setItem('lf_f',JSON.stringify(S.growthFocus));}catch(e){}
   svAll();
@@ -5320,7 +5418,7 @@ function doRefreshFocus(){
   else{try{const r=JSON.parse(localStorage.getItem('lf_f'));if(r&&r.date===t)off=(r.off||0)+7;}catch(e){}}
   genFocus(t,off);rFocus();
 }
-function rFocus(){const el=document.getElementById('fw');if(!el)return;const f=getDailyFocus();el.innerHTML=f.map(x=>`<div class="fcard"><div class="fcat">${esc(x.cat)}</div><div class="ftxt">${esc(x.text)}</div></div>`).join('');}
+function rFocus(){const el=document.getElementById('fw');if(!el)return;const f=getDailyFocus();el.innerHTML=f.map(x=>`<div class="fcard"><div class="fcat">${esc(x.cat)}</div><div class="ftxt">${esc(x.text)}</div>${x.verse?`<div class="fverse">${esc(x.verse)}</div><div class="fref">${esc(x.ref||'')}</div>`:''}</div>`).join('');}
 
 // TIP
 async function loadTip(force){
@@ -6705,7 +6803,7 @@ function rRoutine(){
   try{
     const f=getDailyFocus();
     if(Array.isArray(f)&&f.length){
-      focusHtml=`<div class="rt-focus"><div class="rt-focus-lbl">Don't forget today</div><div class="rt-focus-grid">${f.map(x=>`<div class="rt-focus-item"><div class="rt-focus-cat">${esc(x.cat||'')}</div><div class="rt-focus-txt">${esc(x.text||'')}</div></div>`).join('')}</div></div>`;
+      focusHtml=`<div class="rt-focus"><div class="rt-focus-lbl">Don't forget today</div><div class="rt-focus-grid">${f.map(x=>`<div class="rt-focus-item"><div class="rt-focus-cat">${esc(x.cat||'')}</div><div class="rt-focus-txt">${esc(x.text||'')}</div>${x.verse?`<div class="rt-focus-verse">${esc(x.verse)}</div><div class="rt-focus-ref">${esc(x.ref||'')}</div>`:''}</div>`).join('')}</div></div>`;
     }
   }catch(_){}
   // Calendar-aware line
