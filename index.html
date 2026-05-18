@@ -3124,7 +3124,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v170';
+const APP_VERSION='v171';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -11957,30 +11957,39 @@ function nbCoverInner(){
 }
 // Shared flip-animation wrapper: swap book.innerHTML with the proper
 // flipping-out / entering-in classes, or just set it directly.
-function nbSwapBook(book,html,flipDir){
+// CRITICAL: the spread / font-clean layout classes are applied at the
+// SAME instant the new HTML is swapped in — never before. If we toggled
+// `.spread` up front, the OLD pages still visible during the 220ms
+// flip-out would get re-laid-out under the new layout (two pages
+// squashing into one, or one cover stretching into two) for a split
+// second before the real content appeared. Deferring the class change
+// keeps the outgoing pages stable until they're actually replaced.
+function nbApplyBookClasses(book,wantSpread){
+  book.classList.toggle('font-clean',NB.font==='clean');
+  book.classList.toggle('spread',!!wantSpread);
+}
+function nbSwapBook(book,html,flipDir,wantSpread){
   if(flipDir==='left'||flipDir==='right'){
     const curPages=book.querySelectorAll('.nb-page');
     if(curPages.length){
       curPages.forEach(p=>p.classList.add(flipDir==='left'?'flipping-left':'flipping-right'));
       setTimeout(()=>{
+        nbApplyBookClasses(book,wantSpread);
         book.innerHTML=html;
         book.querySelectorAll('.nb-page').forEach(p=>p.classList.add(flipDir==='left'?'entering-left':'entering-right'));
       },220);
       return true;
     }
   }
+  nbApplyBookClasses(book,wantSpread);
   book.innerHTML=html;
   return false;
 }
 function renderNotebookPage(flipDir){
   const book=document.getElementById('nb-book');if(!book)return;
-  // Apply font + spread classes on the book wrapper so CSS picks them up.
-  book.classList.toggle('font-clean',NB.font==='clean');
-  book.classList.toggle('spread',NB.spread);
   const secs=S.notebook.sections;
   if(!secs.length){
-    book.classList.remove('spread');
-    book.innerHTML=`<div class="nb-page nb-cover-page">${nbCoverInner()}</div>`;
+    nbSwapBook(book,`<div class="nb-page nb-cover-page">${nbCoverInner()}</div>`,flipDir,false);
     return;
   }
   // Cover / "opening the book" state. cover===1 → open (spread shows the
@@ -11988,41 +11997,31 @@ function renderNotebookPage(flipDir){
   // lone closed cover (spread only — the extra flip-back step).
   if(NB.cover>0){
     const spreadOpen=NB.spread&&NB.cover===1;
-    if(!spreadOpen)book.classList.remove('spread');
     let html=`<div class="nb-page nb-cover-page">${nbCoverInner()}</div>`;
     if(spreadOpen){
       const firstRef={sectionIdx:0,pageIdx:0,section:secs[0],page:secs[0].pages[0]};
       html+=nbBuildPageHTML(firstRef,'right');
     }
-    nbSwapBook(book,html,flipDir);
+    nbSwapBook(book,html,flipDir,spreadOpen);
     return;
   }
   const leftRef={sectionIdx:NB.sectionIdx,pageIdx:NB.pageIdx,section:nbCurrentSection(),page:nbCurrentPage()};
   if(!leftRef.page){book.innerHTML='';return;}
   const rightRef=NB.spread?nbPageAtOffset(1):null;
   const html=nbBuildPageHTML(leftRef,'left')+(NB.spread?nbBuildPageHTML(rightRef,'right'):'');
-  // Page-flip animation. 'none' skips (initial render / in-place edits).
-  // 'left' = moving forward, 'right' = moving back. In spread mode both
-  // pages animate together so it still reads as a single motion.
-  if(flipDir==='left'||flipDir==='right'){
-    const curPages=book.querySelectorAll('.nb-page');
-    if(curPages.length){
-      curPages.forEach(p=>p.classList.add(flipDir==='left'?'flipping-left':'flipping-right'));
-      setTimeout(()=>{
-        book.innerHTML=html;
-        book.querySelectorAll('.nb-page').forEach(p=>p.classList.add(flipDir==='left'?'entering-left':'entering-right'));
-      },220);
-      return;
-    }
-  }
   // Was a notebook cell actively focused right before this rebuild?
-  // Only restore focus afterwards if so. Without this gate, every layout
-  // toggle / page add / delete / refine would re-focus the last-used cell
-  // and pop the soft keyboard on mobile — which the user explicitly does
-  // NOT want when they're zoomed in trying to tap a toolbar button.
+  // Capture BEFORE the swap (nbSwapBook replaces innerHTML, which blurs
+  // it). Only restore focus afterwards if so — without this gate, every
+  // layout toggle / page add / delete / refine would re-focus the
+  // last-used cell and pop the soft keyboard on mobile, which the user
+  // explicitly does NOT want when zoomed in tapping a toolbar button.
   const _activeBefore=document.activeElement;
   const _wasInCell=_activeBefore&&_activeBefore.classList&&_activeBefore.classList.contains('nb-cell-ta');
-  book.innerHTML=html;
+  // Page-flip animation. 'none' skips (initial render / in-place edits).
+  // 'left' = moving forward, 'right' = moving back. In spread mode both
+  // pages animate together so it still reads as a single motion. The
+  // layout class is applied at swap time inside nbSwapBook (see note).
+  if(nbSwapBook(book,html,flipDir,NB.spread))return;
   if(_wasInCell&&NB.lastFocused&&NB.lastFocused.sectionIdx===NB.sectionIdx&&NB.lastFocused.pageIdx===NB.pageIdx){
     const ta=book.querySelector(`.nb-page:not(.right-page) [data-nb-cell="${NB.lastFocused.cellIdx}"]`);
     if(ta){try{ta.focus();}catch(_){}}
