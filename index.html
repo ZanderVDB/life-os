@@ -1464,37 +1464,43 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 /* ━━━ BUILDS ━━━ */
 .bg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 /* Projects wraps its header + grid in an extra #projects-list-view div,
-   so the .route flex `gap:26px` (which only applies to direct children)
-   never separates the header from the grid — the cards rode up into the
-   "+ Add project" button. Re-apply the same column gap here so Projects
-   spaces exactly like every other page. */
-#projects-list-view{display:flex;flex-direction:column;gap:26px}
-/* Projects route wraps page-hdr + bg-grid in a #projects-list-view div,
-   which breaks the route-level gap:26px between siblings. Restore the
-   same flex-column gap inside the wrapper so the breathing room matches
-   the Habits page (and every other route). */
+   so the .route flex `gap:26px` (direct-children only) never separates
+   the header from the grid — the cards rode up into the "+ Add project"
+   button. Re-apply the column gap here. NOTE: the show/hide JS must set
+   display:'' (not 'block') so this flex rule — and its gap — survives;
+   an inline display:block silently disables the gap and the overlap
+   comes straight back. */
 #projects-list-view{display:flex;flex-direction:column;gap:26px}
 .bc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px;border-top:3px solid;cursor:pointer;transition:border-color .15s;display:flex;flex-direction:column}
 .bc:hover{border-color:var(--border-strong)}
 .bc.active{border-top-color:var(--peach)}
 .bc.future{border-top-color:var(--lavender)}
 .bc.background{border-top-color:var(--border-strong)}
-.bc-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+.bc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
+.bc-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em}
 .bc.active .bc-tag{color:var(--peach)}
 .bc.future .bc-tag{color:var(--lavender)}
 .bc.background .bc-tag{color:var(--muted)}
+.bc-tag-auto{opacity:.55;font-weight:600}
+.bc-touch{flex:0 0 auto;border:1px solid var(--border);background:var(--surface);border-radius:7px;padding:3px 7px;font-size:12px;line-height:1;cursor:pointer;opacity:.5;transition:all .12s;margin:-3px -3px 0 0}
+.bc-touch:hover{opacity:1;border-color:var(--border-strong);background:var(--surface-hover)}
+.bc-touch.on{opacity:1;background:color-mix(in srgb,var(--peach) 22%,var(--surface));border-color:color-mix(in srgb,var(--peach) 45%,var(--border))}
 .bc-title{font-size:14px;font-weight:600;line-height:1.35;margin-bottom:6px;color:var(--text);font-family:'Playfair Display',serif}
 .bc-desc{font-size:12.5px;color:var(--text-2);line-height:1.55}
+.bc-foot{margin-top:auto;padding-top:11px;font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.04em;display:flex;gap:8px;flex-wrap:wrap}
 .bc-exp{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
 .st-row{display:flex;gap:5px;margin-top:9px;flex-wrap:wrap}
-.stb{border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;opacity:.4;border:none}
+.stb{border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;opacity:.4;border:none;cursor:pointer}
 .stb.on{opacity:1}
 .st-a{background:var(--peach-bg);color:var(--peach)}
 .st-f{background:var(--lavender-bg);color:var(--lavender)}
 .st-b{background:var(--surface-2);color:var(--muted)}
-
-/* Projects list: add spacing between header and the grid */
-#projects-list-view{display:flex;flex-direction:column;gap:20px}
+.st-auto{background:var(--sage-bg);color:var(--sage);font-weight:800;min-width:30px;text-align:center}
+.st-auto.on{box-shadow:inset 0 0 0 1.5px var(--sage)}
+.pd-worked{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--muted)}
+.pd-worked b{color:var(--text-2);font-weight:600}
+.pd-touch-btn{border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--text-2);cursor:pointer;transition:all .12s}
+.pd-touch-btn:hover{background:color-mix(in srgb,var(--peach) 16%,var(--surface));border-color:color-mix(in srgb,var(--peach) 40%,var(--border));color:var(--text)}
 
 /* PROJECT DETAIL VIEW */
 .pd-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
@@ -3124,7 +3130,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v172';
+const APP_VERSION='v173';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3238,7 +3244,7 @@ function setRoute(r,skipHash){
   const wk=document.getElementById('today-week');if(wk)delete wk.dataset.centered;
   const bs=document.getElementById('brain-search');if(bs&&bs.value){bs.value='';UI.brainQuery='';}
   // Leave project detail mode if user navigates away from projects
-  if(r!=='projects'&&UI.projectDetail){UI.projectDetail=null;const pd=document.getElementById('project-detail-view');if(pd)pd.style.display='none';const pl=document.getElementById('projects-list-view');if(pl)pl.style.display='block';}
+  if(r!=='projects'&&UI.projectDetail){UI.projectDetail=null;const pd=document.getElementById('project-detail-view');if(pd)pd.style.display='none';const pl=document.getElementById('projects-list-view');if(pl)pl.style.display='';}
   // Close the brain detail view on any route change so navigating away
   // and back lands on the list, not a stale item that may have been
   // edited/deleted from another device.
@@ -7880,7 +7886,10 @@ function closeProjectModal(opts){
         const st=document.getElementById('pm-status');
         const ds=document.getElementById('pm-desc');
         if(ti&&ti.value.trim())target.title=ti.value.trim();
-        if(st&&st.value)target.status=st.value;
+        // Only treat a status pick as a manual override (auto off) if it
+        // actually changed — clicking Done without touching it shouldn't
+        // disable auto on an existing project.
+        if(st&&st.value){if(st.value!==target.status){target.status=st.value;target.auto=false;}}
         if(ds)target.desc=ds.value;
       }
       if(_isProjectSynthMode()){
@@ -7919,7 +7928,9 @@ function openNewProjectModal(){
   openProjectModal({title:'',desc:'',status:'active',date:tod()},{
     onSave:(it)=>{
       const t=String(it.title||'').trim();if(!t)return;
-      S.builds.push({id:uid(),title:t,desc:String(it.desc||'').trim(),status:it.status||'active',date:tod(),notes:''});
+      // Auto on by default; if the user picked a specific phase in the
+      // modal (closeProjectModal set it.auto=false), respect that.
+      S.builds.push({id:uid(),title:t,desc:String(it.desc||'').trim(),status:it.status||'active',date:tod(),notes:'',auto:it.auto!==false,lastTouched:Date.now()});
       svAll();rBuilds();
     },
     onDelete:()=>{}
@@ -8844,20 +8855,91 @@ function rTasks(){
 
 // BUILDS
 function openProject(id){UI.projectDetail=id;document.getElementById('projects-list-view').style.display='none';document.getElementById('project-detail-view').style.display='block';renderProjectDetail();window.scrollTo({top:0,behavior:'instant'});}
-function closeProject(){UI.projectDetail=null;document.getElementById('project-detail-view').style.display='none';document.getElementById('projects-list-view').style.display='block';rBuilds();window.scrollTo({top:0,behavior:'instant'});}
-function setStatus(id,st){const b=S.builds.find(x=>x.id===id);if(!b)return;b.status=st;svAll();if(UI.projectDetail===id)renderProjectDetail();else rBuilds();}
+// Restore to '' (NOT 'block') so the stylesheet's flex+gap rule on
+// #projects-list-view stays in force — an inline display:block disables
+// the gap and the header/grid overlap returns.
+function closeProject(){UI.projectDetail=null;document.getElementById('project-detail-view').style.display='none';document.getElementById('projects-list-view').style.display='';rBuilds();window.scrollTo({top:0,behavior:'instant'});}
+// Auto-status rules. A project's phase can follow how recently it was
+// worked on: touched within a week = Building now, 7+ days idle = Future,
+// 30+ days idle = Background. Auto is ON by default (b.auto!==false);
+// picking a phase by hand turns it off.
+const PROJ_FUTURE_DAYS=7,PROJ_BG_DAYS=30;
+function _projTouchedMs(b){
+  if(b&&typeof b.lastTouched==='number'&&b.lastTouched>0)return b.lastTouched;
+  // No explicit stamp yet — seed from the newest signal we have so an
+  // old dormant project doesn't wrongly read as "just worked on".
+  let ms=0;
+  const pd=t=>{const v=Date.parse((t||'')+'T12:00:00');return isNaN(v)?0:v;};
+  if(b&&b.date)ms=Math.max(ms,pd(b.date));
+  if(b&&Array.isArray(b.entries))b.entries.forEach(e=>{ms=Math.max(ms,pd(e.date));});
+  return ms||Date.now();
+}
+function _projIsAuto(b){return !!b&&b.auto!==false;}
+function _projAutoStatus(b){
+  const days=(Date.now()-_projTouchedMs(b))/86400000;
+  if(days>=PROJ_BG_DAYS)return 'background';
+  if(days>=PROJ_FUTURE_DAYS)return 'future';
+  return 'active';
+}
+function _projEffStatus(b){return _projIsAuto(b)?_projAutoStatus(b):(b&&b.status||'future');}
+function _projLastWorkedLabel(b){
+  const days=Math.floor((Date.now()-_projTouchedMs(b))/86400000);
+  if(days<=0)return 'today';
+  if(days===1)return 'yesterday';
+  if(days<7)return days+' days ago';
+  if(days<14)return 'last week';
+  if(days<31)return Math.floor(days/7)+' weeks ago';
+  if(days<62)return 'last month';
+  return Math.floor(days/30)+' months ago';
+}
+// Converge stored status with the computed one for auto projects so
+// sorting / AI context / save payload all stay consistent. Converges in
+// one pass (stable afterwards) so it can't loop on snapshot echoes.
+function _projSyncAuto(){
+  let changed=false;
+  (S.builds||[]).forEach(b=>{
+    if(_projIsAuto(b)){const s=_projAutoStatus(b);if(b.status!==s){b.status=s;changed=true;}}
+  });
+  if(changed)svAll();
+}
+function projectTouch(id,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  const b=S.builds.find(x=>x.id===id);if(!b)return;
+  b.lastTouched=Date.now();
+  if(_projIsAuto(b))b.status=_projAutoStatus(b);
+  svAll();
+  if(UI.projectDetail===id)renderProjectDetail();else rBuilds();
+}
+function setProjectAuto(id,on,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  const b=S.builds.find(x=>x.id===id);if(!b)return;
+  b.auto=!!on;
+  if(b.auto)b.status=_projAutoStatus(b);
+  svAll();
+  if(UI.projectDetail===id)renderProjectDetail();else rBuilds();
+}
+// Manual status pick turns auto OFF (the user is overriding the phase).
+function setStatus(id,st){const b=S.builds.find(x=>x.id===id);if(!b)return;b.status=st;b.auto=false;svAll();if(UI.projectDetail===id)renderProjectDetail();else rBuilds();}
 function saveProjectHead(id){
   const b=S.builds.find(x=>x.id===id);if(!b)return;
   const ti=document.getElementById('pd-title-'+id);
   const de=document.getElementById('pd-desc-'+id);
-  if(ti&&ti.value.trim())b.title=ti.value.trim();
-  if(de!==null)b.desc=de.value;
+  let changed=false;
+  if(ti&&ti.value.trim()&&ti.value.trim()!==b.title){b.title=ti.value.trim();changed=true;}
+  if(de!==null&&de.value!==(b.desc||'')){b.desc=de.value;changed=true;}
+  // Editing the project counts as working on it (only when it actually
+  // changed — onblur fires even if the user just looked and clicked away).
+  if(changed){b.lastTouched=Date.now();if(_projIsAuto(b))b.status=_projAutoStatus(b);}
   svAll();
 }
 function saveProjectNotes(id){
   const b=S.builds.find(x=>x.id===id);if(!b)return;
   const ta=document.getElementById('pd-notes-'+id);
-  if(ta)b.notes=ta.value;
+  if(ta&&ta.value!==(b.notes||'')){
+    b.notes=ta.value;
+    b.lastTouched=Date.now();
+    if(_projIsAuto(b))b.status=_projAutoStatus(b);
+  }
   svAll();
 }
 async function structureWithAI(id){
@@ -8877,7 +8959,7 @@ ${current}`;
     if(!r.ok)throw new Error('HTTP '+r.status);
     const data=await r.json();
     const out=(data.content?.[0]?.text||'').trim();
-    if(out){b.notes=out;if(ta)ta.value=out;svAll();}
+    if(out){b.notes=out;if(ta)ta.value=out;b.lastTouched=Date.now();if(_projIsAuto(b))b.status=_projAutoStatus(b);svAll();}
   }catch(e){alert('Structure failed: '+e.message);}
   if(btn){btn.disabled=false;btn.textContent='✨ Structure with AI';}
 }
@@ -8924,8 +9006,10 @@ function migratePeople(){
 function delBuild(id){if(!confirm('Delete this project? All progress notes will be lost.'))return;S.builds=S.builds.filter(x=>x.id!==id);svAll();if(UI.projectDetail===id)closeProject();else rBuilds();}
 function renderProjectDetail(){
   const el=document.getElementById('project-detail-view');if(!el)return;
+  _projSyncAuto();
   const b=S.builds.find(x=>x.id===UI.projectDetail);
   if(!b){closeProject();return;}
+  const eff=_projEffStatus(b),auto=_projIsAuto(b);
   el.innerHTML=`
     <div class="pd-top">
       <button class="pd-back" onclick="closeProject()">← All projects</button>
@@ -8934,9 +9018,14 @@ function renderProjectDetail(){
     <div class="pd-head">
       <input class="pd-title-input" id="pd-title-${b.id}" value="${esc(b.title)}" onblur="saveProjectHead('${b.id}')">
       <div class="pd-status-row">
-        <button class="stb st-a${b.status==='active'?' on':''}" onclick="setStatus('${b.id}','active')">Building now</button>
-        <button class="stb st-f${b.status==='future'?' on':''}" onclick="setStatus('${b.id}','future')">Future</button>
-        <button class="stb st-b${b.status==='background'?' on':''}" onclick="setStatus('${b.id}','background')">Background</button>
+        <button class="stb st-a${eff==='active'?' on':''}" onclick="setStatus('${b.id}','active')">Building now</button>
+        <button class="stb st-f${eff==='future'?' on':''}" onclick="setStatus('${b.id}','future')">Future</button>
+        <button class="stb st-b${eff==='background'?' on':''}" onclick="setStatus('${b.id}','background')">Background</button>
+        <button class="stb st-auto${auto?' on':''}" onclick="setProjectAuto('${b.id}',${auto?'false':'true'})" title="Auto: the phase follows how recently you've worked on this">A</button>
+      </div>
+      <div class="pd-worked">
+        <span>Last worked on <b>${_projLastWorkedLabel(b)}</b>${auto?' · phase set automatically':''}</span>
+        <button class="pd-touch-btn" onclick="projectTouch('${b.id}')">🔥 I worked on this today</button>
       </div>
       <div class="pd-lbl">What this project does</div>
       <textarea class="pd-desc" id="pd-desc-${b.id}" placeholder="Core idea — one or two sentences about what this builds." onblur="saveProjectHead('${b.id}')">${esc(b.desc||'')}</textarea>
@@ -8952,16 +9041,22 @@ function renderProjectDetail(){
 }
 function rBuilds(){
   const el=document.getElementById('builds');if(!el)return;
+  _projSyncAuto();
   const order={active:0,future:1,background:2},lbl={active:'Building now',future:'Future project',background:'Background idea'};
-  const sorted=[...S.builds].sort((a,b)=>(order[a.status]||1)-(order[b.status]||1));
+  const sorted=[...S.builds].sort((a,b)=>(order[_projEffStatus(a)]??1)-(order[_projEffStatus(b)]??1));
   const cnt=document.getElementById('bc-cnt');if(cnt)cnt.textContent=S.builds.length?`${S.builds.length} in pipeline`:'';
   el.innerHTML=sorted.length?sorted.map(b=>{
     const entries=(b.entries||[]).length;
-    return `<div class="bc ${b.status||'future'}" onclick="openProject('${b.id}')">
-      <div class="bc-tag">${lbl[b.status]||'Future'}</div>
+    const eff=_projEffStatus(b),auto=_projIsAuto(b);
+    const touchedToday=Math.floor((Date.now()-_projTouchedMs(b))/86400000)<=0;
+    return `<div class="bc ${eff}" onclick="openProject('${b.id}')">
+      <div class="bc-top">
+        <span class="bc-tag">${lbl[eff]||'Future'}${auto?` <span class="bc-tag-auto">· Auto</span>`:''}</span>
+        <button class="bc-touch${touchedToday?' on':''}" onclick="projectTouch('${b.id}',event)" title="${touchedToday?'Worked on today':'Mark: I worked on this today'}">🔥</button>
+      </div>
       <div class="bc-title">${esc(b.title)}</div>
       <div class="bc-desc">${esc((b.desc||'').slice(0,180))}${(b.desc||'').length>180?'…':''}</div>
-      ${entries?`<div style="margin-top:10px;font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.04em">${entries} entr${entries===1?'y':'ies'} →</div>`:''}
+      <div class="bc-foot"><span>Last worked on ${_projLastWorkedLabel(b)}</span>${entries?`<span>${entries} entr${entries===1?'y':'ies'} →</span>`:''}</div>
     </div>`;
   }).join(''):`<div class="no-t">No projects yet — add one above.</div>`;
 }
@@ -11234,8 +11329,8 @@ async function applyChanges(ch,prompt){
     const validDates=dates.filter(d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&d<=today);
     validDates.forEach(d=>{if(!h.checkedDates.includes(d))h.checkedDates.push(d);});
   });
-  if(ch.addBuild?.length)ch.addBuild.forEach(b=>S.builds.push({id:uid(),title:b.title,desc:b.desc||'',status:b.status||'future',date:tod(),notes:''}));
-  if(ch.addBuildNote?.length)ch.addBuildNote.forEach(n=>{const b=_aiFindStrict(S.builds,x=>x.title,n.project);if(b&&n.content){const prefix=`[${fmt(tod())}] `;b.notes=prefix+n.content+(b.notes?'\n\n'+b.notes:'');if(UI.projectDetail===b.id){const ta=document.getElementById('pd-notes-'+b.id);if(ta)ta.value=b.notes;}}});
+  if(ch.addBuild?.length)ch.addBuild.forEach(b=>S.builds.push({id:uid(),title:b.title,desc:b.desc||'',status:b.status||'future',date:tod(),notes:'',auto:true,lastTouched:Date.now()}));
+  if(ch.addBuildNote?.length)ch.addBuildNote.forEach(n=>{const b=_aiFindStrict(S.builds,x=>x.title,n.project);if(b&&n.content){const prefix=`[${fmt(tod())}] `;b.notes=prefix+n.content+(b.notes?'\n\n'+b.notes:'');b.lastTouched=Date.now();if(_projIsAuto(b))b.status=_projAutoStatus(b);if(UI.projectDetail===b.id){const ta=document.getElementById('pd-notes-'+b.id);if(ta)ta.value=b.notes;}}});
   if(ch.logLearning?.length)ch.logLearning.forEach(lg=>{let h=_aiFindStrict(S.habits,x=>x.name,lg.skill);if(!h){h={id:uid(),name:lg.skill,checkedDates:[],createdAt:tod(),notes:[]};S.habits.push(h);}if(lg.type==='session'||!lg.type){h.checkedDates=h.checkedDates||[];if(!h.checkedDates.includes(tod()))h.checkedDates.push(tod());}h.notes=h.notes||[];if(lg.content)h.notes.push({date:tod(),content:lg.content});});
   if(ch.addIdea?.length)ch.addIdea.forEach(i=>S.ideas.push({id:uid(),title:i.title,desc:i.desc||'',date:tod()}));
   if(ch.addResource?.length)ch.addResource.forEach(r=>S.resources.push({id:uid(),title:r.title,url:r.url||'',desc:r.desc||'',tag:r.tag||'other',date:tod()}));
