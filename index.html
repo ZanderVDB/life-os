@@ -884,6 +884,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ci-act-go:hover{background:var(--gold-bg)}
 .ci-act-mut{color:var(--muted)}
 /* Daily Routine */
+.rt-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 18px 16px}
 .rt-datebar{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;gap:10px;flex-wrap:wrap}
 .rt-date{font-size:16px;font-weight:700;color:var(--text)}
 .rt-progress{font-size:11px;font-weight:600;color:var(--muted);background:var(--surface-2);padding:3px 9px;border-radius:5px}
@@ -2412,7 +2413,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
         <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
         <a href="#people" data-route-link="people"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span class="label">People</span><span class="dot"></span></a>
-        <a href="#routine" data-route-link="routine"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Routine</span><span class="dot"></span></a>
+        <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
         <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
       </nav>
       <div class="s-sep"></div>
@@ -2449,7 +2450,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
       <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
       <a href="#people" data-route-link="people" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span>People</span></a>
-      <a href="#routine" data-route-link="routine" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Routine</span></a>
+      <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
       <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
       <div class="m-drawer-foot">
         <a href="#settings" data-route-link="settings" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
@@ -2514,37 +2515,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
         <section>
           <div class="section-hdr">
-            <h2>Daily notebook</h2>
+            <h2>Daily routine</h2>
             <div class="right" style="gap:6px;flex-wrap:wrap">
-              <input type="search" class="input nb-search" placeholder="Search…" oninput="searchNotebook(this.value)" style="width:160px;padding:6px 10px;font-size:12px">
+              <button class="btn btn-ghost btn-sm" onclick="routineNav(-1)" title="Previous day" aria-label="Previous day">‹</button>
+              <button class="btn btn-ghost btn-sm" id="routine-next-btn" onclick="routineNav(1)" title="Next day" aria-label="Next day">›</button>
+              <button class="btn btn-ghost btn-sm" onclick="routineToday()">Today</button>
             </div>
           </div>
-          <!-- Row 2 of the daily-notebook header, as a 3-column grid:
-               [‹ date ›]  [Today]  [Save]
-               Date-nav stays pinned to the LEFT, Today (when off-today)
-               sits in the centre, Save on the right. The three <div>
-               slots keep their column even when Today is hidden so the
-               date-nav doesn't shift. -->
-          <div class="dn-controls">
-            <div class="dn-ctrl-left">
-              <div class="dn-date-nav" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;flex-shrink:0">
-                <button class="carr" onclick="navNotebook(-1)" title="Previous day">‹</button>
-                <span class="cnt" id="dn-date" onclick="pickNotebookDate()" title="Pick a date" style="min-width:140px;text-align:center;cursor:pointer;padding:4px 10px"></span>
-                <input type="date" id="dn-date-picker" style="position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none">
-                <button class="carr" onclick="navNotebook(1)" title="Next day" id="dn-next">›</button>
-              </div>
-            </div>
-            <div class="dn-ctrl-center">
-              <button class="btn btn-ghost btn-sm" onclick="goToTodayNotebook()" id="dn-today-btn" style="display:none">Today</button>
-            </div>
-            <div class="dn-ctrl-right">
-              <button class="btn btn-primary btn-sm" onclick="saveDN()">Save</button>
-            </div>
-          </div>
-          <div id="dn-search-results" style="display:none"></div>
-          <div class="notebook-wrap" id="dn-wrap">
-            <textarea class="notebook-ta" id="dn-ta" placeholder="Morning brain dump, intentions for today, reflections, anything on your mind…"></textarea>
-          </div>
+          <div class="rt-box"><div id="routine-body"></div></div>
         </section>
       </div>
 
@@ -2643,19 +2621,41 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <div id="brain-notes-panel" style="display:none"><div class="nl-grid" id="notes"></div></div>
       </div>
 
-      <!-- ROUTINE — replaces the old Notebook. A day-by-day checklist
-           driven by a hardcoded daily flow, calendar-aware, with
-           reflective journal prompts at the bottom. Built by rRoutine(). -->
-      <div class="route" data-route="routine">
+      <!-- NOTEBOOK -->
+      <!-- Chaos-space: user-defined sections with A4 pages that flip
+           horizontally. The main AI bar is explicitly walled off from this
+           route (see buildAIContext) — only the per-page ✨ Refine button
+           ever sends any of this content to Claude. -->
+      <div class="route" data-route="notebook">
         <div class="page-hdr">
-          <div class="page-title">Routine</div>
+          <div class="page-title">Notebook</div>
           <div class="page-actions">
-            <button class="btn btn-ghost btn-sm" onclick="routineNav(-1)" title="Previous day" aria-label="Previous day">←</button>
-            <button class="btn btn-ghost btn-sm" id="routine-next-btn" onclick="routineNav(1)" title="Next day" aria-label="Next day">→</button>
-            <button class="btn btn-ghost btn-sm" onclick="routineToday()">Today</button>
+            <button class="btn btn-ghost btn-sm" onclick="nbToggleFont()" id="nb-font-btn" title="Toggle writing font">Aa</button>
+            <button class="btn btn-ghost btn-sm" onclick="nbToggleSpread()" id="nb-spread-btn" title="Toggle two-page spread (wide screens only)">⧉ Spread</button>
+            <button class="btn btn-primary btn-sm" onclick="nbAddSection()">+ New section</button>
           </div>
         </div>
-        <div id="routine-body"></div>
+        <div class="nb-search-row">
+          <div class="nb-search-wrap" id="nb-search-wrap">
+            <input type="search" id="nb-search" class="input nb-search-input" placeholder="Search notebook…" oninput="nbSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();nbFindNext(event.shiftKey?-1:1);}">
+            <button class="nb-search-nav" onclick="nbFindNext(-1)" title="Previous match (Shift+Enter)" aria-label="Previous match">↑</button>
+            <button class="nb-search-nav" onclick="nbFindNext(1)" title="Next match (Enter)" aria-label="Next match">↓</button>
+            <span class="nb-search-count" id="nb-search-count"></span>
+          </div>
+        </div>
+        <div class="page-sub nb-sub" id="nb-sub"></div>
+        <div class="nb-tabs" id="nb-tabs"></div>
+        <div class="nb-mobile-top" id="nb-mobile-top"></div>
+        <div class="nb-book-wrap">
+          <button class="nb-arrow nb-prev nb-arrow-desktop" onclick="nbPrevPage()" aria-label="Previous page" title="Previous page (← arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6 L9 12 L15 18"/></svg></button>
+          <div class="nb-book" id="nb-book"></div>
+          <button class="nb-arrow nb-next nb-arrow-desktop" onclick="nbNextPage()" aria-label="Next page" title="Next page (→ arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 L15 12 L9 18"/></svg></button>
+        </div>
+        <div class="nb-mobile-bot" id="nb-mobile-bot"></div>
+        <div class="nb-arrows-bottom">
+          <button class="nb-arrow nb-prev" onclick="nbPrevPage()" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6 L9 12 L15 18"/></svg></button>
+          <button class="nb-arrow nb-next" onclick="nbNextPage()" aria-label="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 L15 12 L9 18"/></svg></button>
+        </div>
       </div>
 
       <!-- PEOPLE -->
@@ -3088,7 +3088,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v161';
+const APP_VERSION='v162';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3175,8 +3175,8 @@ function setTheme(t){
 // one-third down the screen" symptom caused by browser auto-scroll to
 // elements whose id happened to match the route hash.
 try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}
-const ROUTES=['today','calendar','projects','habits','people','brain','routine','settings'];
-const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',routine:'Routine',settings:'Settings'};
+const ROUTES=['today','calendar','projects','habits','people','brain','notebook','settings'];
+const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',notebook:'Notebook',settings:'Settings'};
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
@@ -3211,10 +3211,12 @@ function setRoute(r,skipHash){
   if(UI._taskModalId)closeTaskModal();
   window.scrollTo({top:0,behavior:'instant'});
   if(r==='settings'){rSettings();_restoreSettingsTab();}
-  // Stop any live notebook voice recording when navigating away (the
-  // notebook route is gone but the voice machinery may still be live).
-  if(r!=='routine'&&NB&&NB.voiceActive&&typeof nbStopVoice==='function')nbStopVoice();
-  if(r==='routine')rRoutine();
+  // Stop any live notebook voice recording when navigating away.
+  if(r!=='notebook'&&NB&&NB.voiceActive&&typeof nbStopVoice==='function')nbStopVoice();
+  if(r==='notebook')rNotebook();
+  // The Daily routine lives in a box on the Today page now, so render it
+  // whenever we land on Today.
+  if(r==='today')rRoutine();
   // People grid needs an explicit render on route entry — otherwise the
   // grid stays at whatever was last rendered (initially the empty stub
   // from the route container HTML). Without this, users see an empty
@@ -6753,9 +6755,10 @@ function rRoutine(){
     })();
   }
 }
-// First app open of the day: instead of a popup, pull the user to the
-// Routine. Gated by S.checkinLevel!=='off' + a localStorage day-stamp so
-// it only redirects once per day and never fights manual navigation.
+// First app open of the day: pull the user to Today and scroll the
+// Daily Routine box into view. Gated by S.checkinLevel!=='off' + a
+// localStorage day-stamp so it only happens once per day and never
+// fights manual navigation.
 function maybeShowDailyCheckin(){
   if(_checkinLevel()==='off')return;
   const today=tod();
@@ -6764,7 +6767,14 @@ function maybeShowDailyCheckin(){
   if(last===today)return;
   try{localStorage.setItem('los_routine_lastShown',today);}catch(_){}
   UI.routineDate=today;
-  if(typeof setRoute==='function')setRoute('routine');
+  if(typeof setRoute==='function')setRoute('today');
+  // Let the route render, then scroll the routine box into view.
+  setTimeout(()=>{
+    const box=document.querySelector('.rt-box');
+    if(box&&typeof box.scrollIntoView==='function'){
+      try{box.scrollIntoView({behavior:'smooth',block:'start'});}catch(_){box.scrollIntoView();}
+    }
+  },350);
 }
 // Back-compat shim — snapshot wire-ups still call the old name.
 function maybeShowHabitCatchup(){return maybeShowDailyCheckin();}
@@ -13346,7 +13356,8 @@ function render(){
   refreshTipCard();
   refreshGCalWarn();
   if(currentRoute==='settings')rSettings();
-  if(currentRoute==='routine')rRoutine();
+  if(currentRoute==='notebook')rNotebook();
+  if(currentRoute==='today')rRoutine();
   if(currentRoute==='people')rPeople();
 }
 // Show / hide the prominent "GCal not connected" banner based on whether
