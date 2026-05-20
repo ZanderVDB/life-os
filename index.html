@@ -3131,7 +3131,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v174';
+const APP_VERSION='v175';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -8739,7 +8739,13 @@ function rTasks(){
         const cls=age>=7?'ti-age ti-age-old':(age>=3?'ti-age ti-age-mid':'ti-age');
         ageTag=`<span class="${cls}" title="On your daily list for ${age} day${age===1?'':'s'}">${age}d</span>`;
       }
-      return `<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${lock?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')">
+      // Inline sub-step row, mirroring the General view. When the task
+      // has open steps, show the NEXT one underneath so Daily isn't
+      // missing the per-step progress UI it used to lack.
+      const nextStep=hasOpenSteps?t.steps.find(s=>!s.done):null;
+      const showSubstep=nextStep&&!t.done;
+      let html=`<div class="ti-wrap${showSubstep?' has-substep':''}">`;
+      html+=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${lock?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')">
         <input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)">
         <span class="tit${t.done?' dn':''}">${esc(t.text)}</span>
         ${ageTag}
@@ -8748,6 +8754,18 @@ function rTasks(){
         ${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}
         <button class="ti-move" title="Send to General" onclick="event.stopPropagation();moveTaskToGeneral('${t.id}')">→ Gen</button>
       </div>`;
+      if(showSubstep){
+        const stepNum=t.steps.findIndex(s=>!s.done)+1;
+        const isLast=stepNum===t.steps.length;
+        const meta=isLast?'Last step':`Step ${stepNum} of ${t.steps.length}`;
+        html+=`<div class="ti-substep" onclick="event.stopPropagation();openTaskModal('${t.id}')" title="Tap the checkbox to mark done. Tap text to open all steps.">
+          <input type="checkbox" onclick="event.stopPropagation();_fadeAndCompleteStep(this,'${t.id}','${nextStep.id}')" title="Mark this step done">
+          <span class="ti-substep-text">${esc(nextStep.text)}</span>
+          <span class="ti-substep-meta">${meta}</span>
+        </div>`;
+      }
+      html+=`</div>`;
+      return html;
     };
     // Reminders due today — auto-surface in Daily so the user doesn't
     // have to navigate to Calendar to see them. Ticking the checkbox
