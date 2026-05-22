@@ -3131,7 +3131,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v176';
+const APP_VERSION='v177';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3702,14 +3702,8 @@ function _scheduleTokenRefresh(secondsValid){
   _gisRefreshTimer=setTimeout(()=>silentRefreshGCalToken(),refreshInMs);
   console.log('[gis] next silent refresh in '+(refreshInMs/1000|0)+'s');
 }
-// Mobile detection — silent OAuth via GIS's requestAccessToken({prompt:''})
-// is not actually silent on mobile browsers. iOS Safari has ITP; Android
-// Chrome with multiple Google accounts pops an account picker; both
-// produce the "phantom login screen" users see on every app open.
-// Disable silent refresh on ALL mobile, regardless of platform. Calendar
-// token will expire naturally; the disconnect banner appears and the user
-// taps to reconnect explicitly (which is a true user-gesture flow that
-// mobile browsers DO allow without weird picker behaviour).
+// Mobile detection — still used by a couple of UI heuristics. NOTE: we no
+// longer block silent token refresh on mobile (see silentRefreshGCalToken).
 function _isMobile(){
   const ua=navigator.userAgent||'';
   if(/Mobile|Android|iPhone|iPad|iPod/i.test(ua))return true;
@@ -3720,11 +3714,14 @@ function _isMobile(){
 // Back-compat: any earlier callers of _isIOS now route through _isMobile.
 function _isIOS(){return _isMobile();}
 function silentRefreshGCalToken(){
-  // Hard-skip on mobile — prompt:'' isn't reliably silent there.
-  if(_isMobile()){
-    console.log('[gis] silent refresh skipped on mobile (picker would pop)');
-    return false;
-  }
+  // Previously hard-skipped on mobile to avoid an account picker popping on
+  // every app open. That on-open trigger is long gone — silent refresh now
+  // only fires on the ~50-min timer or when the token genuinely 401s, both
+  // legitimate moments to re-mint. So we run the SAME silent GIS refresh on
+  // mobile that desktop uses; if consent is still granted prompt:'' returns
+  // a fresh token with no UI (matching the desktop auto-reconnect). If the
+  // platform can't do it silently the error callback clears the token and
+  // the disconnect banner appears — no worse than before.
   if(!_gisInitialized){if(!initGISTokenClient())return false;}
   if(_gisTokenClient){
     try{
