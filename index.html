@@ -3131,7 +3131,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v175';
+const APP_VERSION='v176';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3266,6 +3266,8 @@ function setRoute(r,skipHash){
   // People tab on first visit even when S.people has data; the grid
   // only populates after the first add/edit triggers rPeople().
   if(r==='people')rPeople();
+  // Reflect what the AI can do here in the input's placeholder.
+  if(typeof _updateAIPlaceholder==='function')_updateAIPlaceholder();
 }
 // Settings sub-tab switching. Keeps the active tab persistent across
 // sessions so the user lands where they left off — but only within the
@@ -9800,6 +9802,37 @@ async function refreshCalendarList(){
 // committing to a guess. We render those as a chat thread above the bar
 // and the user answers in the same textarea. After up to 3 rounds the AI
 // must commit. Null when no conversation is in flight.
+// ───────── PAGE-SCOPED AI ─────────
+// The AI bar is global, but what it's ALLOWED to do depends on the page
+// you're on. Today is the command centre — it can touch everything.
+// Every other page is scoped to just its own domain, so e.g. asking the
+// Calendar AI to "add a task" gets politely refused with a pointer to
+// the right page. `ops` lists the change-operation keys permitted on
+// that route; `label` is the human description used in the prompt.
+const AI_SCOPES={
+  today:{label:'everything across your Life OS',ops:['addTasks','completeTasks','removeTasks','addHabits','completeHabits','logLearning','addBuild','addBuildNote','addIdea','addResource','addNote','addReminders','completeReminders','addEvent','removeEvent','updateEvent','addPerson','addPromise','completeRoutine','addNotebookEntry']},
+  calendar:{label:'your calendar — add/remove/change events, create reminders, and tick reminders or habits for any day',ops:['addEvent','removeEvent','updateEvent','addReminders','completeReminders','completeHabits']},
+  projects:{label:'your projects — create projects and add notes to a project',ops:['addBuild','addBuildNote']},
+  habits:{label:'your habits — add habits and tick them for any day',ops:['addHabits','completeHabits','logLearning']},
+  people:{label:'your people — add people and log plans with them',ops:['addPerson','addPromise']},
+  brain:{label:'your brain dump — ideas, resources and notes',ops:['addIdea','addResource','addNote']},
+  notebook:{label:'your notebook — write entries into its sections',ops:['addNotebookEntry']},
+  settings:{label:'nothing on this page',ops:[]}
+};
+// Strip any operation the active page isn't allowed to perform — a safety
+// net so an over-eager model can never act outside the current scope.
+function _scopeFilterCh(ch,scope){
+  const cfg=AI_SCOPES[scope]||AI_SCOPES.today;
+  const keep=new Set([...cfg.ops,'clarifications','message']);
+  Object.keys(ch).forEach(k=>{if(!keep.has(k))delete ch[k];});
+}
+// Placeholder hint that reflects what the AI can do on the current page.
+function _updateAIPlaceholder(){
+  const ta=document.getElementById('ai-ta');if(!ta)return;
+  if(_aiConversation&&_aiConversation.active&&_aiConversation.pendingQuestions){ta.placeholder='Type your answer…';return;}
+  const r=currentRoute||'today';
+  ta.placeholder=r==='today'?"Tell me what's going on…":`${ROUTE_TITLES[r]||'This page'} AI — ${(AI_SCOPES[r]||AI_SCOPES.today).label}`;
+}
 let _aiConversation=null;
 async function doUpdate(){
   const ta=document.getElementById('ai-ta'),msg=ta.value.trim();if(!msg)return;
@@ -9814,8 +9847,10 @@ async function doUpdate(){
     _submitClarificationAnswer(msg);
     return;
   }
-  // Start a fresh conversation
-  _aiConversation={active:true,originalPrompt:msg,rounds:[],pendingQuestions:null};
+  // Start a fresh conversation. Capture the page it started on so the
+  // whole multi-round exchange stays scoped to that page even if the user
+  // navigates away mid-clarification.
+  _aiConversation={active:true,originalPrompt:msg,rounds:[],pendingQuestions:null,scope:(AI_SCOPES[currentRoute]?currentRoute:'today')};
   // Clear textarea so the user can see the AI's response cleanly. The
   // original prompt is preserved in _aiConversation for re-sending.
   ta.value='';ta.style.height='auto';
@@ -9851,23 +9886,38 @@ async function _aiTurn(){
   // content to Claude is the per-page Refine button (nbRefine), which
   // scopes the payload to a single page and shows a preview modal before
   // overwriting anything.
-  const ctx={
-    tasks:S.tasks.filter(t=>!t.done).map(t=>({id:t.id,text:t.text,area:t.area,project:t.project,priority:t.priority})),
-    habits:S.habits.map(h=>{
+  // Page scope governs both what context we send and what operations are
+  // offered. Today = full power; every other page is walled to its domain.
+  const scope=(conv.scope&&AI_SCOPES[conv.scope])?conv.scope:'today';
+  const scopeCfg=AI_SCOPES[scope];
+  const allow=op=>scopeCfg.ops.includes(op);
+  // Context — only the slices the current page can act on, so the model
+  // stays focused and we send fewer tokens.
+  const ctx={};
+  if(allow('addTasks')||allow('completeTasks')||allow('removeTasks'))
+    ctx.tasks=S.tasks.filter(t=>!t.done).map(t=>({id:t.id,text:t.text,area:t.area,project:t.project,priority:t.priority}));
+  if(allow('addHabits')||allow('completeHabits')||allow('logLearning'))
+    ctx.habits=S.habits.map(h=>{
       const s=computeHabitStats(h);
       // Surface excludedDays (rest-day weekdays, 0=Sun..6=Sat) so the AI
-      // can correctly skip them when bulk-ticking past dates ("I did all
-      // my habits last week — but my habits' rest days").
+      // can correctly skip them when bulk-ticking past dates.
       const out={id:h.id,name:h.name,streak:s.current,doneToday:(h.checkedDates||[]).includes(tod())};
       if(Array.isArray(h.excludedDays)&&h.excludedDays.length)out.restDays=h.excludedDays;
       return out;
-    }),
-    builds:S.builds.map(b=>({id:b.id,title:b.title,status:b.status,entries:(b.entries||[]).length})),
-    ideas:S.ideas.map(i=>({id:i.id,title:i.title})),
-    resources:S.resources.map(r=>({id:r.id,title:r.title})),
-    notes:S.notes.map(n=>({id:n.id,title:n.title})),
-    upcomingEvents
-  };
+    });
+  if(allow('addBuild')||allow('addBuildNote'))
+    ctx.builds=S.builds.map(b=>({id:b.id,title:b.title,status:b.status,entries:(b.entries||[]).length}));
+  if(allow('addIdea'))ctx.ideas=S.ideas.map(i=>({id:i.id,title:i.title}));
+  if(allow('addResource'))ctx.resources=S.resources.map(r=>({id:r.id,title:r.title}));
+  if(allow('addNote'))ctx.notes=S.notes.map(n=>({id:n.id,title:n.title}));
+  if(allow('addEvent')||allow('removeEvent')||allow('updateEvent'))ctx.upcomingEvents=upcomingEvents;
+  if(allow('completeReminders'))ctx.reminders=(S.reminders||[]).map(r=>({text:r.text,nextDue:r.nextDue}));
+  if(allow('addPerson')||allow('addPromise'))ctx.people=(S.people||[]).map(p=>({name:p.name}));
+  if(allow('addNotebookEntry'))ctx.notebookSections=((S.notebook&&S.notebook.sections)||[]).map(s=>s.title);
+  if(allow('completeRoutine')){
+    const riso=tod();
+    ctx.routine={date:riso,blocks:_routineBlocks(riso).map(b=>({block:b.title,items:b.items.map(it=>it.t)}))};
+  }
   const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
   const rhythm=S.lifeRhythm?`\n${firstName}'s weekly rhythm / regular commitments (use as soft context, don't duplicate as tasks):\n${S.lifeRhythm}\n`:'';
   // Available work areas — user-configured, not hardcoded to any specific business
@@ -9899,34 +9949,32 @@ ${turns}
 
 Use these answers to refine your proposal. ${isFinalRound?'This is the FINAL round — you MUST commit. Return an empty clarifications array (or omit the field) and use sensible defaults for anything still unclear.':'Only ask MORE clarifications if something CRITICAL is still ambiguous. Otherwise commit by leaving clarifications empty.'} If any answer was "(use your best judgment)" the user wants you to decide for ALL remaining ambiguity in that area — don't ask about it again.`;
   }
-  const prompt=`You manage ${firstName}'s Life OS. Work > personal.
-Today: ${todayName} ${tod()} (user's local time). For reference, ${nextOccurrences}.${rhythm}${projectNames}
-CRITICAL for calendar events: when the user names a weekday (e.g. "community meetings on Wednesday"), use the matching date from the list above. Before returning any date, VERIFY the date you chose actually falls on the requested weekday. Off-by-one day errors break the whole calendar.
-
-CLARIFY WHEN GENUINELY UNCERTAIN — instead of guessing on truly ambiguous input, ask the user back. Populate the "clarifications" array with 1–3 short, specific questions and the chat will surface them.
+  // Reusable instruction blocks + schema fragments, assembled per page
+  // scope below so the model only ever sees what it's allowed to do here.
+  const INSTR={
+    clarify:`CLARIFY WHEN GENUINELY UNCERTAIN — instead of guessing on truly ambiguous input, ask the user back. Populate the "clarifications" array with 1–3 short, specific questions and the chat will surface them.
 - ASK when the input is ambiguous about TYPE (e.g. "going to pick flowers in two months" — task? calendar event? idea? project?), CRITICAL fields like a vague time ("this afternoon" without a specific hour) or a vague date ("next month"), or which existing item the user means.
 - DO NOT ask about routine inferences. "Buy groceries" obviously becomes a task, "lunch with Mike at 1pm Friday" obviously becomes an event. Only ask when a reasonable person would also be unsure.
 - Cap at 3 questions per turn. Be concise — "Should this be a task or a calendar event?" not "I want to clarify a few details".
 - ALWAYS still fill out a best-guess proposal in the other fields. The user sees it and the answers refine it.
-- Empty clarifications array (or omitted) means "I'm confident, apply this".${convBlock}
-
-TASK SCHEDULING — when the user mentions a task with any time hint, ALWAYS fill scheduledTime. Even soft hints like "tomorrow" / "later" / "next week" should resolve to a sensible default time (use 11am for "morning"/"tomorrow"/no specific hint, 2pm for "afternoon", 7pm for "evening", and the literal time when one is given e.g. "at 3pm"). Format scheduledTime as a human-readable 12-hour string like "11am" or "3:30pm". Skip scheduledTime ONLY if the user is clearly adding a free-form to-do with no time intent at all ("buy groceries some day"). Default to giving a time over leaving it blank.
+- Empty clarifications array (or omitted) means "I'm confident, apply this".`,
+    tasks:`TASK SCHEDULING — when the user mentions a task with any time hint, ALWAYS fill scheduledTime. Even soft hints like "tomorrow" / "later" / "next week" should resolve to a sensible default time (use 11am for "morning"/"tomorrow"/no specific hint, 2pm for "afternoon", 7pm for "evening", and the literal time when one is given e.g. "at 3pm"). Format scheduledTime as a human-readable 12-hour string like "11am" or "3:30pm". Skip scheduledTime ONLY if the user is clearly adding a free-form to-do with no time intent at all ("buy groceries some day"). Default to giving a time over leaving it blank.
 
 DAILY vs GENERAL — Tasks live in either the Daily list (today's focus) or the General backlog. They are mutually exclusive.
 - Set "daily":true when the user EXPLICITLY says "daily", "today", "for today", "to my daily list", "on my daily", "do today", or otherwise signals this belongs on today's focused list.
 - Omit "daily" (or set false) when the user says "add to general", "for later", "someday", or doesn't mention daily/today at all — those go on the General backlog.
 - "daily":true does NOT imply scheduledTime; the user can have a daily task with no time. Never invent a scheduledTime just because daily is true.
 
-MULTI-STEP TASKS — addTasks supports an optional "steps" array of {text}. Use steps ONLY when the user describes a task that genuinely has multiple distinct sub-actions ("plan dad's birthday — book restaurant, buy gift, organise people", "ship the new feature: write code, write tests, deploy"). DO NOT auto-decompose simple tasks into steps just because you can — most tasks are single-action and should NOT have steps. A task with steps locks the main checkbox until every step is ticked, so adding steps to a one-shot task makes it harder to complete. When you do use steps, list them in execution order, keep each step short and concrete, and limit to 2–6 steps unless the user explicitly enumerated more.
-
-BULK-TICK HABITS — completeHabits accepts EITHER a string (ticks today) OR an object {match, dates:[YYYY-MM-DD,...]} (ticks each listed date). Use the object form when the user describes ticking habits across multiple past days:
+MULTI-STEP TASKS — addTasks supports an optional "steps" array of {text}. Use steps ONLY when the user describes a task that genuinely has multiple distinct sub-actions ("plan dad's birthday — book restaurant, buy gift, organise people", "ship the new feature: write code, write tests, deploy"). DO NOT auto-decompose simple tasks into steps just because you can — most tasks are single-action and should NOT have steps. A task with steps locks the main checkbox until every step is ticked, so adding steps to a one-shot task makes it harder to complete. When you do use steps, list them in execution order, keep each step short and concrete, and limit to 2–6 steps unless the user explicitly enumerated more.`,
+    habits:`BULK-TICK HABITS — completeHabits accepts EITHER a string (ticks today) OR an object {match, dates:[YYYY-MM-DD,...]} (ticks each listed date). Use the object form when the user describes ticking habits across multiple past days:
 - "I did gym all last week" → {match:"gym", dates:[<7 ISO dates of last week>]}
 - "I did all my habits yesterday" → one object per habit in state.habits, each with dates:[<yesterday>]
 - "I did gym every day this month" → list every date from the 1st of this month through today
 - "I did gym all last week except Saturday and Sunday" → list weekday dates only (skip 0/Sun, 6/Sat)
 - "I did all my habits for the days they're meant for" → for each habit in state.habits, generate dates that EXCLUDE its restDays (state.habits[i].restDays is an array of weekday numbers 0=Sun..6=Sat; only include dates whose weekday is NOT in that array)
 - "I did all my habits except [name]" → tick all EXCEPT the named one
-The "dates" array can be in any order. Don't include future dates. Never go further back than the habit's createdAt (state doesn't include createdAt; cap at 60 days back as a safety). Today is ${tod()}.
+The "dates" array can be in any order. Don't include future dates. Never go further back than the habit's createdAt (state doesn't include createdAt; cap at 60 days back as a safety). Today is ${tod()}.`,
+    calendar:`CRITICAL for calendar events: when the user names a weekday (e.g. "community meetings on Wednesday"), use the matching date from the list above. Before returning any date, VERIFY the date you chose actually falls on the requested weekday. Off-by-one day errors break the whole calendar.
 
 Calendar defaults — apply these automatically unless the user explicitly says otherwise. These come from the user's own Settings and may be empty (no reminders by default):
 - Birthday events: allDay:true, repeat:"yearly", reminderMin:${JSON.stringify(S.calendarDefaults?.birthdayReminders||[1440,0])}
@@ -9941,22 +9989,71 @@ CRITICAL for removeEvent / updateEvent:
 - RESPECT the user's day/date scope rigorously. If they say "delete Bible studies on Tuesday", include the "date" field on the removeEvent and ONLY target Tuesday's event. Do NOT also emit a removeEvent for the Monday occurrence just because the title matches — they didn't ask for that day.
 - One removeEvent op clears every matching instance of a recurring series (by design). Don't generate a separate removeEvent per instance — one op per distinct (title, date-scope) combination is correct.
 - If the user's request is ambiguous (e.g. multiple different-titled events could fit), pick the single closest and mention the others in the "message" field: "Deleted X; you also have Y and Z — should I remove those too?"
-- If no event in upcomingEvents matches the user's request, leave the remove/update arrays empty and tell them in "message": "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title).
-
-REMINDERS vs TASKS vs EVENTS — pick the right surface:
-- Use addReminders for things that RECUR on a schedule with no specific time of day: "pay rent on the 25th of each month", "take out trash every Tuesday", "renew car license yearly in March". They don't belong on the calendar (would clog the timeline) and don't belong as tasks (tasks die when ticked, reminders re-surface).
-- Use addEvent for time-bound things tied to a specific date and (usually) a specific time: meetings, appointments, birthdays. Even recurring meetings go on the calendar with repeat:"weekly" — the calendar is the right home for time-of-day-sensitive things.
-- Use addTasks for one-off action items the user wants to do once and check off.
+- If no event in upcomingEvents matches the user's request, leave the remove/update arrays empty and tell them in "message": "I couldn't find X on your calendar — did you mean Y?" (suggest the closest actual title).`,
+    reminders:`REMINDERS — for things that RECUR on a schedule with no specific time of day: "pay rent on the 25th of each month", "take out trash every Tuesday", "renew car license yearly in March". They re-surface (unlike tasks, which die when ticked).
 - Recurrence shape for addReminders:
   - daily: {"type":"daily"}
   - weekly: {"type":"weekly","weekdays":[1,3,5]} (0=Sun..6=Sat — pick which days)
   - monthly: {"type":"monthly","dayOfMonth":25} (1-31; auto-clamps for short months)
-  - yearly: {"type":"yearly","month":2,"day":15} (month 0-11; March 15 = month:2, day:15)
+  - yearly: {"type":"yearly","month":2,"day":15} (month 0-11; March 15 = month:2, day:15)`,
+    completeReminders:`TICK REMINDERS — completeReminders marks a recurring reminder done and advances it to its next occurrence. Match by partial text against state.reminders. Use {match,date:"YYYY-MM-DD"} to mark it done on a specific day (e.g. "I paid rent yesterday").`,
+    buildNote:`PROJECT NOTES — addBuildNote appends a dated note to an EXISTING project: match "project" against the partial title of one entry in state.builds, and put the user's dictated progress / ideas / updates into "content". addBuild creates a NEW project. Project thoughts belong in addBuildNote, NOT in general notes.`,
+    routine:`DAILY ROUTINE — completeRoutine ticks items on the routine checklist. state.routine lists today's blocks and their item texts. Use {block:"Start of day"} to tick a WHOLE block ("I've done my morning routine" / "start of day is done"). Use {item:"Check your emails"} to tick ONE item (match against the item text). "date" defaults to today; pass an ISO date to tick another day. Set "done":false to UNtick.`,
+    notebook:`NOTEBOOK — addNotebookEntry writes the user's dictated thoughts into the notebook as a new page. "section" is the chapter/section name (e.g. "Finance", "Poems"); if it isn't already in state.notebookSections it will be created. "content" is the text to write. Use this whenever the user is dumping notes/thoughts meant for the notebook.`,
+    people:`PEOPLE — VERY RESTRICTIVE. Only use addPerson when the user EXPLICITLY asks to add/track/remember a person by name. Trigger phrases: "add [name] to my people", "remember [name]", "I met [name]", "track [name]". Do NOT use addPerson just because a name appears in an event title, task, or other context. Do NOT use addPerson when the user is drafting a plan, asking for advice, or doing anything that isn't an explicit instruction to track a person. If a name appears casually in conversation (e.g. "coffee with Jack at 3pm"), leave it alone — Jack does not become a person record unless the user says "add Jack to my people". Required: name. Everything else is optional. Tags are referenced by name; unknown tag names auto-create. level defaults to {major:1,minor:1}. Don't infer a level unless the user is explicit ("she's a close friend" → {major:4,minor:3}). For addPromise: ONLY when the user explicitly says they made a promise/plan with a person ("I told Jack we'd grab coffee", "Andrew and I are playing paddle Friday"). "person" is matched STRICTLY against state.people by name (exact, then startsWith). If the named person doesn't exist in state.people, do NOT auto-create them — return an empty addPromise array and mention in "message" that the person isn't tracked yet. The "text" is the action verb-phrase ("go for coffee", "play paddle"). Date is optional — use only when explicit.`
+  };
+  const SCH={
+    addTasks:`"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","daily":"true if user wants this on the Daily list, omit/false for General","steps":[{"text":"sub-action"}]}]`,
+    completeTasks:`"completeTasks":["partial task text"]`,
+    removeTasks:`"removeTasks":["partial task text"]`,
+    addHabits:`"addHabits":[{"name":"..."}]`,
+    completeHabits:`"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"]`,
+    logLearning:`"logLearning":[{"skill":"...","type":"session|note","content":"..."}]`,
+    addBuild:`"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}]`,
+    addBuildNote:`"addBuildNote":[{"project":"partial title","content":"..."}]`,
+    addIdea:`"addIdea":[{"title":"...","desc":"..."}]`,
+    addResource:`"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}]`,
+    addNote:`"addNote":[{"title":"...","body":"..."}]`,
+    addEvent:`"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}]`,
+    removeEvent:`"removeEvent":[{"match":"exact existing title","date":"YYYY-MM-DD|optional"}]`,
+    updateEvent:`"updateEvent":[{"match":"exact existing title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}]`,
+    addReminders:`"addReminders":[{"text":"...","recurrence":{"type":"daily|weekly|monthly|yearly","weekdays":"[0-6 array, only if weekly]","dayOfMonth":"1-31, only if monthly","month":"0-11, only if yearly","day":"1-31, only if yearly"}}]`,
+    completeReminders:`"completeReminders":["partial reminder text OR {match,date:'YYYY-MM-DD'}"]`,
+    addPerson:`"addPerson":[{"name":"...","metAt":"optional where you met","phone":"optional","email":"optional","notes":"optional","tags":["optional tag names"],"level":{"major":1-5,"minor":1-5}}]`,
+    addPromise:`"addPromise":[{"person":"partial name of an existing person","text":"what you said you'd do","date":"YYYY-MM-DD|optional"}]`,
+    completeRoutine:`"completeRoutine":[{"block":"block name — ticks the whole block (optional)","item":"item text — ticks one item (optional)","date":"YYYY-MM-DD|optional, defaults today","done":true}]`,
+    addNotebookEntry:`"addNotebookEntry":[{"section":"section/chapter name","content":"text to write on a new page"}]`
+  };
+  // Pick the prose blocks relevant to what this page is allowed to do.
+  const instrBlocks=[INSTR.clarify];
+  if(allow('addTasks'))instrBlocks.push(INSTR.tasks);
+  if(allow('completeHabits'))instrBlocks.push(INSTR.habits);
+  if(allow('addEvent')||allow('removeEvent')||allow('updateEvent'))instrBlocks.push(INSTR.calendar);
+  if(allow('addReminders'))instrBlocks.push(INSTR.reminders);
+  if(allow('completeReminders'))instrBlocks.push(INSTR.completeReminders);
+  if(allow('addBuildNote'))instrBlocks.push(INSTR.buildNote);
+  if(allow('completeRoutine'))instrBlocks.push(INSTR.routine);
+  if(allow('addNotebookEntry'))instrBlocks.push(INSTR.notebook);
+  if(allow('addPerson'))instrBlocks.push(INSTR.people);
+  // Schema: clarifications + the page's allowed ops + message.
+  const schemaParts=['"clarifications":["question 1","question 2"]'];
+  scopeCfg.ops.forEach(op=>{if(SCH[op])schemaParts.push(SCH[op]);});
+  schemaParts.push('"message":"1 sentence"');
+  // What the page can/can't do.
+  let scopeDirective;
+  if(scope==='today'){
+    scopeDirective=`You are on the Today page — ${firstName}'s command centre. You can act on ANYTHING across the whole Life OS: tasks, the daily routine checklist, habits, projects, the calendar, reminders, people, the notebook, and brain ideas/resources/notes.`;
+  } else {
+    scopeDirective=`You are on the ${ROUTE_TITLES[scope]} page. On this page you can ONLY work with ${scopeCfg.label}. If ${firstName} asks for anything OUTSIDE that, do NOT act on it — return no operations and use "message" to say it isn't available on this page and which page handles it (the Today page can do everything). Only ever emit the operations listed in the schema below.`;
+  }
+  const prompt=`You manage ${firstName}'s Life OS. Work > personal.
+Today: ${todayName} ${tod()} (user's local time). For reference, ${nextOccurrences}.${rhythm}${projectNames}
+${scopeDirective}${convBlock}
 
-PEOPLE — VERY RESTRICTIVE. Only use addPerson when the user EXPLICITLY asks to add/track/remember a person by name. Trigger phrases: "add [name] to my people", "remember [name]", "I met [name]", "track [name]". Do NOT use addPerson just because a name appears in an event title, task, or other context. Do NOT use addPerson when the user is drafting a plan, asking for advice, or doing anything that isn't an explicit instruction to track a person. If a name appears casually in conversation (e.g. "coffee with Jack at 3pm"), leave it alone — Jack does not become a person record unless the user says "add Jack to my people". Required: name. Everything else is optional. Tags are referenced by name; unknown tag names auto-create. level defaults to {major:1,minor:1}. Don't infer a level unless the user is explicit ("she's a close friend" → {major:4,minor:3}). For addPromise: ONLY when the user explicitly says they made a promise/plan with a person ("I told Jack we'd grab coffee", "Andrew and I are playing paddle Friday"). "person" is matched STRICTLY against state.people by name (exact, then startsWith). If the named person doesn't exist in state.people, do NOT auto-create them — return an empty addPromise array and mention in "message" that the person isn't tracked yet. The "text" is the action verb-phrase ("go for coffee", "play paddle"). Date is optional — use only when explicit.
+${instrBlocks.join('\n\n')}
 
 Respond ONLY raw JSON:
-{"clarifications":["question 1","question 2"],"addTasks":[{"text":"...","area":"work|personal","project":"${projectEnum}","priority":"urgent|hi|med|lo|someday","scheduledTime":"10am|optional","daily":"true if user wants this on the Daily list, omit/false for General","steps":[{"text":"sub-action"}]}],"completeTasks":["partial"],"removeTasks":["partial"],"addHabits":[{"name":"..."}],"completeHabits":["partial name OR {match,dates:[YYYY-MM-DD,...]}"],"addBuild":[{"title":"...","desc":"...","status":"active|future|background"}],"addBuildNote":[{"project":"partial title","content":"..."}],"addIdea":[{"title":"...","desc":"..."}],"addResource":[{"title":"...","url":"...","desc":"...","tag":"article|tool|video|book|person|other"}],"addNote":[{"title":"...","body":"..."}],"addEvent":[{"date":"YYYY-MM-DD","time":"10am","endTime":"11am|optional","allDay":true,"repeat":"daily|weekly|monthly|yearly|none","reminderMin":[60,10],"title":"..."}],"removeEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional"}],"updateEvent":[{"match":"partial title","date":"YYYY-MM-DD|optional","newDate":"YYYY-MM-DD|optional","newTime":"10am|optional","newTitle":"..."}],"addReminders":[{"text":"...","recurrence":{"type":"daily|weekly|monthly|yearly","weekdays":"[0-6 array, only if weekly]","dayOfMonth":"1-31, only if monthly","month":"0-11, only if yearly","day":"1-31, only if yearly"}}],"addPerson":[{"name":"...","metAt":"optional where you met","phone":"optional","email":"optional","notes":"optional","tags":["optional tag names"],"level":{"major":1-5,"minor":1-5}}],"addPromise":[{"person":"partial name of an existing person","text":"what you said you'd do","date":"YYYY-MM-DD|optional"}],"message":"1 sentence"}
+{${schemaParts.join(',')}}
 State:${JSON.stringify(ctx)}
 User:"${msg}"`;
   try{
@@ -9973,6 +10070,9 @@ User:"${msg}"`;
     // seen repeatedly), snap the date to the nearest matching weekday. This
     // runs BEFORE the confirm modal so the user sees the corrected dates.
     fixAIEventWeekdays(ch,msg);
+    // Enforce the page scope: drop any operation this page isn't allowed to
+    // perform, so an over-eager model can never act outside the current page.
+    _scopeFilterCh(ch,scope);
     // CLARIFICATION BRANCH — if the AI is uncertain it returns a non-empty
     // clarifications array. We open a chat thread above the bar instead of
     // committing. The 3-round cap is enforced both in the prompt and here.
@@ -10047,8 +10147,9 @@ function _endConversation(){
   if(decideBtn)decideBtn.style.display='none';
   const btn=document.getElementById('btm-btn');
   if(btn)btn.textContent='Update ↗';
-  const ta=document.getElementById('ai-ta');
-  if(ta){ta.placeholder=`Tell me what's going on…`;}
+  // Restore the page-appropriate placeholder (Today = generic, scoped
+  // pages = their own hint).
+  if(typeof _updateAIPlaceholder==='function')_updateAIPlaceholder();
 }
 function _renderAIChat(ch){
   const conv=_aiConversation;if(!conv)return;
@@ -10192,7 +10293,26 @@ function formatAIChangesDetailed(ch){
     }
     remLines.push(`  • Add reminder "${r.text||'(untitled)'}" — ${when}`);
   });
+  (ch.completeReminders||[]).forEach(r=>{
+    const n=typeof r==='string'?r:(r.match||r.text||'?');
+    const d=(r&&typeof r==='object'&&r.date)?' on '+r.date:'';
+    remLines.push(`  • Tick reminder "${n}"${d}`);
+  });
   if(remLines.length)sections.push('REMINDERS\n'+remLines.join('\n'));
+
+  // ROUTINE — checking off the daily routine checklist.
+  const routineLines=[];
+  (ch.completeRoutine||[]).forEach(r=>{
+    if(!r||typeof r!=='object')return;
+    const what=r.block?`block "${r.block}"`:(r.item?`"${r.item}"`:'routine');
+    routineLines.push(`  • ${r.done===false?'Untick':'Tick'} ${what}${r.date?' on '+r.date:''}`);
+  });
+  if(routineLines.length)sections.push('ROUTINE\n'+routineLines.join('\n'));
+
+  // NOTEBOOK — new pages the AI is adding.
+  const nbLines=[];
+  (ch.addNotebookEntry||[]).forEach(n=>nbLines.push(`  • Write to "${n.section||'Notes'}": "${(n.content||'').slice(0,80)}"`));
+  if(nbLines.length)sections.push('NOTEBOOK\n'+nbLines.join('\n'));
 
   // PEOPLE — surface so the confirm gate fires for people-only changes.
   const peopleLines=[];
@@ -10289,8 +10409,11 @@ const AIC_TYPES={
   addNote:{icon:'▤',label:'Note'},
   addResource:{icon:'🔗',label:'Resource'},
   addReminders:{icon:'⏰',label:'Reminder'},
+  completeReminders:{icon:'✓',label:'Tick reminder'},
   addPerson:{icon:'👤',label:'Person'},
-  addPromise:{icon:'🤝',label:'Plan'}
+  addPromise:{icon:'🤝',label:'Plan'},
+  completeRoutine:{icon:'✓',label:'Routine'},
+  addNotebookEntry:{icon:'📓',label:'Notebook'}
 };
 function _aicFmtReminder(r){if(r==null||r==='none')return null;const arr=Array.isArray(r)?r:[r];const names=arr.map(m=>{m=Number(m);if(isNaN(m))return null;if(m===0)return 'at time';if(m<60)return m+' min';if(m===60)return '1 hr';if(m<1440)return (m/60)+' hr';if(m===1440)return '1 day';return (m/1440)+' day';}).filter(Boolean);return names.length?names.join(' + '):null;}
 // Preview the real events a remove/update match string will hit. Uses
@@ -10418,6 +10541,23 @@ function _aicSummary(key,item){
       if(item.date)meta.push('on '+esc(item.date));
       break;
     }
+    case 'completeReminders':{
+      const n=typeof item==='string'?item:(item.match||item.text||'?');
+      title=`Tick reminder "${esc(n)}"`;
+      if(item&&typeof item==='object'&&item.date)meta.push(esc(item.date));
+      break;
+    }
+    case 'completeRoutine':{
+      title=item.block?`Tick block "${esc(item.block)}"`:(item.item?`Tick "${esc(item.item)}"`:'Routine');
+      if(item.done===false)meta.push('untick');
+      if(item.date)meta.push(esc(item.date));
+      break;
+    }
+    case 'addNotebookEntry':{
+      title=`Notebook → "${esc(item.section||'Notes')}"`;
+      if(item.content)meta.push(esc(item.content.slice(0,60)));
+      break;
+    }
     default:title=esc(JSON.stringify(item).slice(0,60));
   }
   return {title,meta:meta.join(' · '),stepsHTML};
@@ -10455,8 +10595,10 @@ function renderAIChangesInteractive(ch,eventPool){
   const projKeys=['addBuild','addBuildNote'];
   const brainKeys=['addIdea','addNote','addResource'];
   const calKeys=['addEvent','removeEvent','updateEvent'];
-  const remKeys=['addReminders'];
+  const remKeys=['addReminders','completeReminders'];
   const peopleKeys=['addPerson','addPromise'];
+  const routineKeys=['completeRoutine'];
+  const notebookKeys=['addNotebookEntry'];
   const buildSection=(label,keys,opts)=>{
     const cards=[];
     keys.forEach(k=>{
@@ -10480,6 +10622,8 @@ function renderAIChangesInteractive(ch,eventPool){
   buildSection('Brain',brainKeys);
   buildSection('Calendar',calKeys,{matchPreviewKeys:['removeEvent','updateEvent']});
   buildSection('Reminders',remKeys);
+  buildSection('Routine',routineKeys);
+  buildSection('Notebook',notebookKeys);
   buildSection('People',peopleKeys);
   return sections.length?sections.join(''):`<div class="aic-empty">Nothing left — hit Cancel or Redo.</div>`;
 }
@@ -11096,6 +11240,9 @@ function summariseAIChanges(ch){
   countFmt(ch.addEvent,'added','event');
   countFmt(ch.removeEvent,'removed','event');
   countFmt(ch.updateEvent,'updated','event');
+  if(ch.completeReminders?.length)bits.push(`ticked ${ch.completeReminders.length} reminder${ch.completeReminders.length===1?'':'s'}`);
+  if(ch.completeRoutine?.length)bits.push(`ticked ${ch.completeRoutine.length} routine item${ch.completeRoutine.length===1?'':'s'}`);
+  countFmt(ch.addNotebookEntry,'added','notebook entry');
   return bits.length?bits.join(' · '):'no changes';
 }
 function recordAIHistory(prompt,ch){
@@ -11425,7 +11572,59 @@ async function applyChanges(ch,prompt){
     if(pr.date&&/^\d{4}-\d{2}-\d{2}$/.test(String(pr.date).trim()))newPr.date=String(pr.date).trim();
     p.promises.push(newPr);
   });
+  // Tick recurring reminders done (and advance to their next occurrence).
+  if(ch.completeReminders?.length)ch.completeReminders.forEach(r=>{
+    let needle,date;
+    if(typeof r==='string'){needle=r;date=tod();}
+    else if(r&&typeof r==='object'){needle=r.match||r.text||'';date=(r.date&&/^\d{4}-\d{2}-\d{2}$/.test(String(r.date).trim()))?String(r.date).trim():tod();}
+    else return;
+    const rem=_aiFindStrict(S.reminders||[],x=>x.text,needle);
+    if(!rem)return;
+    rem.lastCompleted=date;
+    _refreshReminderDue(rem,date);
+  });
+  // Tick daily-routine items. {block} ticks a whole block; {item} ticks one.
+  if(ch.completeRoutine?.length)ch.completeRoutine.forEach(r=>{
+    if(!r||typeof r!=='object')return;
+    const iso=(r.date&&/^\d{4}-\d{2}-\d{2}$/.test(String(r.date).trim()))?String(r.date).trim():tod();
+    if(iso>tod())return;
+    const done=r.done!==false;
+    const blocks=_routineBlocks(iso);
+    const log=_routineDayLog(iso);
+    const norm=s=>String(s||'').toLowerCase().trim();
+    if(r.block){
+      const bn=norm(r.block);
+      const blk=blocks.find(b=>norm(b.title)===bn)||blocks.find(b=>norm(b.title).includes(bn)||bn.includes(norm(b.title)));
+      if(blk)blk.items.forEach(it=>{log.checks[it.id]=done;});
+    }
+    if(r.item){
+      const inq=norm(r.item);
+      let found=null;
+      blocks.forEach(b=>b.items.forEach(it=>{if(found)return;if(it.id===r.item||norm(it.t)===inq||norm(it.t).includes(inq)||inq.includes(norm(it.t)))found=it;}));
+      if(found)log.checks[found.id]=done;
+    }
+  });
+  // Write dictated thoughts into the notebook as a new page in the named
+  // section (created if it doesn't exist).
+  if(ch.addNotebookEntry?.length)ch.addNotebookEntry.forEach(n=>{
+    if(!n||!n.content||!String(n.content).trim())return;
+    nbEnsureShape();
+    const secName=String(n.section||'').trim();
+    let sec=null;
+    if(secName){const sn=secName.toLowerCase();sec=S.notebook.sections.find(s=>(s.title||'').toLowerCase()===sn)||S.notebook.sections.find(s=>(s.title||'').toLowerCase().includes(sn));}
+    if(!sec){
+      const color=NB_COLORS[S.notebook.sections.length%NB_COLORS.length];
+      sec={id:uid(),title:secName||'Notes',color,pages:[]};
+      S.notebook.sections.push(sec);
+    }
+    sec.pages.push({id:uid(),layout:'single',cells:[nbCellToHtml(String(n.content))],updatedAt:Date.now()});
+  });
   svAll();render();
+  // New-op views that render() doesn't refresh off-route — cheap no-ops if
+  // their container isn't on screen.
+  if(ch.completeRoutine?.length&&typeof rRoutine==='function')rRoutine();
+  if(ch.addNotebookEntry?.length&&typeof rNotebook==='function')rNotebook();
+  if(ch.completeReminders?.length&&typeof rReminders==='function')rReminders();
   // Calendar execution decision:
   //   mode='all'     → already approved in the review queue above, run directly
   //   mode='calendar'→ show the per-calendar confirm popup (default)
