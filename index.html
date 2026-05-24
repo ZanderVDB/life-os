@@ -954,6 +954,26 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .rce-add-block{margin-top:2px}
 .rce-empty{font-size:12px;color:var(--muted);font-style:italic;margin-bottom:8px}
 .rce-foot{margin-top:4px}
+/* First-run onboarding coachmarks */
+#ob-overlay{position:fixed;inset:0;z-index:10000}
+#ob-spot{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,.6);transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+#ob-tip{position:fixed;max-width:330px;width:calc(100vw - 32px);box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow-lift);z-index:10001}
+#ob-tip.ob-center{left:50%;top:50%;transform:translate(-50%,-50%)}
+#ob-tip-title{font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:6px;color:var(--text);line-height:1.25}
+#ob-tip-body{font-size:13px;line-height:1.55;color:var(--text-2);margin-bottom:14px}
+#ob-tip-bar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#ob-dots{display:flex;gap:5px}
+.ob-dot{width:6px;height:6px;border-radius:50%;background:var(--border-strong);opacity:.45}
+.ob-dot.on{background:var(--accent);opacity:1}
+#ob-btns{display:flex;gap:4px;align-items:center}
+#ob-skip,#ob-back{background:transparent;border:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;padding:6px 8px;border-radius:7px}
+#ob-skip:hover,#ob-back:hover{color:var(--text);background:var(--surface-hover)}
+/* Paywall (dormant until billing is live) */
+#paywall-overlay{position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:18px}
+.paywall-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px);padding:26px 24px;max-width:360px;width:100%;text-align:center;box-shadow:var(--shadow-lift)}
+.paywall-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--text);margin-bottom:10px}
+.paywall-body{font-size:13.5px;line-height:1.6;color:var(--text-2);margin-bottom:18px}
+.paywall-out{display:block;margin:12px auto 0;background:transparent;border:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer}
 .pm-notes{width:100%;min-height:60px;font-family:inherit;font-size:13px;padding:9px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical}
 .people-sort-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .people-sort-chip{font-size:11px;padding:4px 9px;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;font-family:inherit}
@@ -3047,6 +3067,25 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <div class="section-hdr"><h2>Account</h2></div>
           <div class="setting-row">
             <div>
+              <div class="setting-label">Subscription</div>
+              <div class="setting-desc" id="sub-desc">—</div>
+            </div>
+            <div class="setting-right">
+              <span class="key-mask" id="sub-status">—</span>
+              <button class="btn btn-primary btn-sm" id="sub-btn" onclick="startSubscription()" style="display:none">Subscribe</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">App tour</div>
+              <div class="setting-desc">Replay the welcome walkthrough — handy if you got lost or want a refresher.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-sm" onclick="replayTutorial()">Replay tutorial</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
               <div class="setting-label">Sign out</div>
             </div>
             <div class="setting-right">
@@ -3169,8 +3208,45 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v178';
+const APP_VERSION='v179';
 const APP_BUILD_DATE='2026-04-24';
+// ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
+// Model: free for TRIAL_DAYS, then a subscription is required. The actual
+// charging needs Google Play Billing wired through the TWA + a backend to
+// verify purchases (a separate step). Until that exists PAYWALL_ENABLED is
+// false, so NOBODY is ever locked out — we just track the trial clock and
+// show status. Flip PAYWALL_ENABLED to true once billing is live.
+const TRIAL_DAYS=7;
+const PAYWALL_ENABLED=false;
+// Owner accounts are always Pro (so dev/testing never hits the wall).
+const OWNER_EMAILS=['zander.vanderberg1@gmail.com'];
+function _isOwner(){try{return!!(CU&&CU.email&&OWNER_EMAILS.includes(CU.email.toLowerCase()));}catch(_){return false;}}
+function _hasEntitlement(){return S.entitlement==='pro'||_isOwner();}
+// Stamp the trial start the first time we see a signed-in, synced account
+// without one. Stored in S.trialStart (YYYY-MM-DD).
+function _ensureTrialStart(){
+  if(!CU||!_initialSyncDone)return;
+  if(_hasEntitlement())return;
+  if(typeof S.trialStart!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(S.trialStart)){
+    S.trialStart=tod();try{svAll();}catch(_){}
+  }
+}
+function _trialDaysLeft(){
+  if(typeof S.trialStart!=='string')return TRIAL_DAYS;
+  const used=_daysBetweenIso(S.trialStart,tod());
+  return Math.max(0,TRIAL_DAYS-used);
+}
+// Whether the app is usable. Pro/owner → always. Otherwise depends on the
+// trial clock — but only enforced once PAYWALL_ENABLED is on.
+function _accessOk(){
+  if(_hasEntitlement())return true;
+  if(!PAYWALL_ENABLED)return true;
+  return _trialDaysLeft()>0;
+}
+// Placeholder until Google Play Billing is wired through the TWA.
+function startSubscription(){
+  alert('Subscriptions go live with the Play Store release. Once billing is connected this button will open the Google Play purchase sheet.');
+}
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
 // account on the same device reused the first account's key. Now each UID
@@ -7034,8 +7110,109 @@ function maybeShowDailyCheckin(){
     }
   },350);
 }
-// Back-compat shim — snapshot wire-ups still call the old name.
-function maybeShowHabitCatchup(){return maybeShowDailyCheckin();}
+// Back-compat shim — snapshot wire-ups still call the old name. On the very
+// first run we run the welcome tour INSTEAD of the daily-routine redirect.
+function maybeShowHabitCatchup(){
+  _ensureTrialStart();
+  if(_maybeStartOnboarding())return;
+  return maybeShowDailyCheckin();
+}
+// ───────── FIRST-RUN ONBOARDING (interactive coachmarks) ─────────
+const ONBOARD_STEPS=[
+  {title:'Welcome to Life OS',body:"Your calm home for tasks, calendar, habits, projects, people and notes — with an AI that handles the busywork. Here's the 30-second tour."},
+  {sel:'#btm',title:"Just say what's going on",body:'Type naturally into this bar — “dentist Thursday 3pm”, “I did gym today”, “add a task to email Sam”. The AI files it in the right place.'},
+  {sel:'.rt-box',route:'today',title:'Your daily routine',body:'A short start- and end-of-day checklist to keep you on track. Make it your own under Settings → Routine.'},
+  {sel:'[data-route-link="calendar"]',title:'Everything has its own page',body:'Calendar, Projects, Habits, People, Brain and your Notebook each get a tab — and the AI on each page focuses on just that page.'},
+  {title:'Two quick setups',body:'Link Google Calendar under Settings → Calendar, and paste your Anthropic API key under Settings → AI to switch the assistant on.'},
+  {title:"You're all set",body:'You can replay this tour anytime from Settings → Account. Enjoy Life OS!'}
+];
+let _obIdx=0,_onboardChecked=false;
+function _maybeStartOnboarding(){
+  if(_onboardChecked)return false;
+  _onboardChecked=true;
+  if(S.onboardDone===true)return false;
+  setTimeout(()=>{try{startOnboarding();}catch(_){}},650);
+  return true;
+}
+function startOnboarding(){_obIdx=0;_obEnsureDom();_obShow(0);}
+function replayTutorial(){S.onboardDone=false;try{svAll();}catch(_){}startOnboarding();}
+function _obEnsureDom(){
+  if(document.getElementById('ob-overlay'))return;
+  const o=document.createElement('div');o.id='ob-overlay';
+  o.innerHTML=`<div id="ob-spot"></div><div id="ob-tip"><div id="ob-tip-title"></div><div id="ob-tip-body"></div><div id="ob-tip-bar"><div id="ob-dots"></div><div id="ob-btns"><button id="ob-skip" onclick="endOnboarding()">Skip</button><button id="ob-back" onclick="_obPrev()">Back</button><button id="ob-next" class="btn btn-primary btn-sm" onclick="_obNext()">Next</button></div></div></div>`;
+  document.body.appendChild(o);
+  window.addEventListener('resize',_obReposition);
+}
+function _obShow(i){
+  _obIdx=i;const step=ONBOARD_STEPS[i];if(!step)return endOnboarding();
+  if(step.route&&typeof setRoute==='function'&&currentRoute!==step.route)setRoute(step.route);
+  const t=document.getElementById('ob-tip-title'),b=document.getElementById('ob-tip-body');
+  if(t)t.textContent=step.title||'';if(b)b.textContent=step.body||'';
+  const dots=document.getElementById('ob-dots');
+  if(dots)dots.innerHTML=ONBOARD_STEPS.map((_,k)=>`<span class="ob-dot${k===i?' on':''}"></span>`).join('');
+  const back=document.getElementById('ob-back');if(back)back.style.visibility=i===0?'hidden':'visible';
+  const next=document.getElementById('ob-next');if(next)next.textContent=i===ONBOARD_STEPS.length-1?'Done':'Next';
+  setTimeout(_obReposition,step.route?280:40);
+}
+function _obReposition(){
+  const step=ONBOARD_STEPS[_obIdx];if(!step)return;
+  const spot=document.getElementById('ob-spot'),tip=document.getElementById('ob-tip');
+  if(!spot||!tip)return;
+  let el=step.sel?document.querySelector(step.sel):null;
+  if(el){const r=el.getBoundingClientRect();if(r.width<2||r.height<2||r.bottom<8||r.top>innerHeight-8)el=null;}
+  if(el){
+    const r=el.getBoundingClientRect(),pad=8;
+    spot.style.display='block';
+    spot.style.left=(r.left-pad)+'px';spot.style.top=(r.top-pad)+'px';
+    spot.style.width=(r.width+pad*2)+'px';spot.style.height=(r.height+pad*2)+'px';
+    tip.classList.remove('ob-center');tip.style.visibility='hidden';tip.style.left='0px';tip.style.top='0px';
+    const th=tip.offsetHeight||170,tw=tip.offsetWidth||300;
+    let top=r.bottom+12;if(top+th>innerHeight-10)top=Math.max(10,r.top-th-12);
+    let left=Math.min(Math.max(10,r.left),innerWidth-tw-10);
+    tip.style.top=top+'px';tip.style.left=left+'px';tip.style.visibility='visible';
+  } else {
+    spot.style.display='none';
+    tip.classList.add('ob-center');tip.style.left='';tip.style.top='';tip.style.visibility='visible';
+  }
+}
+function _obNext(){if(_obIdx>=ONBOARD_STEPS.length-1)return endOnboarding();_obShow(_obIdx+1);}
+function _obPrev(){if(_obIdx>0)_obShow(_obIdx-1);}
+function endOnboarding(){
+  const o=document.getElementById('ob-overlay');if(o)o.remove();
+  try{window.removeEventListener('resize',_obReposition);}catch(_){}
+  if(S.onboardDone!==true){S.onboardDone=true;try{svAll();}catch(_){}}
+}
+// Subscription status row (Settings → Account). Dormant until billing is on.
+function renderSubStatus(){
+  const st=document.getElementById('sub-status'),desc=document.getElementById('sub-desc'),btn=document.getElementById('sub-btn');
+  if(!st)return;
+  if(_hasEntitlement()){st.textContent=_isOwner()?'Owner':'Pro';if(desc)desc.textContent=_isOwner()?'Full access (owner account).':'Thanks for subscribing — full access unlocked.';if(btn)btn.style.display='none';return;}
+  const left=_trialDaysLeft();
+  if(!PAYWALL_ENABLED){
+    st.textContent='Free trial';
+    if(desc)desc.textContent=`Free preview. Paid plans go live with the Play Store release${typeof S.trialStart==='string'?` (trial day ${Math.min(TRIAL_DAYS, _daysBetweenIso(S.trialStart,tod())+1)} of ${TRIAL_DAYS})`:''}.`;
+    if(btn)btn.style.display='none';
+    return;
+  }
+  st.textContent=left>0?`${left} day${left===1?'':'s'} left`:'Trial ended';
+  if(desc)desc.textContent=left>0?`You have ${left} day${left===1?'':'s'} left in your free trial.`:'Your free trial has ended — subscribe to keep using Life OS.';
+  if(btn)btn.style.display='inline-flex';
+}
+// Soft paywall overlay — only ever shown when billing is live AND the trial
+// is up. No-op while PAYWALL_ENABLED is false, so it can't lock anyone now.
+function renderPaywallIfNeeded(){
+  const existing=document.getElementById('paywall-overlay');
+  if(_accessOk()){if(existing)existing.remove();return;}
+  if(existing)return;
+  const o=document.createElement('div');o.id='paywall-overlay';
+  o.innerHTML=`<div class="paywall-card">
+    <div class="paywall-title">Your free trial has ended</div>
+    <div class="paywall-body">Subscribe to keep your tasks, calendar, habits, projects and notes — and the AI assistant.</div>
+    <button class="btn btn-primary" onclick="startSubscription()">Subscribe</button>
+    <button class="paywall-out" onclick="doSignOut()">Sign out</button>
+  </div>`;
+  document.body.appendChild(o);
+}
 function openHabitDayModal(cy,cm,cd,opts){
   // Kill any queued/visible hover preview so we don't get the modal
   // AND the popover on screen at the same time.
@@ -9431,6 +9608,7 @@ function rSettings(){
   const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
   const faithTog=document.getElementById('faith-focus-toggle');if(faithTog)faithTog.checked=S.faithFocus!==false;
   rRoutineEditor();
+  renderSubStatus();
   {const _cl=['off','light','balanced','thorough'].includes(S.checkinLevel)?S.checkinLevel:(S.habitCatchupEnabled===false?'off':'balanced');const _sw=document.getElementById('routine-autoopen-toggle');if(_sw)_sw.checked=_cl!=='off';}
   // Daily reminder toggle reflects both the user preference AND the
   // browser permission state, since either being off means no notifs fire.
@@ -13995,6 +14173,7 @@ function render(){
   if(currentRoute==='notebook')rNotebook();
   if(currentRoute==='today')rRoutine();
   if(currentRoute==='people')rPeople();
+  try{renderPaywallIfNeeded();}catch(_){}
 }
 // Show / hide the prominent "GCal not connected" banner based on whether
 // we have a live token. Called from render() on every snapshot. Also
