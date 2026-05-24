@@ -937,6 +937,23 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .st-tab.on{background:var(--gold);color:#fff;border-color:var(--gold)}
 .setting-tab-pane{display:none}
 .setting-tab-pane.active{display:block}
+/* Routine editor (Settings → Routine) */
+#routine-editor{display:flex;flex-direction:column;gap:18px;margin-top:6px}
+.rce-sec-hd{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px}
+.rce-block{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:10px}
+.rce-block-hd{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rce-title{flex:1;font-weight:600;font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 9px;color:var(--text);min-width:0}
+.rce-sub{width:100%;box-sizing:border-box;font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 9px;color:var(--text-2);margin-bottom:8px}
+.rce-items{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.rce-item{display:flex;align-items:center;gap:8px}
+.rce-item input{flex:1;font-size:12.5px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 9px;color:var(--text);min-width:0}
+.rce-del{flex:0 0 auto;width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.rce-del:hover{background:var(--red-bg);color:var(--red);border-color:var(--red)}
+.rce-add-item,.rce-add-block{font-size:11.5px;font-weight:600;color:var(--accent);background:transparent;border:1px dashed var(--border-strong);border-radius:7px;padding:6px 10px;cursor:pointer}
+.rce-add-item:hover,.rce-add-block:hover{background:var(--surface-hover)}
+.rce-add-block{margin-top:2px}
+.rce-empty{font-size:12px;color:var(--muted);font-style:italic;margin-bottom:8px}
+.rce-foot{margin-top:4px}
 .pm-notes{width:100%;min-height:60px;font-family:inherit;font-size:13px;padding:9px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical}
 .people-sort-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .people-sort-chip{font-size:11px;padding:4px 9px;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;font-family:inherit}
@@ -2735,6 +2752,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <button class="st-tab" data-st="notifications" onclick="setSettingsTab('notifications')">Notifications</button>
           <button class="st-tab" data-st="calendar" onclick="setSettingsTab('calendar')">Calendar</button>
           <button class="st-tab" data-st="ai" onclick="setSettingsTab('ai')">AI</button>
+          <button class="st-tab" data-st="routine" onclick="setSettingsTab('routine')">Routine</button>
           <button class="st-tab" data-st="people" onclick="setSettingsTab('people')">People</button>
           <button class="st-tab" data-st="history" onclick="setSettingsTab('history')">History</button>
           <button class="st-tab" data-st="account" onclick="setSettingsTab('account')">Account</button>
@@ -2920,6 +2938,26 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             </div>
             <textarea id="life-rhythm-ta" class="exp-ta xl" style="width:100%;min-height:120px" placeholder="Wake 6am weekdays / 7am weekends. Work 9am. Gym Mon–Fri ~1hr. Bible study Mon 7–9pm. Off screens by 10pm…" onblur="saveLifeRhythm()"></textarea>
           </div>
+        </div>
+
+        <div class="setting-tab-pane" data-setting-tab="routine">
+          <div class="section-hdr"><h2>Daily routine</h2></div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Bible verses on the focus card</div>
+              <div class="setting-desc">The "Don't forget today" card pairs a motivational line with a supporting Bible verse. Turn off to show the motivational line on its own.</div>
+            </div>
+            <div class="setting-right">
+              <label class="switch"><input type="checkbox" id="faith-focus-toggle" onchange="setFaithFocus(this.checked)"><span class="slider"></span></label>
+            </div>
+          </div>
+          <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:6px">
+            <div>
+              <div class="setting-label">Your checklist</div>
+              <div class="setting-desc">Build the routine that shows on your Today page. Weekday and weekend each have their own blocks and items. Changes save instantly.</div>
+            </div>
+          </div>
+          <div id="routine-editor"></div>
         </div>
 
         <div class="setting-tab-pane" data-setting-tab="people">
@@ -3131,7 +3169,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v177';
+const APP_VERSION='v178';
 const APP_BUILD_DATE='2026-04-24';
 // Anthropic API key storage — scoped per-user. Previously we stored a single
 // global key in localStorage.los_ak, which meant signing into a second Google
@@ -3272,7 +3310,7 @@ function setRoute(r,skipHash){
 // Settings sub-tab switching. Keeps the active tab persistent across
 // sessions so the user lands where they left off — but only within the
 // Settings route. Other routes are unaffected.
-const SETTING_TABS=['general','notifications','calendar','ai','people','history','account'];
+const SETTING_TABS=['general','notifications','calendar','ai','routine','people','history','account'];
 function setSettingsTab(t){
   if(!SETTING_TABS.includes(t))t='general';
   try{localStorage.setItem('los_settings_tab',t);}catch(e){}
@@ -4174,6 +4212,8 @@ function resetStateForNewUser(){
     S.dayNotes={};S.disabledCalendars=[];S.aiHistory=[];
     S.workProjects=[];
     S.todaysTip=null;S.growthFocus=null;S.lifeRhythm='';
+    S.routine=null;S.faithFocus=true;
+    S.trialStart=undefined;S.entitlement=undefined;S.onboardDone=undefined;
     S.calendarDefaults={timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]};
     S.notebook={sections:[]};
     // Wipe Google Calendar caches too — they were fetched with the previous
@@ -4468,6 +4508,14 @@ function handleSnapshot(snap){
     // deliberate upgrade — the whole point of the check-in revamp).
     if(['off','light','balanced','thorough'].includes(d.checkinLevel))S.checkinLevel=d.checkinLevel;
     else S.checkinLevel=(d.habitCatchupEnabled===false)?'off':'balanced';
+    // Customised routine (null/absent → built-in defaults used at render time).
+    S.routine=(d.routine&&Array.isArray(d.routine.weekday)&&Array.isArray(d.routine.weekend))?d.routine:null;
+    // Faith-backed focus card: default ON for existing + new users.
+    S.faithFocus=typeof d.faithFocus==='boolean'?d.faithFocus:true;
+    // Trial / entitlement / onboarding flags.
+    S.trialStart=typeof d.trialStart==='string'?d.trialStart:undefined;
+    S.entitlement=typeof d.entitlement==='string'?d.entitlement:undefined;
+    S.onboardDone=typeof d.onboardDone==='boolean'?d.onboardDone:undefined;
     // Each account's Anthropic key lives in Firestore under their own doc,
     // so this line also enforces the per-user scoping — account B's snapshot
     // will only ever populate account B's per-user key slot.
@@ -4623,6 +4671,13 @@ function _buildSavePayload(){
   payload.peopleTags=Array.isArray(S.peopleTags)?S.peopleTags:[];
   payload.peopleLevelNames=Array.isArray(S.peopleLevelNames)&&S.peopleLevelNames.length===5?S.peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
   payload.peopleSettings=S.peopleSettings&&typeof S.peopleSettings==='object'?S.peopleSettings:{defaultSort:'promise'};
+  // Customised daily routine (null = use built-in defaults).
+  if(S.routine&&Array.isArray(S.routine.weekday)&&Array.isArray(S.routine.weekend))payload.routine=S.routine;else payload.routine=null;
+  payload.faithFocus=typeof S.faithFocus==='boolean'?S.faithFocus:true;
+  // Trial / entitlement / onboarding (used by the paywall + tutorial).
+  if(typeof S.trialStart==='string')payload.trialStart=S.trialStart;
+  if(typeof S.entitlement==='string')payload.entitlement=S.entitlement;
+  if(typeof S.onboardDone==='boolean')payload.onboardDone=S.onboardDone;
   if(typeof S._schemaVersion==='number')payload._schemaVersion=S._schemaVersion;
   return payload;
 }
@@ -4798,7 +4853,7 @@ const GROWTH={
  {t:'Stay close; fruit follows.',v:'"Remain in me, as I also remain in you... apart from me you can do nothing."',r:'John 15:4-5'}
 ]
 };
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',routineLog:{},people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',routineLog:{},routine:null,faithFocus:true,people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
 // or 'all' (every AI change opens the review queue). Legacy 'off' is no
@@ -5448,7 +5503,7 @@ function doRefreshFocus(){
   else{try{const r=JSON.parse(localStorage.getItem('lf_f'));if(r&&r.date===t)off=(r.off||0)+7;}catch(e){}}
   genFocus(t,off);rFocus();
 }
-function rFocus(){const el=document.getElementById('fw');if(!el)return;const f=getDailyFocus();el.innerHTML=f.map(x=>`<div class="fcard"><div class="fcat">${esc(x.cat)}</div><div class="ftxt">${esc(x.text)}</div>${x.verse?`<div class="fverse">${esc(x.verse)}</div><div class="fref">${esc(x.ref||'')}</div>`:''}</div>`).join('');}
+function rFocus(){const el=document.getElementById('fw');if(!el)return;const sv=S.faithFocus!==false;const f=getDailyFocus();el.innerHTML=f.map(x=>`<div class="fcard"><div class="fcat">${esc(x.cat)}</div><div class="ftxt">${esc(x.text)}</div>${(sv&&x.verse)?`<div class="fverse">${esc(x.verse)}</div><div class="fref">${esc(x.ref||'')}</div>`:''}</div>`).join('');}
 
 // TIP
 async function loadTip(force){
@@ -6740,7 +6795,11 @@ function _nextBirthdayOccurrence(iso){
   if(cand<t)cand=`${ty+1}-${mm}`;              // already passed this year
   return {iso:cand,days:_daysBetweenIso(t,cand)};
 }
-const ROUTINE_WEEKDAY=[
+// Default routine templates. These are the OUT-OF-BOX checklist a brand-new
+// account gets. Once a user edits their routine in Settings the customised
+// copy lives in S.routine ({weekday:[...],weekend:[...]}) and these are only
+// used as the seed / "reset to default" source. Kept generic on purpose.
+const ROUTINE_WEEKDAY_DEFAULT=[
   {id:'am',title:'Start of day',sub:'First hour — get your bearings',items:[
     {id:'am-email',t:'Check your emails — clear anything quick'},
     {id:'am-tasks',t:'Check your task list (Daily + General)'},
@@ -6762,13 +6821,27 @@ const ROUTINE_WEEKDAY=[
     {id:'pm-review',t:'Quick review — anything slipping you should flag?'}
   ]}
 ];
-const ROUTINE_WEEKEND=[
+const ROUTINE_WEEKEND_DEFAULT=[
   {id:'we',title:'Weekend',sub:'Keep it light',items:[
     {id:'we-cal',t:"Check today's calendar"},
     {id:'we-glance',t:'Glance at the checklist — anything coming up you should prep for?'},
     {id:'we-rest',t:'Actually rest. That counts too.'}
   ]}
 ];
+// Deep-clone the defaults so callers can mutate without touching the const.
+function _routineDefault(){return {weekday:JSON.parse(JSON.stringify(ROUTINE_WEEKDAY_DEFAULT)),weekend:JSON.parse(JSON.stringify(ROUTINE_WEEKEND_DEFAULT))};}
+// The user's effective routine config: their customised copy if valid,
+// otherwise the built-in defaults. Read-only for rendering.
+function _routineConfig(){
+  if(S.routine&&Array.isArray(S.routine.weekday)&&Array.isArray(S.routine.weekend))return S.routine;
+  return _routineDefault();
+}
+// Promote the defaults into S.routine so the editor has a concrete, mutable
+// copy to work on. Called the first time the user edits anything.
+function _routineEnsureEditable(){
+  if(!(S.routine&&Array.isArray(S.routine.weekday)&&Array.isArray(S.routine.weekend)))S.routine=_routineDefault();
+  return S.routine;
+}
 const ROUTINE_JOURNAL=[
   {id:'j1',q:'What did you do well today?'},
   {id:'j2',q:'What could you have done better?'},
@@ -6781,7 +6854,46 @@ function _routineIsWeekend(iso){
   const dow=new Date(y,m-1,d).getDay();
   return dow===0||dow===6; // Sun or Sat only
 }
-function _routineBlocks(iso){return _routineIsWeekend(iso)?ROUTINE_WEEKEND:ROUTINE_WEEKDAY;}
+function _routineBlocks(iso){const cfg=_routineConfig();return _routineIsWeekend(iso)?cfg.weekend:cfg.weekday;}
+// ── Routine editor (Settings → Routine) ──
+function setFaithFocus(on){
+  S.faithFocus=!!on;svAll();
+  const t=document.getElementById('faith-focus-toggle');if(t)t.checked=S.faithFocus;
+  if(typeof rRoutine==='function')rRoutine();
+  if(typeof rFocus==='function')rFocus();
+}
+function _routineWhichArr(which){const cfg=_routineEnsureEditable();return which==='weekend'?cfg.weekend:cfg.weekday;}
+function _routineAfterEdit(rebuildEditor){
+  svAll();
+  if(rebuildEditor)rRoutineEditor();
+  if(currentRoute==='today'&&typeof rRoutine==='function')rRoutine();
+}
+function routineCfgAddBlock(which){const arr=_routineWhichArr(which);arr.push({id:uid(),title:'New block',sub:'',items:[{id:uid(),t:'New item'}]});_routineAfterEdit(true);}
+function routineCfgDelBlock(which,bi){const arr=_routineWhichArr(which);if(!arr[bi])return;if(!confirm('Delete this block and all its items?'))return;arr.splice(bi,1);_routineAfterEdit(true);}
+function routineCfgSetBlock(which,bi,field,val){const arr=_routineWhichArr(which);if(!arr[bi])return;arr[bi][field]=val;_routineAfterEdit(false);}
+function routineCfgAddItem(which,bi){const arr=_routineWhichArr(which);if(!arr[bi])return;arr[bi].items=arr[bi].items||[];arr[bi].items.push({id:uid(),t:'New item'});_routineAfterEdit(true);}
+function routineCfgDelItem(which,bi,ii){const arr=_routineWhichArr(which);if(!arr[bi]||!arr[bi].items)return;arr[bi].items.splice(ii,1);_routineAfterEdit(true);}
+function routineCfgSetItem(which,bi,ii,val){const arr=_routineWhichArr(which);if(!arr[bi]||!arr[bi].items||!arr[bi].items[ii])return;arr[bi].items[ii].t=val;_routineAfterEdit(false);}
+function routineCfgReset(){if(!confirm('Reset your routine to the default checklist? Your custom blocks and items will be replaced.'))return;S.routine=_routineDefault();_routineAfterEdit(true);}
+function rRoutineEditor(){
+  const el=document.getElementById('routine-editor');if(!el)return;
+  const cfg=_routineConfig();
+  const sec=(which,label)=>{
+    const arr=which==='weekend'?cfg.weekend:cfg.weekday;
+    const blocks=(arr||[]).map((b,bi)=>`
+      <div class="rce-block">
+        <div class="rce-block-hd">
+          <input class="rce-title" value="${esc(b.title||'')}" placeholder="Block title" onchange="routineCfgSetBlock('${which}',${bi},'title',this.value)">
+          <button class="rce-del" title="Delete block" onclick="routineCfgDelBlock('${which}',${bi})">×</button>
+        </div>
+        <input class="rce-sub" value="${esc(b.sub||'')}" placeholder="Subtitle (optional)" onchange="routineCfgSetBlock('${which}',${bi},'sub',this.value)">
+        <div class="rce-items">${(b.items||[]).map((it,ii)=>`<div class="rce-item"><input value="${esc(it.t||'')}" placeholder="Checklist item" onchange="routineCfgSetItem('${which}',${bi},${ii},this.value)"><button class="rce-del" title="Remove item" onclick="routineCfgDelItem('${which}',${bi},${ii})">×</button></div>`).join('')}</div>
+        <button class="rce-add-item" onclick="routineCfgAddItem('${which}',${bi})">+ Add item</button>
+      </div>`).join('');
+    return `<div class="rce-sec"><div class="rce-sec-hd">${label}</div>${blocks||'<div class="rce-empty">No blocks yet.</div>'}<button class="rce-add-block" onclick="routineCfgAddBlock('${which}')">+ Add block</button></div>`;
+  };
+  el.innerHTML=sec('weekday','Weekday')+sec('weekend','Weekend')+`<div class="rce-foot"><button class="btn btn-ghost btn-sm" onclick="routineCfgReset()">↺ Reset to default</button></div>`;
+}
 function _routineDayLog(iso){
   S.routineLog=S.routineLog||{};
   if(!S.routineLog[iso]||typeof S.routineLog[iso]!=='object')S.routineLog[iso]={checks:{},journal:{}};
@@ -6840,7 +6952,8 @@ function rRoutine(){
   try{
     const f=getDailyFocus();
     if(Array.isArray(f)&&f.length){
-      focusHtml=`<div class="rt-focus"><div class="rt-focus-lbl">Don't forget today</div><div class="rt-focus-grid">${f.map(x=>`<div class="rt-focus-item"><div class="rt-focus-cat">${esc(x.cat||'')}</div><div class="rt-focus-txt">${esc(x.text||'')}</div>${x.verse?`<div class="rt-focus-verse">${esc(x.verse)}</div><div class="rt-focus-ref">${esc(x.ref||'')}</div>`:''}</div>`).join('')}</div></div>`;
+      const showVerse=S.faithFocus!==false;
+      focusHtml=`<div class="rt-focus"><div class="rt-focus-lbl">Don't forget today</div><div class="rt-focus-grid">${f.map(x=>`<div class="rt-focus-item"><div class="rt-focus-cat">${esc(x.cat||'')}</div><div class="rt-focus-txt">${esc(x.text||'')}</div>${(showVerse&&x.verse)?`<div class="rt-focus-verse">${esc(x.verse)}</div><div class="rt-focus-ref">${esc(x.ref||'')}</div>`:''}</div>`).join('')}</div></div>`;
     }
   }catch(_){}
   // Calendar-aware line
@@ -9001,18 +9114,9 @@ function migrateProjects(){
       }
     }
   });
-  (S.tasks||[]).forEach(t=>{if(t.project==='zm')t.project='wa';});
-  (S.builds||[]).forEach(b=>{if(b.status&&b.title&&/zomarka/i.test(b.title))b.title=b.title.replace(/zomarka/gi,'Zamaka (WebAnchor client)');});
-  // Back-compat: if the user has tasks tagged with old hardcoded project
-  // codes (wa/tf) but S.workProjects is empty, seed it from those so their
-  // grouping doesn't disappear. New users just start with General only.
-  if(!S.workProjects||!S.workProjects.length){
-    const codes=new Set((S.tasks||[]).map(t=>t.project).filter(p=>p&&p!=='gen'));
-    const seeds=[];
-    if(codes.has('wa'))seeds.push({id:'wa',name:'WebAnchor',color:'var(--blue)'});
-    if(codes.has('tf'))seeds.push({id:'tf',name:'TriFusion',color:'var(--lavender)'});
-    if(seeds.length)S.workProjects=seeds;
-  }
+  // (Removed the legacy WebAnchor/TriFusion/Zamaka seeds — those were
+  // personal to the original developer's account. New users start with
+  // General only and add their own work areas in Settings.)
   rebuildPROJ();
 }
 // v1 → v2 migration. People is a brand-new feature; this just guarantees
@@ -9325,6 +9429,8 @@ function rSettings(){
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
+  const faithTog=document.getElementById('faith-focus-toggle');if(faithTog)faithTog.checked=S.faithFocus!==false;
+  rRoutineEditor();
   {const _cl=['off','light','balanced','thorough'].includes(S.checkinLevel)?S.checkinLevel:(S.habitCatchupEnabled===false?'off':'balanced');const _sw=document.getElementById('routine-autoopen-toggle');if(_sw)_sw.checked=_cl!=='off';}
   // Daily reminder toggle reflects both the user preference AND the
   // browser permission state, since either being off means no notifs fire.
