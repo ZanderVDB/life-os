@@ -2860,8 +2860,17 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
           <div class="setting-row">
             <div>
+              <div class="setting-label">Morning habit catch-up</div>
+              <div class="setting-desc">The first time you open the app each day, pop a box asking which of yesterday's habits you actually did — so you can tick any you missed. Only appears when there's something to catch up on.</div>
+            </div>
+            <div class="setting-right">
+              <label class="switch"><input type="checkbox" id="habit-catchup-toggle" onchange="setMorningHabitCatchup(this.checked)"><span class="slider"></span></label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
               <div class="setting-label">Open Daily Routine each morning</div>
-              <div class="setting-desc">The first time you open the app each day, it jumps straight to the Daily Routine so you start with your checklist. Turn off to land wherever you left off instead.</div>
+              <div class="setting-desc">If there's nothing to catch up on, jump straight to the Daily Routine so you start with your checklist. Turn off to land wherever you left off instead.</div>
             </div>
             <div class="setting-right">
               <label class="switch"><input type="checkbox" id="routine-autoopen-toggle" onchange="setCheckinLevel(this.checked?'balanced':'off')"><span class="slider"></span></label>
@@ -3208,7 +3217,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v179';
+const APP_VERSION='v180';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4288,7 +4297,7 @@ function resetStateForNewUser(){
     S.dayNotes={};S.disabledCalendars=[];S.aiHistory=[];
     S.workProjects=[];
     S.todaysTip=null;S.growthFocus=null;S.lifeRhythm='';
-    S.routine=null;S.faithFocus=true;
+    S.routine=null;S.faithFocus=true;S.morningHabitCatchup=true;
     S.trialStart=undefined;S.entitlement=undefined;S.onboardDone=undefined;
     S.calendarDefaults={timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]};
     S.notebook={sections:[]};
@@ -4584,6 +4593,8 @@ function handleSnapshot(snap){
     // deliberate upgrade — the whole point of the check-in revamp).
     if(['off','light','balanced','thorough'].includes(d.checkinLevel))S.checkinLevel=d.checkinLevel;
     else S.checkinLevel=(d.habitCatchupEnabled===false)?'off':'balanced';
+    // Morning "did you do yesterday's habits?" catch-up box (default ON).
+    S.morningHabitCatchup=typeof d.morningHabitCatchup==='boolean'?d.morningHabitCatchup:true;
     // Customised routine (null/absent → built-in defaults used at render time).
     S.routine=(d.routine&&Array.isArray(d.routine.weekday)&&Array.isArray(d.routine.weekend))?d.routine:null;
     // Faith-backed focus card: default ON for existing + new users.
@@ -4740,6 +4751,7 @@ function _buildSavePayload(){
   if(S.notebook!==undefined)payload.notebook=S.notebook||{sections:[]};
   payload.habitCatchupEnabled=typeof S.habitCatchupEnabled==='boolean'?S.habitCatchupEnabled:true;
   payload.checkinLevel=['off','light','balanced','thorough'].includes(S.checkinLevel)?S.checkinLevel:'balanced';
+  payload.morningHabitCatchup=typeof S.morningHabitCatchup==='boolean'?S.morningHabitCatchup:true;
   // Persist the migration high-water-mark so we don't re-run legacy
   // migrations on every cold launch. Once written, future loads see this
   // and skip the migration block entirely (handleSnapshot gates on it).
@@ -4929,7 +4941,7 @@ const GROWTH={
  {t:'Stay close; fruit follows.',v:'"Remain in me, as I also remain in you... apart from me you can do nothing."',r:'John 15:4-5'}
 ]
 };
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',routineLog:{},routine:null,faithFocus:true,people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',morningHabitCatchup:true,routineLog:{},routine:null,faithFocus:true,people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
 // or 'all' (every AI change opens the review queue). Legacy 'off' is no
@@ -7110,11 +7122,41 @@ function maybeShowDailyCheckin(){
     }
   },350);
 }
+// Morning habit catch-up box: the first time you open the app each day, pop
+// the (already-built) habit day modal for YESTERDAY in catch-up mode, so you
+// can tick any habits you actually did. Only opens when there's something
+// worth asking about — i.e. at least one habit that wasn't ticked yesterday
+// and yesterday wasn't a rest day for it (and the habit existed by then).
+// Returns true if it opened, so the caller can skip the routine redirect.
+function maybeShowHabitCatchupBox(){
+  if(S.morningHabitCatchup===false)return false;
+  if(!Array.isArray(S.habits)||!S.habits.length)return false;
+  const today=tod();
+  let last=null;try{last=localStorage.getItem('los_habitcatchup_lastShown');}catch(_){}
+  if(last===today)return false;
+  const y=addDaysToDateStr(today,-1);
+  const [yy,ym,yd]=y.split('-').map(Number);
+  const dow=new Date(yy,ym-1,yd).getDay();
+  const pending=S.habits.filter(h=>{
+    if((h.checkedDates||[]).includes(y))return false;            // already ticked
+    if((h.excludedDays||[]).includes(dow))return false;          // rest day
+    if(h.createdAt&&h.createdAt>y)return false;                  // didn't exist yet
+    return true;
+  });
+  if(!pending.length)return false;
+  try{localStorage.setItem('los_habitcatchup_lastShown',today);}catch(_){}
+  // openHabitDayModal takes (year, month0, day) — show yesterday in catch-up mode.
+  openHabitDayModal(yy,ym-1,yd,{catchup:true});
+  return true;
+}
 // Back-compat shim — snapshot wire-ups still call the old name. On the very
-// first run we run the welcome tour INSTEAD of the daily-routine redirect.
+// first run we run the welcome tour. Otherwise: the morning habit catch-up
+// box (if there's anything to catch up on) takes precedence, falling back to
+// the daily-routine redirect.
 function maybeShowHabitCatchup(){
   _ensureTrialStart();
   if(_maybeStartOnboarding())return;
+  if(maybeShowHabitCatchupBox())return;
   return maybeShowDailyCheckin();
 }
 // ───────── FIRST-RUN ONBOARDING (interactive coachmarks) ─────────
@@ -9610,6 +9652,7 @@ function rSettings(){
   rRoutineEditor();
   renderSubStatus();
   {const _cl=['off','light','balanced','thorough'].includes(S.checkinLevel)?S.checkinLevel:(S.habitCatchupEnabled===false?'off':'balanced');const _sw=document.getElementById('routine-autoopen-toggle');if(_sw)_sw.checked=_cl!=='off';}
+  {const _hc=document.getElementById('habit-catchup-toggle');if(_hc)_hc.checked=S.morningHabitCatchup!==false;}
   // Daily reminder toggle reflects both the user preference AND the
   // browser permission state, since either being off means no notifs fire.
   const ntTog=document.getElementById('notif-toggle');
@@ -10036,6 +10079,10 @@ function toggleHabitCatchup(on){
   // Back-compat shim — old toggle mapped on/off; route through the new
   // level system so both stay consistent.
   setCheckinLevel(on?'balanced':'off');
+}
+function setMorningHabitCatchup(on){
+  S.morningHabitCatchup=!!on;svAll();
+  const t=document.getElementById('habit-catchup-toggle');if(t)t.checked=S.morningHabitCatchup;
 }
 function setCheckinLevel(level){
   if(!['off','light','balanced','thorough'].includes(level))level='balanced';
