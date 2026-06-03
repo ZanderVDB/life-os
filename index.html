@@ -1269,6 +1269,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ti-checkbtn{flex-shrink:0;border:1px solid var(--border);background:transparent;border-radius:6px;padding:1px 5px;font-size:12px;line-height:1.2;cursor:pointer;opacity:.45;transition:all .12s;margin-top:1px}
 .ti-checkbtn:hover{opacity:1;background:var(--surface-hover);border-color:var(--border-strong)}
 .ti-checkbtn.on{opacity:1;background:color-mix(in srgb,var(--sage) 22%,var(--surface));border-color:color-mix(in srgb,var(--sage) 45%,var(--border))}
+/* Task modal stats line — "Open for X · Last checked Y · [Check today]". */
+.tm-stats{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin:8px 0 14px;padding:8px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px}
+.tm-stats b{color:var(--text-2);font-weight:600}
+.tm-stats-sep{opacity:.4}
+.tm-stats-btn{margin-left:auto;border:1px solid var(--border);background:var(--surface);border-radius:7px;padding:4px 10px;font-size:11.5px;font-weight:600;color:var(--text-2);cursor:pointer;transition:all .12s;flex-shrink:0}
+.tm-stats-btn:hover{background:var(--surface-hover);border-color:var(--border-strong);color:var(--text)}
+.tm-stats-btn.on{background:color-mix(in srgb,var(--sage) 22%,var(--surface));border-color:color-mix(in srgb,var(--sage) 45%,var(--border));color:var(--text)}
 .ti-age-mid{color:var(--peach,#c98a4a);background:var(--peach-bg,#f3e3d2)}
 .ti-age-old{color:#fff;background:var(--red,#c46a6a)}
 .ti-area-badge{font-size:10px;font-weight:600;color:var(--text-2);background:var(--surface-2);border-left:2px solid var(--abg,var(--peach));padding:1px 7px;border-radius:4px;flex-shrink:0;margin-top:1px;letter-spacing:.02em}
@@ -3225,7 +3232,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v181';
+const APP_VERSION='v182';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -8739,6 +8746,43 @@ function taskCheck(id,ev){
     t.lastCheckedAt=Date.now();
   }
   svAll();rTasks();
+  // If the task modal is open for this task, patch its stats line in-place
+  // so the user sees the new "Last checked today" without the modal flicker
+  // of a full re-open.
+  if(UI._taskModalId===id){
+    const el=document.getElementById('tm-stats');
+    if(el)el.innerHTML=_taskStatsHTML(t);
+  }
+}
+// Human-friendly day formatters used by the task modal stats line.
+function _humanOpenFor(days){
+  if(days<=0)return 'today';
+  if(days===1)return '1 day';
+  if(days<14)return days+' days';
+  if(days<31)return Math.floor(days/7)+' weeks';
+  if(days<62)return '1 month';
+  return Math.floor(days/30)+' months';
+}
+function _humanAgo(days){
+  if(days<=0)return 'today';
+  if(days===1)return 'yesterday';
+  if(days<14)return days+' days ago';
+  if(days<31)return Math.floor(days/7)+' weeks ago';
+  if(days<62)return 'last month';
+  return Math.floor(days/30)+' months ago';
+}
+// Stats line shown at the top of the task modal: "Open for X · Last checked Y"
+// plus a one-tap "Check today" button. Factored out so taskCheck can patch
+// it in place without reopening the whole modal.
+function _taskStatsHTML(t){
+  const since=t.dailySince||t.dailyDate||t.date||tod();
+  const age=_daysBetweenIso(since,tod());
+  const ms=_taskCheckedMs(t);
+  const ckDays=ms?Math.floor((Date.now()-ms)/86400000):null;
+  const ckOn=ckDays!==null&&ckDays<=0;
+  const ckStr=ckDays===null?'never':_humanAgo(ckDays);
+  const showBtn=!(typeof _isSyntheticTaskMode==='function'&&_isSyntheticTaskMode());
+  return `<span>Open for <b>${esc(_humanOpenFor(age))}</b></span><span class="tm-stats-sep">·</span><span>Last checked <b>${esc(ckStr)}</b></span>${showBtn?`<button class="tm-stats-btn${ckOn?' on':''}" onclick="taskCheck('${t.id}')" title="${ckOn?'Checked today — tap to undo':'I checked on this today'}">${ckOn?'✓ Checked today':'👀 Check today'}</button>`:''}`;
 }
 function setPri(id,p){
   const t=_findTask(id);if(!t)return;
@@ -8870,6 +8914,7 @@ function openTaskModal(idOrTask,opts){
         <span class="tm-tag" style="--proj:${proj.h}">${esc(t.area==='work'?proj.n:'Personal')}</span>
         <span class="tm-date">${isNew?'New task':'Added '+fmt(t.date||tod())}</span>
       </div>
+      <div id="tm-stats" class="tm-stats">${_taskStatsHTML(t)}</div>
       <label class="tm-lbl" for="tm-text">Task</label>
       <textarea id="tm-text" class="ta tm-text-ta" rows="2" placeholder="What needs doing?">${esc(t.text||'')}</textarea>
       <label class="tm-lbl" for="tm-area">Area</label>
