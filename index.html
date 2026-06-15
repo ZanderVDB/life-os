@@ -2961,6 +2961,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <button class="btn btn-sm" id="outlook-connect-btn" onclick="reconnectOutlookAndRefresh()">Connect</button>
             </div>
           </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Default write calendar</div>
+              <div class="setting-desc">When you create a new event, this calendar is pre-selected. You can still override it per event in the create modal.</div>
+            </div>
+            <div class="setting-right">
+              <select class="select" id="default-write-cal" onchange="setDefaultWriteCalendar(this.value)" style="min-width:180px"></select>
+            </div>
+          </div>
           <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:8px" id="gcal-cal-row">
             <div style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px">
               <div class="setting-label" style="font-size:12px">Calendars</div>
@@ -3235,6 +3244,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <button type="button" class="btn btn-sm em-type-btn" data-emt="task" onclick="setEmType('task')" style="flex:1">🔔 Reminder</button>
     </div>
     <div class="modal-row"><label>Title</label><input class="input" id="em-t" style="width:100%"></div>
+    <div class="modal-row" id="em-cal-row"><label>Calendar</label><select class="select" id="em-cal" style="width:100%"></select></div>
     <div class="modal-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div><label>Start date</label><input class="input" id="em-d" type="date" style="width:100%"></div>
       <div><label>End date</label><input class="input" id="em-d-end" type="date" style="width:100%" title="Leave blank for same day"></div>
@@ -3299,7 +3309,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v185';
+const APP_VERSION='v186';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4819,6 +4829,96 @@ async function deleteGCEvent(id,calId){
   if(r.ok||r.status===410)gcCache={key:'',events:[]};
   return r.ok||r.status===410;
 }
+// ───────── OUTLOOK WRITES (Microsoft Graph) ─────────
+// Mirror the createGCEvent / updateGCEvent / deleteGCEvent shape so the
+// dispatch layer below can swap one for the other based on event.source.
+// Microsoft Graph uses /me/calendars/{id}/events for create, /me/events/{id}
+// for update + delete. All-day end.date is exclusive (same as Google).
+async function createOutlookEvent(title,date,time,desc='',endTime='',opts={}){
+  const tok=getOutlookToken();if(!tok)return null;
+  const tz=opts.timeZone||'Africa/Johannesburg';
+  const allDay=opts.allDay||!time;
+  const endDate=opts.endDate||date;
+  const calId=opts.calendarId||'primary';
+  let body={subject:title,body:{contentType:'text',content:desc||''},isAllDay:allDay};
+  if(allDay){
+    body.start={dateTime:`${date}T00:00:00`,timeZone:tz};
+    body.end={dateTime:`${addDaysToDateStr(endDate,1)}T00:00:00`,timeZone:tz};
+  } else {
+    const hh=p2hhmm(time);
+    const eh=endTime?p2hhmm(endTime):endHH(hh);
+    body.start={dateTime:`${date}T${hh}:00`,timeZone:tz};
+    body.end={dateTime:`${endDate}T${eh}:00`,timeZone:tz};
+  }
+  // Reminders — Outlook only takes ONE reminderMinutesBeforeStart. Use the
+  // smallest positive value the user picked.
+  const rm=Array.isArray(opts.reminderMin)?opts.reminderMin:(typeof opts.reminderMin==='number'?[opts.reminderMin]:[]);
+  const positive=rm.map(n=>Number(n)).filter(n=>!isNaN(n)&&n>=0).sort((a,b)=>a-b);
+  if(positive.length){body.isReminderOn=true;body.reminderMinutesBeforeStart=positive[0];}
+  const path=calId&&calId!=='primary'?`/me/calendars/${encodeURIComponent(calId)}/events`:'/me/events';
+  const r=await fetch('https://graph.microsoft.com/v1.0'+path,{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.ok){gcCache={key:'',events:[]};return await r.json();}
+  console.warn('[outlook] create failed',r.status,await r.text().catch(()=>''));
+  return null;
+}
+async function updateOutlookEvent(id,title,date,time,desc='',endTime='',opts={}){
+  const tok=getOutlookToken();if(!tok)return false;
+  const tz=opts.timeZone||'Africa/Johannesburg';
+  const allDay=opts.allDay||!time;
+  const endDate=opts.endDate||date;
+  let body={subject:title,body:{contentType:'text',content:desc||''},isAllDay:allDay};
+  if(allDay){
+    body.start={dateTime:`${date}T00:00:00`,timeZone:tz};
+    body.end={dateTime:`${addDaysToDateStr(endDate,1)}T00:00:00`,timeZone:tz};
+  } else {
+    const hh=p2hhmm(time);
+    const eh=endTime?p2hhmm(endTime):endHH(hh);
+    body.start={dateTime:`${date}T${hh}:00`,timeZone:tz};
+    body.end={dateTime:`${endDate}T${eh}:00`,timeZone:tz};
+  }
+  const rm=Array.isArray(opts.reminderMin)?opts.reminderMin:(typeof opts.reminderMin==='number'?[opts.reminderMin]:[]);
+  const positive=rm.map(n=>Number(n)).filter(n=>!isNaN(n)&&n>=0).sort((a,b)=>a-b);
+  if(positive.length){body.isReminderOn=true;body.reminderMinutesBeforeStart=positive[0];}
+  const r=await fetch('https://graph.microsoft.com/v1.0/me/events/'+encodeURIComponent(id),{method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.ok)gcCache={key:'',events:[]};
+  return r.ok;
+}
+async function deleteOutlookEvent(id){
+  const tok=getOutlookToken();if(!tok)return false;
+  const r=await fetch('https://graph.microsoft.com/v1.0/me/events/'+encodeURIComponent(id),{method:'DELETE',headers:{Authorization:'Bearer '+tok}});
+  if(r.ok||r.status===404)gcCache={key:'',events:[]};
+  return r.ok||r.status===404;
+}
+// ───────── DISPATCH LAYER ─────────
+// Old call sites all call createGCEvent / updateGCEvent / deleteGCEvent.
+// We wrap them with a source switch so a single argument (opts.source for
+// new events, the event's own source field for updates/deletes) picks the
+// right provider. This avoids touching the 8+ existing call sites.
+const _createGCEvent_google=createGCEvent;
+const _updateGCEvent_google=updateGCEvent;
+const _deleteGCEvent_google=deleteGCEvent;
+// eslint-disable-next-line no-func-assign
+createGCEvent=async function(title,date,time,desc,endTime,opts){
+  opts=opts||{};
+  if(opts.source==='outlook')return createOutlookEvent(title,date,time,desc,endTime,opts);
+  return _createGCEvent_google(title,date,time,desc,endTime,opts);
+};
+// eslint-disable-next-line no-func-assign
+updateGCEvent=async function(id,title,date,time,desc,endTime,opts){
+  opts=opts||{};
+  if(opts.source==='outlook')return updateOutlookEvent(id,title,date,time,desc,endTime,opts);
+  return _updateGCEvent_google(id,title,date,time,desc,endTime,opts);
+};
+// eslint-disable-next-line no-func-assign
+deleteGCEvent=async function(id,calIdOrOpts){
+  // Back-compat: old callers passed (id, calId). New callers can pass
+  // (id, {source, calendarId}).
+  let source='google',calId;
+  if(typeof calIdOrOpts==='string'){calId=calIdOrOpts;}
+  else if(calIdOrOpts&&typeof calIdOrOpts==='object'){source=calIdOrOpts.source||'google';calId=calIdOrOpts.calendarId;}
+  if(source==='outlook')return deleteOutlookEvent(id);
+  return _deleteGCEvent_google(id,calId);
+};
 function p2hhmm(s){const m=(s||'').match(/(\d+)(?::(\d+))?\s*(am|pm)/i);if(!m){const m2=(s||'').match(/^(\d{1,2}):(\d{2})$/);if(m2)return`${m2[1].padStart(2,'0')}:${m2[2]}`;return'10:00';}let h=parseInt(m[1]),min=parseInt(m[2]||'0');if(m[3].toLowerCase()==='pm'&&h!==12)h+=12;if(m[3].toLowerCase()==='am'&&h===12)h=0;return`${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`;}
 function endHH(hh){const[h,m]=hh.split(':').map(Number);const eh=(h+1)%24;return`${String(eh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;}
 
@@ -4842,7 +4942,7 @@ function resetStateForNewUser(){
     S.dayNotes={};S.disabledCalendars=[];S.aiHistory=[];
     S.workProjects=[];
     S.todaysTip=null;S.growthFocus=null;S.lifeRhythm='';
-    S.routine=null;S.faithFocus=true;S.morningHabitCatchup=true;
+    S.routine=null;S.faithFocus=true;S.morningHabitCatchup=true;S.defaultWriteCalendar=null;
     S.trialStart=undefined;S.entitlement=undefined;S.onboardDone=undefined;
     S.calendarDefaults={timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]};
     S.notebook={sections:[]};
@@ -5153,6 +5253,8 @@ function handleSnapshot(snap){
     S.routine=(d.routine&&Array.isArray(d.routine.weekday)&&Array.isArray(d.routine.weekend))?d.routine:null;
     // Faith-backed focus card: default ON for existing + new users.
     S.faithFocus=typeof d.faithFocus==='boolean'?d.faithFocus:true;
+    // Default write calendar (Phase B). Null = auto (primary Google).
+    S.defaultWriteCalendar=(d.defaultWriteCalendar&&typeof d.defaultWriteCalendar==='object'&&d.defaultWriteCalendar.source&&d.defaultWriteCalendar.calendarId)?d.defaultWriteCalendar:null;
     // Trial / entitlement / onboarding flags.
     S.trialStart=typeof d.trialStart==='string'?d.trialStart:undefined;
     S.entitlement=typeof d.entitlement==='string'?d.entitlement:undefined;
@@ -5316,6 +5418,8 @@ function _buildSavePayload(){
   // Customised daily routine (null = use built-in defaults).
   if(S.routine&&Array.isArray(S.routine.weekday)&&Array.isArray(S.routine.weekend))payload.routine=S.routine;else payload.routine=null;
   payload.faithFocus=typeof S.faithFocus==='boolean'?S.faithFocus:true;
+  // Default write calendar — {source:'google'|'outlook', calendarId:'...'} or null.
+  payload.defaultWriteCalendar=(S.defaultWriteCalendar&&typeof S.defaultWriteCalendar==='object'&&S.defaultWriteCalendar.source&&S.defaultWriteCalendar.calendarId)?S.defaultWriteCalendar:null;
   // Trial / entitlement / onboarding (used by the paywall + tutorial).
   if(typeof S.trialStart==='string')payload.trialStart=S.trialStart;
   if(typeof S.entitlement==='string')payload.entitlement=S.entitlement;
@@ -5495,7 +5599,7 @@ const GROWTH={
  {t:'Stay close; fruit follows.',v:'"Remain in me, as I also remain in you... apart from me you can do nothing."',r:'John 15:4-5'}
 ]
 };
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',morningHabitCatchup:true,routineLog:{},routine:null,faithFocus:true,mode:'personal',people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',morningHabitCatchup:true,routineLog:{},routine:null,faithFocus:true,mode:'personal',defaultWriteCalendar:null,people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
 // or 'all' (every AI change opens the review queue). Legacy 'off' is no
@@ -8284,6 +8388,79 @@ function renderEmReminderChips(kept){
 function getEmReminderValues(){
   return [...document.querySelectorAll('#em-reminders input[type="checkbox"]:checked')].map(cb=>Number(cb.value)).filter(n=>!isNaN(n));
 }
+// Populate the event-modal calendar dropdown with every writable calendar
+// across providers. selected = "<source>:<calendarId>" string to mark current
+// choice; if `lock` is true the user can't change it (used for edits — moving
+// events between calendars takes its own API and isn't supported here).
+async function populateEventCalendarSelect(selected,lock){
+  const sel=document.getElementById('em-cal');if(!sel)return;
+  sel.disabled=false;
+  sel.innerHTML='<option value="">Loading…</option>';
+  let gcal=[],ocal=[];
+  try{if(getGCalToken())gcal=await fetchCalendarList();}catch(_){}
+  try{if(getOutlookToken())ocal=await fetchOutlookCalendars();}catch(_){}
+  const opts=[];
+  if(gcal.length){
+    opts.push('<optgroup label="Google Calendar">');
+    gcal.forEach(c=>{opts.push(`<option value="google:${esc(c.id)}">${esc(c.summary||'(untitled)')}${c.primary?' · primary':''}</option>`);});
+    opts.push('</optgroup>');
+  }
+  if(ocal.length){
+    opts.push('<optgroup label="Outlook">');
+    ocal.forEach(c=>{opts.push(`<option value="outlook:${esc(c.id)}">${esc(c.summary||'(untitled)')}${c.primary?' · primary':''}</option>`);});
+    opts.push('</optgroup>');
+  }
+  if(!opts.length){sel.innerHTML='<option value="google:primary">Connect a calendar in Settings</option>';sel.disabled=true;return;}
+  sel.innerHTML=opts.join('');
+  // Default: explicit `selected` arg wins, then the user's saved default, then Google primary.
+  let target=selected;
+  if(!target&&S.defaultWriteCalendar&&S.defaultWriteCalendar.source&&S.defaultWriteCalendar.calendarId){
+    target=`${S.defaultWriteCalendar.source}:${S.defaultWriteCalendar.calendarId}`;
+  }
+  if(!target)target='google:primary';
+  // Find a matching option; fall back to the first if the saved default no longer exists.
+  if(![...sel.options].some(o=>o.value===target))target=sel.options[0]?.value||'google:primary';
+  sel.value=target;
+  if(lock)sel.disabled=true;
+}
+// Parse "<source>:<calendarId>" back into the parts.
+function _parseEmCalValue(v){
+  const m=String(v||'').match(/^(google|outlook):(.+)$/);
+  if(!m)return {source:'google',calendarId:'primary'};
+  return {source:m[1],calendarId:m[2]};
+}
+// Persist the user's chosen default write calendar. The event-modal picker
+// reads this on first open so new events land in the right place by default.
+function setDefaultWriteCalendar(v){
+  const parsed=_parseEmCalValue(v);
+  S.defaultWriteCalendar={source:parsed.source,calendarId:parsed.calendarId};
+  try{svAll();}catch(_){}
+}
+// Populate the Settings → Calendar default-write-calendar dropdown.
+async function populateDefaultWriteCalSelect(){
+  const sel=document.getElementById('default-write-cal');if(!sel)return;
+  sel.disabled=false;
+  sel.innerHTML='<option value="">Loading…</option>';
+  let gcal=[],ocal=[];
+  try{if(getGCalToken())gcal=await fetchCalendarList();}catch(_){}
+  try{if(getOutlookToken())ocal=await fetchOutlookCalendars();}catch(_){}
+  const opts=[];
+  if(gcal.length){
+    opts.push('<optgroup label="Google Calendar">');
+    gcal.forEach(c=>{opts.push(`<option value="google:${esc(c.id)}">${esc(c.summary||'(untitled)')}${c.primary?' · primary':''}</option>`);});
+    opts.push('</optgroup>');
+  }
+  if(ocal.length){
+    opts.push('<optgroup label="Outlook">');
+    ocal.forEach(c=>{opts.push(`<option value="outlook:${esc(c.id)}">${esc(c.summary||'(untitled)')}${c.primary?' · primary':''}</option>`);});
+    opts.push('</optgroup>');
+  }
+  if(!opts.length){sel.innerHTML='<option value="">Connect a calendar first</option>';sel.disabled=true;return;}
+  sel.innerHTML=opts.join('');
+  let target=S.defaultWriteCalendar?`${S.defaultWriteCalendar.source}:${S.defaultWriteCalendar.calendarId}`:'google:primary';
+  if(![...sel.options].some(o=>o.value===target))target=sel.options[0]?.value||'';
+  sel.value=target;
+}
 function setEmReminderValues(mins){
   renderEmReminderChips((mins||[]).map(Number));
 }
@@ -8297,6 +8474,9 @@ function openNewEvent(prefill){
   document.getElementById('em-tm').value=prefill.time||'';
   document.getElementById('em-tm-end').value=prefill.endTime||'';
   document.getElementById('em-del').style.display='none';
+  // Calendar picker — default to the user's saved default write calendar.
+  // Unlocked on create so they can route this event to a different one.
+  populateEventCalendarSelect(null,false);
   // Pre-tick the user's default reminder chips (timed vs all-day). They can
   // still change them before saving, and birthdays auto-apply the birthday
   // default on the fly if the user types "birthday" in the title.
@@ -8362,6 +8542,11 @@ async function openEventEdit(payload){
     if(tzSel){tzSel.value=timeZone;if(tzSel.value!==timeZone){const opt=document.createElement('option');opt.value=timeZone;opt.textContent=timeZone;tzSel.appendChild(opt);tzSel.value=timeZone;}}
     toggleEmAllDay();
     document.getElementById('em-del').style.display='inline-flex';
+    // Calendar picker — locked on edit (moving events between calendars takes
+    // its own API surface and isn't supported here).
+    const evSrc=d.source||'google';
+    const evCalId=d.calendarId||'primary';
+    populateEventCalendarSelect(`${evSrc}:${evCalId}`,true);
     document.getElementById('event-modal').style.display='flex';_syncBodyLock();
     // Intentionally NOT auto-focusing the title on edit — most of the time
     // the user just wants to look at the event, and popping the on-screen
@@ -8459,10 +8644,14 @@ async function saveCurrentEvent(){
   const reminderList=getEmReminderValues();
   const reminderMin=reminderList.length?(reminderList.length===1?reminderList[0]:reminderList):'none';
   const timeZone=document.getElementById('em-tz').value;
-  const opts={allDay,recurrence,reminderMin,timeZone,endDate};
+  // Calendar dropdown decides which provider this event lands on. For new
+  // events the user picked it (defaulting to S.defaultWriteCalendar). For
+  // edits it's locked to the event's existing source/calendar.
+  const _picked=_parseEmCalValue(document.getElementById('em-cal')?.value||'');
+  const opts={allDay,recurrence,reminderMin,timeZone,endDate,source:_picked.source,calendarId:_picked.calendarId};
   if(editingEvent.mode==='new'){
     const res=await createGCEvent(title,date,time,desc,endTime,opts);
-    if(!res){alert('Could not save to Google Calendar. The token may have expired — reconnect in Settings → Integrations.');return;}
+    if(!res){alert(`Could not save to ${_picked.source==='outlook'?'Outlook':'Google Calendar'}. The token may have expired — reconnect in Settings → Calendar.`);return;}
     // People auto-connect: if the user reached the event editor via
     // "Create new birthday" on a person card, link the freshly-created
     // GCal event to that person record so they don't have to manually
@@ -8582,18 +8771,30 @@ function showRecurringUpdateModal(){
 // + brand-new master starting from this instance with the new details.
 async function applyRecurringUpdate(d,mode,fields){
   const calId=d.calendarId||'primary';
+  const source=d.source||'google';
   const {title,date,time,desc,endTime,opts}=fields;
+  // Force opts to carry the event's own source/calendarId — the dispatch
+  // layer in updateGCEvent/createGCEvent reads source to pick the provider.
+  const baseOpts={...opts,source,calendarId:calId};
   if(mode==='single'){
     // PATCH THIS instance only. Don't carry recurrence onto the instance —
     // that would replace the series. Strip recurrence from opts.
-    const instanceOpts={...opts,recurrence:'none'};
+    const instanceOpts={...baseOpts,recurrence:'none'};
     return await updateGCEvent(d.id,title,date,time,desc,endTime,instanceOpts);
   }
   if(mode==='series'){
     const master=d.recurringEventId||d.id;
-    return await updateGCEvent(master,title,date,time,desc,endTime,opts);
+    return await updateGCEvent(master,title,date,time,desc,endTime,baseOpts);
   }
   if(mode==='future'){
+    // Outlook's recurring series doesn't expose Google's RRULE-with-UNTIL
+    // trick we use below. For v1 we fall back to series-wide update with a
+    // warning — full split-the-series support can come later.
+    if(source==='outlook'){
+      alert('"This and following" isn\'t supported for Outlook events yet — applying the change to the whole series instead.');
+      const master=d.recurringEventId||d.id;
+      return await updateGCEvent(master,title,date,time,desc,endTime,baseOpts);
+    }
     const tok=getGCalToken();if(!tok)return false;
     try{
       const masterId=d.recurringEventId||d.id;
@@ -8630,17 +8831,26 @@ async function applyRecurringUpdate(d,mode,fields){
 // Execute the delete based on which 'mode' the user chose in the modal above.
 async function applyRecurringDelete(d,mode){
   const calId=d.calendarId||'primary';
+  const source=d.source||'google';
+  // Object form on deleteGCEvent so the dispatch layer routes to Outlook
+  // when source==='outlook'; back-compat string form stays Google-only.
+  const calRef={source,calendarId:calId};
   if(mode==='single'){
     // Delete just this instance. data.id for a single-event fetch (with
     // singleEvents=true) IS the instance id, so direct delete works.
-    return await deleteGCEvent(d.id,calId);
+    return await deleteGCEvent(d.id,calRef);
   }
   if(mode==='series'){
     // Delete the master event — cascades to every past + future instance.
     const master=d.recurringEventId||d.id;
-    return await deleteGCEvent(master,calId);
+    return await deleteGCEvent(master,calRef);
   }
   if(mode==='future'){
+    if(source==='outlook'){
+      alert('"This and following" isn\'t supported for Outlook events yet — deleting the whole series instead.');
+      const master=d.recurringEventId||d.id;
+      return await deleteGCEvent(master,calRef);
+    }
     // "This and following" — GCal doesn't have a single API call for this.
     // Approach: fetch the master event, grab its RRULE, set UNTIL to the day
     // before THIS instance, PATCH the master. Future occurrences disappear.
@@ -10285,6 +10495,8 @@ function rSettings(){
     else{ob.textContent=otok?'Disconnect':'Connect';ob.disabled=false;ob.title='';}
   }
   if(od&&!_outlookConfigured())od.innerHTML='Outlook integration is built but waiting on a one-time Azure AD app registration. Once <code>window.MICROSOFT_OUTLOOK_CLIENT_ID</code> is set in config, the Connect button activates.';
+  // Default write calendar dropdown — async populate; safe to fire and forget.
+  try{populateDefaultWriteCalSelect();}catch(_){}
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
   const faithTog=document.getElementById('faith-focus-toggle');if(faithTog)faithTog.checked=S.faithFocus!==false;
