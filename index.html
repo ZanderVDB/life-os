@@ -3182,10 +3182,29 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
           <div class="setting-row">
             <div>
+              <div class="setting-label">Legal</div>
+              <div class="setting-desc">How your data is handled and the terms you've agreed to by using Life OS.</div>
+            </div>
+            <div class="setting-right" style="display:flex;gap:8px">
+              <a class="btn btn-sm" href="/privacy.html" target="_blank" rel="noopener">Privacy policy</a>
+              <a class="btn btn-sm" href="/terms.html" target="_blank" rel="noopener">Terms</a>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
               <div class="setting-label">Sign out</div>
             </div>
             <div class="setting-right">
               <button class="btn btn-danger btn-sm" onclick="doSignOut()">Sign out</button>
+            </div>
+          </div>
+          <div class="setting-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px">
+            <div>
+              <div class="setting-label" style="color:var(--red)">Delete all my data</div>
+              <div class="setting-desc">Permanently wipes every profile and everything inside them — tasks, projects, people, notebook, AI history, the lot. Disconnects Google and Outlook. Cannot be undone.</div>
+            </div>
+            <div class="setting-right">
+              <button class="btn btn-danger btn-sm" onclick="openDeleteDataModal()">Delete all data</button>
             </div>
           </div>
         </div>
@@ -3309,7 +3328,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v186';
+const APP_VERSION='v187';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -3537,6 +3556,101 @@ async function deleteProfile(id){
   try{await _profileIndexRef().set(_profileCatalog,{merge:true});}catch(_){}
   try{await db.collection('users').doc(CU.uid).collection('data').doc(id).delete();}catch(_){}
   if(typeof rSettings==='function'&&currentRoute==='settings')rSettings();
+}
+// ───────── ACCOUNT DELETION (Play Store + privacy law requirement) ─────────
+// Type-to-confirm modal, then wipe every profile doc + the catalog, revoke
+// every OAuth token we can, clear localStorage, and sign out. The Firebase
+// Auth identity itself is preserved (deleting it requires a recent sign-in
+// and would force a redirect dance). What matters legally is that the user
+// data is gone, which this does.
+function openDeleteDataModal(){
+  const existing=document.getElementById('delete-data-modal');if(existing)existing.remove();
+  const profiles=(_profileCatalog&&_profileCatalog.profiles)||[];
+  const profileLines=profiles.length?profiles.map(p=>`<li><strong>${esc(p.name||'Profile')}</strong> — every task, project, person, notebook page, AI history entry and setting in it</li>`).join(''):'<li>All Life OS data stored under your account</li>';
+  const overlay=document.createElement('div');
+  overlay.id='delete-data-modal';overlay.className='modal';overlay.style.display='flex';
+  overlay.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:460px">
+      <h3 style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600;margin-bottom:10px;color:var(--red)">Delete all my data</h3>
+      <p style="font-size:13.5px;color:var(--text-2);line-height:1.6;margin-bottom:10px">This permanently removes from our database:</p>
+      <ul style="font-size:13px;color:var(--text-2);line-height:1.6;margin:0 0 14px 18px;padding:0">${profileLines}</ul>
+      <p style="font-size:13.5px;color:var(--text-2);line-height:1.6;margin-bottom:14px">It also revokes your Google + Outlook calendar connections, clears any saved API key, and signs you out. <strong>This cannot be undone.</strong></p>
+      <label class="bd-lbl" style="display:block;margin-bottom:4px">Type <strong>DELETE</strong> to confirm</label>
+      <input id="dd-confirm" class="input" placeholder="DELETE" autocomplete="off" autocapitalize="characters" style="margin-bottom:14px">
+      <div class="modal-actions">
+        <button class="btn btn-sm" onclick="_closeDeleteDataModal()">Cancel</button>
+        <div class="spacer"></div>
+        <button class="btn btn-danger btn-sm" id="dd-go" onclick="confirmDeleteAllData()">Delete everything</button>
+      </div>
+      <div id="dd-progress" style="font-size:12px;color:var(--muted);margin-top:10px;min-height:16px"></div>
+    </div>`;
+  document.body.appendChild(overlay);_syncBodyLock();
+  overlay.addEventListener('click',e=>{if(e.target.closest('.modal-bd'))_closeDeleteDataModal();});
+  setTimeout(()=>{const i=document.getElementById('dd-confirm');if(i)i.focus();},60);
+}
+function _closeDeleteDataModal(){const m=document.getElementById('delete-data-modal');if(m){m.remove();_syncBodyLock();}}
+async function confirmDeleteAllData(){
+  const inp=document.getElementById('dd-confirm');
+  if(!inp||inp.value.trim().toUpperCase()!=='DELETE'){alert("Type DELETE (in capitals) to confirm.");return;}
+  const btn=document.getElementById('dd-go');if(btn){btn.disabled=true;btn.textContent='Deleting…';}
+  const progress=document.getElementById('dd-progress');
+  const step=msg=>{if(progress)progress.textContent=msg;};
+  if(!CU){alert("You're already signed out.");_closeDeleteDataModal();return;}
+  const uid=CU.uid;
+  try{
+    // 1. Revoke Google OAuth token at Google's end. Best effort — even if
+    //    the network call fails, we still clear the local copy below.
+    step('Revoking Google Calendar access…');
+    const gtok=getGCalToken();
+    if(gtok){
+      try{await fetch('https://oauth2.googleapis.com/revoke?token='+encodeURIComponent(gtok),{method:'POST'});}catch(_){}
+    }
+    // 2. Sign out from MSAL so the cached Outlook account drops too.
+    step('Disconnecting Outlook…');
+    try{
+      const client=initMsalClient&&initMsalClient();
+      if(client&&_msalAccount){await client.logoutPopup({account:_msalAccount,mainWindowRedirectUri:window.location.origin}).catch(()=>{});}
+    }catch(_){}
+    // 3. Stop the active Firestore listener BEFORE deleting docs — otherwise
+    //    the snapshot handler runs against the wipe and can re-write empty
+    //    state back, leaving phantom fields.
+    step('Stopping sync…');
+    try{stopSync();}catch(_){}
+    _initialSyncDone=false;
+    // 4. Delete every profile data doc.
+    const profiles=(_profileCatalog&&_profileCatalog.profiles)||[{id:'main'}];
+    let done=0;
+    for(const p of profiles){
+      step(`Deleting "${p.name||p.id}" (${done+1}/${profiles.length})…`);
+      try{await db.collection('users').doc(uid).collection('data').doc(p.id).delete();}catch(e){console.warn('[delete] profile doc failed',p.id,e.message);}
+      done++;
+    }
+    // Also delete the legacy 'main' doc if it somehow wasn't in the catalog.
+    if(!profiles.some(p=>p.id==='main')){try{await db.collection('users').doc(uid).collection('data').doc('main').delete();}catch(_){}}
+    // 5. Delete the catalog itself.
+    step('Deleting profile catalog…');
+    try{await db.collection('users').doc(uid).collection('data').doc('_index').delete();}catch(_){}
+    // 6. Delete the presence subcollection entry if present.
+    try{await db.collection('users').doc(uid).collection('presence').doc('current').delete();}catch(_){}
+    // 7. Clear localStorage keys this app owns.
+    step('Clearing local storage…');
+    try{
+      const keep=new Set();// (intentionally empty — we wipe everything we set)
+      const ours=/^los_/;
+      const toRemove=[];
+      for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&ours.test(k)&&!keep.has(k))toRemove.push(k);}
+      toRemove.forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
+    }catch(_){}
+    try{sessionStorage.clear();}catch(_){}
+    // 8. Sign out from Firebase Auth and hard-reload so nothing stale lingers.
+    step('Signing out…');
+    try{await auth.signOut();}catch(_){}
+    setTimeout(()=>{location.replace(location.origin+location.pathname);},400);
+  }catch(e){
+    console.error('[delete-all-data]',e);
+    if(btn){btn.disabled=false;btn.textContent='Delete everything';}
+    alert('Something went wrong while deleting: '+(e.message||e)+'\n\nSome data may still be present. Try again, or email zander.vanderberg1@gmail.com.');
+  }
 }
 // Render the avatar initial + name in both the desktop sidebar pill and the
 // mobile drawer pill. Called after load and after every switch/rename.

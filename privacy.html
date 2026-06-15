@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · Life OS</title>
+<meta name="description" content="Privacy policy for Life OS.">
+<link rel="icon" href="icon.svg">
+<style>
+  :root{
+    --bg:#fbf8f3;--surface:#fff;--surface-2:#f5efe6;--border:#e7dfd2;
+    --text:#332e26;--text-2:#5a5247;--muted:#8a7f6f;--accent:#a06b3d;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{background:var(--bg);color:var(--text);margin:0;padding:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:720px;margin:0 auto;padding:48px 24px 96px}
+  .top{display:flex;align-items:center;gap:12px;margin-bottom:36px}
+  .top img{width:32px;height:32px}
+  .top-name{font-family:'Playfair Display',Georgia,serif;font-size:22px;font-weight:500;letter-spacing:-.3px}
+  .top-back{margin-left:auto;font-size:13px;color:var(--accent);text-decoration:none;font-weight:600}
+  .top-back:hover{text-decoration:underline}
+  h1{font-family:'Playfair Display',Georgia,serif;font-size:38px;font-weight:600;letter-spacing:-.8px;line-height:1.15;margin:0 0 10px}
+  .lead{font-size:14px;color:var(--muted);margin-bottom:36px}
+  h2{font-family:'Playfair Display',Georgia,serif;font-size:22px;font-weight:600;letter-spacing:-.3px;margin:36px 0 10px}
+  h3{font-size:15px;font-weight:700;margin:20px 0 6px;color:var(--text-2)}
+  p,ul{margin:0 0 14px}
+  ul{padding-left:22px}
+  li{margin-bottom:6px}
+  strong{font-weight:600;color:var(--text)}
+  a{color:var(--accent);text-decoration:none;font-weight:500}
+  a:hover{text-decoration:underline}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--surface-2);padding:1px 6px;border-radius:5px}
+  .foot{margin-top:48px;padding-top:24px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <img src="icon.svg" alt="Life OS">
+    <div class="top-name">Life OS</div>
+    <a class="top-back" href="/">← Back to app</a>
+  </div>
+
+  <h1>Privacy Policy</h1>
+  <div class="lead">Last updated 15 June 2026.</div>
+
+  <p>This page explains what information Life OS handles, how, and what your choices are. It's written in plain language because that's the point. If anything isn't clear, email <a href="mailto:zander.vanderberg1@gmail.com">zander.vanderberg1@gmail.com</a>.</p>
+
+  <h2>Who runs Life OS</h2>
+  <p>Life OS is a personal productivity app built and operated by Zander van der Berg, based in South Africa. For privacy questions, account deletion, or anything else, contact <a href="mailto:zander.vanderberg1@gmail.com">zander.vanderberg1@gmail.com</a>.</p>
+
+  <h2>What we collect</h2>
+
+  <h3>Account information</h3>
+  <p>When you sign in with Google we receive your <strong>name, email address, profile photo URL, and a unique account ID</strong>. We don't ask for or store your Google password.</p>
+
+  <h3>Content you create in Life OS</h3>
+  <p>Tasks, projects, notes, habits, calendar events you create inside Life OS, your daily routine, notebook entries, people records, ideas, resources, and any other content you enter — all stored under your account in Google Firestore.</p>
+
+  <h3>Calendar data</h3>
+  <p>If you connect <strong>Google Calendar</strong> or <strong>Outlook Calendar</strong>, Life OS reads upcoming events from your connected calendars to display them and write events you create. We use OAuth tokens issued by Google / Microsoft — Life OS never sees your password. Calendar events are <strong>not</strong> stored on our servers; they're fetched on demand from Google / Microsoft and cached in your browser.</p>
+
+  <h3>Your Anthropic API key</h3>
+  <p>The AI assistant inside Life OS uses <strong>your own Anthropic API key</strong>. You paste it into Settings; it's stored under your account in Firestore so it syncs across your devices. Prompts you send to the AI are sent directly from your browser to Anthropic's API — they don't pass through any server we operate.</p>
+
+  <h3>Diagnostic logs</h3>
+  <p>The app keeps a small in-browser ring buffer of recent console messages for debugging. This buffer lives only in your browser and is never transmitted off your device.</p>
+
+  <h2>What we use it for</h2>
+  <ul>
+    <li><strong>Running the app for you</strong> — saving your data, syncing it between your devices, showing your calendar.</li>
+    <li><strong>The AI assistant</strong> — your prompts and the relevant context (tasks, habits, people, etc.) are sent to Anthropic so the assistant can help. Anthropic processes prompts under their own terms.</li>
+    <li><strong>Service reliability</strong> — Firebase / Google Cloud handle hosting and storage and may produce operational logs for that purpose.</li>
+  </ul>
+  <p>We do <strong>not</strong> sell your data, use it for advertising, profile you, or share it with marketing partners.</p>
+
+  <h2>Who your data goes to</h2>
+  <ul>
+    <li><strong>Google (Firebase / Firestore)</strong> — hosts your account and stores your content. Bound by Google's data processing terms.</li>
+    <li><strong>Google Calendar / Microsoft Graph</strong> — when you connect those calendars and Life OS makes requests on your behalf.</li>
+    <li><strong>Anthropic</strong> — receives your AI prompts when you use the assistant.</li>
+    <li><strong>Google Play (if you install via the Play Store)</strong> — handles payment and subscription status. We never see your card details.</li>
+  </ul>
+
+  <h2>How long we keep it</h2>
+  <p>Your data stays for as long as your account exists. The moment you delete your account (see below) all of your content is removed from our database, typically within seconds.</p>
+
+  <h2>Your choices</h2>
+
+  <h3>Delete your data</h3>
+  <p>Open Life OS → Settings → Account → <strong>Delete all my data</strong>. This wipes every profile, every task, every note, every linked OAuth token. It cannot be undone. You can also email <a href="mailto:zander.vanderberg1@gmail.com">zander.vanderberg1@gmail.com</a> and we'll do it for you within 7 days.</p>
+
+  <h3>Disconnect a calendar</h3>
+  <p>Settings → Calendar → <strong>Disconnect</strong> next to Google or Outlook. The relevant access token is revoked and Life OS stops requesting calendar data.</p>
+
+  <h3>Export your data</h3>
+  <p>Email <a href="mailto:zander.vanderberg1@gmail.com">zander.vanderberg1@gmail.com</a> and we'll send you a JSON copy of everything stored under your account, free, within 14 days.</p>
+
+  <h3>Your statutory rights</h3>
+  <p>If you're in South Africa your rights under POPIA, in the UK / EU under UK GDPR / GDPR, and in California under the CCPA all apply, including the rights to access, correct, delete, restrict or object to processing, and to lodge a complaint with the Information Regulator (in South Africa) or your local supervisory authority.</p>
+
+  <h2>Security</h2>
+  <p>Data is transmitted over HTTPS. Firestore security rules limit each user's data to their own account. OAuth tokens are stored in the browser's <code>localStorage</code> and refreshed silently by the respective provider's libraries. The app is a static single-page web app — there is no server we run that holds your data outside of Firebase.</p>
+  <p>No system is completely secure. If you spot a vulnerability please email <a href="mailto:zander.vanderberg1@gmail.com">zander.vanderberg1@gmail.com</a>.</p>
+
+  <h2>Children</h2>
+  <p>Life OS isn't designed for users under 13 and we do not knowingly collect data from children. If you believe a child has signed up, email us and we'll delete the account.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If we change anything material we'll update the "last updated" date at the top of this page and, where required, notify you inside the app. Continuing to use Life OS after that means you accept the updated policy.</p>
+
+  <h2>Contact</h2>
+  <p>Zander van der Berg, South Africa · <a href="mailto:zander.vanderberg1@gmail.com">zander.vanderberg1@gmail.com</a></p>
+
+  <div class="foot">
+    See also: <a href="/terms.html">Terms of Service</a>
+  </div>
+</div>
+</body>
+</html>
