@@ -2951,6 +2951,16 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <button class="btn btn-sm" id="gcal-connect-btn" onclick="reconnectGCalAndRefresh()">Connect</button>
             </div>
           </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Outlook Calendar</div>
+              <div class="setting-desc" id="outlook-desc">Connect an Outlook / Microsoft 365 account to overlay its calendars onto your view. Events from both providers show side by side.</div>
+            </div>
+            <div class="setting-right">
+              <span class="key-mask" id="outlook-status">—</span>
+              <button class="btn btn-sm" id="outlook-connect-btn" onclick="reconnectOutlookAndRefresh()">Connect</button>
+            </div>
+          </div>
           <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:8px" id="gcal-cal-row">
             <div style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px">
               <div class="setting-label" style="font-size:12px">Calendars</div>
@@ -3282,10 +3292,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
      access tokens (because Firebase doesn't expose the refresh token
      it manages internally). -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- Microsoft Authentication Library for browsers — powers Outlook calendar
+     auth via MSAL.js. Used by Phase B's Outlook integration. Loads async;
+     code below waits for window.msal before initialising the client. -->
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js" async defer></script>
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v184';
+const APP_VERSION='v185';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -3481,6 +3495,14 @@ async function switchProfile(id){
   }catch(_){gTok=null;}
   try{gcCache={key:'',events:[]};}catch(_){}
   try{_calListCache={ts:0,cals:[]};_gtasksCache={ts:0,items:[]};}catch(_){}
+  // Same idea for the Outlook side — flush its token + calendar list cache
+  // and reload from the new profile's slot.
+  try{
+    const ok=localStorage.getItem(_otkKey());
+    oTok=ok||null;
+  }catch(_){oTok=null;}
+  try{_outlookCalListCache={ts:0,cals:[]};}catch(_){}
+  _msalAccount=null;
   // Clear any GIS refresh timer left over from the previous profile.
   try{clearTimeout(_gisRefreshTimer);_gisRefreshTimer=null;}catch(_){}
   resetStateForNewUser();
@@ -4285,6 +4307,13 @@ async function connectGoogleCalendar(){
   return _connectingGCal;
 }
 async function reconnectGCalAndRefresh(){const t=await connectGoogleCalendar();if(t){gcCache={key:'',events:[]};_calListCache={ts:0,cals:[]};_gtasksCache={ts:0,items:[]};render();rSettings();}}
+// Mirror of reconnectGCalAndRefresh for the Outlook side. If the user is
+// already connected, this acts as a disconnect; otherwise it connects.
+async function reconnectOutlookAndRefresh(){
+  if(getOutlookToken()){await disconnectOutlook();rSettings();return;}
+  const t=await connectOutlookCalendar();
+  if(t){gcCache={key:'',events:[]};_outlookCalListCache={ts:0,cals:[]};try{render();}catch(_){}try{rSettings();}catch(_){}}
+}
 // Revoke the current Google access token at Google's end, wipe local copies,
 // then kick off a fresh connect. Google will force a new consent prompt since
 // there's nothing to reuse. This unblocks the case where Firebase stubbornly
@@ -4380,15 +4409,223 @@ async function fetchGCal(start,end){
       });
     }catch(e){console.warn('[gcal] fetch',cal.id,'failed:',e.message);return[];}
   })()));
+  // Unify Google + Outlook here so every existing caller (and there are many)
+  // gets the merged stream without needing to call both providers itself.
+  // Outlook returns [] when no token / not configured, so this is a cheap
+  // no-op for users who haven't connected it.
+  if(getOutlookToken()){
+    try{const oevs=await fetchOutlook(start,end);return [...results.flat(),...oevs];}
+    catch(e){console.warn('[outlook] fetch failed in fetchGCal merge:',e.message);}
+  }
+  return results.flat();
+}
+// ───────── OUTLOOK CALENDAR (Microsoft Graph) ─────────
+// Second calendar source. Per-profile token storage (mirrors the Google
+// model: each profile holds its own Outlook connection). MSAL.js handles
+// auth in the browser; calls go to https://graph.microsoft.com/v1.0.
+// The feature is dormant until window.MICROSOFT_OUTLOOK_CLIENT_ID is set
+// (Azure AD app registration is a one-time step the developer does).
+function _outlookClientId(){
+  return (
+    (typeof window!=='undefined'&&window.MICROSOFT_OUTLOOK_CLIENT_ID)||
+    (typeof firebaseConfig!=='undefined'&&(firebaseConfig.microsoftClientId||firebaseConfig.outlookClientId))||
+    ''
+  );
+}
+function _outlookConfigured(){return !!_outlookClientId();}
+function _otkKey(){return 'los_otk_'+(_activeProfileId||'main');}
+let oTok=null;
+let _msalInstance=null;
+let _msalAccount=null;
+// Try to read the saved Outlook token for the current profile. We don't
+// store an expiry — silent re-acquire is cheap and the 401 path is wired up
+// like Google's.
+function getOutlookToken(){
+  if(oTok)return oTok;
+  try{const s=localStorage.getItem(_otkKey());if(s){oTok=s;return oTok;}}catch(_){}
+  return null;
+}
+function _outlookCachedAccount(){
+  try{
+    const cached=JSON.parse(localStorage.getItem('los_otk_acc_'+(_activeProfileId||'main'))||'null');
+    if(cached&&cached.username)return cached;
+  }catch(_){}
+  return null;
+}
+function _outlookSaveAccount(acc){
+  if(!acc)return;
+  try{localStorage.setItem('los_otk_acc_'+(_activeProfileId||'main'),JSON.stringify({homeAccountId:acc.homeAccountId,username:acc.username,localAccountId:acc.localAccountId,tenantId:acc.tenantId}));}catch(_){}
+}
+function initMsalClient(){
+  if(_msalInstance)return _msalInstance;
+  if(!(window.msal&&window.msal.PublicClientApplication))return null;
+  const clientId=_outlookClientId();if(!clientId)return null;
+  _msalInstance=new window.msal.PublicClientApplication({
+    auth:{
+      clientId,
+      // 'common' so both personal MS accounts and work/school accounts can sign in.
+      authority:'https://login.microsoftonline.com/common',
+      redirectUri:window.location.origin
+    },
+    cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}
+  });
+  // Restore the cached account so silent refresh works on the next call.
+  const cached=_outlookCachedAccount();
+  if(cached){
+    const accounts=_msalInstance.getAllAccounts();
+    _msalAccount=accounts.find(a=>a.homeAccountId===cached.homeAccountId)||accounts[0]||null;
+  }
+  return _msalInstance;
+}
+const OUTLOOK_SCOPES=['Calendars.ReadWrite','offline_access','User.Read'];
+let _connectingOutlook=null;
+async function connectOutlookCalendar(){
+  if(!_outlookConfigured()){
+    alert("Outlook isn't configured yet — Azure AD app registration is a one-time setup the developer needs to do. (Set window.MICROSOFT_OUTLOOK_CLIENT_ID in config.js when ready.)");
+    return null;
+  }
+  if(_connectingOutlook)return _connectingOutlook;
+  _connectingOutlook=(async()=>{
+    try{
+      const client=initMsalClient();
+      if(!client){alert('Outlook auth library still loading — try again in a second.');return null;}
+      const resp=await client.loginPopup({scopes:OUTLOOK_SCOPES,prompt:'select_account'});
+      _msalAccount=resp.account||null;
+      _outlookSaveAccount(_msalAccount);
+      // After login we still need an access token for Graph — request silently
+      // with the same scopes; the popup token is for Microsoft's auth surface.
+      const tok=await client.acquireTokenSilent({scopes:OUTLOOK_SCOPES,account:_msalAccount}).catch(()=>null);
+      const tokenStr=(tok&&tok.accessToken)||(resp.accessToken)||null;
+      if(tokenStr){
+        oTok=tokenStr;
+        try{localStorage.setItem(_otkKey(),tokenStr);}catch(_){}
+      }
+      try{refreshGCalWarn();}catch(_){}
+      return tokenStr;
+    }catch(e){
+      console.warn('[outlook] connect failed:',e.message||e);
+      if(!/user_cancelled|popup_window_error/.test(String(e&&e.errorCode||''))){
+        alert('Outlook connection failed: '+(e.message||e));
+      }
+      return null;
+    }finally{setTimeout(()=>{_connectingOutlook=null;},100);}
+  })();
+  return _connectingOutlook;
+}
+async function disconnectOutlook(){
+  if(!confirm('Disconnect Outlook calendar? Events will stop showing.'))return;
+  oTok=null;
+  try{localStorage.removeItem(_otkKey());localStorage.removeItem('los_otk_acc_'+(_activeProfileId||'main'));}catch(_){}
+  try{
+    const client=initMsalClient();
+    if(client&&_msalAccount)await client.logoutPopup({account:_msalAccount,mainWindowRedirectUri:window.location.origin}).catch(()=>{});
+  }catch(_){}
+  _msalAccount=null;
+  gcCache={key:'',events:[]};
+  try{render();}catch(_){}
+  try{refreshGCalWarn();}catch(_){}
+}
+// Silent refresh — mirrors silentRefreshGCalToken. Called on 401 paths.
+async function silentRefreshOutlookToken(){
+  const client=initMsalClient();if(!client||!_msalAccount)return false;
+  try{
+    const r=await client.acquireTokenSilent({scopes:OUTLOOK_SCOPES,account:_msalAccount});
+    if(r&&r.accessToken){
+      oTok=r.accessToken;
+      try{localStorage.setItem(_otkKey(),r.accessToken);}catch(_){}
+      return true;
+    }
+  }catch(e){console.warn('[outlook] silent refresh failed:',e.message||e);}
+  return false;
+}
+// List the user's Outlook calendars. Tagged source:'outlook' to mirror the
+// Google shape exactly.
+let _outlookCalListCache={ts:0,cals:[]};
+async function fetchOutlookCalendars(){
+  const tok=getOutlookToken();if(!tok)return[];
+  if(Date.now()-_outlookCalListCache.ts<5*60000&&_outlookCalListCache.cals.length)return _outlookCalListCache.cals;
+  try{
+    const r=await fetch('https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar,hexColor',{headers:{Authorization:'Bearer '+tok}});
+    if(r.status===401){
+      const ok=await silentRefreshOutlookToken();
+      if(!ok){oTok=null;try{localStorage.removeItem(_otkKey());}catch(_){}}
+      try{refreshGCalWarn();}catch(_){}
+      return[];
+    }
+    if(!r.ok)return[];
+    const d=await r.json();
+    const cals=(d.value||[]).map(c=>({
+      id:c.id,
+      summary:c.name||'(Untitled)',
+      backgroundColor:c.hexColor||null,
+      primary:!!c.isDefaultCalendar,
+      hidden:false,
+      selected:true,
+      source:'outlook'
+    }));
+    cals.sort((a,b)=>{if(a.primary&&!b.primary)return -1;if(!a.primary&&b.primary)return 1;return (a.summary||'').localeCompare(b.summary||'');});
+    _outlookCalListCache={ts:Date.now(),cals};
+    return cals;
+  }catch(e){console.warn('[outlook] calList failed:',e.message);return[];}
+}
+// Fetch Outlook events in a time range. Uses /me/calendarView which expands
+// recurring events into individual instances — exactly what we want for
+// rendering. Normalised to the same shape as fetchGCal output.
+async function fetchOutlook(startISO,endISO){
+  const tok=getOutlookToken();if(!tok)return[];
+  const cals=await fetchOutlookCalendars();
+  if(!cals.length)return[];
+  // Honour disabled-calendars set the same way Google does.
+  const disabled=new Set(Array.isArray(S.disabledCalendars)?S.disabledCalendars:[]);
+  const activeCals=cals.filter(c=>c.primary||!disabled.has(c.id));
+  const results=await Promise.all(activeCals.map(cal=>(async()=>{
+    try{
+      const url=`https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(cal.id)}/calendarView?startDateTime=${encodeURIComponent(startISO)}&endDateTime=${encodeURIComponent(endISO)}&$top=250&$orderby=start/dateTime`;
+      const r=await fetch(url,{headers:{Authorization:'Bearer '+tok,Prefer:'outlook.timezone="UTC"'}});
+      if(r.status===401){
+        const ok=await silentRefreshOutlookToken();
+        if(!ok){oTok=null;try{localStorage.removeItem(_otkKey());}catch(_){}}
+        try{refreshGCalWarn();}catch(_){}
+        return[];
+      }
+      if(!r.ok)return[];
+      const d=await r.json();
+      return (d.value||[]).map(ev=>{
+        const allDay=!!ev.isAllDay;
+        const startStr=ev.start?.dateTime||'';const endStr=ev.end?.dateTime||'';
+        const startDate=startStr.slice(0,10);
+        let endDate=endStr?endStr.slice(0,10):null;
+        // Outlook all-day end is also exclusive (next day) — normalise the
+        // same way we do for Google.
+        if(allDay&&endDate)endDate=addDaysToDateStr(endDate,-1);
+        const time=(!allDay&&startStr.length>10)?startStr.slice(11,16):'';
+        const endTime=(!allDay&&endStr.length>10)?endStr.slice(11,16):'';
+        return{
+          id:ev.id,
+          title:ev.subject||'(No title)',
+          description:(ev.bodyPreview||'').slice(0,400),
+          date:startDate,
+          endDate,
+          time,
+          endTime,
+          allDay,
+          gcal:false,
+          source:'outlook',
+          colorId:null,
+          calendarId:cal.id,
+          calendarColor:cal.backgroundColor,
+          recurringEventId:ev.seriesMasterId||null
+        };
+      });
+    }catch(e){console.warn('[outlook] fetch',cal.id,'failed:',e.message);return[];}
+  })()));
   return results.flat();
 }
 async function getGCForMonth(y,m){
   const key=`${y}-${m}`;if(gcCache.key===key)return gcCache.events;
   const s=new Date(y,m,1).toISOString(),e=new Date(y,m+1,1).toISOString();
-  const evs=await fetchGCal(s,e);
-  const tsks=await fetchGTasks();
-  // Merge: tasks that fall inside the month become calendar items too. Pre-
-  // compute year-month boundaries.
+  // fetchGCal now returns Google + Outlook merged; tasks merge in here.
+  const [evs,tsks]=await Promise.all([fetchGCal(s,e),fetchGTasks()]);
   const monthTasks=tsks.filter(t=>t.date&&t.date>=s.slice(0,10)&&t.date<=new Date(y,m+1,0).toISOString().slice(0,10));
   const all=[...evs,...monthTasks];
   gcCache={key,events:all};return all;
@@ -10039,6 +10276,15 @@ function rSettings(){
   let tok=null;try{tok=localStorage.getItem(_gatKey());}catch(e){}
   if(gs)gs.textContent=tok?'Connected':'Not connected';
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
+  // Outlook side mirrors the Google status row.
+  const os=document.getElementById('outlook-status'),ob=document.getElementById('outlook-connect-btn'),od=document.getElementById('outlook-desc');
+  const otok=getOutlookToken();
+  if(os)os.textContent=otok?'Connected':(_outlookConfigured()?'Not connected':'Not configured');
+  if(ob){
+    if(!_outlookConfigured()){ob.textContent='Configure first';ob.disabled=true;ob.title='Set window.MICROSOFT_OUTLOOK_CLIENT_ID in config.js';}
+    else{ob.textContent=otok?'Disconnect':'Connect';ob.disabled=false;ob.title='';}
+  }
+  if(od&&!_outlookConfigured())od.innerHTML='Outlook integration is built but waiting on a one-time Azure AD app registration. Once <code>window.MICROSOFT_OUTLOOK_CLIENT_ID</code> is set in config, the Connect button activates.';
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
   const sndTog=document.getElementById('sounds-toggle');if(sndTog)sndTog.checked=!!S.soundsEnabled;
   const faithTog=document.getElementById('faith-focus-toggle');if(faithTog)faithTog.checked=S.faithFocus!==false;
