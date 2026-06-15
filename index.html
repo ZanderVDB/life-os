@@ -189,6 +189,42 @@ svg{flex-shrink:0}
 .s-nav a .dot.on{opacity:1}
 .s-sep{height:1px;background:var(--border);margin:12px 6px}
 .s-foot{display:flex;flex-direction:column;gap:8px;padding-top:4px}
+/* Profile switcher pill (sidebar foot + mobile drawer top). Tap → popover
+   listing all profiles + Add + Sign out. Avatar tint reflects mode. */
+.profile-pill{display:flex;align-items:center;gap:10px;width:100%;border:1px solid var(--border);background:var(--surface);border-radius:11px;padding:7px 10px 7px 7px;font-family:inherit;cursor:pointer;color:var(--text-2);transition:all .12s}
+.profile-pill:hover{background:var(--surface-hover);border-color:var(--border-strong);color:var(--text)}
+.profile-pill-av{flex:0 0 auto;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-weight:600;font-size:13px;background:var(--lavender-bg);color:var(--lavender)}
+.profile-pill-av[data-mode="business"]{background:var(--blue-bg);color:var(--blue)}
+.profile-pill-name{flex:1;text-align:left;font-size:13px;font-weight:600;line-height:1.2;color:var(--text);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.profile-pill-chev{flex:0 0 auto;font-size:11px;color:var(--muted);line-height:1}
+.profile-pill-mobile{margin:0 0 8px}
+/* Popover */
+.profile-popover{position:fixed;z-index:9500;min-width:240px;max-width:300px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:8px;box-shadow:var(--shadow-lift);font-family:inherit}
+.pp-hdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:6px 8px 8px}
+.pp-row{display:flex;align-items:center;gap:10px;width:100%;border:none;background:transparent;border-radius:8px;padding:7px 8px;cursor:pointer;color:var(--text);transition:background .1s}
+.pp-row:hover{background:var(--surface-hover)}
+.pp-row.on{background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
+.pp-av{flex:0 0 auto;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-weight:600;font-size:14px;background:var(--lavender-bg);color:var(--lavender)}
+.pp-av[data-mode="business"]{background:var(--blue-bg);color:var(--blue)}
+.pp-rowtxt{flex:1;display:flex;flex-direction:column;text-align:left;min-width:0}
+.pp-name{font-size:13.5px;font-weight:600;line-height:1.2;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pp-mode{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-top:2px}
+.pp-tick{flex:0 0 auto;color:var(--accent);font-weight:700;font-size:14px}
+.pp-empty,.pp-note{font-size:11.5px;color:var(--muted);padding:8px;font-style:italic;line-height:1.4}
+.pp-sep{height:1px;background:var(--border);margin:6px 4px}
+.pp-action{display:block;width:100%;text-align:left;border:none;background:transparent;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;color:var(--text-2);cursor:pointer;font-family:inherit}
+.pp-action:hover{background:var(--surface-hover);color:var(--text)}
+.pp-action.danger{color:var(--red)}
+.pp-action.danger:hover{background:var(--red-bg)}
+/* Settings → Account → Profiles list */
+.pp-list{display:flex;flex-direction:column;gap:8px}
+.pp-srow{display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:var(--surface);border-radius:11px;padding:10px 12px;flex-wrap:wrap}
+.pp-srow.on{background:color-mix(in srgb,var(--accent) 8%,var(--surface));border-color:color-mix(in srgb,var(--accent) 35%,var(--border))}
+.pp-srow-name{flex:1;min-width:120px;background:transparent;border:1px solid transparent;border-radius:7px;padding:5px 7px;font-size:13.5px;font-weight:600;color:var(--text);font-family:inherit}
+.pp-srow-name:hover{border-color:var(--border)}
+.pp-srow-name:focus{outline:none;border-color:var(--accent);background:var(--surface)}
+.pp-srow-mode{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.pp-srow-active{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);padding:3px 8px;background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:6px}
 .theme-toggle{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px}
 .theme-toggle button{flex:1;padding:6px 8px;font-size:11px;font-weight:600;border-radius:7px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;border:none;background:transparent}
 .theme-toggle button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06)}
@@ -2513,6 +2549,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       </nav>
       <div class="s-sep"></div>
       <div class="s-foot">
+        <button class="profile-pill" id="profile-pill-desktop" onclick="toggleProfilePopover(event)">
+          <span class="profile-pill-av" id="profile-pill-av-d">P</span>
+          <span class="profile-pill-name" id="profile-pill-name-d">Personal</span>
+          <span class="profile-pill-chev">▾</span>
+        </button>
         <a href="#settings" data-route-link="settings" class="s-nav-foot" style="display:grid;grid-template-columns:22px 1fr;gap:12px;align-items:center;padding:11px 12px;border-radius:10px;font-size:13.5px;color:var(--text-2);font-weight:500;text-decoration:none"><span class="ic" style="display:flex;align-items:center;justify-content:center"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
       </div>
     </div>
@@ -2540,6 +2581,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <svg width="22" height="22"><use href="#logo"/></svg>
         <div class="s-logo">Life OS</div>
       </div>
+      <button class="profile-pill profile-pill-mobile" id="profile-pill-mobile" onclick="toggleProfilePopover(event)">
+        <span class="profile-pill-av" id="profile-pill-av-m">P</span>
+        <span class="profile-pill-name" id="profile-pill-name-m">Personal</span>
+        <span class="profile-pill-chev">▾</span>
+      </button>
       <a href="#today" data-route-link="today" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span>Today</span></a>
       <a href="#calendar" data-route-link="calendar" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span>Calendar</span></a>
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
@@ -3089,6 +3135,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
         <div class="setting-tab-pane" data-setting-tab="account">
           <div class="section-hdr"><h2>Account</h2></div>
+          <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:10px">
+            <div>
+              <div class="setting-label">Profiles</div>
+              <div class="setting-desc">A profile is a separate workspace — its own tasks, projects, people, notebook. You can have up to two (e.g. Personal and Business). Switch from the pill in the sidebar.</div>
+            </div>
+            <div id="profiles-panel"></div>
+          </div>
           <div class="setting-row">
             <div>
               <div class="setting-label">Subscription</div>
@@ -3232,7 +3285,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v182';
+const APP_VERSION='v183';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -3338,6 +3391,221 @@ const persistenceReady=auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
 try{db.enablePersistence().catch(e=>console.warn('[db] persistence:',e.code||e.message));}catch(e){}
 let CU=null,ST=null,SP=null,authResolved=false,authFlipCount=0,lastAuthFlip=0;
 let _unsubscribeDoc=null;let _initialSyncDone=false;let _cacheFallbackTimer=null;
+// ───────── PROFILES ─────────
+// A single Firebase user can have multiple profiles (e.g. Personal + Business).
+// Each profile's data lives in its OWN Firestore doc: users/{uid}/data/{profileId}.
+// A small catalog doc at users/{uid}/data/_index lists every profile + which one
+// is active, so switches survive across devices. Legacy users have everything at
+// users/{uid}/data/main — that doc id ("main") stays as the default profile so
+// nothing has to migrate. Each profile carries a mode ('personal' | 'business')
+// which lightly tilts defaults (routine template, AI tone) — heavy data is
+// always per-profile.
+let _activeProfileId='main';
+let _profileCatalog=null; // {profiles:[{id,name,mode,createdAt}], activeProfileId}
+function _profileDocRef(){return db.collection('users').doc(CU.uid).collection('data').doc(_activeProfileId);}
+function _profileIndexRef(){return db.collection('users').doc(CU.uid).collection('data').doc('_index');}
+function _readActiveProfileLocal(){try{return localStorage.getItem('los_active_profile')||null;}catch(_){return null;}}
+function _writeActiveProfileLocal(id){try{localStorage.setItem('los_active_profile',id);}catch(_){}}
+// Resolve which profile to open: localStorage hint first (fast), then the
+// Firestore catalog (cross-device truth), falling back to 'main' for legacy.
+async function _resolveActiveProfileId(){
+  const localHint=_readActiveProfileLocal();
+  try{
+    const snap=await _profileIndexRef().get({source:'server'}).catch(()=>_profileIndexRef().get());
+    if(snap.exists){
+      const d=snap.data();
+      _profileCatalog={profiles:Array.isArray(d.profiles)?d.profiles:[],activeProfileId:d.activeProfileId||'main'};
+      const valid=id=>_profileCatalog.profiles.some(p=>p.id===id);
+      if(localHint&&valid(localHint))return localHint;
+      if(_profileCatalog.activeProfileId&&valid(_profileCatalog.activeProfileId))return _profileCatalog.activeProfileId;
+      return _profileCatalog.profiles[0]?.id||'main';
+    }
+  }catch(_){}
+  // No catalog yet — legacy user. Seed the catalog from the (existing) 'main' doc.
+  _profileCatalog={profiles:[{id:'main',name:'Personal',mode:'personal',createdAt:tod()}],activeProfileId:'main'};
+  try{await _profileIndexRef().set(_profileCatalog,{merge:true});}catch(_){}
+  return 'main';
+}
+function _activeProfileMeta(){
+  if(!_profileCatalog)return {id:_activeProfileId,name:'Personal',mode:'personal'};
+  return _profileCatalog.profiles.find(p=>p.id===_activeProfileId)||{id:_activeProfileId,name:'Profile',mode:'personal'};
+}
+async function createProfile(name,mode){
+  if(!CU)return null;
+  const trimmed=(name||'').trim();if(!trimmed)return null;
+  if(!_profileCatalog)await _resolveActiveProfileId();
+  // Cap at two — Personal + Business by design.
+  if((_profileCatalog.profiles||[]).length>=2){alert('You can have up to two profiles. Delete one first if you want a different second profile.');return null;}
+  const id='p_'+uid();
+  const entry={id,name:trimmed,mode:(mode==='business'?'business':'personal'),createdAt:tod()};
+  _profileCatalog.profiles.push(entry);
+  _profileCatalog.activeProfileId=id;
+  await _profileIndexRef().set(_profileCatalog,{merge:true});
+  // Seed the new profile's data doc with the mode so it loads correctly.
+  try{await db.collection('users').doc(CU.uid).collection('data').doc(id).set({mode:entry.mode,_profileSeeded:true},{merge:true});}catch(_){}
+  _writeActiveProfileLocal(id);
+  await switchProfile(id);
+  return id;
+}
+async function switchProfile(id){
+  if(!CU||!_profileCatalog)return;
+  const target=_profileCatalog.profiles.find(p=>p.id===id);if(!target)return;
+  if(_activeProfileId===id)return;
+  _activeProfileId=id;
+  _writeActiveProfileLocal(id);
+  _profileCatalog.activeProfileId=id;
+  try{await _profileIndexRef().set({activeProfileId:id},{merge:true});}catch(_){}
+  // Tear down the current subscription, reset in-memory state, reload.
+  if(_unsubscribeDoc){try{_unsubscribeDoc();}catch(e){}_unsubscribeDoc=null;}
+  _initialSyncDone=false;
+  resetStateForNewUser();
+  loadData();
+}
+async function renameProfile(id,name){
+  if(!_profileCatalog)return;
+  const p=_profileCatalog.profiles.find(x=>x.id===id);if(!p)return;
+  const t=(name||'').trim();if(!t)return;
+  p.name=t;
+  try{await _profileIndexRef().set(_profileCatalog,{merge:true});}catch(_){}
+  if(typeof rSettings==='function'&&currentRoute==='settings')rSettings();
+  _renderProfilePill();
+}
+async function deleteProfile(id){
+  if(!_profileCatalog)return;
+  if((_profileCatalog.profiles||[]).length<=1){alert("You can't delete your only profile.");return;}
+  if(id===_activeProfileId){alert('Switch to the other profile first, then delete this one.');return;}
+  const p=_profileCatalog.profiles.find(x=>x.id===id);if(!p)return;
+  if(!confirm(`Delete the "${p.name}" profile and ALL its data? This can't be undone.`))return;
+  _profileCatalog.profiles=_profileCatalog.profiles.filter(x=>x.id!==id);
+  try{await _profileIndexRef().set(_profileCatalog,{merge:true});}catch(_){}
+  try{await db.collection('users').doc(CU.uid).collection('data').doc(id).delete();}catch(_){}
+  if(typeof rSettings==='function'&&currentRoute==='settings')rSettings();
+}
+// Render the avatar initial + name in both the desktop sidebar pill and the
+// mobile drawer pill. Called after load and after every switch/rename.
+function _renderProfilePill(){
+  const meta=_activeProfileMeta();
+  const name=meta.name||'Profile';
+  const initial=(name.charAt(0)||'P').toUpperCase();
+  ['profile-pill-av-d','profile-pill-av-m'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=initial;});
+  ['profile-pill-name-d','profile-pill-name-m'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=name;});
+  // Tint the avatar by mode so business vs personal reads at a glance.
+  ['profile-pill-av-d','profile-pill-av-m'].forEach(id=>{const el=document.getElementById(id);if(el)el.dataset.mode=meta.mode||'personal';});
+}
+// Popover: lists profiles, "Add profile", and Sign out. Anchored to whichever
+// pill was tapped; closes on outside click.
+function toggleProfilePopover(ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  const existing=document.getElementById('profile-popover');
+  if(existing){existing.remove();return;}
+  const anchor=ev&&ev.currentTarget;
+  const pop=document.createElement('div');
+  pop.id='profile-popover';
+  pop.className='profile-popover';
+  const profiles=(_profileCatalog&&_profileCatalog.profiles)||[];
+  const canAdd=profiles.length<2;
+  const rows=profiles.map(p=>{
+    const isActive=p.id===_activeProfileId;
+    const initial=(p.name||'P').charAt(0).toUpperCase();
+    return `<button class="pp-row${isActive?' on':''}" data-pid="${esc(p.id)}" onclick="_ppPick('${esc(p.id)}')">
+      <span class="pp-av" data-mode="${esc(p.mode||'personal')}">${esc(initial)}</span>
+      <span class="pp-rowtxt"><span class="pp-name">${esc(p.name||'Profile')}</span><span class="pp-mode">${p.mode==='business'?'Business':'Personal'}</span></span>
+      ${isActive?'<span class="pp-tick">✓</span>':''}
+    </button>`;
+  }).join('');
+  pop.innerHTML=`
+    <div class="pp-hdr">Profiles</div>
+    ${rows||'<div class="pp-empty">No profiles yet.</div>'}
+    <div class="pp-sep"></div>
+    ${canAdd?'<button class="pp-action" onclick="openCreateProfileModal()">+ Add profile</button>':'<div class="pp-note">Two profiles max — delete one to add another.</div>'}
+    <div class="pp-sep"></div>
+    <button class="pp-action danger" onclick="doSignOut()">Sign out</button>
+  `;
+  document.body.appendChild(pop);
+  // Position near the anchor (or screen center if none).
+  if(anchor){
+    const r=anchor.getBoundingClientRect();
+    const w=pop.offsetWidth,h=pop.offsetHeight;
+    let top=r.top-h-8;if(top<10)top=r.bottom+8;
+    let left=Math.min(Math.max(8,r.left+r.width/2-w/2),innerWidth-w-8);
+    pop.style.top=top+'px';pop.style.left=left+'px';
+  } else {
+    pop.style.top='50%';pop.style.left='50%';pop.style.transform='translate(-50%,-50%)';
+  }
+  // Close on outside click.
+  setTimeout(()=>{
+    document.addEventListener('mousedown',function h(e){
+      if(!pop.contains(e.target)){pop.remove();document.removeEventListener('mousedown',h);}
+    },{once:false});
+  },30);
+}
+function _ppPick(id){
+  const pop=document.getElementById('profile-popover');if(pop)pop.remove();
+  if(id===_activeProfileId)return;
+  switchProfile(id).then(()=>{_renderProfilePill();try{closeDrawer();}catch(_){}});
+}
+function openCreateProfileModal(){
+  const pop=document.getElementById('profile-popover');if(pop)pop.remove();
+  if(_profileCatalog&&(_profileCatalog.profiles||[]).length>=2){alert('Two profiles max.');return;}
+  const existing=document.getElementById('create-profile-modal');if(existing)existing.remove();
+  const overlay=document.createElement('div');
+  overlay.id='create-profile-modal';overlay.className='modal';overlay.style.display='flex';
+  overlay.innerHTML=`<div class="modal-bd"></div>
+    <div class="modal-body" style="max-width:380px">
+      <h3 style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600;margin-bottom:8px">New profile</h3>
+      <p style="font-size:13px;color:var(--text-2);line-height:1.55;margin-bottom:14px">Each profile has its own tasks, projects, calendar visibility, notebook — all separate.</p>
+      <label class="bd-lbl">Profile name</label>
+      <input id="cp-name" class="input" placeholder="e.g. Business" style="margin-bottom:14px" autofocus>
+      <label class="bd-lbl">Mode</label>
+      <div class="theme-toggle" id="cp-mode-toggle" style="margin-bottom:18px">
+        <button data-cpmode="personal" class="on" onclick="_cpSetMode('personal')">Personal</button>
+        <button data-cpmode="business" onclick="_cpSetMode('business')">Business</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-sm" onclick="_cpClose()">Cancel</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary btn-sm" onclick="_cpCreate()">Create</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);_syncBodyLock();
+  overlay.dataset.mode='personal';
+  overlay.addEventListener('click',e=>{if(e.target.closest('.modal-bd'))_cpClose();});
+  setTimeout(()=>{const n=document.getElementById('cp-name');if(n)n.focus();},60);
+}
+function _cpSetMode(m){
+  const overlay=document.getElementById('create-profile-modal');if(!overlay)return;
+  overlay.dataset.mode=m;
+  overlay.querySelectorAll('#cp-mode-toggle button').forEach(b=>b.classList.toggle('on',b.dataset.cpmode===m));
+}
+function _cpClose(){const m=document.getElementById('create-profile-modal');if(m){m.remove();_syncBodyLock();}}
+async function _cpCreate(){
+  const overlay=document.getElementById('create-profile-modal');if(!overlay)return;
+  const name=(document.getElementById('cp-name')?.value||'').trim();
+  if(!name){alert('Give the profile a name.');return;}
+  const mode=overlay.dataset.mode==='business'?'business':'personal';
+  _cpClose();
+  await createProfile(name,mode);
+  _renderProfilePill();
+  try{closeDrawer();}catch(_){}
+}
+// Settings → Account → Profiles panel: list with rename, switch and delete.
+function rProfilesPanel(){
+  const el=document.getElementById('profiles-panel');if(!el)return;
+  const profiles=(_profileCatalog&&_profileCatalog.profiles)||[];
+  const canAdd=profiles.length<2;
+  el.innerHTML=`<div class="pp-list">${profiles.map(p=>{
+    const active=p.id===_activeProfileId;
+    const initial=(p.name||'P').charAt(0).toUpperCase();
+    return `<div class="pp-srow${active?' on':''}">
+      <span class="pp-av" data-mode="${esc(p.mode||'personal')}">${esc(initial)}</span>
+      <input class="pp-srow-name" value="${esc(p.name||'')}" data-pid="${esc(p.id)}" onchange="renameProfile('${esc(p.id)}',this.value)">
+      <span class="pp-srow-mode">${p.mode==='business'?'Business':'Personal'}</span>
+      ${active?'<span class="pp-srow-active">Active</span>':`<button class="btn btn-sm" onclick="switchProfile('${esc(p.id)}').then(_renderProfilePill)">Switch</button>`}
+      ${(!active&&profiles.length>1)?`<button class="btn btn-danger btn-sm" onclick="deleteProfile('${esc(p.id)}')">Delete</button>`:''}
+    </div>`;
+  }).join('')}</div>
+  ${canAdd?'<button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="openCreateProfileModal()">+ Add profile</button>':'<div class="pp-note" style="margin-top:10px">Two profiles max — delete one to add another.</div>'}`;
+}
 
 // THEME
 function setTheme(t){
@@ -4386,7 +4654,7 @@ document.addEventListener('visibilitychange',()=>{
   // without the user having to click Sync. Mobile Safari in PWA mode often
   // lingers on stale cached data otherwise.
   if(document.visibilityState==='visible'&&CU){
-    db.collection('users').doc(CU.uid).collection('data').doc('main').get({source:'server'}).then(snap=>{
+    _profileDocRef().get({source:'server'}).then(snap=>{
       if(snap.exists){
         const d=snap.data();
         if(d&&d.todaysTip)S.todaysTip=d.todaysTip;
@@ -4452,14 +4720,23 @@ async function probeGCalLive(){
   }catch(e){/* 401 already handled inside fetchCalendarList */}
   try{refreshGCalWarn();}catch(_){}
 }
-function loadData(){
+async function loadData(){
   stopSync();
   try{startPresence();}catch(e){console.warn('[presence]',e.message);}
   // Probe the calendar token early so the user sees the disconnect
   // banner immediately on open, rather than after navigating to a
   // route that fetches GCal. Async, doesn't block sync.
   probeGCalLive();
-  const docRef=db.collection('users').doc(CU.uid).collection('data').doc('main');
+  // Resolve which profile to load BEFORE we subscribe to any data doc. New
+  // users / legacy users land on 'main'; multi-profile users land on whichever
+  // they were last on (localStorage hint, falling back to the Firestore catalog).
+  try{_activeProfileId=await _resolveActiveProfileId();}catch(_){_activeProfileId='main';}
+  // Catalog is the source of truth for mode + name. Mirror into S so render
+  // code can read S.mode without async juggling.
+  const _meta=_activeProfileMeta();
+  S.mode=_meta.mode==='business'?'business':'personal';
+  try{_renderProfilePill();}catch(_){}
+  const docRef=_profileDocRef();
   _emptyFallbackRendered=false;
   setTimeout(()=>{
     if(!_initialSyncDone&&!_emptyFallbackRendered){
@@ -4691,7 +4968,7 @@ function handleSnapshot(snap){
             let serverIsNewer=false;
             try{
               const serverSnap=await Promise.race([
-                db.collection('users').doc(CU.uid).collection('data').doc('main').get({source:'server'}),
+                _profileDocRef().get({source:'server'}),
                 new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000))
               ]);
               if(serverSnap&&serverSnap.exists){
@@ -4793,7 +5070,7 @@ function svAll(){
   if(!_initialSyncDone){console.warn('[save] skipped — initial sync not done yet');return;}
   clearTimeout(ST);
   ST=setTimeout(async()=>{
-    try{await db.collection('users').doc(CU.uid).collection('data').doc('main').set(_buildSavePayload(),{merge:true});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error('[save]',e.message);}
+    try{await _profileDocRef().set(_buildSavePayload(),{merge:true});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error('[save]',e.message);}
   },300);
 }
 // Write IMMEDIATELY (no debounce). Use for high-stakes toggles like habit
@@ -4803,7 +5080,7 @@ async function svAllNow(){
   if(!CU)return;
   if(!_initialSyncDone){console.warn('[save-now] skipped — initial sync not done yet');return;}
   clearTimeout(ST);
-  try{await db.collection('users').doc(CU.uid).collection('data').doc('main').set(_buildSavePayload(),{merge:true});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error('[save-now]',e.message);}
+  try{await _profileDocRef().set(_buildSavePayload(),{merge:true});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error('[save-now]',e.message);}
 }
 function saveLifeRhythm(){const ta=document.getElementById('life-rhythm-ta');if(!ta)return;const v=ta.value;if(v===S.lifeRhythm)return;S.lifeRhythm=v;svAll();}
 function promptKey(){
@@ -4814,7 +5091,7 @@ function promptKey(){
     setKey(key);
     if(CU){
       // set({merge:true}) works whether the doc exists or not; .update() silently failed for new users
-      db.collection('users').doc(CU.uid).collection('data').doc('main').set({ak:key},{merge:true}).catch(e=>console.warn('[ak save]',e.message));
+      _profileDocRef().set({ak:key},{merge:true}).catch(e=>console.warn('[ak save]',e.message));
     }
     loadTip(true);
     if(currentRoute==='settings')rSettings();
@@ -4956,7 +5233,7 @@ const GROWTH={
  {t:'Stay close; fruit follows.',v:'"Remain in me, as I also remain in you... apart from me you can do nothing."',r:'John 15:4-5'}
 ]
 };
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',morningHabitCatchup:true,routineLog:{},routine:null,faithFocus:true,people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',morningHabitCatchup:true,routineLog:{},routine:null,faithFocus:true,mode:'personal',people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
 // or 'all' (every AI change opens the review queue). Legacy 'off' is no
@@ -5752,7 +6029,7 @@ async function syncTipFromCloud(){
   if(!CU)return;
   const btn=event?.currentTarget;if(btn){btn.textContent='↻ syncing…';btn.disabled=true;}
   try{
-    const snap=await db.collection('users').doc(CU.uid).collection('data').doc('main').get({source:'server'});
+    const snap=await _profileDocRef().get({source:'server'});
     if(snap.exists){
       const d=snap.data();
       if(d&&d.todaysTip)S.todaysTip=d.todaysTip;
@@ -9742,6 +10019,7 @@ function rSettings(){
   const faithTog=document.getElementById('faith-focus-toggle');if(faithTog)faithTog.checked=S.faithFocus!==false;
   rRoutineEditor();
   renderSubStatus();
+  rProfilesPanel();
   {const _cl=['off','light','balanced','thorough'].includes(S.checkinLevel)?S.checkinLevel:(S.habitCatchupEnabled===false?'off':'balanced');const _sw=document.getElementById('routine-autoopen-toggle');if(_sw)_sw.checked=_cl!=='off';}
   {const _hc=document.getElementById('habit-catchup-toggle');if(_hc)_hc.checked=S.morningHabitCatchup!==false;}
   // Daily reminder toggle reflects both the user preference AND the
@@ -10465,8 +10743,12 @@ CRITICAL for removeEvent / updateEvent:
   } else {
     scopeDirective=`You are on the ${ROUTE_TITLES[scope]} page. On this page you can ONLY work with ${scopeCfg.label}. If ${firstName} asks for anything OUTSIDE that, do NOT act on it — return no operations and use "message" to say it isn't available on this page and which page handles it (the Today page can do everything). Only ever emit the operations listed in the schema below.`;
   }
+  const modeLine=S.mode==='business'
+    ?`This is ${firstName}'s BUSINESS profile — bias toward work-oriented framing: meetings, clients, follow-ups, invoices, deadlines. Default task area is "work" unless personal context is obvious.`
+    :`This is ${firstName}'s PERSONAL profile — bias toward personal framing: chores, errands, relationships, hobbies, health. Default task area is "personal" unless work context is obvious.`;
   const prompt=`You manage ${firstName}'s Life OS. Work > personal.
 Today: ${todayName} ${tod()} (user's local time). For reference, ${nextOccurrences}.${rhythm}${projectNames}
+${modeLine}
 ${scopeDirective}${convBlock}
 
 ${instrBlocks.join('\n\n')}
@@ -14312,6 +14594,7 @@ function render(){
   if(currentRoute==='today')rRoutine();
   if(currentRoute==='people')rPeople();
   try{renderPaywallIfNeeded();}catch(_){}
+  try{_renderProfilePill();}catch(_){}
 }
 // Show / hide the prominent "GCal not connected" banner based on whether
 // we have a live token. Called from render() on every snapshot. Also
