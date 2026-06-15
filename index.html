@@ -3285,7 +3285,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v183';
+const APP_VERSION='v184';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -3403,6 +3403,20 @@ let _unsubscribeDoc=null;let _initialSyncDone=false;let _cacheFallbackTimer=null
 let _activeProfileId='main';
 let _profileCatalog=null; // {profiles:[{id,name,mode,createdAt}], activeProfileId}
 function _profileDocRef(){return db.collection('users').doc(CU.uid).collection('data').doc(_activeProfileId);}
+// Per-profile Google Calendar token storage key — so Personal and Business
+// each hold their OWN calendar connection. Legacy users had everything at
+// the un-suffixed _gatKey(); we copy it across to the new keyed slot on
+// first launch so nobody has to reconnect.
+function _gatKey(){return 'los_gat_'+(_activeProfileId||'main');}
+(function _migrateLegacyGatOnce(){
+  try{
+    const legacy=localStorage.getItem(_gatKey());
+    if(legacy&&!localStorage.getItem('los_gat_main')){
+      localStorage.setItem('los_gat_main',legacy);
+      console.log('[migrate] copied legacy los_gat → los_gat_main');
+    }
+  }catch(_){}
+})();
 function _profileIndexRef(){return db.collection('users').doc(CU.uid).collection('data').doc('_index');}
 function _readActiveProfileLocal(){try{return localStorage.getItem('los_active_profile')||null;}catch(_){return null;}}
 function _writeActiveProfileLocal(id){try{localStorage.setItem('los_active_profile',id);}catch(_){}}
@@ -3458,6 +3472,17 @@ async function switchProfile(id){
   // Tear down the current subscription, reset in-memory state, reload.
   if(_unsubscribeDoc){try{_unsubscribeDoc();}catch(e){}_unsubscribeDoc=null;}
   _initialSyncDone=false;
+  // Reload the calendar token from the NEW profile's slot so Personal and
+  // Business each hold their own Google connection. Cached events / calendar
+  // list belonged to the previous profile — flush them.
+  try{
+    const tk=localStorage.getItem(_gatKey());
+    gTok=tk||null;
+  }catch(_){gTok=null;}
+  try{gcCache={key:'',events:[]};}catch(_){}
+  try{_calListCache={ts:0,cals:[]};_gtasksCache={ts:0,items:[]};}catch(_){}
+  // Clear any GIS refresh timer left over from the previous profile.
+  try{clearTimeout(_gisRefreshTimer);_gisRefreshTimer=null;}catch(_){}
   resetStateForNewUser();
   loadData();
 }
@@ -4059,7 +4084,7 @@ function initGISTokenClient(){
         // Silent refresh failed — clear cached token so banner shows.
         // The user will need to click Connect for a fresh consent.
         if(resp.error==='access_denied'||resp.error==='consent_required'||resp.error==='interaction_required'){
-          gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}
+          gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}
         }
         // Origin mismatch / invalid client come back here too — disable
         // GIS so we don't keep retrying a setup that can't work on this
@@ -4078,7 +4103,7 @@ function initGISTokenClient(){
         return;
       }
       gTok=newTok;
-      try{localStorage.setItem('los_gat',gTok);}catch(e){}
+      try{localStorage.setItem(_gatKey(),gTok);}catch(e){}
       _scheduleTokenRefresh(resp.expires_in||3600);
       if(_gisPendingResolver){_gisPendingResolver.resolve(newTok);_gisPendingResolver=null;}
       try{refreshGCalWarn();}catch(_){}
@@ -4095,7 +4120,7 @@ function initGISTokenClient(){
   // accounts pops the picker for prompt:'' regardless of "silent" intent.
   // The cached token works for up to an hour; if it's expired the 401
   // handler in fetchCalendarList will surface the disconnect banner.
-  if(gTok||(function(){try{return localStorage.getItem('los_gat');}catch(e){return null;}}())){
+  if(gTok||(function(){try{return localStorage.getItem(_gatKey());}catch(e){return null;}}())){
     _scheduleTokenRefresh(3000);
   }
   return true;
@@ -4159,7 +4184,7 @@ async function signInGoogle(){
   const p=makeGProvider();
   try{
     const r=await auth.signInWithPopup(p);
-    if(r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);}catch(e){}}
+    if(r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem(_gatKey(),gTok);}catch(e){}}
     // Cache the OAuth web client ID so GIS can take over for silent
     // refresh on subsequent loads even without an explicit config entry.
     if(r.credential)_cacheClientIdFromCredential(r.credential);
@@ -4185,7 +4210,7 @@ function doSignOut(){
 // Silent token lookup — never prompts. Safe to call during render.
 function getGCalToken(){
   if(gTok)return gTok;
-  try{const s=localStorage.getItem('los_gat');if(s){gTok=s;return gTok;}}catch(e){}
+  try{const s=localStorage.getItem(_gatKey());if(s){gTok=s;return gTok;}}catch(e){}
   return null;
 }
 // Back-compat shim: ensureGTok is still called from several places.
@@ -4241,7 +4266,7 @@ async function connectGoogleCalendar(){
         const r=await auth.currentUser.reauthenticateWithPopup(p);
         if(r.credential?.accessToken){
           gTok=r.credential.accessToken;
-          try{localStorage.setItem('los_gat',gTok);}catch(e){}
+          try{localStorage.setItem(_gatKey(),gTok);}catch(e){}
           if(r.credential)_cacheClientIdFromCredential(r.credential);
           if(initGISTokenClient())_scheduleTokenRefresh(3500);
           return gTok;
@@ -4269,7 +4294,7 @@ async function revokeAndReconnect(){
   if(tok){
     try{await fetch('https://oauth2.googleapis.com/revoke?token='+encodeURIComponent(tok),{method:'POST'});}catch(e){console.warn('[revoke]',e.message);}
   }
-  gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}
+  gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}
   // Stop pending GIS silent refreshes — the token they would mint is for
   // a grant we just revoked, so it would just bounce. The next click
   // reconnects from scratch with a consent prompt.
@@ -4281,7 +4306,7 @@ async function revokeAndReconnect(){
   setTimeout(()=>reconnectGCalAndRefresh(),500);
 }
 auth.getRedirectResult().then(r=>{
-  if(r&&r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem('los_gat',gTok);sessionStorage.removeItem('los_redirect');}catch(e){}}
+  if(r&&r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem(_gatKey(),gTok);sessionStorage.removeItem('los_redirect');}catch(e){}}
 }).catch(e=>{if(e&&e.code)console.warn('Redirect result:',e.code,e.message);});
 
 let _calListCache={ts:0,cals:[]};
@@ -4295,7 +4320,7 @@ async function fetchCalendarList(){
       // If GIS is wired up the callback will swap in a fresh token and
       // the next render's fetch will succeed.
       const refreshing=silentRefreshGCalToken();
-      if(!refreshing){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}}
+      if(!refreshing){gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}}
       try{refreshGCalWarn();}catch(_){}
       return[];
     }
@@ -4308,7 +4333,7 @@ async function fetchCalendarList(){
     // can find e.g. a "Birthdays" calendar that's hidden on the Google side
     // but still syncs from the phone. The Settings UI tags hidden ones so
     // the user can flip them on/off themselves.
-    const cals=(d.items||[]).map(c=>({id:c.id,summary:c.summary,backgroundColor:c.backgroundColor||null,primary:!!c.primary,hidden:c.hidden===true,selected:c.selected!==false}));
+    const cals=(d.items||[]).map(c=>({id:c.id,summary:c.summary,backgroundColor:c.backgroundColor||null,primary:!!c.primary,hidden:c.hidden===true,selected:c.selected!==false,source:'google'}));
     // Sort: primary calendar first, then alphabetically by name. Makes it
     // obvious which one is "yours" in the Settings list.
     cals.sort((a,b)=>{
@@ -4335,7 +4360,7 @@ async function fetchGCal(start,end){
         // Same silent-refresh path as fetchCalendarList — let GIS swap
         // in a fresh token in the background before we drop the user.
         const refreshing=silentRefreshGCalToken();
-        if(!refreshing){gTok=null;try{localStorage.removeItem('los_gat');}catch(e){}}
+        if(!refreshing){gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}}
         try{refreshGCalWarn();}catch(_){}
         return[];
       }
@@ -4351,7 +4376,7 @@ async function fetchGCal(start,end){
         else if(ev.end?.dateTime)endDate=ev.end.dateTime.slice(0,10);
         const time=ev.start.dateTime?ev.start.dateTime.slice(11,16):'';
         const endTime=ev.end?.dateTime?ev.end.dateTime.slice(11,16):'';
-        return{id:ev.id,title:ev.summary||'(No title)',description:ev.description||'',date:startDate,endDate,time,endTime,allDay,gcal:true,colorId:ev.colorId||null,calendarId:cal.id,calendarColor:cal.backgroundColor,recurringEventId:ev.recurringEventId||null};
+        return{id:ev.id,title:ev.summary||'(No title)',description:ev.description||'',date:startDate,endDate,time,endTime,allDay,gcal:true,source:'google',colorId:ev.colorId||null,calendarId:cal.id,calendarColor:cal.backgroundColor,recurringEventId:ev.recurringEventId||null};
       });
     }catch(e){console.warn('[gcal] fetch',cal.id,'failed:',e.message);return[];}
   })()));
@@ -10011,7 +10036,7 @@ function rSettings(){
   if(km){const k=getKey();km.textContent=k?(k.slice(0,10)+'…'+k.slice(-4)):'Not set';}
   const gs=document.getElementById('gcal-status');
   const cb=document.getElementById('gcal-connect-btn');
-  let tok=null;try{tok=localStorage.getItem('los_gat');}catch(e){}
+  let tok=null;try{tok=localStorage.getItem(_gatKey());}catch(e){}
   if(gs)gs.textContent=tok?'Connected':'Not connected';
   if(cb)cb.textContent=tok?'Reconnect':'Connect';
   const lr=document.getElementById('life-rhythm-ta');if(lr&&document.activeElement!==lr)lr.value=S.lifeRhythm||'';
@@ -10218,7 +10243,7 @@ function rSettings(){
 }
 async function renderCalendarList(){
   const el=document.getElementById('gcal-cal-list');if(!el)return;
-  let tok=null;try{tok=localStorage.getItem('los_gat');}catch(e){}
+  let tok=null;try{tok=localStorage.getItem(_gatKey());}catch(e){}
   if(!tok){el.innerHTML='<span style="color:var(--muted)">Connect Google Calendar to see your calendars.</span>';return;}
   const cals=await fetchCalendarList();
   if(!cals.length){el.innerHTML='<span style="color:var(--muted)">Couldn\'t fetch calendars. Try reconnecting.</span>';return;}
