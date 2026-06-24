@@ -3328,7 +3328,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v187';
+const APP_VERSION='v188';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4290,27 +4290,34 @@ function _isMobile(){
 }
 // Back-compat: any earlier callers of _isIOS now route through _isMobile.
 function _isIOS(){return _isMobile();}
+// Returns a Promise<boolean>: true once a fresh access token is in gTok +
+// localStorage, false if it couldn't refresh silently (e.g. user revoked
+// consent). Concurrent callers share the same in-flight request — important
+// because every parallel fetchGCal call that 401s would otherwise stomp the
+// pending resolver and leave the earlier ones hanging.
+let _gisSilentInflight=null;
 function silentRefreshGCalToken(){
-  // Previously hard-skipped on mobile to avoid an account picker popping on
-  // every app open. That on-open trigger is long gone — silent refresh now
-  // only fires on the ~50-min timer or when the token genuinely 401s, both
-  // legitimate moments to re-mint. So we run the SAME silent GIS refresh on
-  // mobile that desktop uses; if consent is still granted prompt:'' returns
-  // a fresh token with no UI (matching the desktop auto-reconnect). If the
-  // platform can't do it silently the error callback clears the token and
-  // the disconnect banner appears — no worse than before.
-  if(!_gisInitialized){if(!initGISTokenClient())return false;}
-  if(_gisTokenClient){
+  if(_gisSilentInflight)return _gisSilentInflight;
+  if(!_gisInitialized){if(!initGISTokenClient())return Promise.resolve(false);}
+  if(!_gisTokenClient)return Promise.resolve(false);
+  _gisSilentInflight=new Promise((resolve)=>{
+    let settled=false;
+    const safety=setTimeout(()=>{if(!settled){settled=true;_gisPendingResolver=null;resolve(false);}},8000);
+    _gisPendingResolver={
+      resolve:(tok)=>{if(settled)return;settled=true;clearTimeout(safety);resolve(!!tok);},
+      reject:()=>{if(settled)return;settled=true;clearTimeout(safety);resolve(false);}
+    };
     try{
-      // prompt:'' tells GIS to attempt silently — no UI shown if the
-      // user has already granted consent. If consent was revoked or
-      // never given, the callback fires with error and we surface
-      // the banner.
+      // prompt:'' tells GIS to attempt silently — no UI shown if the user
+      // has already granted consent.
       _gisTokenClient.requestAccessToken({prompt:''});
-      return true;
-    }catch(e){console.warn('[gis] requestAccessToken failed:',e.message);}
-  }
-  return false;
+    }catch(e){
+      console.warn('[gis] requestAccessToken failed:',e.message);
+      if(!settled){settled=true;clearTimeout(safety);_gisPendingResolver=null;resolve(false);}
+    }
+  });
+  _gisSilentInflight.finally(()=>{_gisSilentInflight=null;});
+  return _gisSilentInflight;
 }
 // Wait briefly for the GIS script to load if it hasn't yet, then init.
 function _bootstrapGIS(){
@@ -4467,15 +4474,22 @@ async function fetchCalendarList(){
   const tok=getGCalToken();if(!tok)return[];
   if(Date.now()-_calListCache.ts<5*60000&&_calListCache.cals.length)return _calListCache.cals;
   try{
-    const r=await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader',{headers:{Authorization:'Bearer '+tok}});
+    let r=await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader',{headers:{Authorization:'Bearer '+tok}});
     if(r.status===401){
-      // Try a silent GIS refresh before surfacing the disconnect banner.
-      // If GIS is wired up the callback will swap in a fresh token and
-      // the next render's fetch will succeed.
-      const refreshing=silentRefreshGCalToken();
-      if(!refreshing){gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}}
-      try{refreshGCalWarn();}catch(_){}
-      return[];
+      // Silently re-mint the token AND wait for it before retrying. Without
+      // the await + retry, the first render after a stale-token app open
+      // returned [] every time (which is what the user saw as "Connected but
+      // no events; navigate away and back to fix it").
+      const refreshed=await silentRefreshGCalToken();
+      if(refreshed){
+        const tok2=getGCalToken();
+        if(tok2)r=await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader',{headers:{Authorization:'Bearer '+tok2}});
+      }
+      if(r.status===401){
+        gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}
+        try{refreshGCalWarn();}catch(_){}
+        return[];
+      }
     }
     if(!r.ok)return[];
     const d=await r.json();
@@ -4508,14 +4522,22 @@ async function fetchGCal(start,end){
   const activeCals=cals.filter(c=>c.primary||!disabled.has(c.id));
   const results=await Promise.all(activeCals.map(cal=>(async()=>{
     try{
-      const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime&maxResults=250`,{headers:{Authorization:'Bearer '+tok}});
+      const url=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${encodeURIComponent(start)}&timeMax=${encodeURIComponent(end)}&singleEvents=true&orderBy=startTime&maxResults=250`;
+      let r=await fetch(url,{headers:{Authorization:'Bearer '+tok}});
       if(r.status===401){
-        // Same silent-refresh path as fetchCalendarList — let GIS swap
-        // in a fresh token in the background before we drop the user.
-        const refreshing=silentRefreshGCalToken();
-        if(!refreshing){gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}}
-        try{refreshGCalWarn();}catch(_){}
-        return[];
+        // Await + retry — without this the first render after a stale-token
+        // open silently returns [] (root cause of the "Settings says Connected
+        // but no events show until I navigate away and back" bug).
+        const refreshed=await silentRefreshGCalToken();
+        if(refreshed){
+          const tok2=getGCalToken();
+          if(tok2)r=await fetch(url,{headers:{Authorization:'Bearer '+tok2}});
+        }
+        if(r.status===401){
+          gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}
+          try{refreshGCalWarn();}catch(_){}
+          return[];
+        }
       }
       if(!r.ok)return[];
       const d=await r.json();
@@ -4669,12 +4691,16 @@ async function fetchOutlookCalendars(){
   const tok=getOutlookToken();if(!tok)return[];
   if(Date.now()-_outlookCalListCache.ts<5*60000&&_outlookCalListCache.cals.length)return _outlookCalListCache.cals;
   try{
-    const r=await fetch('https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar,hexColor',{headers:{Authorization:'Bearer '+tok}});
+    const url='https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar,hexColor';
+    let r=await fetch(url,{headers:{Authorization:'Bearer '+tok}});
     if(r.status===401){
       const ok=await silentRefreshOutlookToken();
-      if(!ok){oTok=null;try{localStorage.removeItem(_otkKey());}catch(_){}}
-      try{refreshGCalWarn();}catch(_){}
-      return[];
+      if(ok){const tok2=getOutlookToken();if(tok2)r=await fetch(url,{headers:{Authorization:'Bearer '+tok2}});}
+      if(r.status===401){
+        oTok=null;try{localStorage.removeItem(_otkKey());}catch(_){}
+        try{refreshGCalWarn();}catch(_){}
+        return[];
+      }
     }
     if(!r.ok)return[];
     const d=await r.json();
@@ -4705,12 +4731,16 @@ async function fetchOutlook(startISO,endISO){
   const results=await Promise.all(activeCals.map(cal=>(async()=>{
     try{
       const url=`https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(cal.id)}/calendarView?startDateTime=${encodeURIComponent(startISO)}&endDateTime=${encodeURIComponent(endISO)}&$top=250&$orderby=start/dateTime`;
-      const r=await fetch(url,{headers:{Authorization:'Bearer '+tok,Prefer:'outlook.timezone="UTC"'}});
+      const headers={Authorization:'Bearer '+tok,Prefer:'outlook.timezone="UTC"'};
+      let r=await fetch(url,{headers});
       if(r.status===401){
         const ok=await silentRefreshOutlookToken();
-        if(!ok){oTok=null;try{localStorage.removeItem(_otkKey());}catch(_){}}
-        try{refreshGCalWarn();}catch(_){}
-        return[];
+        if(ok){const tok2=getOutlookToken();if(tok2)r=await fetch(url,{headers:{Authorization:'Bearer '+tok2,Prefer:'outlook.timezone="UTC"'}});}
+        if(r.status===401){
+          oTok=null;try{localStorage.removeItem(_otkKey());}catch(_){}
+          try{refreshGCalWarn();}catch(_){}
+          return[];
+        }
       }
       if(!r.ok)return[];
       const d=await r.json();
