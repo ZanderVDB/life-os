@@ -1702,6 +1702,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .att-badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 7px;border-radius:5px;flex-shrink:0;line-height:1.2;margin-top:1px}
 .att-item.urgent .att-badge{background:var(--red-bg);color:var(--red)}
 .att-item.stale .att-badge{background:var(--gold-bg);color:var(--gold)}
+.att-item.ppl .att-badge{background:var(--lavender-bg);color:var(--lavender)}
+.att-item.proj .att-badge{background:var(--blue-bg);color:var(--blue)}
 .att-text{font-size:12.5px;line-height:1.45;color:var(--text-2);flex:1;transition:color .1s}
 .att-empty{font-size:12.5px;color:var(--muted);padding:8px 0;text-align:center;font-style:italic}
 .upcom-item{display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--border)}
@@ -3363,7 +3365,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v191';
+const APP_VERSION='v192';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -6721,19 +6723,44 @@ async function rTodayWeek(){
 
 function rAttention(){
   const today=new Date();
-  const urgent=S.tasks.filter(t=>!t.done&&t.priority==='urgent');
-  const stale=S.tasks.filter(t=>{
+  const todayIso=tod();
+  const items=[]; // {badge, cls, text, onclick}
+  // Urgent + stale tasks (the original two categories).
+  S.tasks.filter(t=>!t.done&&t.priority==='urgent').forEach(t=>{
+    items.push({badge:'Urgent',cls:'urgent',text:t.text,onclick:`jumpToTask('${t.id}')`});
+  });
+  S.tasks.filter(t=>{
     if(t.done||t.priority==='urgent'||t.priority==='someday')return false;
     if(!t.date)return false;
+    return Math.floor((today-new Date(t.date+'T12:00:00'))/86400000)>=14;
+  }).forEach(t=>{
     const days=Math.floor((today-new Date(t.date+'T12:00:00'))/86400000);
-    return days>=14;
+    items.push({badge:`${days}d`,cls:'stale',text:t.text,onclick:`jumpToTask('${t.id}')`});
   });
-  const items=[
-    ...urgent.map(t=>({t,badge:'Urgent',cls:'urgent'})),
-    ...stale.map(t=>{const days=Math.floor((today-new Date(t.date+'T12:00:00'))/86400000);return{t,badge:`${days}d`,cls:'stale'};})
-  ];
+  // People you haven't seen in 6+ weeks (only when lastTogether is actually
+  // tracked — no data, no nag).
+  (S.people||[]).forEach(p=>{
+    if(!p.lastTogether||!/^\d{4}-\d{2}-\d{2}$/.test(p.lastTogether))return;
+    const days=_daysBetweenIso(p.lastTogether,todayIso);
+    if(days>=42)items.push({badge:`${Math.floor(days/7)}w`,cls:'ppl',text:`Haven't seen ${p.name}`,onclick:`setRoute('people');openPersonModal('${p.id}')`});
+  });
+  // Plans with people that never got a date (older than a week).
+  (S.people||[]).forEach(p=>{
+    (p.promises||[]).forEach(pr=>{
+      if(!pr||!pr.text||pr.date)return;
+      if(!pr.addedAt||_daysBetweenIso(pr.addedAt,todayIso)<7)return;
+      items.push({badge:'no date',cls:'ppl',text:`${p.name}: ${pr.text}`,onclick:`setRoute('people');openPersonModal('${p.id}')`});
+    });
+  });
+  // Projects going stale (auto-status already computes recency — surface it
+  // instead of demoting silently). Background ideas are exempt by design.
+  (S.builds||[]).forEach(b=>{
+    if(_projEffStatus(b)==='background')return;
+    const days=Math.floor((Date.now()-_projTouchedMs(b))/86400000);
+    if(days>=14)items.push({badge:`${days}d`,cls:'proj',text:`Project: ${b.title}`,onclick:`setRoute('projects');openProject('${b.id}')`});
+  });
   const el=document.getElementById('attention-list');if(!el)return;
-  el.innerHTML=items.length?items.slice(0,8).map(({t,badge,cls})=>`<div class="att-item ${cls}" onclick="jumpToTask('${t.id}')"><span class="att-badge">${badge}</span><span class="att-text">${esc(t.text)}</span></div>`).join(''):`<div class="att-empty">Nothing urgent. ✓</div>`;
+  el.innerHTML=items.length?items.slice(0,8).map(it=>`<div class="att-item ${it.cls}" onclick="${it.onclick}"><span class="att-badge">${it.badge}</span><span class="att-text">${esc(it.text)}</span></div>`).join(''):`<div class="att-empty">Nothing urgent. ✓</div>`;
   // Flash the mobile attention-button dot when there's anything urgent
   const dot=document.getElementById('hb-dot');if(dot)dot.classList.toggle('on',items.length>0);
   const pulldot=document.getElementById('aside-pull-dot');if(pulldot)pulldot.classList.toggle('on',items.length>0);
@@ -8998,6 +9025,27 @@ async function saveCurrentEvent(){
   // edits it's locked to the event's existing source/calendar.
   const _picked=_parseEmCalValue(document.getElementById('em-cal')?.value||'');
   const opts={allDay,recurrence,reminderMin,timeZone,endDate,source:_picked.source,calendarId:_picked.calendarId};
+  // Conflict check — warn (never block) when a timed event overlaps another
+  // timed event already on that day. Best effort against the local cache;
+  // missing end times assume a 1-hour duration.
+  if(!allDay&&time){
+    try{
+      const toMin=s=>{const m=String(s||'').match(/^(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;};
+      const s1=toMin(p2hhmm(time));
+      const e1=endTime?toMin(p2hhmm(endTime)):(s1!==null?s1+60:null);
+      if(s1!==null&&e1!==null){
+        const editingId=editingEvent.mode==='edit'?(editingEvent.data&&editingEvent.data.id):null;
+        const clash=(gcCache.events||[]).find(ev=>{
+          if(ev.allDay||!ev.time||ev.date!==date)return false;
+          if(editingId&&(ev.id===editingId||ev.recurringEventId===editingId))return false;
+          const s2=toMin(ev.time);if(s2===null)return false;
+          const e2=ev.endTime?toMin(ev.endTime):s2+60;
+          return s1<e2&&s2<e1;
+        });
+        if(clash&&!confirm(`⚠ This overlaps "${clash.title}" (${clash.time}${clash.endTime?'–'+clash.endTime:''}) on the same day. Save anyway?`))return;
+      }
+    }catch(_){}
+  }
   if(editingEvent.mode==='new'){
     const res=await createGCEvent(title,date,time,desc,endTime,opts);
     if(!res){alert(`Could not save to ${_picked.source==='outlook'?'Outlook':'Google Calendar'}. The token may have expired — reconnect in Settings → Calendar.`);return;}
