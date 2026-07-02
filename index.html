@@ -1846,6 +1846,11 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ai-bar{position:fixed;bottom:0;left:232px;right:0;padding:12px 28px env(safe-area-inset-bottom,14px);background:linear-gradient(to top,var(--bg) 72%,transparent);z-index:8}
 .ai-inner{max-width:1544px;margin:0 auto;display:flex;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 8px 8px 12px;box-shadow:var(--shadow-lift)}
 .mic-btn{width:38px;height:38px;border-radius:50%;border:1px solid var(--border);background:var(--surface-2);font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted)}
+/* Do ↔ Ask mode chip on the AI bar. Do = neutral, Ask = accent-tinted so
+   the read-only state is visible at a glance. */
+.ai-mode{flex-shrink:0;height:38px;padding:0 13px;border-radius:19px;border:1px solid var(--border);background:var(--surface-2);font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.03em;color:var(--text-2);cursor:pointer;transition:all .12s}
+.ai-mode:hover{border-color:var(--border-strong)}
+.ai-mode.ask{background:color-mix(in srgb,var(--accent) 16%,var(--surface));border-color:color-mix(in srgb,var(--accent) 45%,var(--border));color:var(--text)}
 .mic-btn:hover{background:var(--surface-hover);color:var(--text)}
 .mic-btn.on{background:var(--red);border-color:var(--red);color:#fff;animation:pulse-mic .9s infinite}
 @keyframes pulse-mic{0%,100%{box-shadow:0 0 0 0 rgba(196,106,106,.4)}50%{box-shadow:0 0 0 8px rgba(196,106,106,0)}}
@@ -3263,6 +3268,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <!-- AI BAR -->
 <div class="ai-bar" id="btm" style="display:none">
   <div class="ai-inner">
+    <!-- Do ↔ Ask mode. Do = the existing command executor (creates tasks,
+         events, etc. through the review flow). Ask = read-only Q&A over
+         your data — nothing gets changed, just answered. -->
+    <button class="ai-mode" id="ai-mode-btn" type="button" onclick="toggleAIMode()" title="Switch between Do (make changes) and Ask (read-only questions)">Do</button>
     <button class="mic-btn" id="mic-btn" onclick="toggleVoice()" title="Voice input">🎙</button>
     <textarea class="ai-ta" id="ai-ta" rows="1" placeholder="Tell me what's going on…"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"
@@ -3354,7 +3363,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v190';
+const APP_VERSION='v191';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -11358,9 +11367,118 @@ function _scopeFilterCh(ch,scope){
 // Placeholder hint that reflects what the AI can do on the current page.
 function _updateAIPlaceholder(){
   const ta=document.getElementById('ai-ta');if(!ta)return;
+  // Keep the mode chip + send button in sync every time the placeholder
+  // refreshes (route change, conversation end, mode toggle).
+  const chip=document.getElementById('ai-mode-btn');
+  const btn=document.getElementById('btm-btn');
+  const ask=_aiMode()==='ask';
+  if(chip){chip.textContent=ask?'Ask':'Do';chip.classList.toggle('ask',ask);}
   if(_aiConversation&&_aiConversation.active&&_aiConversation.pendingQuestions){ta.placeholder='Type your answer…';return;}
+  if(btn)btn.textContent=ask?'Ask ↗':'Update ↗';
+  if(ask){ta.placeholder='Ask anything about your data — "when did I last see Jack?"';return;}
   const r=currentRoute||'today';
   ta.placeholder=r==='today'?"Tell me what's going on…":`${ROUTE_TITLES[r]||'This page'} AI — ${(AI_SCOPES[r]||AI_SCOPES.today).label}`;
+}
+// ───────── ASK MODE (read-only Q&A over your data) ─────────
+// Do = the command executor. Ask = questions only: same BYO-key AI, full
+// data context (minus the notebook — that stays out of prompts by policy),
+// zero operations, zero confirm modal. Keeps a short thread so follow-ups
+// like "and the week before?" work.
+function _aiMode(){try{return localStorage.getItem('los_ai_mode')==='ask'?'ask':'do';}catch(_){return 'do';}}
+function toggleAIMode(){
+  const next=_aiMode()==='ask'?'do':'ask';
+  try{localStorage.setItem('los_ai_mode',next);}catch(_){}
+  if(next==='do')_closeAskChat();
+  _updateAIPlaceholder();
+}
+let _askThread=[]; // [{q,a}] — capped at 4, cleared on close / Do usage
+function _closeAskChat(){
+  _askThread=[];
+  const chatEl=document.getElementById('ai-chat');
+  if(chatEl&&!(_aiConversation&&_aiConversation.active))chatEl.style.display='none';
+}
+function _renderAskChat(thinking){
+  let chatEl=document.getElementById('ai-chat');
+  if(!chatEl){
+    const btm=document.getElementById('btm');if(!btm)return;
+    chatEl=document.createElement('div');chatEl.id='ai-chat';chatEl.className='ai-chat';
+    btm.insertBefore(chatEl,btm.firstChild);
+  }
+  const bubbles=_askThread.map(t=>
+    `<div class="ai-chat-bubble user"><strong>You:</strong>${esc(t.q)}</div>`+
+    (t.a?`<div class="ai-chat-bubble bot"><strong>AI:</strong>${esc(t.a)}</div>`:'')
+  ).join('');
+  chatEl.innerHTML=`
+    <div class="ai-chat-msgs">${bubbles}${thinking?'<div class="ai-chat-bubble bot"><em>Thinking…</em></div>':''}</div>
+    <div class="ai-chat-foot">
+      <button class="ai-chat-cancel" onclick="_closeAskChat()">Close</button>
+      <span style="color:var(--muted);font-size:11px">Ask mode — read-only, nothing gets changed.</span>
+    </div>`;
+  chatEl.style.display='block';
+  setTimeout(()=>{const m=chatEl.querySelector('.ai-chat-msgs');if(m)m.scrollTop=m.scrollHeight;},10);
+}
+async function _aiAsk(msg){
+  const btn=document.getElementById('btm-btn'),st=document.getElementById('btm-st');
+  const key=getKey();if(!key){promptKey();return;}
+  _askThread.push({q:msg,a:''});
+  if(_askThread.length>4)_askThread.shift();
+  _renderAskChat(true);
+  if(btn){btn.disabled=true;btn.textContent='Thinking…';}
+  if(st){st.className='ai-st';st.textContent='';}
+  const today=tod();
+  const dAgo=ms=>(typeof ms==='number'&&ms>0)?Math.floor((Date.now()-ms)/86400000):null;
+  // Full read-only context. Compact per-domain maps; notebook excluded.
+  const ctx={
+    tasksOpen:(S.tasks||[]).filter(t=>!t.done).map(t=>{
+      const o={text:t.text,list:t.dailyDate?'daily':'general',priority:t.priority,ageDays:_daysBetweenIso(t.dailySince||t.dailyDate||t.date||today,today)};
+      const ck=dAgo(t.lastCheckedAt);if(ck!==null)o.lastCheckedDaysAgo=ck;
+      if(t.scheduledTime)o.time=t.scheduledTime;
+      return o;
+    }),
+    tasksDoneRecently:(S.tasks||[]).filter(t=>t.done&&t.doneAt&&(Date.now()-t.doneAt)<14*86400000).slice(0,30).map(t=>({text:t.text,daysAgo:dAgo(t.doneAt)})),
+    habits:(S.habits||[]).map(h=>{const s=computeHabitStats(h);return{name:h.name,streak:s.current,doneToday:(h.checkedDates||[]).includes(today)};}),
+    projects:(S.builds||[]).map(b=>({title:b.title,status:_projEffStatus(b),lastWorkedDaysAgo:Math.floor((Date.now()-_projTouchedMs(b))/86400000),notesExcerpt:String(b.notes||'').slice(0,200)})),
+    people:(S.people||[]).map(p=>({name:p.name,lastTogether:p.lastTogether||null,plans:(p.promises||[]).map(x=>({text:x.text,date:x.date||null}))})),
+    reminders:(S.reminders||[]).map(r=>({text:r.text,nextDue:r.nextDue})),
+    recentAIActions:(S.aiHistory||[]).slice(0,10).map(h=>({when:new Date(h.at).toISOString().slice(0,10),prompt:String(h.prompt||'').slice(0,80),did:h.summary}))
+  };
+  try{
+    const riso=today;const log=_routineDayLog(riso);const blocks=_routineBlocks(riso);
+    const total=blocks.reduce((n,b)=>n+b.items.length,0);
+    const done=blocks.reduce((n,b)=>n+b.items.filter(it=>log.checks[it.id]).length,0);
+    ctx.routineToday={done,total};
+  }catch(_){}
+  try{
+    if(getGCalToken()||getOutlookToken()){
+      const now=new Date();const horizon=new Date(now);horizon.setDate(now.getDate()+30);
+      const evs=await fetchGCal(now.toISOString(),horizon.toISOString());
+      const seen=new Set();
+      ctx.upcomingEvents=evs.filter(e=>{const k=e.recurringEventId||e.id;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,30).map(e=>({title:e.title,date:e.date,time:e.time||null}));
+    }
+  }catch(_){}
+  const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
+  const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const prior=_askThread.slice(0,-1).filter(t=>t.a).map(t=>`Q: ${t.q}\nA: ${t.a}`).join('\n');
+  const prompt=`You are the read-only assistant for ${firstName}'s Life OS. Today is ${DAY_NAMES[new Date().getDay()]} ${today}.
+Answer the question using ONLY the state below. Be concrete — name actual tasks/people/dates. If the data doesn't contain the answer, say so plainly. 1–5 sentences.${prior?`\n\nEarlier in this conversation:\n${prior}`:''}
+Respond ONLY raw JSON: {"answer":"..."}
+State:${JSON.stringify(ctx)}
+Question:"${msg}"`;
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,messages:[{role:'user',content:prompt}]})});
+    if(!r.ok){let em='HTTP '+r.status;try{const ed=await r.json();if(ed.error?.message)em=ed.error.message;}catch(_){}throw new Error(em);}
+    const data=await r.json();
+    let answer='';
+    try{answer=JSON.parse((data.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim()).answer||'';}catch(_){answer=(data.content?.[0]?.text||'').trim();}
+    _askThread[_askThread.length-1].a=answer||"I couldn't work that out from your data.";
+    _renderAskChat(false);
+  }catch(e){
+    _askThread.pop();
+    _renderAskChat(false);
+    if(st){st.className='ai-st er';st.textContent='Ask failed: '+e.message;setTimeout(()=>{st.textContent='';st.className='ai-st';},6000);}
+  }
+  if(btn){btn.disabled=false;}
+  _updateAIPlaceholder();
 }
 let _aiConversation=null;
 async function doUpdate(){
@@ -11376,6 +11494,15 @@ async function doUpdate(){
     _submitClarificationAnswer(msg);
     return;
   }
+  // Ask mode — read-only Q&A, its own path entirely (no ops, no confirm).
+  if(_aiMode()==='ask'){
+    ta.value='';ta.style.height='auto';
+    await _aiAsk(msg);
+    return;
+  }
+  // Do mode — an open Ask thread would visually collide with the
+  // clarification chat, so clear it before starting a command.
+  _closeAskChat();
   // Start a fresh conversation. Capture the page it started on so the
   // whole multi-round exchange stays scoped to that page even if the user
   // navigates away mid-clarification.
