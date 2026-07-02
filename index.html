@@ -1853,6 +1853,15 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ai-mode{flex-shrink:0;height:38px;padding:0 13px;border-radius:19px;border:1px solid var(--border);background:var(--surface-2);font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.03em;color:var(--text-2);cursor:pointer;transition:all .12s}
 .ai-mode:hover{border-color:var(--border-strong)}
 .ai-mode.ask{background:color-mix(in srgb,var(--accent) 16%,var(--surface));border-color:color-mix(in srgb,var(--accent) 45%,var(--border));color:var(--text)}
+/* AI memory list (Settings → AI) */
+#ai-memory-list{display:flex;flex-direction:column;gap:6px}
+.aim-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:8px 11px}
+.aim-txt{flex:1;font-size:13px;line-height:1.45;color:var(--text);word-break:break-word}
+.aim-del{flex:0 0 auto;width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.aim-del:hover{background:var(--red-bg);color:var(--red);border-color:var(--red)}
+.aim-empty{font-size:12px;color:var(--muted);font-style:italic;padding:4px 2px}
+.aim-add{display:flex;gap:8px}
+.aim-add .input{flex:1;min-width:0}
 .mic-btn:hover{background:var(--surface-hover);color:var(--text)}
 .mic-btn.on{background:var(--red);border-color:var(--red);color:#fff;animation:pulse-mic .9s infinite}
 @keyframes pulse-mic{0%,100%{box-shadow:0 0 0 0 rgba(196,106,106,.4)}50%{box-shadow:0 0 0 8px rgba(196,106,106,0)}}
@@ -3080,6 +3089,17 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             </div>
             <textarea id="life-rhythm-ta" class="exp-ta xl" style="width:100%;min-height:120px" placeholder="Wake 6am weekdays / 7am weekends. Work 9am. Gym Mon–Fri ~1hr. Bible study Mon 7–9pm. Off screens by 10pm…" onblur="saveLifeRhythm()"></textarea>
           </div>
+          <div class="setting-row" style="align-items:stretch;flex-direction:column;gap:10px">
+            <div style="width:100%">
+              <div class="setting-label">Things the AI should remember</div>
+              <div class="setting-desc">Standing facts carried into every AI request — preferences, recurring context, rules. One fact per line. Applies to both Do and Ask modes.</div>
+            </div>
+            <div id="ai-memory-list"></div>
+            <div class="aim-add">
+              <input class="input" id="ai-memory-input" placeholder='e.g. "Never schedule anything before 9am"' onkeydown="if(event.key==='Enter'){event.preventDefault();aiMemAdd();}">
+              <button class="btn btn-sm" onclick="aiMemAdd()">+ Add</button>
+            </div>
+          </div>
         </div>
 
         <div class="setting-tab-pane" data-setting-tab="routine">
@@ -3365,7 +3385,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v192';
+const APP_VERSION='v193';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -5153,7 +5173,7 @@ function resetStateForNewUser(){
     S.dayNotes={};S.disabledCalendars=[];S.aiHistory=[];
     S.workProjects=[];
     S.todaysTip=null;S.growthFocus=null;S.lifeRhythm='';
-    S.routine=null;S.faithFocus=true;S.morningHabitCatchup=true;S.defaultWriteCalendar=null;
+    S.routine=null;S.faithFocus=true;S.morningHabitCatchup=true;S.defaultWriteCalendar=null;S.aiMemory=[];
     S.trialStart=undefined;S.entitlement=undefined;S.onboardDone=undefined;
     S.calendarDefaults={timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]};
     S.notebook={sections:[]};
@@ -5466,6 +5486,8 @@ function handleSnapshot(snap){
     S.faithFocus=typeof d.faithFocus==='boolean'?d.faithFocus:true;
     // Default write calendar (Phase B). Null = auto (primary Google).
     S.defaultWriteCalendar=(d.defaultWriteCalendar&&typeof d.defaultWriteCalendar==='object'&&d.defaultWriteCalendar.source&&d.defaultWriteCalendar.calendarId)?d.defaultWriteCalendar:null;
+    // AI memory — standing facts injected into every AI prompt.
+    S.aiMemory=Array.isArray(d.aiMemory)?d.aiMemory.filter(x=>typeof x==='string'&&x.trim()):[];
     // Trial / entitlement / onboarding flags.
     S.trialStart=typeof d.trialStart==='string'?d.trialStart:undefined;
     S.entitlement=typeof d.entitlement==='string'?d.entitlement:undefined;
@@ -5631,6 +5653,8 @@ function _buildSavePayload(){
   payload.faithFocus=typeof S.faithFocus==='boolean'?S.faithFocus:true;
   // Default write calendar — {source:'google'|'outlook', calendarId:'...'} or null.
   payload.defaultWriteCalendar=(S.defaultWriteCalendar&&typeof S.defaultWriteCalendar==='object'&&S.defaultWriteCalendar.source&&S.defaultWriteCalendar.calendarId)?S.defaultWriteCalendar:null;
+  // AI memory — standing facts the user wants every AI prompt to carry.
+  payload.aiMemory=Array.isArray(S.aiMemory)?S.aiMemory.filter(x=>typeof x==='string'&&x.trim()).slice(0,50):[];
   // Trial / entitlement / onboarding (used by the paywall + tutorial).
   if(typeof S.trialStart==='string')payload.trialStart=S.trialStart;
   if(typeof S.entitlement==='string')payload.entitlement=S.entitlement;
@@ -5660,6 +5684,36 @@ async function svAllNow(){
   try{await _profileDocRef().set(_buildSavePayload(),{merge:true});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error('[save-now]',e.message);}
 }
 function saveLifeRhythm(){const ta=document.getElementById('life-rhythm-ta');if(!ta)return;const v=ta.value;if(v===S.lifeRhythm)return;S.lifeRhythm=v;svAll();}
+// ── AI memory (Settings → AI → "Things the AI should remember") ──
+// A short user-curated list of standing facts injected into every AI
+// prompt (Do and Ask). The user holds the pen: add and delete only here.
+function rAIMemory(){
+  const el=document.getElementById('ai-memory-list');if(!el)return;
+  const mem=Array.isArray(S.aiMemory)?S.aiMemory:[];
+  el.innerHTML=mem.length
+    ?mem.map((f,i)=>`<div class="aim-row"><span class="aim-txt">${esc(f)}</span><button class="aim-del" title="Forget this" onclick="aiMemDel(${i})">×</button></div>`).join('')
+    :`<div class="aim-empty">Nothing yet — add facts the AI should always know.</div>`;
+}
+function aiMemAdd(){
+  const inp=document.getElementById('ai-memory-input');if(!inp)return;
+  const v=(inp.value||'').trim();if(!v)return;
+  S.aiMemory=Array.isArray(S.aiMemory)?S.aiMemory:[];
+  if(S.aiMemory.length>=50){alert('Memory is full (50 facts) — delete one first.');return;}
+  S.aiMemory.push(v);
+  inp.value='';
+  svAll();rAIMemory();
+}
+function aiMemDel(i){
+  if(!Array.isArray(S.aiMemory))return;
+  S.aiMemory.splice(i,1);
+  svAll();rAIMemory();
+}
+// Shared prompt fragment — '' when the list is empty.
+function _aiMemoryBlock(){
+  const mem=(Array.isArray(S.aiMemory)?S.aiMemory:[]).filter(x=>typeof x==='string'&&x.trim());
+  if(!mem.length)return '';
+  return `\nSTANDING FACTS the user has told you to always remember (treat as ground truth):\n${mem.map(f=>'- '+f).join('\n')}\n`;
+}
 function promptKey(){
   const existing=getKey();
   const k=prompt('Enter your Anthropic API key (starts with sk-ant-...)\nGet one at console.anthropic.com → API Keys',existing||'');
@@ -5810,7 +5864,7 @@ const GROWTH={
  {t:'Stay close; fruit follows.',v:'"Remain in me, as I also remain in you... apart from me you can do nothing."',r:'John 15:4-5'}
 ]
 };
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',morningHabitCatchup:true,routineLog:{},routine:null,faithFocus:true,mode:'personal',defaultWriteCalendar:null,people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
+const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',morningHabitCatchup:true,routineLog:{},routine:null,faithFocus:true,mode:'personal',defaultWriteCalendar:null,aiMemory:[],people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
 // or 'all' (every AI change opens the review queue). Legacy 'off' is no
@@ -10909,6 +10963,7 @@ function rSettings(){
   rRoutineEditor();
   renderSubStatus();
   rProfilesPanel();
+  rAIMemory();
   {const _cl=['off','light','balanced','thorough'].includes(S.checkinLevel)?S.checkinLevel:(S.habitCatchupEnabled===false?'off':'balanced');const _sw=document.getElementById('routine-autoopen-toggle');if(_sw)_sw.checked=_cl!=='off';}
   {const _hc=document.getElementById('habit-catchup-toggle');if(_hc)_hc.checked=S.morningHabitCatchup!==false;}
   // Daily reminder toggle reflects both the user preference AND the
@@ -11507,7 +11562,7 @@ async function _aiAsk(msg){
   const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
   const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const prior=_askThread.slice(0,-1).filter(t=>t.a).map(t=>`Q: ${t.q}\nA: ${t.a}`).join('\n');
-  const prompt=`You are the read-only assistant for ${firstName}'s Life OS. Today is ${DAY_NAMES[new Date().getDay()]} ${today}.
+  const prompt=`You are the read-only assistant for ${firstName}'s Life OS. Today is ${DAY_NAMES[new Date().getDay()]} ${today}.${_aiMemoryBlock()}
 Answer the question using ONLY the state below. Be concrete — name actual tasks/people/dates. If the data doesn't contain the answer, say so plainly. 1–5 sentences.${prior?`\n\nEarlier in this conversation:\n${prior}`:''}
 Respond ONLY raw JSON: {"answer":"..."}
 State:${JSON.stringify(ctx)}
@@ -11754,7 +11809,7 @@ CRITICAL for removeEvent / updateEvent:
     ?`This is ${firstName}'s BUSINESS profile — bias toward work-oriented framing: meetings, clients, follow-ups, invoices, deadlines. Default task area is "work" unless personal context is obvious.`
     :`This is ${firstName}'s PERSONAL profile — bias toward personal framing: chores, errands, relationships, hobbies, health. Default task area is "personal" unless work context is obvious.`;
   const prompt=`You manage ${firstName}'s Life OS. Work > personal.
-Today: ${todayName} ${tod()} (user's local time). For reference, ${nextOccurrences}.${rhythm}${projectNames}
+Today: ${todayName} ${tod()} (user's local time). For reference, ${nextOccurrences}.${rhythm}${_aiMemoryBlock()}${projectNames}
 ${modeLine}
 ${scopeDirective}${convBlock}
 
