@@ -225,6 +225,28 @@ svg{flex-shrink:0}
 .pp-srow-name:focus{outline:none;border-color:var(--accent);background:var(--surface)}
 .pp-srow-mode{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .pp-srow-active{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);padding:3px 8px;background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:6px}
+/* ── Universal search (Ctrl/Cmd+K command palette) ── */
+.us-trigger{display:flex;align-items:center;gap:8px;width:100%;border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:8px 10px;margin-bottom:14px;font-family:inherit;font-size:12.5px;color:var(--muted);cursor:pointer;transition:all .12s}
+.us-trigger:hover{border-color:var(--border-strong);color:var(--text-2);background:var(--surface-hover)}
+.us-trigger-ic{font-size:14px;line-height:1}
+.us-trigger-txt{flex:1;text-align:left}
+.us-trigger-kbd{font-size:9.5px;font-weight:700;letter-spacing:.06em;border:1px solid var(--border);border-radius:5px;padding:2px 5px;color:var(--muted-2,var(--muted))}
+#us-overlay{position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);display:flex;align-items:flex-start;justify-content:center;padding:9vh 16px 16px}
+#us-panel{width:100%;max-width:580px;background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-lift);display:flex;flex-direction:column;max-height:74vh;overflow:hidden}
+#us-input{border:none;outline:none;background:transparent;font-family:inherit;font-size:16px;color:var(--text);padding:16px 18px;border-bottom:1px solid var(--border);width:100%;box-sizing:border-box}
+#us-input::placeholder{color:var(--muted-2,var(--muted))}
+#us-results{overflow-y:auto;padding:8px;flex:1}
+.us-group{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:10px 10px 5px}
+.us-item{display:flex;align-items:center;gap:11px;width:100%;border:none;background:transparent;border-radius:9px;padding:8px 10px;cursor:pointer;text-align:left;font-family:inherit;color:var(--text)}
+.us-item:hover,.us-item.on{background:var(--surface-hover)}
+.us-item.on{background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
+.us-item-ic{flex:0 0 22px;text-align:center;font-size:14px;opacity:.75}
+.us-item-body{flex:1;min-width:0}
+.us-item-title{font-size:13.5px;font-weight:500;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.us-item-sub{font-size:11px;color:var(--muted);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.us-empty{padding:22px 14px;text-align:center;font-size:13px;color:var(--muted);font-style:italic}
+.us-foot{border-top:1px solid var(--border);padding:7px 14px;font-size:10.5px;color:var(--muted);display:flex;gap:14px}
+@media(max-width:700px){#us-overlay{padding:12px}#us-panel{max-height:82vh}.us-foot{display:none}}
 .theme-toggle{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px}
 .theme-toggle button{flex:1;padding:6px 8px;font-size:11px;font-weight:600;border-radius:7px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;border:none;background:transparent}
 .theme-toggle button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06)}
@@ -2538,6 +2560,9 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <svg width="22" height="22"><use href="#logo"/></svg>
         <div class="s-logo">Life OS</div>
       </div>
+      <button class="us-trigger" onclick="openUniversalSearch()" title="Search everything (Ctrl+K)">
+        <span class="us-trigger-ic">⌕</span><span class="us-trigger-txt">Search…</span><span class="us-trigger-kbd">Ctrl K</span>
+      </button>
       <nav class="s-nav" id="s-nav">
         <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
         <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
@@ -2568,6 +2593,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <svg width="22" height="22"><use href="#logo"/></svg>
       <span id="mt-title">Life OS</span>
     </div>
+    <button class="hamburger" onclick="openUniversalSearch()" aria-label="Search everything" title="Search everything" style="font-size:17px;line-height:1">⌕</button>
     <button class="hamburger" onclick="toggleRail()" aria-label="Open needs attention" title="Needs attention, next events, habits" style="position:relative">
       <svg width="16" height="16"><use href="#i-bolt"/></svg>
       <span class="hb-dot" id="hb-dot"></span>
@@ -3328,7 +3354,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v189';
+const APP_VERSION='v190';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -6704,6 +6730,146 @@ function rAttention(){
   const pulldot=document.getElementById('aside-pull-dot');if(pulldot)pulldot.classList.toggle('on',items.length>0);
 }
 function jumpToTask(id){ex={id,type:'task'};setRoute('today');rTasks();setTimeout(()=>{const el=document.getElementById('tasks-sec');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},120);}
+
+// ───────── UNIVERSAL SEARCH (Ctrl/Cmd+K command palette) ─────────
+// One input over everything in S: tasks, projects, people, habits,
+// reminders, notebook, brain, AI history — plus quick actions. All data is
+// already client-side, so this is pure in-memory matching, no AI call.
+// NOTE: the notebook IS searchable here (local, never leaves the device) —
+// the "notebook stays out of the AI" policy is about prompts, not search.
+let _usFlat=[];let _usIdx=0;
+function openUniversalSearch(){
+  if(document.getElementById('us-overlay')){closeUniversalSearch();return;}
+  const o=document.createElement('div');
+  o.id='us-overlay';
+  o.innerHTML=`<div id="us-panel">
+    <input id="us-input" placeholder="Search tasks, people, notes… or type an action" autocomplete="off" spellcheck="false">
+    <div id="us-results"></div>
+    <div class="us-foot"><span>↑↓ navigate</span><span>↵ open</span><span>esc close</span></div>
+  </div>`;
+  document.body.appendChild(o);
+  o.addEventListener('mousedown',e=>{if(e.target.id==='us-overlay')closeUniversalSearch();});
+  const inp=document.getElementById('us-input');
+  inp.addEventListener('input',()=>_usRender(inp.value));
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){e.preventDefault();closeUniversalSearch();return;}
+    if(e.key==='ArrowDown'){e.preventDefault();_usMove(1);return;}
+    if(e.key==='ArrowUp'){e.preventDefault();_usMove(-1);return;}
+    if(e.key==='Enter'){e.preventDefault();const it=_usFlat[_usIdx];if(it)it.go();return;}
+  });
+  _usRender('');
+  setTimeout(()=>inp.focus(),30);
+}
+function closeUniversalSearch(){const o=document.getElementById('us-overlay');if(o)o.remove();_usFlat=[];_usIdx=0;}
+function _usMove(d){
+  if(!_usFlat.length)return;
+  _usIdx=(_usIdx+d+_usFlat.length)%_usFlat.length;
+  _usFlat.forEach((it,i)=>it.el.classList.toggle('on',i===_usIdx));
+  const el=_usFlat[_usIdx].el;
+  if(el&&el.scrollIntoView)el.scrollIntoView({block:'nearest'});
+}
+// Build result entries for the query. Each: {group, icon, title, sub, go}.
+function _usBuildResults(q){
+  const toks=q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hit=hay=>{const h=(hay||'').toLowerCase();return toks.every(t=>h.includes(t));};
+  const rank=(title)=>{const t=(title||'').toLowerCase();if(toks.length&&t.startsWith(toks[0]))return 0;if(toks.every(k=>t.includes(k)))return 1;return 2;};
+  const out=[];
+  const add=(group,icon,title,sub,go)=>{if(!toks.length||hit(title+' '+(sub||'')))out.push({group,icon,title,sub:sub||'',go,_r:rank(title)});};
+  const close=fn=>()=>{closeUniversalSearch();try{fn();}catch(e){console.warn('[search] action failed:',e.message);}};
+  // ── Actions ──
+  add('Actions','＋','New task','Add a task',close(()=>openNewTaskModal()));
+  add('Actions','＋','New event','Add a calendar event',close(()=>{setRoute('calendar');openNewEvent();}));
+  add('Actions','＋','New project','Add a project',close(()=>{setRoute('projects');openNewProjectModal();}));
+  add('Actions','＋','New idea','Drop an idea in Brain',close(()=>{setRoute('brain');openNewIdeaModal();}));
+  ROUTES.forEach(r=>add('Actions','→','Go to '+ROUTE_TITLES[r],'',close(()=>setRoute(r))));
+  if(_profileCatalog&&(_profileCatalog.profiles||[]).length>1){
+    _profileCatalog.profiles.filter(p=>p.id!==_activeProfileId).forEach(p=>{
+      add('Actions','👤','Switch to '+(p.name||'profile'),(p.mode==='business'?'Business':'Personal')+' profile',close(()=>switchProfile(p.id).then(_renderProfilePill)));
+    });
+  }
+  // With no query, the palette is just a launcher — stop after actions.
+  if(!toks.length)return out;
+  // ── Tasks (open) ──
+  (S.tasks||[]).filter(t=>!t.done).forEach(t=>{
+    const bits=[t.dailyDate?'Daily':'General'];if(t.priority)bits.push(t.priority);if(t.scheduledTime)bits.push(t.scheduledTime);
+    add('Tasks','☐',t.text||'(untitled)',bits.join(' · '),close(()=>openTaskModal(t.id)));
+  });
+  // ── Projects ──
+  (S.builds||[]).forEach(b=>{
+    add('Projects','★',b.title||'(untitled)',(b.status||'')+((b.desc||b.notes)?' · '+String(b.desc||b.notes).slice(0,60):''),close(()=>{setRoute('projects');openProject(b.id);}));
+  });
+  // ── People ──
+  (S.people||[]).forEach(p=>{
+    const pr=(p.promises||[]).filter(x=>x&&x.text).map(x=>x.text).join(' ');
+    add('People','👤',p.name||'(unnamed)',[p.notes?String(p.notes).slice(0,50):'',pr?('plans: '+pr.slice(0,50)):''].filter(Boolean).join(' · '),close(()=>{setRoute('people');openPersonModal(p.id);}));
+  });
+  // ── Habits ──
+  (S.habits||[]).forEach(h=>{
+    const s=computeHabitStats(h);
+    add('Habits','↻',h.name||'(untitled)','streak '+(s.current||0),close(()=>setRoute('habits')));
+  });
+  // ── Reminders ──
+  (S.reminders||[]).forEach(r=>{
+    add('Reminders','⏰',r.text||'(untitled)',r.nextDue?('next '+r.nextDue):'',close(()=>openReminderModal(r.id)));
+  });
+  // ── Notebook (local text search across every page cell) ──
+  if(q.length>=2&&S.notebook&&Array.isArray(S.notebook.sections)){
+    S.notebook.sections.forEach((sec,si)=>{
+      (sec.pages||[]).forEach((pg,pi)=>{
+        const txt=(pg.cells||[]).map(c=>nbStripHtml(c||'')).join(' ').replace(/\s+/g,' ').trim();
+        if(!txt||!hit((sec.title||'')+' '+txt))return;
+        const i=txt.toLowerCase().indexOf(toks[0]);
+        const excerpt=i>=0?txt.slice(Math.max(0,i-20),i+60):txt.slice(0,80);
+        out.push({group:'Notebook',icon:'📓',title:(sec.title||'Untitled')+' · p.'+(pi+1),sub:'…'+excerpt+'…',_r:2,
+          go:close(()=>{NB.cover=0;NB.sectionIdx=si;NB.pageIdx=pi;setRoute('notebook');rNotebook();})});
+      });
+    });
+  }
+  // ── Brain ──
+  (S.ideas||[]).forEach(i=>add('Brain','💡',i.title||'(untitled)',String(i.desc||'').slice(0,60),close(()=>{setRoute('brain');setBrainTab('ideas');openBrainDetail('idea',i.id);})));
+  (S.resources||[]).forEach(r=>add('Brain','🔗',r.title||'(untitled)',[r.tag,String(r.desc||r.url||'').slice(0,50)].filter(Boolean).join(' · '),close(()=>{setRoute('brain');setBrainTab('resources');openBrainDetail('resource',r.id);})));
+  (S.notes||[]).forEach(n=>add('Brain','▤',n.title||'(untitled)',String(n.body||'').slice(0,60),close(()=>{setRoute('brain');setBrainTab('notes');openBrainDetail('note',n.id);})));
+  // ── AI history (only for longer queries — high noise otherwise) ──
+  if(q.length>=3)(S.aiHistory||[]).forEach(h=>{
+    add('AI history','✨',String(h.prompt||'').slice(0,70),h.summary||'',close(()=>{setRoute('settings');setSettingsTab('history');}));
+  });
+  return out;
+}
+function _usRender(q){
+  const box=document.getElementById('us-results');if(!box)return;
+  const all=_usBuildResults(q);
+  // Group, rank within group, cap 5 per group (3 for AI history).
+  const ORDER=['Actions','Tasks','Projects','People','Habits','Reminders','Notebook','Brain','AI history'];
+  const byGroup={};
+  all.forEach(e=>{(byGroup[e.group]=byGroup[e.group]||[]).push(e);});
+  _usFlat=[];_usIdx=0;
+  let html='';
+  ORDER.forEach(g=>{
+    const items=(byGroup[g]||[]).sort((a,b)=>a._r-b._r).slice(0,g==='AI history'?3:5);
+    if(!items.length)return;
+    html+=`<div class="us-group">${g}</div>`;
+    items.forEach(e=>{
+      html+=`<button class="us-item" data-us-idx="${_usFlat.length}"><span class="us-item-ic">${e.icon}</span><span class="us-item-body"><span class="us-item-title">${esc(e.title)}</span>${e.sub?`<span class="us-item-sub">${esc(e.sub)}</span>`:''}</span></button>`;
+      _usFlat.push(e);
+    });
+  });
+  box.innerHTML=html||`<div class="us-empty">Nothing matches "${esc(q)}"</div>`;
+  // Wire clicks + hover, and mark the first row selected.
+  box.querySelectorAll('.us-item').forEach(el=>{
+    const i=Number(el.dataset.usIdx);
+    _usFlat[i].el=el;
+    el.addEventListener('click',()=>_usFlat[i].go());
+    el.addEventListener('mousemove',()=>{if(_usIdx!==i){_usIdx=i;_usFlat.forEach((it,k)=>it.el&&it.el.classList.toggle('on',k===i));}});
+  });
+  if(_usFlat[0]&&_usFlat[0].el)_usFlat[0].el.classList.add('on');
+}
+// Global shortcut — Ctrl/Cmd+K toggles the palette anywhere in the app.
+window.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==='k'){
+    e.preventDefault();
+    openUniversalSearch();
+  }
+});
 
 function getCalTitle(){
   const d=UI.calDate;
