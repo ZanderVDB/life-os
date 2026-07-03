@@ -1,0 +1,12 @@
+{
+  "name": "life-os",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Life OS — personal command centre PWA",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
