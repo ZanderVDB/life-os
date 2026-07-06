@@ -317,6 +317,26 @@ svg{flex-shrink:0}
 .wr-focus-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px}
 .wr-focus li{font-size:13px;line-height:1.55;margin-bottom:4px}
 .wr-meta{font-size:11px;color:var(--muted);margin-top:10px;display:flex;gap:10px;align-items:center}
+/* Morning journal prompt */
+.jp-card{background:linear-gradient(135deg,var(--peach-bg) 0%,var(--gold-bg) 100%);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px}
+[data-theme="studio"] .jp-card{background:linear-gradient(135deg,color-mix(in srgb,var(--peach) 16%,var(--surface)) 0%,color-mix(in srgb,var(--gold) 16%,var(--surface)) 100%)}
+.jp-hdr{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.jp-lbl{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;color:var(--text);line-height:1.2}
+.jp-x{border:none;background:transparent;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}
+.jp-x:hover{background:var(--surface-hover);color:var(--text)}
+.jp-sub{font-size:12.5px;color:var(--text-2);margin:4px 0 14px;line-height:1.5}
+.jp-q{margin-bottom:12px}
+.jp-q label{display:block;font-size:12.5px;font-weight:600;color:var(--text-2);margin-bottom:5px}
+.jp-q textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px 12px;padding-bottom:38px;font-size:13.5px;line-height:1.5;resize:vertical;outline:none;background:var(--surface);color:var(--text);font-family:inherit}
+.jp-q textarea:focus{border-color:var(--border-strong)}
+.jp-foot{display:flex;justify-content:flex-end;margin-top:4px}
+/* Routine journal now leads; checklist collapses below */
+.rt-journal-lead{margin-top:0;border-top:none;padding-top:0}
+.rt-checklist{margin-top:20px;border-top:1px solid var(--border);padding-top:12px}
+.rt-checklist-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:4px 2px}
+.rt-checklist-toggle:hover{color:var(--text-2)}
+.rt-checklist-chev{font-size:11px}
+.rt-checklist-body{padding-top:10px}
 /* ━━━ TIP CARD ━━━ */
 .tip-card{
   background:linear-gradient(135deg,var(--peach-bg) 0%,var(--gold-bg) 42%,var(--lavender-bg) 100%);
@@ -1006,7 +1026,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .rt-j-q{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2);margin-bottom:5px;font-weight:500}
 .rt-j-tick{color:var(--sage,#7fa186);font-weight:700;min-width:12px}
 .rt-j-filled .rt-j-q{color:var(--text)}
-.rt-j-in{width:100%;font-family:inherit;font-size:13px;padding:8px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;line-height:1.5}
+.rt-j-in{width:100%;font-family:inherit;font-size:13px;padding:8px 11px;padding-bottom:36px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box;resize:vertical;line-height:1.5}
 .rt-j-in:focus{outline:none;border-color:var(--gold)}
 /* Settings sub-tabs — pill-style nav at the top of the Settings route.
    Active tab gets a gold pill background. On narrow mobile the row
@@ -2738,6 +2758,9 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
              follow-ups, habits, routine, nudges). No AI call — assembled
              from local state, dismissible per day. -->
         <div class="brief-card" id="brief-card" style="display:none"></div>
+        <!-- Morning reflection: asks yesterday's journal questions once a
+             day, with a mic per field. The nudge to actually journal. -->
+        <div class="jp-card" id="journal-prompt-card" style="display:none"></div>
         <!-- Weekly review: appears Sun/Mon, AI-composed on demand. -->
         <div class="wr-card" id="week-review-card" style="display:none"></div>
 
@@ -3461,7 +3484,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v195';
+const APP_VERSION='v196';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -3969,7 +3992,7 @@ function setRoute(r,skipHash){
   if(r==='notebook')rNotebook();
   // The Daily routine lives in a box on the Today page now, so render it
   // whenever we land on Today — along with the morning brief + weekly review.
-  if(r==='today'){rRoutine();try{rBrief();}catch(_){}try{rWeekReview();}catch(_){}}
+  if(r==='today'){rRoutine();try{rBrief();}catch(_){}try{rJournalPrompt();}catch(_){}try{rWeekReview();}catch(_){}}
   // People grid needs an explicit render on route entry — otherwise the
   // grid stays at whatever was last rendered (initially the empty stub
   // from the route container HTML). Without this, users see an empty
@@ -7185,6 +7208,47 @@ function rBrief(){
   }
 }
 
+// ───────── MORNING JOURNAL PROMPT ─────────
+// The user never opened the journal on their own, so we bring it to them:
+// once a day, on the Today page, a card asks YESTERDAY's journal questions
+// with a mic per field. Dismissible; hides itself once yesterday is filled.
+function saveJournalFor(iso,key,val){
+  const log=_routineDayLog(iso);
+  log.journal[key]=(val&&val.trim())?val:'';
+  svAll();
+}
+function _journalPromptDismissed(){try{return localStorage.getItem('los_journal_prompt')===tod();}catch(_){return false;}}
+function dismissJournalPrompt(){try{localStorage.setItem('los_journal_prompt',tod());}catch(_){}if(_fldRec)_stopFieldMic();rJournalPrompt();}
+function rJournalPrompt(){
+  const el=document.getElementById('journal-prompt-card');if(!el)return;
+  if(!CU||_journalPromptDismissed()){el.style.display='none';return;}
+  const y=yest();
+  const log=_routineDayLog(y);
+  const filled=ROUTINE_JOURNAL.filter(j=>String(log.journal[j.id]||'').trim()).length;
+  // Fully answered → nothing to prompt.
+  if(filled>=ROUTINE_JOURNAL.length){el.style.display='none';return;}
+  const yd=new Date(Number(y.slice(0,4)),Number(y.slice(5,7))-1,Number(y.slice(8,10)));
+  const ylabel=yd.toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'});
+  el.style.display='block';
+  el.innerHTML=`
+    <div class="jp-hdr">
+      <span class="jp-lbl">How did yesterday go? · ${esc(ylabel)}</span>
+      <button class="jp-x" onclick="dismissJournalPrompt()" title="Not now">×</button>
+    </div>
+    <div class="jp-sub">A minute of reflection — tap the mic and just talk, or type.</div>
+    ${ROUTINE_JOURNAL.map(j=>{
+      const v=log.journal[j.id]||'';
+      return `<div class="jp-q">
+        <label>${esc(j.q)}</label>
+        <div class="pd-field-wrap">
+          <textarea id="jp-${j.id}" rows="${j.big?3:2}" placeholder="Talk or type…" onblur="saveJournalFor('${y}','${j.id}',this.value)">${esc(v)}</textarea>
+          <button class="fmic" title="Dictate" onclick="fieldMic('jp-${j.id}',this)">🎙</button>
+        </div>
+      </div>`;
+    }).join('')}
+    <div class="jp-foot"><button class="btn btn-primary btn-sm" onclick="dismissJournalPrompt()">Done</button></div>`;
+}
+
 // ───────── WEEKLY REVIEW ─────────
 // A look back over the last 7 days, AI-composed ON DEMAND (never auto —
 // same policy as the daily plan). The card appears on Sundays and Mondays;
@@ -8445,27 +8509,38 @@ function rRoutine(){
       <div class="rt-block-hdr"><span class="rt-block-title">${esc(b.title)}</span><span class="rt-block-sub">${esc(b.sub)}</span></div>
       ${b.items.map(it=>{const ck=!!log.checks[it.id];return `<div class="rt-item${ck?' rt-done':''}" onclick="routineToggle('${it.id}')"><span class="rt-check">${ck?'✓':''}</span><span class="rt-item-txt">${esc(it.t)}</span></div>`;}).join('')}
     </div>`).join('');
+  // Journal leads now (per user: they never used the checklist). Each field
+  // gets a mic so you can just talk. The checklist collapses below.
   const journalHtml=`
-    <div class="rt-journal">
-      <div class="rt-journal-hdr">Daily journal</div>
+    <div class="rt-journal rt-journal-lead">
+      <div class="rt-journal-hdr">Daily journal${isToday?' · today':''}</div>
       ${ROUTINE_JOURNAL.map(j=>{
         const v=log.journal[j.id]||'';
         const has=!!v.trim();
         return `<div class="rt-j${has?' rt-j-filled':''}">
           <label class="rt-j-q"><span class="rt-j-tick">${has?'✓':''}</span>${esc(j.q)}</label>
-          <textarea class="rt-j-in" data-rj="${j.id}" rows="${j.big?4:2}" placeholder="…">${esc(v)}</textarea>
+          <div class="pd-field-wrap">
+            <textarea class="rt-j-in" id="rtj-${j.id}" data-rj="${j.id}" rows="${j.big?4:2}" placeholder="Talk or type…">${esc(v)}</textarea>
+            <button class="fmic" title="Dictate" onclick="fieldMic('rtj-${j.id}',this)">🎙</button>
+          </div>
         </div>`;
       }).join('')}
+    </div>`;
+  const checklistOpen=!!UI.routineChecklistOpen;
+  const checklistHtml=`
+    <div class="rt-checklist">
+      <button class="rt-checklist-toggle" onclick="UI.routineChecklistOpen=!UI.routineChecklistOpen;rRoutine();">
+        <span>Daily checklist · ${done}/${total}</span><span class="rt-checklist-chev">${checklistOpen?'▾':'▸'}</span>
+      </button>
+      <div class="rt-checklist-body" style="display:${checklistOpen?'block':'none'}">${calHtml}${blocksHtml}</div>
     </div>`;
   body.innerHTML=`
     <div class="rt-datebar">
       <div class="rt-date">${esc(dayLabel)}${isToday?' · Today':''}</div>
-      <div class="rt-progress">${done}/${total} done</div>
     </div>
     ${focusHtml}
-    ${calHtml}
-    ${blocksHtml}
-    ${journalHtml}`;
+    ${journalHtml}
+    ${checklistHtml}`;
   body.querySelectorAll('.rt-j-in').forEach(ta=>{
     ta.addEventListener('blur',()=>{
       routineJournal(ta.dataset.rj,ta.value);
@@ -16074,7 +16149,7 @@ function render(){
   refreshGCalWarn();
   if(currentRoute==='settings')rSettings();
   if(currentRoute==='notebook')rNotebook();
-  if(currentRoute==='today'){rRoutine();try{rBrief();}catch(_){}try{rWeekReview();}catch(_){}}
+  if(currentRoute==='today'){rRoutine();try{rBrief();}catch(_){}try{rJournalPrompt();}catch(_){}try{rWeekReview();}catch(_){}}
   if(currentRoute==='people')rPeople();
   try{renderPaywallIfNeeded();}catch(_){}
   try{_renderProfilePill();}catch(_){}
