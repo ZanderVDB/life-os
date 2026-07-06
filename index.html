@@ -1647,8 +1647,54 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .pd-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:14px 0 8px}
 .pd-desc{width:100%;border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:14px;resize:vertical;outline:none;background:var(--bg);color:var(--text);line-height:1.55;min-height:100px;font-family:inherit}
 .pd-desc:focus{border-color:var(--border-strong);background:var(--surface)}
-.pd-notes-ta{width:100%;border:1px solid var(--border);border-radius:12px;padding:16px 18px;font-size:14px;line-height:1.7;resize:vertical;outline:none;background:var(--bg);color:var(--text);min-height:360px;font-family:'Inter',sans-serif;white-space:pre-wrap}
+.pd-notes-ta{width:100%;border:1px solid var(--border);border-radius:12px;padding:16px 18px;font-size:14px;line-height:1.7;resize:vertical;outline:none;background:var(--bg);color:var(--text);min-height:220px;font-family:'Inter',sans-serif;white-space:pre-wrap}
 .pd-notes-ta:focus{border-color:var(--border-strong);background:var(--surface)}
+/* ── Reusable dictate mic (bottom-right of a field) ── */
+.pd-field-wrap{position:relative}
+.fmic{position:absolute;right:8px;bottom:8px;width:30px;height:30px;border-radius:50%;border:1px solid var(--border);background:var(--surface);font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:all .12s;padding:0}
+.fmic:hover{background:var(--surface-hover);color:var(--text);border-color:var(--border-strong)}
+.fmic.on{background:var(--red);color:#fff;border-color:var(--red);animation:fmicPulse 1.2s ease-in-out infinite}
+@keyframes fmicPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--red) 55%,transparent)}50%{box-shadow:0 0 0 6px transparent}}
+/* ── Staleness badge on the detail top bar ── */
+.pd-stale-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:4px 9px;border-radius:6px;background:var(--surface-2);color:var(--muted)}
+.pd-stale-badge.active{background:var(--sage-bg);color:var(--sage)}
+.pd-stale-badge.future{background:var(--gold-bg);color:var(--gold)}
+/* ── Stage stepper ── */
+.pd-stepper{display:flex;align-items:center;gap:0;overflow-x:auto;margin:14px 0 6px;padding-bottom:6px}
+.pd-stage{display:flex;flex-direction:column;align-items:center;gap:5px;border:none;background:transparent;cursor:pointer;flex:0 0 auto;padding:2px 2px}
+.pd-stage-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:var(--surface-2);color:var(--muted);border:1.5px solid var(--border);transition:all .12s}
+.pd-stage-lbl{font-size:9.5px;font-weight:600;color:var(--muted);white-space:nowrap;letter-spacing:.02em}
+.pd-stage.done .pd-stage-dot{background:var(--sage);color:#fff;border-color:var(--sage)}
+.pd-stage.cur .pd-stage-dot{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);transform:scale(1.15)}
+.pd-stage.cur .pd-stage-lbl{color:var(--text);font-weight:700}
+.pd-stage:hover .pd-stage-dot{border-color:var(--border-strong)}
+.pd-stage-sep{flex:1 1 14px;min-width:10px;height:1.5px;background:var(--border);margin-top:-14px}
+.pd-next{margin-top:12px;font-size:13px;line-height:1.55;color:var(--text-2);background:var(--surface-2);border-radius:9px;padding:9px 12px}
+.pd-next-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin-right:6px}
+/* ── Daily-log card ── */
+.pd-log-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px 22px;margin-bottom:18px}
+.pd-log-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.pd-log-hd span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.pd-log-box{margin-bottom:14px}
+.pd-log-input{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:12px 14px;padding-bottom:40px;font-size:14px;line-height:1.55;resize:vertical;outline:none;background:var(--bg);color:var(--text);font-family:inherit;min-height:90px}
+.pd-log-input:focus{border-color:var(--border-strong);background:var(--surface)}
+.pd-log-timeline{display:flex;flex-direction:column;gap:10px}
+.pl-entry{border-left:2px solid var(--border);padding:2px 0 2px 14px;position:relative}
+.pl-entry::before{content:'';position:absolute;left:-5px;top:5px;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.pl-entry-hd{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.pl-entry-stage{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);padding:2px 7px;border-radius:5px}
+.pl-entry-date{font-size:11px;color:var(--muted)}
+.pl-entry-del{margin-left:auto;border:none;background:transparent;color:var(--muted-2,var(--muted));font-size:15px;line-height:1;cursor:pointer;padding:0 4px;opacity:.5}
+.pl-entry-del:hover{opacity:1;color:var(--red)}
+.pl-entry-txt{font-size:13px;line-height:1.55;color:var(--text-2);white-space:pre-wrap}
+.pl-empty{font-size:12.5px;color:var(--muted);font-style:italic;padding:4px 0}
+/* ── Compact auto-phase footer ── */
+.pd-status-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:20px;padding-top:14px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted)}
+.pd-status-foot-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em}
+.pd-status-foot-note{flex:1;min-width:140px;line-height:1.4}
+/* ── Card stage progress bar ── */
+.bc-stagebar{height:4px;border-radius:3px;background:var(--surface-2);overflow:hidden;margin:10px 0 4px}
+.bc-stagebar>span{display:block;height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
 
 /* ━━━ LEARNING (daily-check) ━━━ */
 .lg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
@@ -3415,7 +3461,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v194';
+const APP_VERSION='v195';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -6264,6 +6310,46 @@ function vlog(msg){try{console.log('[voice]',msg);}catch(e){}}
 function vstatus(msg,err){const st=document.getElementById('btm-st');if(!st)return;st.className='ai-st'+(err?' er':'');st.textContent=msg;}
 async function checkMicPerm(){
   try{if(!navigator.permissions||!navigator.permissions.query)return 'unknown';const p=await navigator.permissions.query({name:'microphone'});return p.state;}catch(e){return 'unknown';}
+}
+// ── Reusable field dictation (a 🎙 button on any textarea/input) ──
+// Deliberately separate from the AI-bar voice engine below so we never risk
+// that battle-tested path. Simpler model: append finalized speech to the
+// field with a live interim preview; tap again to stop. One field at a time.
+let _fldRec=null,_fldBtn=null,_fldTarget=null,_fldBase='';
+function fieldMic(targetId,btn){
+  const target=document.getElementById(targetId);if(!target)return;
+  if(!window.isSecureContext){alert('Voice needs a secure (https) connection.');return;}
+  if(!SpeechRec){alert("Voice input isn't supported in this browser — try Chrome, Edge or Safari.");return;}
+  // Tapping the mic of the field already recording stops it.
+  if(_fldRec&&_fldTarget===target){_stopFieldMic();return;}
+  if(_fldRec)_stopFieldMic();
+  _fldTarget=target;_fldBtn=btn||null;
+  _fldBase=target.value||'';if(_fldBase&&!/\s$/.test(_fldBase))_fldBase+=' ';
+  let finalText='';
+  const rec=new SpeechRec();
+  rec.continuous=true;rec.interimResults=true;rec.maxAlternatives=1;
+  _fldRec=rec;
+  rec.onstart=()=>{if(_fldBtn)_fldBtn.classList.add('on');};
+  rec.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const r=e.results[i];
+      if(r.isFinal)finalText+=r[0].transcript+' ';
+      else interim+=r[0].transcript;
+    }
+    _fldTarget.value=_fldBase+finalText+interim;
+    try{_fldTarget.dispatchEvent(new Event('input'));}catch(_){}
+  };
+  rec.onerror=ev=>{if(ev.error==='not-allowed'||ev.error==='service-not-allowed')alert('Microphone is blocked — allow it for this site in your browser settings, then reload.');_stopFieldMic();};
+  rec.onend=()=>{_stopFieldMic();};
+  try{rec.start();}catch(e){_stopFieldMic();}
+}
+function _stopFieldMic(){
+  if(_fldRec){try{_fldRec.onend=null;_fldRec.stop();}catch(e){}_fldRec=null;}
+  if(_fldBtn)_fldBtn.classList.remove('on');
+  // Fire input+change so onblur/change save handlers persist dictated text.
+  if(_fldTarget){try{_fldTarget.dispatchEvent(new Event('input'));_fldTarget.dispatchEvent(new Event('change'));}catch(e){}}
+  _fldBtn=null;_fldTarget=null;
 }
 async function toggleVoice(){
   const ta=document.getElementById('ai-ta'),btn=document.getElementById('mic-btn');
@@ -10719,6 +10805,11 @@ function closeProject(){UI.projectDetail=null;document.getElementById('project-d
 // 30+ days idle = Background. Auto is ON by default (b.auto!==false);
 // picking a phase by hand turns it off.
 const PROJ_FUTURE_DAYS=7,PROJ_BG_DAYS=30;
+// Lifecycle stages every project moves through (fixed for all projects).
+// Separate dimension from status (active/future/background = how RECENT);
+// stage = WHERE in the lifecycle. b.stage is an index into this array.
+const PROJECT_STAGES=['Idea','Planning','Building','Testing','Launch','Live','Done'];
+function _projStage(b){const s=(b&&typeof b.stage==='number')?b.stage:0;return Math.max(0,Math.min(PROJECT_STAGES.length-1,s));}
 function _projTouchedMs(b){
   if(b&&typeof b.lastTouched==='number'&&b.lastTouched>0)return b.lastTouched;
   // No explicit stamp yet — seed from the newest signal we have so an
@@ -10785,6 +10876,77 @@ function setProjectAuto(id,on,ev){
 }
 // Manual status pick turns auto OFF (the user is overriding the phase).
 function setStatus(id,st){const b=S.builds.find(x=>x.id===id);if(!b)return;b.status=st;b.auto=false;svAll();if(UI.projectDetail===id)renderProjectDetail();else rBuilds();}
+// Manually set the lifecycle stage (tapping a chip in the stepper).
+function setProjectStage(id,idx){
+  const b=S.builds.find(x=>x.id===id);if(!b)return;
+  idx=Math.max(0,Math.min(PROJECT_STAGES.length-1,Number(idx)));
+  if(_projStage(b)===idx)return;
+  b.stage=idx;
+  svAll();
+  if(UI.projectDetail===id)renderProjectDetail();else rBuilds();
+}
+function toggleProjectLog(id){
+  const box=document.getElementById('plog-box-'+id);if(!box)return;
+  const open=box.style.display!=='none';
+  box.style.display=open?'none':'block';
+  if(!open)setTimeout(()=>{const ta=document.getElementById('plog-input-'+id);if(ta)ta.focus();},40);
+}
+// The heart of the new project flow: the user logs what they did today (typed
+// or dictated); the AI appends a timestamped entry, rewrites the short
+// "what this is / next step" description, and can advance the stage. Logging
+// counts as working on it, so the staleness clock resets too.
+async function projectLogSubmit(id){
+  const b=S.builds.find(x=>x.id===id);if(!b)return;
+  const ta=document.getElementById('plog-input-'+id);
+  const text=((ta&&ta.value)||'').trim();
+  if(!text){alert('Say or type what you worked on first.');return;}
+  const key=getKey();if(!key){promptKey();return;}
+  if(_fldRec)_stopFieldMic();
+  const btn=document.getElementById('plog-submit-'+id);
+  if(btn){btn.disabled=true;btn.textContent='Updating…';}
+  const idx=_projStage(b);
+  const firstName=(CU&&CU.displayName||'').split(/\s+/)[0]||'the user';
+  const prompt=`You maintain a concise living status for a project in ${firstName}'s personal system.${_aiMemoryBlock()}
+Project: "${b.title}"
+Lifecycle stages: ${PROJECT_STAGES.map((s,i)=>`${i}=${s}`).join(', ')}. Currently on stage ${idx} (${PROJECT_STAGES[idx]}).
+Current description: ${b.desc||'(none yet)'}
+${b.whatsNext?`Current "next step": ${b.whatsNext}`:''}
+${firstName} just logged today's progress: "${text}"
+
+Revise the project's status to reflect this. Respond ONLY raw JSON:
+{"desc":"2-4 sentence description of what this project IS and where it's heading, updated for today's progress — concrete, no fluff","next":"one short sentence: the single most important next step","stage":<the stage index 0-${PROJECT_STAGES.length-1} the project is now on; keep it ${idx} unless the log clearly shows a move to a new stage>}`;
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,messages:[{role:'user',content:prompt}]})});
+    if(!r.ok){let em='HTTP '+r.status;try{const ed=await r.json();if(ed.error?.message)em=ed.error.message;}catch(_){}throw new Error(em);}
+    const data=await r.json();
+    const out=JSON.parse((data.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim());
+    // Append the log entry (records the stage it was made at — the "additions").
+    b.log=Array.isArray(b.log)?b.log:[];
+    b.log.unshift({id:uid(),at:Date.now(),date:tod(),stage:idx,text});
+    if(out.desc&&String(out.desc).trim())b.desc=String(out.desc).trim();
+    if(out.next&&String(out.next).trim())b.whatsNext=String(out.next).trim();
+    // Stage advance — confirm before moving (never silently jump the user).
+    const sug=Number(out.stage);
+    if(!isNaN(sug)&&sug>=0&&sug<PROJECT_STAGES.length&&sug!==idx){
+      if(confirm(`Move this project to "${PROJECT_STAGES[sug]}"?`))b.stage=sug;
+    }
+    // Logging = working on it: reset the staleness clock.
+    b.prevTouched=(typeof b.lastTouched==='number'&&b.lastTouched>0)?b.lastTouched:0;
+    b.lastTouched=Date.now();
+    if(_projIsAuto(b))b.status=_projAutoStatus(b);
+    if(ta)ta.value='';
+    svAll();renderProjectDetail();
+  }catch(e){
+    alert('Update failed: '+(e.message||e));
+    if(btn){btn.disabled=false;btn.textContent='✨ Log & update';}
+  }
+}
+function delProjectLogEntry(id,entryId){
+  const b=S.builds.find(x=>x.id===id);if(!b||!Array.isArray(b.log))return;
+  if(!confirm('Delete this log entry? (It won\'t change the project description.)'))return;
+  b.log=b.log.filter(e=>e.id!==entryId);
+  svAll();renderProjectDetail();
+}
 function saveProjectHead(id){
   const b=S.builds.find(x=>x.id===id);if(!b)return;
   const ti=document.getElementById('pd-title-'+id);
@@ -10866,34 +11028,77 @@ function renderProjectDetail(){
   const b=S.builds.find(x=>x.id===UI.projectDetail);
   if(!b){closeProject();return;}
   const eff=_projEffStatus(b),auto=_projIsAuto(b);
-  const touchedToday=Math.floor((Date.now()-_projTouchedMs(b))/86400000)<=0;
+  const stage=_projStage(b);
+  const loggedToday=Array.isArray(b.log)&&b.log.some(e=>e.date===tod());
+  // Staleness badge (the auto system, now a subtle chip rather than 3 buttons).
+  const staleLbl=eff==='active'?'Active':(eff==='future'?'Paused':'Background');
+  // Stage stepper — tap a chip to set the stage manually.
+  const stepper=PROJECT_STAGES.map((s,i)=>{
+    const cls=i<stage?'done':(i===stage?'cur':'future');
+    return `<button class="pd-stage ${cls}" onclick="setProjectStage('${b.id}',${i})" title="${esc(s)}"><span class="pd-stage-dot">${i<stage?'✓':(i+1)}</span><span class="pd-stage-lbl">${esc(s)}</span></button>`;
+  }).join('<span class="pd-stage-sep"></span>');
+  // Progress-log timeline.
+  const logHtml=(Array.isArray(b.log)&&b.log.length)
+    ? b.log.map(e=>`<div class="pl-entry">
+        <div class="pl-entry-hd"><span class="pl-entry-stage">${esc(PROJECT_STAGES[e.stage]||'—')}</span><span class="pl-entry-date">${esc(fmt(e.date))}</span><button class="pl-entry-del" title="Delete entry" onclick="delProjectLogEntry('${b.id}','${e.id}')">×</button></div>
+        <div class="pl-entry-txt">${esc(e.text)}</div>
+      </div>`).join('')
+    : `<div class="pl-empty">No entries yet — log what you did today and it lands here.</div>`;
   el.innerHTML=`
     <div class="pd-top">
       <button class="pd-back" onclick="closeProject()">← All projects</button>
-      <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="delBuild('${b.id}')">Delete project</button>
+      <span class="pd-stale-badge ${eff}">${staleLbl}${eff!=='active'?' · '+_projLastWorkedLabel(b):''}</span>
+      <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="delBuild('${b.id}')">Delete</button>
     </div>
     <div class="pd-head">
       <input class="pd-title-input" id="pd-title-${b.id}" value="${esc(b.title)}" onblur="saveProjectHead('${b.id}')">
-      <div class="pd-status-row">
-        <button class="stb st-a${eff==='active'?' on':''}" onclick="setStatus('${b.id}','active')">Building now</button>
-        <button class="stb st-f${eff==='future'?' on':''}" onclick="setStatus('${b.id}','future')">Future</button>
-        <button class="stb st-b${eff==='background'?' on':''}" onclick="setStatus('${b.id}','background')">Background</button>
-        <button class="stb st-auto${auto?' on':''}" onclick="setProjectAuto('${b.id}',${auto?'false':'true'})" title="Auto: the phase follows how recently you've worked on this">A</button>
+      <div class="pd-stepper">${stepper}</div>
+      <div class="pd-lbl">What this is</div>
+      <div class="pd-field-wrap">
+        <textarea class="pd-desc" id="pd-desc-${b.id}" placeholder="What this project is and where it's going. The daily log keeps this current — or edit it yourself." onblur="saveProjectHead('${b.id}')">${esc(b.desc||'')}</textarea>
+        <button class="fmic" title="Dictate" onclick="fieldMic('pd-desc-${b.id}',this)">🎙</button>
       </div>
-      <div class="pd-worked">
-        <span>Last worked on <b>${_projLastWorkedLabel(b)}</b>${auto?' · phase set automatically':''}</span>
-        <button class="pd-touch-btn${touchedToday?' on':''}" onclick="projectTouch('${b.id}')">${touchedToday?'🔥 Worked on today — tap to undo':'🔥 I worked on this today'}</button>
-      </div>
-      <div class="pd-lbl">What this project does</div>
-      <textarea class="pd-desc" id="pd-desc-${b.id}" placeholder="Core idea — one or two sentences about what this builds." onblur="saveProjectHead('${b.id}')">${esc(b.desc||'')}</textarea>
+      ${b.whatsNext?`<div class="pd-next"><span class="pd-next-lbl">Next</span> ${esc(b.whatsNext)}</div>`:''}
     </div>
-    <div class="pd-lbl" style="display:flex;align-items:center;gap:8px">
-      <span>Progress, notes & ideas</span>
+
+    <div class="pd-log-card">
+      <div class="pd-log-hd">
+        <span>Daily progress</span>
+        <button class="btn btn-primary btn-sm" onclick="toggleProjectLog('${b.id}')">${loggedToday?'+ Log again':'✍ Log today'}</button>
+      </div>
+      <div id="plog-box-${b.id}" class="pd-log-box" style="display:none">
+        <div class="pd-field-wrap">
+          <textarea class="pd-log-input" id="plog-input-${b.id}" rows="4" placeholder="What did you do on this today? e.g. 'Built the login screen, dropped the old auth, next up is wiring the API.' The AI updates the description above."></textarea>
+          <button class="fmic" title="Dictate" onclick="fieldMic('plog-input-${b.id}',this)">🎙</button>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <button class="btn btn-primary btn-sm" id="plog-submit-${b.id}" onclick="projectLogSubmit('${b.id}')">✨ Log &amp; update</button>
+        </div>
+      </div>
+      <div class="pd-log-timeline">${logHtml}</div>
+    </div>
+
+    <div class="pd-lbl" style="display:flex;align-items:center;gap:8px;margin-top:22px">
+      <span>Scratch notes</span>
       <div style="margin-left:auto;display:flex;gap:6px">
-        <button class="btn btn-sm" id="structure-btn-${b.id}" onclick="structureWithAI('${b.id}')">✨ Structure with AI</button>
+        <button class="btn btn-sm" id="structure-btn-${b.id}" onclick="structureWithAI('${b.id}')">✨ Tidy up</button>
       </div>
     </div>
-    <textarea class="pd-notes-ta" id="pd-notes-${b.id}" placeholder="Jot anything — ideas, progress, questions, links. The AI can also add here when you mention this project. Hit ✨ Structure with AI when it gets messy and Claude will tidy it into sections." onblur="saveProjectNotes('${b.id}')">${esc(b.notes||'')}</textarea>
+    <div class="pd-field-wrap">
+      <textarea class="pd-notes-ta" id="pd-notes-${b.id}" placeholder="Loose notes, links, questions — anything that doesn't belong in the daily log." onblur="saveProjectNotes('${b.id}')">${esc(b.notes||'')}</textarea>
+      <button class="fmic" title="Dictate" onclick="fieldMic('pd-notes-${b.id}',this)">🎙</button>
+    </div>
+
+    <div class="pd-status-foot">
+      <span class="pd-status-foot-lbl">Auto phase</span>
+      <label class="switch"><input type="checkbox" ${auto?'checked':''} onchange="setProjectAuto('${b.id}',this.checked)"><span class="slider"></span></label>
+      <span class="pd-status-foot-note">${auto?'Phase follows how recently you log — paused after 7 days idle, background after 30.':'Set manually:'}</span>
+      ${auto?'':`<div class="pd-status-row" style="margin:0">
+        <button class="stb st-a${eff==='active'?' on':''}" onclick="setStatus('${b.id}','active')">Active</button>
+        <button class="stb st-f${eff==='future'?' on':''}" onclick="setStatus('${b.id}','future')">Paused</button>
+        <button class="stb st-b${eff==='background'?' on':''}" onclick="setStatus('${b.id}','background')">Background</button>
+      </div>`}
+    </div>
   `;
 }
 function rBuilds(){
@@ -10903,17 +11108,19 @@ function rBuilds(){
   const sorted=[...S.builds].sort((a,b)=>(order[_projEffStatus(a)]??1)-(order[_projEffStatus(b)]??1));
   const cnt=document.getElementById('bc-cnt');if(cnt)cnt.textContent=S.builds.length?`${S.builds.length} in pipeline`:'';
   el.innerHTML=sorted.length?sorted.map(b=>{
-    const entries=(b.entries||[]).length;
-    const eff=_projEffStatus(b),auto=_projIsAuto(b);
-    const touchedToday=Math.floor((Date.now()-_projTouchedMs(b))/86400000)<=0;
+    const eff=_projEffStatus(b);
+    const stage=_projStage(b);
+    const loggedToday=Array.isArray(b.log)&&b.log.some(e=>e.date===tod());
+    const stagePct=Math.round((stage/(PROJECT_STAGES.length-1))*100);
+    const logCount=Array.isArray(b.log)?b.log.length:0;
     return `<div class="bc ${eff}" onclick="openProject('${b.id}')">
       <div class="bc-top">
-        <span class="bc-tag">${lbl[eff]||'Future'}${auto?` <span class="bc-tag-auto">· Auto</span>`:''}</span>
-        <button class="bc-touch${touchedToday?' on':''}" onclick="projectTouch('${b.id}',event)" title="${touchedToday?'Worked on today — tap to undo':'Mark: I worked on this today'}">🔥</button>
+        <span class="bc-tag">${esc(PROJECT_STAGES[stage])}${loggedToday?' <span class="bc-tag-auto">· logged today</span>':''}</span>
       </div>
       <div class="bc-title">${esc(b.title)}</div>
       <div class="bc-desc">${esc((b.desc||'').slice(0,180))}${(b.desc||'').length>180?'…':''}</div>
-      <div class="bc-foot"><span>Last worked on ${_projLastWorkedLabel(b)}</span>${entries?`<span>${entries} entr${entries===1?'y':'ies'} →</span>`:''}</div>
+      <div class="bc-stagebar" title="Stage ${stage+1} of ${PROJECT_STAGES.length}"><span style="width:${stagePct}%"></span></div>
+      <div class="bc-foot"><span>Last worked ${_projLastWorkedLabel(b)}</span>${logCount?`<span>${logCount} log${logCount===1?'':'s'} →</span>`:''}</div>
     </div>`;
   }).join(''):`<div class="no-t">No projects yet — add one above.</div>`;
 }
