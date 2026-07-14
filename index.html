@@ -337,6 +337,45 @@ svg{flex-shrink:0}
 .rt-checklist-toggle:hover{color:var(--text-2)}
 .rt-checklist-chev{font-size:11px}
 .rt-checklist-body{padding-top:10px}
+/* ━━━ DAY BOARD (sticky-note whiteboard) ━━━ */
+#tm-notes{padding-bottom:34px}
+.wb-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.wb-title{font-family:'Playfair Display',serif;font-size:26px;font-weight:500;letter-spacing:-.4px;color:var(--text)}
+.wb-scope{margin-left:auto;border:1px solid var(--border);background:var(--surface);border-radius:9px;padding:7px 13px;font-size:12px;font-weight:600;color:var(--text-2);cursor:pointer;transition:all .12s}
+.wb-scope:hover{border-color:var(--border-strong);color:var(--text)}
+.wb-pin{border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 14%,var(--surface));border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;transition:all .12s}
+.wb-pin:hover{background:color-mix(in srgb,var(--accent) 24%,var(--surface))}
+.wb-surface{min-height:62vh;border-radius:16px;padding:30px 24px;border:1px solid var(--border);
+  background:radial-gradient(circle,rgba(0,0,0,.055) 1.2px,transparent 1.3px) 0 0/24px 24px,#f7f4ee;
+  box-shadow:inset 0 0 60px rgba(0,0,0,.05);
+  display:flex;flex-wrap:wrap;gap:22px 20px;align-content:flex-start}
+[data-theme="studio"] .wb-surface{background:radial-gradient(circle,rgba(255,255,255,.04) 1.2px,transparent 1.3px) 0 0/24px 24px,#242029}
+.wb-empty{width:100%;text-align:center;color:var(--muted);font-size:14px;padding:56px 20px;font-style:italic;line-height:2}
+.wb-sticky{position:relative;width:clamp(152px,44vw,212px);min-height:150px;padding:26px 16px 14px;
+  transform:rotate(var(--rot,0deg));box-shadow:2px 5px 12px rgba(0,0,0,.16);
+  display:flex;flex-direction:column;gap:8px;font-family:'Kalam',cursive;color:#3a352c;
+  transition:transform .15s ease,box-shadow .15s ease}
+.wb-sticky:hover{transform:rotate(0deg) scale(1.03);box-shadow:4px 8px 18px rgba(0,0,0,.24);z-index:3}
+.wb-c0{background:#fdf0a0}.wb-c1{background:#fcd4d6}.wb-c2{background:#cfe6f7}.wb-c3{background:#d6edbf}.wb-c4{background:#ffe1b3}
+.wb-pinhead{position:absolute;top:-7px;left:50%;transform:translateX(-50%);width:15px;height:15px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#ff9a9a,#cf3a3a);box-shadow:0 2px 4px rgba(0,0,0,.35)}
+.wb-time{position:absolute;top:7px;right:11px;font-size:12px;font-weight:700;opacity:.55;font-family:'Kalam',cursive}
+.wb-sticky-title{font-size:16.5px;font-weight:700;line-height:1.28;word-break:break-word}
+.wb-note-body{font-size:14px;line-height:1.4;opacity:.82;white-space:pre-wrap;word-break:break-word}
+.wb-steps{display:flex;flex-direction:column;gap:5px}
+.wb-step{display:flex;gap:7px;align-items:flex-start;font-size:14px;line-height:1.3;cursor:pointer}
+.wb-step-box{flex:0 0 16px;width:16px;height:16px;border:1.5px solid #6a6355;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;margin-top:1px}
+.wb-step.done .wb-step-txt{text-decoration:line-through;opacity:.5}
+.wb-gen-badge{align-self:flex-start;font-family:'Inter',sans-serif;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:rgba(0,0,0,.09);padding:2px 7px;border-radius:4px;opacity:.7}
+.wb-btns{margin-top:auto;display:flex;gap:9px;padding-top:8px}
+.wb-btn{font-family:'Kalam',cursive;font-size:13.5px;font-weight:700;background:transparent;border:1.6px solid #4a453b;
+  border-radius:11px 8px 13px 7px;padding:3px 11px;cursor:pointer;color:#3a352c;transform:rotate(-1.2deg);transition:all .12s}
+.wb-btn:hover{background:rgba(0,0,0,.07)}
+.wb-done{border-color:#3f7a34;color:#356629}
+.wb-done:hover{background:rgba(63,122,52,.12)}
+.wb-edit{transform:rotate(1.2deg)}
+.wb-sticky.wb-peel{animation:wbPeel .24s ease forwards;pointer-events:none}
+@keyframes wbPeel{to{transform:rotate(var(--rot,0deg)) translateY(-16px) scale(.88);opacity:0}}
 /* ━━━ TIP CARD ━━━ */
 .tip-card{
   background:linear-gradient(135deg,var(--peach-bg) 0%,var(--gold-bg) 42%,var(--lavender-bg) 100%);
@@ -2670,6 +2709,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       </button>
       <nav class="s-nav" id="s-nav">
         <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
+        <a href="#board" data-route-link="board"><span class="ic"><svg width="17" height="17"><use href="#i-tasks"/></svg></span><span class="label">Board</span><span class="dot"></span></a>
         <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
         <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
@@ -2718,6 +2758,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <span class="profile-pill-chev">▾</span>
       </button>
       <a href="#today" data-route-link="today" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span>Today</span></a>
+      <a href="#board" data-route-link="board" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-tasks"/></svg></span><span>Board</span></a>
       <a href="#calendar" data-route-link="calendar" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span>Calendar</span></a>
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
       <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
@@ -2806,6 +2847,16 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
           <div class="rt-box"><div id="routine-body"></div></div>
         </section>
+      </div>
+
+      <!-- BOARD (whiteboard of sticky-note tasks) -->
+      <div class="route" data-route="board">
+        <div class="wb-toolbar">
+          <div class="wb-title">Day board</div>
+          <button class="wb-scope" id="wb-scope-btn" onclick="toggleBoardScope()" title="Show general tasks too">Daily</button>
+          <button class="wb-pin" onclick="boardAddSticky()" title="Pin a new task">📌 New sticky</button>
+        </div>
+        <div class="wb-surface" id="wb-surface"></div>
       </div>
 
       <!-- CALENDAR -->
@@ -3484,7 +3535,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v196';
+const APP_VERSION='v197';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -3951,8 +4002,8 @@ function setTheme(t){
 // one-third down the screen" symptom caused by browser auto-scroll to
 // elements whose id happened to match the route hash.
 try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}
-const ROUTES=['today','calendar','projects','habits','people','brain','notebook','settings'];
-const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',notebook:'Notebook',settings:'Settings'};
+const ROUTES=['today','board','calendar','projects','habits','people','brain','notebook','settings'];
+const ROUTE_TITLES={today:'Today',board:'Board',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',notebook:'Notebook',settings:'Settings'};
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
@@ -3993,6 +4044,7 @@ function setRoute(r,skipHash){
   // The Daily routine lives in a box on the Today page now, so render it
   // whenever we land on Today — along with the morning brief + weekly review.
   if(r==='today'){rRoutine();try{rBrief();}catch(_){}try{rJournalPrompt();}catch(_){}try{rWeekReview();}catch(_){}}
+  if(r==='board')try{rBoard();}catch(_){}
   // People grid needs an explicit render on route entry — otherwise the
   // grid stays at whatever was last rendered (initially the empty stub
   // from the route container HTML). Without this, users see an empty
@@ -6963,6 +7015,77 @@ function rAttention(){
   const pulldot=document.getElementById('aside-pull-dot');if(pulldot)pulldot.classList.toggle('on',items.length>0);
 }
 function jumpToTask(id){ex={id,type:'task'};setRoute('today');rTasks();setTimeout(()=>{const el=document.getElementById('tasks-sec');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},120);}
+
+// ───────── DAY BOARD (whiteboard of sticky-note tasks) ─────────
+// A tactile view of your tasks as sticky notes. Daily tasks by default;
+// toggle to include General. Each sticky: title, then steps (if any) else
+// notes, then hand-drawn done / edit buttons. Pin adds a new task.
+let _boardScope='daily';
+function _hashStr(s){let h=0;for(let i=0;i<(s||'').length;i++)h=(h*31+s.charCodeAt(i))|0;return Math.abs(h);}
+function toggleBoardScope(){
+  _boardScope=_boardScope==='daily'?'all':'daily';
+  const b=document.getElementById('wb-scope-btn');if(b)b.textContent=_boardScope==='daily'?'Daily':'All tasks';
+  rBoard();
+}
+function boardAddSticky(){openNewTaskModal({daily:true});}
+function boardComplete(id){
+  const t=(S.tasks||[]).find(x=>x.id===id);if(!t)return;
+  // Fade the sticky out, then commit — feels like peeling it off the board.
+  const card=document.querySelector(`.wb-sticky[data-tid="${id}"]`);
+  const finish=()=>{
+    t.done=true;t.doneAt=t.doneAt||Date.now();
+    if(typeof _peopleHandleTaskTick==='function'&&_peopleHandleTaskTick(t))S.tasks=S.tasks.filter(x=>x.id!==t.id);
+    svAll();rBoard();try{rTasks();rAttention();}catch(_){}
+  };
+  if(card){card.classList.add('wb-peel');setTimeout(finish,240);}else finish();
+}
+function boardToggleStep(taskId,stepId){
+  const t=(S.tasks||[]).find(x=>x.id===taskId);if(!t||!Array.isArray(t.steps))return;
+  const s=t.steps.find(x=>x.id===stepId);if(!s)return;
+  s.done=!s.done;
+  // Ticking the last step auto-completes the parent (matches the list view).
+  if(t.steps.length&&t.steps.every(x=>x.done)){t.done=true;t.doneAt=Date.now();}
+  svAll();rBoard();try{rTasks();}catch(_){}
+}
+function rBoard(){
+  const el=document.getElementById('wb-surface');if(!el)return;
+  let tasks=(S.tasks||[]).filter(t=>!t.done&&(_boardScope==='all'?true:!!t.dailyDate));
+  tasks=tasks.sort((a,b)=>{
+    // Daily before general, then by priority.
+    const da=a.dailyDate?0:1,db=b.dailyDate?0:1;
+    if(da!==db)return da-db;
+    return (PO[a.priority]??99)-(PO[b.priority]??99);
+  });
+  if(!tasks.length){
+    el.innerHTML=`<div class="wb-empty">The board's clear.<br><button class="wb-pin" onclick="boardAddSticky()">📌 Pin a task</button></div>`;
+    return;
+  }
+  el.innerHTML=tasks.map(t=>{
+    const h=_hashStr(t.id);
+    const rot=(h%7)-3;                 // stable -3..3° tilt
+    const col=h%5;                      // stable paper colour
+    const hasSteps=Array.isArray(t.steps)&&t.steps.length;
+    let body='';
+    if(hasSteps){
+      body=`<div class="wb-steps">${t.steps.map(s=>`<div class="wb-step${s.done?' done':''}" onclick="boardToggleStep('${t.id}','${s.id}')"><span class="wb-step-box">${s.done?'✓':''}</span><span class="wb-step-txt">${esc(s.text||'')}</span></div>`).join('')}</div>`;
+    } else if(t.notes&&t.notes.trim()){
+      body=`<div class="wb-note-body">${esc(t.notes)}</div>`;
+    }
+    const genBadge=(_boardScope==='all'&&!t.dailyDate)?'<span class="wb-gen-badge">general</span>':'';
+    const time=t.scheduledTime?`<span class="wb-time">${esc(t.scheduledTime)}</span>`:'';
+    return `<div class="wb-sticky wb-c${col}" data-tid="${t.id}" style="--rot:${rot}deg">
+      <span class="wb-pinhead"></span>
+      ${time}
+      <div class="wb-sticky-title">${esc(t.text||'')}</div>
+      ${body}
+      ${genBadge}
+      <div class="wb-btns">
+        <button class="wb-btn wb-done" onclick="boardComplete('${t.id}')">✓ done</button>
+        <button class="wb-btn wb-edit" onclick="openTaskModal('${t.id}')">✎ edit</button>
+      </div>
+    </div>`;
+  }).join('');
+}
 
 // ───────── UNIVERSAL SEARCH (Ctrl/Cmd+K command palette) ─────────
 // One input over everything in S: tasks, projects, people, habits,
@@ -10499,6 +10622,11 @@ function openTaskModal(idOrTask,opts){
       })()}</select>
       <label class="tm-lbl" for="tm-time">Scheduled time</label>
       <input id="tm-time" class="input" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am">
+      <label class="tm-lbl" for="tm-notes">Notes / details</label>
+      <div class="pd-field-wrap">
+        <textarea id="tm-notes" class="ta" rows="2" placeholder="Extra detail — shows on the sticky under the title (when there are no steps).">${esc(t.notes||'')}</textarea>
+        <button class="fmic" title="Dictate" onclick="fieldMic('tm-notes',this)">🎙</button>
+      </div>
       <label class="tm-lbl">Steps</label>
       <div id="tm-steps-wrap" class="tm-steps-wrap">${renderTaskSteps(t)}</div>
       <div id="tm-pri-wrap" class="tm-pri-wrap">${mkPriRow(t)}</div>
@@ -10605,8 +10733,10 @@ function closeTaskModal(){
         const ta=document.getElementById('tm-text');
         const ti=document.getElementById('tm-time');
         const ar=document.getElementById('tm-area');
+        const no=document.getElementById('tm-notes');
         if(ta&&ta.value.trim()&&ta.value.trim()!==t.text)t.text=ta.value.trim();
         if(ti&&ti.value!==t.scheduledTime)t.scheduledTime=ti.value;
+        if(no&&no.value!==(t.notes||''))t.notes=no.value;
         // Single Area dropdown maps to the legacy area/project pair so
         // existing data stays compatible. Personal/Work go to area=...,
         // project='gen'; any custom area id is stored in project with
@@ -10626,6 +10756,7 @@ function closeTaskModal(){
           if(cb)cb(synthCopy);
         } else {
           svAll();rTasks();rAttention();
+          if(currentRoute==='board')try{rBoard();}catch(_){}
         }
       }
     }
@@ -10663,9 +10794,11 @@ function openNewTaskModal(prefill){
         project:t.project||'gen',
         priority:t.priority||'med',
         scheduledTime:String(t.scheduledTime||'').trim(),
+        notes:String(t.notes||'').trim(),
         done:false,
         date:tod()
       };
+      if(Array.isArray(t.steps)&&t.steps.length)newTask.steps=t.steps;
       // If the user is on the Daily sub-tab (or the prefill explicitly
       // asked for daily), the new task should land on Daily — not get
       // dumped into General, which was the long-standing annoyance.
@@ -16150,6 +16283,7 @@ function render(){
   if(currentRoute==='settings')rSettings();
   if(currentRoute==='notebook')rNotebook();
   if(currentRoute==='today'){rRoutine();try{rBrief();}catch(_){}try{rJournalPrompt();}catch(_){}try{rWeekReview();}catch(_){}}
+  if(currentRoute==='board')try{rBoard();}catch(_){}
   if(currentRoute==='people')rPeople();
   try{renderPaywallIfNeeded();}catch(_){}
   try{_renderProfilePill();}catch(_){}
