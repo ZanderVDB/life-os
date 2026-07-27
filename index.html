@@ -350,8 +350,8 @@ svg{flex-shrink:0}
 .wb-pin{border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 14%,var(--surface));border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;transition:all .12s}
 .wb-pin:hover{background:color-mix(in srgb,var(--accent) 24%,var(--surface))}
 .wb-surface{min-height:62vh;border-radius:16px;padding:30px 24px;border:1px solid var(--border);
-  background:radial-gradient(circle,rgba(0,0,0,.055) 1.2px,transparent 1.3px) 0 0/24px 24px,#f7f4ee;
-  box-shadow:inset 0 0 60px rgba(0,0,0,.05);
+  background:radial-gradient(circle,rgba(120,80,40,.05) 1.2px,transparent 1.3px) 0 0/24px 24px,#fbf3e8;
+  box-shadow:inset 0 0 60px rgba(120,80,40,.045);
   display:flex;flex-wrap:wrap;gap:22px 20px;align-content:flex-start}
 [data-theme="studio"] .wb-surface{background:radial-gradient(circle,rgba(255,255,255,.04) 1.2px,transparent 1.3px) 0 0/24px 24px,#242029}
 .wb-empty{width:100%;text-align:center;color:var(--muted);font-size:14px;padding:56px 20px;font-style:italic;line-height:2}
@@ -360,9 +360,13 @@ svg{flex-shrink:0}
   display:flex;flex-direction:column;gap:8px;font-family:'Kalam',cursive;color:#3a352c;
   transition:transform .15s ease,box-shadow .15s ease}
 .wb-sticky:hover{transform:rotate(0deg) scale(1.03);box-shadow:4px 8px 18px rgba(0,0,0,.24);z-index:3}
-.wb-c0{background:#fdf0a0}.wb-c1{background:#fcd4d6}.wb-c2{background:#cfe6f7}.wb-c3{background:#d6edbf}.wb-c4{background:#ffe1b3}
-.wb-pinhead{position:absolute;top:-7px;left:50%;transform:translateX(-50%);width:15px;height:15px;border-radius:50%;
-  background:radial-gradient(circle at 35% 30%,#ff9a9a,#cf3a3a);box-shadow:0 2px 4px rgba(0,0,0,.35)}
+.wb-c0{background:#ffe7c2}.wb-c1{background:#c7e8e0}.wb-c2{background:#fceeb0}.wb-c3{background:#d3e3f0}.wb-c4{background:#f6d4da}
+/* Washi tape across the top of each sticky — replaces the old red pushpin
+   (the "trash"-looking one). Semi-transparent, slightly skewed, warm. */
+.wb-pinhead{position:absolute;top:-9px;left:50%;transform:translateX(-50%) rotate(-2.5deg);width:64px;height:19px;
+  background:linear-gradient(180deg,rgba(255,255,255,.5),rgba(210,102,47,.22));
+  border-left:1px dashed rgba(0,0,0,.05);border-right:1px dashed rgba(0,0,0,.05);
+  box-shadow:0 1px 2px rgba(0,0,0,.07);opacity:.9}
 .wb-time{position:absolute;top:7px;right:11px;font-size:12px;font-weight:700;opacity:.55;font-family:'Kalam',cursive}
 .wb-sticky-title{font-size:16.5px;font-weight:700;line-height:1.28;word-break:break-word}
 .wb-note-body{font-size:14px;line-height:1.4;opacity:.82;white-space:pre-wrap;word-break:break-word}
@@ -380,6 +384,28 @@ svg{flex-shrink:0}
 .wb-edit{transform:rotate(1.2deg)}
 .wb-sticky.wb-peel{animation:wbPeel .24s ease forwards;pointer-events:none}
 @keyframes wbPeel{to{transform:rotate(var(--rot,0deg)) translateY(-16px) scale(.88);opacity:0}}
+/* ━━━ HOME — wall + habit rail ━━━ */
+.home-top{margin-bottom:16px}
+.home-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
+.home-wall{min-height:60vh}
+.home-rail{position:sticky;top:8px}
+@media(max-width:900px){.home-grid{grid-template-columns:1fr}.home-rail{position:static}.home-wall{min-height:auto}}
+.home-hab{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:12px 13px;margin-bottom:10px;box-shadow:var(--shadow)}
+.home-hab:last-child{margin-bottom:0}
+.home-hab-top{display:flex;align-items:center;gap:11px}
+.home-hab-name{font-size:13.5px;font-weight:600;color:var(--text);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.home-hab-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.home-hab-trail{display:flex;gap:5px;margin-top:10px}
+.hab-dot{flex:1;height:16px;border-radius:4px;border:1px solid var(--border);background:transparent;cursor:pointer;transition:transform .1s,background .12s;padding:0}
+.hab-dot.done{background:var(--hc,var(--accent));border-color:var(--hc,var(--accent))}
+.hab-dot.today:not(.done){border:1.5px dashed var(--hc,var(--accent))}
+.hab-dot:hover{transform:translateY(-1px)}
+.home-hab-empty{font-size:13px;color:var(--muted);padding:12px 4px;line-height:1.6}
+/* Home owns its own habit rail, so hide the global right rail (needs-attention
+   / next-events / daily-habits) and let the wall take the full width here. */
+body[data-route="today"] .aside-col{display:none!important}
+body[data-route="today"] .main-wrap{grid-template-columns:1fr}
+body[data-route="today"] #rail-btn{display:none}
 /* ━━━ TIP CARD ━━━ */
 .tip-card{
   background:linear-gradient(135deg,var(--peach-bg) 0%,var(--gold-bg) 42%,var(--lavender-bg) 100%);
@@ -2743,7 +2769,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <span id="mt-title">Life OS</span>
     </div>
     <button class="hamburger" onclick="openUniversalSearch()" aria-label="Search everything" title="Search everything" style="font-size:17px;line-height:1">⌕</button>
-    <button class="hamburger" onclick="toggleRail()" aria-label="Open needs attention" title="Needs attention, next events, habits" style="position:relative">
+    <button class="hamburger" id="rail-btn" onclick="toggleRail()" aria-label="Open needs attention" title="Needs attention, next events, habits" style="position:relative">
       <svg width="16" height="16"><use href="#i-bolt"/></svg>
       <span class="hb-dot" id="hb-dot"></span>
     </button>
@@ -2791,65 +2817,35 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
       <!-- TODAY -->
       <div class="route" data-route="today">
-        <div class="page-hdr">
-          <div>
-            <div class="page-title" id="gr"></div>
-            <div class="page-sub" id="ds"></div>
-          </div>
+        <div class="home-top">
+          <div class="page-title" id="gr"></div>
+          <div class="page-sub" id="ds"></div>
         </div>
 
-        <!-- Morning brief: deterministic digest of the day (events, urgent,
-             follow-ups, habits, routine, nudges). No AI call — assembled
-             from local state, dismissible per day. -->
-        <div class="brief-card" id="brief-card" style="display:none"></div>
-        <!-- Morning reflection: asks yesterday's journal questions once a
-             day, with a mic per field. The nudge to actually journal. -->
-        <div class="jp-card" id="journal-prompt-card" style="display:none"></div>
-        <!-- Weekly review: appears Sun/Mon, AI-composed on demand. -->
-        <div class="wr-card" id="week-review-card" style="display:none"></div>
-
-        <div class="tip-card" id="tip-card">
-          <div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div>
-          <div class="tip-loading">Drafting your plan for today…</div>
+        <!-- HOME = the wall (one merged task list — Daily + General folded
+             into a single surface, since the split "wasn't functional") plus
+             the habit rail. Morning brief, Today's plan, This week and the
+             Daily routine were removed from Home per the usage audit;
+             journaling + routine now live in Diary. See docs/REDESIGN.md. -->
+        <div class="home-grid">
+          <section class="home-wall-col">
+            <div class="section-hdr">
+              <h2>The wall</h2>
+              <div class="right">
+                <button class="btn btn-primary btn-sm" onclick="openNewTaskModal()">+ Add task</button>
+                <button class="wb-pin" onclick="boardAddSticky()">📌 New sticky</button>
+              </div>
+            </div>
+            <div class="wb-surface home-wall" id="home-wall"></div>
+          </section>
+          <aside class="home-rail">
+            <div class="section-hdr">
+              <h2>Habits</h2>
+              <div class="right"><button class="btn btn-ghost btn-sm" onclick="openNewHabitModal()">+ Habit</button></div>
+            </div>
+            <div id="home-habits-list"></div>
+          </aside>
         </div>
-
-        <section>
-          <div class="section-hdr">
-            <h2>This week</h2>
-            <div class="right"><button class="btn btn-ghost btn-sm" onclick="setRoute('calendar')">Open calendar ↗</button></div>
-          </div>
-          <div class="week-sum" id="today-week"></div>
-        </section>
-
-
-        <section>
-          <div class="section-hdr">
-            <h2>Tasks</h2>
-            <div class="right">
-              <button class="btn btn-primary btn-sm" onclick="openNewTaskModal()">+ Add task</button>
-            </div>
-          </div>
-          <!-- Daily = today only, mutually exclusive with General. Tasks
-               carry a dailyDate field that gets set/cleared when moving
-               between the two. History moved to Settings → History. -->
-          <div class="tabs" id="task-tabs" style="margin-bottom:12px">
-            <button class="tab on" data-ttab="daily" onclick="setTaskTab('daily')">Daily</button>
-            <button class="tab" data-ttab="general" onclick="setTaskTab('general')">General</button>
-          </div>
-          <div id="tasks-sec"></div>
-        </section>
-
-        <section>
-          <div class="section-hdr">
-            <h2>Daily routine</h2>
-            <div class="right" style="gap:6px;flex-wrap:wrap">
-              <button class="btn btn-ghost btn-sm" onclick="routineNav(-1)" title="Previous day" aria-label="Previous day">‹</button>
-              <button class="btn btn-ghost btn-sm" id="routine-next-btn" onclick="routineNav(1)" title="Next day" aria-label="Next day">›</button>
-              <button class="btn btn-ghost btn-sm" onclick="routineToday()">Today</button>
-            </div>
-          </div>
-          <div class="rt-box"><div id="routine-body"></div></div>
-        </section>
       </div>
 
       <!-- BOARD (whiteboard of sticky-note tasks) -->
@@ -3538,7 +3534,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v198';
+const APP_VERSION='v199';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4013,6 +4009,10 @@ function setRoute(r,skipHash){
   const routeChanged=r!==currentRoute;
   if(routeChanged)playSound('tab');
   currentRoute=r;
+  // Expose the active route on <body> so chrome can be styled per-route
+  // (e.g. Home owns its own habit rail, so the global right rail is hidden
+  // there — see body[data-route="today"] rules).
+  try{document.body.dataset.route=r;}catch(_){}
   if(!skipHash){try{history.replaceState(null,'','#'+r);}catch(e){location.hash=r;}}
   document.querySelectorAll('[data-route]').forEach(el=>el.classList.toggle('active',el.dataset.route===r));
   document.querySelectorAll('[data-route-link]').forEach(a=>a.classList.toggle('active',a.dataset.routeLink===r));
@@ -4046,7 +4046,7 @@ function setRoute(r,skipHash){
   if(r==='notebook')rNotebook();
   // The Daily routine lives in a box on the Today page now, so render it
   // whenever we land on Today — along with the morning brief + weekly review.
-  if(r==='today'){rRoutine();try{rBrief();}catch(_){}try{rJournalPrompt();}catch(_){}try{rWeekReview();}catch(_){}}
+  if(r==='today'){try{rHomeWall();}catch(_){}try{rHomeHabits();}catch(_){}}
   if(r==='board')try{rBoard();}catch(_){}
   // People grid needs an explicit render on route entry — otherwise the
   // grid stays at whatever was last rendered (initially the empty stub
@@ -6243,7 +6243,7 @@ function toggleHabitDate(id,ds){
   // doneToday / lastDate are transient derived fields — delete them so they
   // don't get persisted and trigger legacy-seed behaviour on other devices
   delete h.doneToday;delete h.lastDate;
-  svAllNow();rHabits();rCal();
+  svAllNow();rHabits();rCal();try{rHomeHabits();}catch(_){}
 }
 // Back-compat shim: legacy callers go through the modal flow now.
 function qaAddHabitFull(){openNewHabitModal();}
@@ -7096,7 +7096,7 @@ function boardComplete(id){
   const finish=()=>{
     t.done=true;t.doneAt=t.doneAt||Date.now();
     if(typeof _peopleHandleTaskTick==='function'&&_peopleHandleTaskTick(t))S.tasks=S.tasks.filter(x=>x.id!==t.id);
-    svAll();rBoard();try{rTasks();rAttention();}catch(_){}
+    svAll();rBoard();try{rTasks();rAttention();rHomeWall();}catch(_){}
   };
   if(card){card.classList.add('wb-peel');setTimeout(finish,240);}else finish();
 }
@@ -7106,7 +7106,7 @@ function boardToggleStep(taskId,stepId){
   s.done=!s.done;
   // Ticking the last step auto-completes the parent (matches the list view).
   if(t.steps.length&&t.steps.every(x=>x.done)){t.done=true;t.doneAt=Date.now();}
-  svAll();rBoard();try{rTasks();}catch(_){}
+  svAll();rBoard();try{rTasks();rHomeWall();}catch(_){}
 }
 function rBoard(){
   const el=document.getElementById('wb-surface');if(!el)return;
@@ -7144,6 +7144,71 @@ function rBoard(){
         <button class="wb-btn wb-done" onclick="boardComplete('${t.id}')">✓ done</button>
         <button class="wb-btn wb-edit" onclick="openTaskModal('${t.id}')">✎ edit</button>
       </div>
+    </div>`;
+  }).join('');
+}
+
+// ───────── HOME — the wall (merged tasks) + habit rail ─────────
+// The wall shows EVERY open task — Daily and General folded into one surface
+// (the split "wasn't functional"). Stickies reuse the board markup so
+// boardComplete / boardToggleStep / openTaskModal all work unchanged.
+function rHomeWall(){
+  const el=document.getElementById('home-wall');if(!el)return;
+  let tasks=(S.tasks||[]).filter(t=>!t.done);
+  tasks.sort((a,b)=>{
+    const da=a.dailyDate?0:1,db=b.dailyDate?0:1;
+    if(da!==db)return da-db;
+    return (PO[a.priority]??99)-(PO[b.priority]??99);
+  });
+  if(!tasks.length){el.innerHTML=`<div class="wb-empty">Nothing on the wall.<br><button class="wb-pin" onclick="boardAddSticky()">📌 Pin a task</button></div>`;return;}
+  el.innerHTML=tasks.map(t=>{
+    const h=_hashStr(t.id);const rot=(h%7)-3;const col=h%5;
+    const hasSteps=Array.isArray(t.steps)&&t.steps.length;
+    let body='';
+    if(hasSteps){body=`<div class="wb-steps">${t.steps.map(s=>`<div class="wb-step${s.done?' done':''}" onclick="boardToggleStep('${t.id}','${s.id}')"><span class="wb-step-box">${s.done?'✓':''}</span><span class="wb-step-txt">${esc(s.text||'')}</span></div>`).join('')}</div>`;}
+    else if(t.notes&&t.notes.trim()){body=`<div class="wb-note-body">${esc(t.notes)}</div>`;}
+    const time=t.scheduledTime?`<span class="wb-time">${esc(t.scheduledTime)}</span>`:'';
+    return `<div class="wb-sticky wb-c${col}" data-tid="${t.id}" style="--rot:${rot}deg">
+      <span class="wb-pinhead"></span>
+      ${time}
+      <div class="wb-sticky-title">${esc(t.text||'')}</div>
+      ${body}
+      <div class="wb-btns">
+        <button class="wb-btn wb-done" onclick="boardComplete('${t.id}')">✓ done</button>
+        <button class="wb-btn wb-edit" onclick="openTaskModal('${t.id}')">✎ edit</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+// Streak ring: a donut in the habit's colour with the current streak in the
+// centre. Fraction = progress toward the all-time best.
+function _habRing(color,frac,cur){
+  const r=15,c=2*Math.PI*r,on=(Math.max(0,Math.min(1,frac))*c).toFixed(1);
+  return `<svg width="42" height="42" viewBox="0 0 42 42" style="flex:0 0 auto"><circle cx="21" cy="21" r="15" fill="none" stroke="var(--border)" stroke-width="4"/><circle cx="21" cy="21" r="15" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${on} ${c}" transform="rotate(-90 21 21)"/><text x="21" y="25.5" text-anchor="middle" font-size="12" font-weight="700" fill="var(--text)" font-family="Inter,sans-serif">${cur}</text></svg>`;
+}
+function rHomeHabits(){
+  const el=document.getElementById('home-habits-list');if(!el)return;
+  if(!S.habits||!S.habits.length){el.innerHTML=`<div class="home-hab-empty">No habits yet — the ones you build show here with their streaks. <a href="#" onclick="openNewHabitModal();return false" style="color:var(--accent);font-weight:600">Add your first ↗</a></div>`;return;}
+  const t=tod();
+  // Last 7 days, oldest → today. Each dot taps to back-fill via toggleHabitDate.
+  const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(localDs(d));}
+  el.innerHTML=S.habits.map(h=>{
+    const st=computeHabitStats(h);
+    const set=habitCheckedSet(h);
+    const color=habitColor(h);
+    const frac=st.max>0?st.current/st.max:(st.current>0?1:0);
+    const trail=days.map(ds=>{
+      const done=set.has(ds);const isToday=ds===t;
+      return `<button class="hab-dot${done?' done':''}${isToday?' today':''}" style="--hc:${color}" title="${ds}${done?' · done':''}" onclick="toggleHabitDate('${h.id}','${ds}')"></button>`;
+    }).join('');
+    return `<div class="home-hab" style="--hc:${color}">
+      <div class="home-hab-top">${_habRing(color,frac,st.current)}
+        <div style="flex:1;min-width:0">
+          <div class="home-hab-name">${esc(h.name)}</div>
+          <div class="home-hab-meta">🔥 ${st.current} day${st.current===1?'':'s'} · best ${st.max}</div>
+        </div>
+      </div>
+      <div class="home-hab-trail">${trail}</div>
     </div>`;
   }).join('');
 }
@@ -16339,6 +16404,7 @@ function render(){
   if(g)g.textContent=gTxt();if(d)d.textContent=dTxt();
   rUpcom();rCal();rFocus();rHabits();rTasks();rBuilds();rIdeas();rResources();rNotes();
   rAttention();rTodayWeek();setBrainTab(UI.brainTab);
+  try{rHomeWall();rHomeHabits();}catch(_){}
   refreshTipCard();
   refreshGCalWarn();
   if(currentRoute==='settings')rSettings();

@@ -321,6 +321,29 @@ palette + universal search · Settings · Login / splash / onboarding.
   from both desktop + mobile nav. Board/Habits still in nav pending their fold
   into Home. Diary nav pending its surface build.
 
+### 2026-07-27 — Increment 2 (v199): Home = the wall + habit rail
+- Rebuilt the `today` route as **Home**: a two-column grid — the sticky **wall**
+  (left) + the **habit rail** (right).
+- **Wall** (`rHomeWall`): shows EVERY open task (Daily + General merged into one
+  surface). Reuses the board sticky markup so `boardComplete` / `boardToggleStep`
+  / `openTaskModal` work unchanged. Stickies restyled — softer Apricot colours,
+  **washi tape** instead of the red pushpin, gentler shadow, warm surface.
+- **Habit rail** (`rHomeHabits` + `_habRing`): a card per habit — streak **ring**
+  (current in centre, fraction = progress to best), 🔥 current + best-ever, and a
+  tappable **7-day trail** (each dot → `toggleHabitDate` for back-fill).
+- Removed from Home: Morning brief, Today's plan (tip card), This week, Daily
+  routine, Daily/General tabs. Their render fns guard on missing els → safe no-op.
+- **Global right rail hidden on Home** (`body[data-route="today"]`): Home owns its
+  own habit rail now, so the needs-attention/next-events/daily-habits rail + its
+  mobile bolt button are hidden here; wall takes full width. Rail stays on other
+  routes for now.
+- Verified in local preview (desktop + mobile): renders, no console errors,
+  stickies + rings + trails correct.
+- **Transitional:** Board + Habits tabs still in nav (Board now duplicates the
+  wall; Habits tab still hosts full habit management — rest days, descriptions).
+  Fold/remove once the rail gains management. **Morning journal prompt is paused**
+  — it returns when Diary is built (next).
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.
