@@ -385,6 +385,24 @@ palette + universal search · Settings · Login / splash / onboarding.
   hour spine + band + habit dock. No console errors. Event/reminder editing works
   via the existing `evChip` delegate + `openReminderModal`.
 
+### 2026-07-27 — Increment 5 (v202): Projects streak-keeper + Brain spark→fire
+- **Projects = streak keepers.** New `b.checkins` (array of ds) + `_projStreak(b)`
+  (current streak, `broken` when lapsed, `checkedToday`) + `projCheckIn(id)`.
+  - Card (`rBuilds`) now leads with 🔥 streak + a **Check in / Revive / ✓ Checked
+    in** button (stopPropagation so the card still opens on tap). Dropped the
+    stage tag, stagebar and log-count from the card.
+  - Detail (`renderProjectDetail`): streak row + check-in under the title;
+    **removed the stage stepper and the daily-progress-log card** (the v195
+    scrap). Kept description, scratch notes, phase (auto) controls.
+- **Brain = spark → fire.** Ideas tab relabelled **✦ Sparks**; each spark gets a
+  **🔥 Fan → project** button (`fanIdeaToProject`) that moves it out of Brain into
+  a new streak-keeper project (starts today's check-in) and drops you on it.
+  Brain + Projects are one pipeline.
+- Verified in preview: streak math correct (3-day live / lapsed→Revive /
+  not-started), fan button present. No console errors. (Dev note: preview now
+  runs on an auto-assigned port — `autoPort:true` in launch.json — because
+  another local app holds :3000.)
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.

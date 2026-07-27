@@ -491,6 +491,16 @@ body[data-route="calendar"] #rail-btn{display:none}
 .dt-hab-tick{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex:0 0 auto}
 .dt-hab.done .dt-hab-tick{background:var(--hc,var(--accent));border-color:var(--hc,var(--accent))}
 .dt-hab.future{opacity:.4;pointer-events:none}
+/* ━━━ PROJECTS — streak keeper + BRAIN spark→fire ━━━ */
+.bc-streak{font-size:12px;font-weight:700;color:var(--muted-2);display:inline-flex;align-items:center;gap:4px;letter-spacing:0}
+.bc-streak.on{color:var(--accent)}
+.bc-streak.broken{color:var(--muted)}
+.bc-foot{align-items:center;justify-content:space-between}
+.ic-fan{flex:0 0 auto;align-self:center;font-size:11px;font-weight:600;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:8px;padding:5px 9px;cursor:pointer;white-space:nowrap;transition:all .12s}
+.ic-fan:hover{background:color-mix(in srgb,var(--accent) 18%,transparent)}
+@media(max-width:520px){.ic-fan{font-size:10px;padding:4px 7px}}
+.pd-streak-row{display:flex;align-items:center;gap:12px;margin:6px 0 16px}
+.pd-streak-row .bc-streak{font-size:14px}
 /* ━━━ TIP CARD ━━━ */
 .tip-card{
   background:linear-gradient(135deg,var(--peach-bg) 0%,var(--gold-bg) 42%,var(--lavender-bg) 100%);
@@ -3042,7 +3052,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
         </div>
         <div class="tabs" id="brain-tabs">
-          <button class="tab on" data-tab="ideas" onclick="setBrainTab('ideas')">Ideas</button>
+          <button class="tab on" data-tab="ideas" onclick="setBrainTab('ideas')">✦ Sparks</button>
           <button class="tab" data-tab="resources" onclick="setBrainTab('resources')">Resources</button>
           <button class="tab" data-tab="notes" onclick="setBrainTab('notes')">Knowledge</button>
         </div>
@@ -3632,7 +3642,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v201';
+const APP_VERSION='v202';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -11563,6 +11573,11 @@ function renderProjectDetail(){
   const eff=_projEffStatus(b),auto=_projIsAuto(b);
   const stage=_projStage(b);
   const loggedToday=Array.isArray(b.log)&&b.log.some(e=>e.date===tod());
+  const st=_projStreak(b);
+  const pdFlame=st.current>0?`🔥 ${st.current} day${st.current===1?'':'s'} streak`:(st.broken?'💤 streak broken':'not started yet');
+  const pdBtn=st.checkedToday
+    ? `<button class="btn btn-ghost btn-sm" disabled>✓ Checked in today</button>`
+    : `<button class="btn btn-primary btn-sm" onclick="projCheckIn('${b.id}')">${st.broken?'Revive streak':'Check in'}</button>`;
   // Staleness badge (the auto system, now a subtle chip rather than 3 buttons).
   const staleLbl=eff==='active'?'Active':(eff==='future'?'Paused':'Background');
   // Stage stepper — tap a chip to set the stage manually.
@@ -11585,30 +11600,16 @@ function renderProjectDetail(){
     </div>
     <div class="pd-head">
       <input class="pd-title-input" id="pd-title-${b.id}" value="${esc(b.title)}" onblur="saveProjectHead('${b.id}')">
-      <div class="pd-stepper">${stepper}</div>
+      <div class="pd-streak-row">
+        <span class="bc-streak${st.current>0?' on':''}${st.broken?' broken':''}">${pdFlame}</span>
+        ${pdBtn}
+      </div>
       <div class="pd-lbl">What this is</div>
       <div class="pd-field-wrap">
         <textarea class="pd-desc" id="pd-desc-${b.id}" placeholder="What this project is and where it's going. The daily log keeps this current — or edit it yourself." onblur="saveProjectHead('${b.id}')">${esc(b.desc||'')}</textarea>
         <button class="fmic" title="Dictate" onclick="fieldMic('pd-desc-${b.id}',this)">🎙</button>
       </div>
       ${b.whatsNext?`<div class="pd-next"><span class="pd-next-lbl">Next</span> ${esc(b.whatsNext)}</div>`:''}
-    </div>
-
-    <div class="pd-log-card">
-      <div class="pd-log-hd">
-        <span>Daily progress</span>
-        <button class="btn btn-primary btn-sm" onclick="toggleProjectLog('${b.id}')">${loggedToday?'+ Log again':'✍ Log today'}</button>
-      </div>
-      <div id="plog-box-${b.id}" class="pd-log-box" style="display:none">
-        <div class="pd-field-wrap">
-          <textarea class="pd-log-input" id="plog-input-${b.id}" rows="4" placeholder="What did you do on this today? e.g. 'Built the login screen, dropped the old auth, next up is wiring the API.' The AI updates the description above."></textarea>
-          <button class="fmic" title="Dictate" onclick="fieldMic('plog-input-${b.id}',this)">🎙</button>
-        </div>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px">
-          <button class="btn btn-primary btn-sm" id="plog-submit-${b.id}" onclick="projectLogSubmit('${b.id}')">✨ Log &amp; update</button>
-        </div>
-      </div>
-      <div class="pd-log-timeline">${logHtml}</div>
     </div>
 
     <div class="pd-lbl" style="display:flex;align-items:center;gap:8px;margin-top:22px">
@@ -11634,35 +11635,71 @@ function renderProjectDetail(){
     </div>
   `;
 }
+// ─── Projects = Streak keepers ───
+// Each project keeps a habit-style check-in streak. Check in to keep it alive;
+// a lapsed streak shows "Revive". This is what makes projects revisit-worthy
+// (the old capture-then-forget problem). Replaces the v195 stage/daily-log
+// emphasis on the card.
+function _projCheckins(b){return Array.isArray(b.checkins)?b.checkins:[];}
+function _projStreak(b){
+  const set=new Set(_projCheckins(b));
+  if(!set.size)return {current:0,broken:false,checkedToday:false};
+  const t=tod();const yd=localDs(new Date(Date.now()-86400000));
+  const checkedToday=set.has(t);
+  let startStr;
+  if(checkedToday)startStr=t; else if(set.has(yd))startStr=yd; else return {current:0,broken:true,checkedToday:false};
+  let cur=0;let cursor=new Date(startStr+'T12:00:00');
+  while(set.has(localDs(cursor))){cur++;cursor.setDate(cursor.getDate()-1);}
+  return {current:cur,broken:false,checkedToday};
+}
+function projCheckIn(id){
+  const b=S.builds.find(x=>x.id===id);if(!b)return;
+  b.checkins=_projCheckins(b).slice();
+  const t=tod();
+  if(!b.checkins.includes(t))b.checkins.push(t);
+  b.lastTouched=Date.now();
+  svAll();try{rBuilds();}catch(_){}if(UI.projectDetail===id)try{renderProjectDetail();}catch(_){}
+}
 function rBuilds(){
   const el=document.getElementById('builds');if(!el)return;
   _projSyncAuto();
-  const order={active:0,future:1,background:2},lbl={active:'Building now',future:'Future project',background:'Background idea'};
+  const order={active:0,future:1,background:2};
   const sorted=[...S.builds].sort((a,b)=>(order[_projEffStatus(a)]??1)-(order[_projEffStatus(b)]??1));
   const cnt=document.getElementById('bc-cnt');if(cnt)cnt.textContent=S.builds.length?`${S.builds.length} in pipeline`:'';
   el.innerHTML=sorted.length?sorted.map(b=>{
     const eff=_projEffStatus(b);
-    const stage=_projStage(b);
-    const loggedToday=Array.isArray(b.log)&&b.log.some(e=>e.date===tod());
-    const stagePct=Math.round((stage/(PROJECT_STAGES.length-1))*100);
-    const logCount=Array.isArray(b.log)?b.log.length:0;
+    const st=_projStreak(b);
+    const flame=st.current>0?`🔥 ${st.current} day${st.current===1?'':'s'}`:(st.broken?'💤 streak broken':'not started');
+    const btn=st.checkedToday
+      ? `<button class="btn btn-ghost btn-sm" disabled>✓ Checked in</button>`
+      : `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();projCheckIn('${b.id}')">${st.broken?'Revive':'Check in'}</button>`;
     return `<div class="bc ${eff}" onclick="openProject('${b.id}')">
-      <div class="bc-top">
-        <span class="bc-tag">${esc(PROJECT_STAGES[stage])}${loggedToday?' <span class="bc-tag-auto">· logged today</span>':''}</span>
-      </div>
+      <div class="bc-top"><span class="bc-streak${st.current>0?' on':''}${st.broken?' broken':''}">${flame}</span></div>
       <div class="bc-title">${esc(b.title)}</div>
-      <div class="bc-desc">${esc((b.desc||'').slice(0,180))}${(b.desc||'').length>180?'…':''}</div>
-      <div class="bc-stagebar" title="Stage ${stage+1} of ${PROJECT_STAGES.length}"><span style="width:${stagePct}%"></span></div>
-      <div class="bc-foot"><span>Last worked ${_projLastWorkedLabel(b)}</span>${logCount?`<span>${logCount} log${logCount===1?'':'s'} →</span>`:''}</div>
+      <div class="bc-desc">${esc((b.desc||'').slice(0,160))}${(b.desc||'').length>160?'…':''}</div>
+      <div class="bc-foot"><span>Last worked ${_projLastWorkedLabel(b)}</span>${btn}</div>
     </div>`;
-  }).join(''):`<div class="no-t">No projects yet — add one above.</div>`;
+  }).join(''):`<div class="no-t">No projects yet — add one, or fan a spark from Brain. Check in daily to keep a project's streak alive.</div>`;
 }
 
 
 // IDEAS
 function saveIdea(id){const i=S.ideas.find(x=>x.id===id);if(!i)return;const ti=document.getElementById('bd-title'),de=document.getElementById('bd-desc');if(ti?.value?.trim())i.title=ti.value.trim();if(de?.value?.trim())i.desc=de.value.trim();svAll();closeBrainDetail();rIdeas();}
 function delIdea(id){if(!confirm('Delete this idea?'))return;S.ideas=S.ideas.filter(x=>x.id!==id);svAll();closeBrainDetail();rIdeas();}
-function rIdeas(){const el=document.getElementById('ideas');if(!el)return;const list=brainFilter([...S.ideas].reverse(),['title','desc']);el.innerHTML=list.length?list.map(i=>`<div class="ic" onclick="openBrainDetail('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div></div></div>`).join(''):(UI.brainQuery?`<div class="no-t">No ideas match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No ideas yet — drop one in or dictate it</div>`);}
+function rIdeas(){const el=document.getElementById('ideas');if(!el)return;const list=brainFilter([...S.ideas].reverse(),['title','desc']);el.innerHTML=list.length?list.map(i=>`<div class="ic" onclick="openBrainDetail('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1;min-width:0"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div></div><button class="ic-fan" onclick="event.stopPropagation();fanIdeaToProject('${i.id}')" title="Fan this spark into a streak-keeper project">🔥 Fan → project</button></div>`).join(''):(UI.brainQuery?`<div class="no-t">No sparks match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No sparks yet — dump an idea or dictate it. The good ones can be fanned into a project. ✦</div>`);}
+// Spark → fire: graduate an idea into a Streak-keeper project. The spark
+// leaves Brain (its content now lives in the project), the project starts
+// with today's check-in so the streak is already alight, and we drop the
+// user on it. Brain + Projects = one pipeline.
+function fanIdeaToProject(id){
+  const i=(S.ideas||[]).find(x=>x.id===id);if(!i)return;
+  if(!confirm('Fan this spark into a project? It moves out of Brain and starts a streak.'))return;
+  const b={id:uid(),title:i.title||'(untitled)',desc:i.desc||'',status:'active',date:tod(),notes:'',auto:true,lastTouched:Date.now(),checkins:[tod()],fromSpark:true};
+  S.builds=S.builds||[];S.builds.push(b);
+  S.ideas=S.ideas.filter(x=>x.id!==id);
+  svAll();try{rIdeas();}catch(_){}try{rBuilds();}catch(_){}
+  setRoute('projects');openProject(b.id);
+}
 
 // RESOURCES
 function saveRes(id){const r=S.resources.find(x=>x.id===id);if(!r)return;const ti=document.getElementById('bd-title'),de=document.getElementById('bd-desc'),ur=document.getElementById('bd-url'),tg=document.getElementById('bd-tag');if(ti?.value?.trim())r.title=ti.value.trim();if(de)r.desc=de.value.trim();if(ur)r.url=ur.value.trim();if(tg)r.tag=tg.value;svAll();closeBrainDetail();rResources();}
