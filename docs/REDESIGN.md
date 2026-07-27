@@ -403,6 +403,21 @@ palette + universal search · Settings · Login / splash / onboarding.
   runs on an auto-assigned port — `autoPort:true` in launch.json — because
   another local app holds :3000.)
 
+### 2026-07-27 — Increment 6 (v203): IA cleanup — fold Board + Habits into Home
+- **Removed Board + Habits from the nav** (desktop + mobile). Nav is now exactly
+  the target IA: **Home · Calendar · Projects · Brain · Diary · Notebook** (+
+  Settings). Routes/containers/render fns kept (hash-reachable, harmless) but
+  unlinked; dropped from the command-palette "Go to" actions too (with People).
+- **Habit management folded into the Home rail:** tapping a habit's name opens
+  `openHabitModal(id)` — the full management modal (description, rest days,
+  delete). The rail already did daily ticking + streaks + back-fill. Board was
+  already a duplicate of the Home wall.
+- Verified: nav = the 6 intended entries, rail name opens the management modal
+  with rest days + description intact, no console errors.
+- **Redesign core is complete.** Remaining = optional polish: dark twin of
+  Apricot, Home→Diary "how did yesterday go?" nudge, Notebook/Settings/login
+  cosmetic passes, empty-state copy.
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.

@@ -393,7 +393,8 @@ svg{flex-shrink:0}
 .home-hab{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:12px 13px;margin-bottom:10px;box-shadow:var(--shadow)}
 .home-hab:last-child{margin-bottom:0}
 .home-hab-top{display:flex;align-items:center;gap:11px}
-.home-hab-name{font-size:13.5px;font-weight:600;color:var(--text);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.home-hab-name{font-size:13.5px;font-weight:600;color:var(--text);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.home-hab-name:hover{color:var(--accent)}
 .home-hab-meta{font-size:11px;color:var(--muted);margin-top:2px}
 .home-hab-trail{display:flex;gap:5px;margin-top:10px}
 .hab-dot{flex:1;height:16px;border-radius:4px;border:1px solid var(--border);background:transparent;cursor:pointer;transition:transform .1s,background .12s;padding:0}
@@ -2835,10 +2836,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       </button>
       <nav class="s-nav" id="s-nav">
         <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17"><use href="#i-home"/></svg></span><span class="label">Home</span><span class="dot"></span></a>
-        <a href="#board" data-route-link="board"><span class="ic"><svg width="17" height="17"><use href="#i-tasks"/></svg></span><span class="label">Board</span><span class="dot"></span></a>
         <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
-        <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
         <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
         <a href="#diary" data-route-link="diary"><span class="ic"><svg width="17" height="17"><use href="#i-learn"/></svg></span><span class="label">Diary</span><span class="dot"></span></a>
         <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
@@ -2884,10 +2883,8 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <span class="profile-pill-chev">▾</span>
       </button>
       <a href="#today" data-route-link="today" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-home"/></svg></span><span>Home</span></a>
-      <a href="#board" data-route-link="board" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-tasks"/></svg></span><span>Board</span></a>
       <a href="#calendar" data-route-link="calendar" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span>Calendar</span></a>
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
-      <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
       <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
       <a href="#diary" data-route-link="diary" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-learn"/></svg></span><span>Diary</span></a>
       <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
@@ -3642,7 +3639,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v202';
+const APP_VERSION='v203';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -7313,7 +7310,7 @@ function rHomeHabits(){
     return `<div class="home-hab" style="--hc:${color}">
       <div class="home-hab-top">${_habRing(color,frac,st.current)}
         <div style="flex:1;min-width:0">
-          <div class="home-hab-name">${esc(h.name)}</div>
+          <div class="home-hab-name" onclick="openHabitModal('${h.id}')" title="Edit habit — rest days, description, delete">${esc(h.name)}</div>
           <div class="home-hab-meta">🔥 ${st.current} day${st.current===1?'':'s'} · best ${st.max}</div>
         </div>
       </div>
@@ -7372,7 +7369,7 @@ function _usBuildResults(q){
   add('Actions','＋','New event','Add a calendar event',close(()=>{setRoute('calendar');openNewEvent();}));
   add('Actions','＋','New project','Add a project',close(()=>{setRoute('projects');openNewProjectModal();}));
   add('Actions','＋','New idea','Drop an idea in Brain',close(()=>{setRoute('brain');openNewIdeaModal();}));
-  ROUTES.forEach(r=>add('Actions','→','Go to '+ROUTE_TITLES[r],'',close(()=>setRoute(r))));
+  ROUTES.filter(r=>!['board','habits','people'].includes(r)).forEach(r=>add('Actions','→','Go to '+ROUTE_TITLES[r],'',close(()=>setRoute(r))));
   if(_profileCatalog&&(_profileCatalog.profiles||[]).length>1){
     _profileCatalog.profiles.filter(p=>p.id!==_activeProfileId).forEach(p=>{
       add('Actions','👤','Switch to '+(p.name||'profile'),(p.mode==='business'?'Business':'Personal')+' profile',close(()=>switchProfile(p.id).then(_renderProfilePill)));
