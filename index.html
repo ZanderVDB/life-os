@@ -15,11 +15,14 @@
 <style>
 /* ━━━ THEMES ━━━ */
 :root,[data-theme="soft"]{
-  --bg:#f4eee5; --bg-2:#ece5d7;
-  --surface:#fbf6ec; --surface-2:#f5efe2; --surface-hover:#f0e9d8;
-  --border:#e4dcc9; --border-strong:#cfc3a8;
-  --text:#2a2018; --text-2:#5a4f42; --muted:#8b7e6b; --muted-2:#b5ac9b;
-  --accent:#2a2018; --accent-ink:#fbf6ec;
+  /* ── Apricot skin (chosen 2026-07-27) — warm peach ground, burnt-orange
+     accent, teal counterpoint. See docs/REDESIGN.md north star. ── */
+  --bg:#fce8d8; --bg-2:#f3d8c2;
+  --surface:#fffbf6; --surface-2:#fbeee2; --surface-hover:#f7e7d8;
+  --border:#f0dbc8; --border-strong:#e4c2a6;
+  --text:#3a2a22; --text-2:#6b5647; --muted:#9a8574; --muted-2:#c0ad9a;
+  --accent:#d2662f; --accent-ink:#fffbf6;
+  --accent-2:#2e8c8c; --accent-2-ink:#fffbf6;
   --peach:#d9a484; --peach-bg:#f5e4d6;
   --sage:#7fa186; --sage-bg:#dfe9db;
   --lavender:#9d8bb8; --lavender-bg:#ebe2f2;
@@ -38,7 +41,8 @@
   --surface:#1c1f26; --surface-2:#232730; --surface-hover:#2a2f39;
   --border:#2d323d; --border-strong:#3f4553;
   --text:#e6e8ee; --text-2:#b8bdc9; --muted:#8890a0; --muted-2:#5f6775;
-  --accent:#e6e8ee; --accent-ink:#15171c;
+  --accent:#e0965e; --accent-ink:#1a130d;
+  --accent-2:#4fb0ad; --accent-2-ink:#0f1115;
   --peach:#e8a07d; --peach-bg:#3b2a22;
   --sage:#8fc09a; --sage-bg:#233028;
   --lavender:#b4a4d1; --lavender-bg:#2e2938;
@@ -2629,6 +2633,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>
     </symbol>
     <symbol id="i-today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9"/><path d="M9.5 20v-6h5v6"/></symbol>
     <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></symbol>
     <symbol id="i-tasks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-proj" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.4"/><rect x="14" y="4" width="7" height="7" rx="1.4"/><rect x="3" y="15" width="7" height="6" rx="1.4"/><rect x="14" y="15" width="7" height="6" rx="1.4"/></symbol>
@@ -2708,14 +2713,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <span class="us-trigger-ic">⌕</span><span class="us-trigger-txt">Search…</span><span class="us-trigger-kbd">Ctrl K</span>
       </button>
       <nav class="s-nav" id="s-nav">
-        <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
+        <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17"><use href="#i-home"/></svg></span><span class="label">Home</span><span class="dot"></span></a>
         <a href="#board" data-route-link="board"><span class="ic"><svg width="17" height="17"><use href="#i-tasks"/></svg></span><span class="label">Board</span><span class="dot"></span></a>
         <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
         <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
-        <a href="#people" data-route-link="people"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span class="label">People</span><span class="dot"></span></a>
-        <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
         <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
+        <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
       </nav>
       <div class="s-sep"></div>
       <div class="s-foot">
@@ -2757,14 +2761,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <span class="profile-pill-name" id="profile-pill-name-m">Personal</span>
         <span class="profile-pill-chev">▾</span>
       </button>
-      <a href="#today" data-route-link="today" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span>Today</span></a>
+      <a href="#today" data-route-link="today" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-home"/></svg></span><span>Home</span></a>
       <a href="#board" data-route-link="board" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-tasks"/></svg></span><span>Board</span></a>
       <a href="#calendar" data-route-link="calendar" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span>Calendar</span></a>
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
       <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
-      <a href="#people" data-route-link="people" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span>People</span></a>
-      <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
       <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
+      <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
       <div class="m-drawer-foot">
         <a href="#settings" data-route-link="settings" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
       </div>
@@ -3535,7 +3538,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v197';
+const APP_VERSION='v198';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4003,7 +4006,7 @@ function setTheme(t){
 // elements whose id happened to match the route hash.
 try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}
 const ROUTES=['today','board','calendar','projects','habits','people','brain','notebook','settings'];
-const ROUTE_TITLES={today:'Today',board:'Board',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',notebook:'Notebook',settings:'Settings'};
+const ROUTE_TITLES={today:'Home',board:'Board',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',notebook:'Notebook',settings:'Settings'};
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
@@ -4191,6 +4194,13 @@ auth.onAuthStateChanged(u=>{
     // show the login screen prematurely while we wait for Firebase to
     // restore the session from IndexedDB.
     try{localStorage.setItem('los_last_uid',u.uid);}catch(_){}
+    // Cache the Google email as a GIS "hint". Passing it on silent token
+    // refresh stops Android/desktop Chrome from popping the "choose an
+    // account" picker when multiple Google accounts are signed in — the
+    // exact reason on-load silent refresh had to be disabled before. With
+    // a hint, prompt:'' refreshes truly silently, so we can now refresh
+    // proactively on open and on tab-focus (see ensureFreshGCalToken).
+    try{if(u.email)localStorage.setItem('los_google_email',u.email);}catch(_){}
     document.getElementById('login').style.display='none';
     document.getElementById('app').style.display='grid';
     document.getElementById('btm').style.display='block';
@@ -4417,6 +4427,34 @@ function _cacheClientIdFromCredential(credential){
   }
   return null;
 }
+// The Google email cached at sign-in. Passed as `hint` on silent refresh so
+// GIS pre-selects the right account and never shows the picker.
+function _getGoogleHint(){try{return localStorage.getItem('los_google_email')||'';}catch(_){return '';}}
+// Persist an access token together with its expiry (epoch ms) so a reopen can
+// tell whether the cached token is still good without first eating a 401.
+function _storeGTok(tok,expiresInSec,pid){
+  const p=pid||_activeProfileId||'main';
+  try{localStorage.setItem('los_gat_'+p,tok);}catch(_){}
+  const exp=Date.now()+Math.max(60,Number(expiresInSec||3600))*1000;
+  try{localStorage.setItem('los_gate_'+p,String(exp));}catch(_){}
+}
+// ms until the (active or given) profile's cached token expires. Returns a
+// negative number when unknown or already expired — i.e. "needs refresh".
+function _gtokMsLeft(pid){
+  try{const e=Number(localStorage.getItem('los_gate_'+(pid||_activeProfileId||'main')));if(e)return e-Date.now();}catch(_){}
+  return -1;
+}
+// If the cached token is missing/expired/within `withinMs` of expiry, attempt a
+// silent refresh and resolve once it's fresh (or the refresh fails). Safe to
+// call on every app open / tab focus: with a hint set it never shows UI, and it
+// no-ops when the token still has plenty of life left. This is the proactive
+// counterpart to the reactive 401 handlers in fetchCalendarList/fetchGCal.
+async function ensureFreshGCalToken(withinMs){
+  if(!getGCalToken())return false;              // not connected — nothing to do
+  const left=_gtokMsLeft();
+  if(left>(withinMs||600000))return true;       // >10min left by default → fine
+  try{return await silentRefreshGCalToken();}catch(_){return false;}
+}
 function initGISTokenClient(){
   if(_gisInitialized)return true;
   // Skip init if GIS is known-broken on this origin — saves the user
@@ -4461,8 +4499,8 @@ function initGISTokenClient(){
       // mid-refresh profile switch silently lands the token in the wrong
       // slot, leaving the original profile permanently "stuck disconnected"
       // even though Settings shows Connected for the new one.
-      const writeKey='los_gat_'+(_refreshingProfileId||_activeProfileId||'main');
-      try{localStorage.setItem(writeKey,newTok);}catch(e){}
+      const writePid=_refreshingProfileId||_activeProfileId||'main';
+      _storeGTok(newTok,resp.expires_in,writePid);
       // Only update the live gTok if we're still on the same profile —
       // otherwise the new profile's render would suddenly use someone
       // else's token.
@@ -4483,8 +4521,19 @@ function initGISTokenClient(){
   // accounts pops the picker for prompt:'' regardless of "silent" intent.
   // The cached token works for up to an hour; if it's expired the 401
   // handler in fetchCalendarList will surface the disconnect banner.
-  if(gTok||(function(){try{return localStorage.getItem(_gatKey());}catch(e){return null;}}())){
-    _scheduleTokenRefresh(3000);
+  if(getGCalToken()){
+    const msLeft=_gtokMsLeft();
+    if(msLeft<10*60000){
+      // Unknown expiry (token cached by an older build → msLeft<0) OR within
+      // 10 min of dying: refresh now so the first fetch of the session doesn't
+      // 401 and flash the disconnect banner. A hint (cached email from a prior
+      // sign-in) keeps this invisible — no account picker.
+      silentRefreshGCalToken();
+    }else{
+      // Plenty of life left — schedule the next silent refresh for 5 min
+      // before the real expiry instead of guessing.
+      _scheduleTokenRefresh(msLeft/1000);
+    }
   }
   return true;
 }
@@ -4547,8 +4596,10 @@ function silentRefreshGCalToken(){
     };
     try{
       // prompt:'' tells GIS to attempt silently — no UI shown if the user
-      // has already granted consent.
-      _gisTokenClient.requestAccessToken({prompt:''});
+      // has already granted consent. `hint` pre-selects the account so a
+      // multi-account browser doesn't pop the "choose an account" picker.
+      const _hint=_getGoogleHint();
+      _gisTokenClient.requestAccessToken(_hint?{prompt:'',hint:_hint}:{prompt:''});
     }catch(e){
       console.warn('[gis] requestAccessToken failed:',e.message);
       if(!settled){settled=true;clearTimeout(safety);_gisPendingResolver=null;resolve(false);}
@@ -4575,7 +4626,7 @@ async function signInGoogle(){
   const p=makeGProvider();
   try{
     const r=await auth.signInWithPopup(p);
-    if(r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem(_gatKey(),gTok);}catch(e){}}
+    if(r.credential?.accessToken){gTok=r.credential.accessToken;_storeGTok(gTok,3500);}
     // Cache the OAuth web client ID so GIS can take over for silent
     // refresh on subsequent loads even without an explicit config entry.
     if(r.credential)_cacheClientIdFromCredential(r.credential);
@@ -4632,7 +4683,7 @@ async function connectGoogleCalendar(){
               resolve:(v)=>{clearTimeout(safetyTimer);orig.resolve(v);},
               reject:(e)=>{clearTimeout(safetyTimer);orig.reject(e);}
             };
-            try{_gisTokenClient.requestAccessToken({prompt:'consent'});}
+            try{const _h=_getGoogleHint();_gisTokenClient.requestAccessToken(_h?{prompt:'consent',hint:_h}:{prompt:'consent'});}
             catch(e){clearTimeout(safetyTimer);_gisPendingResolver=null;reject(e);}
           });
           if(tok)return tok;
@@ -4657,7 +4708,7 @@ async function connectGoogleCalendar(){
         const r=await auth.currentUser.reauthenticateWithPopup(p);
         if(r.credential?.accessToken){
           gTok=r.credential.accessToken;
-          try{localStorage.setItem(_gatKey(),gTok);}catch(e){}
+          _storeGTok(gTok,3500);
           if(r.credential)_cacheClientIdFromCredential(r.credential);
           if(initGISTokenClient())_scheduleTokenRefresh(3500);
           return gTok;
@@ -4704,7 +4755,7 @@ async function revokeAndReconnect(){
   setTimeout(()=>reconnectGCalAndRefresh(),500);
 }
 auth.getRedirectResult().then(r=>{
-  if(r&&r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem(_gatKey(),gTok);sessionStorage.removeItem('los_redirect');}catch(e){}}
+  if(r&&r.credential?.accessToken){gTok=r.credential.accessToken;_storeGTok(gTok,3500);try{sessionStorage.removeItem('los_redirect');}catch(e){}}
 }).catch(e=>{if(e&&e.code)console.warn('Redirect result:',e.code,e.message);});
 
 let _calListCache={ts:0,cals:[]};
@@ -5388,10 +5439,17 @@ document.addEventListener('visibilitychange',()=>{
   // phone propagate without a manual refresh. Events, calendar list, and
   // Tasks all get refreshed.
   if(document.visibilityState==='visible'&&getGCalToken()){
-    gcCache={key:'',events:[]};
-    _gtasksCache={ts:0,items:[]};
-    if(currentRoute==='calendar')rCal();
-    if(currentRoute==='today')rTodayWeek();
+    // Proactively refresh a near-expired token BEFORE re-fetching. A PWA
+    // backgrounded for an hour comes back with a dead token; without this
+    // the first fetch 401s and flashes the disconnect banner before the
+    // reactive refresh catches up. ensureFreshGCalToken no-ops when the
+    // token still has life, and stays silent thanks to the account hint.
+    ensureFreshGCalToken().then(()=>{
+      gcCache={key:'',events:[]};
+      _gtasksCache={ts:0,items:[]};
+      if(currentRoute==='calendar')rCal();
+      if(currentRoute==='today')rTodayWeek();
+    });
   }
   // Force-pull fresh state from Firestore (bypasses local cache) when
   // returning to the tab — so a plan generated on another device shows up
@@ -5459,6 +5517,9 @@ function takeOverDevice(){claimPresence();hideOtherDeviceOverlay();}
 // after they navigate to a route that happens to fetch GCal data.
 async function probeGCalLive(){
   if(!getGCalToken())return;
+  // Refresh a stale/near-expired token up front so the first fetch of the
+  // session succeeds silently instead of 401-ing and flashing the banner.
+  try{await ensureFreshGCalToken();}catch(_){}
   try{
     await fetchCalendarList();
   }catch(e){/* 401 already handled inside fetchCalendarList */}
