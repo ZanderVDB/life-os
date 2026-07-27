@@ -418,6 +418,36 @@ palette + universal search · Settings · Login / splash / onboarding.
   Apricot, Home→Diary "how did yesterday go?" nudge, Notebook/Settings/login
   cosmetic passes, empty-state copy.
 
+### 2026-07-27 — Increment 7 (v204): feedback round 1
+- **Habit trail day numbers:** each trail dot now shows its weekday letter + day
+  number so you can see exactly which days are filled.
+- **Sticky wall reworked** (`UI.homeView`, persisted): **Wall** = a free-form
+  board — stickies are absolutely positioned in an organic scatter and are
+  **draggable** (position saved per task in `t.wx/t.wy`); **List** = a clean
+  structured list for focus / sharing. Toggle in the wall header. Fixes the
+  "rows sized to the tallest note" gripe.
+- **Calendar month view restored** (per user request — it was removed in the
+  redesign). Toggle is now Week · Day · Month; `rCal` dispatches month to the
+  existing `buildMonthView`.
+- **Diary restyled to match the Notebook:** dropped the ruled-lines/hard-spine
+  look; now cream `--paper` A4 sheets with 14px corners, `--shadow-lift`, accent
+  spine + red margin stripe — same visual family as `.nb-page`.
+- **Calendar disconnect — two fixes + diagnostics:**
+  - **Root-cause guard:** the GIS callback no longer nukes the cached token when
+    a *proactive* silent refresh fails but the token is still valid (`_gtokMsLeft()>0`).
+    In an installed PWA the silent refresh routinely fails even mid-session; the
+    v198 proactive refresh was then clearing a good token → "disconnecting the
+    whole time." Now only a genuinely-expired token (or a reactive 401) clears it.
+  - **Diagnostics:** the disconnect banner now appends the real reason
+    (`_humanGisError(_gisLastError)`) so the failure mode is visible.
+  - **Still open:** the >1hr-closed PWA reopen case is a platform limit (Firebase
+    doesn't expose the refresh token; GIS silent refresh can't reach Google's
+    cookies in a standalone PWA). The real fix = server-side auth-code flow with a
+    stored refresh token — proposed to Zander (needs client secret + a service
+    account on Railway). Tracked in task #12.
+- Verified in preview: numbers show, wall drag + list toggle + persistence work,
+  month grid renders (35 cells), diary matches notebook paper. No console errors.
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.

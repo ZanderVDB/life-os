@@ -397,11 +397,38 @@ svg{flex-shrink:0}
 .home-hab-name:hover{color:var(--accent)}
 .home-hab-meta{font-size:11px;color:var(--muted);margin-top:2px}
 .home-hab-trail{display:flex;gap:5px;margin-top:10px}
-.hab-dot{flex:1;height:16px;border-radius:4px;border:1px solid var(--border);background:transparent;cursor:pointer;transition:transform .1s,background .12s;padding:0}
+.hab-dot{flex:1;min-width:0;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;transition:transform .1s,background .12s;padding:3px 0 4px;display:flex;flex-direction:column;align-items:center;gap:1px;font-family:inherit}
+.hab-dot-dow{font-size:8px;font-weight:600;text-transform:uppercase;color:var(--muted-2);line-height:1}
+.hab-dot-num{font-size:11px;font-weight:700;color:var(--muted);line-height:1}
 .hab-dot.done{background:var(--hc,var(--accent));border-color:var(--hc,var(--accent))}
+.hab-dot.done .hab-dot-dow,.hab-dot.done .hab-dot-num{color:#fff}
 .hab-dot.today:not(.done){border:1.5px dashed var(--hc,var(--accent))}
+.hab-dot.today:not(.done) .hab-dot-num{color:var(--text)}
 .hab-dot:hover{transform:translateY(-1px)}
 .home-hab-empty{font-size:13px;color:var(--muted);padding:12px 4px;line-height:1.6}
+/* Home Wall/List toggle */
+.home-viewtog{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.home-viewtog .hvt{font-size:11.5px;font-weight:600;padding:5px 12px;background:var(--surface);color:var(--muted);border:none;cursor:pointer;font-family:inherit}
+.home-viewtog .hvt.on{background:var(--accent);color:var(--accent-ink)}
+/* Free-form draggable wall */
+.home-wall-free{display:block;position:relative;overflow:visible;padding:16px}
+.home-wall-free .wb-sticky{position:absolute;margin:0;width:172px;min-height:auto;touch-action:none;cursor:grab}
+.home-wall-free .wb-sticky:hover{transform:rotate(0deg) scale(1.03);z-index:4}
+.home-wall-free .wb-sticky.wb-dragging{transform:rotate(0deg) scale(1.05);box-shadow:6px 14px 30px rgba(0,0,0,.3);z-index:100;cursor:grabbing}
+/* List view */
+.home-wall-list{display:block;background:none;border:none;box-shadow:none;padding:0;min-height:auto}
+.home-list{display:flex;flex-direction:column;gap:8px}
+.hl-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 14px;cursor:pointer;transition:border-color .12s}
+.hl-row:hover{border-color:var(--border-strong)}
+.hl-check{flex:0 0 auto;width:20px;height:20px;border-radius:6px;border:1.6px solid var(--border-strong);background:transparent;cursor:pointer;transition:all .12s}
+.hl-check:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.hl-body{flex:1;min-width:0}
+.hl-title{font-size:14px;font-weight:500;color:var(--text);line-height:1.3}
+.hl-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.hl-prio{flex:0 0 auto;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:6px;background:var(--surface-2);color:var(--muted)}
+.hl-prio-high{background:var(--red-bg);color:var(--red)}
+.hl-prio-medium{background:var(--gold-bg);color:var(--gold)}
+.hl-prio-low{background:var(--sage-bg);color:var(--sage)}
 /* Home owns its own habit rail, so hide the global right rail (needs-attention
    / next-events / daily-habits) and let the wall take the full width here. */
 body[data-route="today"] .aside-col{display:none!important}
@@ -422,23 +449,24 @@ body[data-route="calendar"] #rail-btn{display:none}
 .diary-bar h2{font-family:'Playfair Display',serif;font-size:26px;font-weight:500;color:var(--text);letter-spacing:-.4px;margin-right:auto}
 .diary-nav{display:flex;align-items:center;gap:6px}
 #diary-date-bar{font-size:13px;color:var(--text-2);min-width:150px;text-align:center;font-weight:500}
-.diary-book{position:relative;display:grid;grid-template-columns:1fr 1fr;background:var(--paper);border-radius:6px;
-  box-shadow:0 20px 50px rgba(60,40,20,.22),0 4px 10px rgba(60,40,20,.12);overflow:hidden;border:1px solid rgba(120,80,40,.16)}
-.diary-book::before{content:'';position:absolute;top:0;bottom:0;left:50%;width:28px;transform:translateX(-50%);
-  background:linear-gradient(90deg,rgba(60,40,20,0),rgba(60,40,20,.13),rgba(60,40,20,0));pointer-events:none;z-index:2}
-.diary-page{padding:28px 30px 40px;min-height:62vh;position:relative;
-  background-image:repeating-linear-gradient(var(--paper) 0 30px,var(--paper-line) 30px 31px)}
-.diary-page.left{box-shadow:inset -16px 0 22px -18px rgba(60,40,20,.4)}
-.diary-page.right{box-shadow:inset 16px 0 22px -18px rgba(60,40,20,.4)}
-.diary-ribbon{position:absolute;top:-4px;right:36px;width:24px;height:60px;background:linear-gradient(180deg,var(--accent),#a2481f);
-  clip-path:polygon(0 0,100% 0,100% 100%,50% 80%,0 100%);z-index:3;box-shadow:0 3px 6px rgba(0,0,0,.22)}
+/* Diary shares the Notebook's page look: cream A4 sheets, rounded corners,
+   soft lift shadow, an accent spine stripe + red vertical margin line — no
+   ruled lines, no hard binding. Two sheets side by side like a spread. */
+.diary-book{position:relative;display:flex;gap:8px;perspective:1600px;align-items:stretch}
+.diary-page{flex:1;position:relative;background:var(--paper);border:1px solid var(--border);border-radius:14px;
+  box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--accent);padding:26px 30px 30px 56px;min-height:64vh;box-sizing:border-box;min-width:0;overflow:hidden}
+.diary-page::before{content:'';position:absolute;left:44px;top:0;bottom:0;width:1px;background:var(--paper-margin);opacity:.5;pointer-events:none}
+.diary-page.right{box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--accent);padding:26px 56px 30px 30px}
+.diary-page.right::before{left:auto;right:44px}
+.diary-ribbon{position:absolute;top:-4px;right:30px;width:22px;height:56px;background:linear-gradient(180deg,var(--accent),#a2481f);
+  clip-path:polygon(0 0,100% 0,100% 100%,50% 78%,0 100%);z-index:5;box-shadow:0 3px 6px rgba(0,0,0,.22)}
 .diary-date{font-family:'Playfair Display',serif;font-size:21px;color:var(--text);line-height:1.1}
 .diary-dayname{font-family:'Kalam',cursive;font-size:14px;color:var(--muted);margin-bottom:16px}
 .diary-page-lbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
 .dj-q{margin-bottom:14px}
 .dj-q label{display:block;font-family:'Kalam',cursive;font-weight:700;font-size:15px;color:var(--text);margin-bottom:2px}
 .dj-field{position:relative}
-.dj-field textarea{width:100%;border:none;background:transparent;resize:none;font-family:'Kalam',cursive;font-size:15px;line-height:30px;color:#3a2a22;padding:0 26px 0 0;outline:none;overflow:hidden}
+.dj-field textarea{width:100%;border:none;background:transparent;resize:none;font-family:'Kalam',cursive;font-size:15px;line-height:1.7;color:#3a2a22;padding:0 26px 0 0;outline:none;overflow:hidden}
 .dj-mic{position:absolute;top:2px;right:0;border:none;background:transparent;font-size:15px;cursor:pointer;opacity:.45;line-height:1}
 .dj-mic:hover{opacity:1}
 .dr-block{margin-bottom:14px}
@@ -452,7 +480,7 @@ body[data-route="calendar"] #rail-btn{display:none}
 .dr-stamp{display:flex;align-items:center;gap:6px;font-family:'Kalam',cursive;font-size:13px;border:1.5px dashed var(--border-strong);border-radius:20px;padding:5px 12px;color:var(--muted);cursor:pointer;transition:all .12s;background:transparent}
 .dr-stamp.on{border-style:solid;border-color:var(--hc,var(--accent));background:color-mix(in srgb,var(--hc,var(--accent)) 15%,var(--paper));color:var(--text)}
 .dr-stamp:hover{transform:translateY(-1px)}
-@media(max-width:800px){.diary-book{grid-template-columns:1fr}.diary-book::before{display:none}.diary-page{min-height:auto}.diary-page.left{box-shadow:none;border-bottom:1px solid var(--border-strong)}.diary-page.right{box-shadow:none}}
+@media(max-width:800px){.diary-book{flex-direction:column}.diary-page{min-height:auto}.diary-page.right{padding:26px 30px 30px 56px;box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--accent)}.diary-page.right::before{left:44px;right:auto}}
 /* ━━━ CALENDAR — unified week lanes (W2) ━━━ */
 .cw-lanes{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .cw-grid{display:grid;grid-template-columns:112px repeat(7,minmax(46px,1fr));min-width:560px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)}
@@ -2926,6 +2954,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
             <div class="section-hdr">
               <h2>The wall</h2>
               <div class="right">
+                <div class="home-viewtog" id="home-viewtog">
+                  <button class="hvt" data-hv="wall" onclick="setHomeView('wall')" title="Free-form board — drag notes around">Wall</button>
+                  <button class="hvt" data-hv="list" onclick="setHomeView('list')" title="Structured list">List</button>
+                </div>
                 <button class="btn btn-primary btn-sm" onclick="openNewTaskModal()">+ Add task</button>
                 <button class="wb-pin" onclick="boardAddSticky()">📌 New sticky</button>
               </div>
@@ -3000,6 +3032,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <div class="cv-row">
                 <button class="cv" onclick="setCV('week')">Week</button>
                 <button class="cv" onclick="setCV('day')">Day</button>
+                <button class="cv" onclick="setCV('month')">Month</button>
               </div>
             </div>
           </div>
@@ -3639,7 +3672,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v203';
+const APP_VERSION='v204';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4582,7 +4615,14 @@ function initGISTokenClient(){
         // Silent refresh failed — clear cached token so banner shows.
         // The user will need to click Connect for a fresh consent.
         if(resp.error==='access_denied'||resp.error==='consent_required'||resp.error==='interaction_required'){
-          gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}
+          // Only drop the cached token if it's ACTUALLY expired. A proactive/
+          // early silent refresh routinely fails in an installed PWA (the GIS
+          // iframe can't reach Google's cookies) even while the cached token
+          // is still perfectly valid — clearing it there is exactly the
+          // "calendar keeps disconnecting the whole time" complaint. Keep a
+          // still-valid token; the reactive 401 handlers clear it when it
+          // genuinely dies.
+          if(_gtokMsLeft()<=0){gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}}
         }
         // Origin mismatch / invalid client come back here too — disable
         // GIS so we don't keep retrying a setup that can't work on this
@@ -7255,26 +7295,19 @@ function rBoard(){
 }
 
 // ───────── HOME — the wall (merged tasks) + habit rail ─────────
-// The wall shows EVERY open task — Daily and General folded into one surface
-// (the split "wasn't functional"). Stickies reuse the board markup so
-// boardComplete / boardToggleStep / openTaskModal all work unchanged.
-function rHomeWall(){
-  const el=document.getElementById('home-wall');if(!el)return;
-  let tasks=(S.tasks||[]).filter(t=>!t.done);
-  tasks.sort((a,b)=>{
-    const da=a.dailyDate?0:1,db=b.dailyDate?0:1;
-    if(da!==db)return da-db;
-    return (PO[a.priority]??99)-(PO[b.priority]??99);
-  });
-  if(!tasks.length){el.innerHTML=`<div class="wb-empty">Nothing on the wall.<br><button class="wb-pin" onclick="boardAddSticky()">📌 Pin a task</button></div>`;return;}
-  el.innerHTML=tasks.map(t=>{
-    const h=_hashStr(t.id);const rot=(h%7)-3;const col=h%5;
-    const hasSteps=Array.isArray(t.steps)&&t.steps.length;
-    let body='';
-    if(hasSteps){body=`<div class="wb-steps">${t.steps.map(s=>`<div class="wb-step${s.done?' done':''}" onclick="boardToggleStep('${t.id}','${s.id}')"><span class="wb-step-box">${s.done?'✓':''}</span><span class="wb-step-txt">${esc(s.text||'')}</span></div>`).join('')}</div>`;}
-    else if(t.notes&&t.notes.trim()){body=`<div class="wb-note-body">${esc(t.notes)}</div>`;}
-    const time=t.scheduledTime?`<span class="wb-time">${esc(t.scheduledTime)}</span>`:'';
-    return `<div class="wb-sticky wb-c${col}" data-tid="${t.id}" style="--rot:${rot}deg">
+// The wall shows EVERY open task — Daily and General folded into one surface.
+// Two modes (UI.homeView, persisted): "wall" = a free-form board you can drag
+// stickies around on (positions saved per task in t.wx/t.wy); "list" = a
+// structured list for focus / showing someone. Stickies reuse the board markup
+// so boardComplete / boardToggleStep / openTaskModal all work unchanged.
+function _wallStickyHTML(t){
+  const h=_hashStr(t.id);const rot=(h%7)-3;const col=h%5;
+  const hasSteps=Array.isArray(t.steps)&&t.steps.length;
+  let body='';
+  if(hasSteps){body=`<div class="wb-steps">${t.steps.map(s=>`<div class="wb-step${s.done?' done':''}" onclick="boardToggleStep('${t.id}','${s.id}')"><span class="wb-step-box">${s.done?'✓':''}</span><span class="wb-step-txt">${esc(s.text||'')}</span></div>`).join('')}</div>`;}
+  else if(t.notes&&t.notes.trim()){body=`<div class="wb-note-body">${esc(t.notes)}</div>`;}
+  const time=t.scheduledTime?`<span class="wb-time">${esc(t.scheduledTime)}</span>`:'';
+  return `<div class="wb-sticky wb-c${col}" data-tid="${t.id}" style="--rot:${rot}deg">
       <span class="wb-pinhead"></span>
       ${time}
       <div class="wb-sticky-title">${esc(t.text||'')}</div>
@@ -7284,7 +7317,98 @@ function rHomeWall(){
         <button class="wb-btn wb-edit" onclick="openTaskModal('${t.id}')">✎ edit</button>
       </div>
     </div>`;
-  }).join('');
+}
+function _homeListRowHTML(t){
+  const hasSteps=Array.isArray(t.steps)&&t.steps.length;
+  const meta=[];
+  if(hasSteps)meta.push(`${t.steps.filter(s=>s.done).length}/${t.steps.length} steps`);
+  if(t.scheduledTime)meta.push(esc(t.scheduledTime));
+  if(t.dailyDate)meta.push('today');
+  const prio=t.priority?`<span class="hl-prio hl-prio-${esc(t.priority)}">${esc(t.priority)}</span>`:'';
+  return `<div class="hl-row" onclick="openTaskModal('${t.id}')">
+    <button class="hl-check" onclick="event.stopPropagation();boardComplete('${t.id}')" title="Mark done"></button>
+    <div class="hl-body"><div class="hl-title">${esc(t.text||'')}</div>${meta.length?`<div class="hl-meta">${meta.join(' · ')}</div>`:''}</div>
+    ${prio}
+  </div>`;
+}
+function setHomeView(v){
+  UI.homeView=v==='list'?'list':'wall';
+  try{localStorage.setItem('los_home_view',UI.homeView);}catch(_){}
+  rHomeWall();
+}
+function _homeSortTasks(){
+  return (S.tasks||[]).filter(t=>!t.done).sort((a,b)=>{
+    const da=a.dailyDate?0:1,db=b.dailyDate?0:1;
+    if(da!==db)return da-db;
+    return (PO[a.priority]??99)-(PO[b.priority]??99);
+  });
+}
+function rHomeWall(){
+  const el=document.getElementById('home-wall');if(!el)return;
+  if(!UI.homeView){try{UI.homeView=(localStorage.getItem('los_home_view')==='list')?'list':'wall';}catch(_){UI.homeView='wall';}}
+  document.querySelectorAll('.hvt').forEach(b=>b.classList.toggle('on',b.dataset.hv===UI.homeView));
+  const list=UI.homeView==='list';
+  el.classList.toggle('home-wall-list',list);
+  el.classList.toggle('home-wall-free',!list);
+  const tasks=_homeSortTasks();
+  if(!tasks.length){el.style.minHeight='';el.innerHTML=`<div class="wb-empty">Nothing on the wall.<br><button class="wb-pin" onclick="boardAddSticky()">📌 Pin a task</button></div>`;return;}
+  if(list){el.style.minHeight='';el.innerHTML=`<div class="home-list">${tasks.map(_homeListRowHTML).join('')}</div>`;return;}
+  el.innerHTML=tasks.map(_wallStickyHTML).join('');
+  setTimeout(()=>_wallLayout(el,tasks),0);
+}
+// Position the free-form stickies: saved (t.wx/t.wy) or an organic scattered
+// auto-layout, then grow the board to fit. Binds drag once.
+function _wallLayout(el,tasks){
+  const W=el.clientWidth||el.getBoundingClientRect().width||800;
+  const colW=200,rowH=178,cols=Math.max(1,Math.floor((W-8)/colW));
+  let maxY=0;
+  tasks.forEach((t,i)=>{
+    const node=el.querySelector(`.wb-sticky[data-tid="${t.id}"]`);if(!node)return;
+    let x,y;
+    if(typeof t.wx==='number'&&typeof t.wy==='number'){x=t.wx;y=t.wy;}
+    else{const col=i%cols,row=Math.floor(i/cols),h=_hashStr(t.id);x=col*colW+6+(h%14);y=row*rowH+6+((h>>4)%22);}
+    x=Math.max(0,Math.min(x,Math.max(0,W-184)));y=Math.max(0,y);
+    node.style.left=x+'px';node.style.top=y+'px';
+    maxY=Math.max(maxY,y+node.offsetHeight);
+  });
+  el.style.minHeight=(maxY+30)+'px';
+  if(!el._wallDragBound){
+    el.addEventListener('pointerdown',_wallPointerDown);
+    window.addEventListener('pointermove',_wallPointerMove);
+    window.addEventListener('pointerup',_wallPointerUp);
+    el._wallDragBound=true;
+  }
+}
+let _wallDrag=null;
+function _wallPointerDown(e){
+  const el=document.getElementById('home-wall');if(!el||!el.classList.contains('home-wall-free'))return;
+  const sticky=e.target.closest('.wb-sticky');if(!sticky)return;
+  if(e.target.closest('button')||e.target.closest('.wb-step'))return; // let interactions through
+  const rect=sticky.getBoundingClientRect();
+  _wallDrag={tid:sticky.dataset.tid,sticky,offX:e.clientX-rect.left,offY:e.clientY-rect.top,el,moved:false};
+  sticky.classList.add('wb-dragging');
+  try{sticky.setPointerCapture(e.pointerId);}catch(_){}
+  e.preventDefault();
+}
+function _wallPointerMove(e){
+  if(!_wallDrag)return;
+  const {sticky,offX,offY,el}=_wallDrag;const wrect=el.getBoundingClientRect();
+  let x=e.clientX-wrect.left-offX+el.scrollLeft;
+  let y=e.clientY-wrect.top-offY+el.scrollTop;
+  x=Math.max(0,Math.min(x,Math.max(0,el.clientWidth-sticky.offsetWidth)));
+  y=Math.max(0,y);
+  sticky.style.left=x+'px';sticky.style.top=y+'px';
+  _wallDrag.lastX=x;_wallDrag.lastY=y;_wallDrag.moved=true;
+}
+function _wallPointerUp(){
+  if(!_wallDrag)return;
+  const {tid,sticky,moved,lastX,lastY,el}=_wallDrag;
+  sticky.classList.remove('wb-dragging');
+  if(moved){
+    const t=(S.tasks||[]).find(x=>x.id===tid);
+    if(t){t.wx=Math.round(lastX);t.wy=Math.round(lastY);const need=lastY+sticky.offsetHeight+30;if(need>(parseInt(el.style.minHeight)||0))el.style.minHeight=need+'px';svAll();}
+  }
+  _wallDrag=null;
 }
 // Streak ring: a donut in the habit's colour with the current streak in the
 // centre. Fraction = progress toward the all-time best.
@@ -7304,8 +7428,9 @@ function rHomeHabits(){
     const color=habitColor(h);
     const frac=st.max>0?st.current/st.max:(st.current>0?1:0);
     const trail=days.map(ds=>{
-      const done=set.has(ds);const isToday=ds===t;
-      return `<button class="hab-dot${done?' done':''}${isToday?' today':''}" style="--hc:${color}" title="${ds}${done?' · done':''}" onclick="toggleHabitDate('${h.id}','${ds}')"></button>`;
+      const done=set.has(ds);const isToday=ds===t;const dnum=Number(ds.slice(8));
+      const dow=new Date(ds+'T12:00:00').toLocaleDateString('en-ZA',{weekday:'narrow'});
+      return `<button class="hab-dot${done?' done':''}${isToday?' today':''}" style="--hc:${color}" title="${ds}${done?' · done':''}" onclick="toggleHabitDate('${h.id}','${ds}')"><span class="hab-dot-dow">${dow}</span><span class="hab-dot-num">${dnum}</span></button>`;
     }).join('');
     return `<div class="home-hab" style="--hc:${color}">
       <div class="home-hab-top">${_habRing(color,frac,st.current)}
@@ -7854,10 +7979,10 @@ async function rCal(){
   // so add/edit/tick stays live without needing a full page render.
   try{rReminders();}catch(_){}
   const el=document.getElementById('cal');if(!el)return;
-  // Redesign: week + day only. Coerce any legacy view (3day/month) to week.
-  if(UI.calView!=='day'&&UI.calView!=='week')UI.calView='week';
+  // Redesign: week + day + month (3-day removed). Coerce anything else to week.
+  if(!['day','week','month'].includes(UI.calView))UI.calView='week';
   const ttl=document.getElementById('cal-ttl');if(ttl){ttl.textContent=getCalTitle();ttl.onclick=pickCalDate;ttl.style.cursor='pointer';ttl.title='Pick a date';}
-  document.querySelectorAll('.cv-row .cv').forEach((b,i)=>b.classList.toggle('on',['week','day'][i]===UI.calView));
+  document.querySelectorAll('.cv-row .cv').forEach((b,i)=>b.classList.toggle('on',['week','day','month'][i]===UI.calView));
   const notice=document.getElementById('gcal-notice');
   if(notice)notice.style.display=getGCalToken()?'none':'flex';
   const todayBtn=document.getElementById('cal-today-btn');
@@ -7889,6 +8014,13 @@ async function rCal(){
     const ds=localDs(UI.calDate);
     const isToday=UI.calDate.toDateString()===today.toDateString();
     el.innerHTML=buildDayTimeline(UI.calDate,ds,isToday,gcEvs);
+  } else if(UI.calView==='month'){
+    // MONTH — restored per user request. The month grid the user built
+    // (events overview); tap a day to open its detail / habits.
+    let gcExtra=[];try{gcExtra=await getGCForMonth(y,m+1);}catch(e){}
+    let gcPrev=[];try{gcPrev=await getGCForMonth(y,m-1);}catch(e){}
+    const allGc=[...gcEvs,...gcExtra,...gcPrev];
+    el.innerHTML=buildMonthView(y,m,today,allGc);
   } else {
     // WEEK — unified lane grid (events / reminders / one lane per habit).
     const s=new Date(UI.calDate);const dow=UI.calDate.getDay();s.setDate(UI.calDate.getDate()+(dow===0?-6:1-dow));
@@ -16657,6 +16789,14 @@ function refreshGCalWarn(){
   const el=document.getElementById('gcal-warn');if(!el)return;
   const hasTok=!!getGCalToken();
   el.style.display=(CU&&!hasTok)?'flex':'none';
+  // Surface WHY it dropped so a disconnect is diagnosable at a glance (and so
+  // Zander can tell me the exact reason). _gisLastError is set by the GIS
+  // callback; _humanGisError turns the terse code into a sentence.
+  const txt=el.querySelector('.gcal-warn-text');
+  if(txt&&CU&&!hasTok){
+    const reason=(typeof _gisLastError!=='undefined'&&_gisLastError)?(' — '+_humanGisError(_gisLastError)):'';
+    txt.textContent="Google Calendar disconnected, tap to reconnect"+reason;
+  }
 }
 // Token expires after ~1hr (Google access token lifetime). If the user
 // keeps the app open longer than that, the warning won't appear until
