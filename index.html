@@ -406,6 +406,47 @@ svg{flex-shrink:0}
 body[data-route="today"] .aside-col{display:none!important}
 body[data-route="today"] .main-wrap{grid-template-columns:1fr}
 body[data-route="today"] #rail-btn{display:none}
+/* Diary also owns its full width — hide the global right rail there too. */
+body[data-route="diary"] .aside-col{display:none!important}
+body[data-route="diary"] .main-wrap{grid-template-columns:1fr}
+body[data-route="diary"] #rail-btn{display:none}
+/* ━━━ DIARY — classic journal book ━━━ */
+.diary-wrap{max-width:1000px;margin:0 auto}
+.diary-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.diary-bar h2{font-family:'Playfair Display',serif;font-size:26px;font-weight:500;color:var(--text);letter-spacing:-.4px;margin-right:auto}
+.diary-nav{display:flex;align-items:center;gap:6px}
+#diary-date-bar{font-size:13px;color:var(--text-2);min-width:150px;text-align:center;font-weight:500}
+.diary-book{position:relative;display:grid;grid-template-columns:1fr 1fr;background:var(--paper);border-radius:6px;
+  box-shadow:0 20px 50px rgba(60,40,20,.22),0 4px 10px rgba(60,40,20,.12);overflow:hidden;border:1px solid rgba(120,80,40,.16)}
+.diary-book::before{content:'';position:absolute;top:0;bottom:0;left:50%;width:28px;transform:translateX(-50%);
+  background:linear-gradient(90deg,rgba(60,40,20,0),rgba(60,40,20,.13),rgba(60,40,20,0));pointer-events:none;z-index:2}
+.diary-page{padding:28px 30px 40px;min-height:62vh;position:relative;
+  background-image:repeating-linear-gradient(var(--paper) 0 30px,var(--paper-line) 30px 31px)}
+.diary-page.left{box-shadow:inset -16px 0 22px -18px rgba(60,40,20,.4)}
+.diary-page.right{box-shadow:inset 16px 0 22px -18px rgba(60,40,20,.4)}
+.diary-ribbon{position:absolute;top:-4px;right:36px;width:24px;height:60px;background:linear-gradient(180deg,var(--accent),#a2481f);
+  clip-path:polygon(0 0,100% 0,100% 100%,50% 80%,0 100%);z-index:3;box-shadow:0 3px 6px rgba(0,0,0,.22)}
+.diary-date{font-family:'Playfair Display',serif;font-size:21px;color:var(--text);line-height:1.1}
+.diary-dayname{font-family:'Kalam',cursive;font-size:14px;color:var(--muted);margin-bottom:16px}
+.diary-page-lbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+.dj-q{margin-bottom:14px}
+.dj-q label{display:block;font-family:'Kalam',cursive;font-weight:700;font-size:15px;color:var(--text);margin-bottom:2px}
+.dj-field{position:relative}
+.dj-field textarea{width:100%;border:none;background:transparent;resize:none;font-family:'Kalam',cursive;font-size:15px;line-height:30px;color:#3a2a22;padding:0 26px 0 0;outline:none;overflow:hidden}
+.dj-mic{position:absolute;top:2px;right:0;border:none;background:transparent;font-size:15px;cursor:pointer;opacity:.45;line-height:1}
+.dj-mic:hover{opacity:1}
+.dr-block{margin-bottom:14px}
+.dr-block-hd{font-family:'Kalam',cursive;font-weight:700;font-size:15px;color:var(--text)}
+.dr-block-sub{font-size:11px;color:var(--muted);margin-bottom:4px}
+.dr-item{display:flex;gap:9px;align-items:flex-start;font-family:'Kalam',cursive;font-size:14.5px;line-height:1.45;color:#3a2a22;cursor:pointer;padding:3px 0}
+.dr-box{flex:0 0 18px;width:18px;height:18px;border:1.6px solid var(--border-strong);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-top:1px;color:#fff;background:transparent}
+.dr-item.done .dr-box{background:var(--accent);border-color:var(--accent)}
+.dr-item.done .dr-t{opacity:.5;text-decoration:line-through}
+.dr-stamps{display:flex;flex-wrap:wrap;gap:8px}
+.dr-stamp{display:flex;align-items:center;gap:6px;font-family:'Kalam',cursive;font-size:13px;border:1.5px dashed var(--border-strong);border-radius:20px;padding:5px 12px;color:var(--muted);cursor:pointer;transition:all .12s;background:transparent}
+.dr-stamp.on{border-style:solid;border-color:var(--hc,var(--accent));background:color-mix(in srgb,var(--hc,var(--accent)) 15%,var(--paper));color:var(--text)}
+.dr-stamp:hover{transform:translateY(-1px)}
+@media(max-width:800px){.diary-book{grid-template-columns:1fr}.diary-book::before{display:none}.diary-page{min-height:auto}.diary-page.left{box-shadow:none;border-bottom:1px solid var(--border-strong)}.diary-page.right{box-shadow:none}}
 /* ━━━ TIP CARD ━━━ */
 .tip-card{
   background:linear-gradient(135deg,var(--peach-bg) 0%,var(--gold-bg) 42%,var(--lavender-bg) 100%);
@@ -2745,6 +2786,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
         <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
         <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
+        <a href="#diary" data-route-link="diary"><span class="ic"><svg width="17" height="17"><use href="#i-learn"/></svg></span><span class="label">Diary</span><span class="dot"></span></a>
         <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
       </nav>
       <div class="s-sep"></div>
@@ -2793,6 +2835,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
       <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
       <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
+      <a href="#diary" data-route-link="diary" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-learn"/></svg></span><span>Diary</span></a>
       <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
       <div class="m-drawer-foot">
         <a href="#settings" data-route-link="settings" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
@@ -2856,6 +2899,24 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <button class="wb-pin" onclick="boardAddSticky()" title="Pin a new task">📌 New sticky</button>
         </div>
         <div class="wb-surface" id="wb-surface"></div>
+      </div>
+
+      <!-- DIARY — classic journal book (B1): journal on the left page,
+           routine + habit stamps on the right, ribbon marks today, flip
+           back through past days. Reads/writes S.routineLog[iso]. -->
+      <div class="route" data-route="diary">
+        <div class="diary-wrap">
+          <div class="diary-bar">
+            <h2>Diary</h2>
+            <div class="diary-nav">
+              <button class="btn btn-ghost btn-sm" onclick="diaryNav(-1)" title="Previous day" aria-label="Previous day">‹</button>
+              <span id="diary-date-bar"></span>
+              <button class="btn btn-ghost btn-sm" id="diary-next" onclick="diaryNav(1)" title="Next day" aria-label="Next day">›</button>
+              <button class="btn btn-ghost btn-sm" onclick="diaryToday()">Today</button>
+            </div>
+          </div>
+          <div id="diary-body"></div>
+        </div>
       </div>
 
       <!-- CALENDAR -->
@@ -3534,7 +3595,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v199';
+const APP_VERSION='v200';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4001,8 +4062,8 @@ function setTheme(t){
 // one-third down the screen" symptom caused by browser auto-scroll to
 // elements whose id happened to match the route hash.
 try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}
-const ROUTES=['today','board','calendar','projects','habits','people','brain','notebook','settings'];
-const ROUTE_TITLES={today:'Home',board:'Board',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',notebook:'Notebook',settings:'Settings'};
+const ROUTES=['today','board','calendar','projects','habits','people','brain','diary','notebook','settings'];
+const ROUTE_TITLES={today:'Home',board:'Board',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',diary:'Diary',notebook:'Notebook',settings:'Settings'};
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
@@ -4047,6 +4108,7 @@ function setRoute(r,skipHash){
   // The Daily routine lives in a box on the Today page now, so render it
   // whenever we land on Today — along with the morning brief + weekly review.
   if(r==='today'){try{rHomeWall();}catch(_){}try{rHomeHabits();}catch(_){}}
+  if(r==='diary')try{rDiary();}catch(_){}
   if(r==='board')try{rBoard();}catch(_){}
   // People grid needs an explicit render on route entry — otherwise the
   // grid stays at whatever was last rendered (initially the empty stub
@@ -6243,7 +6305,7 @@ function toggleHabitDate(id,ds){
   // doneToday / lastDate are transient derived fields — delete them so they
   // don't get persisted and trigger legacy-seed behaviour on other devices
   delete h.doneToday;delete h.lastDate;
-  svAllNow();rHabits();rCal();try{rHomeHabits();}catch(_){}
+  svAllNow();rHabits();rCal();try{rHomeHabits();}catch(_){}try{if(currentRoute==='diary')rDiary();}catch(_){}
 }
 // Back-compat shim: legacy callers go through the modal flow now.
 function qaAddHabitFull(){openNewHabitModal();}
@@ -8703,6 +8765,54 @@ function routineNav(delta){
   UI.routineDate=next;rRoutine();
 }
 function routineToday(){UI.routineDate=tod();rRoutine();}
+// ───────── DIARY — classic journal book (B1) ─────────
+// A two-page spread over S.routineLog[iso]: journal questions on the left,
+// routine checklist + habit stamps on the right. Ribbon marks today. Its own
+// day cursor (UI.diaryDate) so it's independent of anything else.
+function diaryNav(delta){const cur=UI.diaryDate||tod();const next=addDaysToDateStr(cur,delta);if(delta>0&&next>tod())return;UI.diaryDate=next;rDiary();}
+function diaryToday(){UI.diaryDate=tod();rDiary();}
+function diaryToggleRoutine(itemId){
+  const iso=UI.diaryDate||tod();const log=_routineDayLog(iso);
+  // Explicit boolean (not delete) — Firestore merge won't remove absent keys.
+  log.checks[itemId]=!log.checks[itemId];
+  svAll();rDiary();
+}
+function rDiary(){
+  const el=document.getElementById('diary-body');if(!el)return;
+  const iso=UI.diaryDate||tod();UI.diaryDate=iso;
+  const today=tod();const isToday=iso===today;
+  const dd=new Date(Number(iso.slice(0,4)),Number(iso.slice(5,7))-1,Number(iso.slice(8,10)));
+  const dateLbl=dd.toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'});
+  const dayName=dd.toLocaleDateString('en-ZA',{weekday:'long'});
+  const log=_routineDayLog(iso);
+  const journal=ROUTINE_JOURNAL.map(j=>{
+    const v=log.journal[j.id]||'';
+    return `<div class="dj-q"><label>${esc(j.q)}</label><div class="dj-field"><textarea id="dj-${j.id}" rows="${j.big?3:2}" placeholder="…" onblur="saveJournalFor('${iso}','${j.id}',this.value)">${esc(v)}</textarea><button class="dj-mic" title="Dictate" onclick="fieldMic('dj-${j.id}',this)">🎙</button></div></div>`;
+  }).join('');
+  const blocks=_routineBlocks(iso);
+  const routine=(blocks||[]).map(b=>`<div class="dr-block"><div class="dr-block-hd">${esc(b.title||'')}</div>${b.sub?`<div class="dr-block-sub">${esc(b.sub)}</div>`:''}${(b.items||[]).map(it=>{const on=!!log.checks[it.id];return `<div class="dr-item${on?' done':''}" onclick="diaryToggleRoutine('${it.id}')"><span class="dr-box">${on?'✓':''}</span><span class="dr-t">${esc(it.t||'')}</span></div>`;}).join('')}</div>`).join('');
+  const stamps=(S.habits||[]).length?(S.habits).map(h=>{const on=(h.checkedDates||[]).includes(iso);const color=habitColor(h);return `<button class="dr-stamp${on?' on':''}" style="--hc:${color}" onclick="toggleHabitDate('${h.id}','${iso}')"><span class="dr-stamp-ck">${on?'✓':'○'}</span>${esc(h.name)}</button>`;}).join(''):'<span style="font-size:12px;color:var(--muted)">No habits yet.</span>';
+  el.innerHTML=`
+   <div class="diary-book">
+     ${isToday?'<div class="diary-ribbon" title="Today"></div>':''}
+     <div class="diary-page left">
+       <div class="diary-date">${esc(dateLbl)}</div>
+       <div class="diary-dayname">${esc(dayName)}${isToday?' · today':''}</div>
+       <div class="diary-page-lbl">Journal</div>
+       ${journal}
+     </div>
+     <div class="diary-page right">
+       <div class="diary-page-lbl">Routine</div>
+       ${routine||'<div style="font-size:13px;color:var(--muted);margin-bottom:16px">No routine set — edit it in Settings → Routine.</div>'}
+       <div class="diary-page-lbl" style="margin-top:22px">Habit stamps</div>
+       <div class="dr-stamps">${stamps}</div>
+     </div>
+   </div>`;
+  const bar=document.getElementById('diary-date-bar');if(bar)bar.textContent=dateLbl;
+  const nx=document.getElementById('diary-next');if(nx)nx.disabled=isToday;
+  // Auto-grow the journal textareas to fit their content.
+  setTimeout(()=>{el.querySelectorAll('.dj-field textarea').forEach(t=>{t.style.height='auto';t.style.height=Math.max(t.scrollHeight,30)+'px';});},0);
+}
 function routineToggle(itemId){
   const iso=UI.routineDate||tod();
   const log=_routineDayLog(iso);
@@ -16405,6 +16515,7 @@ function render(){
   rUpcom();rCal();rFocus();rHabits();rTasks();rBuilds();rIdeas();rResources();rNotes();
   rAttention();rTodayWeek();setBrainTab(UI.brainTab);
   try{rHomeWall();rHomeHabits();}catch(_){}
+  if(currentRoute==='diary')try{rDiary();}catch(_){}
   refreshTipCard();
   refreshGCalWarn();
   if(currentRoute==='settings')rSettings();

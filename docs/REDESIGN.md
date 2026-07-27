@@ -344,6 +344,26 @@ palette + universal search · Settings · Login / splash / onboarding.
   Fold/remove once the rail gains management. **Morning journal prompt is paused**
   — it returns when Diary is built (next).
 
+### 2026-07-27 — Increment 3 (v200): Diary = classic journal book
+- New **`diary`** route (added to ROUTES/ROUTE_TITLES + desktop & mobile nav with
+  the `#i-learn` book icon). Placed Home · … · Brain · **Diary** · Notebook.
+- **`rDiary()`** renders a two-page book over `S.routineLog[iso]`:
+  - **Left page = Journal:** the 5 `ROUTINE_JOURNAL` questions as handwriting
+    (Kalam) fields on ruled paper, each with a mic (`fieldMic`); saved via the
+    existing `saveJournalFor(iso,…)`.
+  - **Right page = Routine + Habit stamps:** `_routineBlocks(iso)` checklist
+    (`diaryToggleRoutine`) + a habit stamp per `S.habits` (tap = `toggleHabitDate`).
+  - Book chrome: ruled-paper gradient, centre-spine shadow, burnt-orange **ribbon**
+    on today, prev/next day (future disabled) + Today. Own cursor `UI.diaryDate`.
+  - Global right rail hidden on this route too (full-width book).
+- Wired into `setRoute('diary')`, `render()`, and `toggleHabitDate` (stamp refresh).
+- Verified in preview (desktop): book renders, journal values persist, routine
+  checks + habit stamps toggle, ribbon on today, no console errors. Mobile stacks
+  via `@media(max-width:800px)`.
+- **Journaling is restored** (it was paused when Home was rebuilt). Follow-up idea:
+  a small "How did yesterday go? →" nudge on Home that opens Diary to yesterday
+  (the old proactive prompt) — parked, offer to Zander.
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.
