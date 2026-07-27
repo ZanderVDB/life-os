@@ -364,6 +364,27 @@ palette + universal search · Settings · Login / splash / onboarding.
   a small "How did yesterday go? →" nudge on Home that opens Diary to yesterday
   (the old proactive prompt) — parked, offer to Zander.
 
+### 2026-07-27 — Increment 4 (v201): Calendar — unified W2 lanes + DV1 timeline
+- **Unified** the calendar: removed the events/reminders/habits **mode toggle**
+  and the **3-day + month** views. Week + Day only now.
+- **Week = `buildWeekLanes()`** (W2): a CSS-grid `112px + 7×1fr` with rows —
+  **Events** (GCal non-task via `evChip`), **Reminders** (local `S.reminders`
+  that `reminderFiresOn` + Google tasks), then **one lane per habit** as a
+  tap-to-fill tick grid (`toggleHabitDate`) with today highlight, rest-day fade,
+  future-day lockout. This is the back-fill grid.
+- **Day = `buildDayTimeline()`** (DV1): all-day/reminder band on top, a 7am–10pm
+  hour spine with timed events (`evChip`, tap empty slot → `openNewEvent` at that
+  hour), and a right **dock** with today's habits (tickable) + a jump to the
+  journal for that day.
+- `rCal` coerces any legacy view to week/day and dispatches to the two builders;
+  old builders remain defined but unused. Reminders management panel
+  (`#cal-reminders`) + coming-up kept below the grid.
+- Global right rail hidden on the calendar route too (full-width grid).
+- Verified in preview (mobile + desktop): week lanes render with event/reminder
+  chips + habit tick grid (today highlight, rest-day fade); day timeline has the
+  hour spine + band + habit dock. No console errors. Event/reminder editing works
+  via the existing `evChip` delegate + `openReminderModal`.
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.

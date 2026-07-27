@@ -406,10 +406,15 @@ svg{flex-shrink:0}
 body[data-route="today"] .aside-col{display:none!important}
 body[data-route="today"] .main-wrap{grid-template-columns:1fr}
 body[data-route="today"] #rail-btn{display:none}
-/* Diary also owns its full width — hide the global right rail there too. */
-body[data-route="diary"] .aside-col{display:none!important}
-body[data-route="diary"] .main-wrap{grid-template-columns:1fr}
-body[data-route="diary"] #rail-btn{display:none}
+/* Diary + Calendar own their full width — hide the global right rail there
+   too (habits live in the calendar lanes / Home rail now, and the calendar
+   itself is the events surface, so the rail is redundant). */
+body[data-route="diary"] .aside-col,
+body[data-route="calendar"] .aside-col{display:none!important}
+body[data-route="diary"] .main-wrap,
+body[data-route="calendar"] .main-wrap{grid-template-columns:1fr}
+body[data-route="diary"] #rail-btn,
+body[data-route="calendar"] #rail-btn{display:none}
 /* ━━━ DIARY — classic journal book ━━━ */
 .diary-wrap{max-width:1000px;margin:0 auto}
 .diary-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
@@ -447,6 +452,45 @@ body[data-route="diary"] #rail-btn{display:none}
 .dr-stamp.on{border-style:solid;border-color:var(--hc,var(--accent));background:color-mix(in srgb,var(--hc,var(--accent)) 15%,var(--paper));color:var(--text)}
 .dr-stamp:hover{transform:translateY(-1px)}
 @media(max-width:800px){.diary-book{grid-template-columns:1fr}.diary-book::before{display:none}.diary-page{min-height:auto}.diary-page.left{box-shadow:none;border-bottom:1px solid var(--border-strong)}.diary-page.right{box-shadow:none}}
+/* ━━━ CALENDAR — unified week lanes (W2) ━━━ */
+.cw-lanes{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.cw-grid{display:grid;grid-template-columns:112px repeat(7,minmax(46px,1fr));min-width:560px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)}
+.cw-grid>div{border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.cw-hd{background:var(--surface-2);text-align:center;padding:8px 4px;cursor:pointer}
+.cw-hd.today{background:color-mix(in srgb,var(--accent) 15%,var(--surface-2))}
+.cw-hd .dn{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.cw-hd .dd{font-size:15px;color:var(--text);font-weight:600}
+.cw-hd.today .dd{color:var(--accent)}
+.cw-lbl{background:var(--surface-2);font-size:12px;font-weight:600;color:var(--text-2);padding:8px 10px;display:flex;align-items:center;gap:7px}
+.cw-lbl .hd-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.cw-lbl-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cw-cell{padding:5px;min-height:40px}
+.cw-evs{display:flex;flex-direction:column;gap:3px}
+.cw-hcell{cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:40px}
+.cw-hcell .tick{width:22px;height:22px;border-radius:6px;border:1.6px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;transition:transform .1s}
+.cw-hcell.done .tick{background:var(--hc,var(--accent));border-color:var(--hc,var(--accent))}
+.cw-hcell.today:not(.done) .tick{border-color:var(--hc,var(--accent));border-style:dashed}
+.cw-hcell.rest{opacity:.45}.cw-hcell.rest .tick{border:none;color:var(--muted-2)}
+.cw-hcell.future{opacity:.3;pointer-events:none}
+.cw-hcell:hover .tick{transform:scale(1.1)}
+.cw-rem-chip{font-size:11px;background:var(--gold-bg);color:var(--text);border-radius:6px;padding:2px 7px;cursor:pointer;border:1px solid color-mix(in srgb,var(--gold) 40%,var(--border));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+/* ━━━ CALENDAR — day timeline (DV1) ━━━ */
+.dt-wrap{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px;align-items:start}
+@media(max-width:760px){.dt-wrap{grid-template-columns:1fr}}
+.dt-band{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.dt-spine{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)}
+.dt-row{display:flex;gap:10px;border-top:1px solid var(--border);min-height:42px;padding:5px 8px}
+.dt-row:first-child{border-top:none}
+.dt-h{flex:0 0 34px;font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;padding-top:4px}
+.dt-slot{flex:1;display:flex;flex-direction:column;gap:3px;min-height:32px;border-radius:6px}
+.dt-slot:hover{background:var(--surface-2)}
+.dt-dock{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px;position:sticky;top:8px}
+.dt-dock-lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.dt-habs{display:flex;flex-direction:column;gap:7px}
+.dt-hab{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text);cursor:pointer;padding:2px 0}
+.dt-hab-tick{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex:0 0 auto}
+.dt-hab.done .dt-hab-tick{background:var(--hc,var(--accent));border-color:var(--hc,var(--accent))}
+.dt-hab.future{opacity:.4;pointer-events:none}
 /* ━━━ TIP CARD ━━━ */
 .tip-card{
   background:linear-gradient(135deg,var(--peach-bg) 0%,var(--gold-bg) 42%,var(--lavender-bg) 100%);
@@ -2943,19 +2987,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <button class="btn btn-ghost btn-sm cal-today-inline" onclick="goToCalToday()" id="cal-today-btn" style="display:none;margin-left:6px">Today</button>
             </div>
             <div class="cal-controls">
-              <!-- Mode toggle: switch the calendar between rendering events
-                   and rendering habit tick history. Same view (day/3day/
-                   week/month) — different data layer. -->
-              <div class="cv-row cv-mode-row">
-                <button class="cv" data-cm="events" onclick="setCalMode('events')">Events</button>
-                <button class="cv" data-cm="reminders" onclick="setCalMode('reminders')">Reminders</button>
-                <button class="cv" data-cm="habits" onclick="setCalMode('habits')">Habits</button>
-              </div>
+              <!-- Unified calendar: events + reminders + habits in one grid.
+                   Week (lanes) + Day (timeline) only — the mode toggle,
+                   3-day and month views were removed in the redesign. -->
               <div class="cv-row">
-                <button class="cv" onclick="setCV('day')">Day</button>
-                <button class="cv" onclick="setCV('3day')">3 Day</button>
                 <button class="cv" onclick="setCV('week')">Week</button>
-                <button class="cv" onclick="setCV('month')">Month</button>
+                <button class="cv" onclick="setCV('day')">Day</button>
               </div>
             </div>
           </div>
@@ -3595,7 +3632,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v200';
+const APP_VERSION='v201';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -7810,9 +7847,10 @@ async function rCal(){
   // so add/edit/tick stays live without needing a full page render.
   try{rReminders();}catch(_){}
   const el=document.getElementById('cal');if(!el)return;
+  // Redesign: week + day only. Coerce any legacy view (3day/month) to week.
+  if(UI.calView!=='day'&&UI.calView!=='week')UI.calView='week';
   const ttl=document.getElementById('cal-ttl');if(ttl){ttl.textContent=getCalTitle();ttl.onclick=pickCalDate;ttl.style.cursor='pointer';ttl.title='Pick a date';}
-  document.querySelectorAll('.cv-row:not(.cv-mode-row) .cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
-  document.querySelectorAll('.cv-mode-row .cv').forEach(b=>b.classList.toggle('on',b.dataset.cm===(UI.calMode||'events')));
+  document.querySelectorAll('.cv-row .cv').forEach((b,i)=>b.classList.toggle('on',['week','day'][i]===UI.calView));
   const notice=document.getElementById('gcal-notice');
   if(notice)notice.style.display=getGCalToken()?'none':'flex';
   const todayBtn=document.getElementById('cal-today-btn');
@@ -7840,32 +7878,17 @@ async function rCal(){
   // next-month days — getGCForMonth + the extra-range fetch + the tasks
   // merge could each contribute overlapping entries.
   {const seen=new Set();gcEvs=gcEvs.filter(e=>{if(seen.has(e.id))return false;seen.add(e.id);return true;});}
-  const gcForDate=ds=>(gcEvs||[]).filter(e=>e.date===ds);
-  const habitsMode=UI.calMode==='habits';
-  const remindersMode=UI.calMode==='reminders';
   if(UI.calView==='day'){
     const ds=localDs(UI.calDate);
     const isToday=UI.calDate.toDateString()===today.toDateString();
-    const dates=[{date:UI.calDate,ds,isToday}];
-    el.innerHTML=remindersMode?buildRemindersDayView(dates):(habitsMode?buildHabitsDayView(dates):buildDayView(dates,gcEvs));
-    el.onclick=null;
-  } else if(UI.calView==='3day'){
-    const dates=Array.from({length:3},(_,i)=>{const d=new Date(UI.calDate);d.setDate(UI.calDate.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
-    el.innerHTML=remindersMode?buildRemindersMultiDayView(dates):(habitsMode?buildHabitsMultiDayView(dates):buildThreeDayView(dates,gcEvs));
-    el.onclick=null;
-  } else if(UI.calView==='week'){
+    el.innerHTML=buildDayTimeline(UI.calDate,ds,isToday,gcEvs);
+  } else {
+    // WEEK — unified lane grid (events / reminders / one lane per habit).
     const s=new Date(UI.calDate);const dow=UI.calDate.getDay();s.setDate(UI.calDate.getDate()+(dow===0?-6:1-dow));
     const dates=Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
-    el.innerHTML=remindersMode?buildRemindersWeekView(dates):(habitsMode?buildHabitsWeekView(dates):buildWeekView(dates,gcEvs));
-    el.onclick=null;
-  } else {
-    // MONTH
-    let gcExtra=[];try{gcExtra=await getGCForMonth(y,m+1);}catch(e){}
-    let gcPrev=[];try{gcPrev=await getGCForMonth(y,m-1);}catch(e){}
-    const allGc=[...gcEvs,...gcExtra,...gcPrev];
-    el.innerHTML=remindersMode?buildRemindersMonthView(y,m,today):(habitsMode?buildHabitsMonthView(y,m,today):buildMonthView(y,m,today,allGc));
-    el.onclick=null;
+    el.innerHTML=buildWeekLanes(dates,gcEvs);
   }
+  el.onclick=null;
   renderComingUp();
 }
 function localDs(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
@@ -7914,6 +7937,72 @@ function pickCalDate(){
   };
 }
 function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=localDs(UI.calDate);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
+// ═══════════ REDESIGN: unified calendar (W2 lanes + DV1 timeline) ═══════════
+// WEEK = W2 "Lanes": rows are Events / Reminders / one lane per habit, across
+// the 7 days. Habit rows are a tap-to-fill tick grid (back-fill missed days).
+// Everything shares one surface — no more mode toggle.
+function buildWeekLanes(dates,gcEvs){
+  const tds=tod();
+  const hdr=dates.map(d=>{
+    const dn=d.date.toLocaleDateString('en-ZA',{weekday:'short'});
+    return `<div class="cw-hd${d.isToday?' today':''}" onclick="UI.calView='day';UI.calDate=new Date(${d.date.getFullYear()},${d.date.getMonth()},${d.date.getDate()});rCal()"><div class="dn">${dn}</div><div class="dd">${d.date.getDate()}</div></div>`;
+  }).join('');
+  const evLane=dates.map(d=>{
+    const evs=(gcEvs||[]).filter(e=>!e.task&&e.date===d.ds);
+    return `<div class="cw-cell" onclick="if(event.target===this){openNewEvent({date:'${d.ds}'})}"><div class="cw-evs">${evs.map(e=>evChip(e,d.ds)).join('')}</div></div>`;
+  }).join('');
+  const remLane=dates.map(d=>{
+    const rems=(S.reminders||[]).filter(r=>{try{return reminderFiresOn(r,d.date);}catch(_){return false;}});
+    const tasks=(gcEvs||[]).filter(e=>e.task&&e.date===d.ds);
+    const chips=rems.map(r=>`<div class="cw-rem-chip" onclick="openReminderModal('${r.id}')" title="${esc(r.text||'')}">🔔 ${esc(r.text||'')}</div>`).join('')+tasks.map(e=>evChip(e,d.ds)).join('');
+    return `<div class="cw-cell"><div class="cw-evs">${chips}</div></div>`;
+  }).join('');
+  const habLanes=(S.habits||[]).map(h=>{
+    const color=habitColor(h);
+    const cells=dates.map(d=>{
+      const done=(h.checkedDates||[]).includes(d.ds);
+      const rest=(h.excludedDays||[]).includes(d.date.getDay());
+      const future=d.ds>tds;
+      const cls='cw-cell cw-hcell'+(done?' done':'')+(d.isToday?' today':'')+(rest?' rest':'')+(future?' future':'');
+      return `<div class="${cls}" style="--hc:${color}" ${future?'':`onclick="toggleHabitDate('${h.id}','${d.ds}')"`} title="${esc(h.name)} · ${d.ds}"><span class="tick">${done?'✓':(rest?'·':'')}</span></div>`;
+    }).join('');
+    return `<div class="cw-lbl"><span class="hd-dot" style="background:${color}"></span><span class="cw-lbl-t">${esc(h.name)}</span></div>${cells}`;
+  }).join('');
+  const habEmpty=(S.habits||[]).length?'':`<div class="cw-lbl">Habits</div><div class="cw-cell" style="grid-column:2/9;color:var(--muted);font-size:12px;padding:10px">No habits yet — add one on Home.</div>`;
+  return `<div class="cw-lanes"><div class="cw-grid">`
+    +`<div class="cw-lbl cw-corner"></div>${hdr}`
+    +`<div class="cw-lbl">Events</div>${evLane}`
+    +`<div class="cw-lbl">Reminders</div>${remLane}`
+    +`${habLanes}${habEmpty}`
+    +`</div></div>`;
+}
+// DAY = DV1 "Timeline": the day down the hours; events + reminders at their
+// real times, an all-day band on top, and a right dock with today's habits
+// (tickable) + a jump to the journal.
+function buildDayTimeline(date,ds,isToday,gcEvs){
+  const evs=(gcEvs||[]).filter(e=>e.date===ds);
+  const allday=evs.filter(e=>e.allDay||e.task||!e.time);
+  const timed=evs.filter(e=>!e.allDay&&!e.task&&e.time);
+  const rems=(S.reminders||[]).filter(r=>{try{return reminderFiresOn(r,date);}catch(_){return false;}});
+  const startH=7,endH=22;
+  let spine='';
+  for(let hh=startH;hh<=endH;hh++){
+    const hEvs=timed.filter(e=>parseInt((e.time||'').slice(0,2),10)===hh);
+    const lbl=(hh%12===0?12:hh%12)+(hh<12?'a':'p');
+    spine+=`<div class="dt-row"><div class="dt-h">${lbl}</div><div class="dt-slot" onclick="if(event.target===this){openNewEvent({date:'${ds}',time:'${String(hh).padStart(2,'0')}:00'})}">${hEvs.map(e=>evChip(e,ds)).join('')}</div></div>`;
+  }
+  const band=(allday.length||rems.length)?`<div class="dt-band">${allday.map(e=>evChip(e,ds)).join('')}${rems.map(r=>`<div class="cw-rem-chip" onclick="openReminderModal('${r.id}')">🔔 ${esc(r.text||'')}</div>`).join('')}</div>`:'';
+  const habs=(S.habits||[]).length?(S.habits).map(h=>{const done=(h.checkedDates||[]).includes(ds);const color=habitColor(h);const future=ds>tod();return `<div class="dt-hab${done?' done':''}${future?' future':''}" style="--hc:${color}" ${future?'':`onclick="toggleHabitDate('${h.id}','${ds}')"`}><span class="dt-hab-tick">${done?'✓':''}</span>${esc(h.name)}</div>`;}).join(''):'<div style="font-size:12px;color:var(--muted)">No habits yet.</div>';
+  return `<div class="dt-wrap">
+    <div class="dt-main">${band}<div class="dt-spine">${spine}</div></div>
+    <aside class="dt-dock">
+      <div class="dt-dock-lbl">Habits · ${isToday?'today':esc(ds)}</div>
+      <div class="dt-habs">${habs}</div>
+      <div class="dt-dock-lbl" style="margin-top:18px">Reflect</div>
+      <button class="btn btn-ghost btn-sm" onclick="UI.diaryDate='${ds}';setRoute('diary')">Open journal ↗</button>
+    </aside>
+  </div>`;
+}
 
 // ━━━━━━━━━━━━━━━ CALENDAR ━━━━━━━━━━━━━━━
 // Shared helpers
