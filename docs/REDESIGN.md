@@ -448,6 +448,26 @@ palette + universal search · Settings · Login / splash / onboarding.
 - Verified in preview: numbers show, wall drag + list toggle + persistence work,
   month grid renders (35 cells), diary matches notebook paper. No console errors.
 
+### 2026-07-27 — Increment 8 (v205): sticky wall v2 (Zander's vision)
+- **Smooth drag:** the clunk was the Firestore save-echo re-rendering the wall
+  mid-move. Fixed: `rHomeWall` now (a) never rebuilds while `_wallDrag` is set,
+  and (b) when the note SET is unchanged, refreshes content **in place**
+  (`_wallUpdateInPlace`) instead of `innerHTML=`. Drag saves stay debounced (300ms).
+- **Category → colour:** new `S.categories` (`[{id,name,color}]`, defaults Personal
+  + Work, persisted). Each task has `t.category`; sticky colour = category colour
+  (light tint bg + colour tape + colour dot). Legend above the board; a category
+  **picker** on each note's dot, and a **manage** popover (add / rename / recolour /
+  delete). New categories (e.g. company names) via prompt.
+- **Star rating (0–5)** on the card, click to set (`t.stars`); shown in List view too.
+- **Four visual regions** (Today / This week / This month / Future) as labelled
+  columns on a **1200px canvas**. **Purely visual** — only `t.wx/t.wy` is stored; a
+  note's region is just where it sits. **daily/general split dropped from the wall.**
+- **Zoom** (60–130%, persisted) via CSS `zoom`; drag math is zoom-aware.
+- **Per-region "Arrange"** stacks that column's notes by stars (importance).
+- Persistence: `categories` added to save payload + snapshot loader. Verified:
+  category colours, stars, 4 regions, zoom, arrange-by-importance, List view dots
+  + stars. No console errors. (Drag *feel* needs a real device test.)
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.
