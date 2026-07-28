@@ -15,14 +15,11 @@
 <style>
 /* ━━━ THEMES ━━━ */
 :root,[data-theme="soft"]{
-  /* ── Apricot skin (chosen 2026-07-27) — warm peach ground, burnt-orange
-     accent, teal counterpoint. See docs/REDESIGN.md north star. ── */
-  --bg:#fce8d8; --bg-2:#f3d8c2;
-  --surface:#fffbf6; --surface-2:#fbeee2; --surface-hover:#f7e7d8;
-  --border:#f0dbc8; --border-strong:#e4c2a6;
-  --text:#3a2a22; --text-2:#6b5647; --muted:#9a8574; --muted-2:#c0ad9a;
-  --accent:#d2662f; --accent-ink:#fffbf6;
-  --accent-2:#2e8c8c; --accent-2-ink:#fffbf6;
+  --bg:#f4eee5; --bg-2:#ece5d7;
+  --surface:#fbf6ec; --surface-2:#f5efe2; --surface-hover:#f0e9d8;
+  --border:#e4dcc9; --border-strong:#cfc3a8;
+  --text:#2a2018; --text-2:#5a4f42; --muted:#8b7e6b; --muted-2:#b5ac9b;
+  --accent:#2a2018; --accent-ink:#fbf6ec;
   --peach:#d9a484; --peach-bg:#f5e4d6;
   --sage:#7fa186; --sage-bg:#dfe9db;
   --lavender:#9d8bb8; --lavender-bg:#ebe2f2;
@@ -41,8 +38,7 @@
   --surface:#1c1f26; --surface-2:#232730; --surface-hover:#2a2f39;
   --border:#2d323d; --border-strong:#3f4553;
   --text:#e6e8ee; --text-2:#b8bdc9; --muted:#8890a0; --muted-2:#5f6775;
-  --accent:#e0965e; --accent-ink:#1a130d;
-  --accent-2:#4fb0ad; --accent-2-ink:#0f1115;
+  --accent:#e6e8ee; --accent-ink:#15171c;
   --peach:#e8a07d; --peach-bg:#3b2a22;
   --sage:#8fc09a; --sage-bg:#233028;
   --lavender:#b4a4d1; --lavender-bg:#2e2938;
@@ -350,8 +346,8 @@ svg{flex-shrink:0}
 .wb-pin{border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 14%,var(--surface));border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;transition:all .12s}
 .wb-pin:hover{background:color-mix(in srgb,var(--accent) 24%,var(--surface))}
 .wb-surface{min-height:62vh;border-radius:16px;padding:30px 24px;border:1px solid var(--border);
-  background:radial-gradient(circle,rgba(120,80,40,.05) 1.2px,transparent 1.3px) 0 0/24px 24px,#fbf3e8;
-  box-shadow:inset 0 0 60px rgba(120,80,40,.045);
+  background:radial-gradient(circle,rgba(0,0,0,.055) 1.2px,transparent 1.3px) 0 0/24px 24px,#f7f4ee;
+  box-shadow:inset 0 0 60px rgba(0,0,0,.05);
   display:flex;flex-wrap:wrap;gap:22px 20px;align-content:flex-start}
 [data-theme="studio"] .wb-surface{background:radial-gradient(circle,rgba(255,255,255,.04) 1.2px,transparent 1.3px) 0 0/24px 24px,#242029}
 .wb-empty{width:100%;text-align:center;color:var(--muted);font-size:14px;padding:56px 20px;font-style:italic;line-height:2}
@@ -360,13 +356,9 @@ svg{flex-shrink:0}
   display:flex;flex-direction:column;gap:8px;font-family:'Kalam',cursive;color:#3a352c;
   transition:transform .15s ease,box-shadow .15s ease}
 .wb-sticky:hover{transform:rotate(0deg) scale(1.03);box-shadow:4px 8px 18px rgba(0,0,0,.24);z-index:3}
-.wb-c0{background:#ffe7c2}.wb-c1{background:#c7e8e0}.wb-c2{background:#fceeb0}.wb-c3{background:#d3e3f0}.wb-c4{background:#f6d4da}
-/* Washi tape across the top of each sticky — replaces the old red pushpin
-   (the "trash"-looking one). Semi-transparent, slightly skewed, warm. */
-.wb-pinhead{position:absolute;top:-9px;left:50%;transform:translateX(-50%) rotate(-2.5deg);width:64px;height:19px;
-  background:linear-gradient(180deg,rgba(255,255,255,.5),rgba(210,102,47,.22));
-  border-left:1px dashed rgba(0,0,0,.05);border-right:1px dashed rgba(0,0,0,.05);
-  box-shadow:0 1px 2px rgba(0,0,0,.07);opacity:.9}
+.wb-c0{background:#fdf0a0}.wb-c1{background:#fcd4d6}.wb-c2{background:#cfe6f7}.wb-c3{background:#d6edbf}.wb-c4{background:#ffe1b3}
+.wb-pinhead{position:absolute;top:-7px;left:50%;transform:translateX(-50%);width:15px;height:15px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#ff9a9a,#cf3a3a);box-shadow:0 2px 4px rgba(0,0,0,.35)}
 .wb-time{position:absolute;top:7px;right:11px;font-size:12px;font-weight:700;opacity:.55;font-family:'Kalam',cursive}
 .wb-sticky-title{font-size:16.5px;font-weight:700;line-height:1.28;word-break:break-word}
 .wb-note-body{font-size:14px;line-height:1.4;opacity:.82;white-space:pre-wrap;word-break:break-word}
@@ -384,245 +376,6 @@ svg{flex-shrink:0}
 .wb-edit{transform:rotate(1.2deg)}
 .wb-sticky.wb-peel{animation:wbPeel .24s ease forwards;pointer-events:none}
 @keyframes wbPeel{to{transform:rotate(var(--rot,0deg)) translateY(-16px) scale(.88);opacity:0}}
-/* ━━━ HOME — wall + habit rail ━━━ */
-.home-top{margin-bottom:16px}
-.home-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
-.home-wall{min-height:60vh}
-.home-rail{position:sticky;top:8px}
-@media(max-width:900px){.home-grid{grid-template-columns:1fr}.home-rail{position:static}.home-wall{min-height:auto}}
-.home-hab{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:12px 13px;margin-bottom:10px;box-shadow:var(--shadow)}
-.home-hab:last-child{margin-bottom:0}
-.home-hab-top{display:flex;align-items:center;gap:11px}
-.home-hab-name{font-size:13.5px;font-weight:600;color:var(--text);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
-.home-hab-name:hover{color:var(--accent)}
-.home-hab-meta{font-size:11px;color:var(--muted);margin-top:2px}
-.home-hab-trail{display:flex;gap:5px;margin-top:10px}
-.hab-dot{flex:1;min-width:0;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;transition:transform .1s,background .12s;padding:3px 0 4px;display:flex;flex-direction:column;align-items:center;gap:1px;font-family:inherit}
-.hab-dot-dow{font-size:8px;font-weight:600;text-transform:uppercase;color:var(--muted-2);line-height:1}
-.hab-dot-num{font-size:11px;font-weight:700;color:var(--muted);line-height:1}
-.hab-dot.done{background:var(--hc,var(--accent));border-color:var(--hc,var(--accent))}
-.hab-dot.done .hab-dot-dow,.hab-dot.done .hab-dot-num{color:#fff}
-.hab-dot.today:not(.done){border:1.5px dashed var(--hc,var(--accent))}
-.hab-dot.today:not(.done) .hab-dot-num{color:var(--text)}
-.hab-dot:hover{transform:translateY(-1px)}
-.home-hab-empty{font-size:13px;color:var(--muted);padding:12px 4px;line-height:1.6}
-/* Home Wall/List toggle */
-.home-viewtog{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
-.home-viewtog .hvt{font-size:11.5px;font-weight:600;padding:5px 12px;background:var(--surface);color:var(--muted);border:none;cursor:pointer;font-family:inherit}
-.home-viewtog .hvt.on{background:var(--accent);color:var(--accent-ink)}
-/* Zoom control */
-.wall-zoom{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
-.wall-zoom button{width:26px;height:26px;background:var(--surface);border:none;color:var(--text-2);font-size:15px;cursor:pointer;font-family:inherit}
-.wall-zoom button:hover{background:var(--surface-hover)}
-.wall-zoom span{font-size:11px;color:var(--muted);min-width:34px;text-align:center}
-body[data-route="today"] .wall-zoom.hide{display:none}
-/* Category legend */
-.wall2-legend{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px}
-.wall2-legend.hide{display:none}
-.wl-chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-2);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px 3px 8px}
-.wl-chip i{width:11px;height:11px;border-radius:50%;flex:0 0 auto}
-.wl-manage{font-size:11.5px;font-weight:600;color:var(--accent);background:none;border:none;cursor:pointer;padding:3px 4px}
-/* Pan/zoom board — no scrollbars. Drag empty space to pan, Ctrl+scroll to zoom.
-   Colour comes from the task's AREA, stars from its PRIORITY. */
-.home-wall.wall2-scroll{display:block;position:relative;overflow:hidden;border:1px solid var(--border);border-radius:16px;
-  background:radial-gradient(circle,rgba(120,80,40,.06) 1.3px,transparent 1.4px) 0 0/24px 24px,#f7efe2;
-  height:72vh;min-height:460px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
-.home-wall.wall2-scroll.panning{cursor:grabbing}
-.wall2-canvas{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;user-select:none;-webkit-user-select:none}
-.wall2-regions{position:absolute;inset:0;pointer-events:none;z-index:0}
-.wall2-region{position:absolute;border:1.5px dashed rgba(120,80,40,.22);border-radius:16px;background:rgba(255,255,255,.16)}
-.wall2-region-hd{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:11px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);pointer-events:auto}
-.wall2-arrange{font-size:10.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:6px;padding:3px 9px;cursor:pointer}
-.wall2-arrange:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
-.wb-sticky2{position:absolute;width:152px;padding:13px 12px 9px;border-radius:3px;box-shadow:2px 4px 11px rgba(0,0,0,.15);
-  display:flex;flex-direction:column;gap:5px;font-family:'Kalam',cursive;color:#3a2a22;touch-action:none;cursor:grab;z-index:1;
-  transition:transform .16s cubic-bezier(.34,1.35,.5,1),box-shadow .16s;user-select:none;-webkit-user-select:none}
-.wb-sticky2 *{user-select:none;-webkit-user-select:none}
-.wb-sticky2.wb-dragging{cursor:grabbing;box-shadow:5px 17px 36px rgba(0,0,0,.34)!important;z-index:200!important;transition:box-shadow .1s!important;animation:wbCarry .55s ease-in-out infinite}
-@keyframes wbCarry{0%,100%{transform:rotate(-3deg) scale(1.06)}50%{transform:rotate(-1deg) scale(1.06)}}
-/* Pushpin (replaces tape). Lifts out + the stem extends while a note is carried. */
-.wb-pin2{position:absolute;top:-10px;left:50%;width:16px;height:20px;transform:translateX(-50%);transition:transform .2s cubic-bezier(.34,1.5,.5,1),opacity .2s;z-index:3;pointer-events:none}
-.wb-pin2::before{content:'';position:absolute;left:50%;top:9px;width:2px;height:11px;background:rgba(0,0,0,.32);transform:translateX(-50%);border-radius:1px;transition:height .2s cubic-bezier(.34,1.5,.5,1)}
-.wb-pin2::after{content:'';position:absolute;left:50%;top:0;width:15px;height:15px;border-radius:50%;transform:translateX(-50%);
-  background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.85),var(--cat,#c96) 62%);box-shadow:0 2px 3px rgba(0,0,0,.32)}
-.wb-sticky2.wb-dragging .wb-pin2{transform:translateX(-50%) translateY(-15px) scale(.9);opacity:.72}
-.wb-sticky2.wb-dragging .wb-pin2::before{height:26px}
-.wb-sticky2 .wb-sticky-title{font-size:14px}
-.wb-sticky2 .wb-sticky-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:1px}
-.wb-cat{width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.6);cursor:pointer;flex:0 0 auto;box-shadow:0 1px 2px rgba(0,0,0,.18)}
-.wb-stars{display:inline-flex;gap:1px}
-.wb-star{font-size:14px;color:rgba(0,0,0,.16);cursor:pointer;line-height:1}
-.wb-star.on{color:#e0a52e}
-.wb-sticky2 .wb-sticky-title{font-size:15.5px;font-weight:700;line-height:1.25;word-break:break-word}
-.wb-sticky2 .wb-btns{margin-top:2px;display:flex;gap:7px;justify-content:flex-end}
-.wb-sticky2 .wb-btn{font-family:'Kalam',cursive;font-size:14px;font-weight:700;background:rgba(255,255,255,.35);border:1.4px solid rgba(0,0,0,.32);border-radius:9px 7px 10px 6px;width:30px;height:26px;cursor:pointer;color:#3a2a22}
-.wb-sticky2 .wb-btn.wb-done{border-color:#3f7a34;color:#356629}
-.wb-sticky2 .wb-btn:hover{background:rgba(255,255,255,.7)}
-/* Zoomed out → hover a note to pop it up to a readable size */
-.wall2-canvas.zoomed .wb-sticky2{transition:transform .14s ease,box-shadow .14s}
-.wall2-canvas.zoomed .wb-sticky2:hover{transform:scale(2);z-index:120;box-shadow:4px 12px 30px rgba(0,0,0,.3)}
-.wall2-canvas.zoomed-far .wb-sticky2:hover{transform:scale(3.1)}
-/* Floating "which region am I in" badge — shows when zoomed in past the headers */
-.wrb{position:absolute;top:12px;left:12px;z-index:30;display:flex;align-items:center;gap:8px;
-  background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:6px 8px 6px 15px;
-  box-shadow:var(--shadow-lift);font-size:12.5px;font-weight:700;color:var(--text)}
-.wrb .wrb-label{white-space:nowrap}
-.wrb .wrb-label::before{content:'▸ ';color:var(--accent)}
-/* Full-screen board overlay */
-.home-wall-col.wall-fs{position:fixed;inset:0;z-index:4000;background:var(--bg);margin:0;padding:14px 18px 16px;display:flex;flex-direction:column;gap:0;box-sizing:border-box}
-.home-wall-col.wall-fs .section-hdr{margin-bottom:10px}
-.home-wall-col.wall-fs .wall2-legend{margin-bottom:10px}
-.home-wall-col.wall-fs .home-wall{flex:1 1 auto;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto}
-body.wall-fs-active{overflow:hidden}
-/* ━━━ Structured bucket board (Today / This week / This month / Future) ━━━ */
-.home-wall.wall3-mode{display:block;background:none;border:none;padding:0;overflow:visible;height:auto;min-height:0;cursor:default}
-.wall3{display:flex;flex-direction:column;gap:14px}
-.wall3-top{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-@media(max-width:820px){.wall3-top{grid-template-columns:1fr}}
-.wall3-section{border:1.5px dashed var(--border-strong);border-radius:16px;background:rgba(120,80,40,.03);padding:12px 14px 16px;min-height:168px;transition:background .12s,border-color .12s}
-.wall3-section.drop-hover{border-color:var(--accent);border-style:solid;background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
-.wall3-hd{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px}
-.wall3-count{font-size:11px;font-weight:600;color:var(--muted-2);background:var(--surface-2);border-radius:10px;padding:1px 8px;letter-spacing:0}
-.wall3-notes{display:flex;flex-wrap:wrap;gap:18px 16px;align-content:flex-start}
-.wall3-empty{width:100%;text-align:center;color:var(--muted-2);font-size:12px;padding:20px 0;font-style:italic}
-.wb-sticky3{position:relative;width:150px;padding:14px 13px 10px;border-radius:3px;box-shadow:2px 4px 11px rgba(0,0,0,.14);display:flex;flex-direction:column;gap:5px;font-family:'Kalam',cursive;color:#3a2a22;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;transition:transform .12s,box-shadow .12s}
-.wb-sticky3 *{user-select:none;-webkit-user-select:none}
-.wb-sticky3:hover{transform:translateY(-2px);box-shadow:3px 8px 17px rgba(0,0,0,.2)}
-.wb-sticky3 .wb-sticky-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:1px}
-.wb-sticky3 .wb-sticky-title{font-size:14px;font-weight:700;line-height:1.25;word-break:break-word}
-.wb-sticky3 .wb-btns{margin-top:2px;display:flex;gap:7px;justify-content:flex-end}
-.wb-sticky3 .wb-btn{font-family:'Kalam',cursive;font-size:14px;font-weight:700;background:rgba(255,255,255,.35);border:1.4px solid rgba(0,0,0,.32);border-radius:9px 7px 10px 6px;width:30px;height:26px;cursor:pointer;color:#3a2a22}
-.wb-sticky3 .wb-btn.wb-done{border-color:#3f7a34;color:#356629}
-.wb-sticky3 .wb-btn:hover{background:rgba(255,255,255,.7)}
-.wb-source-hidden{opacity:.28!important}
-.wb-drag-clone{transform:rotate(-3deg) scale(1.05);box-shadow:5px 16px 34px rgba(0,0,0,.32)!important}
-.wb-drag-clone .wb-pin2{transform:translateX(-50%) translateY(-15px) scale(.9)}
-.wb-drag-clone .wb-pin2::before{height:24px}
-/* Area picker popover */
-.cat-pop{position:fixed;z-index:9600;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-lift);padding:6px;min-width:180px;font-family:'Inter',system-ui,sans-serif}
-.cat-pop-row{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text)}
-.cat-pop-row:hover{background:var(--surface-hover)}
-.cat-pop-row i{width:13px;height:13px;border-radius:50%;flex:0 0 auto;border:1px solid rgba(0,0,0,.1)}
-.cat-pop-row.on{background:color-mix(in srgb,var(--accent) 10%,var(--surface))}
-/* List view */
-.home-wall-list{display:block;background:none;border:none;box-shadow:none;padding:0;min-height:auto}
-.home-list{display:flex;flex-direction:column;gap:8px}
-.hl-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 14px;cursor:pointer;transition:border-color .12s}
-.hl-row:hover{border-color:var(--border-strong)}
-.hl-check{flex:0 0 auto;width:20px;height:20px;border-radius:6px;border:1.6px solid var(--border-strong);background:transparent;cursor:pointer;transition:all .12s}
-.hl-check:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
-.hl-body{flex:1;min-width:0}
-.hl-title{font-size:14px;font-weight:500;color:var(--text);line-height:1.3}
-.hl-meta{font-size:11px;color:var(--muted);margin-top:2px}
-.hl-prio{flex:0 0 auto;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:6px;background:var(--surface-2);color:var(--muted)}
-.hl-prio-high{background:var(--red-bg);color:var(--red)}
-.hl-prio-medium{background:var(--gold-bg);color:var(--gold)}
-.hl-prio-low{background:var(--sage-bg);color:var(--sage)}
-.hl-cat{flex:0 0 auto;width:11px;height:11px;border-radius:50%;border:1px solid rgba(0,0,0,.08)}
-.hl-stars{flex:0 0 auto;font-size:12px;color:#e0a52e;letter-spacing:1px;white-space:nowrap}
-.hl-stars-off{color:rgba(0,0,0,.15)}
-[data-theme="studio"] .hl-stars-off{color:rgba(255,255,255,.18)}
-/* Home owns its own habit rail, so hide the global right rail (needs-attention
-   / next-events / daily-habits) and let the wall take the full width here. */
-body[data-route="today"] .aside-col{display:none!important}
-body[data-route="today"] .main-wrap{grid-template-columns:1fr}
-body[data-route="today"] #rail-btn{display:none}
-/* Diary + Calendar own their full width — hide the global right rail there
-   too (habits live in the calendar lanes / Home rail now, and the calendar
-   itself is the events surface, so the rail is redundant). */
-body[data-route="diary"] .aside-col,
-body[data-route="calendar"] .aside-col{display:none!important}
-body[data-route="diary"] .main-wrap,
-body[data-route="calendar"] .main-wrap{grid-template-columns:1fr}
-body[data-route="diary"] #rail-btn,
-body[data-route="calendar"] #rail-btn{display:none}
-/* ━━━ DIARY — classic journal book ━━━ */
-.diary-wrap{max-width:1000px;margin:0 auto}
-.diary-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
-.diary-bar h2{font-family:'Playfair Display',serif;font-size:26px;font-weight:500;color:var(--text);letter-spacing:-.4px;margin-right:auto}
-.diary-nav{display:flex;align-items:center;gap:6px}
-#diary-date-bar{font-size:13px;color:var(--text-2);min-width:150px;text-align:center;font-weight:500}
-/* Diary shares the Notebook's page look: cream A4 sheets, rounded corners,
-   soft lift shadow, an accent spine stripe + red vertical margin line — no
-   ruled lines, no hard binding. Two sheets side by side like a spread. */
-.diary-book{position:relative;display:flex;gap:8px;perspective:1600px;align-items:stretch}
-.diary-page{flex:1;position:relative;background:var(--paper);border:1px solid var(--border);border-radius:14px;
-  box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--accent);padding:26px 30px 30px 56px;min-height:64vh;box-sizing:border-box;min-width:0;overflow:hidden}
-.diary-page::before{content:'';position:absolute;left:44px;top:0;bottom:0;width:1px;background:var(--paper-margin);opacity:.5;pointer-events:none}
-.diary-page.right{box-shadow:var(--shadow-lift),inset -3px 0 0 0 var(--accent);padding:26px 56px 30px 30px}
-.diary-page.right::before{left:auto;right:44px}
-.diary-ribbon{position:absolute;top:-4px;right:30px;width:22px;height:56px;background:linear-gradient(180deg,var(--accent),#a2481f);
-  clip-path:polygon(0 0,100% 0,100% 100%,50% 78%,0 100%);z-index:5;box-shadow:0 3px 6px rgba(0,0,0,.22)}
-.diary-date{font-family:'Playfair Display',serif;font-size:21px;color:var(--text);line-height:1.1}
-.diary-dayname{font-family:'Kalam',cursive;font-size:14px;color:var(--muted);margin-bottom:16px}
-.diary-page-lbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
-.dj-q{margin-bottom:14px}
-.dj-q label{display:block;font-family:'Kalam',cursive;font-weight:700;font-size:15px;color:var(--text);margin-bottom:2px}
-.dj-field{position:relative}
-.dj-field textarea{width:100%;border:none;background:transparent;resize:none;font-family:'Kalam',cursive;font-size:15px;line-height:1.7;color:#3a2a22;padding:0 26px 0 0;outline:none;overflow:hidden}
-.dj-mic{position:absolute;top:2px;right:0;border:none;background:transparent;font-size:15px;cursor:pointer;opacity:.45;line-height:1}
-.dj-mic:hover{opacity:1}
-.dr-block{margin-bottom:14px}
-.dr-block-hd{font-family:'Kalam',cursive;font-weight:700;font-size:15px;color:var(--text)}
-.dr-block-sub{font-size:11px;color:var(--muted);margin-bottom:4px}
-.dr-item{display:flex;gap:9px;align-items:flex-start;font-family:'Kalam',cursive;font-size:14.5px;line-height:1.45;color:#3a2a22;cursor:pointer;padding:3px 0}
-.dr-box{flex:0 0 18px;width:18px;height:18px;border:1.6px solid var(--border-strong);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-top:1px;color:#fff;background:transparent}
-.dr-item.done .dr-box{background:var(--accent);border-color:var(--accent)}
-.dr-item.done .dr-t{opacity:.5;text-decoration:line-through}
-.dr-stamps{display:flex;flex-wrap:wrap;gap:8px}
-.dr-stamp{display:flex;align-items:center;gap:6px;font-family:'Kalam',cursive;font-size:13px;border:1.5px dashed var(--border-strong);border-radius:20px;padding:5px 12px;color:var(--muted);cursor:pointer;transition:all .12s;background:transparent}
-.dr-stamp.on{border-style:solid;border-color:var(--hc,var(--accent));background:color-mix(in srgb,var(--hc,var(--accent)) 15%,var(--paper));color:var(--text)}
-.dr-stamp:hover{transform:translateY(-1px)}
-@media(max-width:800px){.diary-book{flex-direction:column}.diary-page{min-height:auto}.diary-page.right{padding:26px 30px 30px 56px;box-shadow:var(--shadow-lift),inset 3px 0 0 0 var(--accent)}.diary-page.right::before{left:44px;right:auto}}
-/* ━━━ CALENDAR — unified week lanes (W2) ━━━ */
-.cw-lanes{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.cw-grid{display:grid;grid-template-columns:112px repeat(7,minmax(46px,1fr));min-width:560px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)}
-.cw-grid>div{border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
-.cw-hd{background:var(--surface-2);text-align:center;padding:8px 4px;cursor:pointer}
-.cw-hd.today{background:color-mix(in srgb,var(--accent) 15%,var(--surface-2))}
-.cw-hd .dn{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.cw-hd .dd{font-size:15px;color:var(--text);font-weight:600}
-.cw-hd.today .dd{color:var(--accent)}
-.cw-lbl{background:var(--surface-2);font-size:12px;font-weight:600;color:var(--text-2);padding:8px 10px;display:flex;align-items:center;gap:7px}
-.cw-lbl .hd-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
-.cw-lbl-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cw-cell{padding:5px;min-height:40px}
-.cw-evs{display:flex;flex-direction:column;gap:3px}
-.cw-hcell{cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:40px}
-.cw-hcell .tick{width:22px;height:22px;border-radius:6px;border:1.6px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;transition:transform .1s}
-.cw-hcell.done .tick{background:var(--hc,var(--accent));border-color:var(--hc,var(--accent))}
-.cw-hcell.today:not(.done) .tick{border-color:var(--hc,var(--accent));border-style:dashed}
-.cw-hcell.rest{opacity:.45}.cw-hcell.rest .tick{border:none;color:var(--muted-2)}
-.cw-hcell.future{opacity:.3;pointer-events:none}
-.cw-hcell:hover .tick{transform:scale(1.1)}
-.cw-rem-chip{font-size:11px;background:var(--gold-bg);color:var(--text);border-radius:6px;padding:2px 7px;cursor:pointer;border:1px solid color-mix(in srgb,var(--gold) 40%,var(--border));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-/* ━━━ CALENDAR — day timeline (DV1) ━━━ */
-.dt-wrap{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px;align-items:start}
-@media(max-width:760px){.dt-wrap{grid-template-columns:1fr}}
-.dt-band{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
-.dt-spine{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)}
-.dt-row{display:flex;gap:10px;border-top:1px solid var(--border);min-height:42px;padding:5px 8px}
-.dt-row:first-child{border-top:none}
-.dt-h{flex:0 0 34px;font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;padding-top:4px}
-.dt-slot{flex:1;display:flex;flex-direction:column;gap:3px;min-height:32px;border-radius:6px}
-.dt-slot:hover{background:var(--surface-2)}
-.dt-dock{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px;position:sticky;top:8px}
-.dt-dock-lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
-.dt-habs{display:flex;flex-direction:column;gap:7px}
-.dt-hab{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text);cursor:pointer;padding:2px 0}
-.dt-hab-tick{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex:0 0 auto}
-.dt-hab.done .dt-hab-tick{background:var(--hc,var(--accent));border-color:var(--hc,var(--accent))}
-.dt-hab.future{opacity:.4;pointer-events:none}
-/* ━━━ PROJECTS — streak keeper + BRAIN spark→fire ━━━ */
-.bc-streak{font-size:12px;font-weight:700;color:var(--muted-2);display:inline-flex;align-items:center;gap:4px;letter-spacing:0}
-.bc-streak.on{color:var(--accent)}
-.bc-streak.broken{color:var(--muted)}
-.bc-foot{align-items:center;justify-content:space-between}
-.ic-fan{flex:0 0 auto;align-self:center;font-size:11px;font-weight:600;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:8px;padding:5px 9px;cursor:pointer;white-space:nowrap;transition:all .12s}
-.ic-fan:hover{background:color-mix(in srgb,var(--accent) 18%,transparent)}
-@media(max-width:520px){.ic-fan{font-size:10px;padding:4px 7px}}
-.pd-streak-row{display:flex;align-items:center;gap:12px;margin:6px 0 16px}
-.pd-streak-row .bc-streak{font-size:14px}
 /* ━━━ TIP CARD ━━━ */
 .tip-card{
   background:linear-gradient(135deg,var(--peach-bg) 0%,var(--gold-bg) 42%,var(--lavender-bg) 100%);
@@ -2876,7 +2629,6 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>
     </symbol>
     <symbol id="i-today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></symbol>
-    <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9"/><path d="M9.5 20v-6h5v6"/></symbol>
     <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></symbol>
     <symbol id="i-tasks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-proj" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.4"/><rect x="14" y="4" width="7" height="7" rx="1.4"/><rect x="3" y="15" width="7" height="6" rx="1.4"/><rect x="14" y="15" width="7" height="6" rx="1.4"/></symbol>
@@ -2956,12 +2708,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <span class="us-trigger-ic">⌕</span><span class="us-trigger-txt">Search…</span><span class="us-trigger-kbd">Ctrl K</span>
       </button>
       <nav class="s-nav" id="s-nav">
-        <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17"><use href="#i-home"/></svg></span><span class="label">Home</span><span class="dot"></span></a>
+        <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
+        <a href="#board" data-route-link="board"><span class="ic"><svg width="17" height="17"><use href="#i-tasks"/></svg></span><span class="label">Board</span><span class="dot"></span></a>
         <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
-        <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
-        <a href="#diary" data-route-link="diary"><span class="ic"><svg width="17" height="17"><use href="#i-learn"/></svg></span><span class="label">Diary</span><span class="dot"></span></a>
+        <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
+        <a href="#people" data-route-link="people"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span class="label">People</span><span class="dot"></span></a>
         <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
+        <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
       </nav>
       <div class="s-sep"></div>
       <div class="s-foot">
@@ -2985,7 +2739,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <span id="mt-title">Life OS</span>
     </div>
     <button class="hamburger" onclick="openUniversalSearch()" aria-label="Search everything" title="Search everything" style="font-size:17px;line-height:1">⌕</button>
-    <button class="hamburger" id="rail-btn" onclick="toggleRail()" aria-label="Open needs attention" title="Needs attention, next events, habits" style="position:relative">
+    <button class="hamburger" onclick="toggleRail()" aria-label="Open needs attention" title="Needs attention, next events, habits" style="position:relative">
       <svg width="16" height="16"><use href="#i-bolt"/></svg>
       <span class="hb-dot" id="hb-dot"></span>
     </button>
@@ -3003,12 +2757,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <span class="profile-pill-name" id="profile-pill-name-m">Personal</span>
         <span class="profile-pill-chev">▾</span>
       </button>
-      <a href="#today" data-route-link="today" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-home"/></svg></span><span>Home</span></a>
+      <a href="#today" data-route-link="today" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span>Today</span></a>
+      <a href="#board" data-route-link="board" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-tasks"/></svg></span><span>Board</span></a>
       <a href="#calendar" data-route-link="calendar" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span>Calendar</span></a>
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
-      <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
-      <a href="#diary" data-route-link="diary" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-learn"/></svg></span><span>Diary</span></a>
+      <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
+      <a href="#people" data-route-link="people" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-ppl"/></svg></span><span>People</span></a>
       <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
+      <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
       <div class="m-drawer-foot">
         <a href="#settings" data-route-link="settings" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-set"/></svg></span><span>Settings</span></a>
       </div>
@@ -3032,40 +2788,65 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
       <!-- TODAY -->
       <div class="route" data-route="today">
-        <div class="home-top">
-          <div class="page-title" id="gr"></div>
-          <div class="page-sub" id="ds"></div>
+        <div class="page-hdr">
+          <div>
+            <div class="page-title" id="gr"></div>
+            <div class="page-sub" id="ds"></div>
+          </div>
         </div>
 
-        <!-- HOME = the wall (one merged task list — Daily + General folded
-             into a single surface, since the split "wasn't functional") plus
-             the habit rail. Morning brief, Today's plan, This week and the
-             Daily routine were removed from Home per the usage audit;
-             journaling + routine now live in Diary. See docs/REDESIGN.md. -->
-        <div class="home-grid">
-          <section class="home-wall-col">
-            <div class="section-hdr">
-              <h2>The wall</h2>
-              <div class="right">
-                <div class="home-viewtog" id="home-viewtog">
-                  <button class="hvt" data-hv="wall" onclick="setHomeView('wall')" title="Free-form board — drag notes around">Wall</button>
-                  <button class="hvt" data-hv="list" onclick="setHomeView('list')" title="Structured list">List</button>
-                </div>
-                <button class="btn btn-ghost btn-sm" id="wall-fs-btn" onclick="toggleWallFullscreen()" title="Full screen board">⛶ Full screen</button>
-                <button class="btn btn-primary btn-sm" onclick="boardAddSticky()">+ New note</button>
-              </div>
-            </div>
-            <div class="wall2-legend" id="wall2-legend"></div>
-            <div class="home-wall" id="home-wall"></div>
-          </section>
-          <aside class="home-rail">
-            <div class="section-hdr">
-              <h2>Habits</h2>
-              <div class="right"><button class="btn btn-ghost btn-sm" onclick="openNewHabitModal()">+ Habit</button></div>
-            </div>
-            <div id="home-habits-list"></div>
-          </aside>
+        <!-- Morning brief: deterministic digest of the day (events, urgent,
+             follow-ups, habits, routine, nudges). No AI call — assembled
+             from local state, dismissible per day. -->
+        <div class="brief-card" id="brief-card" style="display:none"></div>
+        <!-- Morning reflection: asks yesterday's journal questions once a
+             day, with a mic per field. The nudge to actually journal. -->
+        <div class="jp-card" id="journal-prompt-card" style="display:none"></div>
+        <!-- Weekly review: appears Sun/Mon, AI-composed on demand. -->
+        <div class="wr-card" id="week-review-card" style="display:none"></div>
+
+        <div class="tip-card" id="tip-card">
+          <div class="tip-label"><svg width="12" height="12"><use href="#i-spark"/></svg> Today's plan</div>
+          <div class="tip-loading">Drafting your plan for today…</div>
         </div>
+
+        <section>
+          <div class="section-hdr">
+            <h2>This week</h2>
+            <div class="right"><button class="btn btn-ghost btn-sm" onclick="setRoute('calendar')">Open calendar ↗</button></div>
+          </div>
+          <div class="week-sum" id="today-week"></div>
+        </section>
+
+
+        <section>
+          <div class="section-hdr">
+            <h2>Tasks</h2>
+            <div class="right">
+              <button class="btn btn-primary btn-sm" onclick="openNewTaskModal()">+ Add task</button>
+            </div>
+          </div>
+          <!-- Daily = today only, mutually exclusive with General. Tasks
+               carry a dailyDate field that gets set/cleared when moving
+               between the two. History moved to Settings → History. -->
+          <div class="tabs" id="task-tabs" style="margin-bottom:12px">
+            <button class="tab on" data-ttab="daily" onclick="setTaskTab('daily')">Daily</button>
+            <button class="tab" data-ttab="general" onclick="setTaskTab('general')">General</button>
+          </div>
+          <div id="tasks-sec"></div>
+        </section>
+
+        <section>
+          <div class="section-hdr">
+            <h2>Daily routine</h2>
+            <div class="right" style="gap:6px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" onclick="routineNav(-1)" title="Previous day" aria-label="Previous day">‹</button>
+              <button class="btn btn-ghost btn-sm" id="routine-next-btn" onclick="routineNav(1)" title="Next day" aria-label="Next day">›</button>
+              <button class="btn btn-ghost btn-sm" onclick="routineToday()">Today</button>
+            </div>
+          </div>
+          <div class="rt-box"><div id="routine-body"></div></div>
+        </section>
       </div>
 
       <!-- BOARD (whiteboard of sticky-note tasks) -->
@@ -3076,24 +2857,6 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           <button class="wb-pin" onclick="boardAddSticky()" title="Pin a new task">📌 New sticky</button>
         </div>
         <div class="wb-surface" id="wb-surface"></div>
-      </div>
-
-      <!-- DIARY — classic journal book (B1): journal on the left page,
-           routine + habit stamps on the right, ribbon marks today, flip
-           back through past days. Reads/writes S.routineLog[iso]. -->
-      <div class="route" data-route="diary">
-        <div class="diary-wrap">
-          <div class="diary-bar">
-            <h2>Diary</h2>
-            <div class="diary-nav">
-              <button class="btn btn-ghost btn-sm" onclick="diaryNav(-1)" title="Previous day" aria-label="Previous day">‹</button>
-              <span id="diary-date-bar"></span>
-              <button class="btn btn-ghost btn-sm" id="diary-next" onclick="diaryNav(1)" title="Next day" aria-label="Next day">›</button>
-              <button class="btn btn-ghost btn-sm" onclick="diaryToday()">Today</button>
-            </div>
-          </div>
-          <div id="diary-body"></div>
-        </div>
       </div>
 
       <!-- CALENDAR -->
@@ -3120,12 +2883,18 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
               <button class="btn btn-ghost btn-sm cal-today-inline" onclick="goToCalToday()" id="cal-today-btn" style="display:none;margin-left:6px">Today</button>
             </div>
             <div class="cal-controls">
-              <!-- Unified calendar: events + reminders + habits in one grid.
-                   Week (lanes) + Day (timeline) only — the mode toggle,
-                   3-day and month views were removed in the redesign. -->
+              <!-- Mode toggle: switch the calendar between rendering events
+                   and rendering habit tick history. Same view (day/3day/
+                   week/month) — different data layer. -->
+              <div class="cv-row cv-mode-row">
+                <button class="cv" data-cm="events" onclick="setCalMode('events')">Events</button>
+                <button class="cv" data-cm="reminders" onclick="setCalMode('reminders')">Reminders</button>
+                <button class="cv" data-cm="habits" onclick="setCalMode('habits')">Habits</button>
+              </div>
               <div class="cv-row">
-                <button class="cv" onclick="setCV('week')">Week</button>
                 <button class="cv" onclick="setCV('day')">Day</button>
+                <button class="cv" onclick="setCV('3day')">3 Day</button>
+                <button class="cv" onclick="setCV('week')">Week</button>
                 <button class="cv" onclick="setCV('month')">Month</button>
               </div>
             </div>
@@ -3176,7 +2945,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
           </div>
         </div>
         <div class="tabs" id="brain-tabs">
-          <button class="tab on" data-tab="ideas" onclick="setBrainTab('ideas')">✦ Sparks</button>
+          <button class="tab on" data-tab="ideas" onclick="setBrainTab('ideas')">Ideas</button>
           <button class="tab" data-tab="resources" onclick="setBrainTab('resources')">Resources</button>
           <button class="tab" data-tab="notes" onclick="setBrainTab('notes')">Knowledge</button>
         </div>
@@ -3766,7 +3535,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v209';
+const APP_VERSION='v210';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4233,21 +4002,14 @@ function setTheme(t){
 // one-third down the screen" symptom caused by browser auto-scroll to
 // elements whose id happened to match the route hash.
 try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}
-const ROUTES=['today','board','calendar','projects','habits','people','brain','diary','notebook','settings'];
-const ROUTE_TITLES={today:'Home',board:'Board',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',diary:'Diary',notebook:'Notebook',settings:'Settings'};
+const ROUTES=['today','board','calendar','projects','habits','people','brain','notebook','settings'];
+const ROUTE_TITLES={today:'Today',board:'Board',calendar:'Calendar',projects:'Projects',habits:'Habits',people:'People',brain:'Brain',notebook:'Notebook',settings:'Settings'};
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
   const routeChanged=r!==currentRoute;
   if(routeChanged)playSound('tab');
   currentRoute=r;
-  // Expose the active route on <body> so chrome can be styled per-route
-  // (e.g. Home owns its own habit rail, so the global right rail is hidden
-  // there — see body[data-route="today"] rules).
-  try{document.body.dataset.route=r;}catch(_){}
-  // Leaving Home while the board is full-screen? Drop the overlay so it can't
-  // strand over another route (the col lives on <body> in that mode).
-  if(r!=='today'&&typeof _wallExitFullscreen==='function'&&document.querySelector('.home-wall-col.wall-fs'))try{_wallExitFullscreen();}catch(_){}
   if(!skipHash){try{history.replaceState(null,'','#'+r);}catch(e){location.hash=r;}}
   document.querySelectorAll('[data-route]').forEach(el=>el.classList.toggle('active',el.dataset.route===r));
   document.querySelectorAll('[data-route-link]').forEach(a=>a.classList.toggle('active',a.dataset.routeLink===r));
@@ -4281,8 +4043,7 @@ function setRoute(r,skipHash){
   if(r==='notebook')rNotebook();
   // The Daily routine lives in a box on the Today page now, so render it
   // whenever we land on Today — along with the morning brief + weekly review.
-  if(r==='today'){try{rHomeWall();}catch(_){}try{rHomeHabits();}catch(_){}}
-  if(r==='diary')try{rDiary();}catch(_){}
+  if(r==='today'){rRoutine();try{rBrief();}catch(_){}try{rJournalPrompt();}catch(_){}try{rWeekReview();}catch(_){}}
   if(r==='board')try{rBoard();}catch(_){}
   // People grid needs an explicit render on route entry — otherwise the
   // grid stays at whatever was last rendered (initially the empty stub
@@ -4430,13 +4191,6 @@ auth.onAuthStateChanged(u=>{
     // show the login screen prematurely while we wait for Firebase to
     // restore the session from IndexedDB.
     try{localStorage.setItem('los_last_uid',u.uid);}catch(_){}
-    // Cache the Google email as a GIS "hint". Passing it on silent token
-    // refresh stops Android/desktop Chrome from popping the "choose an
-    // account" picker when multiple Google accounts are signed in — the
-    // exact reason on-load silent refresh had to be disabled before. With
-    // a hint, prompt:'' refreshes truly silently, so we can now refresh
-    // proactively on open and on tab-focus (see ensureFreshGCalToken).
-    try{if(u.email)localStorage.setItem('los_google_email',u.email);}catch(_){}
     document.getElementById('login').style.display='none';
     document.getElementById('app').style.display='grid';
     document.getElementById('btm').style.display='block';
@@ -4663,34 +4417,6 @@ function _cacheClientIdFromCredential(credential){
   }
   return null;
 }
-// The Google email cached at sign-in. Passed as `hint` on silent refresh so
-// GIS pre-selects the right account and never shows the picker.
-function _getGoogleHint(){try{return localStorage.getItem('los_google_email')||'';}catch(_){return '';}}
-// Persist an access token together with its expiry (epoch ms) so a reopen can
-// tell whether the cached token is still good without first eating a 401.
-function _storeGTok(tok,expiresInSec,pid){
-  const p=pid||_activeProfileId||'main';
-  try{localStorage.setItem('los_gat_'+p,tok);}catch(_){}
-  const exp=Date.now()+Math.max(60,Number(expiresInSec||3600))*1000;
-  try{localStorage.setItem('los_gate_'+p,String(exp));}catch(_){}
-}
-// ms until the (active or given) profile's cached token expires. Returns a
-// negative number when unknown or already expired — i.e. "needs refresh".
-function _gtokMsLeft(pid){
-  try{const e=Number(localStorage.getItem('los_gate_'+(pid||_activeProfileId||'main')));if(e)return e-Date.now();}catch(_){}
-  return -1;
-}
-// If the cached token is missing/expired/within `withinMs` of expiry, attempt a
-// silent refresh and resolve once it's fresh (or the refresh fails). Safe to
-// call on every app open / tab focus: with a hint set it never shows UI, and it
-// no-ops when the token still has plenty of life left. This is the proactive
-// counterpart to the reactive 401 handlers in fetchCalendarList/fetchGCal.
-async function ensureFreshGCalToken(withinMs){
-  if(!getGCalToken())return false;              // not connected — nothing to do
-  const left=_gtokMsLeft();
-  if(left>(withinMs||600000))return true;       // >10min left by default → fine
-  try{return await silentRefreshGCalToken();}catch(_){return false;}
-}
 function initGISTokenClient(){
   if(_gisInitialized)return true;
   // Skip init if GIS is known-broken on this origin — saves the user
@@ -4712,14 +4438,7 @@ function initGISTokenClient(){
         // Silent refresh failed — clear cached token so banner shows.
         // The user will need to click Connect for a fresh consent.
         if(resp.error==='access_denied'||resp.error==='consent_required'||resp.error==='interaction_required'){
-          // Only drop the cached token if it's ACTUALLY expired. A proactive/
-          // early silent refresh routinely fails in an installed PWA (the GIS
-          // iframe can't reach Google's cookies) even while the cached token
-          // is still perfectly valid — clearing it there is exactly the
-          // "calendar keeps disconnecting the whole time" complaint. Keep a
-          // still-valid token; the reactive 401 handlers clear it when it
-          // genuinely dies.
-          if(_gtokMsLeft()<=0){gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}}
+          gTok=null;try{localStorage.removeItem(_gatKey());}catch(e){}
         }
         // Origin mismatch / invalid client come back here too — disable
         // GIS so we don't keep retrying a setup that can't work on this
@@ -4742,8 +4461,8 @@ function initGISTokenClient(){
       // mid-refresh profile switch silently lands the token in the wrong
       // slot, leaving the original profile permanently "stuck disconnected"
       // even though Settings shows Connected for the new one.
-      const writePid=_refreshingProfileId||_activeProfileId||'main';
-      _storeGTok(newTok,resp.expires_in,writePid);
+      const writeKey='los_gat_'+(_refreshingProfileId||_activeProfileId||'main');
+      try{localStorage.setItem(writeKey,newTok);}catch(e){}
       // Only update the live gTok if we're still on the same profile —
       // otherwise the new profile's render would suddenly use someone
       // else's token.
@@ -4764,19 +4483,8 @@ function initGISTokenClient(){
   // accounts pops the picker for prompt:'' regardless of "silent" intent.
   // The cached token works for up to an hour; if it's expired the 401
   // handler in fetchCalendarList will surface the disconnect banner.
-  if(getGCalToken()){
-    const msLeft=_gtokMsLeft();
-    if(msLeft<10*60000){
-      // Unknown expiry (token cached by an older build → msLeft<0) OR within
-      // 10 min of dying: refresh now so the first fetch of the session doesn't
-      // 401 and flash the disconnect banner. A hint (cached email from a prior
-      // sign-in) keeps this invisible — no account picker.
-      silentRefreshGCalToken();
-    }else{
-      // Plenty of life left — schedule the next silent refresh for 5 min
-      // before the real expiry instead of guessing.
-      _scheduleTokenRefresh(msLeft/1000);
-    }
+  if(gTok||(function(){try{return localStorage.getItem(_gatKey());}catch(e){return null;}}())){
+    _scheduleTokenRefresh(3000);
   }
   return true;
 }
@@ -4839,10 +4547,8 @@ function silentRefreshGCalToken(){
     };
     try{
       // prompt:'' tells GIS to attempt silently — no UI shown if the user
-      // has already granted consent. `hint` pre-selects the account so a
-      // multi-account browser doesn't pop the "choose an account" picker.
-      const _hint=_getGoogleHint();
-      _gisTokenClient.requestAccessToken(_hint?{prompt:'',hint:_hint}:{prompt:''});
+      // has already granted consent.
+      _gisTokenClient.requestAccessToken({prompt:''});
     }catch(e){
       console.warn('[gis] requestAccessToken failed:',e.message);
       if(!settled){settled=true;clearTimeout(safety);_gisPendingResolver=null;resolve(false);}
@@ -4869,7 +4575,7 @@ async function signInGoogle(){
   const p=makeGProvider();
   try{
     const r=await auth.signInWithPopup(p);
-    if(r.credential?.accessToken){gTok=r.credential.accessToken;_storeGTok(gTok,3500);}
+    if(r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem(_gatKey(),gTok);}catch(e){}}
     // Cache the OAuth web client ID so GIS can take over for silent
     // refresh on subsequent loads even without an explicit config entry.
     if(r.credential)_cacheClientIdFromCredential(r.credential);
@@ -4926,7 +4632,7 @@ async function connectGoogleCalendar(){
               resolve:(v)=>{clearTimeout(safetyTimer);orig.resolve(v);},
               reject:(e)=>{clearTimeout(safetyTimer);orig.reject(e);}
             };
-            try{const _h=_getGoogleHint();_gisTokenClient.requestAccessToken(_h?{prompt:'consent',hint:_h}:{prompt:'consent'});}
+            try{_gisTokenClient.requestAccessToken({prompt:'consent'});}
             catch(e){clearTimeout(safetyTimer);_gisPendingResolver=null;reject(e);}
           });
           if(tok)return tok;
@@ -4951,7 +4657,7 @@ async function connectGoogleCalendar(){
         const r=await auth.currentUser.reauthenticateWithPopup(p);
         if(r.credential?.accessToken){
           gTok=r.credential.accessToken;
-          _storeGTok(gTok,3500);
+          try{localStorage.setItem(_gatKey(),gTok);}catch(e){}
           if(r.credential)_cacheClientIdFromCredential(r.credential);
           if(initGISTokenClient())_scheduleTokenRefresh(3500);
           return gTok;
@@ -4998,7 +4704,7 @@ async function revokeAndReconnect(){
   setTimeout(()=>reconnectGCalAndRefresh(),500);
 }
 auth.getRedirectResult().then(r=>{
-  if(r&&r.credential?.accessToken){gTok=r.credential.accessToken;_storeGTok(gTok,3500);try{sessionStorage.removeItem('los_redirect');}catch(e){}}
+  if(r&&r.credential?.accessToken){gTok=r.credential.accessToken;try{localStorage.setItem(_gatKey(),gTok);sessionStorage.removeItem('los_redirect');}catch(e){}}
 }).catch(e=>{if(e&&e.code)console.warn('Redirect result:',e.code,e.message);});
 
 let _calListCache={ts:0,cals:[]};
@@ -5682,17 +5388,10 @@ document.addEventListener('visibilitychange',()=>{
   // phone propagate without a manual refresh. Events, calendar list, and
   // Tasks all get refreshed.
   if(document.visibilityState==='visible'&&getGCalToken()){
-    // Proactively refresh a near-expired token BEFORE re-fetching. A PWA
-    // backgrounded for an hour comes back with a dead token; without this
-    // the first fetch 401s and flashes the disconnect banner before the
-    // reactive refresh catches up. ensureFreshGCalToken no-ops when the
-    // token still has life, and stays silent thanks to the account hint.
-    ensureFreshGCalToken().then(()=>{
-      gcCache={key:'',events:[]};
-      _gtasksCache={ts:0,items:[]};
-      if(currentRoute==='calendar')rCal();
-      if(currentRoute==='today')rTodayWeek();
-    });
+    gcCache={key:'',events:[]};
+    _gtasksCache={ts:0,items:[]};
+    if(currentRoute==='calendar')rCal();
+    if(currentRoute==='today')rTodayWeek();
   }
   // Force-pull fresh state from Firestore (bypasses local cache) when
   // returning to the tab — so a plan generated on another device shows up
@@ -5760,9 +5459,6 @@ function takeOverDevice(){claimPresence();hideOtherDeviceOverlay();}
 // after they navigate to a route that happens to fetch GCal data.
 async function probeGCalLive(){
   if(!getGCalToken())return;
-  // Refresh a stale/near-expired token up front so the first fetch of the
-  // session succeeds silently instead of 401-ing and flashing the banner.
-  try{await ensureFreshGCalToken();}catch(_){}
   try{
     await fetchCalendarList();
   }catch(e){/* 401 already handled inside fetchCalendarList */}
@@ -5868,7 +5564,7 @@ function handleSnapshot(snap){
     // would throw if d.tasks happened to be a string/number/object. Now
     // anything non-array gets coerced to [] with a console.warn so the
     // user can still load the app and we can spot the bad write.
-    ['tasks','builds','learning','ideas','notes','habits','resources','reminders','categories','people','peopleTags','peopleLevelNames'].forEach(k=>{
+    ['tasks','builds','learning','ideas','notes','habits','resources','reminders','people','peopleTags','peopleLevelNames'].forEach(k=>{
       if(d[k]===undefined)return;
       if(Array.isArray(d[k]))S[k]=d[k];
       else{console.warn('[snapshot] expected array for',k,'got',typeof d[k],'— coerced to []');S[k]=[];}
@@ -6081,7 +5777,7 @@ function _buildSavePayload(){
     const{doneToday,lastDate,streak,total,...rest}=h;
     return rest;
   });
-  const payload={tasks:S.tasks,builds:S.builds,learning:S.learning,ideas:S.ideas,notes:S.notes,customEvents:S.customEvents||[],habits:cleanHabits,resources:S.resources||[],reminders:S.reminders||[],categories:S.categories||[],dayNotes:S.dayNotes||{},updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  const payload={tasks:S.tasks,builds:S.builds,learning:S.learning,ideas:S.ideas,notes:S.notes,customEvents:S.customEvents||[],habits:cleanHabits,resources:S.resources||[],reminders:S.reminders||[],dayNotes:S.dayNotes||{},updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
   if(S.todaysTip!==undefined)payload.todaysTip=S.todaysTip||null;
   if(S.growthFocus!==undefined)payload.growthFocus=S.growthFocus||null;
   payload.routineLog=(S.routineLog&&typeof S.routineLog==='object')?S.routineLog:{};
@@ -6486,7 +6182,7 @@ function toggleHabitDate(id,ds){
   // doneToday / lastDate are transient derived fields — delete them so they
   // don't get persisted and trigger legacy-seed behaviour on other devices
   delete h.doneToday;delete h.lastDate;
-  svAllNow();rHabits();rCal();try{rHomeHabits();}catch(_){}try{if(currentRoute==='diary')rDiary();}catch(_){}
+  svAllNow();rHabits();rCal();
 }
 // Back-compat shim: legacy callers go through the modal flow now.
 function qaAddHabitFull(){openNewHabitModal();}
@@ -7339,7 +7035,7 @@ function boardComplete(id){
   const finish=()=>{
     t.done=true;t.doneAt=t.doneAt||Date.now();
     if(typeof _peopleHandleTaskTick==='function'&&_peopleHandleTaskTick(t))S.tasks=S.tasks.filter(x=>x.id!==t.id);
-    svAll();rBoard();try{rTasks();rAttention();rHomeWall();}catch(_){}
+    svAll();rBoard();try{rTasks();rAttention();}catch(_){}
   };
   if(card){card.classList.add('wb-peel');setTimeout(finish,240);}else finish();
 }
@@ -7349,7 +7045,7 @@ function boardToggleStep(taskId,stepId){
   s.done=!s.done;
   // Ticking the last step auto-completes the parent (matches the list view).
   if(t.steps.length&&t.steps.every(x=>x.done)){t.done=true;t.doneAt=Date.now();}
-  svAll();rBoard();try{rTasks();rHomeWall();}catch(_){}
+  svAll();rBoard();try{rTasks();}catch(_){}
 }
 function rBoard(){
   const el=document.getElementById('wb-surface');if(!el)return;
@@ -7387,406 +7083,6 @@ function rBoard(){
         <button class="wb-btn wb-done" onclick="boardComplete('${t.id}')">✓ done</button>
         <button class="wb-btn wb-edit" onclick="openTaskModal('${t.id}')">✎ edit</button>
       </div>
-    </div>`;
-  }).join('');
-}
-
-// ───────── HOME — the wall (merged tasks) + habit rail ─────────
-// The wall is a free-form, zoomable board of category-coloured sticky notes with
-// star ratings. It has four VISUAL regions (Today / This week / This month /
-// Future) — the region a note sits in is PURELY where you dragged it (x/y is
-// saved per task; there is NO stored "this is a today task" flag). "List" mode
-// is a clean structured view. Categories drive the colour.
-const WALL_REGION_W=820, WALL_TOP_H=1040, WALL_BOT_H=560, WALL_STICKY_W=152, WALL_ROW=150;
-const WALL_CANVAS_W=WALL_REGION_W*3;             // 2460 — big, holds lots of notes
-const WALL_CANVAS_H=WALL_TOP_H+WALL_BOT_H;       // 1600
-const WALL_REGIONS=[
-  {label:'Today',x:0,y:0,w:WALL_REGION_W,h:WALL_TOP_H},
-  {label:'This week',x:WALL_REGION_W,y:0,w:WALL_REGION_W,h:WALL_TOP_H},
-  {label:'This month',x:WALL_REGION_W*2,y:0,w:WALL_REGION_W,h:WALL_TOP_H},
-  {label:'Future',x:0,y:WALL_TOP_H,w:WALL_CANVAS_W,h:WALL_BOT_H}
-];
-const PRI_STARS={urgent:5,hi:4,med:3,lo:2,someday:1};
-const STARS_PRI={5:'urgent',4:'hi',3:'med',2:'lo',1:'someday'};
-// Colour comes from the task's AREA; stars from its PRIORITY. Both are real
-// task fields — never a separate wall-only value.
-function _taskAreaColor(t){const id=effectiveAreaId(t);const a=getOrderedAreaList().find(x=>x.id===id);return a?a.color:'var(--muted-2)';}
-function _taskAreaName(t){const id=effectiveAreaId(t);const a=getOrderedAreaList().find(x=>x.id===id);return a?a.name:'—';}
-function _taskStars(t){return PRI_STARS[t.priority]||0;}
-function _starHTML(t){
-  const n=_taskStars(t);let s='<div class="wb-stars" title="Priority">';
-  for(let i=1;i<=5;i++)s+=`<span class="wb-star${i<=n?' on':''}" onclick="event.stopPropagation();_wallStarClick('${t.id}',${i})">★</span>`;
-  return s+'</div>';
-}
-function _wallStickyHTML(t){
-  const color=_taskAreaColor(t);
-  const hasSteps=Array.isArray(t.steps)&&t.steps.length;
-  let body='';
-  if(hasSteps){body=`<div class="wb-steps">${t.steps.map(s=>`<div class="wb-step${s.done?' done':''}" onclick="event.stopPropagation();boardToggleStep('${t.id}','${s.id}')"><span class="wb-step-box">${s.done?'✓':''}</span><span class="wb-step-txt">${esc(s.text||'')}</span></div>`).join('')}</div>`;}
-  else if(t.notes&&t.notes.trim()){body=`<div class="wb-note-body">${esc(t.notes)}</div>`;}
-  return `<div class="wb-sticky2" data-tid="${t.id}" style="--cat:${color};background:color-mix(in srgb,${color} 20%,#fffdf7)">
-    <span class="wb-pin2"></span>
-    <div class="wb-sticky-top">
-      <button class="wb-cat" style="background:${color}" title="Area: ${esc(_taskAreaName(t))} — tap to edit" onclick="event.stopPropagation();openTaskModal('${t.id}')"></button>
-      ${_starHTML(t)}
-    </div>
-    <div class="wb-sticky-title">${esc(t.text||'')}</div>
-    ${body}
-    <div class="wb-btns">
-      <button class="wb-btn wb-done" title="Done" onclick="event.stopPropagation();boardComplete('${t.id}')">✓</button>
-      <button class="wb-btn wb-edit" title="Edit" onclick="event.stopPropagation();openTaskModal('${t.id}')">✎</button>
-    </div>
-  </div>`;
-}
-function _homeListRowHTML(t){
-  const hasSteps=Array.isArray(t.steps)&&t.steps.length;
-  const meta=[];
-  if(hasSteps)meta.push(`${t.steps.filter(s=>s.done).length}/${t.steps.length} steps`);
-  if(t.scheduledTime)meta.push(esc(t.scheduledTime));
-  const color=_taskAreaColor(t);const n=_taskStars(t);
-  const stars=n?`<span class="hl-stars">${'★'.repeat(n)}<span class="hl-stars-off">${'★'.repeat(5-n)}</span></span>`:'';
-  return `<div class="hl-row" onclick="openTaskModal('${t.id}')">
-    <button class="hl-check" onclick="event.stopPropagation();boardComplete('${t.id}')" title="Mark done"></button>
-    <span class="hl-cat" style="background:${color}" title="${esc(_taskAreaName(t))}"></span>
-    <div class="hl-body"><div class="hl-title">${esc(t.text||'')}</div>${meta.length?`<div class="hl-meta">${meta.join(' · ')}</div>`:''}</div>
-    ${stars}
-  </div>`;
-}
-function setHomeView(v){
-  UI.homeView=v==='list'?'list':'wall';
-  try{localStorage.setItem('los_home_view',UI.homeView);}catch(_){}
-  rHomeWall();
-}
-// ── Structured bucket board: notes live IN a section (t.bucket), laid out in a
-// neat grid; drag a note to move it between sections. Colour = area, stars =
-// priority (as before). Replaces the free pan/zoom canvas. ──
-const WALL_BUCKETS=[{key:'today',label:'Today'},{key:'week',label:'This week'},{key:'month',label:'This month'},{key:'future',label:'Future'}];
-const WALL_BUCKET_KEYS=new Set(WALL_BUCKETS.map(b=>b.key));
-function _taskBucket(t){return WALL_BUCKET_KEYS.has(t&&t.bucket)?t.bucket:'today';}
-function _bucketStickyHTML(t){
-  const color=_taskAreaColor(t);
-  const hasSteps=Array.isArray(t.steps)&&t.steps.length;
-  let body='';
-  if(hasSteps){body=`<div class="wb-steps">${t.steps.map(s=>`<div class="wb-step${s.done?' done':''}" onclick="event.stopPropagation();boardToggleStep('${t.id}','${s.id}')"><span class="wb-step-box">${s.done?'✓':''}</span><span class="wb-step-txt">${esc(s.text||'')}</span></div>`).join('')}</div>`;}
-  else if(t.notes&&t.notes.trim()){body=`<div class="wb-note-body">${esc(t.notes)}</div>`;}
-  return `<div class="wb-sticky3" data-tid="${t.id}" style="--cat:${color};background:color-mix(in srgb,${color} 22%,#fffdf7)">
-    <span class="wb-pin2"></span>
-    <div class="wb-sticky-top">
-      <button class="wb-cat" style="background:${color}" title="Area: ${esc(_taskAreaName(t))} — tap to edit" onclick="event.stopPropagation();openTaskModal('${t.id}')"></button>
-      ${_starHTML(t)}
-    </div>
-    <div class="wb-sticky-title">${esc(t.text||'')}</div>
-    ${body}
-    <div class="wb-btns">
-      <button class="wb-btn wb-done" title="Done" onclick="event.stopPropagation();boardComplete('${t.id}')">✓</button>
-      <button class="wb-btn wb-edit" title="Edit" onclick="event.stopPropagation();openTaskModal('${t.id}')">✎</button>
-    </div>
-  </div>`;
-}
-function _bucketSectionHTML(b,items){
-  return `<div class="wall3-section" data-bucket="${b.key}">
-    <div class="wall3-hd"><span>${b.label}</span><span class="wall3-count">${items.length}</span></div>
-    <div class="wall3-notes">${items.map(_bucketStickyHTML).join('')||'<div class="wall3-empty">Drag notes here</div>'}</div>
-  </div>`;
-}
-function _sectionUnder(x,y){
-  for(const s of document.querySelectorAll('.wall3-section')){const r=s.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return s;}
-  return null;
-}
-let _bdrag=null;
-function _bucketBindDrag(){
-  const el=document.getElementById('home-wall');if(!el||el._bucketBound)return;
-  el.addEventListener('pointerdown',_bucketPointerDown);
-  window.addEventListener('pointermove',_bucketPointerMove);
-  window.addEventListener('pointerup',_bucketPointerUp);
-  el._bucketBound=true;
-}
-function _bucketPointerDown(e){
-  const sticky=e.target.closest('.wb-sticky3');if(!sticky)return;
-  if(e.target.closest('button')||e.target.closest('.wb-step')||e.target.closest('.wb-star')||e.target.closest('.wb-cat'))return;
-  const r=sticky.getBoundingClientRect();
-  const clone=sticky.cloneNode(true);
-  clone.classList.add('wb-drag-clone');
-  clone.style.cssText+=`;position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;margin:0;z-index:9999;pointer-events:none`;
-  document.body.appendChild(clone);
-  sticky.classList.add('wb-source-hidden');
-  _bdrag={tid:sticky.dataset.tid,clone,offX:e.clientX-r.left,offY:e.clientY-r.top,moved:false};
-  e.preventDefault();
-}
-function _bucketPointerMove(e){
-  if(!_bdrag)return;_bdrag.moved=true;
-  _bdrag.clone.style.left=(e.clientX-_bdrag.offX)+'px';
-  _bdrag.clone.style.top=(e.clientY-_bdrag.offY)+'px';
-  const sec=_sectionUnder(e.clientX,e.clientY);
-  document.querySelectorAll('.wall3-section').forEach(s=>s.classList.toggle('drop-hover',s===sec));
-}
-function _bucketPointerUp(e){
-  if(!_bdrag)return;
-  const {tid,clone,moved}=_bdrag;_bdrag=null;
-  if(clone)clone.remove();
-  document.querySelectorAll('.wall3-section').forEach(s=>s.classList.remove('drop-hover'));
-  document.querySelectorAll('.wb-source-hidden').forEach(s=>s.classList.remove('wb-source-hidden'));
-  if(moved){
-    const sec=_sectionUnder(e.clientX,e.clientY);
-    if(sec){const t=(S.tasks||[]).find(x=>x.id===tid);if(t){const nb=sec.dataset.bucket;if(_taskBucket(t)!==nb){t.bucket=nb;svAll();rHomeWall();}}}
-  }
-}
-function _wallRegionsHTML(){
-  return `<div class="wall2-regions">`+WALL_REGIONS.map((r,i)=>`<div class="wall2-region" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><div class="wall2-region-hd"><span>${r.label}</span><button class="wall2-arrange" onclick="event.stopPropagation();arrangeRegion(${i})" title="Stack by importance">⇅ Arrange</button></div></div>`).join('')+`</div>`;
-}
-function _wallRenderLegend(){
-  const lg=document.getElementById('wall2-legend');if(!lg)return;
-  const areas=getOrderedAreaList();
-  lg.innerHTML=`<span style="font-size:11px;color:var(--muted)">Colour = area</span>`+areas.map(a=>`<span class="wl-chip"><i style="background:${a.color}"></i>${esc(a.name)}</span>`).join('')
-    +`<button class="wl-manage" onclick="setRoute('settings')" title="Manage areas in Settings">manage ↗</button>`;
-}
-function rHomeWall(){
-  const el=document.getElementById('home-wall');if(!el)return;
-  if(!UI.homeView){try{UI.homeView=(localStorage.getItem('los_home_view')==='list')?'list':'wall';}catch(_){UI.homeView='wall';}}
-  document.querySelectorAll('.hvt').forEach(b=>b.classList.toggle('on',b.dataset.hv===UI.homeView));
-  const list=UI.homeView==='list';
-  el.classList.toggle('home-wall-list',list);
-  el.classList.toggle('wall3-mode',!list);
-  const lg=document.getElementById('wall2-legend');
-  const tasks=(S.tasks||[]).filter(t=>!t.done);
-  if(list){
-    if(lg)lg.classList.add('hide');
-    el.innerHTML=tasks.length?`<div class="home-list">${[...tasks].sort((a,b)=>_taskStars(b)-_taskStars(a)).map(_homeListRowHTML).join('')}</div>`:`<div class="wb-empty">Nothing here yet.<br><button class="wb-pin" onclick="boardAddSticky()">＋ New note</button></div>`;
-    return;
-  }
-  if(lg){lg.classList.remove('hide');_wallRenderLegend();}
-  // Bucket the notes; sort each section by stars (importance) so it's tidy.
-  const by={today:[],week:[],month:[],future:[]};
-  tasks.forEach(t=>{by[_taskBucket(t)].push(t);});
-  Object.keys(by).forEach(k=>by[k].sort((a,b)=>_taskStars(b)-_taskStars(a)));
-  el.innerHTML=`<div class="wall3"><div class="wall3-top">${_bucketSectionHTML(WALL_BUCKETS[0],by.today)}${_bucketSectionHTML(WALL_BUCKETS[1],by.week)}${_bucketSectionHTML(WALL_BUCKETS[2],by.month)}</div>${_bucketSectionHTML(WALL_BUCKETS[3],by.future)}</div>`;
-  _bucketBindDrag();
-}
-function _wallBindInteract(){
-  const el=document.getElementById('home-wall');if(!el||el._wallBound)return;
-  el.addEventListener('pointerdown',_wallPointerDown);
-  window.addEventListener('pointermove',_wallPointerMove);
-  window.addEventListener('pointerup',_wallPointerUp);
-  el.addEventListener('wheel',_wallWheel,{passive:false});
-  el._wallBound=true;
-}
-// Un-positioned notes auto-stack in the Today column (wrapping to the next
-// column when full). Canvas size is fixed; no growth needed.
-function _wallLayout(tasks){
-  const canvas=document.getElementById('wall2-canvas');if(!canvas)return;
-  let col=0,y=48,assigned=false;
-  tasks.forEach(t=>{
-    const node=canvas.querySelector(`.wb-sticky2[data-tid="${t.id}"]`);if(!node)return;
-    if(typeof t.wx==='number'&&typeof t.wy==='number'){node.style.left=t.wx+'px';node.style.top=t.wy+'px';return;}
-    if(y>WALL_TOP_H-40){y=48;col++;}
-    const x=16+col*(WALL_STICKY_W+12);
-    t.wx=Math.round(x);t.wy=Math.round(y);y+=WALL_ROW;assigned=true;
-    node.style.left=t.wx+'px';node.style.top=t.wy+'px';
-  });
-  if(assigned)svAll();
-}
-function _wallUpdateInPlace(canvas,tasks){
-  tasks.forEach(t=>{
-    const node=canvas.querySelector(`.wb-sticky2[data-tid="${t.id}"]`);if(!node)return;
-    const color=_taskAreaColor(t);
-    node.style.setProperty('--cat',color);
-    node.style.background=`color-mix(in srgb,${color} 20%,#fffdf7)`;
-    const cb=node.querySelector('.wb-cat');if(cb){cb.style.background=color;cb.title='Area: '+_taskAreaName(t)+' — tap to edit';}
-    const ti=node.querySelector('.wb-sticky-title');if(ti&&ti.textContent!==(t.text||''))ti.textContent=t.text||'';
-    const st=node.querySelector('.wb-stars');if(st){const n=_taskStars(t);st.querySelectorAll('.wb-star').forEach((s,i)=>s.classList.toggle('on',(i+1)<=n));}
-  });
-}
-// ── Pan + zoom (transform-based; no scrollbars) ──
-// Min zoom = "all four sections fit the screen" (can't zoom out past that).
-// You zoom IN from there to get closer to the (deliberately small) notes.
-function _wallMinZoom(){const vp=document.getElementById('home-wall');const vw=vp?vp.clientWidth:800,vh=vp?vp.clientHeight:520;return Math.max(0.12,Math.min(vw/WALL_CANVAS_W,vh/WALL_CANVAS_H));}
-function _wallMaxZoom(){return 1.6;}
-function _wallZoom(){let z=UI.wallZoom;if(typeof z!=='number'){try{z=parseFloat(localStorage.getItem('los_wall_z2'));}catch(_){}}const mn=_wallMinZoom();if(!z||isNaN(z))z=mn;return Math.max(mn,Math.min(_wallMaxZoom(),z));}
-function _wallPan(){if(!UI.wallPan||typeof UI.wallPan.x!=='number'){let p=null;try{p=JSON.parse(localStorage.getItem('los_wall_p2'));}catch(_){}UI.wallPan=(p&&typeof p.x==='number')?p:{x:0,y:0};}return UI.wallPan;}
-// Contain-clamp: centre the canvas when it's smaller than the viewport, and
-// never allow empty space past the sections when larger.
-function _wallClampPan(){
-  const vp=document.getElementById('home-wall');if(!vp)return;
-  const z=_wallZoom(),p=_wallPan();
-  const cw=WALL_CANVAS_W*z,ch=WALL_CANVAS_H*z,vw=vp.clientWidth,vh=vp.clientHeight;
-  if(cw<=vw)p.x=Math.round((vw-cw)/2);else p.x=Math.min(0,Math.max(vw-cw,p.x));
-  if(ch<=vh)p.y=Math.round((vh-ch)/2);else p.y=Math.min(0,Math.max(vh-ch,p.y));
-}
-function _wallCurrentRegion(){
-  const vp=document.getElementById('home-wall');if(!vp)return -1;
-  const z=_wallZoom(),p=_wallPan();
-  const cx=(vp.clientWidth/2-p.x)/z, cy=(vp.clientHeight/2-p.y)/z;
-  for(let i=0;i<WALL_REGIONS.length;i++){const r=WALL_REGIONS[i];if(cx>=r.x&&cx<r.x+r.w&&cy>=r.y&&cy<r.y+r.h)return i;}
-  return -1;
-}
-function _wallBadgeArrange(){const b=document.getElementById('wall-region-badge');if(b&&b.dataset.region!=null&&b.dataset.region!=='')arrangeRegion(Number(b.dataset.region));}
-function _wallApplyTransform(){
-  const canvas=document.getElementById('wall2-canvas');if(!canvas)return;
-  _wallClampPan();
-  const z=_wallZoom(),p=_wallPan();
-  canvas.style.transform=`translate(${p.x}px,${p.y}px) scale(${z})`;
-  canvas.classList.toggle('zoomed',z<0.7);
-  canvas.classList.toggle('zoomed-far',z<0.45);
-  const lbl=document.getElementById('wall-zoom-lbl');if(lbl)lbl.textContent=Math.round(z*100)+'%';
-  // When zoomed in past the fit view (headers may be off-screen), float a
-  // badge telling you which region the viewport centre is over, with Arrange.
-  const badge=document.getElementById('wall-region-badge');
-  if(badge){
-    const ri=(z>_wallMinZoom()*1.3)?_wallCurrentRegion():-1;
-    if(ri>=0){badge.style.display='flex';badge.dataset.region=ri;const l=badge.querySelector('.wrb-label');if(l)l.textContent=WALL_REGIONS[ri].label;}
-    else badge.style.display='none';
-  }
-}
-function _wallZoomTo(newZ,cx,cy){
-  const oldZ=_wallZoom();newZ=Math.max(_wallMinZoom(),Math.min(_wallMaxZoom(),newZ));if(newZ===oldZ)return;
-  const p=_wallPan();const ax=(cx-p.x)/oldZ,ay=(cy-p.y)/oldZ;
-  p.x=cx-ax*newZ;p.y=cy-ay*newZ;
-  UI.wallZoom=newZ;try{localStorage.setItem('los_wall_z2',String(newZ));}catch(_){}
-  _wallClampPan();_wallApplyTransform();
-}
-function setWallZoom(delta){const vp=document.getElementById('home-wall');if(!vp)return;_wallZoomTo(Math.round((_wallZoom()+delta)*20)/20,vp.clientWidth/2,vp.clientHeight/2);}
-// Full-screen the board. CSS overlay (works everywhere, incl. iOS PWA) + a
-// best-effort real Fullscreen API request on desktop. The board is moved to
-// <body> first: the route container has a transform (route transitions), which
-// would otherwise trap position:fixed and leave the overlay content-sized.
-let _wallFsHome=null;
-function _wallExitFullscreen(){
-  const col=document.querySelector('.home-wall-col.wall-fs');if(!col)return;
-  col.classList.remove('wall-fs');document.body.classList.remove('wall-fs-active');
-  if(_wallFsHome&&_wallFsHome.parent){try{_wallFsHome.parent.insertBefore(col,_wallFsHome.next||null);}catch(_){}_wallFsHome=null;}
-  const btn=document.getElementById('wall-fs-btn');if(btn)btn.textContent='⛶ Full screen';
-  setTimeout(()=>{try{_wallApplyTransform();}catch(_){}},70);
-}
-function toggleWallFullscreen(){
-  const col=document.querySelector('.home-wall-col');if(!col)return;
-  const on=!col.classList.contains('wall-fs');
-  if(on){
-    _wallFsHome={parent:col.parentNode,next:col.nextSibling};
-    document.body.appendChild(col);          // escape the transformed .route
-    col.classList.add('wall-fs');document.body.classList.add('wall-fs-active');
-    const btn=document.getElementById('wall-fs-btn');if(btn)btn.textContent='✕ Exit full screen';
-    const rq=col.requestFullscreen||col.webkitRequestFullscreen;if(rq){try{const r=rq.call(col);if(r&&r.catch)r.catch(()=>{});}catch(_){}}
-    setTimeout(()=>{try{_wallApplyTransform();}catch(_){}},70);
-  } else {
-    const ex=document.exitFullscreen||document.webkitExitFullscreen;
-    if(ex&&(document.fullscreenElement||document.webkitFullscreenElement)){try{ex.call(document);}catch(_){}}
-    _wallExitFullscreen();
-  }
-}
-// If the browser leaves fullscreen (Esc / swipe), drop our overlay too.
-document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.querySelector('.home-wall-col.wall-fs'))_wallExitFullscreen();});
-function _wallWheel(e){
-  const vp=document.getElementById('home-wall');if(!vp||!vp.classList.contains('wall2-scroll'))return;
-  if(!e.ctrlKey&&!e.metaKey)return;   // only Ctrl/Cmd + scroll zooms
-  e.preventDefault();
-  const rect=vp.getBoundingClientRect();
-  _wallZoomTo(_wallZoom()*(e.deltaY<0?1.12:0.9),e.clientX-rect.left,e.clientY-rect.top);
-}
-// Stack a region's notes by importance. Membership = where the note sits
-// (centre inside the region box) — still just x/y, no stored region flag.
-function arrangeRegion(i){
-  const r=WALL_REGIONS[i];
-  const inR=t=>{const cx=(t.wx||0)+WALL_STICKY_W/2,cy=(t.wy||0)+60;return cx>=r.x&&cx<r.x+r.w&&cy>=r.y&&cy<r.y+r.h;};
-  const items=(S.tasks||[]).filter(t=>!t.done&&typeof t.wx==='number'&&inR(t));
-  items.sort((a,b)=>_taskStars(b)-_taskStars(a));
-  const canvas=document.getElementById('wall2-canvas');
-  const perCol=Math.max(1,Math.floor((r.h-56)/WALL_ROW));
-  items.forEach((t,k)=>{
-    const c=Math.floor(k/perCol),row=k%perCol;
-    t.wx=Math.round(r.x+16+c*(WALL_STICKY_W+14));
-    t.wy=Math.round(r.y+48+row*WALL_ROW);
-    const n=canvas&&canvas.querySelector(`.wb-sticky2[data-tid="${t.id}"]`);if(n){n.style.left=t.wx+'px';n.style.top=t.wy+'px';}
-  });
-  svAll();
-}
-// Card stars set the underlying PRIORITY (5=urgent … 1=someday).
-function _wallStarClick(tid,star){
-  const t=(S.tasks||[]).find(x=>x.id===tid);if(!t)return;
-  const cur=_taskStars(t);
-  const want=(cur===star)?star-1:star;
-  t.priority=STARS_PRI[Math.max(1,want)]||'lo';
-  const node=document.querySelector(`.wb-sticky2[data-tid="${tid}"] .wb-stars`);
-  if(node){const n=_taskStars(t);node.querySelectorAll('.wb-star').forEach((s,i)=>s.classList.toggle('on',(i+1)<=n));}
-  svAll();
-}
-// ── Drag: a note moves; empty space pans the whole board ──
-let _wallDrag=null,_wallPanning=null;
-function _wallPointerDown(e){
-  const vp=document.getElementById('home-wall');if(!vp||!vp.classList.contains('wall2-scroll'))return;
-  const sticky=e.target.closest('.wb-sticky2');
-  if(sticky){
-    if(e.target.closest('button')||e.target.closest('.wb-step')||e.target.closest('.wb-star')||e.target.closest('.wb-cat'))return;
-    const z=_wallZoom(),sr=sticky.getBoundingClientRect();
-    _wallDrag={tid:sticky.dataset.tid,sticky,z,offX:(e.clientX-sr.left)/z,offY:(e.clientY-sr.top)/z,moved:false};
-    sticky.classList.add('wb-dragging');
-    try{sticky.setPointerCapture(e.pointerId);}catch(_){}
-    e.preventDefault();return;
-  }
-  if(e.target.closest('.wall2-arrange')||e.target.closest('.wrb'))return;
-  const p=_wallPan();
-  _wallPanning={sx:e.clientX,sy:e.clientY,px:p.x,py:p.y};
-  vp.classList.add('panning');
-  try{vp.setPointerCapture(e.pointerId);}catch(_){}
-  e.preventDefault();
-}
-function _wallPointerMove(e){
-  if(_wallDrag){
-    const {sticky,z,offX,offY}=_wallDrag;const canvas=document.getElementById('wall2-canvas');if(!canvas)return;const cr=canvas.getBoundingClientRect();
-    let x=(e.clientX-cr.left)/z-offX,y=(e.clientY-cr.top)/z-offY;
-    x=Math.max(0,Math.min(x,WALL_CANVAS_W-WALL_STICKY_W));
-    y=Math.max(0,Math.min(y,WALL_CANVAS_H-40));
-    sticky.style.left=x+'px';sticky.style.top=y+'px';
-    _wallDrag.lastX=x;_wallDrag.lastY=y;_wallDrag.moved=true;return;
-  }
-  if(_wallPanning){
-    const p=_wallPan();
-    p.x=_wallPanning.px+(e.clientX-_wallPanning.sx);
-    p.y=_wallPanning.py+(e.clientY-_wallPanning.sy);
-    _wallClampPan();_wallApplyTransform();
-  }
-}
-function _wallPointerUp(){
-  if(_wallDrag){
-    const {tid,sticky,moved,lastX,lastY}=_wallDrag;
-    sticky.classList.remove('wb-dragging');
-    if(moved){const t=(S.tasks||[]).find(x=>x.id===tid);if(t){t.wx=Math.round(lastX);t.wy=Math.round(lastY);svAll();}}
-    _wallDrag=null;return;
-  }
-  if(_wallPanning){
-    _wallPanning=null;const vp=document.getElementById('home-wall');if(vp)vp.classList.remove('panning');
-    try{localStorage.setItem('los_wall_p2',JSON.stringify(_wallPan()));}catch(_){}
-  }
-}
-// Streak ring: a donut in the habit's colour with the current streak in the
-// centre. Fraction = progress toward the all-time best.
-function _habRing(color,frac,cur){
-  const r=15,c=2*Math.PI*r,on=(Math.max(0,Math.min(1,frac))*c).toFixed(1);
-  return `<svg width="42" height="42" viewBox="0 0 42 42" style="flex:0 0 auto"><circle cx="21" cy="21" r="15" fill="none" stroke="var(--border)" stroke-width="4"/><circle cx="21" cy="21" r="15" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${on} ${c}" transform="rotate(-90 21 21)"/><text x="21" y="25.5" text-anchor="middle" font-size="12" font-weight="700" fill="var(--text)" font-family="Inter,sans-serif">${cur}</text></svg>`;
-}
-function rHomeHabits(){
-  const el=document.getElementById('home-habits-list');if(!el)return;
-  if(!S.habits||!S.habits.length){el.innerHTML=`<div class="home-hab-empty">No habits yet — the ones you build show here with their streaks. <a href="#" onclick="openNewHabitModal();return false" style="color:var(--accent);font-weight:600">Add your first ↗</a></div>`;return;}
-  const t=tod();
-  // Last 7 days, oldest → today. Each dot taps to back-fill via toggleHabitDate.
-  const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(localDs(d));}
-  el.innerHTML=S.habits.map(h=>{
-    const st=computeHabitStats(h);
-    const set=habitCheckedSet(h);
-    const color=habitColor(h);
-    const frac=st.max>0?st.current/st.max:(st.current>0?1:0);
-    const trail=days.map(ds=>{
-      const done=set.has(ds);const isToday=ds===t;const dnum=Number(ds.slice(8));
-      const dow=new Date(ds+'T12:00:00').toLocaleDateString('en-ZA',{weekday:'narrow'});
-      return `<button class="hab-dot${done?' done':''}${isToday?' today':''}" style="--hc:${color}" title="${ds}${done?' · done':''}" onclick="toggleHabitDate('${h.id}','${ds}')"><span class="hab-dot-dow">${dow}</span><span class="hab-dot-num">${dnum}</span></button>`;
-    }).join('');
-    return `<div class="home-hab" style="--hc:${color}">
-      <div class="home-hab-top">${_habRing(color,frac,st.current)}
-        <div style="flex:1;min-width:0">
-          <div class="home-hab-name" onclick="openHabitModal('${h.id}')" title="Edit habit — rest days, description, delete">${esc(h.name)}</div>
-          <div class="home-hab-meta">🔥 ${st.current} day${st.current===1?'':'s'} · best ${st.max}</div>
-        </div>
-      </div>
-      <div class="home-hab-trail">${trail}</div>
     </div>`;
   }).join('');
 }
@@ -7841,7 +7137,7 @@ function _usBuildResults(q){
   add('Actions','＋','New event','Add a calendar event',close(()=>{setRoute('calendar');openNewEvent();}));
   add('Actions','＋','New project','Add a project',close(()=>{setRoute('projects');openNewProjectModal();}));
   add('Actions','＋','New idea','Drop an idea in Brain',close(()=>{setRoute('brain');openNewIdeaModal();}));
-  ROUTES.filter(r=>!['board','habits','people'].includes(r)).forEach(r=>add('Actions','→','Go to '+ROUTE_TITLES[r],'',close(()=>setRoute(r))));
+  ROUTES.forEach(r=>add('Actions','→','Go to '+ROUTE_TITLES[r],'',close(()=>setRoute(r))));
   if(_profileCatalog&&(_profileCatalog.profiles||[]).length>1){
     _profileCatalog.profiles.filter(p=>p.id!==_activeProfileId).forEach(p=>{
       add('Actions','👤','Switch to '+(p.name||'profile'),(p.mode==='business'?'Business':'Personal')+' profile',close(()=>switchProfile(p.id).then(_renderProfilePill)));
@@ -8326,10 +7622,9 @@ async function rCal(){
   // so add/edit/tick stays live without needing a full page render.
   try{rReminders();}catch(_){}
   const el=document.getElementById('cal');if(!el)return;
-  // Redesign: week + day + month (3-day removed). Coerce anything else to week.
-  if(!['day','week','month'].includes(UI.calView))UI.calView='week';
   const ttl=document.getElementById('cal-ttl');if(ttl){ttl.textContent=getCalTitle();ttl.onclick=pickCalDate;ttl.style.cursor='pointer';ttl.title='Pick a date';}
-  document.querySelectorAll('.cv-row .cv').forEach((b,i)=>b.classList.toggle('on',['week','day','month'][i]===UI.calView));
+  document.querySelectorAll('.cv-row:not(.cv-mode-row) .cv').forEach((b,i)=>b.classList.toggle('on',['day','3day','week','month'][i]===UI.calView));
+  document.querySelectorAll('.cv-mode-row .cv').forEach(b=>b.classList.toggle('on',b.dataset.cm===(UI.calMode||'events')));
   const notice=document.getElementById('gcal-notice');
   if(notice)notice.style.display=getGCalToken()?'none':'flex';
   const todayBtn=document.getElementById('cal-today-btn');
@@ -8357,24 +7652,32 @@ async function rCal(){
   // next-month days — getGCForMonth + the extra-range fetch + the tasks
   // merge could each contribute overlapping entries.
   {const seen=new Set();gcEvs=gcEvs.filter(e=>{if(seen.has(e.id))return false;seen.add(e.id);return true;});}
+  const gcForDate=ds=>(gcEvs||[]).filter(e=>e.date===ds);
+  const habitsMode=UI.calMode==='habits';
+  const remindersMode=UI.calMode==='reminders';
   if(UI.calView==='day'){
     const ds=localDs(UI.calDate);
     const isToday=UI.calDate.toDateString()===today.toDateString();
-    el.innerHTML=buildDayTimeline(UI.calDate,ds,isToday,gcEvs);
-  } else if(UI.calView==='month'){
-    // MONTH — restored per user request. The month grid the user built
-    // (events overview); tap a day to open its detail / habits.
+    const dates=[{date:UI.calDate,ds,isToday}];
+    el.innerHTML=remindersMode?buildRemindersDayView(dates):(habitsMode?buildHabitsDayView(dates):buildDayView(dates,gcEvs));
+    el.onclick=null;
+  } else if(UI.calView==='3day'){
+    const dates=Array.from({length:3},(_,i)=>{const d=new Date(UI.calDate);d.setDate(UI.calDate.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
+    el.innerHTML=remindersMode?buildRemindersMultiDayView(dates):(habitsMode?buildHabitsMultiDayView(dates):buildThreeDayView(dates,gcEvs));
+    el.onclick=null;
+  } else if(UI.calView==='week'){
+    const s=new Date(UI.calDate);const dow=UI.calDate.getDay();s.setDate(UI.calDate.getDate()+(dow===0?-6:1-dow));
+    const dates=Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
+    el.innerHTML=remindersMode?buildRemindersWeekView(dates):(habitsMode?buildHabitsWeekView(dates):buildWeekView(dates,gcEvs));
+    el.onclick=null;
+  } else {
+    // MONTH
     let gcExtra=[];try{gcExtra=await getGCForMonth(y,m+1);}catch(e){}
     let gcPrev=[];try{gcPrev=await getGCForMonth(y,m-1);}catch(e){}
     const allGc=[...gcEvs,...gcExtra,...gcPrev];
-    el.innerHTML=buildMonthView(y,m,today,allGc);
-  } else {
-    // WEEK — unified lane grid (events / reminders / one lane per habit).
-    const s=new Date(UI.calDate);const dow=UI.calDate.getDay();s.setDate(UI.calDate.getDate()+(dow===0?-6:1-dow));
-    const dates=Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return{date:d,ds:localDs(d),isToday:d.toDateString()===today.toDateString()};});
-    el.innerHTML=buildWeekLanes(dates,gcEvs);
+    el.innerHTML=remindersMode?buildRemindersMonthView(y,m,today):(habitsMode?buildHabitsMonthView(y,m,today):buildMonthView(y,m,today,allGc));
+    el.onclick=null;
   }
-  el.onclick=null;
   renderComingUp();
 }
 function localDs(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
@@ -8423,72 +7726,6 @@ function pickCalDate(){
   };
 }
 function saveDvNote(){const ta=document.getElementById('dv-ta');if(!ta)return;const ds=localDs(UI.calDate);S.dayNotes=S.dayNotes||{};S.dayNotes[ds]=ta.value;svAll();const btn=event.target;if(btn){const orig=btn.textContent;btn.textContent='Saved!';setTimeout(()=>{if(btn)btn.textContent=orig;},1600);}}
-// ═══════════ REDESIGN: unified calendar (W2 lanes + DV1 timeline) ═══════════
-// WEEK = W2 "Lanes": rows are Events / Reminders / one lane per habit, across
-// the 7 days. Habit rows are a tap-to-fill tick grid (back-fill missed days).
-// Everything shares one surface — no more mode toggle.
-function buildWeekLanes(dates,gcEvs){
-  const tds=tod();
-  const hdr=dates.map(d=>{
-    const dn=d.date.toLocaleDateString('en-ZA',{weekday:'short'});
-    return `<div class="cw-hd${d.isToday?' today':''}" onclick="UI.calView='day';UI.calDate=new Date(${d.date.getFullYear()},${d.date.getMonth()},${d.date.getDate()});rCal()"><div class="dn">${dn}</div><div class="dd">${d.date.getDate()}</div></div>`;
-  }).join('');
-  const evLane=dates.map(d=>{
-    const evs=(gcEvs||[]).filter(e=>!e.task&&e.date===d.ds);
-    return `<div class="cw-cell" onclick="if(event.target===this){openNewEvent({date:'${d.ds}'})}"><div class="cw-evs">${evs.map(e=>evChip(e,d.ds)).join('')}</div></div>`;
-  }).join('');
-  const remLane=dates.map(d=>{
-    const rems=(S.reminders||[]).filter(r=>{try{return reminderFiresOn(r,d.date);}catch(_){return false;}});
-    const tasks=(gcEvs||[]).filter(e=>e.task&&e.date===d.ds);
-    const chips=rems.map(r=>`<div class="cw-rem-chip" onclick="openReminderModal('${r.id}')" title="${esc(r.text||'')}">🔔 ${esc(r.text||'')}</div>`).join('')+tasks.map(e=>evChip(e,d.ds)).join('');
-    return `<div class="cw-cell"><div class="cw-evs">${chips}</div></div>`;
-  }).join('');
-  const habLanes=(S.habits||[]).map(h=>{
-    const color=habitColor(h);
-    const cells=dates.map(d=>{
-      const done=(h.checkedDates||[]).includes(d.ds);
-      const rest=(h.excludedDays||[]).includes(d.date.getDay());
-      const future=d.ds>tds;
-      const cls='cw-cell cw-hcell'+(done?' done':'')+(d.isToday?' today':'')+(rest?' rest':'')+(future?' future':'');
-      return `<div class="${cls}" style="--hc:${color}" ${future?'':`onclick="toggleHabitDate('${h.id}','${d.ds}')"`} title="${esc(h.name)} · ${d.ds}"><span class="tick">${done?'✓':(rest?'·':'')}</span></div>`;
-    }).join('');
-    return `<div class="cw-lbl"><span class="hd-dot" style="background:${color}"></span><span class="cw-lbl-t">${esc(h.name)}</span></div>${cells}`;
-  }).join('');
-  const habEmpty=(S.habits||[]).length?'':`<div class="cw-lbl">Habits</div><div class="cw-cell" style="grid-column:2/9;color:var(--muted);font-size:12px;padding:10px">No habits yet — add one on Home.</div>`;
-  return `<div class="cw-lanes"><div class="cw-grid">`
-    +`<div class="cw-lbl cw-corner"></div>${hdr}`
-    +`<div class="cw-lbl">Events</div>${evLane}`
-    +`<div class="cw-lbl">Reminders</div>${remLane}`
-    +`${habLanes}${habEmpty}`
-    +`</div></div>`;
-}
-// DAY = DV1 "Timeline": the day down the hours; events + reminders at their
-// real times, an all-day band on top, and a right dock with today's habits
-// (tickable) + a jump to the journal.
-function buildDayTimeline(date,ds,isToday,gcEvs){
-  const evs=(gcEvs||[]).filter(e=>e.date===ds);
-  const allday=evs.filter(e=>e.allDay||e.task||!e.time);
-  const timed=evs.filter(e=>!e.allDay&&!e.task&&e.time);
-  const rems=(S.reminders||[]).filter(r=>{try{return reminderFiresOn(r,date);}catch(_){return false;}});
-  const startH=7,endH=22;
-  let spine='';
-  for(let hh=startH;hh<=endH;hh++){
-    const hEvs=timed.filter(e=>parseInt((e.time||'').slice(0,2),10)===hh);
-    const lbl=(hh%12===0?12:hh%12)+(hh<12?'a':'p');
-    spine+=`<div class="dt-row"><div class="dt-h">${lbl}</div><div class="dt-slot" onclick="if(event.target===this){openNewEvent({date:'${ds}',time:'${String(hh).padStart(2,'0')}:00'})}">${hEvs.map(e=>evChip(e,ds)).join('')}</div></div>`;
-  }
-  const band=(allday.length||rems.length)?`<div class="dt-band">${allday.map(e=>evChip(e,ds)).join('')}${rems.map(r=>`<div class="cw-rem-chip" onclick="openReminderModal('${r.id}')">🔔 ${esc(r.text||'')}</div>`).join('')}</div>`:'';
-  const habs=(S.habits||[]).length?(S.habits).map(h=>{const done=(h.checkedDates||[]).includes(ds);const color=habitColor(h);const future=ds>tod();return `<div class="dt-hab${done?' done':''}${future?' future':''}" style="--hc:${color}" ${future?'':`onclick="toggleHabitDate('${h.id}','${ds}')"`}><span class="dt-hab-tick">${done?'✓':''}</span>${esc(h.name)}</div>`;}).join(''):'<div style="font-size:12px;color:var(--muted)">No habits yet.</div>';
-  return `<div class="dt-wrap">
-    <div class="dt-main">${band}<div class="dt-spine">${spine}</div></div>
-    <aside class="dt-dock">
-      <div class="dt-dock-lbl">Habits · ${isToday?'today':esc(ds)}</div>
-      <div class="dt-habs">${habs}</div>
-      <div class="dt-dock-lbl" style="margin-top:18px">Reflect</div>
-      <button class="btn btn-ghost btn-sm" onclick="UI.diaryDate='${ds}';setRoute('diary')">Open journal ↗</button>
-    </aside>
-  </div>`;
-}
 
 // ━━━━━━━━━━━━━━━ CALENDAR ━━━━━━━━━━━━━━━
 // Shared helpers
@@ -9340,54 +8577,6 @@ function routineNav(delta){
   UI.routineDate=next;rRoutine();
 }
 function routineToday(){UI.routineDate=tod();rRoutine();}
-// ───────── DIARY — classic journal book (B1) ─────────
-// A two-page spread over S.routineLog[iso]: journal questions on the left,
-// routine checklist + habit stamps on the right. Ribbon marks today. Its own
-// day cursor (UI.diaryDate) so it's independent of anything else.
-function diaryNav(delta){const cur=UI.diaryDate||tod();const next=addDaysToDateStr(cur,delta);if(delta>0&&next>tod())return;UI.diaryDate=next;rDiary();}
-function diaryToday(){UI.diaryDate=tod();rDiary();}
-function diaryToggleRoutine(itemId){
-  const iso=UI.diaryDate||tod();const log=_routineDayLog(iso);
-  // Explicit boolean (not delete) — Firestore merge won't remove absent keys.
-  log.checks[itemId]=!log.checks[itemId];
-  svAll();rDiary();
-}
-function rDiary(){
-  const el=document.getElementById('diary-body');if(!el)return;
-  const iso=UI.diaryDate||tod();UI.diaryDate=iso;
-  const today=tod();const isToday=iso===today;
-  const dd=new Date(Number(iso.slice(0,4)),Number(iso.slice(5,7))-1,Number(iso.slice(8,10)));
-  const dateLbl=dd.toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'});
-  const dayName=dd.toLocaleDateString('en-ZA',{weekday:'long'});
-  const log=_routineDayLog(iso);
-  const journal=ROUTINE_JOURNAL.map(j=>{
-    const v=log.journal[j.id]||'';
-    return `<div class="dj-q"><label>${esc(j.q)}</label><div class="dj-field"><textarea id="dj-${j.id}" rows="${j.big?3:2}" placeholder="…" onblur="saveJournalFor('${iso}','${j.id}',this.value)">${esc(v)}</textarea><button class="dj-mic" title="Dictate" onclick="fieldMic('dj-${j.id}',this)">🎙</button></div></div>`;
-  }).join('');
-  const blocks=_routineBlocks(iso);
-  const routine=(blocks||[]).map(b=>`<div class="dr-block"><div class="dr-block-hd">${esc(b.title||'')}</div>${b.sub?`<div class="dr-block-sub">${esc(b.sub)}</div>`:''}${(b.items||[]).map(it=>{const on=!!log.checks[it.id];return `<div class="dr-item${on?' done':''}" onclick="diaryToggleRoutine('${it.id}')"><span class="dr-box">${on?'✓':''}</span><span class="dr-t">${esc(it.t||'')}</span></div>`;}).join('')}</div>`).join('');
-  const stamps=(S.habits||[]).length?(S.habits).map(h=>{const on=(h.checkedDates||[]).includes(iso);const color=habitColor(h);return `<button class="dr-stamp${on?' on':''}" style="--hc:${color}" onclick="toggleHabitDate('${h.id}','${iso}')"><span class="dr-stamp-ck">${on?'✓':'○'}</span>${esc(h.name)}</button>`;}).join(''):'<span style="font-size:12px;color:var(--muted)">No habits yet.</span>';
-  el.innerHTML=`
-   <div class="diary-book">
-     ${isToday?'<div class="diary-ribbon" title="Today"></div>':''}
-     <div class="diary-page left">
-       <div class="diary-date">${esc(dateLbl)}</div>
-       <div class="diary-dayname">${esc(dayName)}${isToday?' · today':''}</div>
-       <div class="diary-page-lbl">Journal</div>
-       ${journal}
-     </div>
-     <div class="diary-page right">
-       <div class="diary-page-lbl">Routine</div>
-       ${routine||'<div style="font-size:13px;color:var(--muted);margin-bottom:16px">No routine set — edit it in Settings → Routine.</div>'}
-       <div class="diary-page-lbl" style="margin-top:22px">Habit stamps</div>
-       <div class="dr-stamps">${stamps}</div>
-     </div>
-   </div>`;
-  const bar=document.getElementById('diary-date-bar');if(bar)bar.textContent=dateLbl;
-  const nx=document.getElementById('diary-next');if(nx)nx.disabled=isToday;
-  // Auto-grow the journal textareas to fit their content.
-  setTimeout(()=>{el.querySelectorAll('.dj-field textarea').forEach(t=>{t.style.height='auto';t.style.height=Math.max(t.scrollHeight,30)+'px';});},0);
-}
 function routineToggle(itemId){
   const iso=UI.routineDate||tod();
   const log=_routineDayLog(iso);
@@ -12049,11 +11238,6 @@ function renderProjectDetail(){
   const eff=_projEffStatus(b),auto=_projIsAuto(b);
   const stage=_projStage(b);
   const loggedToday=Array.isArray(b.log)&&b.log.some(e=>e.date===tod());
-  const st=_projStreak(b);
-  const pdFlame=st.current>0?`🔥 ${st.current} day${st.current===1?'':'s'} streak`:(st.broken?'💤 streak broken':'not started yet');
-  const pdBtn=st.checkedToday
-    ? `<button class="btn btn-ghost btn-sm" disabled>✓ Checked in today</button>`
-    : `<button class="btn btn-primary btn-sm" onclick="projCheckIn('${b.id}')">${st.broken?'Revive streak':'Check in'}</button>`;
   // Staleness badge (the auto system, now a subtle chip rather than 3 buttons).
   const staleLbl=eff==='active'?'Active':(eff==='future'?'Paused':'Background');
   // Stage stepper — tap a chip to set the stage manually.
@@ -12076,16 +11260,30 @@ function renderProjectDetail(){
     </div>
     <div class="pd-head">
       <input class="pd-title-input" id="pd-title-${b.id}" value="${esc(b.title)}" onblur="saveProjectHead('${b.id}')">
-      <div class="pd-streak-row">
-        <span class="bc-streak${st.current>0?' on':''}${st.broken?' broken':''}">${pdFlame}</span>
-        ${pdBtn}
-      </div>
+      <div class="pd-stepper">${stepper}</div>
       <div class="pd-lbl">What this is</div>
       <div class="pd-field-wrap">
         <textarea class="pd-desc" id="pd-desc-${b.id}" placeholder="What this project is and where it's going. The daily log keeps this current — or edit it yourself." onblur="saveProjectHead('${b.id}')">${esc(b.desc||'')}</textarea>
         <button class="fmic" title="Dictate" onclick="fieldMic('pd-desc-${b.id}',this)">🎙</button>
       </div>
       ${b.whatsNext?`<div class="pd-next"><span class="pd-next-lbl">Next</span> ${esc(b.whatsNext)}</div>`:''}
+    </div>
+
+    <div class="pd-log-card">
+      <div class="pd-log-hd">
+        <span>Daily progress</span>
+        <button class="btn btn-primary btn-sm" onclick="toggleProjectLog('${b.id}')">${loggedToday?'+ Log again':'✍ Log today'}</button>
+      </div>
+      <div id="plog-box-${b.id}" class="pd-log-box" style="display:none">
+        <div class="pd-field-wrap">
+          <textarea class="pd-log-input" id="plog-input-${b.id}" rows="4" placeholder="What did you do on this today? e.g. 'Built the login screen, dropped the old auth, next up is wiring the API.' The AI updates the description above."></textarea>
+          <button class="fmic" title="Dictate" onclick="fieldMic('plog-input-${b.id}',this)">🎙</button>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <button class="btn btn-primary btn-sm" id="plog-submit-${b.id}" onclick="projectLogSubmit('${b.id}')">✨ Log &amp; update</button>
+        </div>
+      </div>
+      <div class="pd-log-timeline">${logHtml}</div>
     </div>
 
     <div class="pd-lbl" style="display:flex;align-items:center;gap:8px;margin-top:22px">
@@ -12111,71 +11309,35 @@ function renderProjectDetail(){
     </div>
   `;
 }
-// ─── Projects = Streak keepers ───
-// Each project keeps a habit-style check-in streak. Check in to keep it alive;
-// a lapsed streak shows "Revive". This is what makes projects revisit-worthy
-// (the old capture-then-forget problem). Replaces the v195 stage/daily-log
-// emphasis on the card.
-function _projCheckins(b){return Array.isArray(b.checkins)?b.checkins:[];}
-function _projStreak(b){
-  const set=new Set(_projCheckins(b));
-  if(!set.size)return {current:0,broken:false,checkedToday:false};
-  const t=tod();const yd=localDs(new Date(Date.now()-86400000));
-  const checkedToday=set.has(t);
-  let startStr;
-  if(checkedToday)startStr=t; else if(set.has(yd))startStr=yd; else return {current:0,broken:true,checkedToday:false};
-  let cur=0;let cursor=new Date(startStr+'T12:00:00');
-  while(set.has(localDs(cursor))){cur++;cursor.setDate(cursor.getDate()-1);}
-  return {current:cur,broken:false,checkedToday};
-}
-function projCheckIn(id){
-  const b=S.builds.find(x=>x.id===id);if(!b)return;
-  b.checkins=_projCheckins(b).slice();
-  const t=tod();
-  if(!b.checkins.includes(t))b.checkins.push(t);
-  b.lastTouched=Date.now();
-  svAll();try{rBuilds();}catch(_){}if(UI.projectDetail===id)try{renderProjectDetail();}catch(_){}
-}
 function rBuilds(){
   const el=document.getElementById('builds');if(!el)return;
   _projSyncAuto();
-  const order={active:0,future:1,background:2};
+  const order={active:0,future:1,background:2},lbl={active:'Building now',future:'Future project',background:'Background idea'};
   const sorted=[...S.builds].sort((a,b)=>(order[_projEffStatus(a)]??1)-(order[_projEffStatus(b)]??1));
   const cnt=document.getElementById('bc-cnt');if(cnt)cnt.textContent=S.builds.length?`${S.builds.length} in pipeline`:'';
   el.innerHTML=sorted.length?sorted.map(b=>{
     const eff=_projEffStatus(b);
-    const st=_projStreak(b);
-    const flame=st.current>0?`🔥 ${st.current} day${st.current===1?'':'s'}`:(st.broken?'💤 streak broken':'not started');
-    const btn=st.checkedToday
-      ? `<button class="btn btn-ghost btn-sm" disabled>✓ Checked in</button>`
-      : `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();projCheckIn('${b.id}')">${st.broken?'Revive':'Check in'}</button>`;
+    const stage=_projStage(b);
+    const loggedToday=Array.isArray(b.log)&&b.log.some(e=>e.date===tod());
+    const stagePct=Math.round((stage/(PROJECT_STAGES.length-1))*100);
+    const logCount=Array.isArray(b.log)?b.log.length:0;
     return `<div class="bc ${eff}" onclick="openProject('${b.id}')">
-      <div class="bc-top"><span class="bc-streak${st.current>0?' on':''}${st.broken?' broken':''}">${flame}</span></div>
+      <div class="bc-top">
+        <span class="bc-tag">${esc(PROJECT_STAGES[stage])}${loggedToday?' <span class="bc-tag-auto">· logged today</span>':''}</span>
+      </div>
       <div class="bc-title">${esc(b.title)}</div>
-      <div class="bc-desc">${esc((b.desc||'').slice(0,160))}${(b.desc||'').length>160?'…':''}</div>
-      <div class="bc-foot"><span>Last worked ${_projLastWorkedLabel(b)}</span>${btn}</div>
+      <div class="bc-desc">${esc((b.desc||'').slice(0,180))}${(b.desc||'').length>180?'…':''}</div>
+      <div class="bc-stagebar" title="Stage ${stage+1} of ${PROJECT_STAGES.length}"><span style="width:${stagePct}%"></span></div>
+      <div class="bc-foot"><span>Last worked ${_projLastWorkedLabel(b)}</span>${logCount?`<span>${logCount} log${logCount===1?'':'s'} →</span>`:''}</div>
     </div>`;
-  }).join(''):`<div class="no-t">No projects yet — add one, or fan a spark from Brain. Check in daily to keep a project's streak alive.</div>`;
+  }).join(''):`<div class="no-t">No projects yet — add one above.</div>`;
 }
 
 
 // IDEAS
 function saveIdea(id){const i=S.ideas.find(x=>x.id===id);if(!i)return;const ti=document.getElementById('bd-title'),de=document.getElementById('bd-desc');if(ti?.value?.trim())i.title=ti.value.trim();if(de?.value?.trim())i.desc=de.value.trim();svAll();closeBrainDetail();rIdeas();}
 function delIdea(id){if(!confirm('Delete this idea?'))return;S.ideas=S.ideas.filter(x=>x.id!==id);svAll();closeBrainDetail();rIdeas();}
-function rIdeas(){const el=document.getElementById('ideas');if(!el)return;const list=brainFilter([...S.ideas].reverse(),['title','desc']);el.innerHTML=list.length?list.map(i=>`<div class="ic" onclick="openBrainDetail('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1;min-width:0"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div></div><button class="ic-fan" onclick="event.stopPropagation();fanIdeaToProject('${i.id}')" title="Fan this spark into a streak-keeper project">🔥 Fan → project</button></div>`).join(''):(UI.brainQuery?`<div class="no-t">No sparks match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No sparks yet — dump an idea or dictate it. The good ones can be fanned into a project. ✦</div>`);}
-// Spark → fire: graduate an idea into a Streak-keeper project. The spark
-// leaves Brain (its content now lives in the project), the project starts
-// with today's check-in so the streak is already alight, and we drop the
-// user on it. Brain + Projects = one pipeline.
-function fanIdeaToProject(id){
-  const i=(S.ideas||[]).find(x=>x.id===id);if(!i)return;
-  if(!confirm('Fan this spark into a project? It moves out of Brain and starts a streak.'))return;
-  const b={id:uid(),title:i.title||'(untitled)',desc:i.desc||'',status:'active',date:tod(),notes:'',auto:true,lastTouched:Date.now(),checkins:[tod()],fromSpark:true};
-  S.builds=S.builds||[];S.builds.push(b);
-  S.ideas=S.ideas.filter(x=>x.id!==id);
-  svAll();try{rIdeas();}catch(_){}try{rBuilds();}catch(_){}
-  setRoute('projects');openProject(b.id);
-}
+function rIdeas(){const el=document.getElementById('ideas');if(!el)return;const list=brainFilter([...S.ideas].reverse(),['title','desc']);el.innerHTML=list.length?list.map(i=>`<div class="ic" onclick="openBrainDetail('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div></div></div>`).join(''):(UI.brainQuery?`<div class="no-t">No ideas match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No ideas yet — drop one in or dictate it</div>`);}
 
 // RESOURCES
 function saveRes(id){const r=S.resources.find(x=>x.id===id);if(!r)return;const ti=document.getElementById('bd-title'),de=document.getElementById('bd-desc'),ur=document.getElementById('bd-url'),tg=document.getElementById('bd-tag');if(ti?.value?.trim())r.title=ti.value.trim();if(de)r.desc=de.value.trim();if(ur)r.url=ur.value.trim();if(tg)r.tag=tg.value;svAll();closeBrainDetail();rResources();}
@@ -17116,8 +16278,6 @@ function render(){
   if(g)g.textContent=gTxt();if(d)d.textContent=dTxt();
   rUpcom();rCal();rFocus();rHabits();rTasks();rBuilds();rIdeas();rResources();rNotes();
   rAttention();rTodayWeek();setBrainTab(UI.brainTab);
-  try{rHomeWall();rHomeHabits();}catch(_){}
-  if(currentRoute==='diary')try{rDiary();}catch(_){}
   refreshTipCard();
   refreshGCalWarn();
   if(currentRoute==='settings')rSettings();
@@ -17136,14 +16296,6 @@ function refreshGCalWarn(){
   const el=document.getElementById('gcal-warn');if(!el)return;
   const hasTok=!!getGCalToken();
   el.style.display=(CU&&!hasTok)?'flex':'none';
-  // Surface WHY it dropped so a disconnect is diagnosable at a glance (and so
-  // Zander can tell me the exact reason). _gisLastError is set by the GIS
-  // callback; _humanGisError turns the terse code into a sentence.
-  const txt=el.querySelector('.gcal-warn-text');
-  if(txt&&CU&&!hasTok){
-    const reason=(typeof _gisLastError!=='undefined'&&_gisLastError)?(' — '+_humanGisError(_gisLastError)):'';
-    txt.textContent="Google Calendar disconnected, tap to reconnect"+reason;
-  }
 }
 // Token expires after ~1hr (Google access token lifetime). If the user
 // keeps the app open longer than that, the warning won't appear until
