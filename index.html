@@ -472,8 +472,32 @@ body[data-route="today"] .wall-zoom.hide{display:none}
 .home-wall-col.wall-fs{position:fixed;inset:0;z-index:4000;background:var(--bg);margin:0;padding:14px 18px 16px;display:flex;flex-direction:column;gap:0;box-sizing:border-box}
 .home-wall-col.wall-fs .section-hdr{margin-bottom:10px}
 .home-wall-col.wall-fs .wall2-legend{margin-bottom:10px}
-.home-wall-col.wall-fs .home-wall{flex:1 1 auto;height:auto!important;min-height:0!important;max-height:none!important}
+.home-wall-col.wall-fs .home-wall{flex:1 1 auto;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto}
 body.wall-fs-active{overflow:hidden}
+/* ━━━ Structured bucket board (Today / This week / This month / Future) ━━━ */
+.home-wall.wall3-mode{display:block;background:none;border:none;padding:0;overflow:visible;height:auto;min-height:0;cursor:default}
+.wall3{display:flex;flex-direction:column;gap:14px}
+.wall3-top{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media(max-width:820px){.wall3-top{grid-template-columns:1fr}}
+.wall3-section{border:1.5px dashed var(--border-strong);border-radius:16px;background:rgba(120,80,40,.03);padding:12px 14px 16px;min-height:168px;transition:background .12s,border-color .12s}
+.wall3-section.drop-hover{border-color:var(--accent);border-style:solid;background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.wall3-hd{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px}
+.wall3-count{font-size:11px;font-weight:600;color:var(--muted-2);background:var(--surface-2);border-radius:10px;padding:1px 8px;letter-spacing:0}
+.wall3-notes{display:flex;flex-wrap:wrap;gap:18px 16px;align-content:flex-start}
+.wall3-empty{width:100%;text-align:center;color:var(--muted-2);font-size:12px;padding:20px 0;font-style:italic}
+.wb-sticky3{position:relative;width:150px;padding:14px 13px 10px;border-radius:3px;box-shadow:2px 4px 11px rgba(0,0,0,.14);display:flex;flex-direction:column;gap:5px;font-family:'Kalam',cursive;color:#3a2a22;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;transition:transform .12s,box-shadow .12s}
+.wb-sticky3 *{user-select:none;-webkit-user-select:none}
+.wb-sticky3:hover{transform:translateY(-2px);box-shadow:3px 8px 17px rgba(0,0,0,.2)}
+.wb-sticky3 .wb-sticky-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:1px}
+.wb-sticky3 .wb-sticky-title{font-size:14px;font-weight:700;line-height:1.25;word-break:break-word}
+.wb-sticky3 .wb-btns{margin-top:2px;display:flex;gap:7px;justify-content:flex-end}
+.wb-sticky3 .wb-btn{font-family:'Kalam',cursive;font-size:14px;font-weight:700;background:rgba(255,255,255,.35);border:1.4px solid rgba(0,0,0,.32);border-radius:9px 7px 10px 6px;width:30px;height:26px;cursor:pointer;color:#3a2a22}
+.wb-sticky3 .wb-btn.wb-done{border-color:#3f7a34;color:#356629}
+.wb-sticky3 .wb-btn:hover{background:rgba(255,255,255,.7)}
+.wb-source-hidden{opacity:.28!important}
+.wb-drag-clone{transform:rotate(-3deg) scale(1.05);box-shadow:5px 16px 34px rgba(0,0,0,.32)!important}
+.wb-drag-clone .wb-pin2{transform:translateX(-50%) translateY(-15px) scale(.9)}
+.wb-drag-clone .wb-pin2::before{height:24px}
 /* Area picker popover */
 .cat-pop{position:fixed;z-index:9600;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-lift);padding:6px;min-width:180px;font-family:'Inter',system-ui,sans-serif}
 .cat-pop-row{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text)}
@@ -3027,7 +3051,6 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
                   <button class="hvt" data-hv="wall" onclick="setHomeView('wall')" title="Free-form board — drag notes around">Wall</button>
                   <button class="hvt" data-hv="list" onclick="setHomeView('list')" title="Structured list">List</button>
                 </div>
-                <div class="wall-zoom" id="wall-zoom"><button onclick="setWallZoom(-0.1)" title="Zoom out">−</button><span id="wall-zoom-lbl">100%</span><button onclick="setWallZoom(0.1)" title="Zoom in">+</button></div>
                 <button class="btn btn-ghost btn-sm" id="wall-fs-btn" onclick="toggleWallFullscreen()" title="Full screen board">⛶ Full screen</button>
                 <button class="btn btn-primary btn-sm" onclick="boardAddSticky()">+ New note</button>
               </div>
@@ -3743,7 +3766,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v208';
+const APP_VERSION='v209';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -7434,6 +7457,80 @@ function setHomeView(v){
   try{localStorage.setItem('los_home_view',UI.homeView);}catch(_){}
   rHomeWall();
 }
+// ── Structured bucket board: notes live IN a section (t.bucket), laid out in a
+// neat grid; drag a note to move it between sections. Colour = area, stars =
+// priority (as before). Replaces the free pan/zoom canvas. ──
+const WALL_BUCKETS=[{key:'today',label:'Today'},{key:'week',label:'This week'},{key:'month',label:'This month'},{key:'future',label:'Future'}];
+const WALL_BUCKET_KEYS=new Set(WALL_BUCKETS.map(b=>b.key));
+function _taskBucket(t){return WALL_BUCKET_KEYS.has(t&&t.bucket)?t.bucket:'today';}
+function _bucketStickyHTML(t){
+  const color=_taskAreaColor(t);
+  const hasSteps=Array.isArray(t.steps)&&t.steps.length;
+  let body='';
+  if(hasSteps){body=`<div class="wb-steps">${t.steps.map(s=>`<div class="wb-step${s.done?' done':''}" onclick="event.stopPropagation();boardToggleStep('${t.id}','${s.id}')"><span class="wb-step-box">${s.done?'✓':''}</span><span class="wb-step-txt">${esc(s.text||'')}</span></div>`).join('')}</div>`;}
+  else if(t.notes&&t.notes.trim()){body=`<div class="wb-note-body">${esc(t.notes)}</div>`;}
+  return `<div class="wb-sticky3" data-tid="${t.id}" style="--cat:${color};background:color-mix(in srgb,${color} 22%,#fffdf7)">
+    <span class="wb-pin2"></span>
+    <div class="wb-sticky-top">
+      <button class="wb-cat" style="background:${color}" title="Area: ${esc(_taskAreaName(t))} — tap to edit" onclick="event.stopPropagation();openTaskModal('${t.id}')"></button>
+      ${_starHTML(t)}
+    </div>
+    <div class="wb-sticky-title">${esc(t.text||'')}</div>
+    ${body}
+    <div class="wb-btns">
+      <button class="wb-btn wb-done" title="Done" onclick="event.stopPropagation();boardComplete('${t.id}')">✓</button>
+      <button class="wb-btn wb-edit" title="Edit" onclick="event.stopPropagation();openTaskModal('${t.id}')">✎</button>
+    </div>
+  </div>`;
+}
+function _bucketSectionHTML(b,items){
+  return `<div class="wall3-section" data-bucket="${b.key}">
+    <div class="wall3-hd"><span>${b.label}</span><span class="wall3-count">${items.length}</span></div>
+    <div class="wall3-notes">${items.map(_bucketStickyHTML).join('')||'<div class="wall3-empty">Drag notes here</div>'}</div>
+  </div>`;
+}
+function _sectionUnder(x,y){
+  for(const s of document.querySelectorAll('.wall3-section')){const r=s.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return s;}
+  return null;
+}
+let _bdrag=null;
+function _bucketBindDrag(){
+  const el=document.getElementById('home-wall');if(!el||el._bucketBound)return;
+  el.addEventListener('pointerdown',_bucketPointerDown);
+  window.addEventListener('pointermove',_bucketPointerMove);
+  window.addEventListener('pointerup',_bucketPointerUp);
+  el._bucketBound=true;
+}
+function _bucketPointerDown(e){
+  const sticky=e.target.closest('.wb-sticky3');if(!sticky)return;
+  if(e.target.closest('button')||e.target.closest('.wb-step')||e.target.closest('.wb-star')||e.target.closest('.wb-cat'))return;
+  const r=sticky.getBoundingClientRect();
+  const clone=sticky.cloneNode(true);
+  clone.classList.add('wb-drag-clone');
+  clone.style.cssText+=`;position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;margin:0;z-index:9999;pointer-events:none`;
+  document.body.appendChild(clone);
+  sticky.classList.add('wb-source-hidden');
+  _bdrag={tid:sticky.dataset.tid,clone,offX:e.clientX-r.left,offY:e.clientY-r.top,moved:false};
+  e.preventDefault();
+}
+function _bucketPointerMove(e){
+  if(!_bdrag)return;_bdrag.moved=true;
+  _bdrag.clone.style.left=(e.clientX-_bdrag.offX)+'px';
+  _bdrag.clone.style.top=(e.clientY-_bdrag.offY)+'px';
+  const sec=_sectionUnder(e.clientX,e.clientY);
+  document.querySelectorAll('.wall3-section').forEach(s=>s.classList.toggle('drop-hover',s===sec));
+}
+function _bucketPointerUp(e){
+  if(!_bdrag)return;
+  const {tid,clone,moved}=_bdrag;_bdrag=null;
+  if(clone)clone.remove();
+  document.querySelectorAll('.wall3-section').forEach(s=>s.classList.remove('drop-hover'));
+  document.querySelectorAll('.wb-source-hidden').forEach(s=>s.classList.remove('wb-source-hidden'));
+  if(moved){
+    const sec=_sectionUnder(e.clientX,e.clientY);
+    if(sec){const t=(S.tasks||[]).find(x=>x.id===tid);if(t){const nb=sec.dataset.bucket;if(_taskBucket(t)!==nb){t.bucket=nb;svAll();rHomeWall();}}}
+  }
+}
 function _wallRegionsHTML(){
   return `<div class="wall2-regions">`+WALL_REGIONS.map((r,i)=>`<div class="wall2-region" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><div class="wall2-region-hd"><span>${r.label}</span><button class="wall2-arrange" onclick="event.stopPropagation();arrangeRegion(${i})" title="Stack by importance">⇅ Arrange</button></div></div>`).join('')+`</div>`;
 }
@@ -7449,8 +7546,7 @@ function rHomeWall(){
   document.querySelectorAll('.hvt').forEach(b=>b.classList.toggle('on',b.dataset.hv===UI.homeView));
   const list=UI.homeView==='list';
   el.classList.toggle('home-wall-list',list);
-  el.classList.toggle('wall2-scroll',!list);
-  const zc=document.getElementById('wall-zoom');if(zc)zc.classList.toggle('hide',list);
+  el.classList.toggle('wall3-mode',!list);
   const lg=document.getElementById('wall2-legend');
   const tasks=(S.tasks||[]).filter(t=>!t.done);
   if(list){
@@ -7459,17 +7555,12 @@ function rHomeWall(){
     return;
   }
   if(lg){lg.classList.remove('hide');_wallRenderLegend();}
-  if(!tasks.length){el.innerHTML=`<div class="wb-empty" style="padding:64px 20px">The board's clear.<br><button class="wb-pin" onclick="boardAddSticky()">＋ New note</button></div>`;return;}
-  if(_wallDrag||_wallPanning)return;  // never rebuild mid-interaction
-  const canvas=document.getElementById('wall2-canvas');
-  const existing=canvas?[...canvas.querySelectorAll('.wb-sticky2')].map(n=>n.dataset.tid):null;
-  const ids=tasks.map(t=>t.id);
-  if(canvas&&existing&&existing.length===ids.length&&existing.every(id=>ids.includes(id))){
-    _wallUpdateInPlace(canvas,tasks);_wallApplyTransform();return;
-  }
-  const sorted=[...tasks].sort((a,b)=>_taskStars(b)-_taskStars(a));
-  el.innerHTML=`<div class="wall2-canvas" id="wall2-canvas" style="width:${WALL_CANVAS_W}px;height:${WALL_CANVAS_H}px">${_wallRegionsHTML()}${sorted.map(_wallStickyHTML).join('')}</div><div id="wall-region-badge" class="wrb" style="display:none"><span class="wrb-label"></span><button class="wall2-arrange" onclick="_wallBadgeArrange()">⇅ Arrange</button></div>`;
-  setTimeout(()=>{_wallLayout(sorted);_wallBindInteract();_wallApplyTransform();},0);
+  // Bucket the notes; sort each section by stars (importance) so it's tidy.
+  const by={today:[],week:[],month:[],future:[]};
+  tasks.forEach(t=>{by[_taskBucket(t)].push(t);});
+  Object.keys(by).forEach(k=>by[k].sort((a,b)=>_taskStars(b)-_taskStars(a)));
+  el.innerHTML=`<div class="wall3"><div class="wall3-top">${_bucketSectionHTML(WALL_BUCKETS[0],by.today)}${_bucketSectionHTML(WALL_BUCKETS[1],by.week)}${_bucketSectionHTML(WALL_BUCKETS[2],by.month)}</div>${_bucketSectionHTML(WALL_BUCKETS[3],by.future)}</div>`;
+  _bucketBindDrag();
 }
 function _wallBindInteract(){
   const el=document.getElementById('home-wall');if(!el||el._wallBound)return;

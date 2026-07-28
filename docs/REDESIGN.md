@@ -516,6 +516,22 @@ palette + universal search · Settings · Login / splash / onboarding.
 - CSS `.home-wall-col.wall-fs` = fixed inset:0 flex column; board flexes to fill.
   Verified: fills viewport (720px), restores to grid, no errors.
 
+### 2026-07-27 — Increment 12 (v209): wall reverted to structured buckets
+- **Zander asked to revert the free pan/zoom board to a structured layout**, but
+  keep the four sections + drag-and-drop between them.
+- New model: a note lives IN a section via a stored **`t.bucket`**
+  (today/week/month/future; default today). Layout = three sections across the
+  top (Today / This week / This month) + full-width **Future** below; notes flow
+  in a **flex-wrap grid** inside each, auto-sorted by stars (importance).
+- **Drag a note between sections** = a floating clone follows the pointer, the
+  target section highlights (`drop-hover`), and on drop `t.bucket` updates and it
+  re-flows there. Works on mouse + touch (pointer events, `user-select:none`).
+- Colour still = area, stars still = priority; pushpin kept (lifts on the drag
+  clone). Removed the zoom control + region badge (not needed). Full-screen button
+  kept (board scrolls inside it). Pan/zoom fns left orphaned/unused.
+- Verified: 4 buckets, correct placement (unbucketed→Today), stars, move-between-
+  buckets re-flows + re-sorts. No errors.
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.
