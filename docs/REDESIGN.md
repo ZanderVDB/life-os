@@ -507,6 +507,15 @@ palette + universal search · Settings · Login / splash / onboarding.
   changed. Verified: fit-default, min=fit, 152px notes, zoom-in, badge tracks the
   region. No errors.
 
+### 2026-07-27 — Increment 11 (v208): full-screen board
+- **"⛶ Full screen" button** on the wall header. `toggleWallFullscreen()` moves
+  the `.home-wall-col` to `<body>` (the `.route` has a transform that would trap
+  `position:fixed`), applies a fixed-overlay class, and best-effort requests the
+  real Fullscreen API. Exit via the button, Esc (`fullscreenchange`), or by
+  navigating away (`setRoute` guard). Restores the col to its grid slot on exit.
+- CSS `.home-wall-col.wall-fs` = fixed inset:0 flex column; board flexes to fill.
+  Verified: fills viewport (720px), restores to grid, no errors.
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.

@@ -468,6 +468,12 @@ body[data-route="today"] .wall-zoom.hide{display:none}
   box-shadow:var(--shadow-lift);font-size:12.5px;font-weight:700;color:var(--text)}
 .wrb .wrb-label{white-space:nowrap}
 .wrb .wrb-label::before{content:'▸ ';color:var(--accent)}
+/* Full-screen board overlay */
+.home-wall-col.wall-fs{position:fixed;inset:0;z-index:4000;background:var(--bg);margin:0;padding:14px 18px 16px;display:flex;flex-direction:column;gap:0;box-sizing:border-box}
+.home-wall-col.wall-fs .section-hdr{margin-bottom:10px}
+.home-wall-col.wall-fs .wall2-legend{margin-bottom:10px}
+.home-wall-col.wall-fs .home-wall{flex:1 1 auto;height:auto!important;min-height:0!important;max-height:none!important}
+body.wall-fs-active{overflow:hidden}
 /* Area picker popover */
 .cat-pop{position:fixed;z-index:9600;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-lift);padding:6px;min-width:180px;font-family:'Inter',system-ui,sans-serif}
 .cat-pop-row{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text)}
@@ -3022,6 +3028,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
                   <button class="hvt" data-hv="list" onclick="setHomeView('list')" title="Structured list">List</button>
                 </div>
                 <div class="wall-zoom" id="wall-zoom"><button onclick="setWallZoom(-0.1)" title="Zoom out">−</button><span id="wall-zoom-lbl">100%</span><button onclick="setWallZoom(0.1)" title="Zoom in">+</button></div>
+                <button class="btn btn-ghost btn-sm" id="wall-fs-btn" onclick="toggleWallFullscreen()" title="Full screen board">⛶ Full screen</button>
                 <button class="btn btn-primary btn-sm" onclick="boardAddSticky()">+ New note</button>
               </div>
             </div>
@@ -3736,7 +3743,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v207';
+const APP_VERSION='v208';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4215,6 +4222,9 @@ function setRoute(r,skipHash){
   // (e.g. Home owns its own habit rail, so the global right rail is hidden
   // there — see body[data-route="today"] rules).
   try{document.body.dataset.route=r;}catch(_){}
+  // Leaving Home while the board is full-screen? Drop the overlay so it can't
+  // strand over another route (the col lives on <body> in that mode).
+  if(r!=='today'&&typeof _wallExitFullscreen==='function'&&document.querySelector('.home-wall-col.wall-fs'))try{_wallExitFullscreen();}catch(_){}
   if(!skipHash){try{history.replaceState(null,'','#'+r);}catch(e){location.hash=r;}}
   document.querySelectorAll('[data-route]').forEach(el=>el.classList.toggle('active',el.dataset.route===r));
   document.querySelectorAll('[data-route-link]').forEach(a=>a.classList.toggle('active',a.dataset.routeLink===r));
@@ -7544,6 +7554,36 @@ function _wallZoomTo(newZ,cx,cy){
   _wallClampPan();_wallApplyTransform();
 }
 function setWallZoom(delta){const vp=document.getElementById('home-wall');if(!vp)return;_wallZoomTo(Math.round((_wallZoom()+delta)*20)/20,vp.clientWidth/2,vp.clientHeight/2);}
+// Full-screen the board. CSS overlay (works everywhere, incl. iOS PWA) + a
+// best-effort real Fullscreen API request on desktop. The board is moved to
+// <body> first: the route container has a transform (route transitions), which
+// would otherwise trap position:fixed and leave the overlay content-sized.
+let _wallFsHome=null;
+function _wallExitFullscreen(){
+  const col=document.querySelector('.home-wall-col.wall-fs');if(!col)return;
+  col.classList.remove('wall-fs');document.body.classList.remove('wall-fs-active');
+  if(_wallFsHome&&_wallFsHome.parent){try{_wallFsHome.parent.insertBefore(col,_wallFsHome.next||null);}catch(_){}_wallFsHome=null;}
+  const btn=document.getElementById('wall-fs-btn');if(btn)btn.textContent='⛶ Full screen';
+  setTimeout(()=>{try{_wallApplyTransform();}catch(_){}},70);
+}
+function toggleWallFullscreen(){
+  const col=document.querySelector('.home-wall-col');if(!col)return;
+  const on=!col.classList.contains('wall-fs');
+  if(on){
+    _wallFsHome={parent:col.parentNode,next:col.nextSibling};
+    document.body.appendChild(col);          // escape the transformed .route
+    col.classList.add('wall-fs');document.body.classList.add('wall-fs-active');
+    const btn=document.getElementById('wall-fs-btn');if(btn)btn.textContent='✕ Exit full screen';
+    const rq=col.requestFullscreen||col.webkitRequestFullscreen;if(rq){try{const r=rq.call(col);if(r&&r.catch)r.catch(()=>{});}catch(_){}}
+    setTimeout(()=>{try{_wallApplyTransform();}catch(_){}},70);
+  } else {
+    const ex=document.exitFullscreen||document.webkitExitFullscreen;
+    if(ex&&(document.fullscreenElement||document.webkitFullscreenElement)){try{ex.call(document);}catch(_){}}
+    _wallExitFullscreen();
+  }
+}
+// If the browser leaves fullscreen (Esc / swipe), drop our overlay too.
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.querySelector('.home-wall-col.wall-fs'))_wallExitFullscreen();});
 function _wallWheel(e){
   const vp=document.getElementById('home-wall');if(!vp||!vp.classList.contains('wall2-scroll'))return;
   if(!e.ctrlKey&&!e.metaKey)return;   // only Ctrl/Cmd + scroll zooms
