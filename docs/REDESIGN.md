@@ -468,6 +468,27 @@ palette + universal search · Settings · Login / splash / onboarding.
   category colours, stars, 4 regions, zoom, arrange-by-importance, List view dots
   + stars. No console errors. (Drag *feel* needs a real device test.)
 
+### 2026-07-27 — Increment 9 (v206): sticky wall v3 (feedback round 3)
+- **Text no longer highlights on drag** — `user-select:none` on the board + notes.
+- **Colour ← area, stars ← priority** (both real task fields; scrapped the separate
+  `t.category`/`t.stars`). `_taskAreaColor` (from `getOrderedAreaList`),
+  `_taskStars` (`PRI_STARS` urgent=5…someday=1). Card stars set the real priority
+  via `STARS_PRI`; the area dot opens the task modal. Legend now shows AREAS.
+- **Layout = 3 top regions (Today / This week / This month) + full-width Future
+  below** (`WALL_REGIONS` with x/y/w/h). Bigger notes (186px), roomier.
+- **Pan-and-zoom canvas, no scrollbars:** transform = `translate(pan) scale(zoom)`.
+  Drag empty space to **pan**; **Ctrl/Cmd+wheel** to zoom; +/− buttons zoom to
+  centre. Zoom **capped at 100%**, down to 35% ("shouldn't increase size"). Pan +
+  zoom persisted. Note-drag math is zoom-aware; region membership for Arrange is by
+  where the note sits.
+- **Zoomed-out hover-enlarge:** `<0.72` adds `.zoomed`; hovering a note pops it to
+  1.9× so it's readable, shrinking back on leave.
+- **Pushpin instead of tape** (`.wb-pin2`) that **lifts out while carried** and
+  drops back on release; plus a subtle **carry wobble** animation while dragging.
+- Verified: area colours, priority stars (+ star→priority), 3+1 regions, transform
+  pan/zoom, zoom clamp 0.35–1, zoomed class, pushpin, no text-select. No errors.
+  (Live drag/pan feel + animations need a real device.)
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.

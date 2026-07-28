@@ -422,40 +422,49 @@ body[data-route="today"] .wall-zoom.hide{display:none}
 .wl-chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-2);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px 3px 8px}
 .wl-chip i{width:11px;height:11px;border-radius:50%;flex:0 0 auto}
 .wl-manage{font-size:11.5px;font-weight:600;color:var(--accent);background:none;border:none;cursor:pointer;padding:3px 4px}
-/* Free-form zoomable board */
-.home-wall.wall2-scroll{display:block;position:relative;overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:16px;background:radial-gradient(circle,rgba(120,80,40,.05) 1.2px,transparent 1.3px) 0 0/22px 22px,#fbf3e8;min-height:60vh;max-height:78vh}
-.wall2-canvas{position:relative;width:1200px;min-height:60vh;transform-origin:top left}
+/* Pan/zoom board — no scrollbars. Drag empty space to pan, Ctrl+scroll to zoom.
+   Colour comes from the task's AREA, stars from its PRIORITY. */
+.home-wall.wall2-scroll{display:block;position:relative;overflow:hidden;border:1px solid var(--border);border-radius:16px;
+  background:radial-gradient(circle,rgba(120,80,40,.06) 1.3px,transparent 1.4px) 0 0/24px 24px,#f7efe2;
+  height:72vh;min-height:460px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.home-wall.wall2-scroll.panning{cursor:grabbing}
+.wall2-canvas{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;user-select:none;-webkit-user-select:none}
 .wall2-regions{position:absolute;inset:0;pointer-events:none;z-index:0}
-.wall2-region{position:absolute;top:0;bottom:0;border-right:1px dashed rgba(120,80,40,.18)}
-.wall2-region:last-child{border-right:none}
-.wall2-region-hd{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:9px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);pointer-events:auto}
-.wall2-arrange{font-size:10px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:6px;padding:2px 7px;cursor:pointer}
+.wall2-region{position:absolute;border:1.5px dashed rgba(120,80,40,.22);border-radius:16px;background:rgba(255,255,255,.16)}
+.wall2-region-hd{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:11px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);pointer-events:auto}
+.wall2-arrange{font-size:10.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:6px;padding:3px 9px;cursor:pointer}
 .wall2-arrange:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
-.wb-sticky2{position:absolute;width:176px;padding:0 13px 11px;border-radius:4px;box-shadow:2px 4px 11px rgba(0,0,0,.14);
-  display:flex;flex-direction:column;gap:6px;font-family:'Kalam',cursive;color:#3a2a22;touch-action:none;cursor:grab;z-index:1;overflow:hidden}
-.wb-sticky2:hover{box-shadow:3px 7px 16px rgba(0,0,0,.2);z-index:4}
-.wb-sticky2.wb-dragging{box-shadow:6px 14px 30px rgba(0,0,0,.3);z-index:100;cursor:grabbing}
-.wb-tape2{height:16px;margin:0 -13px 5px;opacity:.85}
-.wb-sticky2 .wb-sticky-top{display:flex;align-items:center;justify-content:space-between;gap:6px}
-.wb-cat{width:15px;height:15px;border-radius:50%;border:1.5px solid rgba(255,255,255,.6);cursor:pointer;flex:0 0 auto;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.wb-sticky2{position:absolute;width:186px;padding:14px 14px 11px;border-radius:3px;box-shadow:2px 5px 13px rgba(0,0,0,.15);
+  display:flex;flex-direction:column;gap:6px;font-family:'Kalam',cursive;color:#3a2a22;touch-action:none;cursor:grab;z-index:1;
+  transition:transform .16s cubic-bezier(.34,1.35,.5,1),box-shadow .16s;user-select:none;-webkit-user-select:none}
+.wb-sticky2 *{user-select:none;-webkit-user-select:none}
+.wb-sticky2.wb-dragging{cursor:grabbing;box-shadow:5px 17px 36px rgba(0,0,0,.34)!important;z-index:200!important;transition:box-shadow .1s!important;animation:wbCarry .55s ease-in-out infinite}
+@keyframes wbCarry{0%,100%{transform:rotate(-3deg) scale(1.06)}50%{transform:rotate(-1deg) scale(1.06)}}
+/* Pushpin (replaces tape). Lifts out while a note is carried, drops back in. */
+.wb-pin2{position:absolute;top:-10px;left:50%;width:16px;height:20px;transform:translateX(-50%);transition:transform .2s cubic-bezier(.34,1.5,.5,1),opacity .2s;z-index:3;pointer-events:none}
+.wb-pin2::before{content:'';position:absolute;left:50%;top:9px;width:2px;height:11px;background:rgba(0,0,0,.3);transform:translateX(-50%);border-radius:1px}
+.wb-pin2::after{content:'';position:absolute;left:50%;top:0;width:15px;height:15px;border-radius:50%;transform:translateX(-50%);
+  background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.85),var(--cat,#c96) 62%);box-shadow:0 2px 3px rgba(0,0,0,.32)}
+.wb-sticky2.wb-dragging .wb-pin2{transform:translateX(-50%) translateY(-18px) scale(.82);opacity:.6}
+.wb-sticky2 .wb-sticky-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:1px}
+.wb-cat{width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.6);cursor:pointer;flex:0 0 auto;box-shadow:0 1px 2px rgba(0,0,0,.18)}
 .wb-stars{display:inline-flex;gap:1px}
-.wb-star{font-size:13px;color:rgba(0,0,0,.18);cursor:pointer;line-height:1}
+.wb-star{font-size:14px;color:rgba(0,0,0,.16);cursor:pointer;line-height:1}
 .wb-star.on{color:#e0a52e}
 .wb-sticky2 .wb-sticky-title{font-size:15.5px;font-weight:700;line-height:1.25;word-break:break-word}
 .wb-sticky2 .wb-btns{margin-top:2px;display:flex;gap:7px;justify-content:flex-end}
-.wb-sticky2 .wb-btn{font-family:'Kalam',cursive;font-size:14px;font-weight:700;background:rgba(255,255,255,.35);border:1.4px solid rgba(0,0,0,.35);border-radius:9px 7px 10px 6px;width:30px;height:26px;cursor:pointer;color:#3a2a22}
+.wb-sticky2 .wb-btn{font-family:'Kalam',cursive;font-size:14px;font-weight:700;background:rgba(255,255,255,.35);border:1.4px solid rgba(0,0,0,.32);border-radius:9px 7px 10px 6px;width:30px;height:26px;cursor:pointer;color:#3a2a22}
 .wb-sticky2 .wb-btn.wb-done{border-color:#3f7a34;color:#356629}
 .wb-sticky2 .wb-btn:hover{background:rgba(255,255,255,.7)}
-/* Category picker popover */
+/* Zoomed out → hover a note to pop it up to a readable size */
+.wall2-canvas.zoomed .wb-sticky2{transition:transform .14s ease,box-shadow .14s}
+.wall2-canvas.zoomed .wb-sticky2:hover{transform:scale(1.9);z-index:120;box-shadow:4px 12px 30px rgba(0,0,0,.3)}
+/* Area picker popover */
 .cat-pop{position:fixed;z-index:9600;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-lift);padding:6px;min-width:180px;font-family:'Inter',system-ui,sans-serif}
 .cat-pop-row{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text)}
 .cat-pop-row:hover{background:var(--surface-hover)}
 .cat-pop-row i{width:13px;height:13px;border-radius:50%;flex:0 0 auto;border:1px solid rgba(0,0,0,.1)}
 .cat-pop-row.on{background:color-mix(in srgb,var(--accent) 10%,var(--surface))}
-.cat-pop-sep{height:1px;background:var(--border);margin:4px 6px}
-.cat-pop-sw{display:flex;gap:5px;padding:6px 10px;flex-wrap:wrap}
-.cat-pop-sw i{width:18px;height:18px;border-radius:50%;cursor:pointer;border:2px solid transparent}
-.cat-pop-sw i.on{border-color:var(--text)}
 /* List view */
 .home-wall-list{display:block;background:none;border:none;box-shadow:none;padding:0;min-height:auto}
 .home-list{display:flex;flex-direction:column;gap:8px}
@@ -3718,7 +3727,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v205';
+const APP_VERSION='v206';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -7346,32 +7355,37 @@ function rBoard(){
 // Future) — the region a note sits in is PURELY where you dragged it (x/y is
 // saved per task; there is NO stored "this is a today task" flag). "List" mode
 // is a clean structured view. Categories drive the colour.
-const WALL_REGIONS=[{key:'today',label:'Today'},{key:'week',label:'This week'},{key:'month',label:'This month'},{key:'future',label:'Future'}];
-const WALL_REGION_W=300, WALL_STICKY_W=176, WALL_HEAD_H=44, WALL_ROW=170, WALL_CANVAS_W=1200;
-const CAT_COLORS=['#D2662F','#4E7A8C','#5E8A5A','#7E6DAE','#C0894A','#C24A6A','#2E8C8C','#8A6D3B'];
-function _categories(){
-  if(!Array.isArray(S.categories)||!S.categories.length){
-    S.categories=[{id:'personal',name:'Personal',color:'#4E7A8C'},{id:'work',name:'Work',color:'#D2662F'}];
-  }
-  return S.categories;
-}
-function _catById(id){return _categories().find(c=>c.id===id)||null;}
-function _catColor(t){const c=_catById(t&&t.category);return c?c.color:'#c9bba7';}
+const WALL_REGION_W=340, WALL_TOP_H=560, WALL_BOT_H=380, WALL_STICKY_W=186, WALL_ROW=176;
+const WALL_CANVAS_W=WALL_REGION_W*3;             // 1020
+const WALL_CANVAS_H=WALL_TOP_H+WALL_BOT_H;       // 940
+const WALL_REGIONS=[
+  {label:'Today',x:0,y:0,w:WALL_REGION_W,h:WALL_TOP_H},
+  {label:'This week',x:WALL_REGION_W,y:0,w:WALL_REGION_W,h:WALL_TOP_H},
+  {label:'This month',x:WALL_REGION_W*2,y:0,w:WALL_REGION_W,h:WALL_TOP_H},
+  {label:'Future',x:0,y:WALL_TOP_H,w:WALL_CANVAS_W,h:WALL_BOT_H}
+];
+const PRI_STARS={urgent:5,hi:4,med:3,lo:2,someday:1};
+const STARS_PRI={5:'urgent',4:'hi',3:'med',2:'lo',1:'someday'};
+// Colour comes from the task's AREA; stars from its PRIORITY. Both are real
+// task fields — never a separate wall-only value.
+function _taskAreaColor(t){const id=effectiveAreaId(t);const a=getOrderedAreaList().find(x=>x.id===id);return a?a.color:'var(--muted-2)';}
+function _taskAreaName(t){const id=effectiveAreaId(t);const a=getOrderedAreaList().find(x=>x.id===id);return a?a.name:'—';}
+function _taskStars(t){return PRI_STARS[t.priority]||0;}
 function _starHTML(t){
-  let s='<div class="wb-stars">';
-  for(let i=1;i<=5;i++)s+=`<span class="wb-star${i<=(t.stars||0)?' on':''}" onclick="event.stopPropagation();_wallStarClick('${t.id}',${i})">★</span>`;
+  const n=_taskStars(t);let s='<div class="wb-stars" title="Priority">';
+  for(let i=1;i<=5;i++)s+=`<span class="wb-star${i<=n?' on':''}" onclick="event.stopPropagation();_wallStarClick('${t.id}',${i})">★</span>`;
   return s+'</div>';
 }
 function _wallStickyHTML(t){
-  const color=_catColor(t);const cat=_catById(t.category);
+  const color=_taskAreaColor(t);
   const hasSteps=Array.isArray(t.steps)&&t.steps.length;
   let body='';
   if(hasSteps){body=`<div class="wb-steps">${t.steps.map(s=>`<div class="wb-step${s.done?' done':''}" onclick="event.stopPropagation();boardToggleStep('${t.id}','${s.id}')"><span class="wb-step-box">${s.done?'✓':''}</span><span class="wb-step-txt">${esc(s.text||'')}</span></div>`).join('')}</div>`;}
   else if(t.notes&&t.notes.trim()){body=`<div class="wb-note-body">${esc(t.notes)}</div>`;}
   return `<div class="wb-sticky2" data-tid="${t.id}" style="--cat:${color};background:color-mix(in srgb,${color} 20%,#fffdf7)">
-    <div class="wb-tape2" style="background:${color}"></div>
+    <span class="wb-pin2"></span>
     <div class="wb-sticky-top">
-      <button class="wb-cat" style="background:${color}" title="${cat?esc(cat.name):'No category'} — tap to change" onclick="event.stopPropagation();openCatPicker(event,'${t.id}')"></button>
+      <button class="wb-cat" style="background:${color}" title="Area: ${esc(_taskAreaName(t))} — tap to edit" onclick="event.stopPropagation();openTaskModal('${t.id}')"></button>
       ${_starHTML(t)}
     </div>
     <div class="wb-sticky-title">${esc(t.text||'')}</div>
@@ -7387,11 +7401,11 @@ function _homeListRowHTML(t){
   const meta=[];
   if(hasSteps)meta.push(`${t.steps.filter(s=>s.done).length}/${t.steps.length} steps`);
   if(t.scheduledTime)meta.push(esc(t.scheduledTime));
-  const color=_catColor(t);const cat=_catById(t.category);
-  const stars=(t.stars||0)?`<span class="hl-stars">${'★'.repeat(t.stars)}<span class="hl-stars-off">${'★'.repeat(5-t.stars)}</span></span>`:'';
+  const color=_taskAreaColor(t);const n=_taskStars(t);
+  const stars=n?`<span class="hl-stars">${'★'.repeat(n)}<span class="hl-stars-off">${'★'.repeat(5-n)}</span></span>`:'';
   return `<div class="hl-row" onclick="openTaskModal('${t.id}')">
     <button class="hl-check" onclick="event.stopPropagation();boardComplete('${t.id}')" title="Mark done"></button>
-    <span class="hl-cat" style="background:${color}" title="${cat?esc(cat.name):'No category'}"></span>
+    <span class="hl-cat" style="background:${color}" title="${esc(_taskAreaName(t))}"></span>
     <div class="hl-body"><div class="hl-title">${esc(t.text||'')}</div>${meta.length?`<div class="hl-meta">${meta.join(' · ')}</div>`:''}</div>
     ${stars}
   </div>`;
@@ -7402,12 +7416,13 @@ function setHomeView(v){
   rHomeWall();
 }
 function _wallRegionsHTML(){
-  return `<div class="wall2-regions">`+WALL_REGIONS.map((r,i)=>`<div class="wall2-region" style="left:${i*WALL_REGION_W}px;width:${WALL_REGION_W}px"><div class="wall2-region-hd"><span>${r.label}</span><button class="wall2-arrange" onclick="arrangeRegion(${i})" title="Stack by importance">⇅ Arrange</button></div></div>`).join('')+`</div>`;
+  return `<div class="wall2-regions">`+WALL_REGIONS.map((r,i)=>`<div class="wall2-region" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><div class="wall2-region-hd"><span>${r.label}</span><button class="wall2-arrange" onclick="event.stopPropagation();arrangeRegion(${i})" title="Stack by importance">⇅ Arrange</button></div></div>`).join('')+`</div>`;
 }
 function _wallRenderLegend(){
   const lg=document.getElementById('wall2-legend');if(!lg)return;
-  lg.innerHTML=_categories().map(c=>`<span class="wl-chip"><i style="background:${c.color}"></i>${esc(c.name)}</span>`).join('')
-    +`<button class="wl-manage" onclick="openCatManage(event)">＋ / edit categories</button>`;
+  const areas=getOrderedAreaList();
+  lg.innerHTML=`<span style="font-size:11px;color:var(--muted)">Colour = area</span>`+areas.map(a=>`<span class="wl-chip"><i style="background:${a.color}"></i>${esc(a.name)}</span>`).join('')
+    +`<button class="wl-manage" onclick="setRoute('settings')" title="Manage areas in Settings">manage ↗</button>`;
 }
 function rHomeWall(){
   const el=document.getElementById('home-wall');if(!el)return;
@@ -7421,161 +7436,162 @@ function rHomeWall(){
   const tasks=(S.tasks||[]).filter(t=>!t.done);
   if(list){
     if(lg)lg.classList.add('hide');
-    el.style.minHeight='';
-    el.innerHTML=tasks.length?`<div class="home-list">${[...tasks].sort((a,b)=>(b.stars||0)-(a.stars||0)).map(_homeListRowHTML).join('')}</div>`:`<div class="wb-empty">Nothing here yet.<br><button class="wb-pin" onclick="boardAddSticky()">＋ New note</button></div>`;
+    el.innerHTML=tasks.length?`<div class="home-list">${[...tasks].sort((a,b)=>_taskStars(b)-_taskStars(a)).map(_homeListRowHTML).join('')}</div>`:`<div class="wb-empty">Nothing here yet.<br><button class="wb-pin" onclick="boardAddSticky()">＋ New note</button></div>`;
     return;
   }
   if(lg){lg.classList.remove('hide');_wallRenderLegend();}
   if(!tasks.length){el.innerHTML=`<div class="wb-empty" style="padding:64px 20px">The board's clear.<br><button class="wb-pin" onclick="boardAddSticky()">＋ New note</button></div>`;return;}
-  if(_wallDrag)return;  // never rebuild mid-drag
+  if(_wallDrag||_wallPanning)return;  // never rebuild mid-interaction
   const canvas=document.getElementById('wall2-canvas');
   const existing=canvas?[...canvas.querySelectorAll('.wb-sticky2')].map(n=>n.dataset.tid):null;
   const ids=tasks.map(t=>t.id);
   if(canvas&&existing&&existing.length===ids.length&&existing.every(id=>ids.includes(id))){
-    // Same note set → refresh content in place (no innerHTML rebuild). This is
-    // what kills the "clunky" feel: a save echo no longer resets your drag.
-    _wallUpdateInPlace(canvas,tasks);_wallApplyZoom();return;
+    _wallUpdateInPlace(canvas,tasks);_wallApplyTransform();return;
   }
-  const sorted=[...tasks].sort((a,b)=>(b.stars||0)-(a.stars||0));
-  el.innerHTML=`<div class="wall2-canvas" id="wall2-canvas">${_wallRegionsHTML()}${sorted.map(_wallStickyHTML).join('')}</div>`;
-  setTimeout(()=>{_wallLayout(sorted);_wallApplyZoom();_wallBindDrag();},0);
+  const sorted=[...tasks].sort((a,b)=>_taskStars(b)-_taskStars(a));
+  el.innerHTML=`<div class="wall2-canvas" id="wall2-canvas" style="width:${WALL_CANVAS_W}px;height:${WALL_CANVAS_H}px">${_wallRegionsHTML()}${sorted.map(_wallStickyHTML).join('')}</div>`;
+  setTimeout(()=>{_wallLayout(sorted);_wallBindInteract();_wallApplyTransform();},0);
 }
-function _wallBindDrag(){
-  const el=document.getElementById('home-wall');if(!el||el._wallDragBound)return;
+function _wallBindInteract(){
+  const el=document.getElementById('home-wall');if(!el||el._wallBound)return;
   el.addEventListener('pointerdown',_wallPointerDown);
   window.addEventListener('pointermove',_wallPointerMove);
   window.addEventListener('pointerup',_wallPointerUp);
-  el._wallDragBound=true;
+  el.addEventListener('wheel',_wallWheel,{passive:false});
+  el._wallBound=true;
 }
-// Place stickies at saved coords; auto-stack any un-positioned note in the
-// Today column, then grow the canvas to fit.
+// Un-positioned notes auto-stack in the Today column (wrapping to the next
+// column when full). Canvas size is fixed; no growth needed.
 function _wallLayout(tasks){
   const canvas=document.getElementById('wall2-canvas');if(!canvas)return;
-  let stackY=WALL_HEAD_H+8,assigned=false;
+  let col=0,y=48,assigned=false;
   tasks.forEach(t=>{
     const node=canvas.querySelector(`.wb-sticky2[data-tid="${t.id}"]`);if(!node)return;
-    let x,y;
-    if(typeof t.wx==='number'&&typeof t.wy==='number'){x=t.wx;y=t.wy;}
-    else{x=Math.round((WALL_REGION_W-WALL_STICKY_W)/2);y=stackY;stackY+=WALL_ROW;t.wx=x;t.wy=Math.round(y);assigned=true;}
-    node.style.left=x+'px';node.style.top=y+'px';
+    if(typeof t.wx==='number'&&typeof t.wy==='number'){node.style.left=t.wx+'px';node.style.top=t.wy+'px';return;}
+    if(y>WALL_TOP_H-40){y=48;col++;}
+    const x=16+col*(WALL_STICKY_W+12);
+    t.wx=Math.round(x);t.wy=Math.round(y);y+=WALL_ROW;assigned=true;
+    node.style.left=t.wx+'px';node.style.top=t.wy+'px';
   });
-  _wallGrow(canvas);
   if(assigned)svAll();
-}
-function _wallGrow(canvas){
-  if(!canvas)return;let maxY=520;
-  canvas.querySelectorAll('.wb-sticky2').forEach(n=>{maxY=Math.max(maxY,(parseFloat(n.style.top)||0)+n.offsetHeight);});
-  canvas.style.height=(maxY+30)+'px';
 }
 function _wallUpdateInPlace(canvas,tasks){
   tasks.forEach(t=>{
     const node=canvas.querySelector(`.wb-sticky2[data-tid="${t.id}"]`);if(!node)return;
-    const color=_catColor(t);const cat=_catById(t.category);
+    const color=_taskAreaColor(t);
     node.style.setProperty('--cat',color);
     node.style.background=`color-mix(in srgb,${color} 20%,#fffdf7)`;
-    const tape=node.querySelector('.wb-tape2');if(tape)tape.style.background=color;
-    const cb=node.querySelector('.wb-cat');if(cb){cb.style.background=color;cb.title=(cat?cat.name:'No category')+' — tap to change';}
+    const cb=node.querySelector('.wb-cat');if(cb){cb.style.background=color;cb.title='Area: '+_taskAreaName(t)+' — tap to edit';}
     const ti=node.querySelector('.wb-sticky-title');if(ti&&ti.textContent!==(t.text||''))ti.textContent=t.text||'';
-    const st=node.querySelector('.wb-stars');if(st)st.querySelectorAll('.wb-star').forEach((s,i)=>s.classList.toggle('on',(i+1)<=(t.stars||0)));
+    const st=node.querySelector('.wb-stars');if(st){const n=_taskStars(t);st.querySelectorAll('.wb-star').forEach((s,i)=>s.classList.toggle('on',(i+1)<=n));}
   });
 }
-function _wallZoom(){
-  let z=UI.wallZoom;
-  if(typeof z!=='number'){try{z=parseFloat(localStorage.getItem('los_wall_zoom'));}catch(_){}}
-  if(!z||isNaN(z))z=1;
-  return Math.max(0.6,Math.min(1.3,z));
+// ── Pan + zoom (transform-based; no scrollbars) ──
+function _wallZoom(){let z=UI.wallZoom;if(typeof z!=='number'){try{z=parseFloat(localStorage.getItem('los_wall_zoom'));}catch(_){}}if(!z||isNaN(z))z=1;return Math.max(0.35,Math.min(1,z));}
+function _wallPan(){if(!UI.wallPan||typeof UI.wallPan.x!=='number'){let p=null;try{p=JSON.parse(localStorage.getItem('los_wall_pan'));}catch(_){}UI.wallPan=(p&&typeof p.x==='number')?p:{x:20,y:16};}return UI.wallPan;}
+function _wallClampPan(){
+  const vp=document.getElementById('home-wall');if(!vp)return;
+  const z=_wallZoom(),p=_wallPan(),OV=200;
+  const cw=WALL_CANVAS_W*z,ch=WALL_CANVAS_H*z,vw=vp.clientWidth,vh=vp.clientHeight;
+  p.x=Math.min(Math.max(p.x,vw-cw-OV),OV);
+  p.y=Math.min(Math.max(p.y,vh-ch-OV),OV);
 }
-function _wallApplyZoom(){
-  const canvas=document.getElementById('wall2-canvas');if(canvas)canvas.style.zoom=_wallZoom();
-  const lbl=document.getElementById('wall-zoom-lbl');if(lbl)lbl.textContent=Math.round(_wallZoom()*100)+'%';
+function _wallApplyTransform(){
+  const canvas=document.getElementById('wall2-canvas');if(!canvas)return;
+  const z=_wallZoom(),p=_wallPan();
+  canvas.style.transform=`translate(${p.x}px,${p.y}px) scale(${z})`;
+  canvas.classList.toggle('zoomed',z<0.72);
+  const lbl=document.getElementById('wall-zoom-lbl');if(lbl)lbl.textContent=Math.round(z*100)+'%';
 }
-function setWallZoom(delta){
-  UI.wallZoom=Math.max(0.6,Math.min(1.3,Math.round((_wallZoom()+delta)*10)/10));
-  try{localStorage.setItem('los_wall_zoom',String(UI.wallZoom));}catch(_){}
-  _wallApplyZoom();
+function _wallZoomTo(newZ,cx,cy){
+  const oldZ=_wallZoom();newZ=Math.max(0.35,Math.min(1,newZ));if(newZ===oldZ)return;
+  const p=_wallPan();const ax=(cx-p.x)/oldZ,ay=(cy-p.y)/oldZ;
+  p.x=cx-ax*newZ;p.y=cy-ay*newZ;
+  UI.wallZoom=newZ;try{localStorage.setItem('los_wall_zoom',String(newZ));}catch(_){}
+  _wallClampPan();_wallApplyTransform();
 }
-// Stack the notes currently sitting in region i (by their centre-x), most
-// important first. Positions are still just x/y — no stored region.
+function setWallZoom(delta){const vp=document.getElementById('home-wall');if(!vp)return;_wallZoomTo(Math.round((_wallZoom()+delta)*20)/20,vp.clientWidth/2,vp.clientHeight/2);}
+function _wallWheel(e){
+  const vp=document.getElementById('home-wall');if(!vp||!vp.classList.contains('wall2-scroll'))return;
+  if(!e.ctrlKey&&!e.metaKey)return;   // only Ctrl/Cmd + scroll zooms
+  e.preventDefault();
+  const rect=vp.getBoundingClientRect();
+  _wallZoomTo(_wallZoom()*(e.deltaY<0?1.12:0.9),e.clientX-rect.left,e.clientY-rect.top);
+}
+// Stack a region's notes by importance. Membership = where the note sits
+// (centre inside the region box) — still just x/y, no stored region flag.
 function arrangeRegion(i){
-  const lo=i*WALL_REGION_W,hi=(i+1)*WALL_REGION_W;
-  const items=(S.tasks||[]).filter(t=>!t.done&&typeof t.wx==='number'&&(t.wx+WALL_STICKY_W/2)>=lo&&(t.wx+WALL_STICKY_W/2)<hi);
-  items.sort((a,b)=>(b.stars||0)-(a.stars||0));
-  const x=Math.round(lo+(WALL_REGION_W-WALL_STICKY_W)/2);let y=WALL_HEAD_H+8;
+  const r=WALL_REGIONS[i];
+  const inR=t=>{const cx=(t.wx||0)+WALL_STICKY_W/2,cy=(t.wy||0)+60;return cx>=r.x&&cx<r.x+r.w&&cy>=r.y&&cy<r.y+r.h;};
+  const items=(S.tasks||[]).filter(t=>!t.done&&typeof t.wx==='number'&&inR(t));
+  items.sort((a,b)=>_taskStars(b)-_taskStars(a));
   const canvas=document.getElementById('wall2-canvas');
-  items.forEach(t=>{t.wx=x;t.wy=Math.round(y);y+=WALL_ROW;const n=canvas&&canvas.querySelector(`.wb-sticky2[data-tid="${t.id}"]`);if(n){n.style.left=x+'px';n.style.top=t.wy+'px';}});
-  _wallGrow(canvas);svAll();
-}
-function _wallStarClick(tid,star){
-  const t=(S.tasks||[]).find(x=>x.id===tid);if(!t)return;
-  t.stars=(t.stars===star)?star-1:star;
-  const node=document.querySelector(`.wb-sticky2[data-tid="${tid}"] .wb-stars`);
-  if(node)node.querySelectorAll('.wb-star').forEach((s,i)=>s.classList.toggle('on',(i+1)<=(t.stars||0)));
+  const perCol=Math.max(1,Math.floor((r.h-56)/WALL_ROW));
+  items.forEach((t,k)=>{
+    const c=Math.floor(k/perCol),row=k%perCol;
+    t.wx=Math.round(r.x+16+c*(WALL_STICKY_W+14));
+    t.wy=Math.round(r.y+48+row*WALL_ROW);
+    const n=canvas&&canvas.querySelector(`.wb-sticky2[data-tid="${t.id}"]`);if(n){n.style.left=t.wx+'px';n.style.top=t.wy+'px';}
+  });
   svAll();
 }
-// ── Category picker + manager ──
-function _catPopOutside(e){const p=document.getElementById('cat-pop');if(p&&!p.contains(e.target))closeCatPop();}
-function closeCatPop(){const p=document.getElementById('cat-pop');if(p)p.remove();document.removeEventListener('pointerdown',_catPopOutside);}
-function _placeCatPop(pop,e){document.body.appendChild(pop);const w=pop.offsetWidth||200,h=pop.offsetHeight||240;const x=Math.min((e&&e.clientX)||160,window.innerWidth-w-10),y=Math.min((e&&e.clientY)||160,window.innerHeight-h-10);pop.style.left=Math.max(8,x)+'px';pop.style.top=Math.max(8,y)+'px';setTimeout(()=>document.addEventListener('pointerdown',_catPopOutside),0);}
-function openCatPicker(e,tid){
-  closeCatPop();
+// Card stars set the underlying PRIORITY (5=urgent … 1=someday).
+function _wallStarClick(tid,star){
   const t=(S.tasks||[]).find(x=>x.id===tid);if(!t)return;
-  const pop=document.createElement('div');pop.className='cat-pop';pop.id='cat-pop';
-  pop.innerHTML=_categories().map(c=>`<div class="cat-pop-row${t.category===c.id?' on':''}" onclick="catAssign('${tid}','${c.id}')"><i style="background:${c.color}"></i>${esc(c.name)}</div>`).join('')
-    +`<div class="cat-pop-row${!t.category?' on':''}" onclick="catAssign('${tid}','')"><i style="background:#c9bba7"></i>None</div>`
-    +`<div class="cat-pop-sep"></div>`
-    +`<div class="cat-pop-row" style="color:var(--accent);font-weight:600" onclick="catAddNew('${tid}')">＋ New category</div>`;
-  _placeCatPop(pop,e);
+  const cur=_taskStars(t);
+  const want=(cur===star)?star-1:star;
+  t.priority=STARS_PRI[Math.max(1,want)]||'lo';
+  const node=document.querySelector(`.wb-sticky2[data-tid="${tid}"] .wb-stars`);
+  if(node){const n=_taskStars(t);node.querySelectorAll('.wb-star').forEach((s,i)=>s.classList.toggle('on',(i+1)<=n));}
+  svAll();
 }
-function catAssign(tid,cid){
-  const t=(S.tasks||[]).find(x=>x.id===tid);if(!t)return;
-  t.category=cid||'';closeCatPop();svAll();
-  const canvas=document.getElementById('wall2-canvas');if(canvas)_wallUpdateInPlace(canvas,[t]);
-}
-function catAddNew(tid){
-  const name=prompt('New category (e.g. a company name):');if(!name||!name.trim())return;
-  const cats=_categories();const c={id:'c'+Date.now().toString(36),name:name.trim(),color:CAT_COLORS[cats.length%CAT_COLORS.length]};
-  cats.push(c);catAssign(tid,c.id);_wallRenderLegend();
-}
-function openCatManage(e){
-  closeCatPop();
-  const pop=document.createElement('div');pop.className='cat-pop';pop.id='cat-pop';pop.style.minWidth='250px';
-  pop.innerHTML=_categories().map(c=>`<div style="padding:6px 8px"><div class="cat-pop-row" style="padding:4px 2px"><i style="background:${c.color}"></i><input value="${esc(c.name)}" onchange="catRename('${c.id}',this.value)" style="flex:1;border:none;background:transparent;font:inherit;color:var(--text);outline:none;min-width:0"><button title="Delete" onclick="catDelete('${c.id}')" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></div><div class="cat-pop-sw">${CAT_COLORS.map(col=>`<i style="background:${col}" class="${c.color.toLowerCase()===col.toLowerCase()?'on':''}" onclick="catRecolor('${c.id}','${col}')"></i>`).join('')}</div></div>`).join('')
-    +`<div class="cat-pop-sep"></div>`
-    +`<div class="cat-pop-row" style="color:var(--accent);font-weight:600" onclick="catAddBlank()">＋ Add category</div>`;
-  _placeCatPop(pop,e);
-}
-function catRename(cid,name){const c=_catById(cid);if(!c)return;c.name=(name||'').trim()||c.name;svAll();_wallRenderLegend();}
-function catRecolor(cid,color){const c=_catById(cid);if(!c)return;c.color=color;svAll();_wallRenderLegend();const canvas=document.getElementById('wall2-canvas');if(canvas)_wallUpdateInPlace(canvas,(S.tasks||[]).filter(t=>t.category===cid));const p=document.getElementById('cat-pop');if(p)p.querySelectorAll('.cat-pop-sw').forEach(sw=>{});openCatManage();}
-function catDelete(cid){const cats=_categories();const i=cats.findIndex(c=>c.id===cid);if(i<0)return;cats.splice(i,1);(S.tasks||[]).forEach(t=>{if(t.category===cid)t.category='';});svAll();_wallRenderLegend();closeCatPop();rHomeWall();}
-function catAddBlank(){const cats=_categories();cats.push({id:'c'+Date.now().toString(36),name:'New category',color:CAT_COLORS[cats.length%CAT_COLORS.length]});svAll();_wallRenderLegend();openCatManage();}
-// ── Drag (zoom-aware; positions are logical canvas px) ──
-let _wallDrag=null;
+// ── Drag: a note moves; empty space pans the whole board ──
+let _wallDrag=null,_wallPanning=null;
 function _wallPointerDown(e){
-  const scroll=document.getElementById('home-wall');if(!scroll||!scroll.classList.contains('wall2-scroll'))return;
-  const sticky=e.target.closest('.wb-sticky2');if(!sticky)return;
-  if(e.target.closest('button')||e.target.closest('.wb-step')||e.target.closest('.wb-star')||e.target.closest('.wb-cat'))return;
-  const canvas=document.getElementById('wall2-canvas');if(!canvas)return;
-  const z=_wallZoom(),sr=sticky.getBoundingClientRect();
-  _wallDrag={tid:sticky.dataset.tid,sticky,canvas,z,offX:(e.clientX-sr.left)/z,offY:(e.clientY-sr.top)/z,moved:false};
-  sticky.classList.add('wb-dragging');
-  try{sticky.setPointerCapture(e.pointerId);}catch(_){}
+  const vp=document.getElementById('home-wall');if(!vp||!vp.classList.contains('wall2-scroll'))return;
+  const sticky=e.target.closest('.wb-sticky2');
+  if(sticky){
+    if(e.target.closest('button')||e.target.closest('.wb-step')||e.target.closest('.wb-star')||e.target.closest('.wb-cat'))return;
+    const z=_wallZoom(),sr=sticky.getBoundingClientRect();
+    _wallDrag={tid:sticky.dataset.tid,sticky,z,offX:(e.clientX-sr.left)/z,offY:(e.clientY-sr.top)/z,moved:false};
+    sticky.classList.add('wb-dragging');
+    try{sticky.setPointerCapture(e.pointerId);}catch(_){}
+    e.preventDefault();return;
+  }
+  if(e.target.closest('.wall2-arrange'))return;
+  const p=_wallPan();
+  _wallPanning={sx:e.clientX,sy:e.clientY,px:p.x,py:p.y};
+  vp.classList.add('panning');
+  try{vp.setPointerCapture(e.pointerId);}catch(_){}
   e.preventDefault();
 }
 function _wallPointerMove(e){
-  if(!_wallDrag)return;
-  const {sticky,canvas,z,offX,offY}=_wallDrag;const cr=canvas.getBoundingClientRect();
-  let x=(e.clientX-cr.left)/z-offX,y=(e.clientY-cr.top)/z-offY;
-  x=Math.max(0,Math.min(x,WALL_CANVAS_W-WALL_STICKY_W));
-  y=Math.max(WALL_HEAD_H,y);
-  sticky.style.left=x+'px';sticky.style.top=y+'px';
-  _wallDrag.lastX=x;_wallDrag.lastY=y;_wallDrag.moved=true;
+  if(_wallDrag){
+    const {sticky,z,offX,offY}=_wallDrag;const canvas=document.getElementById('wall2-canvas');if(!canvas)return;const cr=canvas.getBoundingClientRect();
+    let x=(e.clientX-cr.left)/z-offX,y=(e.clientY-cr.top)/z-offY;
+    x=Math.max(0,Math.min(x,WALL_CANVAS_W-WALL_STICKY_W));
+    y=Math.max(0,Math.min(y,WALL_CANVAS_H-40));
+    sticky.style.left=x+'px';sticky.style.top=y+'px';
+    _wallDrag.lastX=x;_wallDrag.lastY=y;_wallDrag.moved=true;return;
+  }
+  if(_wallPanning){
+    const p=_wallPan();
+    p.x=_wallPanning.px+(e.clientX-_wallPanning.sx);
+    p.y=_wallPanning.py+(e.clientY-_wallPanning.sy);
+    _wallClampPan();_wallApplyTransform();
+  }
 }
 function _wallPointerUp(){
-  if(!_wallDrag)return;
-  const {tid,sticky,canvas,moved,lastX,lastY}=_wallDrag;
-  sticky.classList.remove('wb-dragging');
-  if(moved){const t=(S.tasks||[]).find(x=>x.id===tid);if(t){t.wx=Math.round(lastX);t.wy=Math.round(lastY);_wallGrow(canvas);svAll();}}
-  _wallDrag=null;
+  if(_wallDrag){
+    const {tid,sticky,moved,lastX,lastY}=_wallDrag;
+    sticky.classList.remove('wb-dragging');
+    if(moved){const t=(S.tasks||[]).find(x=>x.id===tid);if(t){t.wx=Math.round(lastX);t.wy=Math.round(lastY);svAll();}}
+    _wallDrag=null;return;
+  }
+  if(_wallPanning){
+    _wallPanning=null;const vp=document.getElementById('home-wall');if(vp)vp.classList.remove('panning');
+    try{localStorage.setItem('los_wall_pan',JSON.stringify(_wallPan()));}catch(_){}
+  }
 }
 // Streak ring: a donut in the habit's colour with the current streak in the
 // centre. Fraction = progress toward the all-time best.
