@@ -489,6 +489,24 @@ palette + universal search · Settings · Login / splash / onboarding.
   pan/zoom, zoom clamp 0.35–1, zoomed class, pushpin, no text-select. No errors.
   (Live drag/pan feel + animations need a real device.)
 
+### 2026-07-27 — Increment 10 (v207): wall v3.1 (feedback round 4)
+- **Pushpin stem extends** when a note is picked up (`::before` height 11→26px,
+  transitioned) so it reads as pulled out, not just floating.
+- **Sections fill the screen; big canvas + small notes.** Canvas is now
+  2460×1600 with three large top regions + full-width Future; notes shrunk to
+  152px so a section holds ~25–30. Min zoom is **dynamic = "all four sections
+  fit"** (`_wallMinZoom`), and that's the floor — you can't zoom out past the
+  sections. Default zoom = fit. Zoom **in** up to 1.6.
+- **Contain-clamp pan** — centres when the canvas is smaller than the viewport,
+  no empty space past the sections otherwise.
+- **Floating region badge** (`#wall-region-badge`): when zoomed in past the fit
+  view, a pill shows "▸ <region> · Arrange" for whichever region the viewport
+  centre is over (`_wallCurrentRegion`), so you always know which block you're in
+  and can arrange it without seeing its header.
+- Reset the persisted zoom/pan keys (`los_wall_z2/p2`) since the canvas geometry
+  changed. Verified: fit-default, min=fit, 152px notes, zoom-in, badge tracks the
+  region. No errors.
+
 ### Architecture notes (for the surface rebuilds)
 - Routing: `ROUTES` + `ROUTE_TITLES` arrays (line ~4009); `setRoute()` toggles
   `.active` on `<div class="route" data-route="X">` containers + nav links.

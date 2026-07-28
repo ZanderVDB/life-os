@@ -434,18 +434,20 @@ body[data-route="today"] .wall-zoom.hide{display:none}
 .wall2-region-hd{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:11px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);pointer-events:auto}
 .wall2-arrange{font-size:10.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:6px;padding:3px 9px;cursor:pointer}
 .wall2-arrange:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
-.wb-sticky2{position:absolute;width:186px;padding:14px 14px 11px;border-radius:3px;box-shadow:2px 5px 13px rgba(0,0,0,.15);
-  display:flex;flex-direction:column;gap:6px;font-family:'Kalam',cursive;color:#3a2a22;touch-action:none;cursor:grab;z-index:1;
+.wb-sticky2{position:absolute;width:152px;padding:13px 12px 9px;border-radius:3px;box-shadow:2px 4px 11px rgba(0,0,0,.15);
+  display:flex;flex-direction:column;gap:5px;font-family:'Kalam',cursive;color:#3a2a22;touch-action:none;cursor:grab;z-index:1;
   transition:transform .16s cubic-bezier(.34,1.35,.5,1),box-shadow .16s;user-select:none;-webkit-user-select:none}
 .wb-sticky2 *{user-select:none;-webkit-user-select:none}
 .wb-sticky2.wb-dragging{cursor:grabbing;box-shadow:5px 17px 36px rgba(0,0,0,.34)!important;z-index:200!important;transition:box-shadow .1s!important;animation:wbCarry .55s ease-in-out infinite}
 @keyframes wbCarry{0%,100%{transform:rotate(-3deg) scale(1.06)}50%{transform:rotate(-1deg) scale(1.06)}}
-/* Pushpin (replaces tape). Lifts out while a note is carried, drops back in. */
+/* Pushpin (replaces tape). Lifts out + the stem extends while a note is carried. */
 .wb-pin2{position:absolute;top:-10px;left:50%;width:16px;height:20px;transform:translateX(-50%);transition:transform .2s cubic-bezier(.34,1.5,.5,1),opacity .2s;z-index:3;pointer-events:none}
-.wb-pin2::before{content:'';position:absolute;left:50%;top:9px;width:2px;height:11px;background:rgba(0,0,0,.3);transform:translateX(-50%);border-radius:1px}
+.wb-pin2::before{content:'';position:absolute;left:50%;top:9px;width:2px;height:11px;background:rgba(0,0,0,.32);transform:translateX(-50%);border-radius:1px;transition:height .2s cubic-bezier(.34,1.5,.5,1)}
 .wb-pin2::after{content:'';position:absolute;left:50%;top:0;width:15px;height:15px;border-radius:50%;transform:translateX(-50%);
   background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.85),var(--cat,#c96) 62%);box-shadow:0 2px 3px rgba(0,0,0,.32)}
-.wb-sticky2.wb-dragging .wb-pin2{transform:translateX(-50%) translateY(-18px) scale(.82);opacity:.6}
+.wb-sticky2.wb-dragging .wb-pin2{transform:translateX(-50%) translateY(-15px) scale(.9);opacity:.72}
+.wb-sticky2.wb-dragging .wb-pin2::before{height:26px}
+.wb-sticky2 .wb-sticky-title{font-size:14px}
 .wb-sticky2 .wb-sticky-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:1px}
 .wb-cat{width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.6);cursor:pointer;flex:0 0 auto;box-shadow:0 1px 2px rgba(0,0,0,.18)}
 .wb-stars{display:inline-flex;gap:1px}
@@ -458,7 +460,14 @@ body[data-route="today"] .wall-zoom.hide{display:none}
 .wb-sticky2 .wb-btn:hover{background:rgba(255,255,255,.7)}
 /* Zoomed out → hover a note to pop it up to a readable size */
 .wall2-canvas.zoomed .wb-sticky2{transition:transform .14s ease,box-shadow .14s}
-.wall2-canvas.zoomed .wb-sticky2:hover{transform:scale(1.9);z-index:120;box-shadow:4px 12px 30px rgba(0,0,0,.3)}
+.wall2-canvas.zoomed .wb-sticky2:hover{transform:scale(2);z-index:120;box-shadow:4px 12px 30px rgba(0,0,0,.3)}
+.wall2-canvas.zoomed-far .wb-sticky2:hover{transform:scale(3.1)}
+/* Floating "which region am I in" badge — shows when zoomed in past the headers */
+.wrb{position:absolute;top:12px;left:12px;z-index:30;display:flex;align-items:center;gap:8px;
+  background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:6px 8px 6px 15px;
+  box-shadow:var(--shadow-lift);font-size:12.5px;font-weight:700;color:var(--text)}
+.wrb .wrb-label{white-space:nowrap}
+.wrb .wrb-label::before{content:'▸ ';color:var(--accent)}
 /* Area picker popover */
 .cat-pop{position:fixed;z-index:9600;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-lift);padding:6px;min-width:180px;font-family:'Inter',system-ui,sans-serif}
 .cat-pop-row{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text)}
@@ -3727,7 +3736,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v206';
+const APP_VERSION='v207';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -7355,9 +7364,9 @@ function rBoard(){
 // Future) — the region a note sits in is PURELY where you dragged it (x/y is
 // saved per task; there is NO stored "this is a today task" flag). "List" mode
 // is a clean structured view. Categories drive the colour.
-const WALL_REGION_W=340, WALL_TOP_H=560, WALL_BOT_H=380, WALL_STICKY_W=186, WALL_ROW=176;
-const WALL_CANVAS_W=WALL_REGION_W*3;             // 1020
-const WALL_CANVAS_H=WALL_TOP_H+WALL_BOT_H;       // 940
+const WALL_REGION_W=820, WALL_TOP_H=1040, WALL_BOT_H=560, WALL_STICKY_W=152, WALL_ROW=150;
+const WALL_CANVAS_W=WALL_REGION_W*3;             // 2460 — big, holds lots of notes
+const WALL_CANVAS_H=WALL_TOP_H+WALL_BOT_H;       // 1600
 const WALL_REGIONS=[
   {label:'Today',x:0,y:0,w:WALL_REGION_W,h:WALL_TOP_H},
   {label:'This week',x:WALL_REGION_W,y:0,w:WALL_REGION_W,h:WALL_TOP_H},
@@ -7449,7 +7458,7 @@ function rHomeWall(){
     _wallUpdateInPlace(canvas,tasks);_wallApplyTransform();return;
   }
   const sorted=[...tasks].sort((a,b)=>_taskStars(b)-_taskStars(a));
-  el.innerHTML=`<div class="wall2-canvas" id="wall2-canvas" style="width:${WALL_CANVAS_W}px;height:${WALL_CANVAS_H}px">${_wallRegionsHTML()}${sorted.map(_wallStickyHTML).join('')}</div>`;
+  el.innerHTML=`<div class="wall2-canvas" id="wall2-canvas" style="width:${WALL_CANVAS_W}px;height:${WALL_CANVAS_H}px">${_wallRegionsHTML()}${sorted.map(_wallStickyHTML).join('')}</div><div id="wall-region-badge" class="wrb" style="display:none"><span class="wrb-label"></span><button class="wall2-arrange" onclick="_wallBadgeArrange()">⇅ Arrange</button></div>`;
   setTimeout(()=>{_wallLayout(sorted);_wallBindInteract();_wallApplyTransform();},0);
 }
 function _wallBindInteract(){
@@ -7487,27 +7496,51 @@ function _wallUpdateInPlace(canvas,tasks){
   });
 }
 // ── Pan + zoom (transform-based; no scrollbars) ──
-function _wallZoom(){let z=UI.wallZoom;if(typeof z!=='number'){try{z=parseFloat(localStorage.getItem('los_wall_zoom'));}catch(_){}}if(!z||isNaN(z))z=1;return Math.max(0.35,Math.min(1,z));}
-function _wallPan(){if(!UI.wallPan||typeof UI.wallPan.x!=='number'){let p=null;try{p=JSON.parse(localStorage.getItem('los_wall_pan'));}catch(_){}UI.wallPan=(p&&typeof p.x==='number')?p:{x:20,y:16};}return UI.wallPan;}
+// Min zoom = "all four sections fit the screen" (can't zoom out past that).
+// You zoom IN from there to get closer to the (deliberately small) notes.
+function _wallMinZoom(){const vp=document.getElementById('home-wall');const vw=vp?vp.clientWidth:800,vh=vp?vp.clientHeight:520;return Math.max(0.12,Math.min(vw/WALL_CANVAS_W,vh/WALL_CANVAS_H));}
+function _wallMaxZoom(){return 1.6;}
+function _wallZoom(){let z=UI.wallZoom;if(typeof z!=='number'){try{z=parseFloat(localStorage.getItem('los_wall_z2'));}catch(_){}}const mn=_wallMinZoom();if(!z||isNaN(z))z=mn;return Math.max(mn,Math.min(_wallMaxZoom(),z));}
+function _wallPan(){if(!UI.wallPan||typeof UI.wallPan.x!=='number'){let p=null;try{p=JSON.parse(localStorage.getItem('los_wall_p2'));}catch(_){}UI.wallPan=(p&&typeof p.x==='number')?p:{x:0,y:0};}return UI.wallPan;}
+// Contain-clamp: centre the canvas when it's smaller than the viewport, and
+// never allow empty space past the sections when larger.
 function _wallClampPan(){
   const vp=document.getElementById('home-wall');if(!vp)return;
-  const z=_wallZoom(),p=_wallPan(),OV=200;
+  const z=_wallZoom(),p=_wallPan();
   const cw=WALL_CANVAS_W*z,ch=WALL_CANVAS_H*z,vw=vp.clientWidth,vh=vp.clientHeight;
-  p.x=Math.min(Math.max(p.x,vw-cw-OV),OV);
-  p.y=Math.min(Math.max(p.y,vh-ch-OV),OV);
+  if(cw<=vw)p.x=Math.round((vw-cw)/2);else p.x=Math.min(0,Math.max(vw-cw,p.x));
+  if(ch<=vh)p.y=Math.round((vh-ch)/2);else p.y=Math.min(0,Math.max(vh-ch,p.y));
 }
+function _wallCurrentRegion(){
+  const vp=document.getElementById('home-wall');if(!vp)return -1;
+  const z=_wallZoom(),p=_wallPan();
+  const cx=(vp.clientWidth/2-p.x)/z, cy=(vp.clientHeight/2-p.y)/z;
+  for(let i=0;i<WALL_REGIONS.length;i++){const r=WALL_REGIONS[i];if(cx>=r.x&&cx<r.x+r.w&&cy>=r.y&&cy<r.y+r.h)return i;}
+  return -1;
+}
+function _wallBadgeArrange(){const b=document.getElementById('wall-region-badge');if(b&&b.dataset.region!=null&&b.dataset.region!=='')arrangeRegion(Number(b.dataset.region));}
 function _wallApplyTransform(){
   const canvas=document.getElementById('wall2-canvas');if(!canvas)return;
+  _wallClampPan();
   const z=_wallZoom(),p=_wallPan();
   canvas.style.transform=`translate(${p.x}px,${p.y}px) scale(${z})`;
-  canvas.classList.toggle('zoomed',z<0.72);
+  canvas.classList.toggle('zoomed',z<0.7);
+  canvas.classList.toggle('zoomed-far',z<0.45);
   const lbl=document.getElementById('wall-zoom-lbl');if(lbl)lbl.textContent=Math.round(z*100)+'%';
+  // When zoomed in past the fit view (headers may be off-screen), float a
+  // badge telling you which region the viewport centre is over, with Arrange.
+  const badge=document.getElementById('wall-region-badge');
+  if(badge){
+    const ri=(z>_wallMinZoom()*1.3)?_wallCurrentRegion():-1;
+    if(ri>=0){badge.style.display='flex';badge.dataset.region=ri;const l=badge.querySelector('.wrb-label');if(l)l.textContent=WALL_REGIONS[ri].label;}
+    else badge.style.display='none';
+  }
 }
 function _wallZoomTo(newZ,cx,cy){
-  const oldZ=_wallZoom();newZ=Math.max(0.35,Math.min(1,newZ));if(newZ===oldZ)return;
+  const oldZ=_wallZoom();newZ=Math.max(_wallMinZoom(),Math.min(_wallMaxZoom(),newZ));if(newZ===oldZ)return;
   const p=_wallPan();const ax=(cx-p.x)/oldZ,ay=(cy-p.y)/oldZ;
   p.x=cx-ax*newZ;p.y=cy-ay*newZ;
-  UI.wallZoom=newZ;try{localStorage.setItem('los_wall_zoom',String(newZ));}catch(_){}
+  UI.wallZoom=newZ;try{localStorage.setItem('los_wall_z2',String(newZ));}catch(_){}
   _wallClampPan();_wallApplyTransform();
 }
 function setWallZoom(delta){const vp=document.getElementById('home-wall');if(!vp)return;_wallZoomTo(Math.round((_wallZoom()+delta)*20)/20,vp.clientWidth/2,vp.clientHeight/2);}
@@ -7558,7 +7591,7 @@ function _wallPointerDown(e){
     try{sticky.setPointerCapture(e.pointerId);}catch(_){}
     e.preventDefault();return;
   }
-  if(e.target.closest('.wall2-arrange'))return;
+  if(e.target.closest('.wall2-arrange')||e.target.closest('.wrb'))return;
   const p=_wallPan();
   _wallPanning={sx:e.clientX,sy:e.clientY,px:p.x,py:p.y};
   vp.classList.add('panning');
@@ -7590,7 +7623,7 @@ function _wallPointerUp(){
   }
   if(_wallPanning){
     _wallPanning=null;const vp=document.getElementById('home-wall');if(vp)vp.classList.remove('panning');
-    try{localStorage.setItem('los_wall_pan',JSON.stringify(_wallPan()));}catch(_){}
+    try{localStorage.setItem('los_wall_p2',JSON.stringify(_wallPan()));}catch(_){}
   }
 }
 // Streak ring: a donut in the habit's colour with the current streak in the
