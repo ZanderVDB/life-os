@@ -45,9 +45,9 @@
 [data-theme="studio"]{
   --app-bg:radial-gradient(72% 62% at 2% 102%, rgba(226,176,120,.18), transparent 52%), linear-gradient(34deg, #2e2018 0%, #241b26 40%, #191521 72%, #131019 100%);
   --btn-grad:linear-gradient(135deg,#d9ad78 0%,#c99f6b 100%);
-  --bg:#181420; --bg-2:#110e18;
-  --surface:#2c2534; --surface-2:#362e42; --surface-hover:#40384e;
-  --border:#3a3242; --border-strong:#4d4458;
+  --bg:#181317; --bg-2:#110d10;
+  --surface:#231d21; --surface-2:#2b2428; --surface-hover:#352d32;
+  --border:#382f35; --border-strong:#4c424a;
   --text:#efe5d4; --text-2:#bcb3bd; --muted:#8b8296; --muted-2:#635b70;
   --accent:#dcab7d; --accent-ink:#201b26;
   --peach:#f0b487; --peach-bg:#3a2c22;
@@ -58,7 +58,7 @@
   --red:#e0806e; --red-bg:#3a2420;
   --pink:#d98fa4; --pink-bg:#3a2830;
   --emerald:#88b1a0; --emerald-bg:#26332e;
-  --paper:#2c2534; --paper-line:rgba(254,222,184,.08); --paper-margin:rgba(220,171,125,.4);
+  --paper:#231d21; --paper-line:rgba(254,222,184,.08); --paper-margin:rgba(220,171,125,.4);
   --shadow:0 1px 3px rgba(0,0,0,.42), 0 4px 14px rgba(0,0,0,.34);
   --shadow-lift:0 6px 30px rgba(0,0,0,.5);
 }
@@ -91,6 +91,32 @@
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent), 0 0 20px -7px color-mix(in srgb,var(--accent) 45%,transparent);
 }
 [data-theme="studio"] .day-card.today .dc-day{color:var(--accent)}
+/* Left sidebar: let the app's warm gradient glow through, and give each nav
+   item its own gradient icon tile (look-book style). */
+[data-theme="studio"] .sidebar{background:color-mix(in srgb, var(--surface) 70%, transparent)}
+[data-theme="studio"] .s-nav a{grid-template-columns:30px 1fr auto}
+[data-theme="studio"] .s-nav a .ic{
+  width:28px;height:28px;border-radius:9px;color:#201b1f;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.28);
+}
+[data-theme="studio"] .s-nav a.active{background:color-mix(in srgb,var(--accent) 13%, var(--surface))}
+[data-theme="studio"] .s-nav a.active .ic{color:#1b171a}
+[data-theme="studio"] .s-nav a:nth-of-type(1) .ic{background:linear-gradient(140deg,#e8c193,#d99a5c)}
+[data-theme="studio"] .s-nav a:nth-of-type(2) .ic{background:linear-gradient(140deg,#a3aed0,#7c88ad)}
+[data-theme="studio"] .s-nav a:nth-of-type(3) .ic{background:linear-gradient(140deg,#e8c987,#dcab7d)}
+[data-theme="studio"] .s-nav a:nth-of-type(4) .ic{background:linear-gradient(140deg,#9ec3b2,#7aa295)}
+[data-theme="studio"] .s-nav a:nth-of-type(5) .ic{background:linear-gradient(140deg,#e8927b,#d98fa4)}
+[data-theme="studio"] .s-nav a:nth-of-type(6) .ic{background:linear-gradient(140deg,#bbaef4,#8f9cc0)}
+[data-theme="studio"] .s-nav a:nth-of-type(7) .ic{background:linear-gradient(140deg,#cabfc7,#dcab7d)}
+/* Right rail cards get a subtle gradient body + a tan top-accent line. */
+[data-theme="studio"] .ac-card{
+  position:relative;
+  background:linear-gradient(158deg, color-mix(in srgb,var(--accent) 7%, var(--surface)) 0%, var(--surface) 48%, color-mix(in srgb,#000 16%, var(--surface)) 100%);
+}
+[data-theme="studio"] .ac-card::before{
+  content:'';position:absolute;left:16px;right:16px;top:0;height:2px;border-radius:0 0 3px 3px;
+  background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 20%,transparent) 72%,transparent);
+}
 
 /* ━━━ BASE ━━━ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -3676,7 +3702,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v219';
+const APP_VERSION='v220';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
