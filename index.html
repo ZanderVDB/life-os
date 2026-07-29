@@ -1630,6 +1630,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 [data-theme="studio"] .ph-b{background:rgba(240,164,74,.16);color:#f3ad57}
 .exp-dt{font-size:11px;color:var(--muted-2);margin-top:8px}
 .no-t{background:var(--surface-2);border:1px dashed var(--border);border-radius:var(--radius);padding:18px;text-align:center;font-size:13px;color:var(--muted)}
+/* Illustrated empty states (playful, theme-coloured) */
+.empty-st{display:flex;flex-direction:column;align-items:center;text-align:center;gap:5px;padding:26px 20px 30px}
+.empty-illo{width:148px;height:130px;margin-bottom:8px;filter:drop-shadow(0 6px 14px rgba(0,0,0,.06))}
+@media (prefers-reduced-motion: no-preference){.empty-illo{animation:illoIn .5s cubic-bezier(.34,1.4,.5,1)}}
+@keyframes illoIn{0%{opacity:0;transform:translateY(10px) scale(.94)}100%{opacity:1;transform:none}}
+.empty-st-title{font-size:15.5px;font-weight:600;color:var(--text)}
+.empty-st-sub{font-size:13px;color:var(--muted);max-width:34ch;line-height:1.55}
+.empty-st .btn{margin-top:12px}
 
 /* ━━━ HABITS (aside) ━━━ */
 .hab-list{display:flex;flex-direction:column;gap:6px}
@@ -3693,7 +3701,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v212';
+const APP_VERSION='v213';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -10227,7 +10235,7 @@ function rHabits(){
 }
 function rHabitsFull(){
   const el=document.getElementById('learn');if(!el)return;
-  if(!S.habits.length){el.innerHTML=`<div class="no-t">No habits yet — add one above to start building a streak.</div>`;return;}
+  if(!S.habits.length){el.innerHTML=emptyState(_illoHabits(),'No habits yet','Add one above and watch your streak grow.');return;}
   el.innerHTML=S.habits.map(h=>{
     const stats=computeHabitStats(h);
     const tier=tierFor(stats.current);
@@ -11118,7 +11126,7 @@ function rTasks(){
       html+=`<div class="tcard">${sort(todayItems).map(dailyMkTi).join('')}</div>`;
     }
     if(!html){
-      el.innerHTML=`<div class="no-t">No daily tasks yet. <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openNewTaskModal({daily:true})">+ Add task</button> or switch to General to pull one in.</div>`;
+      el.innerHTML=emptyState(_illoTasks(),'Nothing on today','A clear list — add a task, or switch to General to pull one in.','<button class="btn btn-primary btn-sm" onclick="openNewTaskModal({daily:true})">+ Add task</button>');
       return;
     }
     el.innerHTML=html;
@@ -11542,7 +11550,14 @@ function rBuilds(){
 // IDEAS
 function saveIdea(id){const i=S.ideas.find(x=>x.id===id);if(!i)return;const ti=document.getElementById('bd-title'),de=document.getElementById('bd-desc');if(ti?.value?.trim())i.title=ti.value.trim();if(de?.value?.trim())i.desc=de.value.trim();svAll();closeBrainDetail();rIdeas();}
 function delIdea(id){if(!confirm('Delete this idea?'))return;S.ideas=S.ideas.filter(x=>x.id!==id);svAll();closeBrainDetail();rIdeas();}
-function rIdeas(){const el=document.getElementById('ideas');if(!el)return;const list=brainFilter([...S.ideas].reverse(),['title','desc']);el.innerHTML=list.length?list.map(i=>`<div class="ic" onclick="openBrainDetail('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div></div></div>`).join(''):(UI.brainQuery?`<div class="no-t">No ideas match "${esc(UI.brainQuery)}"</div>`:`<div class="no-t">No ideas yet — drop one in or dictate it</div>`);}
+// ── Playful, theme-coloured spot illustrations for empty states ──
+function emptyState(illo,title,sub,btn){
+  return `<div class="empty-st">${illo}<div class="empty-st-title">${title}</div>${sub?`<div class="empty-st-sub">${sub}</div>`:''}${btn||''}</div>`;
+}
+function _illoTasks(){return `<svg class="empty-illo" viewBox="0 0 160 140" fill="none" aria-hidden="true"><rect x="42" y="30" width="76" height="94" rx="13" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="2.5"/><rect x="62" y="22" width="36" height="18" rx="8" fill="var(--accent)"/><rect x="56" y="54" width="50" height="7" rx="3.5" fill="var(--border-strong)" opacity=".45"/><rect x="56" y="72" width="38" height="7" rx="3.5" fill="var(--border-strong)" opacity=".45"/><rect x="56" y="90" width="44" height="7" rx="3.5" fill="var(--border-strong)" opacity=".45"/><circle cx="114" cy="100" r="24" fill="var(--sage)"/><path d="M103 100l7 7 14-15" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 44l2.2 6 6 2.2-6 2.2-2.2 6-2.2-6-6-2.2 6-2.2z" fill="var(--gold)"/><circle cx="130" cy="42" r="4" fill="var(--peach)"/></svg>`;}
+function _illoHabits(){return `<svg class="empty-illo" viewBox="0 0 160 140" fill="none" aria-hidden="true"><path d="M56 98h48l-6 28a7 7 0 0 1-7 6H69a7 7 0 0 1-7-6z" fill="var(--peach)"/><rect x="51" y="88" width="58" height="14" rx="7" fill="var(--accent)"/><path d="M80 88V54" stroke="var(--sage)" stroke-width="4" stroke-linecap="round"/><path d="M80 68c-13-2-21-11-21-23 13 0 21 9 21 23z" fill="var(--sage)"/><path d="M80 60c11-2 19-10 19-21-12 0-19 8-19 21z" fill="var(--emerald)"/><circle cx="80" cy="46" r="8" fill="var(--gold)"/><path d="M120 40l1.7 5 5 1.7-5 1.7-1.7 5-1.7-5-5-1.7 5-1.7z" fill="var(--blue)"/></svg>`;}
+function _illoIdeas(){return `<svg class="empty-illo" viewBox="0 0 160 140" fill="none" aria-hidden="true"><circle cx="80" cy="60" r="30" fill="var(--gold)"/><rect x="68" y="88" width="24" height="10" rx="4" fill="var(--border-strong)"/><rect x="70" y="100" width="20" height="8" rx="4" fill="var(--border-strong)" opacity=".7"/><path d="M80 46v20M72 58h16" stroke="#fff" stroke-width="3.5" stroke-linecap="round" opacity=".85"/><path d="M80 20v-9M114 27l6-6M46 27l-6-6M122 60h9M29 60h-9" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round"/></svg>`;}
+function rIdeas(){const el=document.getElementById('ideas');if(!el)return;const list=brainFilter([...S.ideas].reverse(),['title','desc']);el.innerHTML=list.length?list.map(i=>`<div class="ic" onclick="openBrainDetail('idea','${i.id}')"><span class="ic-dot"></span><div style="flex:1"><div class="ict">${esc(i.title)}</div>${i.desc?`<div class="icd">${esc(i.desc)}</div>`:''}<div class="icdt">${fmt(i.date)}</div></div></div>`).join(''):(UI.brainQuery?`<div class="no-t">No ideas match "${esc(UI.brainQuery)}"</div>`:emptyState(_illoIdeas(),'No ideas yet','Drop one in or dictate it — every big thing starts as a spark.'));}
 
 // RESOURCES
 function saveRes(id){const r=S.resources.find(x=>x.id===id);if(!r)return;const ti=document.getElementById('bd-title'),de=document.getElementById('bd-desc'),ur=document.getElementById('bd-url'),tg=document.getElementById('bd-tag');if(ti?.value?.trim())r.title=ti.value.trim();if(de)r.desc=de.value.trim();if(ur)r.url=ur.value.trim();if(tg)r.tag=tg.value;svAll();closeBrainDetail();rResources();}
