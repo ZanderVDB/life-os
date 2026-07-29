@@ -99,7 +99,30 @@
   --shadow:0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
   --shadow-lift:0 6px 28px rgba(0,0,0,.5);
 }
-[data-theme="midnight"],[data-theme="espresso"]{color-scheme:dark}
+/* ── VIBRANT schemes (punchier accents + saturated category colours). ── */
+[data-theme="vibrant"]{
+  --bg:#f2f3fc; --bg-2:#e6e8f8;
+  --surface:#ffffff; --surface-2:#f1f2fc; --surface-hover:#e9ebf9;
+  --border:#e1e3f2; --border-strong:#c6cae8;
+  --text:#191b2e; --text-2:#494e6b; --muted:#7b809c; --muted-2:#aab0cc;
+  --accent:#6c5ce7; --accent-ink:#ffffff;
+  --peach:#ff8a5c; --peach-bg:#ffe6db; --sage:#20bf9f; --sage-bg:#d3f5ee; --lavender:#8c7ae6; --lavender-bg:#e8e3fb; --gold:#f5b800; --gold-bg:#fff2cc; --blue:#3d7bff; --blue-bg:#dbe7ff; --red:#ff5a7a; --red-bg:#ffdbe3; --pink:#ff6bcb; --pink-bg:#ffdcf3; --emerald:#12b886; --emerald-bg:#d0f3e6;
+  --paper:#ffffff; --paper-line:rgba(120,110,200,.14); --paper-margin:rgba(255,90,122,.35);
+  --shadow:0 1px 3px rgba(60,50,130,.06), 0 6px 18px rgba(60,50,130,.07);
+  --shadow-lift:0 8px 30px rgba(108,92,231,.16);
+}
+[data-theme="aurora"]{
+  --bg:#0d0f1a; --bg-2:#080a12;
+  --surface:#151a2c; --surface-2:#1d2340; --surface-hover:#262d4e;
+  --border:#2a3152; --border-strong:#3d4674;
+  --text:#eef0ff; --text-2:#b7bce0; --muted:#8289b8; --muted-2:#585f8a;
+  --accent:#7c6cff; --accent-ink:#0d0f1a;
+  --peach:#ff9d6c; --peach-bg:#3a2a2e; --sage:#3ee0b8; --sage-bg:#153030; --lavender:#a594ff; --lavender-bg:#272348; --gold:#ffd452; --gold-bg:#3a3320; --blue:#5c9dff; --blue-bg:#182a48; --red:#ff6b8a; --red-bg:#3a2030; --pink:#ff7ad9; --pink-bg:#3a2340; --emerald:#2fe0a0; --emerald-bg:#153028;
+  --paper:#141a2e; --paper-line:rgba(255,255,255,.06); --paper-margin:rgba(160,140,255,.4);
+  --shadow:0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.35);
+  --shadow-lift:0 6px 30px rgba(90,70,230,.3);
+}
+[data-theme="midnight"],[data-theme="espresso"],[data-theme="aurora"]{color-scheme:dark}
 
 /* ━━━ BASE ━━━ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -2697,6 +2720,39 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .notebook-wrap{padding:14px 16px 16px 42px}
   .notebook-wrap::before{left:32px}
 }
+/* ━━━━━━━━━ MOTION LAYER — press / hover / entrance micro-interactions ━━━━━━━━━
+   Springy easings and tactile feedback across the app. All gated behind
+   prefers-reduced-motion so it never fights accessibility settings. */
+@media (prefers-reduced-motion: no-preference){
+  .btn,.tab,.cv,.pb,.g-btn,.theme-sw,.carr,.iconbtn,.wb-pin,.us-trigger,.profile-pill,.hb-rest-d,.variant-btn,.em-type-btn,.wl-manage,.st-tab,.nb-tab{
+    transition:transform .15s cubic-bezier(.34,1.56,.5,1),background-color .16s,border-color .16s,box-shadow .16s,color .16s,opacity .16s;
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn:active,.tab:active,.cv:active,.pb:active,.g-btn:active,.theme-sw:active,.carr:active,.iconbtn:active,.us-trigger:active,.profile-pill:active,.st-tab:active,.wp-dot-btn:active,.s-nav a:active,.s-nav-a:active,.wb-btn:active,.hl-check:active{transform:scale(.93)}
+  /* Card hover-lift */
+  .ti,.bc,.lc2,.ic,.rc,.nc,.people-card,.hc,.wp-row,.aim-row{transition:transform .17s cubic-bezier(.34,1.3,.5,1),box-shadow .17s,border-color .15s}
+  .ti:hover,.bc:hover,.lc2:hover,.ic:hover,.rc:hover,.nc:hover,.people-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lift)}
+  /* Nav — pop the tab you land on */
+  .s-nav a,.s-nav-a{transition:background .16s,color .16s,transform .12s}
+  .s-nav a.active,.s-nav-a.active{animation:navPop .32s cubic-bezier(.34,1.56,.5,1)}
+  @keyframes navPop{0%{transform:scale(.96)}55%{transform:scale(1.03)}100%{transform:scale(1)}}
+  /* Springier route + modal entrances (override the plain fades) */
+  .route.active{animation:routeIn .34s cubic-bezier(.22,.68,.24,1)}
+  @keyframes routeIn{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}
+  .modal-body{animation:modalPop .28s cubic-bezier(.34,1.42,.5,1)!important}
+  @keyframes modalPop{0%{opacity:0;transform:scale(.92) translateY(12px)}100%{opacity:1;transform:none}}
+  .modal-bd{animation:fadeBd .22s ease-out!important}
+  @keyframes fadeBd{from{opacity:0}to{opacity:1}}
+  /* Tabs / view toggles pop when selected */
+  .tab.on,.cv.on{animation:tabPop .28s cubic-bezier(.34,1.5,.5,1)}
+  @keyframes tabPop{0%{transform:scale(.95)}55%{transform:scale(1.04)}100%{transform:scale(1)}}
+  /* Native checkboxes pop on check */
+  input[type=checkbox]:checked{animation:ckPop .3s cubic-bezier(.34,1.56,.5,1)}
+  @keyframes ckPop{0%{transform:scale(.65)}55%{transform:scale(1.2)}100%{transform:scale(1)}}
+  /* Save pill drops in with a bounce */
+  .save-pill.show{animation:pillIn .34s cubic-bezier(.34,1.56,.5,1)}
+  @keyframes pillIn{0%{transform:translateY(-10px) scale(.9);opacity:0}100%{transform:none;opacity:1}}
+}
 </style>
 </head>
 <body>
@@ -3131,6 +3187,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
                     <button class="theme-sw" data-theme-btn="sage" onclick="setTheme('sage')" style="--sw-bg:#eef1e7;--sw-ac:#5e7d4f"><span></span>Sage</button>
                     <button class="theme-sw" data-theme-btn="apricot" onclick="setTheme('apricot')" style="--sw-bg:#fce8d8;--sw-ac:#d2662f"><span></span>Apricot</button>
                     <button class="theme-sw" data-theme-btn="slate" onclick="setTheme('slate')" style="--sw-bg:#eceef1;--sw-ac:#3f6d8e"><span></span>Slate</button>
+                    <button class="theme-sw" data-theme-btn="vibrant" onclick="setTheme('vibrant')" style="--sw-bg:#f2f3fc;--sw-ac:#6c5ce7"><span></span>Vibrant</button>
                   </div>
                 </div>
                 <div class="theme-picker-group">
@@ -3139,6 +3196,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
                     <button class="theme-sw" data-theme-btn="studio" onclick="setTheme('studio')" style="--sw-bg:#1c1f26;--sw-ac:#e6e8ee"><span></span>Charcoal</button>
                     <button class="theme-sw" data-theme-btn="midnight" onclick="setTheme('midnight')" style="--sw-bg:#161d2e;--sw-ac:#6f9bff"><span></span>Midnight</button>
                     <button class="theme-sw" data-theme-btn="espresso" onclick="setTheme('espresso')" style="--sw-bg:#231c17;--sw-ac:#d69158"><span></span>Espresso</button>
+                    <button class="theme-sw" data-theme-btn="aurora" onclick="setTheme('aurora')" style="--sw-bg:#151a2c;--sw-ac:#7c6cff"><span></span>Aurora</button>
                   </div>
                 </div>
               </div>
@@ -3635,7 +3693,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v211';
+const APP_VERSION='v212';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4086,7 +4144,7 @@ function rProfilesPanel(){
 }
 
 // THEME
-const THEMES=['soft','sage','apricot','slate','studio','midnight','espresso'];
+const THEMES=['soft','sage','apricot','slate','vibrant','studio','midnight','espresso','aurora'];
 function setTheme(t){
   if(!THEMES.includes(t))t='soft';
   document.documentElement.setAttribute('data-theme',t);
