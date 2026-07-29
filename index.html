@@ -122,7 +122,31 @@
   --shadow:0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.35);
   --shadow-lift:0 6px 30px rgba(90,70,230,.3);
 }
-[data-theme="midnight"],[data-theme="espresso"],[data-theme="aurora"]{color-scheme:dark}
+/* ── "Tropic" / "Reef" — from the sunset-meets-sea palette
+   (#F04770 #F78C6A #FFD167 #06D7A0 #108AB1 #073A4B). ── */
+[data-theme="tropic"]{
+  --bg:#f4f8f7; --bg-2:#e7f0ee;
+  --surface:#ffffff; --surface-2:#eef6f4; --surface-hover:#e6f1ee;
+  --border:#dde9e6; --border-strong:#bfd6d0;
+  --text:#08333f; --text-2:#3c5a61; --muted:#6d878d; --muted-2:#a2b9bd;
+  --accent:#06d7a0; --accent-ink:#063a45;
+  --peach:#f78c6a; --peach-bg:#ffe4d9; --sage:#06d7a0; --sage-bg:#d0f6eb; --lavender:#8b7fd6; --lavender-bg:#e9e5fa; --gold:#ffcf5c; --gold-bg:#fff1c9; --blue:#108ab1; --blue-bg:#d5ecf4; --red:#f04770; --red-bg:#ffdbe4; --pink:#f04770; --pink-bg:#ffdbe6; --emerald:#06d7a0; --emerald-bg:#d0f6eb;
+  --paper:#ffffff; --paper-line:rgba(16,138,177,.12); --paper-margin:rgba(240,71,112,.32);
+  --shadow:0 1px 3px rgba(8,51,63,.05), 0 6px 18px rgba(8,51,63,.06);
+  --shadow-lift:0 8px 30px rgba(6,215,160,.16);
+}
+[data-theme="reef"]{
+  --bg:#073a4b; --bg-2:#052c39;
+  --surface:#0c4658; --surface-2:#104f62; --surface-hover:#155a70;
+  --border:#17546a; --border-strong:#236e87;
+  --text:#e9f7f6; --text-2:#a7d0d3; --muted:#6f9aa1; --muted-2:#4c7882;
+  --accent:#06d7a0; --accent-ink:#062c39;
+  --peach:#f78c6a; --peach-bg:#3a2b28; --sage:#06d7a0; --sage-bg:#0a3a3c; --lavender:#a99cf0; --lavender-bg:#2b2b46; --gold:#ffd167; --gold-bg:#3a3320; --blue:#3fb0d6; --blue-bg:#0e3d4f; --red:#ff6088; --red-bg:#3a2230; --pink:#ff6ba0; --pink-bg:#3a2434; --emerald:#06d7a0; --emerald-bg:#0a3a3c;
+  --paper:#0c4658; --paper-line:rgba(255,255,255,.06); --paper-margin:rgba(255,110,140,.4);
+  --shadow:0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.35);
+  --shadow-lift:0 6px 30px rgba(6,215,160,.24);
+}
+[data-theme="midnight"],[data-theme="espresso"],[data-theme="aurora"],[data-theme="reef"]{color-scheme:dark}
 
 /* ━━━ BASE ━━━ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -3196,6 +3220,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
                     <button class="theme-sw" data-theme-btn="apricot" onclick="setTheme('apricot')" style="--sw-bg:#fce8d8;--sw-ac:#d2662f"><span></span>Apricot</button>
                     <button class="theme-sw" data-theme-btn="slate" onclick="setTheme('slate')" style="--sw-bg:#eceef1;--sw-ac:#3f6d8e"><span></span>Slate</button>
                     <button class="theme-sw" data-theme-btn="vibrant" onclick="setTheme('vibrant')" style="--sw-bg:#f2f3fc;--sw-ac:#6c5ce7"><span></span>Vibrant</button>
+                    <button class="theme-sw" data-theme-btn="tropic" onclick="setTheme('tropic')" style="--sw-bg:#f4f8f7;--sw-ac:#06d7a0"><span></span>Tropic</button>
                   </div>
                 </div>
                 <div class="theme-picker-group">
@@ -3205,6 +3230,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
                     <button class="theme-sw" data-theme-btn="midnight" onclick="setTheme('midnight')" style="--sw-bg:#161d2e;--sw-ac:#6f9bff"><span></span>Midnight</button>
                     <button class="theme-sw" data-theme-btn="espresso" onclick="setTheme('espresso')" style="--sw-bg:#231c17;--sw-ac:#d69158"><span></span>Espresso</button>
                     <button class="theme-sw" data-theme-btn="aurora" onclick="setTheme('aurora')" style="--sw-bg:#151a2c;--sw-ac:#7c6cff"><span></span>Aurora</button>
+                    <button class="theme-sw" data-theme-btn="reef" onclick="setTheme('reef')" style="--sw-bg:#073a4b;--sw-ac:#06d7a0"><span></span>Reef</button>
                   </div>
                 </div>
               </div>
@@ -3701,7 +3727,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v213';
+const APP_VERSION='v214';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4152,7 +4178,7 @@ function rProfilesPanel(){
 }
 
 // THEME
-const THEMES=['soft','sage','apricot','slate','vibrant','studio','midnight','espresso','aurora'];
+const THEMES=['soft','sage','apricot','slate','vibrant','tropic','studio','midnight','espresso','aurora','reef'];
 function setTheme(t){
   if(!THEMES.includes(t))t='soft';
   document.documentElement.setAttribute('data-theme',t);
