@@ -82,6 +82,15 @@
   font-size:13px;letter-spacing:0;text-transform:none;font-weight:750;
   background:var(--head-grad);-webkit-background-clip:text;background-clip:text;color:transparent;
 }
+/* Right-rail card titles pick up the tan accent so they match the main cards. */
+[data-theme="studio"] .ac-card h3{color:var(--accent)}
+[data-theme="studio"] .ac-card h3 svg{color:var(--accent);opacity:.9}
+/* "Today" cell in the week grid gets a clear tan-accented ring + glow. */
+[data-theme="studio"] .day-card.today{
+  border-color:var(--accent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent), 0 0 20px -7px color-mix(in srgb,var(--accent) 45%,transparent);
+}
+[data-theme="studio"] .day-card.today .dc-day{color:var(--accent)}
 
 /* ━━━ BASE ━━━ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -3653,7 +3662,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v217';
+const APP_VERSION='v218';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
