@@ -116,7 +116,7 @@
    dots with a soft glow so they read against the dark gradient. */
 [data-theme="studio"] .main-wrap{position:relative;z-index:2}
 [data-theme="studio"] .app::after{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-repeat:no-repeat;
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:6;background-repeat:no-repeat;
   background-image:
     radial-gradient(2.6px 2.6px at 14% 20%, rgba(246,208,152,.9), rgba(246,208,152,.18) 42%, transparent 72%),
     radial-gradient(2px 2px at 66% 12%, rgba(246,208,152,.75), transparent 66%),
@@ -134,10 +134,11 @@
     radial-gradient(2.3px 2.3px at 26% 40%, rgba(246,208,152,.66), transparent 68%),
     radial-gradient(2px 2px at 78% 86%, rgba(246,208,152,.6), transparent 66%);
 }
+[data-theme="studio"] .app::after{opacity:.6}
 @media (prefers-reduced-motion: no-preference){
   [data-theme="studio"] .app::after{animation:duskTwinkle 6s ease-in-out infinite alternate}
 }
-@keyframes duskTwinkle{from{opacity:.6}to{opacity:1}}
+@keyframes duskTwinkle{from{opacity:.35}to{opacity:.72}}
 
 /* ━━━ BASE ━━━ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -2815,13 +2816,6 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <circle cx="12" cy="12" r="9.2"/>
       <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>
     </symbol>
-    <linearGradient id="navico1" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#ecc79a"/><stop offset="1" stop-color="#d4914f"/></linearGradient>
-    <linearGradient id="navico2" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#aab6d8"/><stop offset="1" stop-color="#7581a8"/></linearGradient>
-    <linearGradient id="navico3" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#eecd8a"/><stop offset="1" stop-color="#d8a271"/></linearGradient>
-    <linearGradient id="navico4" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#a6cbb9"/><stop offset="1" stop-color="#74a08f"/></linearGradient>
-    <linearGradient id="navico5" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#ee9a80"/><stop offset="1" stop-color="#d886a0"/></linearGradient>
-    <linearGradient id="navico6" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#c1b5f6"/><stop offset="1" stop-color="#8b98bd"/></linearGradient>
-    <linearGradient id="navico7" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#d3c9d0"/><stop offset="1" stop-color="#dcab7d"/></linearGradient>
     <symbol id="i-today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></symbol>
     <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></symbol>
     <symbol id="i-tasks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2" fill="currentColor" stroke="none"/></symbol>
@@ -2902,13 +2896,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <span class="us-trigger-ic">⌕</span><span class="us-trigger-txt">Search…</span><span class="us-trigger-kbd">Ctrl K</span>
       </button>
       <nav class="s-nav" id="s-nav">
-        <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico1)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
-        <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico2)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
-        <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico3)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.4"/><rect x="14" y="4" width="7" height="7" rx="1.4"/><rect x="3" y="15" width="7" height="6" rx="1.4"/><rect x="14" y="15" width="7" height="6" rx="1.4"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
-        <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico4)" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
-        <a href="#diary" data-route-link="diary"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico5)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2V5Z"/><path d="M4 18h16"/></svg></span><span class="label">Diary</span><span class="dot"></span></a>
-        <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico6)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5v-17Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v5H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M8 7h8M8 11h6"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
-        <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico7)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-2 0-3.5 1.5-3.5 3.5 0 .4-.3.8-.7.9A3 3 0 0 0 6 10c0 .6.2 1.2.6 1.6-.4.5-.6 1-.6 1.7a3 3 0 0 0 2.4 3c.2 1.6 1.5 2.7 3.1 2.7s2.9-1.1 3.1-2.7a3 3 0 0 0 2.4-3c0-.7-.2-1.2-.6-1.7.4-.4.6-1 .6-1.6a3 3 0 0 0-1.8-2.6c-.4-.1-.7-.5-.7-.9C15.5 4.5 14 3 12 3Z"/><path d="M12 3v16"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
+        <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico1)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico1" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#f0d0a2"/><stop offset="1" stop-color="#d4914f"/></linearGradient></defs><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
+        <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico2)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico2" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#b3bfe0"/><stop offset="1" stop-color="#7581a8"/></linearGradient></defs><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
+        <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico3)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico3" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#f2d493"/><stop offset="1" stop-color="#d8a271"/></linearGradient></defs><rect x="3" y="4" width="7" height="7" rx="1.4"/><rect x="14" y="4" width="7" height="7" rx="1.4"/><rect x="3" y="15" width="7" height="6" rx="1.4"/><rect x="14" y="15" width="7" height="6" rx="1.4"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
+        <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico4)" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico4" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#aed3c1"/><stop offset="1" stop-color="#74a08f"/></linearGradient></defs><path d="M20 6 9 17l-5-5"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
+        <a href="#diary" data-route-link="diary"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico5)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico5" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#f4a88f"/><stop offset="1" stop-color="#d886a0"/></linearGradient></defs><path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2V5Z"/><path d="M4 18h16"/></svg></span><span class="label">Diary</span><span class="dot"></span></a>
+        <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico6)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico6" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#cabff8"/><stop offset="1" stop-color="#8b98bd"/></linearGradient></defs><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5v-17Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v5H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M8 7h8M8 11h6"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
+        <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico7)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico7" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#ddd2d9"/><stop offset="1" stop-color="#dcab7d"/></linearGradient></defs><path d="M12 3c-2 0-3.5 1.5-3.5 3.5 0 .4-.3.8-.7.9A3 3 0 0 0 6 10c0 .6.2 1.2.6 1.6-.4.5-.6 1-.6 1.7a3 3 0 0 0 2.4 3c.2 1.6 1.5 2.7 3.1 2.7s2.9-1.1 3.1-2.7a3 3 0 0 0 2.4-3c0-.7-.2-1.2-.6-1.7.4-.4.6-1 .6-1.6a3 3 0 0 0-1.8-2.6c-.4-.1-.7-.5-.7-.9C15.5 4.5 14 3 12 3Z"/><path d="M12 3v16"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
       </nav>
       <div class="s-sep"></div>
       <div class="s-foot">
@@ -3731,7 +3725,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v222';
+const APP_VERSION='v223';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
