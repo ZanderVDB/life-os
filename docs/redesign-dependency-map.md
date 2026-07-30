@@ -49,6 +49,30 @@ if left. **Recommend doing these first, before Step 4.**
    `S.learning` (dead, still saved). Decide *keep / migrate / delete* before
    any storage change, or the decision gets made accidentally.
 
+### Phase 0.5 — Platform foundation *(NEW — added 2026-07-31)*
+
+**Architecture decision:** Life OS v2 moves to a **Railway backend** with
+**Railway PostgreSQL** and **Cloudflare R2**. Firebase Auth and Firestore
+remain temporarily. See `backend-architecture-v2.md`,
+`postgres-data-model-v2.md`, `r2-storage-architecture.md`,
+`storage-migration-plan.md` (Phase B).
+
+**This changes D2 in the dependency table above.** The storage-model question is
+now answered — it is no longer "decide, implement later". The backend and
+database should exist **before** the Task redesign, because:
+
+- Step 4/5 will build the Today and Task Detail screens. Building them against
+  Firestore and then rebuilding them against an API is doing the work twice.
+- The task model must gain a **`project_id`** (which has never existed) and a
+  **working `due_date`**. Both are schema decisions, not UI decisions.
+- File storage (R2) blocks Project documents and Library attachments; standing
+  it up early removes that block from two later phases.
+
+**Sequencing:** Phase A (safety) → Phase B (backend + Postgres + R2 in staging)
+→ *then* Step 4. The **migration of task data** (Phase C) happens alongside the
+Task redesign, not before it, because the destination schema depends on the
+redesigned object.
+
 ### Phase 1 — Foundations (already done)
 1. ✅ Global Design System
 2. ✅ Navigation & Sidebar
@@ -132,6 +156,7 @@ if left. **Recommend doing these first, before Step 4.**
 
 | Change | Why |
 |---|---|
+| **Add Phase 0.5 — build the backend + Postgres + R2 before Step 4** | The storage decision is now made; building screens against Firestore first means building them twice |
 | Add a **Phase 0** for the profile data leak and the orphaned-data decision | Both silently corrupt/lose data; both are cheap now, expensive later |
 | Treat **Today + Task Detail as one unit** | Same object, same save path, and the broken due-date save sits between them |
 | Design the **task→project link** during Phase 2, use it in Phase 4 | Otherwise the task model is reopened mid-Project work |

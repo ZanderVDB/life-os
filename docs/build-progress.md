@@ -17,8 +17,9 @@ this file (where we are) → `design-ideas.md` (captured, not built).
 | | |
 |---|---|
 | **Version** | v239 |
-| **Rebuild step** | 3 of 17 complete · **system audit done** |
-| **Next step** | 4 — Today Dashboard (**awaiting approval**) |
+| **Rebuild step** | 3 of 17 complete · system audit done · **platform v2 designed** |
+| **Next step** | Phase A (safety) → Phase B (backend) → then Step 4 (**awaiting approval**) |
+| **Data platform** | Firestore (live) → **Postgres + R2 planned, not started** |
 | **Live** | life-os.web-anchor.com (Railway) |
 | **Repo** | `ZanderVDB/life-os` · single-file `index.html` + `sw.js` |
 
@@ -171,6 +172,49 @@ diary/notebook, auth/settings/mobile) plus direct structural analysis.
 10. AI changes are **not atomic**; calendar operations run *after* the local save.
 
 **Also captured to the roadmap:** Task Energy, Focus Mode.
+
+---
+
+### 2026-07-31 — Architecture direction: platform v2 ✅ (design only, no code)
+
+**Decision recorded:** *Life OS v2 will move toward a Railway-hosted backend
+with Railway PostgreSQL for structured data and Cloudflare R2 for binary files
+and exports. Firebase Auth and Firestore may remain temporarily during a
+controlled, reversible migration.*
+
+**Migration status: NOT STARTED. Firestore has NOT been removed. No
+infrastructure provisioned. No user data touched.**
+
+**Deployment description corrected.** GitHub + Railway were already in use. The
+misleading part was calling Railway a "backend": `server.js` is only a ~50-line
+**static file server** with no routes, no database access and no secrets. There
+is **no application backend today**. The real change is introducing that tier
+and moving trust out of the browser.
+
+**Produced:** `backend-architecture-v2.md`, `postgres-data-model-v2.md`,
+`r2-storage-architecture.md`, `storage-migration-plan.md`.
+**Updated:** `redesign-dependency-map.md` (new Phase 0.5),
+`technical-debt.md` (decision + which risks the move resolves),
+`integration-map.md` (deployment clarification), `design-ideas.md`.
+
+**Key decisions**
+- **Railway PostgreSQL over Cloudflare D1** — chosen for backend proximity, real
+  transactions (AI batches must be atomic) and recursive CTEs (dependency/Gantt
+  queries). Not chosen by default; D1 was compared on 11 criteria.
+- **Node + TypeScript + Fastify**, one modular service — no microservices.
+- **Hybrid API**: REST for resources, RPC-style for actions.
+- **Transitional auth**: Firebase ID token verified server-side, mapped to an
+  internal `users.id` UUID, so Firebase can be replaced later without touching
+  the data model.
+- **UUID primary keys** replace today's 7-character random ids.
+- **Legacy vocabulary retired**: `builds`→`projects`, `workProjects`→`areas`,
+  `task.project`→`tasks.area_id`, and a genuine new `tasks.project_id`.
+- **R2 is never the primary database** — Postgres holds metadata + object keys.
+- **Backups and user exports are separate features**, deliberately.
+
+**New capability the schema unlocks:** task↔project links, task recurrence,
+milestones, dependencies (Gantt), a searchable diary, brain relationships,
+attachments, and a real export.
 
 ---
 

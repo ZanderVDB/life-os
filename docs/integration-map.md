@@ -2,6 +2,14 @@
 
 **Audit date 2026-07-31 · version v239.** Every external service the app talks to.
 
+> **Deployment clarification (2026-07-31).** Source control is **GitHub**
+> (`ZanderVDB/life-os`) and hosting is **Railway** — both already correct.
+> Railway runs a Node process, but `server.js` is **only a static file server**:
+> no routes, no database access, no secrets. **There is no application backend
+> today.** The planned change is not "move hosting" — it is *introducing a
+> backend tier* and moving trust out of the browser.
+> See `backend-architecture-v2.md` §1.
+
 | Service | Used for | State |
 |---|---|---|
 | **Firebase Auth** | sign-in (Google only) | live |

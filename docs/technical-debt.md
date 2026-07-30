@@ -2,6 +2,15 @@
 
 **Audit date 2026-07-31 · version v239.**
 
+> **Architecture decision (2026-07-31):** Life OS v2 will move toward a
+> **Railway-hosted backend** with **Railway PostgreSQL** for structured data and
+> **Cloudflare R2** for binary files and exports. **Firebase Auth and Firestore
+> may remain temporarily** during a controlled, reversible migration.
+> **The migration has not started. Firestore has not been removed.**
+> Several risks below are *addressed by* that architecture — they are not fixed
+> yet. See `backend-architecture-v2.md`, `postgres-data-model-v2.md`,
+> `r2-storage-architecture.md`, `storage-migration-plan.md`.
+
 Ordered by severity. Each entry says what it is, where it is, what breaks,
 whether the redesign will expose it, and whether it must be fixed first.
 
@@ -240,3 +249,29 @@ still ships (it returns immediately).
 | **D1** profile data leak | D2 due dates (Step 4/5) | D8, D9, D13, D15, D16, D17, D18 |
 | **D6** decide orphaned data | D4 touch interactions (Step 4/5) | D14 (needs a push service) |
 | **D3** *decide* storage model | D5 atomicity (Step 12) · D12 AI scope | D10 (audit rules separately) |
+
+---
+
+## How the v2 architecture affects these risks
+
+**Resolved by the move** (once built and migrated — *not yet*):
+
+| Risk | Resolution |
+|---|---|
+| **D3** 1 MB record ceiling | Real relational tables; no document limit |
+| **D5** AI not atomic | `:apply` executes reviewed operations in one DB transaction |
+| **D10** keys in plain text | Anthropic key and OAuth tokens move server-side; tokens encrypted at rest |
+| **D1** profile leak *(structurally)* | Ownership enforced in middleware; rows physically separated by `profile_id`. **Still must be fixed in the current app first** — otherwise contaminated data migrates as truth. |
+| **D6** orphaned data | An explicit, reviewed mapping decides keep/migrate/delete |
+| **D8** global re-render | The client fetches only what a screen needs, instead of holding all state |
+| No export | A first-class export feature (JSON / Markdown / CSV / attachments) |
+| No file support | R2 + the `attachments` table |
+
+**Unaffected — still client/product work:** D2 (due dates), D4 (touch drag),
+D9 (timezones — though the schema now *stores* timezones properly), D11 (diary
+blur-save), D13 (notebook sanitisation), D14 (notifications when closed).
+
+**New risks introduced by the migration** — see
+`storage-migration-plan.md` § *Risks specific to this migration*: dual-write
+divergence, calendar re-consent, notebook cell mangling, free-text
+`scheduledTime` parsing, and partial-run recovery.

@@ -103,6 +103,31 @@ No desktop-only assumptions anywhere.
 
 ---
 
+## 14. Unlocked by the v2 platform *(designed, not built)*
+
+The Railway + PostgreSQL + R2 architecture makes these possible for the first
+time. They are captured here, **not scheduled** — each still needs its own
+design pass in its own step.
+
+- **Attachments everywhere** — files, images, video and audio on projects,
+  Library pages, tasks and brain items (impossible today: no file storage exists).
+- **Task recurrence** — repeating tasks (only reminders and calendar events can
+  repeat today).
+- **Task ↔ project links, milestones and dependencies** — the foundation of the
+  planned Gantt view.
+- **A searchable diary** — diary content is invisible to search today.
+- **Brain relationships** — `brain_links` is the seed of the knowledge graph.
+- **Real exports** — JSON, Markdown/HTML for Library content, CSV, attachment
+  bundles. The app has no export at all today.
+- **Server-side AI** — preview-first as a structural guarantee, plus rate limits
+  and a token budget.
+- **Cross-device settings** — theme and notification preferences currently do
+  not sync; `user_preferences` fixes that.
+- **Future sharing / collaboration** — `profile_memberships` exists so this
+  needs no data-model change later. **Explicitly not a v2 goal.**
+
+---
+
 ## Unresolved questions
 - **Greeting vs one-hero rule:** resolved as *greeting is the hero of Today +
   the brand identity moment*; every other screen gets its own single hero.
