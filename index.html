@@ -93,7 +93,7 @@
 [data-theme="studio"] .day-card.today .dc-day{color:var(--accent)}
 /* Left sidebar: a gradient wash (more opaque up top, fading down) so the
    app's warm glow rises up through the bottom of the rail. */
-[data-theme="studio"] .sidebar{background:linear-gradient(178deg, color-mix(in srgb,var(--surface) 86%, transparent) 0%, color-mix(in srgb,var(--surface) 44%, transparent) 76%, color-mix(in srgb,var(--surface) 18%, transparent) 100%)}
+[data-theme="studio"] .sidebar{background:linear-gradient(178deg, color-mix(in srgb,var(--surface) 86%, transparent) 0%, color-mix(in srgb,var(--surface) 44%, transparent) 76%, color-mix(in srgb,var(--surface) 18%, transparent) 100%);border-right:none}
 /* Nav icons: the glyph itself is gradient-stroked (per-item, via the SVG
    defs) — no box behind it. Active row gets a soft tan-tint highlight. */
 [data-theme="studio"] .s-nav a .ic{width:22px;height:22px}
@@ -1581,22 +1581,37 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ti.ps{border-left-color:var(--border);opacity:.55}
 /* Dusk task priority — feeds a gradient left stripe (.ti::before below)
    instead of a solid border + inset glow. */
-[data-theme="studio"] .ti.pu{--ti-stripe:#e78d78;border-left:none;box-shadow:none}
-[data-theme="studio"] .ti.ph{--ti-stripe:#e6a86c;border-left:none;box-shadow:none}
-[data-theme="studio"] .ti.pm{--ti-stripe:var(--gold);border-left:none;box-shadow:none}
-[data-theme="studio"] .ti.pl{--ti-stripe:var(--sage);border-left:none;box-shadow:none}
+[data-theme="studio"] .ti.pu{--ti-stripe:#e0574e;border-left:none;box-shadow:none}
+[data-theme="studio"] .ti.ph{--ti-stripe:#e8974a;border-left:none;box-shadow:none}
+[data-theme="studio"] .ti.pm{--ti-stripe:#e0bd7d;border-left:none;box-shadow:none}
+[data-theme="studio"] .ti.pl{--ti-stripe:#8f9cc0;border-left:none;box-shadow:none}
 /* Dusk task list: roomier rounded rows with a gradient priority stripe.
    The .tcard turns into a transparent gap container; each .ti becomes its
    own rounded surface (look-book style). */
 [data-theme="studio"] .tcard{background:transparent;border:none;border-radius:0;overflow:visible;display:flex;flex-direction:column;gap:7px}
 [data-theme="studio"] .tcard .ti{background:var(--surface-2);border:1px solid var(--border);border-radius:11px;border-left:none;padding:11px 14px 11px 16px;box-shadow:none}
+/* Urgent tasks get a bold red border + soft glow so they stand out. */
+[data-theme="studio"] .tcard .ti.pu{border-color:#e0574e;box-shadow:inset 0 0 0 1px #e0574e, 0 0 16px -7px rgba(224,87,78,.6)}
 [data-theme="studio"] .tcard .ti:last-of-type{border-bottom:1px solid var(--border)}
 [data-theme="studio"] .ti{position:relative;overflow:hidden}
 [data-theme="studio"] .ti::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(165deg,var(--ti-stripe,var(--border-strong)),color-mix(in srgb,var(--ti-stripe,var(--border-strong)) 42%,#000))}
 [data-theme="studio"] .ti.pn{--ti-stripe:var(--muted-2)}
-[data-theme="studio"] .ti.ps{--ti-stripe:var(--muted-2)}
+[data-theme="studio"] .ti.ps{--ti-stripe:#6f6878}
 [data-theme="studio"] .ti.rem-overdue{--ti-stripe:var(--red)}
 [data-theme="studio"] .ti:hover{background:var(--surface-hover)}
+/* Sub-steps: a slightly-inset, darker drawer that tucks under its parent
+   task — clearly part of it, pushing the row below down, without widening
+   the parent's card. */
+[data-theme="studio"] .ti-wrap.has-substep .ti{border-bottom-left-radius:4px;border-bottom-right-radius:4px}
+[data-theme="studio"] .ti-substep{
+  margin:0 9px;padding:7px 12px 7px 30px;
+  background:color-mix(in srgb, var(--surface-2) 72%, #000);
+  border:1px solid var(--border);border-top:none;border-radius:0 0 11px 11px;
+  color:var(--text-2);font-size:11.5px;
+  box-shadow:0 6px 14px -8px rgba(0,0,0,.55);position:relative;overflow:hidden;
+}
+[data-theme="studio"] .ti-substep::before{left:13px;color:var(--muted);transform:translateY(-50%)}
+[data-theme="studio"] .ti-substep:hover{background:color-mix(in srgb, var(--surface-hover) 78%, #000)}
 /* Neutral / "no priority" — used by History rows so completed work
    renders flat-grey regardless of urgency it had before being ticked. */
 .ti.pn{border-left-color:var(--border)}
@@ -3742,7 +3757,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v228';
+const APP_VERSION='v229';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -17405,17 +17420,17 @@ try{
     ['S7','Right-rail cards','bg','.ac-card'],
     ['S8','Nav icons (solid)','stroke','.s-nav a .ic svg *'],
     ['S9','Primary button','bg','.btn-primary'],
-    ['S10','Task priority stripes','stripe','.tcard .ti::before'],
     ['S11','Google Calendar bar','bg','.gcal-warn'],
     ['S12','Chat / composer bar','bg','.ai-inner'],
     ['S13','"Today" cell','bg','.day-card.today'],
     ['S14','Habit bars','bg','.hab-bar'],
     ['S15','"Life OS" wordmark','text','.s-logo']];
-  var DEF={S1:{r:'R14',d:'DN',b:60},S2:{r:'R9',d:'DN',b:64},S3:{r:'R4'},S4:{r:'R6',d:'DN',b:50},
-    S5:{r:'R3'},S6:{r:'R14',d:'LT',b:52},S7:{r:'R3'},S8:{r:'R8',d:'RA',b:70},
-    S9:{r:'R8',d:'TR',b:82},S10:{r:'R2'},S11:{r:'R3'},S12:{r:'R11',d:'DN',b:45},
-    S13:{r:'R4'},S14:{r:'R5',d:'RT',b:45},S15:{r:'R8',d:'BL',b:73},
-    _text:'#efe5d4',_text2:'#bcb3bd',_muted:'#8b8296',_border:'#382f35',_borders:true};
+  var DEF={S1:{r:'R1'},S2:{r:'R8',d:'UP',b:50},S3:{r:'R4'},S4:{r:'R12',d:'DN',b:2},
+    S5:{r:'R6',d:'DN',b:47},S6:{r:'R14',d:'LT',b:55},S7:{r:'R8',d:'DN',b:2},S8:{r:'R2'},
+    S9:{r:'R2'},S11:{r:'R14',d:'DN',b:57},S12:{r:'R14',d:'DN',b:60},
+    S13:{r:'R14',d:'UP',b:68},S14:{r:'R5',d:'RT',b:50},S15:{r:'R8',d:'BL',b:81},
+    _text:'#d9d9d9',_text2:'#8b9a9f',_muted:'#8b9a9f',_border:'#202332',_borders:true,
+    _surface:'#262c3e',_surface2:'#31384e',_bg:'#1c2130'};
   var KEY='los_design_v1',cfg;
   try{cfg=JSON.parse(localStorage.getItem(KEY));}catch(e){cfg=null;}
   if(!cfg)cfg=JSON.parse(JSON.stringify(DEF));
@@ -17431,7 +17446,7 @@ try{
       else o+=scoped+'{background:'+grad(x.r,x.d,x.b)+' !important}\n';
     });
     var bc=cfg._borders?cfg._border:'transparent';
-    o+='[data-theme="studio"]{--text:'+cfg._text+';--text-2:'+cfg._text2+';--muted:'+cfg._muted+';--border:'+bc+';--border-strong:'+bc+'}\n';
+    o+='[data-theme="studio"]{--text:'+cfg._text+';--text-2:'+cfg._text2+';--muted:'+cfg._muted+';--border:'+bc+';--border-strong:'+bc+';--surface:'+cfg._surface+';--surface-2:'+cfg._surface2+';--surface-hover:'+cfg._surface2+';--bg:'+cfg._bg+';--paper:'+cfg._surface+'}\n';
     o+='[data-theme="studio"] ::placeholder{color:'+cfg._muted+' !important}\n';
     o+='[data-theme="studio"] .us-trigger-txt,[data-theme="studio"] .us-trigger-kbd{color:'+cfg._muted+' !important}\n';
     return o;
@@ -17475,7 +17490,11 @@ try{
       '<select class="d" data-s="'+su[0]+'">'+dOpts+'</select>'+
       '<input type="range" class="b" data-s="'+su[0]+'" min="2" max="98"></div></div>';
   }).join('');
-  body+='<div class="dp-sec">Text &amp; borders</div>'+
+  body+='<div class="dp-sec">Base surfaces (day cells · search · calendar · people)</div>'+
+    '<div class="dp-tr"><span>Card surface</span><input type="color" id="dc-surface"></div>'+
+    '<div class="dp-tr"><span>Raised surface</span><input type="color" id="dc-surface2"></div>'+
+    '<div class="dp-tr"><span>App base</span><input type="color" id="dc-bg"></div>'+
+    '<div class="dp-sec">Text &amp; borders</div>'+
     '<div class="dp-tr"><span>Main text</span><input type="color" id="dc-text"></div>'+
     '<div class="dp-tr"><span>Secondary text</span><input type="color" id="dc-text2"></div>'+
     '<div class="dp-tr"><span>Muted / placeholder</span><input type="color" id="dc-muted"></div>'+
@@ -17503,6 +17522,9 @@ try{
     panel.querySelector('#dc-muted').value=cfg._muted;
     panel.querySelector('#dc-border').value=cfg._border;
     panel.querySelector('#dc-borders').checked=!!cfg._borders;
+    panel.querySelector('#dc-surface').value=cfg._surface;
+    panel.querySelector('#dc-surface2').value=cfg._surface2;
+    panel.querySelector('#dc-bg').value=cfg._bg;
   }
   panel.querySelector('.dp-body').addEventListener('input',function(e){
     var t=e.target,id=t.dataset&&t.dataset.s;
@@ -17516,6 +17538,9 @@ try{
     else if(t.id==='dc-muted')cfg._muted=t.value;
     else if(t.id==='dc-border')cfg._border=t.value;
     else if(t.id==='dc-borders')cfg._borders=t.checked;
+    else if(t.id==='dc-surface')cfg._surface=t.value;
+    else if(t.id==='dc-surface2')cfg._surface2=t.value;
+    else if(t.id==='dc-bg')cfg._bg=t.value;
     else return;
     apply();
   });
