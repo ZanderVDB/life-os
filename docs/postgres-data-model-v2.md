@@ -6,6 +6,38 @@
 
 ---
 
+## §0. LOCKED: one workspace per user (2026-07-31)
+
+> **"Each signed-in user has one primary Life OS workspace. Personal, business,
+> church, health, finance and other parts of life coexist inside the same
+> workspace. They are separated through Areas, Projects, tags, calendars,
+> Library books, filters and saved views — not through profile switching."**
+
+**Why this changed.** The Firestore model gave one user two switchable
+profiles (Personal / Business). That divided a life into disconnected halves —
+the opposite of what Life OS is for — and it caused real harm: the pre-v240
+switching bug copied data between them (confirmed: 10 reminders and 4
+byte-identical People records duplicated across both profiles).
+
+**The four concepts, kept separate:**
+
+| Concept | Answers | Table |
+|---|---|---|
+| **Authentication** | Who is signed in? | `users` |
+| **Workspace** | Which body of data may they access? | `workspaces` + `workspace_memberships` |
+| **Area** | Which part of life is this item? | `areas` → `area_id` |
+| **Project** | What outcome is this item part of? | `projects` → `project_id` |
+
+**Never use authentication or workspaces to organise personal vs work
+content.** That is what Areas are for.
+
+**Future workspaces stay possible** — the schema supports shared company,
+team, family and client workspaces — but v2 creates exactly **one primary
+workspace per user** and **exposes no switcher**. Multi-workspace UI must never
+become Personal/Business switching under a new name.
+
+---
+
 ## Conventions
 
 - **Identifiers:** `uuid` primary keys, default `gen_random_uuid()` (pgcrypto).
@@ -21,13 +53,16 @@
   | `workProjects` | **`areas`** |
   | `task.project` (actually an Area) | **`tasks.area_id`** |
   | `routineLog[date].journal` | **`diary_entries`** |
+| Firestore *profile* | **`workspaces`** (one primary per user) |
+| Personal / Business profiles | **`areas`** inside one workspace |
   | `notebook.sections` | **`books` → `book_sections` → `book_pages`** |
   | `notes` (Brain) | **`brain_items.kind = 'knowledge'`** |
   | `learning` | *dropped* |
 
-- **Ownership:** every user-data table carries `profile_id`. This is the single
-  ownership boundary; the API filters on it in middleware. Nothing is shared
-  across profiles.
+- **Ownership:** every user-data table carries `workspace_id`. This is the single
+  ownership boundary; the API filters on it in middleware.
+  **Areas** (`area_id`) classify *within* a workspace — they are not an
+  ownership boundary and never gate access.
 - **Timestamps:** `created_at`, `updated_at` (`timestamptz`, UTC). Dates the user
   reasons about locally (a due date, a diary day) are `date`, not `timestamptz`.
 - **Soft delete:** `deleted_at timestamptz NULL` on tables where accidental loss
@@ -55,37 +90,66 @@
 **Indexes:** `firebase_uid`, `email`. **Delete:** restrict — never cascade from
 a user; account deletion is a deliberate job. **Growth:** tiny.
 
-## 2. `profiles`
-**Purpose:** a workspace (Personal / Business). The ownership boundary.
+## 2. `workspaces`
+**Purpose:** a body of data. **The ownership boundary.**
+Replaces the Firestore *profile*. See §0 — v2 gives each user **one primary
+workspace**; Personal/Business separation moves to **Areas**.
 
 | Column | Type | Req | Notes |
 |---|---|---|---|
-| `id` | uuid PK | ● | |
+| `id` | uuid PK | ● | referenced by every user-data table as `workspace_id` |
 | `owner_user_id` | uuid FK→users | ● | `ON DELETE RESTRICT` |
-| `name` | text | ● | |
-| `mode` | text | ● | `personal` \| `business` — biases AI framing |
+| `name` | text | ● | e.g. "Zander" |
+| `kind` | text | ● | `primary` \| `shared` — **only `primary` is created in v2** |
 | `legacy_firestore_doc_id` | text | ○ | migration provenance (e.g. `main`) |
 | `created_at`,`updated_at`,`deleted_at` | | | soft delete |
 
-**Growth:** ~2 rows/user today; the 2-profile cap becomes policy, not schema.
+**`mode` is deliberately gone.** The old `personal`/`business` flag biased AI
+framing per profile. In v2 that context comes from the item's **Area**, so the
+AI can reason about work and personal life in one place instead of being
+switched between two blind halves.
 
-## 3. `profile_memberships`
-**Purpose:** who may access a profile. Only `owner` exists today, but having the
-table now means **future sharing needs no data-model change**.
+**Constraint:** exactly one `kind='primary'` workspace per user —
+`UNIQUE (owner_user_id) WHERE kind='primary' AND deleted_at IS NULL`.
+**Growth:** 1 row/user in v2.
 
-`id` uuid PK · `profile_id` FK→profiles (cascade) · `user_id` FK→users
-(cascade) · `role` text (`owner`|`editor`|`viewer`) · `created_at`
-**Unique:** `(profile_id, user_id)`. **Index:** `(user_id)` — the auth
+## 3. `workspace_memberships`
+**Purpose:** who may access a workspace. In v2 there is exactly one row per
+user (`owner`). The table exists so **future collaboration needs no data-model
+change** — it is *not* a re-creation of profile switching.
+
+`id` uuid PK · `workspace_id` FK→workspaces (cascade) · `user_id` FK→users
+(cascade) · `role` text (`owner`|`admin`|`editor`|`viewer`) · `created_at`
+**Unique:** `(workspace_id, user_id)`. **Index:** `(user_id)` — the auth
 middleware's hot path.
 
-## 4. `areas`
-**Purpose:** task categories (legacy `workProjects`). **Not projects.**
+> **Do not expose workspace switching in the v2 UI.** The schema supports it;
+> the product does not. Future use is genuine multi-party collaboration
+> (a company, a family, a client), never "my work life vs my personal life".
 
-`id` uuid PK · `profile_id` FK (cascade) · `name` text ● · `color` text ●
-· `sort_order` integer ● · `is_system` boolean (the built-in Personal/Work) ·
+## 4. `areas`
+**Purpose:** **which part of life** an item belongs to. This is what replaces
+Personal/Business profiles. (Legacy name: `workProjects`.) **Not projects.**
+
+`id` uuid PK · `workspace_id` FK (cascade) · `name` text ● · `color` text ●
+· `sort_order` integer ● · `is_system` boolean · `icon` text ○ ·
 `created_at`,`updated_at`,`deleted_at`
-**Index:** `(profile_id, sort_order)`. **Delete:** soft; API reassigns affected
-tasks (today's only referential clean-up — keep that behaviour).
+**Index:** `(workspace_id, sort_order)`. **Delete:** soft; the API reassigns
+affected items (today's only referential clean-up — keep that behaviour).
+
+Seeded examples: **Personal · Work · Church · Health · Finance · Family ·
+Learning**. Users add their own.
+
+**Areas are usable across** tasks, projects, calendar items, reminders, Library
+books/entries, Brain items, AI commands, and saved views/filters — so every
+table that can be classified carries a nullable `area_id`.
+
+| Question | Answered by |
+|---|---|
+| Who is signed in? | **authentication** (`users`) |
+| Which body of data may they access? | **workspace** (`workspaces` + memberships) |
+| Which part of life is this item? | **area** (`areas.area_id`) |
+| What outcome is it part of? | **project** (`projects.project_id`) |
 
 ## 5. `projects`
 **Purpose:** real projects. Gains everything the vision needs.
@@ -93,7 +157,7 @@ tasks (today's only referential clean-up — keep that behaviour).
 | Column | Type | Req | Notes |
 |---|---|---|---|
 | `id` | uuid PK | ● | |
-| `profile_id` | uuid FK | ● | cascade |
+| `workspace_id` | uuid FK | ● | cascade |
 | `area_id` | uuid FK→areas | ○ | `ON DELETE SET NULL` |
 | `title` | text | ● | |
 | `description` | text | ○ | |
@@ -109,13 +173,13 @@ tasks (today's only referential clean-up — keep that behaviour).
 | `notes` | text | ○ | scratch |
 | `version`,`created_at`,`updated_at`,`deleted_at` | | | |
 
-**Indexes:** `(profile_id, status)`, `(profile_id, due_date)`,
-`(profile_id, area_id)`. **Growth:** low (tens–hundreds).
+**Indexes:** `(workspace_id, status)`, `(workspace_id, due_date)`,
+`(workspace_id, area_id)`. **Growth:** low (tens–hundreds).
 
 ## 6. `project_milestones`
 **Purpose:** dated checkpoints — **do not exist today**, required for Gantt.
 
-`id` uuid PK · `project_id` FK (cascade) · `profile_id` FK (denormalised for
+`id` uuid PK · `project_id` FK (cascade) · `workspace_id` FK (denormalised for
 ownership filtering) · `title` ● · `due_date` date ● · `completed_at`
 timestamptz ○ · `sort_order` · timestamps
 **Index:** `(project_id, due_date)`.
@@ -123,7 +187,7 @@ timestamptz ○ · `sort_order` · timestamps
 ## 7. `project_dependencies`
 **Purpose:** "project B cannot start until A finishes".
 
-`id` uuid PK · `profile_id` · `predecessor_project_id` FK · `successor_project_id`
+`id` uuid PK · `workspace_id` · `predecessor_project_id` FK · `successor_project_id`
 FK · `dependency_type` text (`finish_start`|`start_start`|`finish_finish`|
 `start_finish`) · `lag_days` integer default 0 · `created_at`
 **Unique:** `(predecessor_project_id, successor_project_id)`.
@@ -136,7 +200,7 @@ recursive CTE — the reason Postgres was chosen.
 | Column | Type | Req | Notes |
 |---|---|---|---|
 | `id` | uuid PK | ● | |
-| `profile_id` | uuid FK | ● | cascade |
+| `workspace_id` | uuid FK | ● | cascade |
 | `area_id` | uuid FK→areas | ○ | **the honest name** for today's `task.project` |
 | `project_id` | uuid FK→projects | ○ | **NEW — the link that does not exist today** (`ON DELETE SET NULL`) |
 | `parent_task_id` | uuid FK→tasks | ○ | optional nesting (distinct from `task_steps`) |
@@ -156,9 +220,9 @@ recursive CTE — the reason Postgres was chosen.
 | `source` | text | ● | `user`\|`ai`\|`import` — provenance |
 | `version`,`created_at`,`updated_at`,`deleted_at` | | | |
 
-**Indexes:** `(profile_id, bucket, sort_order) WHERE deleted_at IS NULL` ·
-`(profile_id, status)` · `(profile_id, due_date)` · `(project_id)` ·
-`(profile_id, updated_at DESC)`.
+**Indexes:** `(workspace_id, bucket, sort_order) WHERE deleted_at IS NULL` ·
+`(workspace_id, status)` · `(workspace_id, due_date)` · `(project_id)` ·
+`(workspace_id, updated_at DESC)`.
 **Delete:** soft — fixes today's behaviour where completing effectively deletes
 (only 50 completed tasks are retained).
 **Growth:** the largest user table; thousands per profile over years. Fine.
@@ -166,7 +230,7 @@ recursive CTE — the reason Postgres was chosen.
 ## 9. `task_steps`
 **Purpose:** subtasks (today's inline `steps`).
 
-`id` uuid PK · `task_id` FK (cascade) · `profile_id` · `title` ● ·
+`id` uuid PK · `task_id` FK (cascade) · `workspace_id` · `title` ● ·
 `is_done` boolean ● · `completed_at` ○ · `sort_order` ● · timestamps
 **Index:** `(task_id, sort_order)`. **Gains over today:** steps become
 **renameable** (currently add/delete only) and individually addressable.
@@ -178,7 +242,7 @@ Same shape as `project_dependencies`, between tasks. Cycle-checked in the API.
 ## 11. `task_recurrence_rules`
 **Purpose:** repeating tasks — **completely absent today**.
 
-`id` uuid PK · `profile_id` · `freq` text (`daily`|`weekly`|`monthly`|`yearly`)
+`id` uuid PK · `workspace_id` · `freq` text (`daily`|`weekly`|`monthly`|`yearly`)
 · `interval` integer default 1 · `by_weekday` smallint[] · `by_month_day`
 smallint[] · `by_month` smallint · `starts_on` date · `ends_on` date ○ ·
 `count` integer ○ · `timezone` text ● (**store the zone — audit D9**) ·
@@ -190,12 +254,12 @@ reuses this table.
 ## 12. `task_activity`
 **Purpose:** an audit trail — "what happened to this task".
 
-`id` uuid PK (UUIDv7) · `task_id` FK (cascade) · `profile_id` · `actor_type`
+`id` uuid PK (UUIDv7) · `task_id` FK (cascade) · `workspace_id` · `actor_type`
 text (`user`|`ai`|`system`) · `actor_user_id` FK ○ · `action` text
 (`created`|`completed`|`moved_bucket`|`edited`|`linked_project`…) ·
 `changes` jsonb (before/after of changed fields only) · `ai_command_id` FK ○ ·
 `created_at`
-**Index:** `(task_id, created_at DESC)`, `(profile_id, created_at DESC)`.
+**Index:** `(task_id, created_at DESC)`, `(workspace_id, created_at DESC)`.
 **Delete:** hard, with a retention job (e.g. 12 months). **Growth:** high —
 the fastest-growing table. Consider monthly partitioning later.
 **Not versioning** — it records events, it does not reconstruct old rows.
@@ -207,7 +271,7 @@ finally allows manual log entries without an API key** (today the flow is
 AI-only).
 
 ## 14. `habits`
-`id` uuid PK · `profile_id` FK · `name` ● · `description` ○ ·
+`id` uuid PK · `workspace_id` FK · `name` ● · `description` ○ ·
 `rest_weekdays` smallint[] (0–6) · `started_on` date ● · `archived_at` ○ ·
 `sort_order` · timestamps
 **Note:** streaks/tiers are **computed, never stored** — persisting them once
@@ -216,23 +280,23 @@ caused habits to auto-tick (audit). Keep that discipline.
 ## 15. `habit_entries`
 **Purpose:** one row per habit per completed day. Replaces `checkedDates[]`.
 
-`id` uuid PK · `habit_id` FK (cascade) · `profile_id` · `entry_date` date ● ·
+`id` uuid PK · `habit_id` FK (cascade) · `workspace_id` · `entry_date` date ● ·
 `source` text (`user`|`ai`|`catchup`) · `created_at`
 **Unique:** `(habit_id, entry_date)` — makes double-ticking impossible and
-back-fill idempotent. **Index:** `(profile_id, entry_date)`.
+back-fill idempotent. **Index:** `(workspace_id, entry_date)`.
 **Growth:** ~365 × habits per year. Trivial for Postgres, and far better than a
 growing array inside one document.
 
 ## 16. `reminders`
-`id` uuid PK · `profile_id` · `text` ● · `recurrence_rule_id` FK ○ ·
+`id` uuid PK · `workspace_id` · `text` ● · `recurrence_rule_id` FK ○ ·
 `next_due_on` date · `last_completed_on` date ○ · `is_active` boolean ·
 timestamps · `deleted_at`
-**Index:** `(profile_id, next_due_on) WHERE is_active`.
+**Index:** `(workspace_id, next_due_on) WHERE is_active`.
 
 ## 17. `books`
 **Purpose:** the Library. **The 4th level the Notebook lacks today.**
 
-`id` uuid PK · `profile_id` · `title` ● · `kind` text
+`id` uuid PK · `workspace_id` · `title` ● · `kind` text
 (`notebook`|`diary`|`research`|`recipes`|`travel`|`meetings`|`other`) ·
 `color` · `cover_attachment_id` FK→attachments ○ · `sort_order` ·
 timestamps · `deleted_at`
@@ -240,11 +304,11 @@ timestamps · `deleted_at`
 The Diary becomes **a book of kind `diary`**, exactly as the vision describes.
 
 ## 18. `book_sections`
-`id` uuid PK · `book_id` FK (cascade) · `profile_id` · `title` ● · `color` ·
+`id` uuid PK · `book_id` FK (cascade) · `workspace_id` · `title` ● · `color` ·
 `sort_order` · timestamps · `deleted_at`
 
 ## 19. `book_pages`
-`id` uuid PK · `section_id` FK (cascade) · `profile_id` · `title` ○
+`id` uuid PK · `section_id` FK (cascade) · `workspace_id` · `title` ○
 (**pages have no title today**) · `layout` text (`single`|`half`|`quad`) ·
 `content` jsonb ● · `content_format` text (`html_cells`|`richtext_v2`) ·
 `entry_date` date ○ (set for diary pages) · `version` · timestamps ·
@@ -254,7 +318,7 @@ The Diary becomes **a book of kind `diary`**, exactly as the vision describes.
 format can evolve. `content_format` makes migration safe: today's mixed
 plain-text/HTML cells import as `html_cells` and can be upgraded later without
 guessing.
-**Index:** `(section_id, sort_order)`, `(profile_id, entry_date)`,
+**Index:** `(section_id, sort_order)`, `(workspace_id, entry_date)`,
 plus a GIN full-text index for search — **notebook and diary become searchable**
 (the diary is unsearchable today).
 
@@ -262,30 +326,30 @@ plus a GIN full-text index for search — **notebook and diary become searchable
 **Purpose:** the day-keyed journal, **finally separated from routine ticks**
 (audit D5 — today `journal` and `checks` share one object).
 
-`id` uuid PK · `profile_id` · `entry_date` date ● · `book_page_id` FK ○
+`id` uuid PK · `workspace_id` · `entry_date` date ● · `book_page_id` FK ○
 (links the entry to its Library page) · `answers` jsonb (the five prompts,
 keyed by prompt id) · `mood` text ○ (**new**) · `created_at`,`updated_at`,
 `deleted_at`
-**Unique:** `(profile_id, entry_date)`.
+**Unique:** `(workspace_id, entry_date)`.
 
 A separate small table `routine_completions`
-(`profile_id, entry_date, routine_item_id, is_done`) takes over the `checks`
+(`workspace_id, entry_date, routine_item_id, is_done`) takes over the `checks`
 half, keeping the two concerns apart permanently.
 
 ## 21. `brain_items`
-`id` uuid PK · `profile_id` · `kind` text (`idea`|`resource`|`knowledge`) ● ·
+`id` uuid PK · `workspace_id` · `kind` text (`idea`|`resource`|`knowledge`) ● ·
 `title` ● · `body` text ○ · `url` text ○ · `tag` text ○ · `source` text ·
 `version` · timestamps · `deleted_at`
 
 One table with a `kind` discriminator replaces three near-identical arrays and
 the `desc`/`body` field-name inconsistency.
-**Index:** `(profile_id, kind)`, GIN full-text on `title || body`.
+**Index:** `(workspace_id, kind)`, GIN full-text on `title || body`.
 
 ## 22. `brain_links`
 **Purpose:** relationships between knowledge — **do not exist today**; the
 foundation for the planned graph.
 
-`id` uuid PK · `profile_id` · `from_item_id` FK→brain_items (cascade) ·
+`id` uuid PK · `workspace_id` · `from_item_id` FK→brain_items (cascade) ·
 `to_item_id` FK→brain_items (cascade) · `relation` text
 (`relates_to`|`supports`|`contradicts`|`derived_from`) · `created_by` text
 (`user`|`ai`) · `created_at`
@@ -299,12 +363,12 @@ table if breadth is needed).
 **Purpose:** one row per connected external calendar account, **per profile**
 (today each profile already keeps its own token, in browser storage).
 
-`id` uuid PK · `profile_id` · `provider` text (`google`|`microsoft`) ·
+`id` uuid PK · `workspace_id` · `provider` text (`google`|`microsoft`) ·
 `external_account_email` · `scopes` text[] · `access_token_encrypted` bytea ·
 `refresh_token_encrypted` bytea · `token_expires_at` timestamptz ·
 `status` text (`active`|`needs_reauth`|`revoked`) · `last_synced_at` ·
 timestamps
-**Unique:** `(profile_id, provider, external_account_email)`.
+**Unique:** `(workspace_id, provider, external_account_email)`.
 **Tokens are encrypted at rest** (AES-256-GCM, key from
 `TOKEN_ENCRYPTION_KEY`) and **never returned to the client** — a direct fix for
 tokens sitting in plain browser storage today.
@@ -314,14 +378,14 @@ tokens sitting in plain browser storage today.
 **Events themselves are still owned by the provider** — this table stores the
 mapping and just enough cache to render without a round-trip.
 
-`id` uuid PK · `profile_id` · `connection_id` FK · `provider_event_id` ● ·
+`id` uuid PK · `workspace_id` · `connection_id` FK · `provider_event_id` ● ·
 `provider_calendar_id` ● · `recurring_event_id` ○ · `etag` ○ ·
 `linked_task_id` FK ○ · `linked_project_id` FK ○ ·
 `linked_milestone_id` FK ○ · `title_cache` · `starts_at` timestamptz ·
 `ends_at` timestamptz · `is_all_day` boolean · `timezone` text ●
 (**store it — audit D9**) · `last_seen_at` · `deleted_at`
 **Unique:** `(connection_id, provider_event_id)`.
-**Index:** `(profile_id, starts_at)`.
+**Index:** `(workspace_id, starts_at)`.
 
 **This is what finally lets tasks appear on the calendar** — the audit found
 tasks and the calendar are completely disconnected today.
@@ -329,12 +393,12 @@ tasks and the calendar are completely disconnected today.
 ## 25. `ai_commands`
 **Purpose:** one row per AI request — the **preview** record.
 
-`id` uuid PK · `profile_id` · `user_id` FK · `prompt` text ● · `mode` text
+`id` uuid PK · `workspace_id` · `user_id` FK · `prompt` text ● · `mode` text
 (`do`|`ask`) · `scope` text (the page) · `model` text · `status` text
 (`pending`|`awaiting_review`|`applied`|`cancelled`|`failed`) ·
 `clarifications` jsonb · `assistant_message` text · `input_tokens`,
 `output_tokens` integer · `error` jsonb ○ · `created_at`,`applied_at`
-**Index:** `(profile_id, created_at DESC)`.
+**Index:** `(workspace_id, created_at DESC)`.
 Replaces `aiHistory` (capped at 200 inside the document today) with unbounded,
 queryable history.
 
@@ -342,7 +406,7 @@ queryable history.
 **Purpose:** the individual proposed changes — what the review UI edits, and
 what `:apply` executes **inside one transaction**.
 
-`id` uuid PK · `ai_command_id` FK (cascade) · `profile_id` · `seq` integer ● ·
+`id` uuid PK · `ai_command_id` FK (cascade) · `workspace_id` · `seq` integer ● ·
 `op_type` text ● (`create_task`, `complete_habit`, `update_event`…) ·
 `payload` jsonb ● (**edited in place** when the user edits the preview) ·
 `status` text (`proposed`|`accepted`|`rejected`|`applied`|`failed`) ·
@@ -354,17 +418,17 @@ This makes preview-first **structural** rather than a UI convention, and gives
 each operation an individual outcome — fixing today's silent partial failures.
 
 ## 27. `ai_memory`
-`id` uuid PK · `profile_id` · `fact` text ● · `sort_order` · `created_at`
+`id` uuid PK · `workspace_id` · `fact` text ● · `sort_order` · `created_at`
 Replaces the 50-item array. Cap becomes a policy check, not a `slice()`.
 
 ## 28. `user_preferences`
 **Purpose:** settings — and a fix for today's split brain, where **theme and all
 notification settings are device-only and never sync**.
 
-`id` uuid PK · `user_id` FK ○ · `profile_id` FK ○ · `scope` text
+`id` uuid PK · `user_id` FK ○ · `workspace_id` FK ○ · `scope` text
 (`user`|`profile`|`device`) · `device_id` text ○ · `key` text ● ·
 `value` jsonb ● · `updated_at`
-**Unique:** `(COALESCE(user_id,…), COALESCE(profile_id,…), COALESCE(device_id,''), key)`.
+**Unique:** `(COALESCE(user_id,…), COALESCE(workspace_id,…), COALESCE(device_id,''), key)`.
 
 Key–value rather than wide columns, because preferences change often and this
 avoids a migration per toggle. Genuinely device-local things (notebook zoom)
@@ -388,7 +452,7 @@ the bytes.**
 | Column | Type | Req | Notes |
 |---|---|---|---|
 | `id` | uuid PK | ● | |
-| `profile_id` | uuid FK | ● | ownership |
+| `workspace_id` | uuid FK | ● | ownership |
 | `uploaded_by_user_id` | uuid FK | ● | |
 | `r2_object_key` | text UNIQUE | ● | see `r2-storage-architecture.md` |
 | `original_filename` | text | ● | |
@@ -402,8 +466,8 @@ the bytes.**
 | `metadata` | jsonb | ○ | width/height/duration |
 | `created_at`,`updated_at`,`deleted_at` | | | |
 
-**Indexes:** `(profile_id, entity_type, entity_id)`,
-`(profile_id, checksum_sha256)`, `(status) WHERE status <> 'ready'`.
+**Indexes:** `(workspace_id, entity_type, entity_id)`,
+`(workspace_id, checksum_sha256)`, `(status) WHERE status <> 'ready'`.
 **Delete:** soft first; a cleanup job removes the R2 object afterwards, so a
 mistaken delete is recoverable.
 **Polymorphic caveat:** `entity_id` cannot have a foreign key, so orphans are
@@ -413,18 +477,18 @@ possible — a nightly job reconciles both directions (see the R2 doc).
 **Purpose:** make the Firestore→Postgres migration idempotent, restartable and
 auditable.
 
-`id` uuid PK · `profile_id` FK ○ (null = global) · `phase` text (`A`…`F`) ·
+`id` uuid PK · `workspace_id` FK ○ (null = global) · `phase` text (`A`…`F`) ·
 `step` text (e.g. `tasks`) · `status` text
 (`pending`|`running`|`succeeded`|`failed`|`rolled_back`) · `dry_run` boolean ·
 `source_snapshot_ref` text (the Firestore export used) · `backup_ref` text
 (the pre-run DB backup) · `counts` jsonb (`{read, written, skipped, failed}`) ·
 `validation` jsonb (post-run comparison) · `error` jsonb ○ ·
 `started_at`,`finished_at`
-**Index:** `(profile_id, step, status)`.
+**Index:** `(workspace_id, step, status)`.
 
 Plus **`migration_id_map`** — the safety net that makes re-running safe:
-`legacy_id` text · `legacy_kind` text · `new_id` uuid · `profile_id` ·
-`migration_run_id` FK. **Unique:** `(profile_id, legacy_kind, legacy_id)`.
+`legacy_id` text · `legacy_kind` text · `new_id` uuid · `workspace_id` ·
+`migration_run_id` FK. **Unique:** `(workspace_id, legacy_kind, legacy_id)`.
 Re-running a step finds the existing mapping and **updates instead of
 duplicating**.
 
@@ -436,9 +500,11 @@ Standard tooling table: `version`, `name`, `applied_at`, `checksum`.
 ## Ownership and deletion summary
 
 ```
-users ──< profiles ──< profile_memberships
+users ──< workspaces ──< workspace_memberships     (v2: exactly ONE primary)
              │
-             ├──< areas ──< tasks >── projects ──< project_milestones
+             ├──< areas ····> classify items (label, never an owner)
+             │
+             ├──< tasks >── projects ──< project_milestones
              │                │                └─< project_dependencies
              │                ├──< task_steps
              │                ├──< task_dependencies
@@ -456,10 +522,12 @@ users ──< profiles ──< profile_memberships
              └──< user_preferences
 ```
 
-- **Cascade** from `profile` downward (deleting a profile removes its data).
+- **Cascade** from `workspace` downward (deleting a workspace removes its data).
 - **Restrict** from `users` — account deletion is an explicit, logged job.
 - **SET NULL** for optional cross-links (`tasks.project_id`, `tasks.area_id`,
-  `projects.area_id`) so deleting a project never destroys tasks.
+  `projects.area_id`) so deleting a project or Area never destroys tasks.
+- **Areas never cascade-delete content.** Removing an Area reclassifies items,
+  it does not remove them — an Area is a label, not an owner.
 - **Soft delete** on user-visible content; hard delete on activity/log tables
   with retention.
 

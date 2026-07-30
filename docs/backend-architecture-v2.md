@@ -9,6 +9,37 @@
 > remain temporarily** during a controlled, reversible migration.
 > Firestore has **not** been removed. The migration has **not** started.
 
+## ✅ LOCKED: ONE WORKSPACE PER USER (2026-07-31)
+
+> **"Each signed-in user has one primary Life OS workspace. Personal, business,
+> church, health, finance and other parts of life coexist inside the same
+> workspace. They are separated through Areas, Projects, tags, calendars,
+> Library books, filters and saved views — not through profile switching."**
+
+The Personal/Business profile-switching model **does not continue into v2**.
+It divided one life into disconnected halves and caused real data harm (the
+pre-v240 switching bug duplicated 10 reminders and 4 People records across
+profiles).
+
+| Concept | Answers | Model |
+|---|---|---|
+| **Authentication** | Who is signed in? | `users` (Firebase token → internal uuid) |
+| **Workspace** | Which body of data may they access? | `workspaces` + `workspace_memberships` |
+| **Area** | Which part of life is this item? | `areas.area_id` |
+| **Project** | What outcome is it part of? | `projects.project_id` |
+
+- Every data route is scoped by **`workspaceId`**, not `profileId`.
+- `resolveProfile` middleware becomes **`resolveWorkspace`** — same job,
+  honest name: verify membership, else `403`.
+- v2 provisions **exactly one `kind=primary` workspace** per user on first
+  sign-in, and **exposes no switcher**.
+- The schema keeps multi-workspace support for **genuine collaboration**
+  (company, team, family, client) — never for splitting one person's own life.
+- **Retirement:** the live two-profile switcher stays for now and is removed as
+  part of the v2 cutover. See `storage-migration-plan.md`.
+
+---
+
 ## ✅ LOCKED DECISIONS (approved 2026-07-31)
 
 **Phase 0.5 is accepted: the backend and data foundation are completed BEFORE
@@ -158,22 +189,22 @@ convention benefits of resource URLs.
 
 ```
 REST for CRUD:
-  GET    /api/v1/profiles/:profileId/tasks
-  POST   /api/v1/profiles/:profileId/tasks
-  PATCH  /api/v1/profiles/:profileId/tasks/:taskId
-  DELETE /api/v1/profiles/:profileId/tasks/:taskId
+  GET    /api/v1/workspaces/:workspaceId/tasks
+  POST   /api/v1/workspaces/:workspaceId/tasks
+  PATCH  /api/v1/workspaces/:workspaceId/tasks/:taskId
+  DELETE /api/v1/workspaces/:workspaceId/tasks/:taskId
 
 RPC for actions (POST, verb in the path, explicit and auditable):
-  POST /api/v1/profiles/:profileId/tasks/:taskId:complete
-  POST /api/v1/profiles/:profileId/tasks:reorder
-  POST /api/v1/profiles/:profileId/ai/commands          → returns a PREVIEW
-  POST /api/v1/profiles/:profileId/ai/commands/:id:apply
-  POST /api/v1/profiles/:profileId/exports
+  POST /api/v1/workspaces/:workspaceId/tasks/:taskId:complete
+  POST /api/v1/workspaces/:workspaceId/tasks:reorder
+  POST /api/v1/workspaces/:workspaceId/ai/commands          → returns a PREVIEW
+  POST /api/v1/workspaces/:workspaceId/ai/commands/:id:apply
+  POST /api/v1/workspaces/:workspaceId/exports
 ```
 
 Everything is versioned under `/api/v1/`. Every data route is scoped by
-`profileId` in the path, which makes the ownership check uniform and impossible
-to forget.
+`workspaceId` in the path, which makes the ownership check uniform and
+impossible to forget.
 
 ---
 
@@ -184,7 +215,7 @@ to forget.
 /health/ready                            readiness — DB + R2 reachable
 /api/v1/me                               current user + profiles
 /api/v1/profiles                         list / create
-/api/v1/profiles/:profileId              get / update / delete
+/api/v1/workspaces/:workspaceId              get / update / delete
 
   …/tasks                                CRUD, filter by bucket/status
   …/tasks:reorder                        bulk order within a bucket
@@ -235,9 +266,9 @@ identity at once would combine two risky changes.
    (signature, expiry, issuer, audience). It never trusts client-side claims.
 4. The backend looks up `users.firebase_uid` → internal `users.id` (a UUID),
    creating the row on first sight (just-in-time provisioning).
-5. **Every** data route then re-checks that the requested `profileId` belongs to
-   that user, via `profile_memberships`. A valid token for user A can never
-   touch user B's profile.
+5. **Every** data route then re-checks that the requested `workspaceId` is one
+   the user is a member of, via `workspace_memberships`. A valid token for user
+   A can never touch user B's workspace.
 
 **Why this survives replacing Firebase later:** the internal `users.id` UUID is
 the only identifier the rest of the schema references. `firebase_uid` is just
@@ -265,7 +296,7 @@ users
 ```
 requestId → logger → cors → bodyLimit → rateLimit
   → authenticate (verify Firebase token → internal user)
-  → resolveProfile (:profileId → membership check → 403 if not owned)
+  → resolveWorkspace (:workspaceId → membership check → 403 if not a member)
   → validate (Zod on params/query/body)
   → handler (inside a DB transaction where it writes)
   → errorHandler
@@ -290,7 +321,7 @@ HTTP: `400` validation · `401` missing/invalid token · `403` not your profile 
 impossible (e.g. dependency cycle) · `429` rate limited · `500` unexpected.
 
 **Logging:** structured JSON via Pino, one line per request
-(`requestId, userId, profileId, route, status, durationMs`). **Redact**
+(`requestId, userId, workspaceId, route, status, durationMs`). **Redact**
 `authorization`, tokens, API keys, and file contents. Log AI prompts only in a
 truncated, opt-in form. Errors log the full cause server-side only.
 
@@ -466,7 +497,7 @@ The app has **no export at all today** — a real gap for a personal life system
 
 | Audit risk | How the backend addresses it |
 |---|---|
-| D1 profile data leak | Ownership enforced in middleware; a profile's rows are physically separate |
+| D1 profile data leak | **Structurally impossible** — there is only one workspace, and ownership is enforced in middleware |
 | D3 one 1 MB record | Real tables, no document ceiling |
 | D5 AI not atomic | Apply runs in one DB transaction |
 | D6 orphaned data | An explicit, reviewed mapping decides what migrates |

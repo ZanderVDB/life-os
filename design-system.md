@@ -35,6 +35,36 @@ is considered.
 
 Anything that doesn't help answer it becomes **visually quieter**.
 
+### One life, one workspace *(locked 2026-07-31)*
+
+> **"Each signed-in user has one primary Life OS workspace. Personal, business,
+> church, health, finance and other parts of life coexist inside the same
+> workspace. They are separated through Areas, Projects, tags, calendars,
+> Library books, filters and saved views — not through profile switching."**
+
+Life OS exists to **understand and connect a whole life**, not to divide it
+into disconnected halves. The old Personal/Business profile switcher did the
+opposite — and its switching bug copied data between the two.
+
+| Concept | Question it answers |
+|---|---|
+| **Authentication** | Who is signed in? |
+| **Workspace** | Which body of data may they access? |
+| **Area** | Which part of life is this item? |
+| **Project** | What outcome is this item part of? |
+
+**Never use sign-in or workspaces to organise personal vs work content** —
+that is what **Areas** are for. Areas apply across tasks, projects, calendar
+items, reminders, Library books, Brain items, AI commands and saved views.
+
+Multiple workspaces stay architecturally possible for **genuine collaboration**
+(a company, a team, a family, a client) — but the product ships **one primary
+workspace per user**, with **no switcher**, and multi-workspace UI must never
+become Personal/Business switching under a new name.
+
+*(The live two-profile switcher is retired as part of the v2 cutover, not
+before. See `docs/storage-migration-plan.md`.)*
+
 **Priorities, in order:** hierarchy > decoration · whitespace > borders ·
 elevation & contrast > outlines · **one hero per screen**.
 

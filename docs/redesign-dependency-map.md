@@ -9,6 +9,22 @@ It is derived from the audit, not from preference.
 
 ---
 
+## 0. Locked product decision — one workspace per user (2026-07-31)
+
+Personal/Business profile switching is **retired in v2**. Each signed-in user
+gets **one primary workspace**; life categories are **Areas**.
+
+**Effect on the rebuild order:**
+- **Areas become a first-class concept in Step 4/5**, not a Settings detail.
+  Tasks already carry `area_id`; the Today redesign must treat Areas as the
+  primary life-classification and support filtering by them.
+- **No profile switcher** is designed into any new screen.
+- **One less contamination class** — D1 becomes structurally impossible once
+  there is a single workspace.
+- Migration carries **Personal only**; Business is archived, not migrated.
+
+---
+
 ## 1. The dependency facts that drive the order
 
 These are the real couplings found in the code. Everything below follows from
@@ -18,6 +34,7 @@ them.
 |---|---|---|
 | D1 | **Tasks are not linked to Projects at all.** `task.project` points at an *Area* (`S.workProjects`), never at a project (`S.builds`). | Any Project Workspace with a task list needs a **new** link field. Task model must be settled first. |
 | D2 | **The whole app is one database record**, saved whole on every change. | Splitting storage affects every system. Do it once, deliberately — not per screen. |
+| D2b | **Profile switching is retired**; Areas replace it. | Areas must be designed into Step 4/5 as the life-classification, and every new screen must be workspace-scoped, never profile-scoped. |
 | D3 | **There is no file/image/attachment capability anywhere.** | Project documents and Library media are blocked until this is built. It is infrastructure, not a screen. |
 | D4 | **The AI writes directly into every collection** (20 operations). Its schema hard-codes today's field names, including the dead Daily/General model. | Every object reshape breaks the AI. The AI must be re-pointed **after** the objects settle, not before. |
 | D5 | **The Diary is entangled with the routine checklist** — `routineLog[date]` holds `journal` *and* `checks` in one object. | Diary cannot move into a Library until journal and checks are separated. |

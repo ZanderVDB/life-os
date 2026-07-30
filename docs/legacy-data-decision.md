@@ -12,6 +12,27 @@
 
 ---
 
+## ⛔ Profile decision (locked 2026-07-31)
+
+Life OS v2 = **one primary workspace per user**. Personal/Business profile
+switching is retired; life categories move to **Areas**.
+
+| Profile | Verdict |
+|---|---|
+| **Personal** (`main`) | **AUTHORITATIVE.** Its Tasks, Reminders, Habits, Diary, Notebook, Projects, Brain data and settings are migration candidates. |
+| **Business** (`p_x9zxkv4`) | **LEGACY — NOT MIGRATED.** Archived in the verified v242 export only. Recorded as *"legacy profile — not migrated."* |
+
+**Inspection evidence of contamination:** 10 reminders and 4 byte-identical
+People records exist in **both** profiles — the pre-v240 switching-bug
+signature. Because Business is not authoritative, this needs **no
+record-by-record ownership review**: Personal wins, Business copies are
+excluded.
+
+**Nothing is deleted from Firestore.** Business data is preserved until the
+migration and rollback period end.
+
+---
+
 ## How to read this
 
 | Verdict | Meaning |
@@ -39,7 +60,7 @@
 | `ideas` / `resources` / `notes` (Brain) | ✅ Brain | ✅ (create only) | **KEEP** |
 | `notebook` | ✅ Notebook | ✅ (append page) | **KEEP** |
 | **`dayNotes`** | ❌ none | ❌ | **NEEDS CONTENT REVIEW** |
-| **`people`** | ❌ unreachable | ✅ **still writable** | **ARCHIVE** |
+| **`people`** | ❌ unreachable | ✅ **still writable** | **ARCHIVE once, from Personal — not migrated to v2** |
 | `peopleTags` / `peopleLevelNames` / `peopleSettings` | ⚠️ Settings only | indirect | **ARCHIVE** (with people) |
 | Promises (inside `people`) | ❌ | ✅ | **ARCHIVE** |
 | Task→People links (`linkedPersonId`, `linkedPromiseId`) | ❌ | indirect | **ARCHIVE** |
@@ -75,8 +96,11 @@
   meaningful sense.
 - **Known bug:** `lastTogether` is written as an object but read as a date
   string, so the "haven't seen X" nudge silently stopped working.
-- **Recommendation:** export/archive, then remove from the active product —
-  *and disable the AI operations first*, otherwise the dataset keeps growing.
+- **Recommendation:** archive **once, from Personal** (the 4 Business copies are
+  duplicates and are ignored), then remove from the active product — **and
+  disable `addPerson`/`addPromise` first**, otherwise the dataset keeps growing
+  while undecided.
+- **Not migrated into Life OS v2.**
 - **No v2 destination is planned.** `profile_memberships` in the Postgres model
   is about *account sharing*, not this.
 
@@ -156,9 +180,13 @@ datasets were in the pre-v240 reset gap.
 collision between two small profiles is effectively impossible. **Any shared id
 is strong evidence of contamination** from the pre-v240 profile-switch bug.
 
-**Nothing is de-duplicated automatically.** If duplicates are found, the
-cleanup is a separate, explicitly-approved step — and the rollback floor exists
-precisely for that.
+**Confirmed by inspection:** 10 reminders and 4 byte-identical People records
+are present in both profiles.
+
+**No de-duplication work is needed.** Because Business is excluded from
+migration wholesale, the duplicates simply do not travel. Personal is
+authoritative. Nothing is removed from Firestore — the duplicates stay there,
+and in the export, until the rollback period ends.
 
 ---
 
@@ -176,7 +204,7 @@ precisely for that.
 
 ## Status
 
-- Phase A1 (profile isolation) ✅ · Phase A3 (verified export) ✅ · **A2
-  inspector built ✅ — awaiting a real run.**
+- Phase A1 (profile isolation) ✅ · A3 (verified export) ✅ · **A2 inspection
+  RUN ✅** · profile model decision **LOCKED** ✅
 - **No migration has run. Firestore remains the source of truth.**
 - **No legacy dataset is approved for deletion.**

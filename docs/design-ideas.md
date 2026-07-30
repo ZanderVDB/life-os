@@ -123,8 +123,10 @@ design pass in its own step.
   and a token budget.
 - **Cross-device settings** — theme and notification preferences currently do
   not sync; `user_preferences` fixes that.
-- **Future sharing / collaboration** — `profile_memberships` exists so this
-  needs no data-model change later. **Explicitly not a v2 goal.**
+- **Future sharing / collaboration** — `workspace_memberships` exists so this
+  needs no data-model change later. **Explicitly not a v2 goal**, and it must
+  never become Personal/Business switching under a new name (see
+  `design-system.md` → *One life, one workspace*).
 
 ---
 

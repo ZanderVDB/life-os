@@ -17,13 +17,47 @@
 
 ---
 
+## ⛔ LOCKED: Personal is authoritative · Business is NOT migrated (2026-07-31)
+
+Life OS v2 gives each user **one primary workspace**. The two-profile model is
+retired. That changes what migrates.
+
+| Source profile | Status | Migration |
+|---|---|---|
+| **Personal** (`main`) | **AUTHORITATIVE** — the real user data | **MIGRATES** |
+| **Business** (`p_x9zxkv4`) | **LEGACY — never intentionally used** | **EXCLUDED BY DEFAULT** |
+
+**Business-profile data is treated as contamination, copied defaults,
+accidental state or system-generated state** unless explicit evidence proves
+otherwise. Evidence for this: the pre-v240 switching bug copied data across
+profiles — confirmed by inspection as **10 reminders** and **4 byte-identical
+People records** present in both.
+
+**Rules**
+1. **Do not migrate Business application data** into the primary workspace.
+2. **Do not merge its reminders into Personal.** Personal reminders are
+   authoritative; Business copies are excluded. No reminder-by-reminder
+   ownership review is required.
+3. **Do not duplicate its People records.** The 4 byte-identical records are
+   archived **once, from Personal**, and are **not migrated into v2**.
+4. **Do not migrate its single routine/Diary entry** unless Zander later asks.
+5. **Do not delete it.** It stays in Firestore and inside the **VERIFIED v242
+   export** for the whole migration and rollback period.
+6. Record it in `migration_runs` as **"legacy profile — not migrated"**.
+
+**Profile switching retires as part of the v2 cutover** — not before. The live
+switcher is unchanged today.
+
+---
+
 ## Non-negotiable rules
 
 1. **Do not lift-and-shift.** The single Firestore record must **not** be
    dropped into one PostgreSQL `jsonb` column. That would carry every existing
    problem across and gain nothing. Data is **reshaped** into real tables.
 2. **System by system**, not all at once.
-3. **Profile by profile.** One profile is migrated and validated before the next.
+3. **Personal profile only.** The Business profile is excluded by default (see
+   the locked rule above) and archived in the export.
 4. **Idempotent.** Re-running any step must update, never duplicate — enforced
    by `migration_id_map` (`legacy_id → new uuid`, unique per profile+kind).
 5. **Restartable.** Every step is chunked and records progress in
@@ -87,7 +121,7 @@ See `firestore-export-restore.md`.
 | **B1. Create the backend service** | Second Railway service from the same repo (`api`), Node + TypeScript + Fastify |
 | **B2. Provision PostgreSQL** | Railway add-on; **staging first**, then production |
 | **B3. Schema migrations** | Versioned SQL, applied on boot inside an advisory lock |
-| **B4. Firebase token verification** | Admin SDK; map `firebase_uid` → internal `users.id`; ownership middleware |
+| **B4. Firebase token verification** | Admin SDK; map `firebase_uid` → internal `users.id`; provision ONE `kind=primary` workspace; `resolveWorkspace` ownership middleware |
 | **B5. Private R2 buckets** | `prod`, `exports`, `backups` + scoped token + lifecycle rules |
 | **B6. Health checks + staging** | `/health`, `/health/ready`, `/health/version`; a full staging environment |
 | **B7. Backup + restore rehearsal** | Prove a `pg_dump` can be restored into staging **before** trusting it |
@@ -120,7 +154,7 @@ redesign are blocked on them.
 | `done` + `doneAt` | `status` + `completed_at` | `done→'done'` else `'open'` |
 | `bucket` | `bucket` | unchanged; default `today` if invalid |
 | `ord` | `sort_order` | re-spaced (×1000) so future inserts need no renumber |
-| `project` | **`area_id`** | resolve via `migration_id_map` for areas; `'gen'`→null |
+| `project` | **`area_id`** | resolve via `migration_id_map` for areas; `'gen'`→null. The built-in Personal/Work pseudo-areas become **real `areas` rows** — this is where Personal/Business separation now lives |
 | `area` | — | **dropped**; folded into `area_id` (the personal/work built-ins become real `areas` rows) |
 | `priority` | `priority` | `hi→high`, `lo→low`, `med→medium` |
 | `steps[]` | `task_steps` | new uuids, `sort_order` from array index |

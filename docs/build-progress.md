@@ -18,7 +18,7 @@ this file (where we are) → `design-ideas.md` (captured, not built).
 |---|---|
 | **Version** | v243 |
 | **Rebuild step** | 3 of 17 · audit done · platform v2 designed · **A1+A3 done, A2 inspector built** |
-| **Next step** | Run the A2 inspector, then decide each legacy dataset (needs approval) |
+| **Next step** | Approve remaining legacy verdicts, then Phase B (backend) |
 | **Data platform** | Firestore = source of truth · Postgres + R2 **planned, not started** |
 | **Tests** | `npm test` — 110 passing |
 | **Live** | life-os.web-anchor.com (Railway) |
@@ -394,6 +394,51 @@ only. Full suite **110 passing**.
 
 **Docs:** `legacy-data-decision.md` — per-dataset verdicts, all **preliminary**.
 **Nothing is approved for deletion.**
+
+---
+
+### 2026-07-31 — Architecture decision: ONE WORKSPACE PER USER ✅ (docs only)
+
+**A2 inspection was run.** It confirmed the pre-v240 contamination signature:
+**10 reminders** and **4 byte-identical People records** present in *both*
+profiles.
+
+**Decision locked:**
+
+> *"Each signed-in user has one primary Life OS workspace. Personal, business,
+> church, health, finance and other parts of life coexist inside the same
+> workspace. They are separated through Areas, Projects, tags, calendars,
+> Library books, filters and saved views — not through profile switching."*
+
+**Why:** Life OS exists to connect a whole life, not split it in half. The
+two-profile model divided it *and* leaked data between the halves.
+
+**Model (four separate concepts):** authentication = who is signed in ·
+workspace = which body of data · **area = which part of life** · project =
+which outcome. Never use auth or workspaces to organise personal vs work.
+
+**Schema changes (design only):**
+- `profiles` → **`workspaces`** (`kind: primary|shared`; unique primary per
+  user), `profile_memberships` → **`workspace_memberships`**
+- **`profile_id` → `workspace_id`** across all 30+ tables
+- `profiles.mode` (personal/business) **removed** — AI context now comes from
+  the item's Area, not a global mode flag
+- **`areas`** promoted to the life-classification, carried by every
+  classifiable table; Areas never gate access and never cascade-delete content
+- API routes `/profiles/:profileId` → **`/workspaces/:workspaceId`**;
+  `resolveProfile` → `resolveWorkspace`
+
+**Migration rule:** **Personal (`main`) is authoritative and migrates.
+Business (`p_x9zxkv4`) is legacy and is NOT migrated** — archived in the
+verified v242 export only, recorded as *"legacy profile — not migrated."*
+The contaminated duplicates therefore need no record-by-record review: they
+simply do not travel.
+
+**Future collaboration stays possible** (company/team/family/client
+workspaces) but ships no switcher in v2.
+
+**Nothing changed in the app.** The live switcher is untouched; no data was
+deleted, migrated or modified. Profile switching retires at v2 cutover.
 
 ---
 
