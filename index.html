@@ -69,8 +69,8 @@
   --emerald:#00D9A3; --emerald-bg:#16282b;
   --cyan:#27D7FF; --cyan-bg:#142a34;
   --paper:#211E2C; --paper-line:rgba(200,190,235,.06); --paper-margin:rgba(138,93,255,.38);
-  --shadow:0 6px 18px rgba(0,0,0,.20);
-  --shadow-lift:0 10px 28px rgba(0,0,0,.30);
+  --shadow:0 8px 24px rgba(0,0,0,.22);
+  --shadow-lift:0 14px 34px rgba(0,0,0,.32);
   --btn-glow:0 6px 18px rgba(124,77,255,.22);
 }
 /* ── DUSK screen styling — carry the look-book's design language onto the
@@ -90,13 +90,14 @@
   background:var(--name-grad);-webkit-background-clip:text;background-clip:text;color:transparent;
 }
 /* Section titles are neutral (not purple); only active sections go purple. */
-[data-theme="studio"] .section-hdr h2{color:#CEC7E8}
+/* Linear-style section headers: small uppercase, wide tracking, medium weight. */
+[data-theme="studio"] .section-hdr h2{color:#CEC7E8;text-transform:uppercase;letter-spacing:.16em;font-weight:600}
 [data-theme="studio"] .route[data-route="today"] > section{
   background:var(--surface);border:none;border-radius:18px;
-  padding:15px 16px;box-shadow:var(--shadow);
+  padding:16px 18px;box-shadow:var(--shadow);
 }
 [data-theme="studio"] .route[data-route="today"] .section-hdr h2{
-  font-size:13px;letter-spacing:0;text-transform:none;font-weight:750;color:#CEC7E8;
+  font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:600;color:#CEC7E8;
 }
 /* Right-rail card titles pick up the tan accent so they match the main cards. */
 [data-theme="studio"] .ac-card h3{color:#CEC7E8}
@@ -116,6 +117,12 @@
 [data-theme="studio"] .week-sum .day-card:not(.today){background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);box-shadow:none}
 [data-theme="studio"] .week-sum .day-card:not(.today):hover{background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.09)}
 [data-theme="studio"] .week-sum .day-card-hdr{border-bottom-color:rgba(255,255,255,.06)}
+/* Tasks: drop the one big container so each time-bucket floats as its own
+   independent workspace card — real spacing + soft shadow, not table cells. */
+[data-theme="studio"] .route[data-route="today"]{gap:32px}
+[data-theme="studio"] .route[data-route="today"] > section:has(#tasks-sec){background:transparent;box-shadow:none;padding:0}
+[data-theme="studio"] .bucket-sec{background:var(--surface);border-radius:16px;padding:15px 14px 13px;box-shadow:var(--shadow)}
+[data-theme="studio"] .bucket-hdr{margin-bottom:12px}
 /* Left sidebar: a flat graphite panel, no dividing border — separation comes
    from the surface sitting a touch darker than the app canvas. */
 [data-theme="studio"] .sidebar{background:#17151F;border-right:none}
@@ -127,7 +134,9 @@
 [data-theme="studio"] .s-nav a,[data-theme="studio"] .s-nav a .ic{color:#9189A7;background:transparent}
 [data-theme="studio"] .s-nav a:hover{background:var(--surface);color:#fff}
 [data-theme="studio"] .s-nav a:hover .ic{color:#fff}
-[data-theme="studio"] .s-nav a.active{background:linear-gradient(180deg,#7C4DFF 0%,#9A67FF 100%);color:#fff;box-shadow:0 6px 16px -6px rgba(124,77,255,.5)}
+[data-theme="studio"] .s-nav a.active{background:linear-gradient(180deg,#7C4DFF 0%,#9A67FF 100%);color:#fff;box-shadow:0 6px 18px -6px rgba(124,77,255,.55), inset 0 1px 0 rgba(255,255,255,.12)}
+/* No Windows-style focus rectangle on nav — the gradient + glow IS the state. */
+[data-theme="studio"] .s-nav a:focus,[data-theme="studio"] .s-nav a:focus-visible{outline:none}
 [data-theme="studio"] .s-nav a.active .ic,[data-theme="studio"] .s-nav a.active .label{color:#fff}
 /* Right rail cards: a calm raised surface — no accent line, soft shadow only. */
 [data-theme="studio"] .ac-card{position:relative;background:var(--surface);border:none;box-shadow:var(--shadow)}
@@ -198,9 +207,10 @@ body.no-scroll{overflow:hidden}
    down by its height instead of having content scroll behind it. The
    user reported overlap on phone where rows would slide under the bar. */
 .gcal-warn{position:relative;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;background:var(--red-bg,#fde7e7);color:var(--red,#c44);font-size:12.5px;font-weight:600;cursor:pointer;border-bottom:1px solid var(--red,#c44);font-family:'Inter',system-ui,sans-serif}
-[data-theme="studio"] .gcal-warn{background:linear-gradient(180deg,#4285F4 0%,#5A95FF 100%);color:#fff;font-weight:600;border:none;box-shadow:0 4px 14px -6px rgba(66,133,244,.5)}
-[data-theme="studio"] .gcal-warn .gcal-warn-icon{color:#fff}
-[data-theme="studio"] .gcal-warn .gcal-warn-text{color:#fff}
+/* Muted deep-blue — integrated with the graphite shell, not shouting. */
+[data-theme="studio"] .gcal-warn{background:rgba(39,76,136,.78);color:#cdd8ec;font-weight:500;border:none;box-shadow:none;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+[data-theme="studio"] .gcal-warn .gcal-warn-icon{color:#8fb4f0}
+[data-theme="studio"] .gcal-warn .gcal-warn-text{color:#cdd8ec}
 .gcal-warn:hover{filter:brightness(1.04)}
 .gcal-warn-icon{font-size:16px;line-height:1}
 .gcal-warn-text{line-height:1.3}
@@ -287,6 +297,15 @@ svg{flex-shrink:0}
 }
 .s-logo-row{display:flex;align-items:center;gap:10px;padding:4px 10px 22px}
 .s-logo-row svg{color:var(--text)}
+/* Signature lotus mark — the one deliberate "wow". A slow, understated purple
+   halo breathes around the gradient icon; premium, not attention-grabbing. */
+[data-theme="studio"] .s-logo-row svg{animation:logoShimmer 6.5s ease-in-out infinite;will-change:filter}
+@keyframes logoShimmer{
+  0%,100%{filter:drop-shadow(0 0 2px rgba(124,77,255,.20))}
+  50%{filter:drop-shadow(0 0 8px rgba(163,107,255,.55))}
+}
+@media(prefers-reduced-motion:reduce){[data-theme="studio"] .s-logo-row svg{animation:none;filter:drop-shadow(0 0 3px rgba(124,77,255,.3))}}
+[data-theme="studio"] .s-logo{color:#F6F3FF;letter-spacing:-.2px}
 .s-logo{font-family:'Playfair Display','Georgia',serif;font-size:20px;font-weight:500;letter-spacing:-.3px;color:var(--text);line-height:1}
 .s-nav{display:flex;flex-direction:column;gap:5px;flex:1;overflow-y:auto;padding-right:2px}
 .s-nav::-webkit-scrollbar{width:4px}
@@ -1649,7 +1668,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
    The .tcard turns into a transparent gap container; each .ti becomes its
    own rounded surface (look-book style). */
 [data-theme="studio"] .tcard{background:transparent;border:none;border-radius:0;overflow:visible;display:flex;flex-direction:column;gap:7px}
-[data-theme="studio"] .tcard .ti{background:#282431;border:none;border-radius:11px;border-left:none;padding:11px 14px 11px 16px;box-shadow:0 2px 10px rgba(0,0,0,.18);transition:background .2s ease-out,box-shadow .2s ease-out,transform .2s ease-out}
+[data-theme="studio"] .tcard .ti{background:#282431;border:none;border-radius:12px;border-left:none;padding:11px 14px 11px 16px;box-shadow:0 1px 4px rgba(0,0,0,.14);transition:background .2s ease-out,box-shadow .2s ease-out,transform .2s ease-out}
 /* Urgent tasks get a bold red ring + soft glow so they stand out. */
 [data-theme="studio"] .tcard .ti.pu{box-shadow:inset 0 0 0 1.5px #FF646E, 0 0 18px -7px rgba(255,100,110,.55)}
 [data-theme="studio"] .ti{position:relative;overflow:hidden}
@@ -1681,7 +1700,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .bucket-sec{margin-bottom:16px}
 .bucket-sec:last-child{margin-bottom:0}
 .bucket-hdr{display:flex;align-items:center;gap:8px;margin-bottom:9px;padding-left:2px}
-.bucket-hdr .bh{font-size:12.5px;font-weight:750;letter-spacing:.01em;color:var(--text-2)}
+.bucket-hdr .bh{font-size:11.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-2)}
 [data-theme="studio"] .bucket-hdr .bh{color:#CEC7E8}
 .bucket-cnt{font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:1px 7px;font-variant-numeric:tabular-nums}
 .bucket-drop{min-height:46px}
@@ -1692,10 +1711,9 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .bucket-empty{color:var(--muted);font-size:12px;font-style:italic;padding:13px 4px;text-align:center;pointer-events:none}
 /* Today / This week / This month as three side-by-side columns; Future
    spans full width below (rendered outside the grid). */
-.buckets-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px;align-items:stretch}
+.buckets-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-bottom:20px;align-items:start}
 .buckets-grid .bucket-sec{margin-bottom:0;display:flex;flex-direction:column;min-width:0}
-.buckets-grid .bucket-drop{flex:1 1 auto}
-@media(max-width:1024px){.buckets-grid{grid-template-columns:1fr}}
+@media(max-width:1024px){.buckets-grid{grid-template-columns:1fr;gap:16px}}
 .ti-wrap[draggable="true"]{cursor:default}
 .ti-wrap.dragging{opacity:.45}
 .ti-drag{color:var(--muted);cursor:grab;font-size:12px;line-height:1;letter-spacing:-1px;user-select:none;flex:0 0 auto;margin-top:2px;opacity:.55}
@@ -1903,10 +1921,20 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 /* When the main checkbox is locked (steps unfinished), dim it visually
    and show the not-allowed cursor so the lock is obvious. */
 .ti.has-steps input[type=checkbox]{opacity:.4;cursor:not-allowed}
-.hc-tick{width:19px;height:19px;border-radius:50%;border:1.6px solid var(--muted-2);background:transparent;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;flex-shrink:0;cursor:pointer;color:var(--muted);transition:all .15s;padding:0}
-.hc-tick:hover{border-color:var(--sage)}
-.hc.done .hc-tick{background:var(--sage);border-color:var(--sage);color:#08221c}
-.hc.rest .hc-tick{border-style:dashed;color:var(--muted-2)}
+/* Circular habit progress ring — the repeating "designed" motif. The ring
+   fills toward the next streak milestone; cyan = building, green = done today,
+   muted dashed = rest day. Tap to toggle today. */
+.hc-ring-btn{flex-shrink:0;background:none;border:none;padding:0;cursor:pointer;line-height:0;display:flex;transition:transform .18s ease-out}
+.hc-ring-btn:hover{transform:scale(1.09)}
+.hc-ring{display:block;overflow:visible}
+.hc-ring-track{fill:none;stroke:var(--border);stroke-width:3}
+.hc-ring-fill{fill:none;stroke:#27D7FF;stroke-width:3;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .55s cubic-bezier(.4,0,.2,1),stroke .2s}
+.hc.done .hc-ring-fill{stroke:#00D9A3}
+.hc.rest .hc-ring-fill{stroke:var(--muted-2)}
+.hc.rest .hc-ring-track{stroke-dasharray:2 3.2}
+.hc-ring-num{fill:var(--text-2);font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-variant-numeric:tabular-nums}
+.hc.done .hc-ring-num{fill:#00D9A3;font-size:12.5px}
+.hc.rest .hc-ring-num{fill:var(--muted-2)}
 .hc-name{font-size:12px;font-weight:500;color:var(--text);flex:1;line-height:1.3;min-width:0;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hc-rest{font-size:8.5px;font-weight:600;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:1px 6px;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em}
 .hc-streak{font-size:10.5px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
@@ -3838,7 +3866,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v235';
+const APP_VERSION='v236';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -10345,6 +10373,15 @@ function qaAddNote(){openNewNoteModal();}
 
 // HABITS
 function toggleHabit(id){toggleHabitDate(id,tod());}
+// Fraction (0-1) of the way from the last streak milestone to the next —
+// drives how full a habit's progress ring is. Ties the ring to the streak.
+function habitRingPct(streak){
+  if(!streak||streak<0)return 0;
+  const M=[3,7,14,21,30,60,100,200,365];
+  let prev=0;
+  for(const m of M){ if(streak<m) return (streak-prev)/(m-prev); prev=m; }
+  return 1;
+}
 function rHabits(){
   const t=tod();
   // CRITICAL: do NOT mutate h.doneToday here. That field is transient
@@ -10368,10 +10405,18 @@ function rHabits(){
       const dt=doneToday[h.id];
       const isRest=isExcludedWeekday(h,new Date());
       const cls='hc'+(dt?' done':'')+(isRest&&!dt?' rest':'');
+      const circ=94.25; // 2·π·r, r=15
+      const off=(circ*(1-(dt?1:habitRingPct(stats.current)))).toFixed(1);
+      const center=dt?'✓':(stats.current>0?stats.current:(isRest?'·':''));
       return `<div class="${cls}">
-        <button class="hc-tick" onclick="event.stopPropagation();toggleHabit('${h.id}')" title="${dt?'Done today — tap to undo':(isRest?'Rest day — tap to log a bonus':'Mark done today')}">${dt?'✓':(isRest?'·':'')}</button>
+        <button class="hc-ring-btn" onclick="event.stopPropagation();toggleHabit('${h.id}')" title="${dt?'Done today — tap to undo':(isRest?'Rest day — tap to log a bonus':'Mark done today')}" aria-label="${esc(h.name)} — streak ${stats.current}, ${dt?'done today':'not done'}">
+          <svg class="hc-ring" viewBox="0 0 34 34" width="34" height="34" aria-hidden="true">
+            <circle class="hc-ring-track" cx="17" cy="17" r="15"/>
+            <circle class="hc-ring-fill" cx="17" cy="17" r="15" stroke-dasharray="${circ}" stroke-dashoffset="${off}"/>
+            <text class="hc-ring-num" x="17" y="17">${center}</text>
+          </svg>
+        </button>
         <div class="hc-name" onclick="openHabitModal('${h.id}')">${esc(h.name)}${isRest&&!dt?'<span class="hc-rest">Rest day</span>':''}</div>
-        <div class="hc-streak" title="Current streak">${stats.current?stats.current+'🔥':'–'}</div>
         <button class="hc-edit" onclick="event.stopPropagation();openHabitModal('${h.id}')" title="Open habit detail">✎</button>
       </div>`;
     }).join(''):`<div class="att-empty">No habits yet.</div>`;
