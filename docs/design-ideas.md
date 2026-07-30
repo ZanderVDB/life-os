@@ -89,6 +89,20 @@ No desktop-only assumptions anywhere.
 
 ---
 
+## 12. Task Energy *(captured 2026-07-31 — do not implement)*
+- An **optional** "energy required" attribute on a task.
+- The AI may later factor in **energy, calendar load, time of day and recent
+  activity** when recommending what to work on.
+- **Do not implement yet.**
+
+## 13. Focus Mode *(captured 2026-07-31 — do not implement)*
+- A **distraction-free workspace centred on a single task**.
+- Unrelated interface elements fade into the background.
+- Exiting returns to the normal Life OS interface.
+- **Do not implement yet.**
+
+---
+
 ## Unresolved questions
 - **Greeting vs one-hero rule:** resolved as *greeting is the hero of Today +
   the brand identity moment*; every other screen gets its own single hero.

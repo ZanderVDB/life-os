@@ -7,12 +7,17 @@
 > **If code conflicts with this file, this file wins.** Old decisions are not
 > preserved just because they exist — every choice must earn its place here.
 
-**The three project documents:**
+**The project documents:**
 | File | Role |
 |---|---|
 | `design-system.md` | **This file.** The constitution — every permanent decision. |
-| `build-progress.md` | Chronological record of completed steps; where we are now. |
-| `design-ideas.md` | Roadmap capture. Future ideas — **never built automatically.** |
+| `docs/build-progress.md` | Chronological record of completed steps; where we are now. |
+| `docs/design-ideas.md` | Roadmap capture. Future ideas — **never built automatically.** |
+
+**Audit of the existing system** (2026-07-31, read before redesigning a screen):
+`docs/current-system-audit.md` · `docs/data-model-map.md` ·
+`docs/page-capability-map.md` · `docs/integration-map.md` ·
+`docs/technical-debt.md` · `docs/redesign-dependency-map.md`
 
 ---
 

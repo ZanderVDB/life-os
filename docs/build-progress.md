@@ -3,8 +3,12 @@
 Chronological record of completed work, so any future session can understand
 the project's state instantly.
 
-**Read order for a new session:** `design-system.md` (the constitution) →
-this file (where we are) → `design-ideas.md` (what's captured, not built).
+**Read order for a new session:** `../design-system.md` (the constitution) →
+this file (where we are) → `design-ideas.md` (captured, not built).
+
+**Audit documents (created 2026-07-31, before Step 4):**
+`current-system-audit.md` · `data-model-map.md` · `page-capability-map.md` ·
+`integration-map.md` · `technical-debt.md` · `redesign-dependency-map.md`
 
 ---
 
@@ -13,8 +17,8 @@ this file (where we are) → `design-ideas.md` (what's captured, not built).
 | | |
 |---|---|
 | **Version** | v239 |
-| **Rebuild step** | 3 of 17 complete |
-| **Next step** | 4 — Today Dashboard |
+| **Rebuild step** | 3 of 17 complete · **system audit done** |
+| **Next step** | 4 — Today Dashboard (**awaiting approval**) |
 | **Live** | life-os.web-anchor.com (Railway) |
 | **Repo** | `ZanderVDB/life-os` · single-file `index.html` + `sw.js` |
 
@@ -134,6 +138,39 @@ behaviour, and busy-detection for typing + dragging. No console errors.
 
 **Docs created:** `design-ideas.md` (roadmap capture) and `build-progress.md`
 (this file).
+
+---
+
+### 2026-07-31 — Discovery: full system audit ✅ (no code changed)
+A complete read-only audit of the existing product, run before Step 4 so the
+redesign can proceed from first principles without losing working behaviour.
+Six parallel deep-dives (tasks, calendar/integrations, AI, projects/brain,
+diary/notebook, auth/settings/mobile) plus direct structural analysis.
+
+**Produced:** `current-system-audit.md`, `data-model-map.md`,
+`page-capability-map.md`, `integration-map.md`, `technical-debt.md`,
+`redesign-dependency-map.md`.
+
+**Most consequential findings**
+1. **Tasks cannot be linked to Projects.** `task.project` points at an *Area*,
+   never at a project — the planned Project Workspace has no foundation.
+2. **Due dates cannot be saved** (v233 feature is inert): the only code reading
+   the date picker is never called.
+3. **Profile switching leaks data** — 4 fields aren't cleared and are retained
+   when absent from the new profile, then written into it.
+4. **All data is one Firestore record** with a hard 1 MB ceiling; the diary,
+   notebook and AI history grow without limit and there is no size guard.
+5. **The Diary is not `S.dayNotes`** — it lives in `S.routineLog[date].journal`,
+   entangled with routine ticks. `S.dayNotes` is orphaned data still being saved.
+6. **Drag-and-drop is desktop-only** — task management is impossible on a phone.
+7. **No file/image/attachment capability exists anywhere.**
+8. Three pages (Board, Habits, People) are unreachable but still in the file,
+   and People data is still saved.
+9. The AI has **full write power on the Diary page** (missing from the scope
+   table) and applies most changes **with no preview** by default.
+10. AI changes are **not atomic**; calendar operations run *after* the local save.
+
+**Also captured to the roadmap:** Task Energy, Focus Mode.
 
 ---
 
