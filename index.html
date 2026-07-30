@@ -3742,7 +3742,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v227';
+const APP_VERSION='v228';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -17370,6 +17370,170 @@ document.addEventListener('click',e=>{
   try{hideMcwPopover();}catch(_){}
   openEventEdit(el.dataset.evPayload);
 },true);
+</script>
+
+<!-- ══════════ DESIGN MODE — live in-app gradient/colour editor ══════════
+     A pop-out panel (toggle: the ◐ button bottom-left, or Alt+D) that lets
+     you tune every Dusk surface on the REAL app: gradient recipe, direction,
+     balance, plus text colours and borders. Persists to localStorage and
+     applies on load, so the current design IS the app's look. "Copy config"
+     exports the line for baking it in permanently later. -->
+<script>
+(function(){
+try{
+  var REC={R1:['#202332'],R2:['#bc9876'],R3:['#434e60'],R4:['#8b9a9f'],
+    R5:['#202332','#bc9876'],R6:['#202332','#434e60'],R7:['#202332','#8b9a9f'],
+    R8:['#bc9876','#434e60'],R9:['#bc9876','#8b9a9f'],R10:['#434e60','#8b9a9f'],
+    R11:['#202332','#434e60','#8b9a9f'],R12:['#202332','#bc9876','#434e60'],
+    R13:['#bc9876','#434e60','#8b9a9f'],R14:['#202332','#14151d'],R15:['#8b9a9f','#cdd4d6']};
+  var RNAME={R1:'Navy',R2:'Tan',R3:'Slate',R4:'Dove',R5:'Navy·Tan',R6:'Navy·Slate',R7:'Navy·Dove',R8:'Tan·Slate',R9:'Tan·Dove',R10:'Slate·Dove',R11:'Navy·Slate·Dove',R12:'Navy·Tan·Slate',R13:'Tan·Slate·Dove',R14:'Navy·Ink',R15:'Dove·Mist'};
+  var DIR={DN:['↓','180deg'],UP:['↑','0deg'],RT:['→','90deg'],LT:['←','270deg'],BR:['↘','135deg'],TR:['↗','45deg'],BL:['↙','225deg'],TL:['↖','315deg'],RA:['◉','radial']};
+  function grad(r,d,b){
+    var c=REC[r]||REC.R1; if(c.length===1)return c[0];
+    b=Math.max(2,Math.min(98,b==null?50:b));
+    var stops=c.length===2?(c[0]+', '+b+'%, '+c[1]):(c[0]+', '+c[1]+' '+b+'%, '+c[2]);
+    var dd=DIR[d]||DIR.DN;
+    return dd[1]==='radial'?('radial-gradient(circle at 30% 26%, '+stops+')'):('linear-gradient('+dd[1]+', '+stops+')');
+  }
+  var SURF=[
+    ['S1','App background','bg','.app'],
+    ['S2','Page title','text','.page-title'],
+    ['S3','Section / bucket titles','text','.section-hdr h2, .route[data-route="today"] .bucket-hdr .bh'],
+    ['S4','"This week" card','bg','.route[data-route="today"] > section:has(#today-week)'],
+    ['S5','Task rows','bg','.tcard .ti'],
+    ['S6','Left sidebar','bg','.sidebar'],
+    ['S7','Right-rail cards','bg','.ac-card'],
+    ['S8','Nav icons (solid)','stroke','.s-nav a .ic svg *'],
+    ['S9','Primary button','bg','.btn-primary'],
+    ['S10','Task priority stripes','stripe','.tcard .ti::before'],
+    ['S11','Google Calendar bar','bg','.gcal-warn'],
+    ['S12','Chat / composer bar','bg','.ai-inner'],
+    ['S13','"Today" cell','bg','.day-card.today'],
+    ['S14','Habit bars','bg','.hab-bar'],
+    ['S15','"Life OS" wordmark','text','.s-logo']];
+  var DEF={S1:{r:'R14',d:'DN',b:60},S2:{r:'R9',d:'DN',b:64},S3:{r:'R4'},S4:{r:'R6',d:'DN',b:50},
+    S5:{r:'R3'},S6:{r:'R14',d:'LT',b:52},S7:{r:'R3'},S8:{r:'R8',d:'RA',b:70},
+    S9:{r:'R8',d:'TR',b:82},S10:{r:'R2'},S11:{r:'R3'},S12:{r:'R11',d:'DN',b:45},
+    S13:{r:'R4'},S14:{r:'R5',d:'RT',b:45},S15:{r:'R8',d:'BL',b:73},
+    _text:'#efe5d4',_text2:'#bcb3bd',_muted:'#8b8296',_border:'#382f35',_borders:true};
+  var KEY='los_design_v1',cfg;
+  try{cfg=JSON.parse(localStorage.getItem(KEY));}catch(e){cfg=null;}
+  if(!cfg)cfg=JSON.parse(JSON.stringify(DEF));
+  for(var k in DEF)if(!(k in cfg))cfg[k]=DEF[k];
+
+  function buildCss(){
+    var o='';
+    SURF.forEach(function(su){
+      var id=su[0],t=su[2],sel=su[3],x=cfg[id]; if(!x)return;
+      var scoped=sel.split(',').map(function(s){return '[data-theme="studio"] '+s.trim();}).join(', ');
+      if(t==='text')o+=scoped+'{background:'+grad(x.r,x.d,x.b)+' !important;-webkit-background-clip:text !important;background-clip:text !important;color:transparent !important}\n';
+      else if(t==='stroke')o+=scoped+'{stroke:'+(REC[x.r]||REC.R1)[0]+' !important}\n';
+      else o+=scoped+'{background:'+grad(x.r,x.d,x.b)+' !important}\n';
+    });
+    var bc=cfg._borders?cfg._border:'transparent';
+    o+='[data-theme="studio"]{--text:'+cfg._text+';--text-2:'+cfg._text2+';--muted:'+cfg._muted+';--border:'+bc+';--border-strong:'+bc+'}\n';
+    o+='[data-theme="studio"] ::placeholder{color:'+cfg._muted+' !important}\n';
+    o+='[data-theme="studio"] .us-trigger-txt,[data-theme="studio"] .us-trigger-kbd{color:'+cfg._muted+' !important}\n';
+    return o;
+  }
+  var styleEl=document.getElementById('los-design-style');
+  if(!styleEl){styleEl=document.createElement('style');styleEl.id='los-design-style';document.head.appendChild(styleEl);}
+  function apply(){styleEl.textContent=buildCss();try{localStorage.setItem(KEY,JSON.stringify(cfg));}catch(e){}}
+  apply();
+
+  // ── Panel styles ──
+  var pcss=document.createElement('style');
+  pcss.textContent=
+   '#los-design-btn{position:fixed;left:9px;bottom:9px;z-index:99998;width:38px;height:38px;border-radius:11px;border:1px solid rgba(220,171,125,.4);background:#17141d;color:#dcab7d;font-size:17px;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45)}'+
+   '#los-design-panel{position:fixed;right:0;top:0;bottom:0;width:332px;max-width:90vw;z-index:99999;background:#131019;border-left:1px solid #2c2634;color:#e6ded2;font-family:Inter,system-ui,sans-serif;display:none;flex-direction:column;box-shadow:-12px 0 44px rgba(0,0,0,.55)}'+
+   '#los-design-panel.open{display:flex}'+
+   '.dp-hd{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #2c2634;font-weight:750;font-size:14px}'+
+   '.dp-hd button{background:none;border:none;color:#9a8f80;font-size:22px;cursor:pointer;line-height:1}'+
+   '.dp-body{flex:1;overflow-y:auto;padding:12px 14px}'+
+   '.dp-ft{display:flex;gap:8px;padding:11px 14px;border-top:1px solid #2c2634}'+
+   '.dp-ft button{flex:1;background:#221d2a;border:1px solid #37303e;color:#e6ded2;border-radius:8px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}'+
+   '.dp-row{border:1px solid #26212e;border-radius:9px;padding:7px 8px;margin-bottom:6px}'+
+   '.dp-nm{font-size:11px;font-weight:650;margin-bottom:6px;display:flex;align-items:center;gap:7px}'+
+   '.dp-nm .sw{width:22px;height:15px;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}'+
+   '.dp-nm em{color:#877c6d;font-style:normal;font-weight:600;font-size:10px;margin-left:auto}'+
+   '.dp-ctls{display:flex;gap:5px;align-items:center}'+
+   '.dp-ctls select{flex:1;min-width:0;background:#0e0c13;color:#e6ded2;border:1px solid #2c2634;border-radius:6px;padding:4px;font-size:10.5px;font-family:inherit}'+
+   '.dp-ctls select.d{flex:0 0 44px;text-align:center}'+
+   '.dp-ctls input[type=range]{flex:1;accent-color:#dcab7d;min-width:0}'+
+   '.dp-sec{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#877c6d;margin:15px 0 9px}'+
+   '.dp-tr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px}'+
+   '.dp-tr input[type=color]{width:40px;height:24px;border:1px solid #2c2634;border-radius:5px;background:none;cursor:pointer;padding:0}'+
+   '.dp-tr input[type=checkbox]{width:16px;height:16px;accent-color:#dcab7d}'+
+   '#dp-out{width:100%;height:66px;margin-top:8px;font-family:monospace;font-size:9.5px;background:#0e0c13;color:#dcab7d;border:1px solid #2c2634;border-radius:7px;padding:7px;resize:none;display:none}';
+  document.head.appendChild(pcss);
+
+  var rOpts=Object.keys(REC).map(function(r){return '<option value="'+r+'">'+r+' · '+RNAME[r]+'</option>';}).join('');
+  var dOpts=Object.keys(DIR).map(function(d){return '<option value="'+d+'">'+DIR[d][0]+'</option>';}).join('');
+  var body=SURF.map(function(su){
+    return '<div class="dp-row"><div class="dp-nm"><span class="sw" id="dsw-'+su[0]+'"></span>'+su[1]+' <em>'+su[0]+'</em></div>'+
+      '<div class="dp-ctls"><select class="r" data-s="'+su[0]+'">'+rOpts+'</select>'+
+      '<select class="d" data-s="'+su[0]+'">'+dOpts+'</select>'+
+      '<input type="range" class="b" data-s="'+su[0]+'" min="2" max="98"></div></div>';
+  }).join('');
+  body+='<div class="dp-sec">Text &amp; borders</div>'+
+    '<div class="dp-tr"><span>Main text</span><input type="color" id="dc-text"></div>'+
+    '<div class="dp-tr"><span>Secondary text</span><input type="color" id="dc-text2"></div>'+
+    '<div class="dp-tr"><span>Muted / placeholder</span><input type="color" id="dc-muted"></div>'+
+    '<div class="dp-tr"><span>Border colour</span><input type="color" id="dc-border"></div>'+
+    '<div class="dp-tr"><span>Show borders</span><input type="checkbox" id="dc-borders"></div>'+
+    '<textarea id="dp-out" readonly></textarea>';
+
+  var panel=document.createElement('div');panel.id='los-design-panel';
+  panel.innerHTML='<div class="dp-hd">Design mode<button id="dp-x" title="Close">×</button></div><div class="dp-body">'+body+'</div>'+
+    '<div class="dp-ft"><button id="dp-exp">Copy config</button><button id="dp-rst">Reset</button></div>';
+  document.body.appendChild(panel);
+  var btn=document.createElement('button');btn.id='los-design-btn';btn.textContent='◐';btn.title='Design mode (Alt+D)';
+  document.body.appendChild(btn);
+
+  function swBg(x){return grad(x.r,x.d,x.b);}
+  function sync(){
+    SURF.forEach(function(su){var id=su[0],x=cfg[id];
+      var r=panel.querySelector('select.r[data-s="'+id+'"]');if(r)r.value=x.r;
+      var d=panel.querySelector('select.d[data-s="'+id+'"]');if(d)d.value=x.d||'DN';
+      var b=panel.querySelector('input.b[data-s="'+id+'"]');if(b)b.value=(x.b==null?50:x.b);
+      var sw=panel.querySelector('#dsw-'+id);if(sw)sw.style.background=swBg(x);
+    });
+    panel.querySelector('#dc-text').value=cfg._text;
+    panel.querySelector('#dc-text2').value=cfg._text2;
+    panel.querySelector('#dc-muted').value=cfg._muted;
+    panel.querySelector('#dc-border').value=cfg._border;
+    panel.querySelector('#dc-borders').checked=!!cfg._borders;
+  }
+  panel.querySelector('.dp-body').addEventListener('input',function(e){
+    var t=e.target,id=t.dataset&&t.dataset.s;
+    if(id){var x=cfg[id];
+      if(t.classList.contains('r'))x.r=t.value;
+      else if(t.classList.contains('d'))x.d=t.value;
+      else if(t.classList.contains('b'))x.b=+t.value;
+      var sw=panel.querySelector('#dsw-'+id);if(sw)sw.style.background=swBg(x);
+    } else if(t.id==='dc-text')cfg._text=t.value;
+    else if(t.id==='dc-text2')cfg._text2=t.value;
+    else if(t.id==='dc-muted')cfg._muted=t.value;
+    else if(t.id==='dc-border')cfg._border=t.value;
+    else if(t.id==='dc-borders')cfg._borders=t.checked;
+    else return;
+    apply();
+  });
+  function exportStr(){
+    var line=SURF.map(function(su){var x=cfg[su[0]];return (REC[x.r].length===1)?(su[0]+'→'+x.r+' solid'):(su[0]+'→'+x.r+' '+DIR[x.d||'DN'][0]+' '+(x.b==null?50:x.b)+'%');}).join(', ');
+    return '('+line+')  |  text:'+cfg._text+' sec:'+cfg._text2+' muted:'+cfg._muted+' border:'+cfg._border+' borders:'+(cfg._borders?'on':'off');
+  }
+  function toggle(on){panel.classList.toggle('open',on==null?!panel.classList.contains('open'):on);if(panel.classList.contains('open'))sync();}
+  btn.addEventListener('click',function(){toggle();});
+  panel.querySelector('#dp-x').addEventListener('click',function(){toggle(false);});
+  panel.querySelector('#dp-rst').addEventListener('click',function(){cfg=JSON.parse(JSON.stringify(DEF));sync();apply();});
+  panel.querySelector('#dp-exp').addEventListener('click',function(){
+    var ta=panel.querySelector('#dp-out');ta.style.display='block';ta.value=exportStr();ta.select();
+    try{navigator.clipboard.writeText(ta.value);}catch(e){}
+  });
+  document.addEventListener('keydown',function(e){if(e.altKey&&(e.key==='d'||e.key==='D')){e.preventDefault();toggle();}if(e.key==='Escape'&&panel.classList.contains('open'))toggle(false);});
+}catch(err){console.warn('Design mode failed:',err);}
+})();
 </script>
 </body>
 </html>
