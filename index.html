@@ -1730,9 +1730,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
 /* ━━━ HABITS (aside) ━━━ */
 .hab-list{display:flex;flex-direction:column;gap:6px}
-.hc{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .15s}
+.hc{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;display:flex;align-items:center;gap:9px;transition:all .15s}
 .hc:hover{border-color:var(--border-strong)}
-.hc.done{background:var(--sage-bg);border-color:var(--sage)}
+.hc.done{background:color-mix(in srgb,var(--accent) 15%,var(--surface-2));border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.hc.rest{opacity:.7}
 /* Habit description textarea — auto-grows to fit content. Critical:
    overflow:hidden so the textarea NEVER shows an internal scrollbar
    (we manage height via JS oninput / on render). resize:none stops
@@ -1860,11 +1861,16 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 /* When the main checkbox is locked (steps unfinished), dim it visually
    and show the not-allowed cursor so the lock is obvious. */
 .ti.has-steps input[type=checkbox]{opacity:.4;cursor:not-allowed}
-.hc-tick{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--muted-2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all .15s}
-.hc.done .hc-tick{background:var(--sage);border-color:var(--sage);color:#fff}
-.hc-name{font-size:12px;font-weight:500;color:var(--text);flex:1;line-height:1.3;min-width:0}
-.hc-streak{font-size:10px;color:var(--muted);flex-shrink:0}
-.hc.done .hc-streak{color:var(--sage)}
+.hc-tick{width:19px;height:19px;border-radius:50%;border:1.6px solid var(--muted-2);background:transparent;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;flex-shrink:0;cursor:pointer;color:var(--muted);transition:all .15s;padding:0}
+.hc-tick:hover{border-color:var(--accent)}
+.hc.done .hc-tick{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.hc.rest .hc-tick{border-style:dashed;color:var(--muted-2)}
+.hc-name{font-size:12px;font-weight:500;color:var(--text);flex:1;line-height:1.3;min-width:0;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc-rest{font-size:8.5px;font-weight:600;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:1px 6px;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em}
+.hc-streak{font-size:10.5px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
+.hc.done .hc-streak{color:var(--accent)}
+.hc-edit{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0;opacity:.55;padding:2px;line-height:1}
+.hc-edit:hover{opacity:1;color:var(--accent)}
 
 /* ━━━ BUILDS ━━━ */
 .bg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
@@ -2959,7 +2965,6 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico1)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico1" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#f0d0a2"/><stop offset="1" stop-color="#d4914f"/></linearGradient></defs><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
         <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico2)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico2" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#b3bfe0"/><stop offset="1" stop-color="#7581a8"/></linearGradient></defs><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico3)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico3" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#f2d493"/><stop offset="1" stop-color="#d8a271"/></linearGradient></defs><rect x="3" y="4" width="7" height="7" rx="1.4"/><rect x="14" y="4" width="7" height="7" rx="1.4"/><rect x="3" y="15" width="7" height="6" rx="1.4"/><rect x="14" y="15" width="7" height="6" rx="1.4"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
-        <a href="#habits" data-route-link="habits"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico4)" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico4" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#aed3c1"/><stop offset="1" stop-color="#74a08f"/></linearGradient></defs><path d="M20 6 9 17l-5-5"/></svg></span><span class="label">Habits</span><span class="dot"></span></a>
         <a href="#diary" data-route-link="diary"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico5)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico5" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#f4a88f"/><stop offset="1" stop-color="#d886a0"/></linearGradient></defs><path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2V5Z"/><path d="M4 18h16"/></svg></span><span class="label">Diary</span><span class="dot"></span></a>
         <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico6)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico6" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#cabff8"/><stop offset="1" stop-color="#8b98bd"/></linearGradient></defs><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5v-17Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v5H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M8 7h8M8 11h6"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
         <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico7)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico7" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#ddd2d9"/><stop offset="1" stop-color="#dcab7d"/></linearGradient></defs><path d="M12 3c-2 0-3.5 1.5-3.5 3.5 0 .4-.3.8-.7.9A3 3 0 0 0 6 10c0 .6.2 1.2.6 1.6-.4.5-.6 1-.6 1.7a3 3 0 0 0 2.4 3c.2 1.6 1.5 2.7 3.1 2.7s2.9-1.1 3.1-2.7a3 3 0 0 0 2.4-3c0-.7-.2-1.2-.6-1.7.4-.4.6-1 .6-1.6a3 3 0 0 0-1.8-2.6c-.4-.1-.7-.5-.7-.9C15.5 4.5 14 3 12 3Z"/><path d="M12 3v16"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
@@ -3007,7 +3012,6 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
       <a href="#today" data-route-link="today" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-today"/></svg></span><span>Today</span></a>
       <a href="#calendar" data-route-link="calendar" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-cal"/></svg></span><span>Calendar</span></a>
       <a href="#projects" data-route-link="projects" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-proj"/></svg></span><span>Projects</span></a>
-      <a href="#habits" data-route-link="habits" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-check"/></svg></span><span>Habits</span></a>
       <a href="#diary" data-route-link="diary" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-learn"/></svg></span><span>Diary</span></a>
       <a href="#notebook" data-route-link="notebook" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-book"/></svg></span><span>Notebook</span></a>
       <a href="#brain" data-route-link="brain" onclick="closeDrawer()" class="s-nav-a"><span class="ic"><svg width="17" height="17"><use href="#i-brain"/></svg></span><span>Brain</span></a>
@@ -3788,7 +3792,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v233';
+const APP_VERSION='v234';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4263,8 +4267,8 @@ function setTheme(t){
 // one-third down the screen" symptom caused by browser auto-scroll to
 // elements whose id happened to match the route hash.
 try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}
-const ROUTES=['today','calendar','projects','habits','diary','brain','notebook','settings'];
-const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',habits:'Habits',diary:'Diary',brain:'Brain',notebook:'Notebook',settings:'Settings'};
+const ROUTES=['today','calendar','projects','diary','brain','notebook','settings'];
+const ROUTE_TITLES={today:'Today',calendar:'Calendar',projects:'Projects',diary:'Diary',brain:'Brain',notebook:'Notebook',settings:'Settings'};
 let currentRoute='today';
 function setRoute(r,skipHash){
   if(!ROUTES.includes(r))r='today';
@@ -10315,12 +10319,14 @@ function rHabits(){
   if(el){
     el.innerHTML=S.habits.length?S.habits.map(h=>{
       const stats=computeHabitStats(h);
-      const tier=tierFor(stats.current);
       const dt=doneToday[h.id];
-      return `<div class="hc${dt?' done':''}" onclick="toggleHabit('${h.id}')">
-        <div class="hc-tick">${dt?'✓':''}</div>
-        <div class="hc-name">${esc(h.name)}${tier?` <span class="tier-badge ${tier.cls}" style="font-size:9px;padding:1px 6px">${tier.icon}</span>`:''}</div>
-        <div class="hc-streak">${stats.current?stats.current+'🔥':'–'}</div>
+      const isRest=isExcludedWeekday(h,new Date());
+      const cls='hc'+(dt?' done':'')+(isRest&&!dt?' rest':'');
+      return `<div class="${cls}">
+        <button class="hc-tick" onclick="event.stopPropagation();toggleHabit('${h.id}')" title="${dt?'Done today — tap to undo':(isRest?'Rest day — tap to log a bonus':'Mark done today')}">${dt?'✓':(isRest?'·':'')}</button>
+        <div class="hc-name" onclick="openHabitModal('${h.id}')">${esc(h.name)}${isRest&&!dt?'<span class="hc-rest">Rest day</span>':''}</div>
+        <div class="hc-streak" title="Current streak">${stats.current?stats.current+'🔥':'–'}</div>
+        <button class="hc-edit" onclick="event.stopPropagation();openHabitModal('${h.id}')" title="Open habit detail">✎</button>
       </div>`;
     }).join(''):`<div class="att-empty">No habits yet.</div>`;
   }
