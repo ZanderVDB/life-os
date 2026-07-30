@@ -2933,37 +2933,102 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   .notebook-wrap{padding:14px 16px 16px 42px}
   .notebook-wrap::before{left:32px}
 }
-/* ━━━━━━━━━ MOTION LAYER — press / hover / entrance micro-interactions ━━━━━━━━━
-   Springy easings and tactile feedback across the app. All gated behind
-   prefers-reduced-motion so it never fights accessibility settings. */
+/* ━━━━━━━━━━━━━━━━━━━━━━ MOTION SYSTEM (design-system.md §7) ━━━━━━━━━━━━━━━━━━
+   ONE animation language for the whole app. Fast enough to feel responsive,
+   slow enough to feel intentional. Premium — never playful, bouncy or flashy.
+   NO overshoot easings anywhere: every curve decelerates into place.
+   Animate transform/opacity only (GPU); never width/height/top/left.
+   Every token is defined here and inherited by every page. ━━━━━━━━━━━━━━━━━ */
+:root{
+  /* Durations */
+  --d-instant:90ms;   /* colour-only swaps */
+  --d-fast:140ms;     /* hover, press, focus */
+  --d-base:200ms;     /* selection, tabs, toggles, most state changes */
+  --d-slow:260ms;     /* page transitions, dialogs, panels */
+  --d-slower:320ms;   /* large surfaces, side panels, drawers */
+  /* Easings — one philosophy. Enter decelerates, exit accelerates. */
+  --e-out:cubic-bezier(.2,.7,.2,1);     /* DEFAULT — enter / settle */
+  --e-in:cubic-bezier(.4,0,.9,.4);      /* exit / dismiss */
+  --e-inout:cubic-bezier(.4,0,.2,1);    /* moving between two states */
+  --e-linear:linear;                    /* progress + spinners only */
+  /* Primitives */
+  --m-lift:-2px;      /* hover lift */
+  --m-press:.97;      /* press scale */
+  --m-rise:8px;       /* entrance rise */
+  --m-slide:12px;     /* dropdown / menu slide */
+  /* Composite transitions — reuse these instead of hand-rolling */
+  --t-hover:transform var(--d-fast) var(--e-out),box-shadow var(--d-fast) var(--e-out),background-color var(--d-fast) var(--e-out),border-color var(--d-fast) var(--e-out),color var(--d-fast) var(--e-out);
+  --t-press:transform var(--d-instant) var(--e-out);
+  --t-focus:box-shadow var(--d-fast) var(--e-out),border-color var(--d-fast) var(--e-out),outline-color var(--d-fast) var(--e-out);
+  --t-select:background-color var(--d-base) var(--e-out),color var(--d-base) var(--e-out),transform var(--d-base) var(--e-out),opacity var(--d-base) var(--e-out);
+  --t-move:transform var(--d-base) var(--e-inout);
+  --t-fade:opacity var(--d-base) var(--e-out);
+}
+/* ── Shared keyframes — available in every theme, all transform/opacity ── */
+@keyframes m-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes m-rise-in{from{opacity:0;transform:translateY(var(--m-rise))}to{opacity:1;transform:none}}
+@keyframes m-scale-in{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+@keyframes m-menu-in{from{opacity:0;transform:translateY(calc(var(--m-slide) * -.5)) scale(.98)}to{opacity:1;transform:none}}
+@keyframes m-tip-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes m-toast-in{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes m-toast-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(8px) scale(.99)}}
+@keyframes m-panel-in{from{transform:translateX(100%)}to{transform:none}}
+@keyframes m-spin{to{transform:rotate(360deg)}}
+@keyframes m-shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@keyframes m-pulse{0%,100%{opacity:.55}50%{opacity:.9}}
+/* ── Reusable motion utilities — apply these on new components ── */
+.m-enter{animation:m-rise-in var(--d-slow) var(--e-out) both}
+.m-fade{animation:m-fade-in var(--d-base) var(--e-out) both}
+.m-scale{animation:m-scale-in var(--d-slow) var(--e-out) both}
+/* Staggered list entrance: set --i on each child (0,1,2…) */
+.m-stagger>*{animation:m-rise-in var(--d-slow) var(--e-out) both;animation-delay:calc(var(--i,0) * 30ms)}
+/* Loading + skeleton + progress */
+.m-spin{animation:m-spin 900ms var(--e-linear) infinite}
+.m-skeleton{position:relative;overflow:hidden;background:var(--surface-2);border-radius:8px}
+.m-skeleton::after{content:'';position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent);
+  animation:m-shimmer 1.25s var(--e-inout) infinite}
+.m-loading{animation:m-pulse 1.4s var(--e-inout) infinite}
+.m-progress-fill{transition:transform var(--d-slow) var(--e-out)}
+/* Success / error state changes — colour+scale settle, never a bounce */
+.m-success,.m-error{transition:var(--t-select)}
+@keyframes m-nudge{0%,100%{transform:none}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+.m-error-nudge{animation:m-nudge var(--d-slow) var(--e-inout)}
+
 @media (prefers-reduced-motion: no-preference){
-  .btn,.tab,.cv,.pb,.g-btn,.theme-sw,.carr,.iconbtn,.wb-pin,.us-trigger,.profile-pill,.hb-rest-d,.variant-btn,.em-type-btn,.wl-manage,.st-tab,.nb-tab{
-    transition:transform .15s cubic-bezier(.34,1.56,.5,1),background-color .16s,border-color .16s,box-shadow .16s,color .16s,opacity .16s;
-  }
-  .btn:hover{transform:translateY(-1px)}
-  .btn:active,.tab:active,.cv:active,.pb:active,.g-btn:active,.theme-sw:active,.carr:active,.iconbtn:active,.us-trigger:active,.profile-pill:active,.st-tab:active,.wp-dot-btn:active,.s-nav a:active,.s-nav-a:active,.wb-btn:active,.hl-check:active{transform:scale(.93)}
-  /* Card hover-lift */
-  .ti,.bc,.lc2,.ic,.rc,.nc,.people-card,.hc,.wp-row,.aim-row{transition:transform .17s cubic-bezier(.34,1.3,.5,1),box-shadow .17s,border-color .15s}
-  .ti:hover,.bc:hover,.lc2:hover,.ic:hover,.rc:hover,.nc:hover,.people-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lift)}
-  /* Nav — the selected item does NOT pop or bounce; the shared sliding
-     indicator carries the state (design-system.md §7: calm, no spring). */
-  .s-nav a,.s-nav-a{transition:background .16s,color .14s,transform .12s}
-  /* Route entrance — calm crossfade + slight rise, 260ms ease-out. */
-  .route.active{animation:routeIn .26s cubic-bezier(.2,.7,.2,1)}
-  @keyframes routeIn{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
-  .modal-body{animation:modalPop .28s cubic-bezier(.34,1.42,.5,1)!important}
-  @keyframes modalPop{0%{opacity:0;transform:scale(.92) translateY(12px)}100%{opacity:1;transform:none}}
-  .modal-bd{animation:fadeBd .22s ease-out!important}
-  @keyframes fadeBd{from{opacity:0}to{opacity:1}}
-  /* Tabs / view toggles pop when selected */
-  .tab.on,.cv.on{animation:tabPop .28s cubic-bezier(.34,1.5,.5,1)}
-  @keyframes tabPop{0%{transform:scale(.95)}55%{transform:scale(1.04)}100%{transform:scale(1)}}
-  /* Native checkboxes pop on check */
-  input[type=checkbox]:checked{animation:ckPop .3s cubic-bezier(.34,1.56,.5,1)}
-  @keyframes ckPop{0%{transform:scale(.65)}55%{transform:scale(1.2)}100%{transform:scale(1)}}
-  /* Save pill drops in with a bounce */
-  .save-pill.show{animation:pillIn .34s cubic-bezier(.34,1.56,.5,1)}
-  @keyframes pillIn{0%{transform:translateY(-10px) scale(.9);opacity:0}100%{transform:none;opacity:1}}
+  /* Buttons + controls: calm hover lift, immediate press acknowledgement */
+  .btn,.tab,.cv,.pb,.g-btn,.theme-sw,.carr,.iconbtn,.wb-pin,.us-trigger,.profile-pill,.hb-rest-d,.variant-btn,.em-type-btn,.wl-manage,.st-tab,.nb-tab{transition:var(--t-hover)}
+  .btn:hover{transform:translateY(var(--m-lift))}
+  .btn:active,.tab:active,.cv:active,.pb:active,.g-btn:active,.theme-sw:active,.carr:active,.iconbtn:active,.us-trigger:active,.profile-pill:active,.st-tab:active,.wp-dot-btn:active,.s-nav a:active,.s-nav-a:active,.wb-btn:active,.hl-check:active{transform:scale(var(--m-press));transition:var(--t-press)}
+  /* Cards: gentle lift — no spring */
+  .ti,.bc,.lc2,.ic,.rc,.nc,.people-card,.hc,.wp-row,.aim-row{transition:var(--t-hover)}
+  .ti:hover,.bc:hover,.lc2:hover,.ic:hover,.rc:hover,.nc:hover,.people-card:hover{transform:translateY(var(--m-lift));box-shadow:var(--shadow-lift)}
+  /* Inputs: focus guides the eye */
+  .input,.select,.ta,.exp-ta,.inp-e,.tm-text-ta,.pd-desc,.pd-notes-ta{transition:var(--t-focus),background-color var(--d-fast) var(--e-out)}
+  /* Nav — no pop; the shared sliding indicator carries the state. */
+  .s-nav a,.s-nav-a{transition:var(--t-select)}
+  /* Page transitions — calm crossfade + slight rise */
+  .route.active{animation:m-rise-in var(--d-slow) var(--e-out)}
+  /* Dialogs — scale + fade, settle without overshoot */
+  .modal-body{animation:m-scale-in var(--d-slow) var(--e-out)!important}
+  .modal-bd{animation:m-fade-in var(--d-base) var(--e-out)!important}
+  /* Tabs / view toggles — no pop */
+  .tab,.cv{transition:var(--t-select)}
+  /* Checkboxes — settle in, no rubber-band */
+  input[type=checkbox]:checked{animation:m-scale-in var(--d-base) var(--e-out)}
+  /* Save pill — quiet fade (saving must never draw attention) */
+  .save-pill.show{animation:m-fade-in var(--d-base) var(--e-out)}
+  /* Drag & drop — fluid; the dragged item leads, the rest reflow calmly */
+  .ti[draggable="true"]{transition:var(--t-hover),opacity var(--d-fast) var(--e-out)}
+  .ti.dragging{opacity:.6;transform:scale(1.01);cursor:grabbing}
+  .bucket-drop.drag-over{transition:background-color var(--d-fast) var(--e-out),outline-color var(--d-fast) var(--e-out)}
+}
+/* Reduced motion: keep meaning, drop movement. Never fully instant — a short
+   fade still communicates the state change. */
+@media (prefers-reduced-motion: reduce){
+  .m-enter,.m-fade,.m-scale,.m-stagger>*,.route.active,.modal-body,.modal-bd{animation:m-fade-in var(--d-fast) var(--e-out) both!important}
+  .m-skeleton::after,.m-loading,.m-error-nudge{animation:none!important}
+  .m-spin{animation:m-spin 1.4s var(--e-linear) infinite}
 }
 </style>
 </head>
@@ -3910,7 +3975,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v238';
+const APP_VERSION='v239';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -5983,6 +6048,21 @@ function handleSnapshot(snap){
       return;
     }
     const d=snap.data();
+    // ── OPTIMISTIC-SAVE ECHO SUPPRESSION (autosave architecture) ──────────
+    // Firestore echoes our OWN writes back through onSnapshot: first a local
+    // snapshot (hasPendingWrites=true), then a server-confirmed one once the
+    // write lands. Because `updatedAt` is a serverTimestamp sentinel, it
+    // resolves twice — so every single save used to fire TWO snapshots, each
+    // overwriting S and forcing a full render(). That is exactly what made
+    // the UI rubber-band and steal the caret mid-typing.
+    // Our in-memory state is the source of truth for our own writes, so drop
+    // the local echo outright. (Never during initial sync — that first
+    // snapshot is what unblocks the app.)
+    if(_initialSyncDone&&snap.metadata.hasPendingWrites)return;
+    // Fingerprint the render-relevant state BEFORE applying, so we can skip
+    // the re-render when a snapshot changes nothing we actually display
+    // (i.e. the server-confirmed echo of our own write).
+    const _fpBefore=_initialSyncDone?_stateFp():'';
     // Capture focus before re-rendering so live typing isn't stolen
     const focused=document.activeElement;
     const focId=focused?focused.id:null;
@@ -6190,6 +6270,14 @@ function handleSnapshot(snap){
       if(!getKey())promptKey();
       maybeShowHabitCatchup();
     } else {
+      // Nothing we render actually changed (the server-confirmed echo of our
+      // own write) — skip the re-render entirely. This is the second half of
+      // the anti-rubber-band fix: a save now causes ZERO re-renders.
+      if(_stateFp()===_fpBefore)return;
+      // A genuine REMOTE change. If the user is mid-interaction (typing or
+      // dragging), defer the re-render until they're done rather than yanking
+      // the DOM out from under them.
+      if(_isUserBusy()){_deferredRemoteRender=true;return;}
       render();
       // Restore focused input so the user's typing isn't clobbered by a sync
       if(focId&&focEditable){
@@ -6250,6 +6338,90 @@ function _buildSavePayload(){
   if(typeof S._schemaVersion==='number')payload._schemaVersion=S._schemaVersion;
   return payload;
 }
+// ══════════════════════════════════════════════════════════════════════════
+// AUTOSAVE ENGINE — optimistic, coalescing, self-healing.
+//
+// Contract (design-system.md §8):
+//   • Local state is the source of truth the moment the user acts.
+//   • Saving happens in the background and NEVER blocks or interrupts editing.
+//   • Network latency can never move the UI backwards.
+//   • We only ever surface something on genuine, repeated failure.
+//
+// Writes coalesce: while one is in flight, further edits just re-arm the
+// dirty flag, and the loop drains with the LATEST payload rather than
+// queueing a write per keystroke.
+// ══════════════════════════════════════════════════════════════════════════
+let _saveDirty=false,_saveLooping=false,_saveRetry=0,_saveState='idle';
+const SAVE_DEBOUNCE=300,SAVE_MAX_RETRY=6;
+// Deterministic stringify (recursively key-sorted) so fingerprints are stable
+// regardless of property order — Firestore does not preserve ours.
+function _stableStr(v){
+  if(v===null||typeof v!=='object')return JSON.stringify(v)||'null';
+  if(Array.isArray(v))return '['+v.map(_stableStr).join(',')+']';
+  return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+_stableStr(v[k])).join(',')+'}';
+}
+// Fingerprint of the render-relevant state only — used to decide whether an
+// incoming snapshot actually changes anything on screen.
+function _stateFp(){
+  try{
+    return _stableStr({t:S.tasks,h:S.habits,b:S.builds,l:S.learning,i:S.ideas,n:S.notes,
+      r:S.resources,rm:S.reminders,p:S.people,nb:S.notebook,dn:S.dayNotes,
+      wp:S.workProjects,rl:S.routineLog,tt:S.todaysTip,gf:S.growthFocus});
+  }catch(e){return String(Math.random());} // never equal → fail safe: re-render
+}
+// True while the user is mid-interaction; we refuse to re-render underneath
+// them (this is what used to eat the caret and cancel drags).
+function _isUserBusy(){
+  const el=document.activeElement;
+  if(el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable))return true;
+  if(document.body.classList.contains('is-dragging'))return true;
+  return false;
+}
+let _deferredRemoteRender=false;
+// When the interaction ends, apply any remote change we held back.
+function _flushDeferredRender(){
+  if(!_deferredRemoteRender||_isUserBusy())return;
+  _deferredRemoteRender=false;
+  try{render();}catch(e){console.warn('[sync] deferred render:',e.message);}
+}
+document.addEventListener('focusout',()=>setTimeout(_flushDeferredRender,0));
+document.addEventListener('dragend',()=>setTimeout(_flushDeferredRender,0));
+// Save status is SILENT on success — the user should never feel a save happen.
+// It only ever speaks up when writes are genuinely failing.
+function _setSaveState(s){
+  _saveState=s;
+  // Resolve the pill lazily — SP is assigned during auth init, but save state
+  // can change before/independently of that.
+  const el=SP||document.getElementById('sp');
+  if(!el)return;
+  const loud=(s==='retrying'||s==='error');
+  el.textContent=s==='retrying'?'Reconnecting…':s==='error'?'Offline — changes kept on this device':'Saved';
+  el.classList.toggle('show',loud);
+}
+async function _saveLoop(){
+  if(_saveLooping)return;
+  _saveLooping=true;
+  try{
+    while(_saveDirty){
+      _saveDirty=false;                       // capture everything up to now
+      const payload=_buildSavePayload();
+      try{
+        await _profileDocRef().set(payload,{merge:true});
+        _saveRetry=0;
+        _setSaveState('idle');
+      }catch(e){
+        // A genuine failure. NEVER revert local state — the user's edits are
+        // real; we simply keep retrying with backoff until the write lands.
+        console.warn('[save] write failed:',e.message);
+        _saveDirty=true;
+        _saveRetry++;
+        if(_saveRetry>SAVE_MAX_RETRY){_setSaveState('error');break;}
+        _setSaveState('retrying');
+        await new Promise(r=>setTimeout(r,Math.min(30000,500*Math.pow(2,_saveRetry-1))));
+      }
+    }
+  } finally{_saveLooping=false;}
+}
 function svAll(){
   if(!CU)return;
   // CRITICAL: don't write before initial sync has landed. resetStateForNewUser
@@ -6257,10 +6429,9 @@ function svAll(){
   // BEFORE the Firestore snapshot arrives, the empty state would overwrite
   // their real cloud data. This is what was nuking projects across devices.
   if(!_initialSyncDone){console.warn('[save] skipped — initial sync not done yet');return;}
+  _saveDirty=true;
   clearTimeout(ST);
-  ST=setTimeout(async()=>{
-    try{await _profileDocRef().set(_buildSavePayload(),{merge:true});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error('[save]',e.message);}
-  },300);
+  ST=setTimeout(_saveLoop,SAVE_DEBOUNCE);
 }
 // Write IMMEDIATELY (no debounce). Use for high-stakes toggles like habit
 // ticks and task checks so concurrent devices don't race against a stale
@@ -6268,9 +6439,14 @@ function svAll(){
 async function svAllNow(){
   if(!CU)return;
   if(!_initialSyncDone){console.warn('[save-now] skipped — initial sync not done yet');return;}
+  _saveDirty=true;
   clearTimeout(ST);
-  try{await _profileDocRef().set(_buildSavePayload(),{merge:true});if(SP){SP.classList.add('show');setTimeout(()=>SP.classList.remove('show'),1500);}}catch(e){console.error('[save-now]',e.message);}
+  return _saveLoop();
 }
+// Connectivity returned — drain anything still pending straight away.
+window.addEventListener('online',()=>{
+  if(_saveDirty||_saveState==='error'){_saveRetry=0;_saveLoop();}
+});
 function saveLifeRhythm(){const ta=document.getElementById('life-rhythm-ta');if(!ta)return;const v=ta.value;if(v===S.lifeRhythm)return;S.lifeRhythm=v;svAll();}
 // ── AI memory (Settings → AI → "Things the AI should remember") ──
 // A short user-curated list of standing facts injected into every AI
@@ -11414,6 +11590,8 @@ function _flipReorder(doMove){
 }
 function taskDragStart(e,id){
   _dragTaskId=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}
+  // Mark the app as busy so a background sync can't re-render mid-drag.
+  document.body.classList.add('is-dragging');
   const w=e.currentTarget;setTimeout(()=>{try{w.classList.add('dragging');}catch(_){}},0);
 }
 function taskDragOver(e){
@@ -11436,6 +11614,7 @@ function taskDragLeave(e){
 function taskDrop(e){e.preventDefault();}
 function taskDragEnd(){
   const id=_dragTaskId;_dragTaskId=null;_lastDropZone=null;
+  document.body.classList.remove('is-dragging');
   document.querySelectorAll('.bucket-drop.drag-over').forEach(d=>d.classList.remove('drag-over'));
   document.querySelectorAll('.ti-wrap.dragging').forEach(w=>w.classList.remove('dragging'));
   if(!id)return;

@@ -7,6 +7,13 @@
 > **If code conflicts with this file, this file wins.** Old decisions are not
 > preserved just because they exist — every choice must earn its place here.
 
+**The three project documents:**
+| File | Role |
+|---|---|
+| `design-system.md` | **This file.** The constitution — every permanent decision. |
+| `build-progress.md` | Chronological record of completed steps; where we are now. |
+| `design-ideas.md` | Roadmap capture. Future ideas — **never built automatically.** |
+
 ---
 
 ## 1. Philosophy
@@ -150,9 +157,37 @@ Generous whitespace is the default. **When unsure, add space.**
 **Nothing appears or disappears instantly. Motion communicates state — it is
 never decorative.** Subtle, fast, smooth, natural, with weight.
 
-**Durations:** micro `120ms` · standard `200ms` · entrance `280ms` · page `280ms`.
-**Easing:** entrance/exit `cubic-bezier(.2,.7,.2,1)` (ease-out) · movement
-ease-in-out · lift `cubic-bezier(.34,1.4,.5,1)` (gentle spring).
+### Tokens (implemented — use these, never hand-roll a curve)
+
+| Duration | Value | Use |
+|---|---|---|
+| `--d-instant` | 90ms | colour-only swaps, press |
+| `--d-fast` | 140ms | hover, focus |
+| `--d-base` | 200ms | selection, tabs, toggles |
+| `--d-slow` | 260ms | page transitions, dialogs |
+| `--d-slower` | 320ms | side panels, drawers |
+
+| Easing | Value | Use |
+|---|---|---|
+| `--e-out` | `cubic-bezier(.2,.7,.2,1)` | **default** — enter / settle |
+| `--e-in` | `cubic-bezier(.4,0,.9,.4)` | exit / dismiss |
+| `--e-inout` | `cubic-bezier(.4,0,.2,1)` | moving between two states |
+| `--e-linear` | `linear` | progress + spinners only |
+
+**Primitives:** `--m-lift: -2px` · `--m-press: .97` · `--m-rise: 8px` ·
+`--m-slide: 12px`.
+**Composites:** `--t-hover` · `--t-press` · `--t-focus` · `--t-select` ·
+`--t-move` · `--t-fade`.
+**Utilities:** `.m-enter` `.m-fade` `.m-scale` `.m-stagger` (set `--i` per child)
+`.m-spin` `.m-skeleton` `.m-loading` `.m-progress-fill` `.m-error-nudge`.
+
+> **NO OVERSHOOT.** Every curve decelerates into place. Any `cubic-bezier`
+> with a control point > 1 is banned — it reads as playful/bouncy.
+
+**Coverage** — hover · press · focus · selection · page transitions · dialogs ·
+dropdowns · context menus · tooltips · cards · buttons · inputs · tabs ·
+drag & drop · toasts · side panels · loading · skeletons · progress · success ·
+error.
 
 | Interaction | Motion |
 |---|---|
@@ -174,6 +209,31 @@ ease-in-out · lift `cubic-bezier(.34,1.4,.5,1)` (gentle spring).
 - **Optimistic first.** Local state updates instantly. Saving is invisible and
   happens in the background. The UI **never rubber-bands, reverts, or jumps**
   because of a save, and editing is **never blocked** by saving.
+
+### Autosave architecture (implemented — do not regress)
+
+Local memory is the **source of truth** the moment the user acts. The network
+reconciles behind them.
+
+1. **Echo suppression.** Firestore echoes our own writes back through
+   `onSnapshot` — once locally (`hasPendingWrites: true`) and again on server
+   ack. Because `updatedAt` is a `serverTimestamp()` sentinel it resolves
+   twice, so **every save used to fire two snapshots, each overwriting state
+   and forcing a full re-render.** That was the rubber-banding. We now drop the
+   local echo outright, and fingerprint state before/after to skip the
+   server echo. **A save now causes zero re-renders.**
+2. **Never re-render under an active interaction.** If the user is typing or
+   dragging (`_isUserBusy()`), a genuine remote change is *deferred* and
+   applied on `focusout`/`dragend` — never mid-keystroke.
+3. **Coalescing write loop.** Rapid edits set a dirty flag; a single loop
+   drains it with the *latest* payload. 50 keystrokes = 1 write.
+4. **Failure never reverts.** Writes retry with exponential backoff (max 6,
+   capped 30s) and resume on `online`. Local edits are always kept.
+5. **Silent on success.** The save indicator only appears when writes are
+   genuinely failing ("Reconnecting…" / "Offline — changes kept on this
+   device"). The user should never feel a save happen.
+6. **Never write before initial sync** — an empty local state must not
+   overwrite real cloud data.
 - **One hero per screen.** Everything else is quieter.
 - **Immediate, physical feedback** on every action.
 - **Progressive disclosure** over dense screens.
@@ -311,3 +371,11 @@ ease-in-out · lift `cubic-bezier(.34,1.4,.5,1)` (gentle spring).
   one-time logo intro that replaces the looping shimmer; full keyboard nav
   (↑/↓/Home/End), a restored visible focus ring, Escape closes drawers, ARIA
   labels + `aria-current`, reduced-motion honoured, GPU-only transforms.
+- **2026-07-30 — Step 3 (Design Tokens & Motion System) complete** (v239):
+  full motion-token system (§7) covering all 21 interaction categories; **every
+  overshoot easing removed app-wide** (verified 0 remaining); press `.93→.97`,
+  hover lift `-2px`. **Autosave rearchitected** (§8) — Firestore write-echo
+  suppression + state fingerprinting means a save now triggers **zero
+  re-renders**, remote changes defer while typing/dragging, writes coalesce and
+  retry with backoff, failures never revert, indicator silent on success.
+  Added `build-progress.md` + `design-ideas.md`. No pages redesigned.
