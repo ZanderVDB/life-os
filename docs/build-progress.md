@@ -16,11 +16,11 @@ this file (where we are) → `design-ideas.md` (captured, not built).
 
 | | |
 |---|---|
-| **Version** | v241 |
+| **Version** | v242 |
 | **Rebuild step** | 3 of 17 · audit done · platform v2 designed · **Phase A1+A3 done** |
-| **Next step** | Run one real export, then **A2 legacy-data inspection** (method needs approval) |
+| **Next step** | Re-run the export on v242 (must report VERIFIED), then **A2** (method needs approval) |
 | **Data platform** | Firestore = source of truth · Postgres + R2 **planned, not started** |
-| **Tests** | `npm test` — 57 passing |
+| **Tests** | `npm test` — 75 passing |
 | **Live** | life-os.web-anchor.com (Railway) |
 | **Repo** | `ZanderVDB/life-os` · single-file `index.html` + `sw.js` |
 
@@ -301,6 +301,60 @@ not the future storage architecture.**
 **Still to run:** the user must perform one real export on live data. The tool
 is verified against its own code path with synthetic documents; it has not yet
 been exercised against a live Firestore account.
+
+---
+
+### 2026-07-31 — A3 follow-up: export verification failure diagnosed ✅ (v242)
+
+**The first live export ran and reported FAILED** (2 profiles, 4 documents,
+95.1 KB). Diagnosed as a **false failure caused by a verifier design flaw** —
+not a data-integrity problem.
+
+**Root cause.** The `presence` document (`users/{uid}/data/presence`) is
+rewritten **every 10 seconds** by `_presenceHeart`, with a `serverTimestamp()` —
+including by the very tab running the export. The verifier compared two
+consecutive server reads and required *every* document's checksum to match, so
+a heartbeat landing between the reads failed `fingerprints_match_second_read`.
+Applying a point-in-time integrity check to a continuously-rewritten document
+was the bug. (A second, rarer path existed too: `_migrateTaskBuckets()` runs
+inside `rTasksV2()` and can call `svAll()`, so the app could write to its own
+profile document mid-export.)
+
+**Presence policy — option B.** Volatile documents are now exported as
+**informational metadata only** (path, role, field names, count, size), content
+deliberately omitted and recorded as such (`contentOmitted`, `omissionReason`,
+plus a top-level `volatileDocuments` list), excluded from verification and
+marked `restorable: false`. **Unrecognised documents are NOT treated as
+volatile** — they are captured and verified in full so anything new fails loudly.
+
+**Also added**
+- **Concurrent-write detection**: if a document's checksum changes *and* its
+  `updatedAt` advances, that is a genuine write → `FAILED — CONCURRENT CHANGE
+  DETECTED` (retryable). If the checksum changes but `updatedAt` does *not*,
+  that is `FAILED — DATA MISMATCH` (genuinely concerning). The old verifier
+  could not tell these apart.
+- **Six explicit statuses**: VERIFIED · DATA MISMATCH · INCOMPLETE EXPORT ·
+  CONCURRENT CHANGE DETECTED · SERIALISATION ERROR · UNKNOWN.
+- **Failure reporting**: every failed check now shows category, affected
+  document path, expected vs actual, and a plain explanation — counts, paths,
+  truncated hashes and field names only, **never content**.
+- **Quiescence + retry**: waits for pending saves to settle before reading, and
+  retries up to 2 extra times **only** for concurrent-change failures. Never
+  declares success after mismatched reads.
+- **Document-set stability** and **orphaned-document** checks (new).
+- **Local diagnostic reader** (`?export=1` → *Inspect a saved export…*): reads a
+  downloaded file from disk entirely in-browser — no uploads, no network, no
+  Firestore, no writes, nothing retained, no content shown.
+
+**Verifier not weakened.** The only check removed is the one measuring
+volatile, non-restorable metadata. Every integrity check on real user data is
+unchanged, and three new checks were added.
+
+**Tests:** 51 passing in the export suite (was 33), including a direct
+reproduction of the live failure. Full suite **75 passing** (`npm test`).
+
+**The earlier failed export is superseded** — it should be replaced by a fresh
+run on v242, not relied on as a rollback floor.
 
 ---
 

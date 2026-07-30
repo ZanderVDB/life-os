@@ -3975,7 +3975,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v241';
+const APP_VERSION='v242';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -18023,178 +18023,436 @@ async function _exportSha256(str){
     return 'fnv1a-'+h.toString(16).padStart(8,'0');
   }
 }
-// ── Verification (pure — unit-tested) ─────────────────────────────────────
-// `src` = [{id, fieldCount, fingerprint}] from an independent second read.
-function _exportVerify(exp,src){
-  const checks=[],fail=[];
-  const add=(name,ok,detail)=>{checks.push({name,ok,detail:detail||''});if(!ok)fail.push(name);};
+// ── Document roles ────────────────────────────────────────────────────────
+// Not every document in users/{uid}/data is user data. `presence` is device
+// coordination state rewritten every 10 SECONDS by the heartbeat — including
+// by the very tab running the export. Applying a two-read integrity check to
+// it guarantees eventual false failures, and restoring it is meaningless
+// because the next heartbeat overwrites it.
+//
+// POLICY (option B): volatile documents are exported as INFORMATIONAL
+// METADATA ONLY — path, role, field names, counts, size — with their content
+// deliberately omitted and recorded as such. They are excluded from
+// consistency verification and marked non-restorable. Nothing is silently
+// dropped: the file states exactly what was omitted and why.
+//
+// Anything NOT recognised defaults to full capture + full verification, so a
+// new document type fails loudly rather than being quietly skipped.
+const EXPORT_VOLATILE_DOCS=['presence'];
+function _exportDocRole(id,profileIds){
+  if(EXPORT_VOLATILE_DOCS.includes(id))return {role:'presence',volatile:true,restorable:false,
+    reason:'Device presence heartbeat — rewritten every 10s, not needed to restore data.'};
+  if(id==='_index')return {role:'index',volatile:false,restorable:true,reason:'Profile catalogue.'};
+  if(profileIds.includes(id))return {role:'profile',volatile:false,restorable:true,reason:'Profile data document.'};
+  return {role:'unknown',volatile:false,restorable:true,reason:'Unrecognised document — captured and verified in full.'};
+}
+// ── Verification ──────────────────────────────────────────────────────────
+// `a` / `b` are per-document summaries from two independent server reads:
+//   {id, path, role, volatile, fieldCount, fingerprint, updatedAtIso}
+// Only NON-VOLATILE documents are compared.
+function _exportVerify(exp,a,b){
+  const checks=[];
+  const add=(name,ok,category,detail)=>{checks.push(Object.assign({name,ok,category},detail||{}));};
+  const idOf=arr=>arr.map(d=>d.id);
+  const stable=arr=>arr.filter(d=>!d.volatile);
 
+  // Serialisation
+  let parses=true;try{JSON.parse(JSON.stringify(exp));}catch(_){parses=false;}
+  add('json_parses',parses,'serialisation',
+    {expected:'valid JSON',actual:parses?'valid JSON':'unserialisable',
+     explanation:'The export must survive a serialise/parse round trip.'});
+
+  const s=JSON.stringify(exp.documents||{});
+  add('no_circular_values',!s.includes('"__t":"circular"'),'serialisation',
+    {expected:'0 circular markers',actual:s.includes('"__t":"circular"')?'present':'0',
+     explanation:'A circular reference means a value could not be captured faithfully.'});
+  add('no_unsupported_values',!s.includes('"__t":"unsupported"'),'serialisation',
+    {expected:'0 unsupported markers',actual:s.includes('"__t":"unsupported"')?'present':'0',
+     explanation:'An unsupported value means a field was degraded rather than captured.'});
+
+  // Export completeness
   const docIds=Object.keys(exp.documents||{});
-  add('json_parses',(()=>{try{JSON.parse(JSON.stringify(exp));return true;}catch(_){return false;}})(),
-      docIds.length+' documents');
-  add('document_count_matches',docIds.length===src.length,
-      'export '+docIds.length+' vs source '+src.length);
-  add('no_duplicate_documents',new Set(docIds).size===docIds.length,'');
+  add('document_count_matches',docIds.length===a.length,'export completeness',
+    {expected:a.length+' documents',actual:docIds.length+' documents',
+     explanation:'Every document seen in the source read must appear in the export.'});
+  add('no_duplicate_documents',new Set(docIds).size===docIds.length,'export completeness',
+    {expected:'no duplicates',actual:(docIds.length-new Set(docIds).size)+' duplicates',
+     explanation:'Each document id must appear exactly once.'});
 
-  // Every profile named in the index must have been exported.
+  const disappeared=idOf(a).filter(id=>!idOf(b).includes(id));
+  const appeared=idOf(b).filter(id=>!idOf(a).includes(id));
+  add('document_set_stable',disappeared.length===0&&appeared.length===0,'concurrent-write detection',
+    {expected:'same documents in both reads',
+     actual:(disappeared.length?disappeared.length+' disappeared ':'')+(appeared.length?appeared.length+' appeared':'')||'stable',
+     path:disappeared.concat(appeared).map(id=>'…/data/'+id).join(', '),
+     explanation:'A document created or deleted mid-export means the snapshot is not a single point in time.'});
+
+  // Profile / index consistency
   const idxProfiles=(exp.profiles||[]).map(p=>p.id);
   const missing=idxProfiles.filter(id=>!docIds.includes(id));
-  add('every_indexed_profile_exported',missing.length===0,
-      missing.length?('missing: '+missing.length):'all '+idxProfiles.length+' present');
-  add('no_duplicate_profiles',new Set(idxProfiles).size===idxProfiles.length,'');
-  add('active_profile_present',!exp.activeProfileId||docIds.includes(exp.activeProfileId),'');
+  add('every_indexed_profile_exported',missing.length===0,'profile/index consistency',
+    {expected:idxProfiles.length+' profile documents',actual:(idxProfiles.length-missing.length)+' present',
+     path:missing.map(id=>'…/data/'+id).join(', '),
+     explanation:'Every profile named in the catalogue must have its data document exported.'});
+  add('no_duplicate_profiles',new Set(idxProfiles).size===idxProfiles.length,'profile/index consistency',
+    {expected:'unique profile ids',actual:(idxProfiles.length-new Set(idxProfiles).size)+' duplicates',
+     explanation:'The profile catalogue must not list the same id twice.'});
+  const orphans=docIds.filter(id=>{
+    const r=(exp.documents[id]||{}).role;return r==='unknown';
+  });
+  add('no_orphaned_profile_documents',orphans.length===0,'profile/index consistency',
+    {expected:'0 unrecognised documents',actual:orphans.length+' unrecognised',
+     path:orphans.map(id=>'…/data/'+id).join(', '),
+     explanation:'A document that is neither the index, a listed profile, nor a known volatile document may be stale or orphaned metadata.'});
+  add('active_profile_present',!exp.activeProfileId||docIds.includes(exp.activeProfileId),'profile/index consistency',
+    {expected:'active profile exported',actual:docIds.includes(exp.activeProfileId)?'present':'MISSING',
+     path:'…/data/'+exp.activeProfileId,
+     explanation:'The currently-active profile must be part of the snapshot.'});
 
-  // Field counts + fingerprints must match the independent second read.
-  let fieldMismatch=0,fpMismatch=0;
-  for(const s of src){
-    const d=exp.documents[s.id];
-    if(!d){fieldMismatch++;continue;}
-    if(d.fieldCount!==s.fieldCount)fieldMismatch++;
-    if(d.fingerprint!==s.fingerprint)fpMismatch++;
+  // Data integrity + checksum stability (NON-VOLATILE ONLY)
+  const bById={};b.forEach(d=>{bById[d.id]=d;});
+  const fieldDiffs=[],fpDiffs=[],concurrent=[];
+  stable(a).forEach(d1=>{
+    const d2=bById[d1.id];if(!d2)return;                       // covered by document_set_stable
+    if(d1.fieldCount!==d2.fieldCount)
+      fieldDiffs.push({path:d1.path,role:d1.role,expected:d1.fieldCount,actual:d2.fieldCount});
+    if(d1.fingerprint!==d2.fingerprint){
+      const rec={path:d1.path,role:d1.role,
+        expected:String(d1.fingerprint).slice(0,12)+'…',actual:String(d2.fingerprint).slice(0,12)+'…',
+        updatedAtChanged:(d1.updatedAtIso||null)!==(d2.updatedAtIso||null)};
+      // updatedAt moving proves a genuine write landed between the two reads.
+      if(rec.updatedAtChanged)concurrent.push(rec);else fpDiffs.push(rec);
+    }
+  });
+  add('field_counts_match',fieldDiffs.length===0,'data integrity',
+    {expected:'identical field counts across two reads',actual:fieldDiffs.length+' document(s) differ',
+     path:fieldDiffs.map(x=>x.path).join(', '),documents:fieldDiffs,
+     explanation:'A field-count change between reads means the document was modified mid-export.'});
+  add('no_concurrent_writes',concurrent.length===0,'concurrent-write detection',
+    {expected:'no writes during export',actual:concurrent.length+' document(s) changed',
+     path:concurrent.map(x=>x.path).join(', '),documents:concurrent,
+     explanation:'The document changed AND its updatedAt advanced — another tab, device or a background save wrote during the export. The data is fine; the snapshot just is not a single point in time. Retry with other tabs closed.'});
+  add('fingerprints_match_second_read',fpDiffs.length===0,'checksum stability',
+    {expected:'identical checksums across two reads',actual:fpDiffs.length+' document(s) differ',
+     path:fpDiffs.map(x=>x.path).join(', '),documents:fpDiffs,
+     explanation:'The content changed but updatedAt did NOT advance. That is unexpected and may indicate a serialisation instability rather than a normal write.'});
+
+  // Restore identity
+  add('has_restore_identity',!!(exp.userId&&exp.firebaseProjectId&&exp.exportVersion),'metadata only',
+    {expected:'userId + firebaseProjectId + exportVersion',
+     actual:[exp.userId?'userId':'',exp.firebaseProjectId?'projectId':'',exp.exportVersion?'version':''].filter(Boolean).join(' + ')||'none',
+     explanation:'These identify which account and backend the export belongs to.'});
+
+  const failed=checks.filter(c=>!c.ok);
+  return {ok:failed.length===0,status:_exportClassify(checks),
+          failed:failed.map(c=>c.name),checks};
+}
+// Turn the check results into one actionable status.
+function _exportClassify(checks){
+  const bad=n=>checks.some(c=>c.name===n&&!c.ok);
+  if(checks.every(c=>c.ok))return 'VERIFIED';
+  if(bad('json_parses')||bad('no_circular_values')||bad('no_unsupported_values'))
+    return 'FAILED — SERIALISATION ERROR';
+  if(bad('no_concurrent_writes')||bad('document_set_stable')||bad('field_counts_match'))
+    return 'FAILED — CONCURRENT CHANGE DETECTED';
+  if(bad('document_count_matches')||bad('every_indexed_profile_exported')||bad('active_profile_present'))
+    return 'FAILED — INCOMPLETE EXPORT';
+  if(bad('fingerprints_match_second_read'))return 'FAILED — DATA MISMATCH';
+  if(bad('no_duplicate_documents')||bad('no_duplicate_profiles')||bad('no_orphaned_profile_documents')||bad('has_restore_identity'))
+    return 'FAILED — INCOMPLETE EXPORT';
+  return 'FAILED — UNKNOWN';
+}
+// ── Quiescence: never export while this tab has a write in flight ─────────
+async function _exportWaitForQuiet(maxMs){
+  const t0=Date.now();
+  while(Date.now()-t0<(maxMs||8000)){
+    let dirty=false,looping=false;
+    try{dirty=_saveDirty;looping=_saveLooping;}catch(_){}
+    if(!dirty&&!looping)return true;
+    await new Promise(r=>setTimeout(r,250));
   }
-  add('field_counts_match',fieldMismatch===0,fieldMismatch?(fieldMismatch+' mismatched'):'');
-  add('fingerprints_match_second_read',fpMismatch===0,fpMismatch?(fpMismatch+' mismatched'):'');
-
-  // Nothing unserialisable slipped through.
-  const s=JSON.stringify(exp.documents||{});
-  add('no_circular_values',!s.includes('"__t":"circular"'),'');
-  add('no_unsupported_values',!s.includes('"__t":"unsupported"'),'');
-
-  // Identity fields needed to restore.
-  add('has_restore_identity',!!(exp.userId&&exp.firebaseProjectId&&exp.exportVersion),'');
-
-  return {ok:fail.length===0,failed:fail,checks};
+  return false;
 }
 // ── The export itself ─────────────────────────────────────────────────────
 async function buildFirestoreExport(){
   if(!CU)throw new Error('Not signed in.');
   const uid=CU.uid;
   const col=db.collection('users').doc(uid).collection('data');
-  // Read the WHOLE data subcollection from the server — captures _index,
-  // every profile doc, presence, and anything unknown/legacy.
   const readAll=async()=>{
     const snap=await col.get({source:'server'});
     const out=[];
     snap.forEach(doc=>out.push({id:doc.id,path:doc.ref.path,data:doc.data()}));
     return out;
   };
+  const summarise=async(docs,profileIds)=>{
+    const list=[];
+    for(const d of docs){
+      const ser=_exportSerializeValue(d.data);
+      const stable=_exportStableString(ser);
+      const meta=_exportDocRole(d.id,profileIds);
+      const ua=ser&&ser.updatedAt&&ser.updatedAt.iso?ser.updatedAt.iso:null;
+      list.push({id:d.id,path:d.path,role:meta.role,volatile:meta.volatile,restorable:meta.restorable,
+        reason:meta.reason,fieldCount:_exportCountFields(ser),
+        approxBytes:new TextEncoder().encode(stable).length,
+        fingerprint:await _exportSha256(stable),updatedAtIso:ua,
+        schemaVersion:(d.data&&typeof d.data._schemaVersion==='number')?d.data._schemaVersion:null,
+        topLevelFieldNames:Object.keys(d.data||{}).sort(),ser:ser});
+    }
+    return list;
+  };
+  await _exportWaitForQuiet(8000);
   const first=await readAll();
+  const idxDoc0=first.find(d=>d.id==='_index');
+  const profileIds=(idxDoc0&&idxDoc0.data&&Array.isArray(idxDoc0.data.profiles))
+    ?idxDoc0.data.profiles.map(p=>p.id):[];
+  const a=await summarise(first,profileIds);
+  const b=await summarise(await readAll(),profileIds);
 
   const documents={};
-  for(const d of first){
-    const ser=_exportSerializeValue(d.data);
-    const stable=_exportStableString(ser);
-    documents[d.id]={
-      path:d.path,
-      fieldCount:_exportCountFields(ser),
-      approxBytes:new TextEncoder().encode(stable).length,
-      fingerprint:await _exportSha256(stable),
-      updatedAt:(ser&&ser.updatedAt)?ser.updatedAt:null,
-      schemaVersion:(d.data&&typeof d.data._schemaVersion==='number')?d.data._schemaVersion:null,
-      topLevelFieldNames:Object.keys(d.data||{}).sort(),
-      data:ser
-    };
+  for(const d of a){
+    const base={path:d.path,role:d.role,restorable:d.restorable,fieldCount:d.fieldCount,
+      approxBytes:d.approxBytes,fingerprint:d.fingerprint,updatedAt:d.updatedAtIso,
+      schemaVersion:d.schemaVersion,topLevelFieldNames:d.topLevelFieldNames};
+    if(d.volatile){
+      // Metadata only — content deliberately omitted, and said so explicitly.
+      documents[d.id]=Object.assign(base,{volatile:true,contentOmitted:true,
+        omissionReason:d.reason,verified:false,data:null});
+    } else {
+      documents[d.id]=Object.assign(base,{volatile:false,verified:true,data:d.ser});
+    }
   }
-  // Independent SECOND read for fingerprint comparison.
-  const second=await readAll();
-  const srcCheck=[];
-  for(const d of second){
-    const stable=_exportStableString(_exportSerializeValue(d.data));
-    srcCheck.push({id:d.id,fieldCount:_exportCountFields(_exportSerializeValue(d.data)),
-                   fingerprint:await _exportSha256(stable)});
-  }
-
-  const idxDoc=first.find(d=>d.id==='_index');
-  const idx=idxDoc?idxDoc.data:null;
+  const idx=idxDoc0?idxDoc0.data:null;
   const exp={
-    exportFormat:EXPORT_FORMAT,
-    exportVersion:EXPORT_VERSION,
-    createdAt:new Date().toISOString(),
-    appVersion:APP_VERSION,
+    exportFormat:EXPORT_FORMAT,exportVersion:EXPORT_VERSION,
+    createdAt:new Date().toISOString(),appVersion:APP_VERSION,
     firebaseProjectId:(firebaseConfig&&firebaseConfig.projectId)||null,
-    userId:uid,
-    userIdFingerprint:await _exportSha256(uid),
+    userId:uid,userIdFingerprint:await _exportSha256(uid),
     activeProfileId:(idx&&idx.activeProfileId)||_activeProfileId||null,
     profiles:(idx&&Array.isArray(idx.profiles))?idx.profiles.map(p=>({
       id:p.id,name:p.name,mode:p.mode,createdAt:p.createdAt!=null?_exportSerializeValue(p.createdAt):null
     })):[],
     documentCount:Object.keys(documents).length,
-    documents,
-    verification:null
+    verifiedDocumentCount:a.filter(d=>!d.volatile).length,
+    volatileDocuments:a.filter(d=>d.volatile).map(d=>({id:d.id,path:d.path,reason:d.reason})),
+    documents,verification:null
   };
-  exp.verification=_exportVerify(exp,srcCheck);
+  exp.verification=_exportVerify(exp,a,b);
   return exp;
 }
-// Filename: no email, no raw uid — a short one-way fingerprint instead.
 function _exportFilename(exp){
   const t=new Date(exp.createdAt);
   const p=n=>String(n).padStart(2,'0');
   const stamp=t.getFullYear()+p(t.getMonth()+1)+p(t.getDate())+'-'+p(t.getHours())+p(t.getMinutes());
   return 'life-os-export_'+stamp+'_'+exp.appVersion+'_'+String(exp.userIdFingerprint).slice(0,8)+'.json';
 }
-// Download to the user's device. Never uploaded, never stored in the app.
-async function losExport(){
-  const log=m=>console.log('[export] '+m);
+// Build → verify → (retry on concurrent change) → download.
+async function losExport(opts){
+  opts=opts||{};
+  const maxRetries=(opts.maxRetries==null?2:opts.maxRetries);
+  const onStatus=opts.onStatus||function(){};
+  let exp=null,attempt=0;
   try{
-    log('reading from server (read-only)…');
-    const exp=await buildFirestoreExport();
+    while(attempt<=maxRetries){
+      attempt++;
+      onStatus('Reading from server (attempt '+attempt+' of '+(maxRetries+1)+')…');
+      exp=await buildFirestoreExport();
+      if(exp.verification.ok)break;
+      const concurrent=exp.verification.status==='FAILED — CONCURRENT CHANGE DETECTED';
+      if(!concurrent||attempt>maxRetries)break;
+      onStatus('Something wrote during the export. Close other Life OS tabs and devices — retrying in 3s…');
+      await new Promise(r=>setTimeout(r,3000));
+      await _exportWaitForQuiet(8000);
+    }
     const json=JSON.stringify(exp,null,2);
     const bytes=new TextEncoder().encode(json).length;
     const name=_exportFilename(exp);
+    // Always download — a failed export is still useful diagnostic evidence,
+    // it just must not be treated as a rollback floor.
     const blob=new Blob([json],{type:'application/json'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url;a.download=name;document.body.appendChild(a);a.click();
     setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
-    // Summary only — NEVER any document content.
     const v=exp.verification;
     const summary={
-      file:name,
-      profiles:exp.profiles.length,
-      documents:exp.documentCount,
-      sizeBytes:bytes,
-      sizeReadable:(bytes/1024).toFixed(1)+' KB',
-      verification:v.ok?'PASSED':'FAILED',
+      file:name,status:v.status,attempts:attempt,
+      profiles:exp.profiles.length,documents:exp.documentCount,
+      verifiedDocuments:exp.verifiedDocumentCount,
+      volatileDocuments:exp.volatileDocuments.map(d=>d.id),
+      sizeBytes:bytes,sizeReadable:(bytes/1024).toFixed(1)+' KB',
       failedChecks:v.failed,
+      // Counts, paths, hashes and field names only — never content.
+      failures:v.checks.filter(c=>!c.ok).map(c=>({
+        check:c.name,affects:c.category,path:c.path||'',
+        expected:c.expected,actual:c.actual,why:c.explanation
+      })),
       perDocument:Object.keys(exp.documents).map(id=>({
-        id:id,fields:exp.documents[id].fieldCount,bytes:exp.documents[id].approxBytes
+        id:id,role:exp.documents[id].role,verified:exp.documents[id].verified,
+        fields:exp.documents[id].fieldCount,bytes:exp.documents[id].approxBytes
       }))
     };
-    log('done — '+summary.documents+' documents, '+summary.sizeReadable+', verification '+summary.verification);
-    console.table?console.table(summary.perDocument):log(JSON.stringify(summary.perDocument));
+    console.log('[export] '+summary.status+' — '+summary.documents+' documents, '+summary.sizeReadable);
+    if(summary.failures.length)console.table&&console.table(summary.failures);
+    console.table&&console.table(summary.perDocument);
     return summary;
   }catch(e){
     console.error('[export] FAILED:',e.message);
-    return {error:e.message};
+    return {status:'FAILED — UNKNOWN',error:e.message};
   }
 }
 window.losExport=losExport;
+// ── Local diagnostic reader ───────────────────────────────────────────────
+// Reads a previously-downloaded export FROM THE USER'S DISK and shows only
+// structural metadata. No uploads, no network, no Firestore, no writes, and
+// no document content is ever read out or logged.
+function _exportInspectFile(file){
+  return new Promise((resolve,reject)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file.'));
+    fr.onload=()=>{
+      let d;try{d=JSON.parse(fr.result);}catch(e){return reject(new Error('Not valid JSON: '+e.message));}
+      if(d.exportFormat!==EXPORT_FORMAT)return reject(new Error('Not a Life OS export file.'));
+      const docs=d.documents||{};
+      resolve({
+        exportFormat:d.exportFormat,exportVersion:d.exportVersion,appVersion:d.appVersion,
+        createdAt:d.createdAt,firebaseProjectId:d.firebaseProjectId,
+        userIdFingerprint:d.userIdFingerprint,activeProfileId:d.activeProfileId,
+        profileCount:(d.profiles||[]).length,
+        profileIds:(d.profiles||[]).map(p=>p.id),
+        documentCount:d.documentCount!=null?d.documentCount:Object.keys(docs).length,
+        status:(d.verification&&d.verification.status)||(d.verification?(d.verification.ok?'VERIFIED':'FAILED — UNKNOWN'):'no verification block'),
+        failedChecks:(d.verification&&d.verification.failed)||[],
+        checks:((d.verification&&d.verification.checks)||[]).map(c=>({
+          check:c.name,ok:c.ok,affects:c.category||'',path:c.path||'',
+          expected:c.expected!=null?String(c.expected):'',actual:c.actual!=null?String(c.actual):'',
+          why:c.explanation||''
+        })),
+        documents:Object.keys(docs).map(id=>({
+          id:id,path:docs[id].path,role:docs[id].role||'',
+          verified:docs[id].verified,volatile:!!docs[id].volatile,
+          fields:docs[id].fieldCount,bytes:docs[id].approxBytes,
+          fingerprint:String(docs[id].fingerprint||'').slice(0,16)+'…',
+          updatedAt:docs[id].updatedAt||null,schemaVersion:docs[id].schemaVersion,
+          topLevelFieldCount:(docs[id].topLevelFieldNames||[]).length,
+          hasData:docs[id].data!=null
+        }))
+      });
+    };
+    fr.readAsText(file);
+  });
+}
 // Guarded panel for devices without a console: open the app with ?export=1
 function _maybeShowExportPanel(){
   let on=false;try{on=new URLSearchParams(location.search).get('export')==='1';}catch(_){}
   if(!on||document.getElementById('los-export-panel'))return;
+  const esc2=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const w=document.createElement('div');
   w.id='los-export-panel';
-  w.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(10,8,16,.72);display:flex;align-items:center;justify-content:center;padding:20px;font-family:Inter,system-ui,sans-serif';
-  w.innerHTML='<div style="background:#211E2C;border-radius:16px;padding:22px;max-width:460px;width:100%;box-shadow:0 14px 34px rgba(0,0,0,.32);color:#F4F2FA">'+
+  w.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(10,8,16,.72);display:flex;align-items:center;justify-content:center;padding:16px;font-family:Inter,system-ui,sans-serif;overflow:auto';
+  w.innerHTML='<div style="background:#211E2C;border-radius:16px;padding:22px;max-width:720px;width:100%;box-shadow:0 14px 34px rgba(0,0,0,.32);color:#F4F2FA;max-height:92vh;overflow:auto">'+
     '<div style="font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:#CEC7E8;font-weight:600;margin-bottom:10px">Developer · Phase A3</div>'+
     '<div style="font-size:19px;font-weight:700;margin-bottom:8px">Protected Firestore export</div>'+
-    '<div style="font-size:13.5px;line-height:1.55;color:#B5ABC9;margin-bottom:16px">Downloads a complete, verified, read-only snapshot of this account\'s Firestore data to <b>this device only</b>. Nothing is uploaded, modified or deleted.</div>'+
-    '<div id="lxp-out" style="font-size:12.5px;color:#B5ABC9;margin-bottom:14px;white-space:pre-wrap"></div>'+
-    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
-      '<button id="lxp-close" style="background:#2A2536;border:none;color:#fff;border-radius:10px;padding:9px 14px;font-size:13px;cursor:pointer;font-family:inherit">Close</button>'+
+    '<div style="font-size:13.5px;line-height:1.55;color:#B5ABC9;margin-bottom:16px">Read-only snapshot saved to <b>this device only</b>. Nothing is uploaded, modified or deleted. Diagnostics show counts, paths, checksums and field names — <b>never your content</b>.</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+
       '<button id="lxp-go" style="background:linear-gradient(180deg,#7C4DFF,#C28DFF);border:none;color:#fff;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Create export</button>'+
-    '</div></div>';
+      '<button id="lxp-pick" style="background:#2A2536;border:none;color:#fff;border-radius:10px;padding:9px 14px;font-size:13px;cursor:pointer;font-family:inherit">Inspect a saved export…</button>'+
+      '<button id="lxp-close" style="background:none;border:none;color:#B5ABC9;border-radius:10px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;margin-left:auto">Close</button>'+
+    '</div>'+
+    '<input id="lxp-file" type="file" accept="application/json,.json" style="display:none">'+
+    '<div id="lxp-status" style="font-size:13px;color:#B5ABC9;margin-bottom:10px"></div>'+
+    '<div id="lxp-out" style="font-size:12px;color:#B5ABC9"></div>'+
+    '</div>';
   document.body.appendChild(w);
-  const out=w.querySelector('#lxp-out');
+  const statusEl=w.querySelector('#lxp-status'),out=w.querySelector('#lxp-out');
+  const COLOR=s=>s==='VERIFIED'?'#00D9A3':'#FF646E';
+  const box=(html)=>'<div style="background:#1A1725;border-radius:10px;padding:12px;margin-bottom:10px">'+html+'</div>';
+  const table=(rows,cols)=>{
+    if(!rows.length)return '';
+    return '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">'+
+      '<tr>'+cols.map(c=>'<th style="text-align:left;padding:4px 8px 4px 0;color:#CEC7E8;font-weight:600;white-space:nowrap">'+esc2(c.label)+'</th>').join('')+'</tr>'+
+      rows.map(r=>'<tr>'+cols.map(c=>'<td style="padding:3px 8px 3px 0;vertical-align:top;color:'+(c.color?c.color(r):'#B5ABC9')+'">'+esc2(c.get(r))+'</td>').join('')+'</tr>').join('')+
+      '</table></div>';
+  };
+  const renderResult=(r)=>{
+    if(r.error){out.innerHTML=box('<b style="color:#FF646E">Error:</b> '+esc2(r.error));return;}
+    let h='';
+    h+=box('<div style="font-size:15px;font-weight:700;color:'+COLOR(r.status)+';margin-bottom:6px">'+esc2(r.status)+'</div>'+
+      '<div>Profiles: <b>'+r.profiles+'</b> · Documents: <b>'+r.documents+'</b> ('+r.verifiedDocuments+' verified'+
+      (r.volatileDocuments&&r.volatileDocuments.length?(', '+r.volatileDocuments.length+' volatile/metadata-only'):'')+')'+
+      ' · Size: <b>'+esc2(r.sizeReadable)+'</b>'+(r.attempts>1?(' · attempts: '+r.attempts):'')+'</div>'+
+      '<div style="margin-top:6px;word-break:break-all">Saved as <b>'+esc2(r.file)+'</b> in your downloads folder.</div>');
+    if(r.failures&&r.failures.length){
+      h+='<div style="font-size:12px;font-weight:700;color:#CEC7E8;margin:12px 0 6px;letter-spacing:.1em;text-transform:uppercase">Failed checks</div>';
+      h+=box(table(r.failures,[
+        {label:'Check',get:x=>x.check,color:()=>'#FF646E'},
+        {label:'Affects',get:x=>x.affects},
+        {label:'Expected',get:x=>x.expected},
+        {label:'Actual',get:x=>x.actual},
+        {label:'Document',get:x=>x.path||'—'},
+        {label:'Why',get:x=>x.why}
+      ]));
+    }
+    h+='<div style="font-size:12px;font-weight:700;color:#CEC7E8;margin:12px 0 6px;letter-spacing:.1em;text-transform:uppercase">Documents</div>';
+    h+=box(table(r.perDocument||r.documents||[],[
+      {label:'Id',get:x=>x.id},{label:'Role',get:x=>x.role},
+      {label:'Verified',get:x=>x.verified===false?'no (volatile)':'yes'},
+      {label:'Fields',get:x=>x.fields},{label:'Bytes',get:x=>x.bytes}
+    ]));
+    out.innerHTML=h;
+  };
   w.querySelector('#lxp-close').onclick=()=>w.remove();
   w.querySelector('#lxp-go').onclick=async()=>{
-    const btn=w.querySelector('#lxp-go');btn.disabled=true;btn.textContent='Working…';
-    out.textContent='Reading from server…';
-    const r=await losExport();
+    const btn=w.querySelector('#lxp-go');btn.disabled=true;btn.textContent='Working…';out.innerHTML='';
+    const r=await losExport({onStatus:m=>{statusEl.textContent=m;}});
+    statusEl.textContent='';
     btn.disabled=false;btn.textContent='Create export';
-    out.textContent=r.error?('Failed: '+r.error)
-      :('Verification: '+r.verification+'\nProfiles: '+r.profiles+'\nDocuments: '+r.documents+'\nSize: '+r.sizeReadable+'\nSaved to your downloads folder as:\n'+r.file);
+    renderResult(r);
+  };
+  // Local file inspector — reads from disk, never uploads.
+  const fileEl=w.querySelector('#lxp-file');
+  w.querySelector('#lxp-pick').onclick=()=>fileEl.click();
+  fileEl.onchange=async()=>{
+    const f=fileEl.files&&fileEl.files[0];if(!f)return;
+    statusEl.textContent='Reading '+f.name+' locally…';out.innerHTML='';
+    try{
+      const d=await _exportInspectFile(f);
+      statusEl.textContent='';
+      let h=box('<div style="font-size:15px;font-weight:700;color:'+COLOR(d.status)+';margin-bottom:6px">'+esc2(d.status)+'</div>'+
+        '<div>Format <b>'+esc2(d.exportFormat)+'</b> v'+esc2(d.exportVersion)+' · app '+esc2(d.appVersion)+'</div>'+
+        '<div>Created '+esc2(d.createdAt)+'</div>'+
+        '<div>Project '+esc2(d.firebaseProjectId)+' · user '+esc2(String(d.userIdFingerprint).slice(0,8))+'…</div>'+
+        '<div>Profiles: <b>'+d.profileCount+'</b> ('+esc2(d.profileIds.join(', '))+') · active: <b>'+esc2(d.activeProfileId)+'</b></div>'+
+        '<div>Documents: <b>'+d.documentCount+'</b></div>');
+      const failed=d.checks.filter(c=>!c.ok);
+      if(failed.length){
+        h+='<div style="font-size:12px;font-weight:700;color:#CEC7E8;margin:12px 0 6px;letter-spacing:.1em;text-transform:uppercase">Failed checks</div>';
+        h+=box(table(failed,[
+          {label:'Check',get:x=>x.check,color:()=>'#FF646E'},{label:'Affects',get:x=>x.affects},
+          {label:'Expected',get:x=>x.expected},{label:'Actual',get:x=>x.actual},
+          {label:'Document',get:x=>x.path||'—'},{label:'Why',get:x=>x.why}
+        ]));
+      }
+      if(d.checks.length){
+        h+='<div style="font-size:12px;font-weight:700;color:#CEC7E8;margin:12px 0 6px;letter-spacing:.1em;text-transform:uppercase">All checks</div>';
+        h+=box(table(d.checks,[
+          {label:'Check',get:x=>x.check},
+          {label:'Result',get:x=>x.ok?'pass':'FAIL',color:x=>x.ok?'#00D9A3':'#FF646E'},
+          {label:'Affects',get:x=>x.affects}
+        ]));
+      }
+      h+='<div style="font-size:12px;font-weight:700;color:#CEC7E8;margin:12px 0 6px;letter-spacing:.1em;text-transform:uppercase">Documents</div>';
+      h+=box(table(d.documents,[
+        {label:'Id',get:x=>x.id},{label:'Role',get:x=>x.role||'—'},
+        {label:'Content',get:x=>x.hasData?'captured':'metadata only'},
+        {label:'Fields',get:x=>x.fields},{label:'Bytes',get:x=>x.bytes},
+        {label:'Checksum',get:x=>x.fingerprint},{label:'updatedAt',get:x=>x.updatedAt||'—'}
+      ]));
+      out.innerHTML=h;
+    }catch(e){
+      statusEl.textContent='';
+      out.innerHTML=box('<b style="color:#FF646E">Could not inspect:</b> '+esc2(e.message));
+    }
+    fileEl.value='';   // never retain the selection
   };
 }
 </script>

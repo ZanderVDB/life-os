@@ -65,7 +65,7 @@ defined rollback period afterwards.
 |---|---|
 | **A1. Fix the profile-contamination bug** ✅ **DONE (v240)** | `technical-debt.md` **D1** — switching profiles can copy one profile's reminders/people into another *and then save them there*. Migrating contaminated data would make it permanent. **This must be fixed first.** |
 | **A2. Inspect the orphaned data** | Decide keep/migrate/delete for `dayNotes` (invisible but still saved — may hold years of notes), `people`/`peopleTags`/`peopleLevelNames` (unreachable page, still saved), `learning` (dead), `customEvents` (being actively emptied). **A decision, not a guess.** |
-| **A3. Protected Firestore export** ✅ **TOOL BUILT (v241)** — awaiting a real run by the user | Full export of every profile document to `life-os-backups`, write-once, retained through the entire migration. This is the rollback floor. |
+| **A3. Protected Firestore export** 🟡 **TOOL BUILT (v242)** — first live run reported a FALSE failure (volatile presence doc); verifier corrected; **awaiting a VERIFIED re-run** | Full export of every profile document to `life-os-backups`, write-once, retained through the entire migration. This is the rollback floor. |
 | **A4. Verify Firebase security rules** | **They are not in this repository** and could not be audited. They are currently the only server-side protection. Confirm a user cannot read another user's documents *before* building anything that assumes that. |
 | **A5. Record a data census** | Per profile: counts of tasks, habits, habit-tick dates, notebook sections/pages, diary days, brain items, reminders, AI history, plus the **document size in bytes** (how close to the 1 MB ceiling). This census is the baseline every later validation compares against. |
 

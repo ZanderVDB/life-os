@@ -1,6 +1,6 @@
 # Life OS — Firestore Export & Restore
 
-**Created 2026-07-31 · Phase A3 · app version v241**
+**Created 2026-07-31 · Phase A3 · app version v242**
 
 > **The export exists. No restore tool exists, and none runs automatically.**
 > This document specifies exactly how a restore *would* be performed if it were
@@ -41,6 +41,36 @@ user-triggered download. Nothing is uploaded, and the app never keeps a copy.
 e.g. `life-os-export_20260731-0100_v241_deadbeef.json`
 The fingerprint is the first 8 characters of a SHA-256 of the user id — **no
 email address and no raw user id** appear in the filename.
+
+---
+
+## 2b. Document roles and the presence policy
+
+Not every document under `users/{uid}/data` is user data.
+
+| Document | Role | Captured | Verified | Restorable |
+|---|---|---|---|---|
+| `_index` | profile catalogue | full | ✅ | ✅ |
+| `<profileId>` | profile data | full | ✅ | ✅ |
+| `presence` | device heartbeat | **metadata only** | ❌ | ❌ |
+| anything else | unknown | full | ✅ | ✅ |
+
+**Presence policy (option B, chosen 2026-07-31).** The presence document is
+rewritten **every 10 seconds** by the heartbeat — including by the very tab
+running the export. Applying a two-read integrity check to it guaranteed
+eventual false failures, and restoring it is meaningless because the next
+heartbeat overwrites it within seconds.
+
+So presence is exported as **informational metadata only** — path, role, field
+names, field count, size — with its **content deliberately omitted** and the
+omission recorded in the file (`contentOmitted: true` plus `omissionReason`).
+It is excluded from consistency verification and marked `restorable: false`.
+The export also lists every document treated this way under `volatileDocuments`,
+so nothing is *silently* dropped.
+
+**Unrecognised documents are NOT treated as volatile.** They are captured and
+verified in full, so a new document type fails loudly rather than being quietly
+skipped.
 
 ---
 
@@ -256,5 +286,33 @@ embedded in `verification`:
 | `no_unsupported_values` | no value was silently degraded |
 | `has_restore_identity` | `userId`, `firebaseProjectId`, `exportVersion` present |
 
-If any check fails, the summary reports `verification: FAILED` and names the
-failed checks. **A failed export must not be relied on as a rollback floor.**
+If any check fails the summary reports one of six statuses, names every failed
+check, and shows expected vs actual with the affected document path.
+
+| Status | Meaning |
+|---|---|
+| `VERIFIED` | Safe to use as a rollback floor |
+| `FAILED — CONCURRENT CHANGE DETECTED` | Something wrote during the export (the document changed **and** its `updatedAt` advanced). The data is fine; retry with other tabs and devices closed. |
+| `FAILED — DATA MISMATCH` | Content changed but `updatedAt` did **not** advance — unexpected; may indicate serialisation instability |
+| `FAILED — INCOMPLETE EXPORT` | A document or profile is missing, duplicated or orphaned |
+| `FAILED — SERIALISATION ERROR` | A value could not be captured faithfully |
+| `FAILED — UNKNOWN` | An unclassified failure |
+
+The export retries automatically (up to 2 extra attempts) **only** for
+concurrent-change failures, waiting for pending saves to settle first. It
+**never** declares success after mismatched reads.
+
+**A failed export must not be relied on as a rollback floor** — but it is still
+downloaded, because it is useful diagnostic evidence.
+
+---
+
+## 10. Inspecting a saved export (local, read-only)
+
+Open the app with `?export=1` → **Inspect a saved export…** → choose the file.
+
+It runs **entirely in the browser**: no uploads, no network requests, no
+Firestore access, no writes, nothing retained, and **no document content is
+ever displayed or logged**. It shows only format/version, app version, document
+paths and roles, counts, sizes, truncated checksums, `updatedAt`, schema
+versions and the verification check results.
