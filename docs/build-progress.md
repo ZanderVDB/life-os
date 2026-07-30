@@ -16,11 +16,11 @@ this file (where we are) → `design-ideas.md` (captured, not built).
 
 | | |
 |---|---|
-| **Version** | v242 |
-| **Rebuild step** | 3 of 17 · audit done · platform v2 designed · **Phase A1+A3 done** |
-| **Next step** | Re-run the export on v242 (must report VERIFIED), then **A2** (method needs approval) |
+| **Version** | v243 |
+| **Rebuild step** | 3 of 17 · audit done · platform v2 designed · **A1+A3 done, A2 inspector built** |
+| **Next step** | Run the A2 inspector, then decide each legacy dataset (needs approval) |
 | **Data platform** | Firestore = source of truth · Postgres + R2 **planned, not started** |
-| **Tests** | `npm test` — 75 passing |
+| **Tests** | `npm test` — 110 passing |
 | **Live** | life-os.web-anchor.com (Railway) |
 | **Repo** | `ZanderVDB/life-os` · single-file `index.html` + `sw.js` |
 
@@ -355,6 +355,45 @@ reproduction of the live failure. Full suite **75 passing** (`npm test`).
 
 **The earlier failed export is superseded** — it should be replaced by a fresh
 run on v242, not relied on as a rollback floor.
+
+---
+
+### 2026-07-31 — Phase A2: legacy data inspector ✅ (v243)
+
+**Read-only, structure-only.** Answers "what legacy data exists and is it safe
+to retire?" without ever revealing what any of it says.
+
+**Added** (`index.html`): `_inspHash`, `_inspBytes`, `_inspShape`,
+`_inspScanDates`, `_inspDataset`, `LEGACY_REGISTRY` (static provenance from
+the audit), `LEGACY_TASK_FIELDS`, `buildLegacyInspection()`, `losInspect()`
++ `_download`, `_maybeShowInspectPanel()` (`?inspect=1`).
+
+**Reports:** per-profile size, % of the 1 MB ceiling, field counts, schema
+version, populated/empty/unknown top-level fields, date ranges; per-dataset
+counts, bytes, date ranges, value shapes, structurally-empty counts, code paths
+that still read/write it, AI writability, reachable UI, migration destination,
+deletion risk and a **preliminary** recommendation; plus a cross-profile
+contamination check.
+
+**Confirmed by code inspection:** the **Board page has no persisted field of
+its own** — it renders `S.tasks` filtered by `t.dailyDate`, so removing the
+page removes no unique data.
+
+**Privacy:** structure only — field names, counts, bytes, date ranges, shapes,
+hashed ids, classifications. Never task titles, diary text, notebook text,
+names, notes, reminders or descriptions. Tests assert that synthetic records
+containing obvious secret markers produce a report containing none of them.
+
+**Read-only guarantees** (static analysis, comment/string-stripped): no
+Firestore writes, no autosave, no hydration, no migrations, no `render()`,
+no network, no localStorage writes, server reads only, volatile documents
+excluded.
+
+**Tests:** `tests/legacy-inspector.test.js` — **35 passing**, synthetic data
+only. Full suite **110 passing**.
+
+**Docs:** `legacy-data-decision.md` — per-dataset verdicts, all **preliminary**.
+**Nothing is approved for deletion.**
 
 ---
 

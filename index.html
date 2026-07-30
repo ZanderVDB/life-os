@@ -3975,7 +3975,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v242';
+const APP_VERSION='v243';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4721,8 +4721,10 @@ auth.onAuthStateChanged(u=>{
       setSplashStage(45,'Restoring your session…');
       loadData();
       initRouter();
-      // Phase A3 developer export panel — only when opened with ?export=1.
+      // Phase A3 export panel (?export=1) and Phase A2 legacy-data inspector
+      // (?inspect=1). Both are developer-only and absent from the normal UI.
       try{_maybeShowExportPanel();}catch(_){}
+      try{_maybeShowInspectPanel();}catch(_){}
     } else {
       console.log('[auth] subsequent fire for same user — skipping reload');
     }
@@ -18340,6 +18342,413 @@ function _exportInspectFile(file){
     };
     fr.readAsText(file);
   });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// PHASE A2 — LEGACY DATA INSPECTOR  (READ-ONLY, STRUCTURE ONLY)
+//
+// Answers "what legacy data actually exists, and is it safe to retire?"
+// WITHOUT ever revealing what any of it says.
+//
+// STRICTLY READ-ONLY: fresh server reads, no hydration into live state, no
+// render(), no autosave, no migrations, no schema upgrades, no cleanup.
+//
+// PRIVACY: reports field NAMES, counts, byte sizes, date ranges, value shapes,
+// hashed ids and classifications. It NEVER reads, displays, logs, downloads or
+// transmits any free-text value — no task titles, diary text, notebook text,
+// names, notes, reminders or descriptions.
+//
+// Access:  ?inspect=1   (guarded panel)  ·  losInspect()  (console)
+// ══════════════════════════════════════════════════════════════════════════
+const INSPECT_FORMAT='life-os-legacy-inspection';
+const INSPECT_VERSION=1;
+
+// Non-reversible short hash — enough to detect duplicate ids across profiles,
+// never enough to recover the id.
+function _inspHash(s){
+  let h=0x811c9dc5;
+  const str=String(s==null?'':s);
+  for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}
+  return h.toString(16).padStart(8,'0');
+}
+function _inspBytes(v){
+  try{return new TextEncoder().encode(_exportStableString(_exportSerializeValue(v))).length;}
+  catch(_){return 0;}
+}
+// Classify a value's SHAPE — never its content.
+function _inspShape(v){
+  if(v===null)return 'null';
+  if(v===undefined)return 'undefined';
+  if(Array.isArray(v))return v.length?'array':'empty-array';
+  if(typeof v==='object'){
+    if(typeof v.toDate==='function')return 'timestamp';
+    return Object.keys(v).length?'object':'empty-object';
+  }
+  if(typeof v==='string')return v.trim()===''?'empty-string':'string';
+  return typeof v;
+}
+const _ISO_DATE=/^\d{4}-\d{2}-\d{2}$/;
+// Walk records and collect ISO date strings + epoch-ms numbers from
+// date-looking fields only. Values are dates, never text.
+function _inspScanDates(records,depth){
+  let min=null,max=null;
+  const take=iso=>{if(!iso)return;if(!min||iso<min)min=iso;if(!max||iso>max)max=iso;};
+  const fromMs=n=>{
+    if(typeof n!=='number'||!isFinite(n)||n<946684800000||n>4102444800000)return null; // 2000..2100
+    try{return new Date(n).toISOString().slice(0,10);}catch(_){return null;}
+  };
+  const walk=(v,key,d)=>{
+    if(d>(depth||3)||v==null)return;
+    if(typeof v==='string'){if(_ISO_DATE.test(v))take(v);return;}
+    if(typeof v==='number'){if(/at$|At$|date$|Date$|time$|Time$/.test(key||''))take(fromMs(v));return;}
+    if(Array.isArray(v)){v.forEach(x=>walk(x,key,d+1));return;}
+    if(typeof v==='object'){
+      if(typeof v.toDate==='function'&&typeof v.seconds==='number'){take(fromMs(v.seconds*1000));return;}
+      for(const k of Object.keys(v))walk(v[k],k,d+1);
+    }
+  };
+  (records||[]).forEach(r=>walk(r,'',0));
+  return {earliest:min,latest:max};
+}
+// ── Static provenance, from the 2026-07-31 code audit ─────────────────────
+// Documents WHY each dataset is in question. Recommendations are PRELIMINARY.
+const LEGACY_REGISTRY={
+  dayNotes:{label:'Day notes',kind:'map',
+    reads:['loadDailyNote() — runs at boot but no-ops (#dn-ta is not in the DOM)','searchNotebook() — 0 callers'],
+    writes:['saveDN(), saveDvNote(), navNotebook() — all 0 callers'],
+    ai:'No AI operation touches it',ui:'NONE — every consumer was removed',
+    newer:'Diary lives in routineLog[date].journal; Notebook lives in S.notebook',
+    dest:'Library book (kind=diary/notes) — or drop if empty/generated',
+    risk:'HIGH — invisible historical data; the name resembles the live Notebook',
+    rec:'NEEDS CONTENT REVIEW'},
+  people:{label:'People records',kind:'array',
+    reads:['rPeople() (unreachable route)','universal search','AI context (names only)','rAttention/rBrief nudges'],
+    writes:['AI addPerson/addPromise','task-tick promise cascade'],
+    ai:'YES — AI can still create people and promises',ui:'NONE — the People route is unreachable',
+    newer:'None',dest:'Archive/export; no v2 destination planned',
+    risk:'MEDIUM — real personal data, still AI-writable',rec:'ARCHIVE'},
+  peopleTags:{label:'People tags',kind:'array',reads:['Settings → People'],writes:['AI auto-creates unknown tags'],
+    ai:'YES — indirectly via addPerson',ui:'Settings only',newer:'None',dest:'Archive with people',
+    risk:'LOW',rec:'ARCHIVE'},
+  peopleLevelNames:{label:'People level names',kind:'array',reads:['Settings → People'],writes:['Settings'],
+    ai:'No',ui:'Settings only',newer:'None',dest:'Archive with people',risk:'LOW',rec:'ARCHIVE'},
+  peopleSettings:{label:'People settings',kind:'object',reads:['Settings → People'],writes:['Settings'],
+    ai:'No',ui:'Settings only',newer:'None',dest:'Archive with people',risk:'LOW',rec:'ARCHIVE'},
+  learning:{label:'Learning (legacy)',kind:'array',
+    reads:['migrateHabits() legacy merge (run-once, version-gated)'],
+    writes:['Emptied by migrateHabits; still written to Firestore on every save'],
+    ai:'logLearning writes to HABITS, not here',ui:'NONE',
+    newer:'S.habits — this was merged into it long ago',dest:'None — superseded',
+    risk:'LOW if empty',rec:'EXPORT THEN DELETE'},
+  customEvents:{label:'Custom events (ghost)',kind:'array',
+    reads:['~9 calendar render paths (all effectively dead)'],
+    writes:['FORCE-EMPTIED on every snapshot, then written back as [] on every save'],
+    ai:'No — the GCal hard-gate refuses to create them',ui:'Would render if repopulated',
+    newer:'Google/Outlook calendar',dest:'None',
+    risk:'ALREADY DESTRUCTIVE — the clear-on-load has been erasing legacy entries',
+    rec:'NEEDS CONTENT REVIEW'},
+  routineLog:{label:'Routine log + Diary journal',kind:'map',
+    reads:['rDiary(), rRoutine(), weekly review'],writes:['saveJournalFor(), routineToggle(), AI completeRoutine'],
+    ai:'YES — completeRoutine ticks routine items',ui:'ACTIVE — the Diary page',
+    newer:'This IS the live diary',dest:'Split: journal → diary_entries, checks → routine_completions',
+    risk:'DO NOT TOUCH — live data',rec:'KEEP'},
+  habits:{label:'Habits',kind:'array',reads:['right rail, calendar habit mode, rHabitsFull (unreachable page)'],
+    writes:['toggleHabitDate, AI completeHabits'],ai:'YES',ui:'ACTIVE — right rail + calendar',
+    newer:'This IS the live system',dest:'habits + habit_entries',risk:'DO NOT TOUCH — live data',rec:'KEEP'},
+  reminders:{label:'Reminders',kind:'array',reads:['Today, calendar reminders mode'],
+    writes:['reminder modal, AI addReminders/completeReminders'],ai:'YES',ui:'ACTIVE',
+    newer:'This IS the live system',dest:'reminders + task_recurrence_rules',
+    risk:'Was in the pre-v240 contamination set',rec:'KEEP'},
+  tasks:{label:'Tasks',kind:'array',reads:['Today board, search, AI'],writes:['task modal, AI, drag/drop'],
+    ai:'YES',ui:'ACTIVE',newer:'This IS the live system',dest:'tasks + task_steps',
+    risk:'DO NOT TOUCH — live data',rec:'KEEP'}
+};
+// Dead per-task fields from the removed Daily/General model + People links.
+const LEGACY_TASK_FIELDS=['dailyDate','dailySince','daily','linkedPersonId','linkedPromiseId',
+                          'lastCheckedAt','prevCheckedAt','dueDate'];
+
+// Inspect one dataset inside one profile document — structure only.
+function _inspDataset(key,value){
+  const reg=LEGACY_REGISTRY[key]||{};
+  const out={key,label:reg.label||key,present:value!==undefined,bytes:_inspBytes(value),
+             shape:_inspShape(value),count:0,populated:false,earliest:null,latest:null,
+             valueShapes:{},idHashes:[],notes:[]};
+  if(value===undefined||value===null)return out;
+  if(Array.isArray(value)){
+    out.count=value.length;out.populated=value.length>0;
+    value.forEach(r=>{const s=_inspShape(r);out.valueShapes[s]=(out.valueShapes[s]||0)+1;
+      if(r&&typeof r==='object'&&r.id!=null)out.idHashes.push(_inspHash(r.id));});
+    Object.assign(out,_inspScanDates(value));
+  } else if(typeof value==='object'){
+    const keys=Object.keys(value);
+    out.count=keys.length;out.populated=keys.length>0;
+    keys.forEach(k=>{const s=_inspShape(value[k]);out.valueShapes[s]=(out.valueShapes[s]||0)+1;});
+    // Date-keyed maps (dayNotes, routineLog): the KEYS are the dates.
+    const dateKeys=keys.filter(k=>_ISO_DATE.test(k));
+    out.keyFormat=dateKeys.length===keys.length?'YYYY-MM-DD (all)':
+      (dateKeys.length?('mixed — '+dateKeys.length+'/'+keys.length+' date-like'):'non-date keys');
+    if(dateKeys.length){dateKeys.sort();out.earliest=dateKeys[0];out.latest=dateKeys[dateKeys.length-1];}
+    else Object.assign(out,_inspScanDates(keys.map(k=>value[k])));
+    // How many entries are structurally empty (no content to lose)?
+    let empty=0;
+    keys.forEach(k=>{const v=value[k],s=_inspShape(v);
+      if(s==='empty-string'||s==='empty-object'||s==='empty-array'||v==null)empty++;
+      else if(s==='object'){
+        // e.g. routineLog day = {checks:{},journal:{}} → empty if both are empty
+        const inner=Object.keys(v).every(kk=>{const sv=_inspShape(v[kk]);
+          return sv==='empty-object'||sv==='empty-array'||sv==='empty-string'||v[kk]==null||
+            (sv==='object'&&Object.keys(v[kk]).every(k3=>_inspShape(v[kk][k3])==='empty-string'));});
+        if(inner)empty++;
+      }});
+    out.structurallyEmpty=empty;
+    out.populatedEntries=keys.length-empty;
+  } else {
+    out.count=1;out.populated=out.shape!=='empty-string';
+  }
+  Object.assign(out,{reads:reg.reads||[],writes:reg.writes||[],aiWritable:reg.ai||'unknown',
+    reachableUI:reg.ui||'unknown',newerEquivalent:reg.newer||'—',migrationDestination:reg.dest||'—',
+    deletionRisk:reg.risk||'unknown',recommendation:reg.rec||'NEEDS CONTENT REVIEW'});
+  return out;
+}
+// ── The inspection ────────────────────────────────────────────────────────
+async function buildLegacyInspection(){
+  if(!CU)throw new Error('Not signed in.');
+  const col=db.collection('users').doc(CU.uid).collection('data');
+  const snap=await col.get({source:'server'});           // fresh SERVER read
+  const docs=[];snap.forEach(d=>docs.push({id:d.id,path:d.ref.path,data:d.data()}));
+
+  const idxDoc=docs.find(d=>d.id==='_index');
+  const idx=idxDoc?idxDoc.data:null;
+  const profileIds=(idx&&Array.isArray(idx.profiles))?idx.profiles.map(p=>p.id):[];
+  const KNOWN=new Set(PROFILE_STATE_KEYS.concat(['updatedAt','ak','confirmAllAI','_schemaVersion']));
+  const LIMIT=1048576;   // Firestore 1 MB per-document ceiling
+
+  const profiles=[],datasetsByProfile={};
+  for(const d of docs){
+    const role=_exportDocRole(d.id,profileIds);
+    if(role.role!=='profile')continue;
+    const data=d.data||{};
+    const keys=Object.keys(data);
+    const bytes=_inspBytes(data);
+    const populated=[],empty=[];
+    keys.forEach(k=>{const s=_inspShape(data[k]);
+      (s==='empty-array'||s==='empty-object'||s==='empty-string'||data[k]==null)?empty.push(k):populated.push(k);});
+    const unknown=keys.filter(k=>!KNOWN.has(k));
+    // Dead per-task fields still present?
+    const tasks=Array.isArray(data.tasks)?data.tasks:[];
+    const deadFields={};
+    LEGACY_TASK_FIELDS.forEach(f=>{const n=tasks.filter(t=>t&&t[f]!==undefined&&t[f]!==null&&t[f]!=='').length;
+      if(n)deadFields[f]=n;});
+    const p={
+      shortId:_inspHash(d.id).slice(0,6),
+      isActive:(idx&&idx.activeProfileId)===d.id,
+      mode:(idx&&(idx.profiles||[]).find(x=>x.id===d.id)||{}).mode||null,
+      bytes,percentOfCeiling:+(bytes/LIMIT*100).toFixed(2),
+      topLevelFieldCount:keys.length,
+      schemaVersion:typeof data._schemaVersion==='number'?data._schemaVersion:null,
+      populatedFields:populated.sort(),emptyFields:empty.sort(),unknownTopLevelFields:unknown.sort(),
+      deadTaskFields:deadFields,
+      taskCount:tasks.length
+    };
+    Object.assign(p,_inspScanDates([data],4));
+    profiles.push(p);
+    const ds={};
+    Object.keys(LEGACY_REGISTRY).forEach(k=>{ds[k]=_inspDataset(k,data[k]);});
+    // Board is a VIEW over tasks — it has no field of its own.
+    ds.__board={key:'board',label:'Board (sticky wall)',present:true,
+      count:tasks.filter(t=>t&&t.dailyDate).length,bytes:0,
+      shape:'view-over-tasks',populated:tasks.some(t=>t&&t.dailyDate),
+      notes:['Board has NO persisted field of its own. rBoard() renders S.tasks filtered by t.dailyDate.',
+             'boardAddSticky() just opens the task modal with daily:true.'],
+      reads:['rBoard() — route unreachable'],writes:['none of its own'],
+      aiWritable:'Indirectly — AI sets dailyDate via addTasks {daily:true}',
+      reachableUI:'NONE — the board route is unreachable',
+      newerEquivalent:'Tasks (bucket model replaced Daily/General)',
+      migrationDestination:'None — no unique data to migrate',
+      deletionRisk:'LOW — removing the page removes no unique data',
+      recommendation:'DELETE (page only) — the underlying tasks are unaffected'};
+    // People cross-links held on tasks
+    ds.__peopleLinks={key:'peopleLinks',label:'Task → People links',present:true,
+      count:tasks.filter(t=>t&&(t.linkedPersonId||t.linkedPromiseId)).length,bytes:0,
+      shape:'fields-on-tasks',populated:tasks.some(t=>t&&(t.linkedPersonId||t.linkedPromiseId)),
+      reads:['_peopleHandleTaskTick()'],writes:['promise → task creation'],
+      aiWritable:'Indirectly via addPromise',reachableUI:'NONE',
+      newerEquivalent:'None',migrationDestination:'Drop with People, or keep as orphan ids',
+      deletionRisk:'LOW — dangling ids are ignored at render time',
+      recommendation:'ARCHIVE'};
+    // Promises live INSIDE people records
+    const people=Array.isArray(data.people)?data.people:[];
+    ds.__promises={key:'promises',label:'Promises (inside People)',present:true,
+      count:people.reduce((n,p2)=>n+((p2&&Array.isArray(p2.promises))?p2.promises.length:0),0),
+      bytes:_inspBytes(people.map(p2=>(p2&&p2.promises)||[])),shape:'nested-in-people',
+      populated:people.some(p2=>p2&&(p2.promises||[]).length),
+      reads:['rPeople (unreachable)','AI context'],writes:['AI addPromise'],
+      aiWritable:'YES',reachableUI:'NONE',newerEquivalent:'None',
+      migrationDestination:'Archive with people',deletionRisk:'MEDIUM',recommendation:'ARCHIVE'};
+    datasetsByProfile[p.shortId]=ds;
+  }
+  // ── Cross-profile contamination (pre-v240 bug evidence) ────────────────
+  const contamination=[];
+  const CHECK=['reminders','people','peopleTags','tasks','habits','builds','ideas','resources','notes'];
+  if(profiles.length>1){
+    const profDocs=docs.filter(d=>_exportDocRole(d.id,profileIds).role==='profile');
+    CHECK.forEach(key=>{
+      const perProfile=profDocs.map(d=>{
+        const arr=Array.isArray((d.data||{})[key])?d.data[key]:[];
+        const m={};arr.forEach(r=>{if(r&&r.id!=null)m[String(r.id)]=_inspHash(_exportStableString(_exportSerializeValue(r)));});
+        return {shortId:_inspHash(d.id).slice(0,6),ids:m};
+      });
+      const [a,b]=perProfile;
+      if(!a||!b)return;
+      const shared=Object.keys(a.ids).filter(id=>id in b.ids);
+      if(!shared.length)return;
+      const identical=shared.filter(id=>a.ids[id]===b.ids[id]).length;
+      contamination.push({dataset:key,duplicateIdCount:shared.length,
+        byteIdentical:identical,differing:shared.length-identical,
+        sampleIdHashes:shared.slice(0,5).map(_inspHash),
+        profiles:[a.shortId,b.shortId],
+        assessment:shared.length?('Random 7-char ids make accidental collision effectively impossible — '+
+          shared.length+' shared id(s) is strong evidence of the pre-v240 profile-switch contamination.'):'',
+        wasInResetGap:['reminders','people','peopleTags'].includes(key)});
+    });
+  }
+  return {
+    inspectionFormat:INSPECT_FORMAT,inspectionVersion:INSPECT_VERSION,
+    createdAt:new Date().toISOString(),appVersion:APP_VERSION,
+    note:'STRUCTURE ONLY — contains no task, diary, notebook, People, note or reminder text.',
+    profileCount:profiles.length,documentCount:docs.length,
+    firestoreCeilingBytes:LIMIT,
+    profiles,datasets:datasetsByProfile,contamination,
+    volatileExcluded:docs.filter(d=>_exportDocRole(d.id,profileIds).volatile).map(d=>d.id)
+  };
+}
+function _inspFilename(rep){
+  const t=new Date(rep.createdAt),p=n=>String(n).padStart(2,'0');
+  return 'life-os-DIAGNOSTIC-REPORT_'+t.getFullYear()+p(t.getMonth()+1)+p(t.getDate())+'-'+
+    p(t.getHours())+p(t.getMinutes())+'_'+rep.appVersion+'.json';
+}
+async function losInspect(opts){
+  opts=opts||{};
+  try{
+    const rep=await buildLegacyInspection();
+    if(opts.download!==false){
+      const json=JSON.stringify(rep,null,2);
+      const blob=new Blob([json],{type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=_inspFilename(rep);document.body.appendChild(a);a.click();
+      setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
+    }
+    console.log('[inspect] structure-only report — '+rep.profileCount+' profiles, '+
+      rep.documentCount+' documents. No content was read.');
+    return rep;
+  }catch(e){console.error('[inspect] FAILED:',e.message);return {error:e.message};}
+}
+// Download an already-built report (used by the panel button).
+losInspect._download=function(rep){
+  const json=JSON.stringify(rep,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=_inspFilename(rep);document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
+};
+window.losInspect=losInspect;
+
+// Guarded inspector panel: open the app with ?inspect=1
+function _maybeShowInspectPanel(){
+  let on=false;try{on=new URLSearchParams(location.search).get('inspect')==='1';}catch(_){}
+  if(!on||document.getElementById('los-inspect-panel'))return;
+  const e2=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const w=document.createElement('div');
+  w.id='los-inspect-panel';
+  w.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(10,8,16,.75);display:flex;align-items:flex-start;justify-content:center;padding:16px;font-family:Inter,system-ui,sans-serif;overflow:auto';
+  w.innerHTML='<div style="background:#211E2C;border-radius:16px;padding:22px;max-width:1000px;width:100%;box-shadow:0 14px 34px rgba(0,0,0,.32);color:#F4F2FA;margin:auto">'+
+    '<div style="font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:#CEC7E8;font-weight:600;margin-bottom:10px">Developer · Phase A2</div>'+
+    '<div style="font-size:19px;font-weight:700;margin-bottom:8px">Legacy data inspection</div>'+
+    '<div style="font-size:13.5px;line-height:1.55;color:#B5ABC9;margin-bottom:16px">Read-only. Fresh server reads. Nothing is modified, migrated or deleted, and live app state is untouched.<br><b style="color:#00D9A3">Structure only</b> — field names, counts, sizes, date ranges, shapes and hashed ids. No task, diary, notebook, People, note or reminder text is ever read or shown.</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+
+      '<button id="lip-go" style="background:linear-gradient(180deg,#7C4DFF,#C28DFF);border:none;color:#fff;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Run inspection</button>'+
+      '<button id="lip-dl" style="background:#2A2536;border:none;color:#fff;border-radius:10px;padding:9px 14px;font-size:13px;cursor:pointer;font-family:inherit" disabled>Download diagnostic report</button>'+
+      '<button id="lip-close" style="background:none;border:none;color:#B5ABC9;border-radius:10px;padding:9px 12px;font-size:13px;cursor:pointer;font-family:inherit;margin-left:auto">Close</button>'+
+    '</div>'+
+    '<div id="lip-status" style="font-size:13px;color:#B5ABC9;margin-bottom:10px"></div>'+
+    '<div id="lip-out" style="font-size:12px;color:#B5ABC9"></div></div>';
+  document.body.appendChild(w);
+  const statusEl=w.querySelector('#lip-status'),out=w.querySelector('#lip-out'),dlBtn=w.querySelector('#lip-dl');
+  let report=null;
+  const box=h=>'<div style="background:#1A1725;border-radius:10px;padding:12px;margin-bottom:10px">'+h+'</div>';
+  const hdr=t=>'<div style="font-size:11.5px;font-weight:700;color:#CEC7E8;margin:14px 0 6px;letter-spacing:.12em;text-transform:uppercase">'+e2(t)+'</div>';
+  const tbl=(rows,cols)=>rows.length?('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">'+
+    '<tr>'+cols.map(c=>'<th style="text-align:left;padding:4px 10px 4px 0;color:#CEC7E8;font-weight:600;white-space:nowrap">'+e2(c.label)+'</th>').join('')+'</tr>'+
+    rows.map(r=>'<tr style="border-top:1px solid #2A2536">'+cols.map(c=>'<td style="padding:4px 10px 4px 0;vertical-align:top;color:'+(c.color?c.color(r):'#B5ABC9')+';white-space:'+(c.wrap?'normal':'nowrap')+'">'+e2(c.get(r))+'</td>').join('')+'</tr>').join('')+'</table></div>'):'<i>none</i>';
+  const RECCOL=r=>({KEEP:'#00D9A3','NEEDS CONTENT REVIEW':'#FFB84D',ARCHIVE:'#B5ABC9'})[String(r.recommendation||'').split(' (')[0]]||'#FF646E';
+
+  w.querySelector('#lip-close').onclick=()=>w.remove();
+  dlBtn.onclick=()=>{ if(report) losInspect._download(report); };
+  w.querySelector('#lip-go').onclick=async()=>{
+    const b=w.querySelector('#lip-go');b.disabled=true;b.textContent='Reading…';
+    statusEl.textContent='Fresh server reads — read-only…';out.innerHTML='';
+    const rep=await losInspect({download:false});
+    b.disabled=false;b.textContent='Run inspection';statusEl.textContent='';
+    if(rep.error){out.innerHTML=box('<b style="color:#FF646E">Error:</b> '+e2(rep.error));return;}
+    report=rep;dlBtn.disabled=false;
+    let h=box('<b>'+rep.profileCount+'</b> profiles · <b>'+rep.documentCount+'</b> documents · report is <b style="color:#00D9A3">structure only</b>'+
+      (rep.volatileExcluded.length?(' · volatile excluded: '+e2(rep.volatileExcluded.join(', '))):''));
+
+    h+=hdr('Profiles');
+    h+=box(tbl(rep.profiles,[
+      {label:'Profile',get:p=>p.shortId+(p.isActive?' (active)':'')},
+      {label:'Mode',get:p=>p.mode||'—'},
+      {label:'Size',get:p=>(p.bytes/1024).toFixed(1)+' KB'},
+      {label:'% of 1 MB',get:p=>p.percentOfCeiling+'%',color:p=>p.percentOfCeiling>60?'#FF646E':'#B5ABC9'},
+      {label:'Fields',get:p=>p.topLevelFieldCount},
+      {label:'Schema',get:p=>p.schemaVersion==null?'—':p.schemaVersion},
+      {label:'Tasks',get:p=>p.taskCount},
+      {label:'Date range',get:p=>(p.earliest||'?')+' → '+(p.latest||'?')},
+      {label:'Unknown fields',get:p=>p.unknownTopLevelFields.length?p.unknownTopLevelFields.join(', '):'none',wrap:true},
+      {label:'Empty fields',get:p=>p.emptyFields.length,color:()=>'#B5ABC9'}
+    ]));
+
+    h+=hdr('Dead per-task fields still present');
+    const dead=[];rep.profiles.forEach(p=>Object.keys(p.deadTaskFields||{}).forEach(f=>
+      dead.push({profile:p.shortId,field:f,count:p.deadTaskFields[f]})));
+    h+=box(dead.length?tbl(dead,[{label:'Profile',get:x=>x.profile},{label:'Field',get:x=>x.field},
+      {label:'Tasks carrying it',get:x=>x.count}]):'<i>None — no task carries a dead Daily/General or People-link field.</i>');
+
+    h+=hdr('Legacy datasets');
+    Object.keys(rep.datasets).forEach(pid=>{
+      const ds=rep.datasets[pid];
+      const rows=Object.keys(ds).map(k=>ds[k]);
+      h+='<div style="font-size:11.5px;color:#CEC7E8;margin:8px 0 4px">Profile '+e2(pid)+'</div>';
+      h+=box(tbl(rows,[
+        {label:'Dataset',get:d=>d.label},
+        {label:'Records',get:d=>d.count},
+        {label:'Populated',get:d=>d.populated?'yes':'EMPTY',color:d=>d.populated?'#B5ABC9':'#766D8B'},
+        {label:'Bytes',get:d=>d.bytes||'—'},
+        {label:'Earliest',get:d=>d.earliest||'—'},
+        {label:'Latest',get:d=>d.latest||'—'},
+        {label:'Reachable UI',get:d=>d.reachableUI||'—',wrap:true},
+        {label:'AI can write',get:d=>String(d.aiWritable||'—').slice(0,28)},
+        {label:'Destination',get:d=>d.migrationDestination||'—',wrap:true},
+        {label:'Preliminary',get:d=>d.recommendation||'—',color:RECCOL}
+      ]));
+    });
+
+    h+=hdr('Cross-profile contamination check (pre-v240 bug)');
+    h+=box(rep.contamination.length
+      ? tbl(rep.contamination,[
+          {label:'Dataset',get:c=>c.dataset,color:()=>'#FF646E'},
+          {label:'Shared ids',get:c=>c.duplicateIdCount},
+          {label:'Byte-identical',get:c=>c.byteIdentical},
+          {label:'Differing',get:c=>c.differing},
+          {label:'In the reset gap?',get:c=>c.wasInResetGap?'YES':'no',color:c=>c.wasInResetGap?'#FF646E':'#B5ABC9'},
+          {label:'Id hashes',get:c=>c.sampleIdHashes.join(', '),wrap:true}
+        ])
+      : '<b style="color:#00D9A3">No shared record ids between profiles.</b> No evidence of contamination from the pre-v240 profile-switching bug.');
+
+    out.innerHTML=h;
+  };
 }
 // Guarded panel for devices without a console: open the app with ?export=1
 function _maybeShowExportPanel(){

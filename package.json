@@ -5,7 +5,7 @@
   "description": "Life OS — personal command centre PWA",
   "scripts": {
     "start": "node server.js",
-    "test": "node tests/profile-state.test.js && node tests/export-serialization.test.js"
+    "test": "node tests/profile-state.test.js && node tests/export-serialization.test.js && node tests/legacy-inspector.test.js"
   },
   "engines": {
     "node": ">=18"

@@ -1,0 +1,182 @@
+# Life OS — Legacy Data Decisions
+
+**Created 2026-07-31 · Phase A2 · app version v243**
+
+> **NOTHING IS APPROVED FOR DELETION.** Every recommendation below is
+> **preliminary**, derived from a code audit plus a structure-only inspection.
+> No legacy dataset may be deleted, migrated or cleaned until Zander approves
+> it explicitly, dataset by dataset.
+>
+> **Rollback floor in place:** a VERIFIED export exists (v242 — 2 profiles,
+> 4 documents, 3 verified, 98.9 KB). See `firestore-export-restore.md`.
+
+---
+
+## How to read this
+
+| Verdict | Meaning |
+|---|---|
+| **KEEP** | Live data. Do not touch. |
+| **MIGRATE** | Has a destination in the v2 model. |
+| **ARCHIVE** | Not needed live; preserve a copy, then remove from the active product. |
+| **EXPORT THEN DELETE** | Superseded; keep a copy for safety, then drop. |
+| **DELETE** | Safe to drop outright. *(Nothing is currently marked this.)* |
+| **NEEDS CONTENT REVIEW** | Structure alone cannot decide. A separate, explicitly-approved content review is required. |
+
+**Deleting an unused page and deleting its data are separate decisions.**
+
+---
+
+## Summary table
+
+| Dataset | Live UI? | AI can write? | Preliminary verdict |
+|---|---|---|---|
+| `tasks` | ✅ Today | ✅ | **KEEP** |
+| `habits` | ✅ rail + calendar | ✅ | **KEEP** |
+| `reminders` | ✅ Today + calendar | ✅ | **KEEP** |
+| `routineLog` (diary + routine ticks) | ✅ Diary | ✅ (routine only) | **KEEP** — but must be *split* |
+| `builds` (Projects) | ✅ Projects | ✅ | **KEEP** |
+| `ideas` / `resources` / `notes` (Brain) | ✅ Brain | ✅ (create only) | **KEEP** |
+| `notebook` | ✅ Notebook | ✅ (append page) | **KEEP** |
+| **`dayNotes`** | ❌ none | ❌ | **NEEDS CONTENT REVIEW** |
+| **`people`** | ❌ unreachable | ✅ **still writable** | **ARCHIVE** |
+| `peopleTags` / `peopleLevelNames` / `peopleSettings` | ⚠️ Settings only | indirect | **ARCHIVE** (with people) |
+| Promises (inside `people`) | ❌ | ✅ | **ARCHIVE** |
+| Task→People links (`linkedPersonId`, `linkedPromiseId`) | ❌ | indirect | **ARCHIVE** |
+| **`learning`** | ❌ none | ❌ | **EXPORT THEN DELETE** |
+| **`customEvents`** | ❌ (force-emptied) | ❌ | **NEEDS CONTENT REVIEW** |
+| **Board page** | ❌ unreachable | indirect | **DELETE (page only)** — no unique data |
+| **Habits page** (`rHabitsFull`) | ❌ unreachable | — | **DELETE (page only)** — habit data untouched |
+| Dead task fields (`dailyDate`, `dailySince`, `daily`) | ❌ | ✅ AI still sets `dailyDate` | **EXPORT THEN DELETE** (field-level) |
+
+---
+
+## Dataset detail
+
+### `dayNotes` — **NEEDS CONTENT REVIEW** ⚠️ highest-risk item
+- **Reads:** `loadDailyNote()` runs at boot but **no-ops** — its target `#dn-ta`
+  is not in the DOM. `searchNotebook()` has zero callers.
+- **Writes:** `saveDN()`, `saveDvNote()`, `navNotebook()` — **all zero callers**.
+- **AI:** no operation touches it. **UI:** none — every consumer was removed.
+- **Still loaded, still saved, still fingerprinted** on every write.
+- **Why it is dangerous:** it may hold years of day notes that no screen shows,
+  and its name closely resembles the *live* Notebook (`S.notebook`) — making it
+  very easy to migrate or delete the wrong one.
+- **Structure alone cannot decide.** The inspector reports entry count, byte
+  size, key format, date range and how many entries are structurally empty.
+  If populated entries exist, a **separately-approved** content review is
+  required before any verdict.
+- **Possible destination:** a Library book (`kind: diary` or `notes`).
+
+### `people` (+ tags, level names, settings, promises) — **ARCHIVE**
+- **Page unreachable**, but **data is still persisted on every save**, and the
+  **AI can still create people and promises** (`addPerson`, `addPromise`).
+- Real personal data about third parties → deletion is not reversible in any
+  meaningful sense.
+- **Known bug:** `lastTogether` is written as an object but read as a date
+  string, so the "haven't seen X" nudge silently stopped working.
+- **Recommendation:** export/archive, then remove from the active product —
+  *and disable the AI operations first*, otherwise the dataset keeps growing.
+- **No v2 destination is planned.** `profile_memberships` in the Postgres model
+  is about *account sharing*, not this.
+
+### `learning` — **EXPORT THEN DELETE**
+- Merged into `S.habits` long ago by `migrateHabits()` (run-once,
+  version-gated), which **empties it**. Still written to Firestore every save.
+- **AI:** `logLearning` writes to **habits**, not here.
+- If the inspection shows `count: 0` in both profiles, this is the cleanest
+  removal in the whole list.
+
+### `customEvents` — **NEEDS CONTENT REVIEW** ⚠️ already destructive
+- **Force-emptied on every snapshot** (`S.customEvents=[]`) and then **written
+  back as `[]` on every save**. This is an *ongoing, one-way erasure* of legacy
+  entries — it has been running since the ghost-event fix.
+- Any legacy entries that existed have very likely **already been destroyed**
+  in Firestore.
+- **The only place they could survive is the VERIFIED export** — and only if it
+  was taken before/while entries still existed (unlikely, given how long the
+  clear has been running).
+- **Do not make further destructive changes.** Confirm current counts (expected
+  `0`), then decide whether to stop writing the field at all.
+
+### Board page — **DELETE (page only)**
+- **Confirmed: Board has no persisted field of its own.** `rBoard()` renders
+  `S.tasks` filtered by `t.dailyDate`; `boardAddSticky()` just opens the task
+  modal with `daily: true`.
+- Removing the page removes **no unique data and no unique functionality** —
+  the bucket model replaced Daily/General.
+- The `dailyDate` field on tasks is a *separate* decision (below).
+
+### Old Habits page — **DELETE (page only)**
+- `rHabitsFull()` renders into `#learn` inside the unreachable `habits` route,
+  yet **still runs on every `rHabits()` call**.
+- **Habit data is live and must remain** — only the dead renderer and markup go.
+- Its rest-day picker, tier badges and stats are dead UI; if any of that is
+  worth keeping, it should be rebuilt in the rail/detail view, not revived.
+
+### Dead task fields — **EXPORT THEN DELETE** (field-level)
+- `dailyDate`, `dailySince`, `daily` are remnants of the removed Daily/General
+  split. **The AI still sets `dailyDate`** via `addTasks {daily:true}`, and the
+  AI prompt still teaches the old model — so this must be fixed in the AI
+  schema *before* the fields are dropped.
+- `linkedPersonId` / `linkedPromiseId` follow the People decision.
+- `dueDate` is **not** dead — it is a real field that simply cannot be saved
+  (`technical-debt.md` D2). It must be *fixed*, not removed.
+
+### `routineLog` — **KEEP, but must be split**
+- This **is** the live Diary. It holds `journal` (the five answers) **and**
+  `checks` (routine ticks) in one object per day.
+- Before any Library merge, `journal` must be separated from `checks`
+  (Postgres: `diary_entries` + `routine_completions`).
+- **Do not modify the entangled structure during inspection.**
+
+### `learning` vs `habits` vs `routine` vs `routineLog` — the relationship
+| Object | Status |
+|---|---|
+| `habits` | **ACTIVE** — the live habit system (`checkedDates` is the source of truth) |
+| `routine` | **ACTIVE** — the user-editable routine template (Settings) |
+| `routineLog` | **ACTIVE** — per-day routine ticks **and** diary journal answers |
+| `learning` | **LEGACY** — merged into `habits`, emptied, still persisted |
+| Habits *page* | **DEAD UI** over live habit data |
+| Diary routine ticks | the `checks` half of `routineLog` — same object as the journal |
+
+**No duplication of habit data exists.** The only duplication is the dead
+`learning` array and the dead Habits page renderer.
+
+---
+
+## Cross-profile contamination (pre-v240 bug)
+
+The inspector compares record ids across both profiles for `reminders`,
+`people`, `peopleTags`, `tasks`, `habits`, `builds`, `ideas`, `resources` and
+`notes`, reporting duplicate-id counts, how many are byte-identical, and which
+datasets were in the pre-v240 reset gap.
+
+**Interpretation:** ids are 7 random base-36 characters, so an accidental
+collision between two small profiles is effectively impossible. **Any shared id
+is strong evidence of contamination** from the pre-v240 profile-switch bug.
+
+**Nothing is de-duplicated automatically.** If duplicates are found, the
+cleanup is a separate, explicitly-approved step — and the rollback floor exists
+precisely for that.
+
+---
+
+## Open questions that structure cannot answer
+
+1. **`dayNotes`** — are the populated entries real notes, or generated/empty
+   scaffolding? Needs an approved content review.
+2. **`customEvents`** — did any legacy entries survive, in the export or
+   anywhere? Probably not.
+3. **People** — is there anything worth keeping before archiving?
+4. **Contamination** — if duplicates exist, which profile is the original?
+   (`createdAt` on the profile catalogue and per-record dates may help.)
+
+---
+
+## Status
+
+- Phase A1 (profile isolation) ✅ · Phase A3 (verified export) ✅ · **A2
+  inspector built ✅ — awaiting a real run.**
+- **No migration has run. Firestore remains the source of truth.**
+- **No legacy dataset is approved for deletion.**
