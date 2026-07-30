@@ -43,22 +43,22 @@
    The canvas is a tan-brown → near-black gradient; the primary button is a
    soft, low-contrast tan. ── */
 [data-theme="studio"]{
-  --app-bg:radial-gradient(64% 56% at 0% 100%, rgba(232,180,112,.34), transparent 55%), radial-gradient(50% 50% at 100% 0%, rgba(150,120,150,.10), transparent 60%), linear-gradient(35deg, #34241a 0%, #271a1b 42%, #1b1417 72%, #120d11 100%);
-  --btn-grad:linear-gradient(135deg,#d9ad78 0%,#c99f6b 100%);
-  --bg:#181317; --bg-2:#110d10;
-  --surface:#231d21; --surface-2:#2b2428; --surface-hover:#352d32;
-  --border:#382f35; --border-strong:#4c424a;
-  --text:#efe5d4; --text-2:#bcb3bd; --muted:#8b8296; --muted-2:#635b70;
-  --accent:#dcab7d; --accent-ink:#201b26;
-  --peach:#f0b487; --peach-bg:#3a2c22;
-  --sage:#88b1a0; --sage-bg:#26332e;
-  --lavender:#a99cf0; --lavender-bg:#2b2842;
-  --gold:#e0bd7d; --gold-bg:#3a3222;
-  --blue:#8f9cc0; --blue-bg:#262c3e;
-  --red:#e0806e; --red-bg:#3a2420;
-  --pink:#d98fa4; --pink-bg:#3a2830;
-  --emerald:#88b1a0; --emerald-bg:#26332e;
-  --paper:#231d21; --paper-line:rgba(254,222,184,.08); --paper-margin:rgba(220,171,125,.4);
+  --app-bg:radial-gradient(64% 56% at 0% 100%, rgba(150,110,235,.30), transparent 55%), radial-gradient(50% 50% at 100% 0%, rgba(120,90,190,.12), transparent 60%), linear-gradient(35deg, #2a2142 0%, #211934 42%, #191324 72%, #110d1c 100%);
+  --btn-grad:linear-gradient(135deg,#a888ee 0%,#8b5fd6 100%);
+  --bg:#171226; --bg-2:#100c1a;
+  --surface:#221b34; --surface-2:#2b2340; --surface-hover:#352b4c;
+  --border:#382f4e; --border-strong:#4c4266;
+  --text:#ece6f5; --text-2:#bcb4cd; --muted:#8b83a0; --muted-2:#635b7c;
+  --accent:#9d76ec; --accent-ink:#1a1330;
+  --peach:#c08ae0; --peach-bg:#2e2542;
+  --sage:#8f76e0; --sage-bg:#26203c;
+  --lavender:#a99cf0; --lavender-bg:#2b2846;
+  --gold:#c9a3ef; --gold-bg:#2e2742;
+  --blue:#8f97d8; --blue-bg:#26264a;
+  --red:#e0806e; --red-bg:#3a2430;
+  --pink:#cf8fd0; --pink-bg:#3a2842;
+  --emerald:#8f76e0; --emerald-bg:#26203c;
+  --paper:#221b34; --paper-line:rgba(200,180,240,.08); --paper-margin:rgba(157,118,236,.4);
   --shadow:0 1px 3px rgba(0,0,0,.42), 0 4px 14px rgba(0,0,0,.34);
   --shadow-lift:0 6px 30px rgba(0,0,0,.5);
 }
@@ -120,8 +120,8 @@
   /* Two shapes: a 4-point sparkle for the bigger stars, and a small rounded
      SQUARE for the little ones (per the reference — small = square, big =
      star). More of them, well spread. */
-  --star:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M12%202%20L13.6%2010.4%20L22%2012%20L13.6%2013.6%20L12%2022%20L10.4%2013.6%20L2%2012%20L10.4%2010.4%20Z'%20fill='%23f6d6a0'/%3E%3C/svg%3E");
-  --sq:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%2010'%3E%3Crect%20x='2.2'%20y='2.2'%20width='5.6'%20height='5.6'%20rx='1'%20fill='%23f6d6a0'/%3E%3C/svg%3E");
+  --star:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M12%202%20L13.6%2010.4%20L22%2012%20L13.6%2013.6%20L12%2022%20L10.4%2013.6%20L2%2012%20L10.4%2010.4%20Z'%20fill='%23d8c6f5'/%3E%3C/svg%3E");
+  --sq:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%2010'%3E%3Crect%20x='2.2'%20y='2.2'%20width='5.6'%20height='5.6'%20rx='1'%20fill='%23d8c6f5'/%3E%3C/svg%3E");
   display:block;position:fixed;inset:0;pointer-events:none;z-index:6;opacity:.92;background-repeat:no-repeat;
   background-image:
     var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),
@@ -2848,9 +2848,10 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <!-- ICON DEFS -->
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <symbol id="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="9.2"/>
-      <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>
+    <symbol id="logo" viewBox="0 0 24 24">
+      <path d="M12 20.4 C6.9 17.6 3.4 13.1 3.4 8.5 C7.1 9.2 10.1 13 12 20.4 Z" fill="#b291ea" fill-opacity=".9"/>
+      <path d="M12 20.4 C17.1 17.6 20.6 13.1 20.6 8.5 C16.9 9.2 13.9 13 12 20.4 Z" fill="#b291ea" fill-opacity=".9"/>
+      <path d="M12 2.3 C8.6 8 8.6 15 12 20.4 C15.4 15 15.4 8 12 2.3 Z" fill="#8f66df" fill-opacity=".95"/>
     </symbol>
     <symbol id="i-today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></symbol>
     <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></symbol>
@@ -3765,7 +3766,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v230';
+const APP_VERSION='v231';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -17404,12 +17405,12 @@ document.addEventListener('click',e=>{
 <script>
 (function(){
 try{
-  var REC={RS:['var(--surface, #262c3e)'],RS2:['var(--surface-2, #31384e)'],R1:['#202332'],R2:['#bc9876'],R3:['#434e60'],R4:['#8b9a9f'],
-    R5:['#202332','#bc9876'],R6:['#202332','#434e60'],R7:['#202332','#8b9a9f'],
-    R8:['#bc9876','#434e60'],R9:['#bc9876','#8b9a9f'],R10:['#434e60','#8b9a9f'],
-    R11:['#202332','#434e60','#8b9a9f'],R12:['#202332','#bc9876','#434e60'],
-    R13:['#bc9876','#434e60','#8b9a9f'],R14:['#202332','#14151d'],R15:['#8b9a9f','#cdd4d6']};
-  var RNAME={RS:'Base surface',RS2:'Raised surface',R1:'Navy',R2:'Tan',R3:'Slate',R4:'Dove',R5:'Navy·Tan',R6:'Navy·Slate',R7:'Navy·Dove',R8:'Tan·Slate',R9:'Tan·Dove',R10:'Slate·Dove',R11:'Navy·Slate·Dove',R12:'Navy·Tan·Slate',R13:'Tan·Slate·Dove',R14:'Navy·Ink',R15:'Dove·Mist'};
+  var REC={RS:['var(--surface, #221b34)'],RS2:['var(--surface-2, #2b2340)'],R1:['#211934'],R2:['#9d76ec'],R3:['#4a3f6b'],R4:['#b3a6da'],
+    R5:['#211934','#9d76ec'],R6:['#211934','#4a3f6b'],R7:['#211934','#b3a6da'],
+    R8:['#9d76ec','#4a3f6b'],R9:['#9d76ec','#b3a6da'],R10:['#4a3f6b','#b3a6da'],
+    R11:['#211934','#4a3f6b','#b3a6da'],R12:['#211934','#9d76ec','#4a3f6b'],
+    R13:['#9d76ec','#4a3f6b','#b3a6da'],R14:['#211934','#140f22'],R15:['#b3a6da','#ded5f2']};
+  var RNAME={RS:'Base surface',RS2:'Raised surface',R1:'Deep purple',R2:'Bright purple',R3:'Mid purple',R4:'Lavender',R5:'Deep·Bright',R6:'Deep·Mid',R7:'Deep·Lav',R8:'Bright·Mid',R9:'Bright·Lav',R10:'Mid·Lav',R11:'Deep·Mid·Lav',R12:'Deep·Bright·Mid',R13:'Bright·Mid·Lav',R14:'Deep·Ink',R15:'Lav·Mist'};
   var DIR={DN:['↓','180deg'],UP:['↑','0deg'],RT:['→','90deg'],LT:['←','270deg'],BR:['↘','135deg'],TR:['↗','45deg'],BL:['↙','225deg'],TL:['↖','315deg'],RA:['◉','radial']};
   function grad(r,d,b){
     var c=REC[r]||REC.R1; if(c.length===1)return c[0];
@@ -17437,13 +17438,14 @@ try{
     S5:{r:'R6',d:'DN',b:47},S6:{r:'R14',d:'LT',b:55},S7:{r:'RS'},S8:{r:'R2'},
     S9:{r:'R2'},S11:{r:'R14',d:'DN',b:57},S12:{r:'R14',d:'DN',b:60},
     S13:{r:'R14',d:'UP',b:68},S14:{r:'R5',d:'RT',b:50},S15:{r:'R8',d:'BL',b:81},
-    _text:'#d9d9d9',_text2:'#8b9a9f',_muted:'#8b9a9f',_border:'#202332',_borders:true,
-    _surface:'#262c3e',_surface2:'#31384e',_bg:'#1c2130'};
+    _text:'#ece6f5',_text2:'#b3a6da',_muted:'#8b83a0',_border:'#382f4e',_borders:true,
+    _surface:'#221b34',_surface2:'#2b2340',_bg:'#171226'};
   var KEY='los_design_v1',cfg;
   try{cfg=JSON.parse(localStorage.getItem(KEY));}catch(e){cfg=null;}
   if(!cfg)cfg=JSON.parse(JSON.stringify(DEF));
   for(var k in DEF)if(!(k in cfg))cfg[k]=DEF[k];
   if(!cfg._m2){cfg.S4={r:'RS'};cfg.S7={r:'RS'};cfg._m2=1;}
+  if(!cfg._m3){cfg._text='#ece6f5';cfg._text2='#b3a6da';cfg._muted='#8b83a0';cfg._border='#382f4e';cfg._surface='#221b34';cfg._surface2='#2b2340';cfg._bg='#171226';cfg._m3=1;}
 
   function buildCss(){
     var o='';
