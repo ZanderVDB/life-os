@@ -1683,6 +1683,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .completed-day{margin-bottom:12px}
 .cmp-date{font-size:11px;font-weight:600;color:var(--muted);padding:4px 2px 6px;text-transform:uppercase;letter-spacing:.06em}
 .tit{font-size:13px;flex:1;min-width:0;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+/* Streamlined right side of a task row: a fixed-width date column then a
+   fixed-width category chip, so both line up across every row. */
+.ti-due{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto;white-space:nowrap;width:48px;text-align:right;margin-top:2px}
+.ti-area-badge.cat{box-sizing:border-box;width:64px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 0 auto}
+.tm-when{display:flex;gap:10px}
+.tm-when-f{flex:1;min-width:0}
 .tit.dn{text-decoration:line-through;color:var(--muted-2)}
 .ti-time{font-size:10px;color:var(--muted);background:var(--surface-2);padding:2px 6px;border-radius:5px;flex-shrink:0;margin-top:2px}
 .exp-p{padding:13px 15px;background:var(--surface-2);border-bottom:1px solid var(--border)}
@@ -3782,7 +3788,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v232';
+const APP_VERSION='v233';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -10810,6 +10816,10 @@ function saveTask(id){
   else{const ta=document.getElementById('exp-ta-'+id);if(ta?.value?.trim())t.text=ta.value.trim();}
   if(modalTi&&UI._taskModalId===id)t.scheduledTime=modalTi.value;
   else{const ti=document.getElementById('exp-ti-'+id);if(ti)t.scheduledTime=ti.value;}
+  const modalDue=document.getElementById('tm-due');
+  if(modalDue&&UI._taskModalId===id){ const v=modalDue.value||''; if(v)t.dueDate=v; else delete t.dueDate; }
+  // A dated task can't stay later than its date-bucket — pull it up if needed.
+  if(t.dueDate){ const db=dateBucket(t.dueDate); if(TASK_BUCKETS.includes(t.bucket)&&(BUCKET_IDX[t.bucket]??0)>(BUCKET_IDX[db]??3))t.bucket=db; }
   if(modalAr&&UI._taskModalId===id&&modalAr.value){
     const v=modalAr.value;
     if(v==='personal'){t.area='personal';t.project='gen';}
@@ -10916,13 +10926,15 @@ function openTaskModal(idOrTask,opts){
       <div id="tm-stats" class="tm-stats">${_taskStatsHTML(t)}</div>
       <label class="tm-lbl" for="tm-text">Task</label>
       <textarea id="tm-text" class="ta tm-text-ta" rows="2" placeholder="What needs doing?">${esc(t.text||'')}</textarea>
-      <label class="tm-lbl" for="tm-area">Area</label>
+      <label class="tm-lbl" for="tm-area">Category</label>
       <select id="tm-area" class="input">${(function(){
         const cur=effectiveAreaId(t);
         return getOrderedAreaList().map(a=>`<option value="${esc(a.id)}"${a.id===cur?' selected':''}>${esc(a.name)}</option>`).join('');
       })()}</select>
-      <label class="tm-lbl" for="tm-time">Scheduled time</label>
-      <input id="tm-time" class="input" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am">
+      <div class="tm-when">
+        <div class="tm-when-f"><label class="tm-lbl" for="tm-due">Due date <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label><input id="tm-due" class="input" type="date" value="${esc(t.dueDate||'')}"></div>
+        <div class="tm-when-f"><label class="tm-lbl" for="tm-time">Time <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label><input id="tm-time" class="input" value="${esc(t.scheduledTime||'')}" placeholder="e.g. 10am"></div>
+      </div>
       <label class="tm-lbl" for="tm-notes">Notes / details</label>
       <div class="pd-field-wrap">
         <textarea id="tm-notes" class="ta" rows="2" placeholder="Extra detail — shows on the sticky under the title (when there are no steps).">${esc(t.notes||'')}</textarea>
@@ -11125,10 +11137,53 @@ function mkPriRow(t){
 // chip. Reminders render into their own section (#reminders-sec) above. ──
 const TASK_BUCKETS=['today','week','month','future'];
 const BUCKET_LABELS={today:'Today',week:'This week',month:'This month',future:'Future'};
+const BUCKET_IDX={today:0,week:1,month:2,future:3};
+// The LATEST bucket a task due on `iso` (YYYY-MM-DD) may occupy. A dated task
+// may sit in that bucket or any SOONER one, but never a later one.
+function dateBucket(iso){
+  if(!iso)return null;
+  const today=tod();
+  if(iso<=today)return 'today';
+  const d=new Date(iso+'T12:00:00'), now=new Date(today+'T12:00:00');
+  const endWeek=new Date(now); endWeek.setDate(now.getDate()+((7-now.getDay())%7)); // this week's Sunday
+  if(d<=endWeek)return 'week';
+  const endMonth=new Date(now.getFullYear(),now.getMonth()+1,0,12);
+  if(d<=endMonth)return 'month';
+  return 'future';
+}
+function bucketAllowed(t,bucket){
+  if(!t||!t.dueDate)return true;
+  return (BUCKET_IDX[bucket]??0)<=(BUCKET_IDX[dateBucket(t.dueDate)]??3);
+}
+const _MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDue(iso){ if(!iso)return ''; const d=new Date(iso+'T12:00:00'); return d.getDate()+' '+_MON[d.getMonth()]; }
+// Popup shown when a dated task is dragged later than it's allowed to go.
+function _dateBucketPopup(id,targetBucket){
+  const t=S.tasks.find(x=>x.id===id);if(!t||!t.dueDate)return;
+  const db=dateBucket(t.dueDate);
+  const ov=document.createElement('div');ov.className='modal';ov.id='date-lock-modal';
+  ov.innerHTML=`<div class="modal-bd" onclick="_dlpClose()"></div>
+    <div class="modal-body" style="max-width:340px;text-align:center">
+      <div style="font-size:15px;font-weight:750;margin-bottom:8px">Scheduled task</div>
+      <div style="font-size:13px;color:var(--text-2);line-height:1.55;margin-bottom:16px">“${esc(t.text)}” is scheduled for <b>${fmtDue(t.dueDate)}</b>, so it has to stay in <b>${BUCKET_LABELS[db]}</b> or sooner.</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="_dlpChange('${id}')">Change the date</button>
+        <button class="btn btn-sm" onclick="_dlpRemove('${id}','${targetBucket}')">Remove the date &amp; move it</button>
+        <button class="btn btn-ghost btn-sm" onclick="_dlpClose()">Keep it in ${BUCKET_LABELS[db]}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);try{_syncBodyLock();}catch(_){}
+}
+function _dlpClose(){document.getElementById('date-lock-modal')?.remove();try{_syncBodyLock();}catch(_){}}
+function _dlpChange(id){_dlpClose();openTaskModal(id);}
+function _dlpRemove(id,bucket){const t=S.tasks.find(x=>x.id===id);if(t){delete t.dueDate;t.bucket=bucket;}_dlpClose();svAll();rTasks();if(typeof rAttention==='function')rAttention();}
 let _dragTaskId=null;
 function _migrateTaskBuckets(){
   const tasks=S.tasks||[];let changed=false;
   tasks.forEach(t=>{if(!TASK_BUCKETS.includes(t.bucket)){t.bucket='today';changed=true;}});
+  // Dated tasks can't sit later than their date-bucket — pull them forward as
+  // the date nears (never pushed back; you can still place them sooner).
+  tasks.forEach(t=>{if(t.dueDate){const db=dateBucket(t.dueDate);if((BUCKET_IDX[t.bucket]??0)>(BUCKET_IDX[db]??3)){t.bucket=db;changed=true;}}});
   TASK_BUCKETS.forEach(b=>{
     const inB=tasks.filter(t=>t.bucket===b);
     if(inB.some(t=>typeof t.ord!=='number')){
@@ -11198,6 +11253,8 @@ function taskDragEnd(){
   if(!wrap){rTasks();return;}
   const drop=wrap.closest('.bucket-drop');if(!drop){rTasks();return;}
   const bucket=drop.dataset.bucket;
+  const dragged=S.tasks.find(x=>x.id===id);
+  if(dragged&&dragged.dueDate&&!bucketAllowed(dragged,bucket)){ rTasks(); _dateBucketPopup(id,bucket); return; }
   [...drop.querySelectorAll('.ti-wrap')].forEach((w,i)=>{const t=S.tasks.find(x=>x.id===w.dataset.taskId);if(t){t.bucket=bucket;t.ord=i;}});
   svAll();if(typeof rAttention==='function')rAttention();rTasks();
 }
@@ -11224,7 +11281,7 @@ function rTasksV2(){
     const _ckTag=_ckLbl?`<span class="ti-checked" title="Last checked ${_ckMs?new Date(_ckMs).toLocaleDateString('en-ZA',{day:'numeric',month:'short'}):''}">✓ ${esc(_ckLbl)}</span>`:'';
     const _ckOn=_taskCheckedToday(t);
     let html=`<div class="ti-wrap${showSubstep?' has-substep':''}" draggable="true" data-task-id="${t.id}" ondragstart="taskDragStart(event,'${t.id}')" ondragend="taskDragEnd(event)">`;
-    html+=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${mainLocked?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')"><span class="ti-drag" title="Drag to reorder or move between buckets">⠿</span><input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}${area.name?`<span class="ti-area-badge" style="--abg:${area.color}">${esc(area.name)}</span>`:''}</div>`;
+    html+=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${mainLocked?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')"><span class="ti-drag" title="Drag to reorder or move between buckets">⠿</span><input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}<span class="ti-due">${t.dueDate?fmtDue(t.dueDate):(t.scheduledTime?esc(t.scheduledTime):'')}</span>${area.name?`<span class="ti-area-badge cat" style="--abg:${area.color}">${esc(area.name)}</span>`:''}</div>`;
     if(showSubstep){const stepNum=t.steps.findIndex(s=>!s.done)+1;const isLast=stepNum===t.steps.length;const meta=isLast?'Last step':`Step ${stepNum} of ${t.steps.length}`;html+=`<div class="ti-substep" onclick="event.stopPropagation();openTaskModal('${t.id}')" title="Tap the checkbox to mark done. Tap text to open all steps."><input type="checkbox" onclick="event.stopPropagation();_fadeAndCompleteStep(this,'${t.id}','${nextStep.id}')" title="Mark this step done"><span class="ti-substep-text">${esc(nextStep.text)}</span><span class="ti-substep-meta">${meta}</span></div>`;}
     html+=`</div>`;return html;
   };
