@@ -3975,7 +3975,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v240';
+const APP_VERSION='v241';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4721,6 +4721,8 @@ auth.onAuthStateChanged(u=>{
       setSplashStage(45,'Restoring your session…');
       loadData();
       initRouter();
+      // Phase A3 developer export panel — only when opened with ?export=1.
+      try{_maybeShowExportPanel();}catch(_){}
     } else {
       console.log('[auth] subsequent fire for same user — skipping reload');
     }
@@ -17913,6 +17915,288 @@ document.addEventListener('click',e=>{
   try{hideMcwPopover();}catch(_){}
   openEventEdit(el.dataset.evPayload);
 },true);
+
+// ══════════════════════════════════════════════════════════════════════════
+// PHASE A3 — PROTECTED FIRESTORE EXPORT  (rollback floor, READ-ONLY)
+//
+// Creates a complete, portable, verified snapshot of everything this account
+// holds in Firestore, and downloads it to the user's own device.
+//
+// STRICTLY READ-ONLY. It never writes, never normalises, never hydrates into
+// live app state, never triggers autosave, and never touches the active
+// profile. It reads the whole `data` subcollection from the SERVER (not the
+// local cache) so unknown / legacy / future documents and fields are captured
+// too — nothing is silently omitted.
+//
+// PRIVACY: stays on the device. Never uploaded, never logged, never sent to
+// any AI service, never written to localStorage. No document content is
+// printed to the console or shown in the result summary.
+//
+// Access (deliberately out of the normal product UI):
+//   • console:  losExport()
+//   • URL:      ?export=1     → a small guarded panel
+// ══════════════════════════════════════════════════════════════════════════
+const EXPORT_FORMAT='life-os-firestore-export';
+const EXPORT_VERSION=1;
+
+// ── Reversible value serialisation ────────────────────────────────────────
+// Firestore values must survive JSON without becoming ambiguous. Anything
+// non-plain is boxed as {__t:<type>,...} so a restore can rebuild it exactly.
+function _exportSerializeValue(v,seen){
+  seen=seen||new Set();
+  if(v===null)return null;
+  const t=typeof v;
+  if(t==='string'||t==='boolean')return v;
+  if(t==='number')return Number.isFinite(v)?v:{__t:'number',v:String(v)}; // NaN/Infinity
+  if(t==='undefined')return {__t:'undefined'};
+  if(t==='function')return {__t:'unsupported',repr:'function'};
+  if(t==='bigint')return {__t:'bigint',v:v.toString()};
+  if(v instanceof Date)return {__t:'date',iso:v.toISOString()};
+  // Firestore Timestamp (compat SDK): has seconds + nanoseconds + toDate()
+  if(typeof v.toDate==='function'&&typeof v.seconds==='number'){
+    let iso=null;try{iso=v.toDate().toISOString();}catch(_){}
+    return {__t:'timestamp',seconds:v.seconds,nanoseconds:(v.nanoseconds!=null?v.nanoseconds:0),iso:iso};
+  }
+  if(typeof v.latitude==='number'&&typeof v.longitude==='number'&&v.constructor&&/GeoPoint/.test(v.constructor.name))
+    return {__t:'geopoint',latitude:v.latitude,longitude:v.longitude};
+  if(v.path&&typeof v.path==='string'&&typeof v.id==='string'&&v.firestore)
+    return {__t:'ref',path:v.path};
+  if(v instanceof Uint8Array||(v.constructor&&v.constructor.name==='Blob'&&typeof v.toBase64==='function')){
+    try{return {__t:'bytes',b64:(typeof v.toBase64==='function')?v.toBase64():btoa(String.fromCharCode.apply(null,v))};}
+    catch(_){return {__t:'unsupported',repr:'bytes'};}
+  }
+  if(t==='object'){
+    if(seen.has(v))return {__t:'circular'};
+    seen.add(v);
+    let out;
+    if(Array.isArray(v))out=v.map(x=>_exportSerializeValue(x,seen));
+    else{
+      out={};
+      // Sorted keys so the serialisation (and its fingerprint) is stable.
+      for(const k of Object.keys(v).sort())out[k]=_exportSerializeValue(v[k],seen);
+    }
+    seen.delete(v);
+    return out;
+  }
+  return {__t:'unsupported',repr:String(v)};
+}
+// Inverse — used by the documented restore procedure and by the tests.
+function _exportDeserializeValue(v){
+  if(v===null||typeof v!=='object')return v;
+  if(Array.isArray(v))return v.map(_exportDeserializeValue);
+  switch(v.__t){
+    case 'undefined': return undefined;
+    case 'number':    return Number(v.v);
+    case 'bigint':    return BigInt(v.v);
+    case 'date':      return new Date(v.iso);
+    case 'timestamp': return {seconds:v.seconds,nanoseconds:v.nanoseconds,iso:v.iso};
+    case 'geopoint':  return {latitude:v.latitude,longitude:v.longitude};
+    case 'ref':       return {path:v.path};
+    case 'bytes':     return {b64:v.b64};
+    case 'circular':  return undefined;
+    case 'unsupported': return undefined;
+  }
+  const out={};
+  for(const k of Object.keys(v))out[k]=_exportDeserializeValue(v[k]);
+  return out;
+}
+// Deterministic string form (recursively key-sorted) → the fingerprint input.
+function _exportStableString(v){
+  if(v===null||typeof v!=='object')return JSON.stringify(v)===undefined?'null':JSON.stringify(v);
+  if(Array.isArray(v))return '['+v.map(_exportStableString).join(',')+']';
+  return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+_exportStableString(v[k])).join(',')+'}';
+}
+// Count leaf + container fields, so verification can compare structure.
+function _exportCountFields(v){
+  if(v===null||typeof v!=='object')return 1;
+  if(Array.isArray(v))return v.reduce((n,x)=>n+_exportCountFields(x),0);
+  return Object.keys(v).reduce((n,k)=>n+1+_exportCountFields(v[k]),0);
+}
+async function _exportSha256(str){
+  try{
+    const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }catch(e){
+    // Fallback (non-secure context): FNV-1a. Still deterministic.
+    let h=0x811c9dc5;
+    for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}
+    return 'fnv1a-'+h.toString(16).padStart(8,'0');
+  }
+}
+// ── Verification (pure — unit-tested) ─────────────────────────────────────
+// `src` = [{id, fieldCount, fingerprint}] from an independent second read.
+function _exportVerify(exp,src){
+  const checks=[],fail=[];
+  const add=(name,ok,detail)=>{checks.push({name,ok,detail:detail||''});if(!ok)fail.push(name);};
+
+  const docIds=Object.keys(exp.documents||{});
+  add('json_parses',(()=>{try{JSON.parse(JSON.stringify(exp));return true;}catch(_){return false;}})(),
+      docIds.length+' documents');
+  add('document_count_matches',docIds.length===src.length,
+      'export '+docIds.length+' vs source '+src.length);
+  add('no_duplicate_documents',new Set(docIds).size===docIds.length,'');
+
+  // Every profile named in the index must have been exported.
+  const idxProfiles=(exp.profiles||[]).map(p=>p.id);
+  const missing=idxProfiles.filter(id=>!docIds.includes(id));
+  add('every_indexed_profile_exported',missing.length===0,
+      missing.length?('missing: '+missing.length):'all '+idxProfiles.length+' present');
+  add('no_duplicate_profiles',new Set(idxProfiles).size===idxProfiles.length,'');
+  add('active_profile_present',!exp.activeProfileId||docIds.includes(exp.activeProfileId),'');
+
+  // Field counts + fingerprints must match the independent second read.
+  let fieldMismatch=0,fpMismatch=0;
+  for(const s of src){
+    const d=exp.documents[s.id];
+    if(!d){fieldMismatch++;continue;}
+    if(d.fieldCount!==s.fieldCount)fieldMismatch++;
+    if(d.fingerprint!==s.fingerprint)fpMismatch++;
+  }
+  add('field_counts_match',fieldMismatch===0,fieldMismatch?(fieldMismatch+' mismatched'):'');
+  add('fingerprints_match_second_read',fpMismatch===0,fpMismatch?(fpMismatch+' mismatched'):'');
+
+  // Nothing unserialisable slipped through.
+  const s=JSON.stringify(exp.documents||{});
+  add('no_circular_values',!s.includes('"__t":"circular"'),'');
+  add('no_unsupported_values',!s.includes('"__t":"unsupported"'),'');
+
+  // Identity fields needed to restore.
+  add('has_restore_identity',!!(exp.userId&&exp.firebaseProjectId&&exp.exportVersion),'');
+
+  return {ok:fail.length===0,failed:fail,checks};
+}
+// ── The export itself ─────────────────────────────────────────────────────
+async function buildFirestoreExport(){
+  if(!CU)throw new Error('Not signed in.');
+  const uid=CU.uid;
+  const col=db.collection('users').doc(uid).collection('data');
+  // Read the WHOLE data subcollection from the server — captures _index,
+  // every profile doc, presence, and anything unknown/legacy.
+  const readAll=async()=>{
+    const snap=await col.get({source:'server'});
+    const out=[];
+    snap.forEach(doc=>out.push({id:doc.id,path:doc.ref.path,data:doc.data()}));
+    return out;
+  };
+  const first=await readAll();
+
+  const documents={};
+  for(const d of first){
+    const ser=_exportSerializeValue(d.data);
+    const stable=_exportStableString(ser);
+    documents[d.id]={
+      path:d.path,
+      fieldCount:_exportCountFields(ser),
+      approxBytes:new TextEncoder().encode(stable).length,
+      fingerprint:await _exportSha256(stable),
+      updatedAt:(ser&&ser.updatedAt)?ser.updatedAt:null,
+      schemaVersion:(d.data&&typeof d.data._schemaVersion==='number')?d.data._schemaVersion:null,
+      topLevelFieldNames:Object.keys(d.data||{}).sort(),
+      data:ser
+    };
+  }
+  // Independent SECOND read for fingerprint comparison.
+  const second=await readAll();
+  const srcCheck=[];
+  for(const d of second){
+    const stable=_exportStableString(_exportSerializeValue(d.data));
+    srcCheck.push({id:d.id,fieldCount:_exportCountFields(_exportSerializeValue(d.data)),
+                   fingerprint:await _exportSha256(stable)});
+  }
+
+  const idxDoc=first.find(d=>d.id==='_index');
+  const idx=idxDoc?idxDoc.data:null;
+  const exp={
+    exportFormat:EXPORT_FORMAT,
+    exportVersion:EXPORT_VERSION,
+    createdAt:new Date().toISOString(),
+    appVersion:APP_VERSION,
+    firebaseProjectId:(firebaseConfig&&firebaseConfig.projectId)||null,
+    userId:uid,
+    userIdFingerprint:await _exportSha256(uid),
+    activeProfileId:(idx&&idx.activeProfileId)||_activeProfileId||null,
+    profiles:(idx&&Array.isArray(idx.profiles))?idx.profiles.map(p=>({
+      id:p.id,name:p.name,mode:p.mode,createdAt:p.createdAt!=null?_exportSerializeValue(p.createdAt):null
+    })):[],
+    documentCount:Object.keys(documents).length,
+    documents,
+    verification:null
+  };
+  exp.verification=_exportVerify(exp,srcCheck);
+  return exp;
+}
+// Filename: no email, no raw uid — a short one-way fingerprint instead.
+function _exportFilename(exp){
+  const t=new Date(exp.createdAt);
+  const p=n=>String(n).padStart(2,'0');
+  const stamp=t.getFullYear()+p(t.getMonth()+1)+p(t.getDate())+'-'+p(t.getHours())+p(t.getMinutes());
+  return 'life-os-export_'+stamp+'_'+exp.appVersion+'_'+String(exp.userIdFingerprint).slice(0,8)+'.json';
+}
+// Download to the user's device. Never uploaded, never stored in the app.
+async function losExport(){
+  const log=m=>console.log('[export] '+m);
+  try{
+    log('reading from server (read-only)…');
+    const exp=await buildFirestoreExport();
+    const json=JSON.stringify(exp,null,2);
+    const bytes=new TextEncoder().encode(json).length;
+    const name=_exportFilename(exp);
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=name;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
+    // Summary only — NEVER any document content.
+    const v=exp.verification;
+    const summary={
+      file:name,
+      profiles:exp.profiles.length,
+      documents:exp.documentCount,
+      sizeBytes:bytes,
+      sizeReadable:(bytes/1024).toFixed(1)+' KB',
+      verification:v.ok?'PASSED':'FAILED',
+      failedChecks:v.failed,
+      perDocument:Object.keys(exp.documents).map(id=>({
+        id:id,fields:exp.documents[id].fieldCount,bytes:exp.documents[id].approxBytes
+      }))
+    };
+    log('done — '+summary.documents+' documents, '+summary.sizeReadable+', verification '+summary.verification);
+    console.table?console.table(summary.perDocument):log(JSON.stringify(summary.perDocument));
+    return summary;
+  }catch(e){
+    console.error('[export] FAILED:',e.message);
+    return {error:e.message};
+  }
+}
+window.losExport=losExport;
+// Guarded panel for devices without a console: open the app with ?export=1
+function _maybeShowExportPanel(){
+  let on=false;try{on=new URLSearchParams(location.search).get('export')==='1';}catch(_){}
+  if(!on||document.getElementById('los-export-panel'))return;
+  const w=document.createElement('div');
+  w.id='los-export-panel';
+  w.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(10,8,16,.72);display:flex;align-items:center;justify-content:center;padding:20px;font-family:Inter,system-ui,sans-serif';
+  w.innerHTML='<div style="background:#211E2C;border-radius:16px;padding:22px;max-width:460px;width:100%;box-shadow:0 14px 34px rgba(0,0,0,.32);color:#F4F2FA">'+
+    '<div style="font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:#CEC7E8;font-weight:600;margin-bottom:10px">Developer · Phase A3</div>'+
+    '<div style="font-size:19px;font-weight:700;margin-bottom:8px">Protected Firestore export</div>'+
+    '<div style="font-size:13.5px;line-height:1.55;color:#B5ABC9;margin-bottom:16px">Downloads a complete, verified, read-only snapshot of this account\'s Firestore data to <b>this device only</b>. Nothing is uploaded, modified or deleted.</div>'+
+    '<div id="lxp-out" style="font-size:12.5px;color:#B5ABC9;margin-bottom:14px;white-space:pre-wrap"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+      '<button id="lxp-close" style="background:#2A2536;border:none;color:#fff;border-radius:10px;padding:9px 14px;font-size:13px;cursor:pointer;font-family:inherit">Close</button>'+
+      '<button id="lxp-go" style="background:linear-gradient(180deg,#7C4DFF,#C28DFF);border:none;color:#fff;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Create export</button>'+
+    '</div></div>';
+  document.body.appendChild(w);
+  const out=w.querySelector('#lxp-out');
+  w.querySelector('#lxp-close').onclick=()=>w.remove();
+  w.querySelector('#lxp-go').onclick=async()=>{
+    const btn=w.querySelector('#lxp-go');btn.disabled=true;btn.textContent='Working…';
+    out.textContent='Reading from server…';
+    const r=await losExport();
+    btn.disabled=false;btn.textContent='Create export';
+    out.textContent=r.error?('Failed: '+r.error)
+      :('Verification: '+r.verification+'\nProfiles: '+r.profiles+'\nDocuments: '+r.documents+'\nSize: '+r.sizeReadable+'\nSaved to your downloads folder as:\n'+r.file);
+  };
+}
 </script>
 
 <!-- ══════════ DESIGN MODE — live in-app gradient/colour editor ══════════

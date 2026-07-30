@@ -16,10 +16,11 @@ this file (where we are) → `design-ideas.md` (captured, not built).
 
 | | |
 |---|---|
-| **Version** | v239 |
-| **Rebuild step** | 3 of 17 complete · system audit done · **platform v2 designed** |
-| **Next step** | Phase A (safety) → Phase B (backend) → then Step 4 (**awaiting approval**) |
-| **Data platform** | Firestore (live) → **Postgres + R2 planned, not started** |
+| **Version** | v241 |
+| **Rebuild step** | 3 of 17 · audit done · platform v2 designed · **Phase A1+A3 done** |
+| **Next step** | Run one real export, then **A2 legacy-data inspection** (method needs approval) |
+| **Data platform** | Firestore = source of truth · Postgres + R2 **planned, not started** |
+| **Tests** | `npm test` — 57 passing |
 | **Live** | life-os.web-anchor.com (Railway) |
 | **Repo** | `ZanderVDB/life-os` · single-file `index.html` + `sw.js` |
 
@@ -256,6 +257,50 @@ omitted from the factory fails the build.
 
 **Not done (deliberately):** no UI redesign, no data migration, no PostgreSQL/R2
 provisioning, no Firebase removal, no legacy data deleted.
+
+---
+
+### 2026-07-31 — Phase A3: protected Firestore export ✅ (v241)
+
+**A rollback floor before any legacy-data inspection or migration.**
+Read-only, verified, downloaded to the user's device only.
+
+**Added** (all in `index.html`, plus tests):
+- `_exportSerializeValue` / `_exportDeserializeValue` — reversible boxing of
+  Timestamps, Dates, `undefined`, NaN/Infinity, BigInt, GeoPoint, refs, bytes,
+  circular refs. **Unknown/legacy fields are preserved verbatim.**
+- `_exportStableString` / `_exportCountFields` / `_exportSha256` — canonical
+  form, field counts, real SHA-256 fingerprints.
+- `_exportVerify` — 11 checks, including a **second independent server read**
+  compared fingerprint-for-fingerprint.
+- `buildFirestoreExport` — reads the **entire `data` subcollection** from the
+  server (`get({source:'server'})`), so `_index`, every profile, presence and
+  any unknown document are captured.
+- `losExport()` + a `?export=1` guarded panel. Not in the normal product UI.
+- `.gitignore` created — export filename patterns can never be committed.
+
+**Read-only guarantees** (asserted by tests against the shipped code): no
+`set`/`update`/`delete`/`add`, no `FieldValue`, no `svAll`, no hydration into
+live state, no `localStorage` write, no network transmission.
+
+**Privacy:** stays on device · no content in console output or the summary ·
+filename carries a SHA-256 fingerprint, never the email or raw uid · never sent
+to any AI service · git-ignored.
+
+**Tests:** `tests/export-serialization.test.js` — **33 passing**, synthetic data
+only. Total suite now **57 passing** (`npm test`).
+
+**Docs:** `firestore-export-restore.md` — format spec, restore procedures
+(all / one profile / test project), overwrite-vs-merge, cross-user guards,
+schema-version handling, rollback procedure, honest limitations.
+
+**Status: no migration has run · Firestore remains the source of truth ·
+legacy-data inspection (A2) still pending · the export is a rollback asset,
+not the future storage architecture.**
+
+**Still to run:** the user must perform one real export on live data. The tool
+is verified against its own code path with synthetic documents; it has not yet
+been exercised against a live Firestore account.
 
 ---
 

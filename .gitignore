@@ -1,0 +1,37 @@
+# ── PRIVATE DATA — never commit ───────────────────────────────────────────
+# Protected Firestore exports (Phase A3). These contain the full contents of
+# tasks, diary entries, notebook pages, People records and everything else.
+# They belong on the user's device only.
+life-os-export_*.json
+life-os-export*.json
+*firestore-export*.json
+*.export.json
+exports/
+backups/
+/private/
+
+# Environment / secrets (none exist yet; the v2 backend will need them)
+.env
+.env.*
+!.env.example
+*.pem
+*-service-account*.json
+serviceAccountKey*.json
+
+# Dependencies / build output (for the future TypeScript backend)
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Local scratch
+tmp/
+.tmp/
+*.log

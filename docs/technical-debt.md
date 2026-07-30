@@ -18,7 +18,16 @@ whether the redesign will expose it, and whether it must be fixed first.
 
 ---
 
-## 🔴 D1 — Profile switching can copy one profile's data into another
+## ✅ D1 — Profile switching can copy one profile's data into another — **FIXED (v240)**
+
+> **Resolved 2026-07-31 in Phase A1.** One authoritative `defaultProfileState()`
+> factory (39 fields) now drives both reset and hydration; every hydration branch
+> assigns, so an absent field lands on its default instead of the previous
+> profile's value. A `_profileSwitching` barrier plus `flushPendingSaves()`
+> stops any write landing in the wrong document mid-switch. 24 regression tests.
+> **Existing contamination (if any) is NOT cleaned up — that needs A2 inspection.**
+>
+> Original description follows.
 
 **What:** Switching profiles clears memory before loading the new profile — but
 the clear-out **misses four fields**: `reminders`, `people`, `peopleTags`,
