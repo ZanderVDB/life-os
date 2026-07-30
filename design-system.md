@@ -51,7 +51,9 @@ Dark theme only. **Purple is the brand and the only accent. No rainbow.**
 | Muted / placeholder | `#766D8B` |
 | Section label | `#CEC7E8` |
 
-### Accent — purple (actions, focus, selection, brand)
+### Accent — purple (the one accent)
+Purple represents **interaction, focus, progress, selection, and primary
+actions**. Nothing else is an accent.
 | Role | Value |
 |---|---|
 | Accent | `#8A5DFF` |
@@ -59,26 +61,36 @@ Dark theme only. **Purple is the brand and the only accent. No rainbow.**
 | Name gradient (animated) | `#C89BFF → #8A5DFF` |
 | Selection / focus glow | `rgba(124,77,255,.22)` |
 
-### Status — **meaning only, never decoration, never style**
-Keep to the absolute minimum. Always pair colour with an icon/label/shape
-(never colour alone).
-| Role | Value |
-|---|---|
-| Positive / success | `#00D9A3` |
-| Negative / danger | `#FF646E` |
-| External (Google) | `#274C88` (muted) |
+### Status — meaning only (never decoration)
+Two status colours, each with exactly one job. Always pair with an
+icon/label/shape — **never colour alone**. **Neutral greys** carry inactive,
+secondary, and disabled states.
+| Role | Value | Used for |
+|---|---|---|
+| Success | `#00D9A3` | success / completed states ONLY |
+| Danger | `#FF646E` | destructive actions, errors, urgent warnings ONLY |
 
-> **Decision pending (§13):** retire cyan / amber / gold as UI accents to hold
-> the "no extra colours" rule. Streaks and progress move to **purple**.
+**Brand colours** (e.g. Google `#4285F4`) appear **only inside official logos or
+integration marks**, where they aid recognition — never as a UI accent or
+surface. The Google Calendar banner surface stays neutral; the Google glyph
+inside it may carry brand blue.
+
+**Eliminated as accents:** cyan, amber, gold, decorative blue. If information
+needs differentiating, reach for **typography, spacing, icons, shape, or
+hierarchy before colour.**
 
 ---
 
 ## 3. Typography
 
-- **UI font:** Inter (with system fallback stack).
-- **Wordmark:** "Life OS" — *pending §13 (Playfair serif vs tight Inter)*.
+- **UI font:** Inter, everywhere (system fallback stack). Geist is a possible
+  future swap for the UI font — not now.
+- **Wordmark:** "Life OS" set in **Playfair Display** (refined serif) — the
+  **only** serif anywhere in the app. The lotus mark + wordmark are a single
+  **logo lockup**, always together. No other heading or element uses serif.
 - **Greeting is the hero** (see §Hero): 34–40px / 800, tight leading, the
-  user's name in the animated purple **name gradient**.
+  user's name in the animated purple **name gradient**. (Set in Inter, not the
+  serif — the serif is reserved for the wordmark lockup.)
 
 **Scale — no tiny text.**
 | Token | Size / weight | Notes |
@@ -225,14 +237,23 @@ ease-in-out · lift `cubic-bezier(.34,1.4,.5,1)` (gentle spring).
 
 ---
 
-## 13. Open decisions (confirm, then lock)
+## 13. Resolved decisions
 
-1. **Semantic-colour reduction** — drop cyan (streaks) / amber / gold; keep
-   purple + one positive (green) + one negative (red)? *Recommended: yes.*
-2. **Wordmark font** — keep Playfair serif "Life OS", or move to tight Inter?
-3. **Library page-turn depth** — restrained (open transition + fast page slide)
-   vs skeuomorphic page-curl. *Recommended: restrained — a literal curl fights
-   "calm, not flashy."*
+- **2026-07-30 — Colour:** one accent system. **Purple** = interaction, focus,
+  progress, selection, primary actions. **Green** = success/completed only.
+  **Red** = destructive/error/urgent only. **Greys** = inactive/secondary/
+  disabled. Brand colours only inside logos/integration marks. Cyan, amber,
+  gold, decorative blue **eliminated** as accents. Differentiate by type/space/
+  icon/shape/hierarchy before colour. (§2)
+- **2026-07-30 — Wordmark:** "Life OS" in **Playfair Display**, the *only*
+  serif in the app; lotus + wordmark = one logo lockup; **Inter** everywhere
+  else (Geist a possible future UI-font swap). (§3)
+- **2026-07-30 — Library (step 10):** a **premium digital library**, not a
+  realistic bookshelf. Physicality via depth/shadow/motion only — **no**
+  skeuomorphic textures or page-curls. Books sit on elegant shelves, ease
+  forward on hover, and open by the **cover expanding into the workspace** with
+  contents fading in; page navigation is **fast horizontal slides / subtle
+  crossfades**. Goal: "handling a beautiful notebook," not simulating paper.
 
 ---
 
@@ -261,4 +282,7 @@ ease-in-out · lift `cubic-bezier(.34,1.4,.5,1)` (gentle spring).
 ## Changelog
 - **2026-07-30 — v2.0** established (design reset). Palette, type scale, radius,
   shadow, spacing, animation, a11y, components codified from the graphite
-  direction; §13 decisions pending.
+  direction.
+- **2026-07-30 — v2.0.1** §13 decisions locked: one-accent colour system
+  (purple + green + red only), Playfair wordmark as the sole serif, restrained
+  premium Library. **Step 1 (Global Design System) complete.**
