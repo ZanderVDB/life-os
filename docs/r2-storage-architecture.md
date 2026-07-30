@@ -1,7 +1,17 @@
 # Life OS — Cloudflare R2 Storage Architecture
 
 **Status: DESIGN ONLY. No bucket exists. No credentials have been created.**
-**Created 2026-07-31.**
+**Created 2026-07-31 · decisions LOCKED 2026-07-31.**
+
+> **Locked:** hybrid delivery (signed URLs for attachments/large files/downloads/
+> video; short-lived signed URLs may initially serve private inline images; room
+> left for a backend thumbnail/transform layer; do not stream all large objects
+> through Railway). Soft quota **5 GB per profile, configurable**, warnings at
+> **70 / 85 / 95 %**. General max file size **100 MB**, future per-type limits.
+> Malware scanning **deferred** while private/single-user, but **mandatory
+> before user-to-user sharing**; extension/MIME/size/safe-name/ownership/
+> object-path/private-access validation still required. **Nothing provisioned
+> or enforced yet.**
 
 > **Today the app has no file capability at all** — no file picker, no image
 > embedding, no object storage. This document designs that capability from
@@ -130,8 +140,10 @@ Client → GET the object directly from R2
 | Video | 500 MB | `video/mp4`, `webm`, `quicktime` |
 | Export | 1 GB | `application/zip` (server-generated only) |
 
-- **Per-profile storage quota** (suggested start: 5 GB), enforced at presign
-  time against `SUM(byte_size)`. Without a quota, storage cost is unbounded.
+- **Per-profile soft quota: 5 GB (LOCKED, configurable)**, enforced at presign
+  time against `SUM(byte_size)`, with warnings at **70 %, 85 %, 95 %**.
+- **General maximum single file: 100 MB (LOCKED)**. The per-category figures
+  above become the future per-type limits.
 - **Allow-list, never deny-list.** Anything not listed is rejected.
 - Size is validated at presign (declared) **and** at complete (actual, via HEAD)
   — a client can lie about the first.
@@ -290,9 +302,7 @@ without explicit authorisation.**
 
 ## 16. Open questions
 
-1. **Signed URLs vs a streaming proxy** for inline Library images — start with
-   signed URLs; revisit if URL churn becomes noisy.
+1. ~~Signed URLs vs streaming proxy~~ — **LOCKED: hybrid.** Signed URLs first;
+   a backend thumbnail/transform layer may be added later.
 2. **Video posters** — worth an ffmpeg dependency on Railway, or skip in v1?
-3. **Per-profile quota** — is 5 GB the right starting number?
-4. **Malware scanning** — accepted as out of scope for single-user; must be
-   revisited before any sharing feature.
+3. ~~Malware scanning~~ — **LOCKED: deferred**, mandatory before sharing.

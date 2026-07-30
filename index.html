@@ -3975,7 +3975,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v239';
+const APP_VERSION='v240';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4155,6 +4155,14 @@ async function switchProfile(id){
   if(!CU||!_profileCatalog)return;
   const target=_profileCatalog.profiles.find(p=>p.id===id);if(!target)return;
   if(_activeProfileId===id)return;
+  // 1. Drain any pending write to the OUTGOING profile's document FIRST.
+  //    _activeProfileId is about to change, and _profileDocRef() reads it —
+  //    so an in-flight or debounced save would otherwise write the old
+  //    profile's state into the new profile's document.
+  await flushPendingSaves();
+  // 2. Block every write until the target profile has hydrated.
+  _profileSwitching=true;
+  _saveDirty=false;
   _activeProfileId=id;
   _writeActiveProfileLocal(id);
   _profileCatalog.activeProfileId=id;
@@ -5817,15 +5825,10 @@ function stopSync(){
 // reference — tons of code captures S directly.
 function resetStateForNewUser(){
   try{
-    S.tasks=[];S.builds=[];S.learning=[];S.ideas=[];S.notes=[];
-    S.customEvents=[];S.habits=[];S.resources=[];
-    S.dayNotes={};S.disabledCalendars=[];S.aiHistory=[];
-    S.workProjects=[];
-    S.todaysTip=null;S.growthFocus=null;S.lifeRhythm='';
-    S.routine=null;S.faithFocus=true;S.morningHabitCatchup=true;S.defaultWriteCalendar=null;S.aiMemory=[];S.weeklyReview=null;
-    S.trialStart=undefined;S.entitlement=undefined;S.onboardDone=undefined;
-    S.calendarDefaults={timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]};
-    S.notebook={sections:[]};
+    // ONE call, driven by defaultProfileState(). The previous hand-maintained
+    // list here silently omitted reminders / people / peopleTags /
+    // peopleLevelNames, which is how one profile's data reached another.
+    resetProfileState();
     // Wipe Google Calendar caches too — they were fetched with the previous
     // user's session and will be re-fetched for the new user on demand.
     try{gcCache={key:'',events:[]};}catch(e){}
@@ -6041,7 +6044,7 @@ function handleSnapshot(snap){
       // legitimately say "doesn't exist" for a doc that does exist server-
       // side if the cache was never warmed.)
       if(!_initialSyncDone&&!fromCache){
-        _initialSyncDone=true;
+        _initialSyncDone=true;_profileSwitching=false;
         setSplashStage(100,'Ready');setTimeout(hideSplash,250);
         seed();render();loadDailyNote();loadTip(false);if(!getKey())promptKey();
       }
@@ -6071,93 +6074,10 @@ function handleSnapshot(snap){
     const focVal=focEditable?focused.value:null;
     let focStart=null,focEnd=null;
     if(focEditable){try{focStart=focused.selectionStart;focEnd=focused.selectionEnd;}catch(_){}}
-    // Pull arrays / objects into local state with TYPE GUARDS — a single
-    // corrupt write (different build, manual Firestore edit, sync glitch)
-    // used to brick the app on next sign-in because S.tasks.filter(...)
-    // would throw if d.tasks happened to be a string/number/object. Now
-    // anything non-array gets coerced to [] with a console.warn so the
-    // user can still load the app and we can spot the bad write.
-    ['tasks','builds','learning','ideas','notes','habits','resources','reminders','people','peopleTags','peopleLevelNames'].forEach(k=>{
-      if(d[k]===undefined)return;
-      if(Array.isArray(d[k]))S[k]=d[k];
-      else{console.warn('[snapshot] expected array for',k,'got',typeof d[k],'— coerced to []');S[k]=[];}
-    });
-    // customEvents was a fallback for GCal-create failures and now produces
-    // ghost entries on the calendar (visible in some views, missing from
-    // others, undeletable). The new GCal hard-gate prevents new ones, but
-    // legacy entries persist in Firestore until they're cleared. Drop them
-    // unconditionally on every snapshot — next svAll writes back []. If you
-    // ever want this back as a real local-only events store it'll need to
-    // be a different field.
-    S.customEvents=[];
-    S.dayNotes=d.dayNotes||{};
-    S.todaysTip=d.todaysTip||null;
-    S.growthFocus=d.growthFocus||null;
-    S.routineLog=(d.routineLog&&typeof d.routineLog==='object')?d.routineLog:{};
-    S.lifeRhythm=d.lifeRhythm||'';
-    S.disabledCalendars=Array.isArray(d.disabledCalendars)?d.disabledCalendars:[];
-    S.peopleSettings=d.peopleSettings&&typeof d.peopleSettings==='object'?d.peopleSettings:{defaultSort:'promise'};
-    // peopleLevelNames default if missing or malformed
-    if(!Array.isArray(S.peopleLevelNames)||S.peopleLevelNames.length!==5){
-      S.peopleLevelNames=['Acquaintance','Casual friend','Friend','Close friend','Inner circle'];
-    }
-    S.aiHistory=Array.isArray(d.aiHistory)?d.aiHistory:[];
-    S.workProjects=Array.isArray(d.workProjects)?d.workProjects:[];
-    if(typeof d._personalOrder==='number')S._personalOrder=d._personalOrder;else delete S._personalOrder;
-    if(typeof d._workOrder==='number')S._workOrder=d._workOrder;else delete S._workOrder;
-    // Notebook: free-form chaos space. Deliberately NOT included in the AI
-    // bot's context (see buildAIContext / doUpdate) — the only code path
-    // that sends notebook content to Claude is the per-page Refine button.
-    if(d.notebook&&typeof d.notebook==='object'&&Array.isArray(d.notebook.sections)){
-      S.notebook={sections:d.notebook.sections};
-    } else if(!S.notebook){
-      S.notebook={sections:[]};
-    }
-    if(d.calendarDefaults&&typeof d.calendarDefaults==='object'){
-      // Migrate legacy all-day reminder minutes to the current 5pm set.
-      // Current scheme: 1 day before at 5pm, everything else at 9am. Maps
-      // every legacy value (midnight 1440/2880/10080/20160 and the brief
-      // all-5pm experiment 1860/9060/19140) to the right new value.
-      const MAP={
-        1440:420,                                 // 1 day before → 5pm
-        2880:2340, 1860:2340,                     // 2 days before → 9am
-        10080:9540, 9060:9540,                    // 1 week before → 9am
-        20160:19620, 19140:19620                  // 2 weeks before → 9am
-      };
-      const migrateAllDay=arr=>(arr||[]).map(m=>MAP[m]??m);
-      S.calendarDefaults={
-        timedReminders:Array.isArray(d.calendarDefaults.timedReminders)?d.calendarDefaults.timedReminders:[60,10],
-        allDayReminders:Array.isArray(d.calendarDefaults.allDayReminders)?migrateAllDay(d.calendarDefaults.allDayReminders):[0],
-        birthdayReminders:Array.isArray(d.calendarDefaults.birthdayReminders)?migrateAllDay(d.calendarDefaults.birthdayReminders):[420,0]
-      };
-    }
-    // Legacy 'off' values are migrated to 'calendar' — confirmation is no
-    // longer optional, the AI always pauses for review on calendar changes.
-    if(d.aiConfirmMode==='calendar'||d.aiConfirmMode==='all')S.aiConfirmMode=d.aiConfirmMode;
-    else if(d.aiConfirmMode==='off')S.aiConfirmMode='calendar';
-    else if(typeof d.confirmAllAI==='boolean')S.aiConfirmMode=d.confirmAllAI?'all':'calendar';
-    S.habitCatchupEnabled=typeof d.habitCatchupEnabled==='boolean'?d.habitCatchupEnabled:true;
-    // Daily check-in aggression level. Migrate from the old boolean:
-    // habitCatchupEnabled===false → 'off'; otherwise → 'balanced' (a
-    // deliberate upgrade — the whole point of the check-in revamp).
-    if(['off','light','balanced','thorough'].includes(d.checkinLevel))S.checkinLevel=d.checkinLevel;
-    else S.checkinLevel=(d.habitCatchupEnabled===false)?'off':'balanced';
-    // Morning "did you do yesterday's habits?" catch-up box (default ON).
-    S.morningHabitCatchup=typeof d.morningHabitCatchup==='boolean'?d.morningHabitCatchup:true;
-    // Customised routine (null/absent → built-in defaults used at render time).
-    S.routine=(d.routine&&Array.isArray(d.routine.weekday)&&Array.isArray(d.routine.weekend))?d.routine:null;
-    // Faith-backed focus card: default ON for existing + new users.
-    S.faithFocus=typeof d.faithFocus==='boolean'?d.faithFocus:true;
-    // Default write calendar (Phase B). Null = auto (primary Google).
-    S.defaultWriteCalendar=(d.defaultWriteCalendar&&typeof d.defaultWriteCalendar==='object'&&d.defaultWriteCalendar.source&&d.defaultWriteCalendar.calendarId)?d.defaultWriteCalendar:null;
-    // AI memory — standing facts injected into every AI prompt.
-    S.aiMemory=Array.isArray(d.aiMemory)?d.aiMemory.filter(x=>typeof x==='string'&&x.trim()):[];
-    // Weekly review — latest generated review.
-    S.weeklyReview=(d.weeklyReview&&typeof d.weeklyReview==='object'&&d.weeklyReview.text)?d.weeklyReview:null;
-    // Trial / entitlement / onboarding flags.
-    S.trialStart=typeof d.trialStart==='string'?d.trialStart:undefined;
-    S.entitlement=typeof d.entitlement==='string'?d.entitlement:undefined;
-    S.onboardDone=typeof d.onboardDone==='boolean'?d.onboardDone:undefined;
+    // Apply the document onto state. Every field is assigned from the
+    // document or from its declared default — nothing is ever left holding
+    // the previous profile's value. See defaultProfileState().
+    hydrateProfileState(S, d);
     // Each account's Anthropic key lives in Firestore under their own doc,
     // so this line also enforces the per-user scoping — account B's snapshot
     // will only ever populate account B's per-user key slot.
@@ -6251,7 +6171,7 @@ function handleSnapshot(snap){
             const stillNonEmpty=(S.tasks||[]).length||(S.habits||[]).length||(S.builds||[]).length||(S.ideas||[]).length||(S.notes||[]).length||(S.resources||[]).length||(S.notebook&&S.notebook.sections&&S.notebook.sections.length);
             if(stillNonEmpty){
               console.warn('[sync] no server snapshot in '+(delay/1000)+'s — accepting cache (has real data, server agrees or unreachable)');
-              _initialSyncDone=true;
+              _initialSyncDone=true;_profileSwitching=false;
               setSplashStage(100,'Ready');setTimeout(hideSplash,250);
               try{render();loadDailyNote();loadTip(false);if(!getKey())promptKey();maybeShowHabitCatchup();}catch(_){}
             } else {
@@ -6264,7 +6184,7 @@ function handleSnapshot(snap){
       }
       // Server-confirmed first read — clear any pending cache-fallback timer.
       if(_cacheFallbackTimer){clearTimeout(_cacheFallbackTimer);_cacheFallbackTimer=null;}
-      _initialSyncDone=true;
+      _initialSyncDone=true;_profileSwitching=false;
       setSplashStage(100,'Ready');setTimeout(hideSplash,250);
       render();loadDailyNote();loadTip(false);
       if(!getKey())promptKey();
@@ -6352,6 +6272,10 @@ function _buildSavePayload(){
 // queueing a write per keystroke.
 // ══════════════════════════════════════════════════════════════════════════
 let _saveDirty=false,_saveLooping=false,_saveRetry=0,_saveState='idle';
+let _saveLoopDone=Promise.resolve();
+// True from the moment a profile switch begins until the target profile's
+// first snapshot has hydrated. Blocks ALL writes for that window.
+let _profileSwitching=false;
 const SAVE_DEBOUNCE=300,SAVE_MAX_RETRY=6;
 // Deterministic stringify (recursively key-sorted) so fingerprints are stable
 // regardless of property order — Firestore does not preserve ours.
@@ -6399,28 +6323,46 @@ function _setSaveState(s){
   el.classList.toggle('show',loud);
 }
 async function _saveLoop(){
-  if(_saveLooping)return;
+  // Re-entrant callers get the in-flight run so they can await a real flush
+  // (switchProfile relies on this to drain writes for the OUTGOING profile).
+  if(_saveLooping)return _saveLoopDone;
+  // Never write while a profile switch is mid-flight: _activeProfileId has
+  // already moved to the target, so a write here would put the outgoing
+  // profile's state into the incoming profile's document.
+  if(_profileSwitching){console.warn('[save] skipped — profile switch in progress');return;}
   _saveLooping=true;
-  try{
-    while(_saveDirty){
-      _saveDirty=false;                       // capture everything up to now
-      const payload=_buildSavePayload();
-      try{
-        await _profileDocRef().set(payload,{merge:true});
-        _saveRetry=0;
-        _setSaveState('idle');
-      }catch(e){
-        // A genuine failure. NEVER revert local state — the user's edits are
-        // real; we simply keep retrying with backoff until the write lands.
-        console.warn('[save] write failed:',e.message);
-        _saveDirty=true;
-        _saveRetry++;
-        if(_saveRetry>SAVE_MAX_RETRY){_setSaveState('error');break;}
-        _setSaveState('retrying');
-        await new Promise(r=>setTimeout(r,Math.min(30000,500*Math.pow(2,_saveRetry-1))));
+  _saveLoopDone=(async()=>{
+    try{
+      while(_saveDirty){
+        if(_profileSwitching)break;            // switch started mid-drain
+        _saveDirty=false;                      // capture everything up to now
+        const payload=_buildSavePayload();
+        try{
+          await _profileDocRef().set(payload,{merge:true});
+          _saveRetry=0;
+          _setSaveState('idle');
+        }catch(e){
+          // A genuine failure. NEVER revert local state — the user's edits are
+          // real; we simply keep retrying with backoff until the write lands.
+          console.warn('[save] write failed:',e.message);
+          _saveDirty=true;
+          _saveRetry++;
+          if(_saveRetry>SAVE_MAX_RETRY){_setSaveState('error');break;}
+          _setSaveState('retrying');
+          await new Promise(r=>setTimeout(r,Math.min(30000,500*Math.pow(2,_saveRetry-1))));
+        }
       }
-    }
-  } finally{_saveLooping=false;}
+    } finally{_saveLooping=false;}
+  })();
+  return _saveLoopDone;
+}
+// Drain any pending write for the CURRENT profile and wait for it to land.
+// Called before _activeProfileId changes so unsaved edits are never lost and
+// never land in the wrong document.
+async function flushPendingSaves(){
+  clearTimeout(ST);
+  if(_saveDirty&&!_profileSwitching&&_initialSyncDone&&CU){try{await _saveLoop();}catch(_){}}
+  else if(_saveLooping){try{await _saveLoopDone;}catch(_){}}
 }
 function svAll(){
   if(!CU)return;
@@ -6429,6 +6371,7 @@ function svAll(){
   // BEFORE the Firestore snapshot arrives, the empty state would overwrite
   // their real cloud data. This is what was nuking projects across devices.
   if(!_initialSyncDone){console.warn('[save] skipped — initial sync not done yet');return;}
+  if(_profileSwitching){console.warn('[save] skipped — profile switch in progress');return;}
   _saveDirty=true;
   clearTimeout(ST);
   ST=setTimeout(_saveLoop,SAVE_DEBOUNCE);
@@ -6439,6 +6382,7 @@ function svAll(){
 async function svAllNow(){
   if(!CU)return;
   if(!_initialSyncDone){console.warn('[save-now] skipped — initial sync not done yet');return;}
+  if(_profileSwitching){console.warn('[save-now] skipped — profile switch in progress');return;}
   _saveDirty=true;
   clearTimeout(ST);
   return _saveLoop();
@@ -6628,7 +6572,140 @@ const GROWTH={
  {t:'Stay close; fruit follows.',v:'"Remain in me, as I also remain in you... apart from me you can do nothing."',r:'John 15:4-5'}
 ]
 };
-const S={tasks:[],builds:[],learning:[],ideas:[],notes:[],customEvents:[],habits:[],resources:[],reminders:[],dayNotes:{},disabledCalendars:[],aiHistory:[],soundsEnabled:false,aiConfirmMode:'calendar',workProjects:[],calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},notebook:{sections:[]},habitCatchupEnabled:true,checkinLevel:'balanced',morningHabitCatchup:true,routineLog:{},routine:null,faithFocus:true,mode:'personal',defaultWriteCalendar:null,aiMemory:[],weeklyReview:null,people:[],peopleTags:[],peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],peopleSettings:{defaultSort:'promise'}};
+// ══════════════════════════════════════════════════════════════════════════
+// PROFILE-SCOPED STATE — ONE AUTHORITATIVE DEFAULT FACTORY
+//
+// Every field that belongs to a PROFILE must be declared here and nowhere
+// else. This is the single source of truth used by:
+//   • the initial S object
+//   • resetProfileState()   — wipes to defaults on profile switch / sign-out
+//   • hydrateProfileState() — applies a Firestore document onto clean state
+//
+// WHY THIS EXISTS (the v239 profile-contamination bug):
+// reset and hydration each had their own hand-maintained field list. Four
+// fields (reminders, people, peopleTags, peopleLevelNames) were missing from
+// the reset list AND were hydrated with "if the field is absent, keep what's
+// already there". Switching profiles therefore carried the previous profile's
+// data across — and the next save wrote it into the new profile's document.
+//
+// RULE: adding a profile field anywhere without adding it here is a bug.
+// hydrateProfileState() only ever assigns declared defaults, never "keeps"
+// a previous value, so an omitted field fails loudly in tests rather than
+// silently leaking. See tests/profile-state.test.js.
+// ══════════════════════════════════════════════════════════════════════════
+function _deviceAIConfirmMode(){
+  // Device-level fallback for a profile that has never stored the setting.
+  // Device-scoped, so it is NOT contamination from another profile.
+  try{
+    const m=localStorage.getItem('los_ai_confirm');
+    if(m==='calendar'||m==='all')return m;
+    if(localStorage.getItem('los_confirm_ai')==='1')return 'all';
+  }catch(e){}
+  return 'calendar';
+}
+function defaultProfileState(){
+  return {
+    // collections
+    tasks:[], builds:[], learning:[], ideas:[], notes:[], customEvents:[],
+    habits:[], resources:[], reminders:[], workProjects:[],
+    people:[], peopleTags:[],
+    // maps + objects
+    dayNotes:{}, routineLog:{}, notebook:{sections:[]},
+    peopleLevelNames:['Acquaintance','Casual friend','Friend','Close friend','Inner circle'],
+    peopleSettings:{defaultSort:'promise'},
+    calendarDefaults:{timedReminders:[60,10],allDayReminders:[0],birthdayReminders:[1440,0]},
+    disabledCalendars:[], aiHistory:[], aiMemory:[],
+    // scalars / flags
+    todaysTip:null, growthFocus:null, lifeRhythm:'',
+    weeklyReview:null, routine:null, defaultWriteCalendar:null,
+    aiConfirmMode:_deviceAIConfirmMode(),
+    habitCatchupEnabled:true, checkinLevel:'balanced', morningHabitCatchup:true,
+    faithFocus:true, mode:'personal',
+    // optional — absent means "not set"; must be deleted, not left stale
+    trialStart:undefined, entitlement:undefined, onboardDone:undefined,
+    _personalOrder:undefined, _workOrder:undefined, _schemaVersion:undefined
+  };
+}
+const PROFILE_STATE_KEYS=Object.keys(defaultProfileState());
+// Apply a Firestore profile document onto state.
+// CONTRACT: every branch assigns. Nothing is ever left at its previous value,
+// so a field absent from `d` lands on its declared default — never on the
+// value belonging to the profile we just switched away from.
+// Kept free of DOM/global access so it can be unit-tested in Node.
+function hydrateProfileState(S,d){
+  d=d||{};
+  const DEF=defaultProfileState();
+  // Arrays, with a type guard: a corrupt write used to brick the app because
+  // S.tasks.filter(...) throws if the stored value isn't an array.
+  ['tasks','builds','learning','ideas','notes','habits','resources','reminders',
+   'people','peopleTags','peopleLevelNames','workProjects','disabledCalendars',
+   'aiHistory'].forEach(k=>{
+    if(Array.isArray(d[k])){S[k]=d[k];return;}
+    if(d[k]!==undefined)console.warn('[snapshot] expected array for',k,'got',typeof d[k],'— using default');
+    S[k]=DEF[k];
+  });
+  // aiMemory: array of non-empty strings only.
+  S.aiMemory=Array.isArray(d.aiMemory)?d.aiMemory.filter(x=>typeof x==='string'&&x.trim()):DEF.aiMemory;
+  // peopleLevelNames must be exactly 5 entries or fall back to the defaults.
+  if(!Array.isArray(S.peopleLevelNames)||S.peopleLevelNames.length!==5)S.peopleLevelNames=DEF.peopleLevelNames;
+  // customEvents: legacy ghost-event store. Deliberately always emptied — the
+  // GCal hard-gate prevents new ones and old entries are undeletable ghosts.
+  S.customEvents=DEF.customEvents;
+  // Maps / objects
+  S.dayNotes=(d.dayNotes&&typeof d.dayNotes==='object')?d.dayNotes:DEF.dayNotes;
+  S.routineLog=(d.routineLog&&typeof d.routineLog==='object')?d.routineLog:DEF.routineLog;
+  S.peopleSettings=(d.peopleSettings&&typeof d.peopleSettings==='object')?d.peopleSettings:DEF.peopleSettings;
+  S.notebook=(d.notebook&&typeof d.notebook==='object'&&Array.isArray(d.notebook.sections))
+    ?{sections:d.notebook.sections}:DEF.notebook;
+  if(d.calendarDefaults&&typeof d.calendarDefaults==='object'){
+    // Migrate legacy all-day reminder minutes to the current 5pm/9am set.
+    const MAP={1440:420, 2880:2340, 1860:2340, 10080:9540, 9060:9540, 20160:19620, 19140:19620};
+    const migrateAllDay=arr=>(arr||[]).map(m=>MAP[m]??m);
+    S.calendarDefaults={
+      timedReminders:Array.isArray(d.calendarDefaults.timedReminders)?d.calendarDefaults.timedReminders:[60,10],
+      allDayReminders:Array.isArray(d.calendarDefaults.allDayReminders)?migrateAllDay(d.calendarDefaults.allDayReminders):[0],
+      birthdayReminders:Array.isArray(d.calendarDefaults.birthdayReminders)?migrateAllDay(d.calendarDefaults.birthdayReminders):[420,0]
+    };
+  } else S.calendarDefaults=DEF.calendarDefaults;
+  // Scalars
+  S.todaysTip=d.todaysTip||DEF.todaysTip;
+  S.growthFocus=d.growthFocus||DEF.growthFocus;
+  S.lifeRhythm=d.lifeRhythm||DEF.lifeRhythm;
+  // aiConfirmMode: legacy 'off' → 'calendar'; legacy boolean → 'all'/'calendar'.
+  if(d.aiConfirmMode==='calendar'||d.aiConfirmMode==='all')S.aiConfirmMode=d.aiConfirmMode;
+  else if(d.aiConfirmMode==='off')S.aiConfirmMode='calendar';
+  else if(typeof d.confirmAllAI==='boolean')S.aiConfirmMode=d.confirmAllAI?'all':'calendar';
+  else S.aiConfirmMode=DEF.aiConfirmMode;
+  S.habitCatchupEnabled=typeof d.habitCatchupEnabled==='boolean'?d.habitCatchupEnabled:DEF.habitCatchupEnabled;
+  // Check-in level; migrate from the old boolean (false → 'off').
+  if(['off','light','balanced','thorough'].includes(d.checkinLevel))S.checkinLevel=d.checkinLevel;
+  else S.checkinLevel=(d.habitCatchupEnabled===false)?'off':DEF.checkinLevel;
+  S.morningHabitCatchup=typeof d.morningHabitCatchup==='boolean'?d.morningHabitCatchup:DEF.morningHabitCatchup;
+  S.routine=(d.routine&&Array.isArray(d.routine.weekday)&&Array.isArray(d.routine.weekend))?d.routine:DEF.routine;
+  S.faithFocus=typeof d.faithFocus==='boolean'?d.faithFocus:DEF.faithFocus;
+  S.defaultWriteCalendar=(d.defaultWriteCalendar&&typeof d.defaultWriteCalendar==='object'&&d.defaultWriteCalendar.source&&d.defaultWriteCalendar.calendarId)?d.defaultWriteCalendar:DEF.defaultWriteCalendar;
+  S.weeklyReview=(d.weeklyReview&&typeof d.weeklyReview==='object'&&d.weeklyReview.text)?d.weeklyReview:DEF.weeklyReview;
+  // Optional fields: DELETE when absent so `'x' in S` stays false.
+  const opt={trialStart:'string',entitlement:'string',onboardDone:'boolean',
+             _personalOrder:'number',_workOrder:'number',_schemaVersion:'number'};
+  for(const k in opt){
+    if(typeof d[k]===opt[k])S[k]=d[k];else delete S[k];
+  }
+  return S;
+}
+// GLOBAL / DEVICE state — deliberately NOT cleared on a profile switch,
+// because it belongs to the device or the signed-in user, not the profile.
+const GLOBAL_STATE_KEYS=['soundsEnabled'];
+// Wipe every profile-scoped field back to its declared default. Fields whose
+// default is `undefined` are DELETED so `'x' in S` stays false.
+function resetProfileState(){
+  const d=defaultProfileState();
+  for(const k of PROFILE_STATE_KEYS){
+    if(d[k]===undefined)delete S[k];
+    else S[k]=d[k];
+  }
+}
+const S=Object.assign(defaultProfileState(),{soundsEnabled:false});
 // Preferences mirrored to localStorage so they apply before Firestore sync.
 // aiConfirmMode values: 'calendar' (default — only calendar edits need OK)
 // or 'all' (every AI change opens the review queue). Legacy 'off' is no

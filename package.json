@@ -4,7 +4,8 @@
   "private": true,
   "description": "Life OS — personal command centre PWA",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node tests/profile-state.test.js"
   },
   "engines": {
     "node": ">=18"

@@ -218,6 +218,47 @@ attachments, and a real export.
 
 ---
 
+### 2026-07-31 — Phase A1: profile-contamination fix ✅ (v240)
+
+**First code change of the v2 programme.** Architecture decisions locked
+(Drizzle-only, TypeScript accepted, 5 GB/100 MB quotas, hybrid R2 delivery,
+deferred malware scanning, mobile first-class, system-by-system migration) —
+see `backend-architecture-v2.md` § LOCKED DECISIONS.
+
+**Root cause.** Reset and hydration each kept their own hand-maintained field
+list. `resetStateForNewUser()` omitted `reminders`, `people`, `peopleTags`,
+`peopleLevelNames`; the snapshot hydrator used *"if the field is absent from
+the document, keep whatever is already in memory"*. Switching to a profile that
+had never stored those fields therefore kept the previous profile's values —
+and the next save wrote them into the new profile's document. Three more fields
+(`notebook`, `calendarDefaults`, `aiConfirmMode`) had the same "keep old"
+shape. Separately, `switchProfile` changed `_activeProfileId` **before**
+draining pending writes, so an in-flight or debounced save could land the
+outgoing profile's state in the incoming profile's document.
+
+**Fix.**
+- `defaultProfileState()` — one authoritative factory, **39 profile fields**.
+- `PROFILE_STATE_KEYS` / `GLOBAL_STATE_KEYS` — explicit scope separation
+  (`soundsEnabled` is device-global and survives a switch).
+- `resetProfileState()` — wipes every declared field; `undefined` defaults are
+  **deleted** so `'x' in S` stays false.
+- `hydrateProfileState(S, d)` — replaced 87 lines of inline hydration.
+  **Every branch assigns**; absent ⇒ declared default, never the previous value.
+  DOM-free so it is unit-testable.
+- `flushPendingSaves()` + `_profileSwitching` barrier — writes are drained to
+  the outgoing profile *before* `_activeProfileId` moves, then blocked until the
+  target profile has hydrated.
+
+**Tests:** `tests/profile-state.test.js` (`npm test`) — **24 passing**. They
+extract the real functions from `index.html` rather than re-implementing them,
+and include structural guards so a future field added to the save payload but
+omitted from the factory fails the build.
+
+**Not done (deliberately):** no UI redesign, no data migration, no PostgreSQL/R2
+provisioning, no Firebase removal, no legacy data deleted.
+
+---
+
 ## Known issues / debt
 - Some labels still sit below the 11px type floor (design-system §3) — fix as
   each screen is rebuilt.

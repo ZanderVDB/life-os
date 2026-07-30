@@ -1,7 +1,14 @@
 # Life OS — Storage Migration Plan
 
 **Status: PLAN ONLY. No migration has run. No infrastructure exists.**
-**Created 2026-07-31.**
+**Created 2026-07-31 · approach LOCKED 2026-07-31.**
+
+> **Locked:** system-by-system migration through *define model → create schema
+> → import → validate → dual-write → switch reads → stop legacy writes → retain
+> rollback data until approval*. **The Today and Task Detail UI is built against
+> the new Task API — never shipped against the old Firestore object and
+> rewritten later.** Legacy data decisions are provisional; **nothing is
+> deleted**.
 
 > **Destination:** Railway backend → **Railway PostgreSQL** (structured data) +
 > **Cloudflare R2** (files/exports). **Firebase Auth stays temporarily.**

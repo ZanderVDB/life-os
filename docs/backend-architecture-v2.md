@@ -9,6 +9,44 @@
 > remain temporarily** during a controlled, reversible migration.
 > Firestore has **not** been removed. The migration has **not** started.
 
+## ✅ LOCKED DECISIONS (approved 2026-07-31)
+
+**Phase 0.5 is accepted: the backend and data foundation are completed BEFORE
+the Today and Task Detail redesign.**
+
+| Area | Locked choice |
+|---|---|
+| **Stack** | Node.js · **TypeScript** · Fastify · Zod · **Drizzle ORM + Drizzle migrations** · PostgreSQL · Pino |
+| **ORM** | **Drizzle only** — Kysely is *not* installed. One query layer. |
+| **Build step** | The TypeScript build step is **accepted**; Life OS is becoming a relational, multi-system application. |
+| **Structured data** | **Railway PostgreSQL** — never one JSON blob column |
+| **Files/objects** | **Cloudflare R2** — never the primary structured database |
+| **Source** | GitHub · **Deploy** Railway |
+| **Auth** | Firebase Auth **temporarily**, verified server-side |
+| **Legacy** | Firestore **temporarily** as legacy source + rollback copy |
+| **Anthropic** | **One platform-level key**, Railway env var only. The browser must stop storing/calling Anthropic with a user key. **Not migrated yet.** |
+| **Quota** | **5 GB soft per profile**, configurable; warn at **70 / 85 / 95 %**. General max file size **100 MB**, with future per-type limits. **Not provisioned or enforced yet.** |
+| **R2 delivery** | **Hybrid** — signed URLs for attachments/large files/downloads/video; short-lived signed URLs may initially serve private inline images; leave room for a backend thumbnail/transform layer. **Do not stream all large objects through Railway.** Buckets private; permanent credentials never reach the browser. |
+| **Malware scanning** | **Deferred** while private and single-user. Extension, MIME, size, safe-name, ownership, object-path and private-access validation are still **required**. Risky files are delivered as attachments, never executed inline. **Mandatory before user-to-user sharing.** |
+| **Mobile** | **First-class.** Every core Task interaction needs a touch-first method, a **non-drag Move action**, a keyboard method and an accessible method. HTML5 desktop drag may **not** be the only movement mechanism. |
+| **Migration** | System-by-system. Today/Task Detail UI is built **against the new Task API**, never shipped against the old Firestore object and rewritten later. |
+
+### AI capabilities to design for (not built yet)
+Usage tracking · per-profile/per-user budgets · rate limiting · model
+configuration · **provider abstraction** · safe error logging.
+
+### Legacy data — provisional decisions (nothing deleted)
+| Data | Decision |
+|---|---|
+| `dayNotes` | **Needs live-data inspection.** Export/inspect before deciding. |
+| People | **Archive or export, then remove from the active product** — unless inspection reveals an important future use. |
+| Board | Verify whether it holds unique stored data. Page code may be removed later, **but not before its data is classified.** |
+| Old Habits page | Unreachable **UI** may be removed later. **Valid habit data must remain.** |
+| `learning` | Inspect for unique content; migrate anything useful before removal. |
+| `customEvents` | **Investigate carefully — current behaviour may already be destructive.** Make no further destructive changes. |
+
+> **Deleting an unused page and deleting its data are separate decisions.**
+
 ---
 
 ## 1. Current deployment state — corrected
@@ -96,13 +134,12 @@ The repo today is plain Node (no dependencies, no build step, `engines: node >=1
 | **TypeScript** | The whole point of this migration is *typed, validated structure*. A 26-table relational model without types will regress into the same untyped soup we are escaping. |
 | **Fastify** | Fast, small, first-class schema validation, good plugin/encapsulation model. Express is acceptable if familiarity matters more. |
 | **Zod** | One schema definition reused for runtime validation **and** TypeScript types |
-| **Drizzle ORM** (or **Kysely**) | Typed SQL that stays close to SQL. Avoid heavy ORMs — the query shapes here (Gantt, recursive dependencies) are SQL-shaped. |
+| **Drizzle ORM** (LOCKED — not Kysely) | Typed SQL that stays close to SQL. Avoid heavy ORMs — the query shapes here (Gantt, recursive dependencies) are SQL-shaped. |
 | **node-postgres (`pg`)** | Connection pooling underneath Drizzle |
 | **Pino** | Structured JSON logging, Fastify-native |
 | **Vitest** | Tests, including migration tests |
 
-**Honest trade-off:** TypeScript introduces a build step this project has never
-had. The lighter alternative is **plain JavaScript with JSDoc types + Zod**,
+**Trade-off (accepted 2026-07-31):** TypeScript introduces a build step this project has never had. The lighter alternative is **plain JavaScript with JSDoc types + Zod**,
 which keeps zero-build simplicity and still validates at runtime. If the build
 step feels like too much change at once, that is a legitimate choice — but for a
 relational backend I recommend TypeScript.
