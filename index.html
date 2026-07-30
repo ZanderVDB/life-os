@@ -117,13 +117,21 @@
    tan dots so they read clearly on a large dark screen. */
 #dusk-stars{display:none}
 [data-theme="studio"] #dusk-stars{
-  /* A 4-point sparkle SVG, scattered at a range of sizes — small ones read
-     compact/dot-like, bigger ones clearly star-like, per the reference. */
+  /* Two shapes: a 4-point sparkle for the bigger stars, and a small rounded
+     SQUARE for the little ones (per the reference — small = square, big =
+     star). More of them, well spread. */
   --star:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M12%202%20L13.6%2010.4%20L22%2012%20L13.6%2013.6%20L12%2022%20L10.4%2013.6%20L2%2012%20L10.4%2010.4%20Z'%20fill='%23f6d6a0'/%3E%3C/svg%3E");
+  --sq:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%2010'%3E%3Crect%20x='2.2'%20y='2.2'%20width='5.6'%20height='5.6'%20rx='1'%20fill='%23f6d6a0'/%3E%3C/svg%3E");
   display:block;position:fixed;inset:0;pointer-events:none;z-index:6;opacity:.92;background-repeat:no-repeat;
-  background-image:var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star);
-  background-position:13% 18%,66% 11%,85% 32%,29% 56%,52% 24%,91% 64%,17% 76%,61% 82%,44% 68%,7% 42%,75% 50%,36% 10%,96% 20%,25% 38%,79% 84%,55% 46%,40% 90%,88% 8%;
-  background-size:15px,9px,20px,7px,13px,10px,17px,8px,12px,9px,16px,6px,11px,14px,9px,6px,13px,8px;
+  background-image:
+    var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),var(--star),
+    var(--sq),var(--sq),var(--sq),var(--sq),var(--sq),var(--sq),var(--sq),var(--sq),var(--sq),var(--sq),var(--sq),var(--sq);
+  background-position:
+    13% 18%,66% 11%,85% 32%,29% 56%,52% 24%,91% 64%,17% 76%,61% 82%,44% 68%,75% 50%,96% 20%,79% 84%,
+    7% 42%,36% 10%,25% 38%,55% 46%,40% 90%,88% 8%,48% 6%,70% 28%,20% 64%,60% 62%,34% 78%,9% 88%;
+  background-size:
+    17px,12px,20px,14px,16px,11px,18px,13px,15px,13px,12px,15px,
+    5px,6px,4px,7px,5px,6px,4px,6px,5px,7px,5px,4px;
 }
 @media (prefers-reduced-motion: no-preference){
   [data-theme="studio"] #dusk-stars{animation:duskTwinkle 6s ease-in-out infinite alternate}
@@ -1594,7 +1602,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 [data-theme="studio"] .tcard .ti.pu{border-color:#e0574e;box-shadow:inset 0 0 0 1px #e0574e, 0 0 16px -7px rgba(224,87,78,.6)}
 [data-theme="studio"] .tcard .ti:last-of-type{border-bottom:1px solid var(--border)}
 [data-theme="studio"] .ti{position:relative;overflow:hidden}
-[data-theme="studio"] .ti::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(165deg,var(--ti-stripe,var(--border-strong)),color-mix(in srgb,var(--ti-stripe,var(--border-strong)) 42%,#000))}
+[data-theme="studio"] .ti::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--ti-stripe,var(--border-strong))}
 [data-theme="studio"] .ti.pn{--ti-stripe:var(--muted-2)}
 [data-theme="studio"] .ti.ps{--ti-stripe:#6f6878}
 [data-theme="studio"] .ti.rem-overdue{--ti-stripe:var(--red)}
@@ -1658,7 +1666,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 }
 .completed-day{margin-bottom:12px}
 .cmp-date{font-size:11px;font-weight:600;color:var(--muted);padding:4px 2px 6px;text-transform:uppercase;letter-spacing:.06em}
-.tit{font-size:13px;flex:1;line-height:1.45;word-break:break-word;color:var(--text)}
+.tit{font-size:13px;flex:1;min-width:0;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
 .tit.dn{text-decoration:line-through;color:var(--muted-2)}
 .ti-time{font-size:10px;color:var(--muted);background:var(--surface-2);padding:2px 6px;border-radius:5px;flex-shrink:0;margin-top:2px}
 .exp-p{padding:13px 15px;background:var(--surface-2);border-bottom:1px solid var(--border)}
@@ -3757,7 +3765,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v229';
+const APP_VERSION='v230';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -11199,7 +11207,7 @@ function rTasksV2(){
     const _ckTag=_ckLbl?`<span class="ti-checked" title="Last checked ${_ckMs?new Date(_ckMs).toLocaleDateString('en-ZA',{day:'numeric',month:'short'}):''}">✓ ${esc(_ckLbl)}</span>`:'';
     const _ckOn=_taskCheckedToday(t);
     let html=`<div class="ti-wrap${showSubstep?' has-substep':''}" draggable="true" data-task-id="${t.id}" ondragstart="taskDragStart(event,'${t.id}')" ondragend="taskDragEnd(event)">`;
-    html+=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${mainLocked?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')"><span class="ti-drag" title="Drag to reorder or move between buckets">⠿</span><input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${_ckTag}${area.name?`<span class="ti-area-badge" style="--abg:${area.color}">${esc(area.name)}</span>`:''}${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}<button class="ti-checkbtn${_ckOn?' on':''}" title="${_ckOn?'Checked today — tap to undo':'I checked on this today'}" onclick="taskCheck('${t.id}',event)">👀</button></div>`;
+    html+=`<div class="ti ${pCls(t.priority||'lo')}${fading?' fading':''}${mainLocked?' has-steps':''}"${fadeStyle} onclick="openTaskModal('${t.id}')"><span class="ti-drag" title="Drag to reorder or move between buckets">⠿</span><input type="checkbox"${t.done?' checked':''}${checkboxAttrs} onclick="chk('${t.id}',event)"><span class="tit${t.done?' dn':''}">${esc(t.text)}</span>${stepBadge}${t.scheduledTime?`<span class="ti-time">${esc(t.scheduledTime)}</span>`:''}${area.name?`<span class="ti-area-badge" style="--abg:${area.color}">${esc(area.name)}</span>`:''}</div>`;
     if(showSubstep){const stepNum=t.steps.findIndex(s=>!s.done)+1;const isLast=stepNum===t.steps.length;const meta=isLast?'Last step':`Step ${stepNum} of ${t.steps.length}`;html+=`<div class="ti-substep" onclick="event.stopPropagation();openTaskModal('${t.id}')" title="Tap the checkbox to mark done. Tap text to open all steps."><input type="checkbox" onclick="event.stopPropagation();_fadeAndCompleteStep(this,'${t.id}','${nextStep.id}')" title="Mark this step done"><span class="ti-substep-text">${esc(nextStep.text)}</span><span class="ti-substep-meta">${meta}</span></div>`;}
     html+=`</div>`;return html;
   };
@@ -17396,12 +17404,12 @@ document.addEventListener('click',e=>{
 <script>
 (function(){
 try{
-  var REC={R1:['#202332'],R2:['#bc9876'],R3:['#434e60'],R4:['#8b9a9f'],
+  var REC={RS:['var(--surface, #262c3e)'],RS2:['var(--surface-2, #31384e)'],R1:['#202332'],R2:['#bc9876'],R3:['#434e60'],R4:['#8b9a9f'],
     R5:['#202332','#bc9876'],R6:['#202332','#434e60'],R7:['#202332','#8b9a9f'],
     R8:['#bc9876','#434e60'],R9:['#bc9876','#8b9a9f'],R10:['#434e60','#8b9a9f'],
     R11:['#202332','#434e60','#8b9a9f'],R12:['#202332','#bc9876','#434e60'],
     R13:['#bc9876','#434e60','#8b9a9f'],R14:['#202332','#14151d'],R15:['#8b9a9f','#cdd4d6']};
-  var RNAME={R1:'Navy',R2:'Tan',R3:'Slate',R4:'Dove',R5:'Navy·Tan',R6:'Navy·Slate',R7:'Navy·Dove',R8:'Tan·Slate',R9:'Tan·Dove',R10:'Slate·Dove',R11:'Navy·Slate·Dove',R12:'Navy·Tan·Slate',R13:'Tan·Slate·Dove',R14:'Navy·Ink',R15:'Dove·Mist'};
+  var RNAME={RS:'Base surface',RS2:'Raised surface',R1:'Navy',R2:'Tan',R3:'Slate',R4:'Dove',R5:'Navy·Tan',R6:'Navy·Slate',R7:'Navy·Dove',R8:'Tan·Slate',R9:'Tan·Dove',R10:'Slate·Dove',R11:'Navy·Slate·Dove',R12:'Navy·Tan·Slate',R13:'Tan·Slate·Dove',R14:'Navy·Ink',R15:'Dove·Mist'};
   var DIR={DN:['↓','180deg'],UP:['↑','0deg'],RT:['→','90deg'],LT:['←','270deg'],BR:['↘','135deg'],TR:['↗','45deg'],BL:['↙','225deg'],TL:['↖','315deg'],RA:['◉','radial']};
   function grad(r,d,b){
     var c=REC[r]||REC.R1; if(c.length===1)return c[0];
@@ -17425,8 +17433,8 @@ try{
     ['S13','"Today" cell','bg','.day-card.today'],
     ['S14','Habit bars','bg','.hab-bar'],
     ['S15','"Life OS" wordmark','text','.s-logo']];
-  var DEF={S1:{r:'R1'},S2:{r:'R8',d:'UP',b:50},S3:{r:'R4'},S4:{r:'R12',d:'DN',b:2},
-    S5:{r:'R6',d:'DN',b:47},S6:{r:'R14',d:'LT',b:55},S7:{r:'R8',d:'DN',b:2},S8:{r:'R2'},
+  var DEF={S1:{r:'R1'},S2:{r:'R8',d:'UP',b:50},S3:{r:'R4'},S4:{r:'RS'},
+    S5:{r:'R6',d:'DN',b:47},S6:{r:'R14',d:'LT',b:55},S7:{r:'RS'},S8:{r:'R2'},
     S9:{r:'R2'},S11:{r:'R14',d:'DN',b:57},S12:{r:'R14',d:'DN',b:60},
     S13:{r:'R14',d:'UP',b:68},S14:{r:'R5',d:'RT',b:50},S15:{r:'R8',d:'BL',b:81},
     _text:'#d9d9d9',_text2:'#8b9a9f',_muted:'#8b9a9f',_border:'#202332',_borders:true,
@@ -17435,6 +17443,7 @@ try{
   try{cfg=JSON.parse(localStorage.getItem(KEY));}catch(e){cfg=null;}
   if(!cfg)cfg=JSON.parse(JSON.stringify(DEF));
   for(var k in DEF)if(!(k in cfg))cfg[k]=DEF[k];
+  if(!cfg._m2){cfg.S4={r:'RS'};cfg.S7={r:'RS'};cfg._m2=1;}
 
   function buildCss(){
     var o='';
