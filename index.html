@@ -126,18 +126,45 @@
 /* Left sidebar: a flat graphite panel, no dividing border — separation comes
    from the surface sitting a touch darker than the app canvas. */
 [data-theme="studio"] .sidebar{background:#17151F;border-right:none}
-/* Nav: transparent by default; the glyph follows currentColor (graphite),
-   goes white on hover, and ONLY the selected item gets the brand-purple
-   gradient pill with a soft glow + white glyph/label. */
-[data-theme="studio"] .s-nav a .ic{width:22px;height:22px}
-[data-theme="studio"] .s-nav a .ic svg{width:20px;height:20px}
-[data-theme="studio"] .s-nav a,[data-theme="studio"] .s-nav a .ic{color:#9189A7;background:transparent}
-[data-theme="studio"] .s-nav a:hover{background:var(--surface);color:#fff}
-[data-theme="studio"] .s-nav a:hover .ic{color:#fff}
-[data-theme="studio"] .s-nav a.active{background:linear-gradient(180deg,#7C4DFF 0%,#9A67FF 100%);color:#fff;box-shadow:0 6px 18px -6px rgba(124,77,255,.55), inset 0 1px 0 rgba(255,255,255,.12)}
-/* No Windows-style focus rectangle on nav — the gradient + glow IS the state. */
-[data-theme="studio"] .s-nav a:focus,[data-theme="studio"] .s-nav a:focus-visible{outline:none}
-[data-theme="studio"] .s-nav a.active .ic,[data-theme="studio"] .s-nav a.active .label{color:#fff}
+/* Nav — ONE animation system (see design-system.md §7,§11). Items are quiet by
+   default; a SINGLE shared purple indicator physically glides behind the
+   selected item (macOS, not Android). Content sits above the indicator; hover
+   brightens + nudges the glyph 1px. All motion is transform/opacity only. */
+[data-theme="studio"] .s-nav{position:relative}
+[data-theme="studio"] .s-nav a{position:relative;z-index:1;font-weight:450;transition:color 140ms ease-out}
+[data-theme="studio"] .s-nav a .ic{width:22px;height:22px;color:#9189A7;transition:color 140ms ease-out}
+[data-theme="studio"] .s-nav a .ic svg{width:20px;height:20px;transition:transform 140ms ease-out}
+[data-theme="studio"] .s-nav a,[data-theme="studio"] .s-nav a .label{color:#9189A7;background:transparent}
+/* Hover (non-selected): brighten + a subtle wash + a 1px glyph nudge. */
+[data-theme="studio"] .s-nav a:not(.active):hover{background:rgba(255,255,255,.045);color:#EAE6F4}
+[data-theme="studio"] .s-nav a:not(.active):hover .ic{color:#EAE6F4}
+[data-theme="studio"] .s-nav a:hover .ic svg{transform:translateX(1px)}
+/* Selected: inherits the shared indicator — no per-item background, no pop.
+   The label gains WEIGHT (not dramatic brightness) and settles to white. */
+[data-theme="studio"] .s-nav a.active{background:transparent;box-shadow:none;color:#FFFFFF;font-weight:600}
+[data-theme="studio"] .s-nav a.active .ic,[data-theme="studio"] .s-nav a.active .label{color:#FFFFFF}
+[data-theme="studio"] .s-nav a.active .ic svg{transform:none}
+/* The shared sliding indicator — one element, translateY only (GPU-friendly). */
+[data-theme="studio"] .s-nav-ind{
+  position:absolute;left:0;right:0;top:0;height:44px;border-radius:10px;z-index:0;pointer-events:none;
+  background:linear-gradient(180deg,#7C4DFF 0%,#9A67FF 100%);
+  box-shadow:0 6px 18px -6px rgba(124,77,255,.5), inset 0 1px 0 rgba(255,255,255,.12);
+  opacity:0;transform:translateY(0);will-change:transform;
+  transition:transform 200ms cubic-bezier(.2,.7,.2,1), opacity 160ms ease-out;
+}
+/* Settings sits in the foot, outside the indicator's track — give it its own
+   quiet selected state. */
+[data-theme="studio"] .s-nav-foot{transition:color 140ms ease-out,background 140ms ease-out}
+[data-theme="studio"] .s-nav-foot:hover{background:rgba(255,255,255,.045);color:#EAE6F4}
+[data-theme="studio"] .s-nav-foot.active{background:rgba(124,77,255,.18);color:#FFFFFF}
+/* Keyboard focus: a real, visible ring (replaces the earlier outline:none). */
+[data-theme="studio"] .s-nav a:focus-visible,[data-theme="studio"] .s-nav-foot:focus-visible,[data-theme="studio"] .us-trigger:focus-visible{outline:2px solid rgba(138,93,255,.75);outline-offset:2px}
+[data-theme="studio"] .s-nav a:focus:not(:focus-visible){outline:none}
+/* Reduced motion: no glide or nudge — states change by fade only. */
+@media(prefers-reduced-motion:reduce){
+  [data-theme="studio"] .s-nav-ind{transition:opacity 120ms ease-out}
+  [data-theme="studio"] .s-nav a .ic svg{transition:none}
+}
 /* Right rail cards: a calm raised surface — no accent line, soft shadow only. */
 [data-theme="studio"] .ac-card{position:relative;background:var(--surface);border:none;box-shadow:var(--shadow)}
 /* Chat/composer bar floats — a graphite glassy pill; its border lifts to the
@@ -286,7 +313,10 @@ svg{flex-shrink:0}
 .g-btn svg{width:20px;height:20px;flex-shrink:0}
 
 /* ━━━ APP SHELL ━━━ */
-.app{display:grid;grid-template-columns:232px 1fr;min-height:100vh;background:var(--app-bg,var(--bg));background-attachment:fixed}
+/* Layout tokens — sidebar/rail widths live here so we can add Expanded /
+   Compact / Icon-only / Drawer modes later without touching the grid. */
+:root{--sidebar-w:232px;--rail-w:380px}
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;min-height:100vh;background:var(--app-bg,var(--bg));background-attachment:fixed}
 .sidebar{
   background:var(--surface);border-right:1px solid var(--border);
   position:relative;z-index:5;
@@ -297,17 +327,27 @@ svg{flex-shrink:0}
 }
 .s-logo-row{display:flex;align-items:center;gap:10px;padding:4px 10px 22px}
 .s-logo-row svg{color:var(--text)}
-/* Signature lotus mark — the one deliberate "wow". A slow, understated purple
-   halo breathes around the gradient icon; premium, not attention-grabbing. */
-[data-theme="studio"] .s-logo-row svg{animation:logoShimmer 6.5s ease-in-out infinite;will-change:filter}
-@keyframes logoShimmer{
-  0%,100%{filter:drop-shadow(0 0 2px rgba(124,77,255,.20))}
-  50%{filter:drop-shadow(0 0 8px rgba(163,107,255,.55))}
+/* Logo lockup (lotus + Playfair wordmark) = the product identity. On first
+   load it plays ONE tasteful intro — the lotus settles in, then the wordmark
+   eases in — and then rests calm (a faint STATIC halo, no looping movement).
+   Scoped to the sidebar so it never replays when the mobile drawer opens. */
+[data-theme="studio"] .sidebar .s-logo-row svg{filter:drop-shadow(0 0 5px rgba(124,77,255,.28));animation:logoMarkIn .55s cubic-bezier(.2,.7,.2,1) both}
+[data-theme="studio"] .sidebar .s-logo-row .s-logo{animation:logoWordIn .5s cubic-bezier(.2,.7,.2,1) .26s both}
+@keyframes logoMarkIn{
+  0%{opacity:0;transform:scale(.8)}
+  60%{filter:drop-shadow(0 0 12px rgba(163,107,255,.55))}
+  100%{opacity:1;transform:scale(1);filter:drop-shadow(0 0 5px rgba(124,77,255,.28))}
 }
-@media(prefers-reduced-motion:reduce){[data-theme="studio"] .s-logo-row svg{animation:none;filter:drop-shadow(0 0 3px rgba(124,77,255,.3))}}
+@keyframes logoWordIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+@media(prefers-reduced-motion:reduce){
+  [data-theme="studio"] .sidebar .s-logo-row svg,[data-theme="studio"] .sidebar .s-logo-row .s-logo{animation:none}
+}
 [data-theme="studio"] .s-logo{color:#F6F3FF;letter-spacing:-.2px}
 .s-logo{font-family:'Playfair Display','Georgia',serif;font-size:20px;font-weight:500;letter-spacing:-.3px;color:var(--text);line-height:1}
-.s-nav{display:flex;flex-direction:column;gap:5px;flex:1;overflow-y:auto;padding-right:2px}
+.s-nav{position:relative;display:flex;flex-direction:column;gap:5px;flex:1;overflow-y:auto;padding-right:2px}
+/* Sliding indicator is ALWAYS out of flow (any theme) so it never affects
+   layout; its visual (gradient/glow) is defined only under [data-theme="studio"]. */
+.s-nav-ind{position:absolute;left:0;right:0;top:0;pointer-events:none;opacity:0}
 .s-nav::-webkit-scrollbar{width:4px}
 .s-nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 .s-nav a{
@@ -397,7 +437,7 @@ svg{flex-shrink:0}
 .theme-sw.on{border-color:var(--accent);color:var(--text);box-shadow:0 0 0 1.5px var(--accent)}
 
 /* ━━━ MAIN LAYOUT ━━━ */
-.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:56px;padding:32px 32px 140px 44px;max-width:2200px;margin:0 auto;width:100%}
+.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) var(--rail-w);gap:56px;padding:32px 32px 140px 44px;max-width:2200px;margin:0 auto;width:100%}
 .main-col{min-width:0;display:flex;flex-direction:column;gap:28px}
 .aside-col{display:flex;flex-direction:column;gap:14px;min-width:0;position:sticky;top:22px;align-self:start;max-height:calc(100vh - 60px);overflow-y:auto;padding-right:2px}
 .aside-col::-webkit-scrollbar{width:5px}
@@ -405,7 +445,7 @@ svg{flex-shrink:0}
 
 /* ━━━ ROUTES (tabs as pages) ━━━ */
 .route{display:none;flex-direction:column;gap:26px}
-.route.active{display:flex;animation:fade .25s ease}
+.route.active{display:flex;animation:fade-in .22s ease}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
 /* ━━━ PAGE HEADER ━━━ */
@@ -2905,13 +2945,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
   /* Card hover-lift */
   .ti,.bc,.lc2,.ic,.rc,.nc,.people-card,.hc,.wp-row,.aim-row{transition:transform .17s cubic-bezier(.34,1.3,.5,1),box-shadow .17s,border-color .15s}
   .ti:hover,.bc:hover,.lc2:hover,.ic:hover,.rc:hover,.nc:hover,.people-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lift)}
-  /* Nav — pop the tab you land on */
-  .s-nav a,.s-nav-a{transition:background .16s,color .16s,transform .12s}
-  .s-nav a.active,.s-nav-a.active{animation:navPop .32s cubic-bezier(.34,1.56,.5,1)}
-  @keyframes navPop{0%{transform:scale(.96)}55%{transform:scale(1.03)}100%{transform:scale(1)}}
-  /* Springier route + modal entrances (override the plain fades) */
-  .route.active{animation:routeIn .34s cubic-bezier(.22,.68,.24,1)}
-  @keyframes routeIn{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}
+  /* Nav — the selected item does NOT pop or bounce; the shared sliding
+     indicator carries the state (design-system.md §7: calm, no spring). */
+  .s-nav a,.s-nav-a{transition:background .16s,color .14s,transform .12s}
+  /* Route entrance — calm crossfade + slight rise, 260ms ease-out. */
+  .route.active{animation:routeIn .26s cubic-bezier(.2,.7,.2,1)}
+  @keyframes routeIn{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
   .modal-body{animation:modalPop .28s cubic-bezier(.34,1.42,.5,1)!important}
   @keyframes modalPop{0%{opacity:0;transform:scale(.92) translateY(12px)}100%{opacity:1;transform:none}}
   .modal-bd{animation:fadeBd .22s ease-out!important}
@@ -3033,10 +3072,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <svg width="22" height="22" viewBox="0 0 24 24"><defs><linearGradient id="loGradSb" gradientUnits="userSpaceOnUse" x1="4" y1="21" x2="20" y2="3"><stop offset="0" stop-color="#7C4DFF"/><stop offset="1" stop-color="#C28DFF"/></linearGradient></defs><path d="M12 20.4 C6.9 17.6 3.4 13.1 3.4 8.5 C7.1 9.2 10.1 13 12 20.4 Z" fill="url(#loGradSb)" fill-opacity=".82"/><path d="M12 20.4 C17.1 17.6 20.6 13.1 20.6 8.5 C16.9 9.2 13.9 13 12 20.4 Z" fill="url(#loGradSb)" fill-opacity=".82"/><path d="M12 2.3 C8.6 8 8.6 15 12 20.4 C15.4 15 15.4 8 12 2.3 Z" fill="url(#loGradSb)"/></svg>
         <div class="s-logo">Life OS</div>
       </div>
-      <button class="us-trigger" onclick="openUniversalSearch()" title="Search everything (Ctrl+K)">
-        <span class="us-trigger-ic">⌕</span><span class="us-trigger-txt">Search…</span><span class="us-trigger-kbd">Ctrl K</span>
+      <!-- Command-palette entry point (not just a search field). Today it opens
+           universal search; it is architected to grow into Search + AI + quick
+           actions + navigation + commands (Raycast/Spotlight/Linear style). -->
+      <button class="us-trigger" data-command-entry onclick="openUniversalSearch()" aria-label="Search and run commands" aria-keyshortcuts="Meta+K Control+K" title="Search & commands (Ctrl K)">
+        <span class="us-trigger-ic" aria-hidden="true">⌕</span><span class="us-trigger-txt">Search or run a command…</span><span class="us-trigger-kbd" aria-hidden="true">Ctrl K</span>
       </button>
-      <nav class="s-nav" id="s-nav">
+      <nav class="s-nav" id="s-nav" aria-label="Primary">
+        <div class="s-nav-ind" aria-hidden="true"></div>
         <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
         <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
         <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.4"/><rect x="14" y="4" width="7" height="7" rx="1.4"/><rect x="3" y="15" width="7" height="6" rx="1.4"/><rect x="14" y="15" width="7" height="6" rx="1.4"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
@@ -3074,7 +3117,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
   <!-- MOBILE DRAWER -->
   <div class="mobile-drawer" id="m-drawer" onclick="if(event.target.id==='m-drawer')closeDrawer()">
-    <div class="mobile-drawer-panel">
+    <div class="mobile-drawer-panel" role="dialog" aria-modal="true" aria-label="Navigation menu">
       <div class="s-logo-row">
         <svg width="22" height="22" viewBox="0 0 24 24"><defs><linearGradient id="loGradMb" gradientUnits="userSpaceOnUse" x1="4" y1="21" x2="20" y2="3"><stop offset="0" stop-color="#7C4DFF"/><stop offset="1" stop-color="#C28DFF"/></linearGradient></defs><path d="M12 20.4 C6.9 17.6 3.4 13.1 3.4 8.5 C7.1 9.2 10.1 13 12 20.4 Z" fill="url(#loGradMb)" fill-opacity=".82"/><path d="M12 20.4 C17.1 17.6 20.6 13.1 20.6 8.5 C16.9 9.2 13.9 13 12 20.4 Z" fill="url(#loGradMb)" fill-opacity=".82"/><path d="M12 2.3 C8.6 8 8.6 15 12 20.4 C15.4 15 15.4 8 12 2.3 Z" fill="url(#loGradMb)"/></svg>
         <div class="s-logo">Life OS</div>
@@ -3867,7 +3910,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v237';
+const APP_VERSION='v238';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -4352,7 +4395,8 @@ function setRoute(r,skipHash){
   currentRoute=r;
   if(!skipHash){try{history.replaceState(null,'','#'+r);}catch(e){location.hash=r;}}
   document.querySelectorAll('[data-route]').forEach(el=>el.classList.toggle('active',el.dataset.route===r));
-  document.querySelectorAll('[data-route-link]').forEach(a=>a.classList.toggle('active',a.dataset.routeLink===r));
+  document.querySelectorAll('[data-route-link]').forEach(a=>{const on=a.dataset.routeLink===r;a.classList.toggle('active',on);if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
+  if(typeof positionNavIndicator==='function')positionNavIndicator();
   const mt=document.getElementById('mt-title');if(mt)mt.textContent=ROUTE_TITLES[r];
   // Close any open quick-add forms so switching away and back resets state
   document.querySelectorAll('[id$="-qa"]').forEach(el=>{if(el)el.style.display='none';});
@@ -4415,6 +4459,53 @@ function _restoreSettingsTab(){
   try{const s=localStorage.getItem('los_settings_tab');if(s&&SETTING_TABS.includes(s))t=s;}catch(_){}
   setSettingsTab(t);
 }
+// ── Sliding nav indicator ──────────────────────────────────────────────
+// A single shared purple pill that physically glides behind the selected nav
+// item (macOS-style). translateY only — GPU-friendly. It SNAPS into place the
+// first time the sidebar is actually laid out (e.g. after sign-in reveals
+// #app), then GLIDES on every route change thereafter.
+function positionNavIndicator(){
+  const nav=document.getElementById('s-nav');if(!nav)return;
+  const ind=nav.querySelector('.s-nav-ind');if(!ind)return;
+  const a=nav.querySelector('a.active');
+  if(!a||!a.offsetHeight){ind.style.opacity='0';return;}          // hidden / off-track (e.g. Settings)
+  const shown=(ind.style.opacity==='1');
+  if(!shown)ind.style.transition='none';                          // snap on first reveal
+  ind.style.height=a.offsetHeight+'px';
+  ind.style.transform='translateY('+a.offsetTop+'px)';
+  ind.style.opacity='1';
+  if(!shown){void ind.offsetHeight;ind.style.transition='';}      // re-enable glide
+}
+let _navIndObserver=null;
+function initNavIndicator(){
+  const nav=document.getElementById('s-nav');if(!nav)return;
+  // Reposition whenever the sidebar changes size — covers the 0→real transition
+  // when #app is revealed post-sign-in, and any font-load reflow.
+  try{_navIndObserver=new ResizeObserver(()=>positionNavIndicator());_navIndObserver.observe(nav);}catch(e){}
+  window.addEventListener('resize',()=>positionNavIndicator());
+  requestAnimationFrame(positionNavIndicator);
+  // Keyboard: Up/Down move focus between nav items; Home/End jump to the ends.
+  nav.addEventListener('keydown',e=>{
+    if(e.key!=='ArrowDown'&&e.key!=='ArrowUp'&&e.key!=='Home'&&e.key!=='End')return;
+    const items=[...nav.querySelectorAll('a')];if(!items.length)return;
+    const i=items.indexOf(document.activeElement);
+    e.preventDefault();
+    let n;
+    if(e.key==='Home')n=0;
+    else if(e.key==='End')n=items.length-1;
+    else if(e.key==='ArrowDown')n=(i<0?0:(i+1)%items.length);
+    else n=(i<0?items.length-1:(i-1+items.length)%items.length);
+    items[n].focus();
+  });
+  // Escape closes the mobile drawer / right rail if either is open.
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Escape')return;
+    const d=document.getElementById('m-drawer');
+    if(d&&d.classList.contains('open')){closeDrawer();return;}
+    const rail=document.getElementById('rail');
+    if(rail&&rail.classList.contains('open')&&typeof closeRail==='function')closeRail();
+  });
+}
 function initRouter(){
   document.querySelectorAll('[data-route-link]').forEach(a=>{
     a.addEventListener('click',e=>{
@@ -4427,6 +4518,7 @@ function initRouter(){
   });
   window.addEventListener('hashchange',()=>{const r=location.hash.replace('#','')||'today';setRoute(r,true);});
   const initial=location.hash.replace('#','')||'today';setRoute(initial,true);
+  initNavIndicator();
 }
 function _syncBodyLock(){
   const drawerOpen=document.getElementById('m-drawer')?.classList.contains('open');

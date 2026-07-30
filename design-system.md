@@ -220,6 +220,23 @@ ease-in-out · lift `cubic-bezier(.34,1.4,.5,1)` (gentle spring).
 - **Transitions are continuous** — the shell (sidebar + rail) is persistent;
   only the main column crossfades between pages. No hard cuts.
 
+**Step 2 — locked nav behaviour:**
+- **Sliding indicator:** a *single* shared purple element physically glides
+  between items (translateY only — GPU). Never disappears/reappears; snaps on
+  first reveal, glides thereafter. Selected item's label gains **weight**, not
+  loud brightness. No pop, no bounce.
+- **One icon system:** hover → brighten + 1px nudge; selected → inherits the
+  indicator; disabled → opacity only.
+- **Timings:** hover 140ms · active/glide 200ms · page 260ms · all ease-out.
+- **Width is a token** (`--sidebar-w`, `--rail-w`) → Expanded / Compact /
+  Icon-only / Drawer modes plug in later without touching the grid.
+- **Search = command-palette entry point** (grows into search + AI + quick
+  actions + navigation + commands), never a dead search field.
+- **Logo intro:** on first load the lockup plays ONE intro (lotus settles →
+  wordmark eases in) then rests calm. Never loops.
+- **Mobile:** the sidebar is architected to become a slide-out drawer; no
+  desktop-only assumptions.
+
 ---
 
 ## 12. We intentionally avoid
@@ -286,3 +303,11 @@ ease-in-out · lift `cubic-bezier(.34,1.4,.5,1)` (gentle spring).
 - **2026-07-30 — v2.0.1** §13 decisions locked: one-accent colour system
   (purple + green + red only), Playfair wordmark as the sole serif, restrained
   premium Library. **Step 1 (Global Design System) complete.**
+- **2026-07-30 — Step 2 (Navigation & Sidebar) built** (v238, pending review):
+  shared sliding active indicator (translateY, macOS-style); one nav
+  interaction system (hover brighten + 1px glyph nudge, selected gains weight,
+  no pop/bounce); quieter label weight; continuous route crossfade (260ms);
+  `--sidebar-w`/`--rail-w` layout tokens; command-palette-ready search; a
+  one-time logo intro that replaces the looping shimmer; full keyboard nav
+  (↑/↓/Home/End), a restored visible focus ring, Escape closes drawers, ARIA
+  labels + `aria-current`, reduced-motion honoured, GPU-only transforms.
