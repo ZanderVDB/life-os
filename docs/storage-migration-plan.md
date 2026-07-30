@@ -98,7 +98,7 @@ defined rollback period afterwards.
 | Step | Why |
 |---|---|
 | **A1. Fix the profile-contamination bug** ✅ **DONE (v240)** | `technical-debt.md` **D1** — switching profiles can copy one profile's reminders/people into another *and then save them there*. Migrating contaminated data would make it permanent. **This must be fixed first.** |
-| **A2. Inspect the orphaned data** 🟡 **INSPECTOR BUILT (v243)** — read-only, structure-only; awaiting a real run and per-dataset approval. See `legacy-data-decision.md`. | Decide keep/migrate/delete for `dayNotes` (invisible but still saved — may hold years of notes), `people`/`peopleTags`/`peopleLevelNames` (unreachable page, still saved), `learning` (dead), `customEvents` (being actively emptied). **A decision, not a guess.** |
+| **A2. Inspect the orphaned data** ✅ **DONE (v243, decided v244)** — inspection run; `dayNotes` and `customEvents` confirmed EMPTY in both profiles and excluded from v2; People AI writes frozen. See `legacy-data-decision.md`. | Decide keep/migrate/delete for `dayNotes` (invisible but still saved — may hold years of notes), `people`/`peopleTags`/`peopleLevelNames` (unreachable page, still saved), `learning` (dead), `customEvents` (being actively emptied). **A decision, not a guess.** |
 | **A3. Protected Firestore export** ✅ **DONE (v242)** — VERIFIED live: 2 profiles, 4 documents (3 verified + presence volatile), 98.9 KB. **This is the rollback floor.** | Full export of every profile document to `life-os-backups`, write-once, retained through the entire migration. This is the rollback floor. |
 | **A4. Verify Firebase security rules** | **They are not in this repository** and could not be audited. They are currently the only server-side protection. Confirm a user cannot read another user's documents *before* building anything that assumes that. |
 | **A5. Record a data census** | Per profile: counts of tasks, habits, habit-tick dates, notebook sections/pages, diary days, brain items, reminders, AI history, plus the **document size in bytes** (how close to the 1 MB ceiling). This census is the baseline every later validation compares against. |
@@ -108,13 +108,17 @@ down (**A2 — pending, not started**) · ~~export tool built + verified~~ ✅ (
 **needs one real run on live data**) · rules confirmed (**A4 — pending**) ·
 census recorded (**A5 — pending**).
 
+**PHASE A IS COMPLETE** (A1 ✅ v240 · A2 ✅ v243/v244 · A3 ✅ v242 VERIFIED ·
+A5 ✅). **A4 — verifying the Firebase security rules — remains outstanding**
+and is carried into Phase B.
+
 **Status: Firestore remains the source of truth. No migration has run. The
 export is a rollback asset, not the future storage architecture.**
 See `firestore-export-restore.md`.
 
 ---
 
-## Phase B — Platform foundation (no user data yet)
+## Phase B — Platform foundation (no user data yet) — **NOT STARTED**
 
 | Step | Notes |
 |---|---|
@@ -190,7 +194,7 @@ redesign are blocked on them.
 | **E1. Split the Diary** | `routineLog[date]` currently holds `journal` **and** routine `checks` in one object. Split into `diary_entries` and `routine_completions`. **Must happen before any Library merge.** |
 | **E2. Notebook → books/sections/pages** | `S.notebook.sections[]` → one `books` row (kind `notebook`) + `book_sections` + `book_pages`. Cells → `content` jsonb with `content_format='html_cells'`. **Do not attempt to normalise the mixed plain-text/HTML cells during migration** — the legacy converter only runs at render time, so a blind conversion would mangle untouched cells. Preserve exactly, convert later. |
 | **E3. Diary as a book** | Create a `books` row of kind `diary`; link `diary_entries.book_page_id` |
-| **E4. `dayNotes`** | Per the A2 decision. If kept, import as a distinct book so nothing is silently lost. |
+| **E4. `dayNotes`** | **EXCLUDED — empty in both profiles (0/0). Nothing to migrate.** Field retired during final legacy cleanup only. |
 | **E5. Brain** | `ideas`/`resources`/`notes` → `brain_items` with `kind`; note `notes.body` vs `ideas.desc` field-name difference. `brain_links` starts empty. |
 | **E6. Extract embedded images** | Scan page content for `data:image`; extract to R2, replace with attachment references, report counts |
 | **E7. Full-text search** | Build GIN indexes — **the diary becomes searchable for the first time** |

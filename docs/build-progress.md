@@ -16,11 +16,11 @@ this file (where we are) → `design-ideas.md` (captured, not built).
 
 | | |
 |---|---|
-| **Version** | v243 |
-| **Rebuild step** | 3 of 17 · audit done · platform v2 designed · **A1+A3 done, A2 inspector built** |
-| **Next step** | Approve remaining legacy verdicts, then Phase B (backend) |
+| **Version** | v244 |
+| **Rebuild step** | 3 of 17 · audit done · platform v2 designed · **PHASE A COMPLETE** |
+| **Next step** | **Phase B — backend + Postgres in staging** (awaiting approval; not started) |
 | **Data platform** | Firestore = source of truth · Postgres + R2 **planned, not started** |
-| **Tests** | `npm test` — 110 passing |
+| **Tests** | `npm test` — 135 passing |
 | **Live** | life-os.web-anchor.com (Railway) |
 | **Repo** | `ZanderVDB/life-os` · single-file `index.html` + `sw.js` |
 
@@ -439,6 +439,60 @@ workspaces) but ships no switcher in v2.
 
 **Nothing changed in the app.** The live switcher is untouched; no data was
 deleted, migrated or modified. Profile switching retires at v2 cutover.
+
+---
+
+### 2026-07-31 — Phase A closeout ✅ (v244) — **PHASE A COMPLETE**
+
+**Legacy decisions finalised from the live inspection:**
+- **`dayNotes` — EXCLUDED from v2.** Confirmed **0 entries in both profiles**.
+  The feared years of invisible notes do not exist, so **no content review is
+  needed**. Field retired at final cleanup only; not deleted now.
+- **`customEvents` — EXCLUDED from v2.** Confirmed **0 in both profiles**. The
+  destructive clear-on-load must be retired with the legacy calendar code, and
+  a local-event system must never be recreated under this name.
+
+**CODE — legacy People/Promise AI writes FROZEN.**
+The People dataset is excluded from v2 but the AI could still grow it. Now
+blocked at **three layers**:
+1. **Schema** — `_allowedOps()` removes `addPerson`/`addPromise` from every
+   scope, so the model is never told they exist (Today: 20 → 18 ops).
+2. **Scope filter** — `_scopeFilterCh()` strips them from any change set.
+3. **Apply guard** — `_stripFrozenPeopleOps()` runs at the top of
+   `applyChanges()`, before any mutation or save; a People-only request returns
+   early **without saving**.
+
+Existing records are **untouched and still readable**; nothing is deleted,
+rewritten, or redirected into another system. Every unrelated operation
+(tasks, reminders, habits, projects, notes, events, routine, notebook) is
+unaffected. **Reversible via one flag:** `LEGACY_PEOPLE_FROZEN = false`.
+
+**User-facing message:** *"The People feature has been retired and is no longer
+accepting new records. Your existing entries are unchanged."* — shown alone for
+a People-only request, appended when other changes did apply, and recorded in
+AI history as `blocked — People retired`.
+
+**Area seeding rule locked:** migrate existing Areas from Personal; guarantee
+**Personal** and **Work**; **no auto-seeding** of optional Areas (one-click
+suggestions later); case/whitespace duplicate prevention; **removing an Area
+never deletes linked content** — it reassigns it (`ON DELETE SET NULL`).
+
+**Business profile rule unchanged:** legacy, excluded entirely, preserved in
+the verified v242 export and Firestore rollback period. Not deleted.
+
+**Tests:** `tests/people-freeze.test.js` — **25 passing**. Full suite **135**.
+
+### Phase A status: COMPLETE
+| Step | Status |
+|---|---|
+| A1 profile contamination fix | ✅ v240 |
+| A2 legacy-data inspection + decisions | ✅ v243 / v244 |
+| A3 protected export + verification | ✅ v242 VERIFIED — the rollback floor |
+| A4 Firebase security rules | ⚠️ **outstanding** — carried into Phase B |
+| A5 data census | ✅ delivered by the A2 inspector |
+
+**No user data has been migrated, deleted or modified at any point.**
+**Phase B is NOT started.**
 
 ---
 

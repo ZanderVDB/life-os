@@ -132,13 +132,25 @@ middleware's hot path.
 Personal/Business profiles. (Legacy name: `workProjects`.) **Not projects.**
 
 `id` uuid PK · `workspace_id` FK (cascade) · `name` text ● · `color` text ●
-· `sort_order` integer ● · `is_system` boolean · `icon` text ○ ·
+· `sort_order` integer ● · `is_system` boolean (Personal/Work) · `icon` text ○ ·
 `created_at`,`updated_at`,`deleted_at`
 **Index:** `(workspace_id, sort_order)`. **Delete:** soft; the API reassigns
 affected items (today's only referential clean-up — keep that behaviour).
 
-Seeded examples: **Personal · Work · Church · Health · Finance · Family ·
-Learning**. Users add their own.
+**Seeding rule (locked 2026-07-31).** Migrate the user's **existing valid Areas
+from the authoritative Personal profile**, and guarantee **Personal** and
+**Work** exist. **Do not auto-seed** Church, Health, Finance, Family, Learning
+or any other optional Area — those may later be offered as **one-click
+suggestions** in onboarding or Settings, never as forced defaults.
+
+**Duplicate prevention:** normalise on write — trim, collapse internal
+whitespace, compare case-insensitively — so "Work", "work" and "  Work " cannot
+coexist. Enforced by `UNIQUE (workspace_id, lower(btrim(name))) WHERE deleted_at IS NULL`.
+
+**Removal is never destructive.** Deleting an Area must **never** delete the
+tasks, projects, calendar items, books or brain items linked to it. Every
+`area_id` is `ON DELETE SET NULL`, and the API reassigns affected content to
+**no Area or another chosen Area**. An Area is a label, never an owner.
 
 **Areas are usable across** tasks, projects, calendar items, reminders, Library
 books/entries, Brain items, AI commands, and saved views/filters — so every

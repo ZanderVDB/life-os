@@ -66,15 +66,27 @@ the Today and Task Detail redesign.**
 Usage tracking · per-profile/per-user budgets · rate limiting · model
 configuration · **provider abstraction** · safe error logging.
 
-### Legacy data — provisional decisions (nothing deleted)
+### Areas — seeding rule (locked 2026-07-31)
+Migrate existing Areas from the Personal profile; guarantee **Personal** and
+**Work**. **No auto-seeding** of optional Areas — offer them later as one-click
+suggestions. Prevent case/whitespace duplicates. **Removing an Area never
+deletes linked content** — it reassigns it.
+
+### Legacy People — AI writes FROZEN (v244)
+`addPerson` and `addPromise` are blocked at three layers (never offered in the
+schema · stripped by the scope filter · rejected by an apply-time guard).
+Existing records are untouched and readable; nothing is redirected into another
+system. Reversible by setting `LEGACY_PEOPLE_FROZEN = false`.
+
+### Legacy data — decisions (nothing deleted)
 | Data | Decision |
 |---|---|
-| `dayNotes` | **Needs live-data inspection.** Export/inspect before deciding. |
-| People | **Archive or export, then remove from the active product** — unless inspection reveals an important future use. |
+| `dayNotes` | ✅ **EXCLUDED from v2** — confirmed empty (0/0). Retire the field at final cleanup. |
+| People | **Archive once from Personal, then remove from the active product.** AI writes frozen in v244. Not migrated. |
 | Board | Verify whether it holds unique stored data. Page code may be removed later, **but not before its data is classified.** |
 | Old Habits page | Unreachable **UI** may be removed later. **Valid habit data must remain.** |
 | `learning` | Inspect for unique content; migrate anything useful before removal. |
-| `customEvents` | **Investigate carefully — current behaviour may already be destructive.** Make no further destructive changes. |
+| `customEvents` | ✅ **EXCLUDED from v2** — confirmed empty (0/0). Retire the destructive clear-on-load with the legacy calendar code. Never recreate under this name. |
 
 > **Deleting an unused page and deleting its data are separate decisions.**
 

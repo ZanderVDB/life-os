@@ -3975,7 +3975,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v243';
+const APP_VERSION='v244';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -13030,11 +13030,50 @@ const AI_SCOPES={
   notebook:{label:'your notebook — write entries into its sections',ops:['addNotebookEntry']},
   settings:{label:'nothing on this page',ops:[]}
 };
+// ══════════════════════════════════════════════════════════════════════════
+// LEGACY PEOPLE FREEZE  (Phase A closeout, 2026-07-31)
+//
+// The People system is retired: its page is unreachable, its data is excluded
+// from the Life OS v2 model, and it is archived in the verified v242 export.
+// Leaving the AI able to CREATE people and promises meant a dataset we had
+// already decided to retire kept growing.
+//
+// This blocks WRITES only:
+//   • existing People records are untouched and still readable
+//   • nothing is deleted, rewritten or redirected into another system
+//   • every unrelated AI operation continues to work normally
+//   • read-only diagnostic tooling (?inspect=1) is unaffected
+//
+// TO UN-FREEZE: set LEGACY_PEOPLE_FROZEN = false. Nothing else needs changing.
+// ══════════════════════════════════════════════════════════════════════════
+const LEGACY_PEOPLE_FROZEN=true;
+const FROZEN_PEOPLE_OPS=['addPerson','addPromise'];
+const LEGACY_PEOPLE_MESSAGE='The People feature has been retired and is no longer accepting new records. Your existing entries are unchanged.';
+// True once any frozen operation is stripped, so the reply can explain why.
+function _peopleOpsBlocked(ch){
+  if(!LEGACY_PEOPLE_FROZEN||!ch)return false;
+  return FROZEN_PEOPLE_OPS.some(op=>Array.isArray(ch[op])&&ch[op].length>0);
+}
+// Layer 2 of 3 — remove frozen operations from a proposed change set.
+function _stripFrozenPeopleOps(ch){
+  if(!LEGACY_PEOPLE_FROZEN||!ch)return false;
+  let hit=false;
+  FROZEN_PEOPLE_OPS.forEach(op=>{
+    if(ch[op]!==undefined){if(Array.isArray(ch[op])&&ch[op].length)hit=true;delete ch[op];}
+  });
+  return hit;
+}
+// Layer 1 of 3 — the model is never told these operations exist.
+function _allowedOps(scope){
+  const cfg=AI_SCOPES[scope]||AI_SCOPES.today;
+  const ops=cfg.ops||[];
+  return LEGACY_PEOPLE_FROZEN?ops.filter(o=>!FROZEN_PEOPLE_OPS.includes(o)):ops.slice();
+}
 // Strip any operation the active page isn't allowed to perform — a safety
 // net so an over-eager model can never act outside the current scope.
+// Also enforces the People freeze (layer 2).
 function _scopeFilterCh(ch,scope){
-  const cfg=AI_SCOPES[scope]||AI_SCOPES.today;
-  const keep=new Set([...cfg.ops,'clarifications','message']);
+  const keep=new Set([..._allowedOps(scope),'clarifications','message']);
   Object.keys(ch).forEach(k=>{if(!keep.has(k))delete ch[k];});
 }
 // Placeholder hint that reflects what the AI can do on the current page.
@@ -13219,7 +13258,10 @@ async function _aiTurn(){
   // offered. Today = full power; every other page is walled to its domain.
   const scope=(conv.scope&&AI_SCOPES[conv.scope])?conv.scope:'today';
   const scopeCfg=AI_SCOPES[scope];
-  const allow=op=>scopeCfg.ops.includes(op);
+  // _allowedOps() applies the LEGACY PEOPLE FREEZE, so frozen operations are
+  // absent from the context, the instructions AND the response schema.
+  const scopeOps=_allowedOps(scope);
+  const allow=op=>scopeOps.includes(op);
   // Context — only the slices the current page can act on, so the model
   // stays focused and we send fewer tokens.
   const ctx={};
@@ -13366,7 +13408,7 @@ CRITICAL for removeEvent / updateEvent:
   if(allow('addPerson'))instrBlocks.push(INSTR.people);
   // Schema: clarifications + the page's allowed ops + message.
   const schemaParts=['"clarifications":["question 1","question 2"]'];
-  scopeCfg.ops.forEach(op=>{if(SCH[op])schemaParts.push(SCH[op]);});
+  scopeOps.forEach(op=>{if(SCH[op])schemaParts.push(SCH[op]);});
   schemaParts.push('"message":"1 sentence"');
   // What the page can/can't do.
   let scopeDirective;
@@ -13405,6 +13447,9 @@ User:"${msg}"`;
     fixAIEventWeekdays(ch,msg);
     // Enforce the page scope: drop any operation this page isn't allowed to
     // perform, so an over-eager model can never act outside the current page.
+    // LEGACY PEOPLE FREEZE — note the request before the filter removes it,
+    // so the reply can explain rather than saying 'no changes'.
+    const _peopleWasRequested=_peopleOpsBlocked(ch);
     _scopeFilterCh(ch,scope);
     // CLARIFICATION BRANCH — if the AI is uncertain it returns a non-empty
     // clarifications array. We open a chat thread above the bar instead of
@@ -13427,16 +13472,21 @@ User:"${msg}"`;
     // ACTUALLY applied (never records cancelled operations).
     applyChanges(ch,msg);
     if(hadActionable){
-      st.className='ai-st ok';st.textContent=ch.message||'Done!';
+      st.className='ai-st ok';
+      st.textContent=(ch.message||'Done!')+(_peopleWasRequested?(' — '+LEGACY_PEOPLE_MESSAGE):'');
     } else {
       // AI returned nothing actionable (couldn't interpret / not in schema /
       // it's just a text reply). Surface that explicitly so the user doesn't
       // wonder if anything happened, and log the attempt to history with a
       // "no changes" note.
       st.className='ai-st';
-      st.textContent=ch.message?`AI: ${ch.message}`:'AI didn\'t make any changes — try rephrasing.';
+      // If the whole request was about People, say so plainly rather than
+      // leaving the user to think the AI simply failed to understand.
+      st.textContent=_peopleWasRequested
+        ?LEGACY_PEOPLE_MESSAGE
+        :(ch.message?`AI: ${ch.message}`:'AI didn\'t make any changes — try rephrasing.');
       S.aiHistory=S.aiHistory||[];
-      S.aiHistory.unshift({at:Date.now(),prompt:msg.slice(0,500),summary:'no changes',detail:'',message:(ch.message||'').slice(0,200)});
+      S.aiHistory.unshift({at:Date.now(),prompt:msg.slice(0,500),summary:_peopleWasRequested?'blocked — People retired':'no changes',detail:'',message:(ch.message||'').slice(0,200)});
       if(S.aiHistory.length>200)S.aiHistory.length=200;
       svAll();
     }
@@ -14762,6 +14812,16 @@ function _aiFindStrict(list,getStr,needleRaw){
   return hit||null;
 }
 async function applyChanges(ch,prompt){
+  // ── LEGACY PEOPLE FREEZE — layer 3 of 3 (the last line of defence) ──────
+  // Even a hand-crafted or replayed change object cannot write to People.
+  // Frozen ops are dropped BEFORE anything is applied or saved, so no
+  // existing record is touched and no write is triggered.
+  const _peopleBlocked=_stripFrozenPeopleOps(ch);
+  if(_peopleBlocked&&!formatAIChangesDetailed(ch)){
+    // The request was ONLY about People — nothing else to apply, so stop
+    // here without saving and explain why.
+    return {status:LEGACY_PEOPLE_MESSAGE,peopleBlocked:true};
+  }
   // aiConfirmMode — Settings → AI behaviour → Confirm before applying
   //   'calendar' : tasks/habits/etc apply now; calendar needs OK (default)
   //   'all'      : every AI change goes through the review queue

@@ -59,13 +59,13 @@ migration and rollback period end.
 | `builds` (Projects) | ✅ Projects | ✅ | **KEEP** |
 | `ideas` / `resources` / `notes` (Brain) | ✅ Brain | ✅ (create only) | **KEEP** |
 | `notebook` | ✅ Notebook | ✅ (append page) | **KEEP** |
-| **`dayNotes`** | ❌ none | ❌ | **NEEDS CONTENT REVIEW** |
-| **`people`** | ❌ unreachable | ✅ **still writable** | **ARCHIVE once, from Personal — not migrated to v2** |
+| **`dayNotes`** | ❌ none | ❌ | **EXCLUDED FROM v2** — empty in both profiles |
+| **`people`** | ❌ unreachable | ❌ **FROZEN v244** | **ARCHIVE once, from Personal — not migrated to v2** |
 | `peopleTags` / `peopleLevelNames` / `peopleSettings` | ⚠️ Settings only | indirect | **ARCHIVE** (with people) |
 | Promises (inside `people`) | ❌ | ✅ | **ARCHIVE** |
 | Task→People links (`linkedPersonId`, `linkedPromiseId`) | ❌ | indirect | **ARCHIVE** |
 | **`learning`** | ❌ none | ❌ | **EXPORT THEN DELETE** |
-| **`customEvents`** | ❌ (force-emptied) | ❌ | **NEEDS CONTENT REVIEW** |
+| **`customEvents`** | ❌ (force-emptied) | ❌ | **EXCLUDED FROM v2** — empty in both profiles |
 | **Board page** | ❌ unreachable | indirect | **DELETE (page only)** — no unique data |
 | **Habits page** (`rHabitsFull`) | ❌ unreachable | — | **DELETE (page only)** — habit data untouched |
 | Dead task fields (`dailyDate`, `dailySince`, `daily`) | ❌ | ✅ AI still sets `dailyDate` | **EXPORT THEN DELETE** (field-level) |
@@ -74,7 +74,19 @@ migration and rollback period end.
 
 ## Dataset detail
 
-### `dayNotes` — **NEEDS CONTENT REVIEW** ⚠️ highest-risk item
+### `dayNotes` — **EXCLUDED FROM v2** ✅ *(resolved 2026-07-31)*
+
+**The live inspector confirmed: Personal count 0, Business count 0.** There is
+no hidden historical data — the risk that made this the highest-priority
+unknown does not exist. **No content review is needed.**
+
+- **Not migrated to v2.**
+- The field may be retired during final legacy cleanup, **after** migration
+  validation and rollback approval.
+- **Not deleted or rewritten now.** The verified v242 export remains the
+  historical rollback copy.
+
+*Original analysis retained below for provenance.*
 - **Reads:** `loadDailyNote()` runs at boot but **no-ops** — its target `#dn-ta`
   is not in the DOM. `searchNotebook()` has zero callers.
 - **Writes:** `saveDN()`, `saveDvNote()`, `navNotebook()` — **all zero callers**.
@@ -96,6 +108,9 @@ migration and rollback period end.
   meaningful sense.
 - **Known bug:** `lastTogether` is written as an object but read as a date
   string, so the "haven't seen X" nudge silently stopped working.
+- **AI writes FROZEN in v244** — `addPerson` and `addPromise` are blocked at
+  three layers (schema, scope filter, apply guard). Existing records are
+  untouched and still readable. Reversible via one flag.
 - **Recommendation:** archive **once, from Personal** (the 4 Business copies are
   duplicates and are ignored), then remove from the active product — **and
   disable `addPerson`/`addPromise` first**, otherwise the dataset keeps growing
@@ -111,7 +126,17 @@ migration and rollback period end.
 - If the inspection shows `count: 0` in both profiles, this is the cleanest
   removal in the whole list.
 
-### `customEvents` — **NEEDS CONTENT REVIEW** ⚠️ already destructive
+### `customEvents` — **EXCLUDED FROM v2** ✅ *(resolved 2026-07-31)*
+
+**The live inspector confirmed: Personal count 0, Business count 0.**
+
+- **Not migrated to v2.**
+- The **destructive clear-on-load behaviour must be retired** when the related
+  legacy calendar code is removed — it should not keep running indefinitely.
+- **Do not recreate a local-event system under this historic name.**
+- **Not deleted now**; no further destructive changes.
+
+*Original analysis retained below for provenance.*
 - **Force-emptied on every snapshot** (`S.customEvents=[]`) and then **written
   back as `[]` on every save**. This is an *ongoing, one-way erasure* of legacy
   entries — it has been running since the ghost-event fix.
@@ -208,3 +233,47 @@ and in the export, until the rollback period ends.
   RUN ✅** · profile model decision **LOCKED** ✅
 - **No migration has run. Firestore remains the source of truth.**
 - **No legacy dataset is approved for deletion.**
+
+
+---
+
+## Area seeding rule *(locked 2026-07-31)*
+
+Areas replace Personal/Business profiles as the life-classification.
+
+**On migration**
+- Migrate **existing valid Areas from the authoritative Personal profile**.
+- Guarantee **Personal** and **Work** exist as the two default Areas.
+- **Do not auto-seed** Church, Health, Finance, Family, Learning or any other
+  optional Area for every user.
+
+**Suggestions, not defaults**
+- Optional Areas may later be offered through onboarding or Settings as
+  **one-click additions** — never forced defaults.
+- **Not built now.** The model and schema simply must support it.
+
+**Integrity**
+- Prevent duplicates where names differ only by **case or trivial spacing**
+  (normalise: trim, collapse internal whitespace, case-insensitive compare).
+- Areas remain **editable and removable**.
+
+**Removal is never destructive**
+- Removing an Area **must never delete** the Tasks, Projects, Calendar items,
+  Books or Brain items linked to it.
+- Linked content is **reassigned to no Area, or to another chosen Area**.
+- In the schema this is `ON DELETE SET NULL` on every `area_id`, plus an API
+  reassignment step — an Area is a label, never an owner.
+
+---
+
+## Phase A status: **COMPLETE** *(2026-07-31)*
+
+| Step | Status |
+|---|---|
+| A1 profile contamination fix | ✅ v240 |
+| A2 legacy-data inspection + decisions | ✅ v243, decided v244 |
+| A3 protected export + verification | ✅ v242 — VERIFIED, the rollback floor |
+| A4 Firebase security rules | ⚠️ **still outstanding** — not in this repo |
+| A5 data census | ✅ delivered by the A2 inspector |
+
+**No user data has been migrated, deleted or modified at any point.**

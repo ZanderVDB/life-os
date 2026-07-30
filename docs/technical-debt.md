@@ -113,12 +113,21 @@ change permanently saved. A partly-failed batch reports success.
 
 ---
 
-## 🟠 D6 — Orphaned data that is still being saved
+## 🟡 D6 — Orphaned data that is still being saved — **DECIDED (v244)**
+
+> **Resolved by decision 2026-07-31.** Live inspection: `dayNotes` **0/0** and
+> `customEvents` **0/0** — both empty in both profiles, both **excluded from
+> v2**, no content review needed. `learning` is superseded. `people` is
+> archived-once-from-Personal and its **AI writes are frozen (v244)**.
+> **Nothing is deleted yet** — fields are retired during final legacy cleanup,
+> after migration validation and rollback approval.
+>
+> Original description follows.
 
 | Data | State |
 |---|---|
-| `S.dayNotes` | **Every screen that displayed it is gone.** Still loaded, still saved, still fingerprinted. Existing accounts may hold years of invisible notes. |
-| `S.people` + tags + level names + settings | Page unreachable, **data still saved**, AI can still create people |
+| `S.dayNotes` | Every screen that displayed it is gone. **CONFIRMED EMPTY (0/0)** — the feared hidden history does not exist. Excluded from v2. |
+| `S.people` + tags + level names + settings | Page unreachable, data still saved. **AI writes FROZEN in v244** — the dataset can no longer grow. |
 | `S.learning` | Merged into habits long ago; still written on every save |
 | `S.customEvents` | Force-emptied on load and **written back empty** — an ongoing destructive cleanup |
 
