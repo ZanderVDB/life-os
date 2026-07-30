@@ -42,76 +42,105 @@
    accent and slate-blue / dove support, from the reference the user shared.
    The canvas is a tan-brown → near-black gradient; the primary button is a
    soft, low-contrast tan. ── */
+/* ── GRAPHITE (the main scheme) — a premium-OS palette: neutral graphite
+   surfaces carry the whole UI, white typography, and purple appears ONLY as
+   the brand / on actions, focus and selection. Colour hierarchy: dark
+   surfaces → white type → purple for intent → cyan/green/amber/red/blue only
+   where they mean something. Borders are minimal; separation comes from
+   surface elevation + very soft shadows. ── */
 [data-theme="studio"]{
-  --app-bg:radial-gradient(64% 56% at 0% 100%, rgba(150,110,235,.30), transparent 55%), radial-gradient(50% 50% at 100% 0%, rgba(120,90,190,.12), transparent 60%), linear-gradient(35deg, #2a2142 0%, #211934 42%, #191324 72%, #110d1c 100%);
-  --btn-grad:linear-gradient(135deg,#a888ee 0%,#8b5fd6 100%);
-  --bg:#171226; --bg-2:#100c1a;
-  --surface:#221b34; --surface-2:#2b2340; --surface-hover:#352b4c;
-  --border:#382f4e; --border-strong:#4c4266;
-  --text:#ece6f5; --text-2:#bcb4cd; --muted:#8b83a0; --muted-2:#635b7c;
-  --accent:#9d76ec; --accent-ink:#1a1330;
-  --peach:#c08ae0; --peach-bg:#2e2542;
-  --sage:#8f76e0; --sage-bg:#26203c;
-  --lavender:#a99cf0; --lavender-bg:#2b2846;
-  --gold:#c9a3ef; --gold-bg:#2e2742;
-  --blue:#8f97d8; --blue-bg:#26264a;
-  --red:#e0806e; --red-bg:#3a2430;
-  --pink:#cf8fd0; --pink-bg:#3a2842;
-  --emerald:#8f76e0; --emerald-bg:#26203c;
-  --paper:#221b34; --paper-line:rgba(200,180,240,.08); --paper-margin:rgba(157,118,236,.4);
-  --shadow:0 1px 3px rgba(0,0,0,.42), 0 4px 14px rgba(0,0,0,.34);
-  --shadow-lift:0 6px 30px rgba(0,0,0,.5);
+  /* App background — an extremely subtle vertical graphite gradient. */
+  --app-bg:linear-gradient(180deg, #1A1624 0%, #141220 52%, #111018 100%);
+  /* Brand gradient — primary buttons / selection. */
+  --btn-grad:linear-gradient(180deg,#7C4DFF 0%,#C28DFF 100%);
+  --bg:#151320; --bg-2:#111018;
+  --surface:#211E2C; --surface-2:#2A2536; --surface-hover:#322C40;
+  --border:#332E43; --border-strong:#3d3652;
+  --text:#F4F2FA; --text-2:#B5ABC9; --muted:#766D8B; --muted-2:#5b546e;
+  --accent:#8A5DFF; --accent-ink:#ffffff;
+  /* Semantic accents — surface only where they carry meaning. */
+  --peach:#FFB84D; --peach-bg:#2c2637;
+  --sage:#00D9A3; --sage-bg:#16282b;
+  --lavender:#B47EFF; --lavender-bg:#282240;
+  --gold:#FFD166; --gold-bg:#2d2837;
+  --blue:#4285F4; --blue-bg:#1c2440;
+  --red:#FF646E; --red-bg:#31202b;
+  --pink:#FF8FB0; --pink-bg:#31202e;
+  --emerald:#00D9A3; --emerald-bg:#16282b;
+  --cyan:#27D7FF; --cyan-bg:#142a34;
+  --paper:#211E2C; --paper-line:rgba(200,190,235,.06); --paper-margin:rgba(138,93,255,.38);
+  --shadow:0 6px 18px rgba(0,0,0,.20);
+  --shadow-lift:0 10px 28px rgba(0,0,0,.30);
+  --btn-glow:0 6px 18px rgba(124,77,255,.22);
 }
 /* ── DUSK screen styling — carry the look-book's design language onto the
    real screens: gradient page headings, carded Today sections, gradient
    section titles. Scoped to Dusk so the light theme is untouched. The tan
    heading gradient runs the reverse direction to the app's background
    gradient (option "A" from the look-book). ── */
-[data-theme="studio"]{--head-grad:linear-gradient(214deg,#f4ddb9 0%,#d79a5f 100%)}
+[data-theme="studio"]{--name-grad:linear-gradient(180deg,#C89BFF 0%,#8A5DFF 100%)}
 [data-theme="studio"] .page-title{
   font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   font-weight:800;font-size:34px;letter-spacing:-1px;line-height:1.06;
-  background:var(--head-grad);-webkit-background-clip:text;background-clip:text;
-  color:transparent;padding-bottom:2px;width:max-content;max-width:100%;
+  color:#F6F3FF;padding-bottom:2px;width:max-content;max-width:100%;
 }
+/* The greeting's name gets a subtle purple gradient — the one place purple
+   touches the title. */
+[data-theme="studio"] .page-title .gr-name{
+  background:var(--name-grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+/* Section titles are neutral (not purple); only active sections go purple. */
+[data-theme="studio"] .section-hdr h2{color:#CEC7E8}
 [data-theme="studio"] .route[data-route="today"] > section{
-  background:var(--surface);border:1px solid var(--border);border-radius:18px;
+  background:var(--surface);border:none;border-radius:18px;
   padding:15px 16px;box-shadow:var(--shadow);
 }
 [data-theme="studio"] .route[data-route="today"] .section-hdr h2{
-  font-size:13px;letter-spacing:0;text-transform:none;font-weight:750;
-  background:var(--head-grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+  font-size:13px;letter-spacing:0;text-transform:none;font-weight:750;color:#CEC7E8;
 }
 /* Right-rail card titles pick up the tan accent so they match the main cards. */
-[data-theme="studio"] .ac-card h3{color:var(--accent)}
-[data-theme="studio"] .ac-card h3 svg{color:var(--accent);opacity:.9}
+[data-theme="studio"] .ac-card h3{color:#CEC7E8}
+[data-theme="studio"] .ac-card h3 svg{color:var(--muted);opacity:.9}
 /* "Today" cell in the week grid gets a clear tan-accented ring + glow. */
 [data-theme="studio"] .day-card.today{
-  border-color:var(--accent);
-  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent), 0 0 20px -7px color-mix(in srgb,var(--accent) 45%,transparent);
+  background:linear-gradient(160deg,#7C4DFF 0%,#A56CFF 100%);
+  border:none;border-radius:14px;color:#fff;
+  box-shadow:0 8px 22px -7px rgba(124,77,255,.6), inset 0 1px 0 rgba(255,255,255,.15);
 }
-[data-theme="studio"] .day-card.today .dc-day{color:var(--accent)}
-/* Left sidebar: a gradient wash (more opaque up top, fading down) so the
-   app's warm glow rises up through the bottom of the rail. */
-[data-theme="studio"] .sidebar{background:linear-gradient(178deg, color-mix(in srgb,var(--surface) 86%, transparent) 0%, color-mix(in srgb,var(--surface) 44%, transparent) 76%, color-mix(in srgb,var(--surface) 18%, transparent) 100%);border-right:none}
-/* Nav icons: the glyph itself is gradient-stroked (per-item, via the SVG
-   defs) — no box behind it. Active row gets a soft tan-tint highlight. */
+[data-theme="studio"] .day-card.today .dc-day,
+[data-theme="studio"] .day-card.today .dc-name{color:#fff}
+/* Weekly calendar = one large premium surface (soft top→bottom gradient);
+   the day cells inside are near-transparent with extremely subtle separators
+   so the whole thing reads as a single panel — except Today (purple, above). */
+[data-theme="studio"] .route[data-route="today"] > section:has(#today-week){background:linear-gradient(180deg,#2A2440 0%,#231E36 100%)}
+[data-theme="studio"] .week-sum .day-card:not(.today){background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);box-shadow:none}
+[data-theme="studio"] .week-sum .day-card:not(.today):hover{background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.09)}
+[data-theme="studio"] .week-sum .day-card-hdr{border-bottom-color:rgba(255,255,255,.06)}
+/* Left sidebar: a flat graphite panel, no dividing border — separation comes
+   from the surface sitting a touch darker than the app canvas. */
+[data-theme="studio"] .sidebar{background:#17151F;border-right:none}
+/* Nav: transparent by default; the glyph follows currentColor (graphite),
+   goes white on hover, and ONLY the selected item gets the brand-purple
+   gradient pill with a soft glow + white glyph/label. */
 [data-theme="studio"] .s-nav a .ic{width:22px;height:22px}
 [data-theme="studio"] .s-nav a .ic svg{width:20px;height:20px}
-[data-theme="studio"] .s-nav a.active{background:color-mix(in srgb,var(--accent) 12%, var(--surface))}
-/* Right rail cards: subtle gradient body + a tan top-accent line. */
-[data-theme="studio"] .ac-card{
-  position:relative;
-  background:linear-gradient(158deg, color-mix(in srgb,var(--accent) 7%, var(--surface)) 0%, var(--surface) 48%, color-mix(in srgb,#000 16%, var(--surface)) 100%);
-}
-[data-theme="studio"] .ac-card::before{
-  content:'';position:absolute;left:16px;right:16px;top:0;height:2px;border-radius:0 0 3px 3px;
-  background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 20%,transparent) 72%,transparent);
-}
-/* Chat/composer bar floats — no dark scrim; the app gradient runs straight
-   behind it and the input is a glassy floating pill. */
+[data-theme="studio"] .s-nav a,[data-theme="studio"] .s-nav a .ic{color:#9189A7;background:transparent}
+[data-theme="studio"] .s-nav a:hover{background:var(--surface);color:#fff}
+[data-theme="studio"] .s-nav a:hover .ic{color:#fff}
+[data-theme="studio"] .s-nav a.active{background:linear-gradient(180deg,#7C4DFF 0%,#9A67FF 100%);color:#fff;box-shadow:0 6px 16px -6px rgba(124,77,255,.5)}
+[data-theme="studio"] .s-nav a.active .ic,[data-theme="studio"] .s-nav a.active .label{color:#fff}
+/* Right rail cards: a calm raised surface — no accent line, soft shadow only. */
+[data-theme="studio"] .ac-card{position:relative;background:var(--surface);border:none;box-shadow:var(--shadow)}
+/* Chat/composer bar floats — a graphite glassy pill; its border lifts to the
+   brand purple on focus. */
 [data-theme="studio"] .ai-bar{background:transparent}
-[data-theme="studio"] .ai-inner{background:color-mix(in srgb,var(--surface) 80%, transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-color:color-mix(in srgb,var(--border-strong) 66%, transparent)}
+[data-theme="studio"] .ai-inner{background:#17161F;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid #353046;transition:border-color .18s,box-shadow .18s}
+[data-theme="studio"] .ai-inner:focus-within{border-color:#8A5DFF;box-shadow:0 0 0 3px rgba(138,93,255,.15)}
+/* Placeholder + muted UI text (was injected by the retired Design Mode). */
+[data-theme="studio"] ::placeholder{color:var(--muted)}
+[data-theme="studio"] .us-trigger-txt,[data-theme="studio"] .us-trigger-kbd{color:var(--muted)}
+/* Right rail sits a touch lighter than the app canvas — a distinct panel. */
+[data-theme="studio"] .aside-col{background:#1D1A28}
 /* Drifting twinkle-stars — a dedicated fixed overlay element (not a pseudo,
    so positioning is bulletproof) floating above the scene. Bigger, glowing
    tan dots so they read clearly on a large dark screen. */
@@ -169,8 +198,9 @@ body.no-scroll{overflow:hidden}
    down by its height instead of having content scroll behind it. The
    user reported overlap on phone where rows would slide under the bar. */
 .gcal-warn{position:relative;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;background:var(--red-bg,#fde7e7);color:var(--red,#c44);font-size:12.5px;font-weight:600;cursor:pointer;border-bottom:1px solid var(--red,#c44);font-family:'Inter',system-ui,sans-serif}
-[data-theme="studio"] .gcal-warn{background:linear-gradient(to bottom, color-mix(in srgb,var(--gold) 12%, var(--surface)), color-mix(in srgb,var(--surface) 88%, transparent));color:var(--text-2);font-weight:500;border-bottom:1px solid var(--border);backdrop-filter:blur(6px)}
-[data-theme="studio"] .gcal-warn .gcal-warn-icon{color:var(--gold)}
+[data-theme="studio"] .gcal-warn{background:linear-gradient(180deg,#4285F4 0%,#5A95FF 100%);color:#fff;font-weight:600;border:none;box-shadow:0 4px 14px -6px rgba(66,133,244,.5)}
+[data-theme="studio"] .gcal-warn .gcal-warn-icon{color:#fff}
+[data-theme="studio"] .gcal-warn .gcal-warn-text{color:#fff}
 .gcal-warn:hover{filter:brightness(1.04)}
 .gcal-warn-icon{font-size:16px;line-height:1}
 .gcal-warn-text{line-height:1.3}
@@ -376,6 +406,12 @@ svg{flex-shrink:0}
 .btn:hover{background:var(--surface-hover);border-color:var(--border-strong)}
 .btn-primary{background:var(--btn-grad,var(--accent));color:var(--accent-ink);border-color:transparent}
 .btn-primary:hover{opacity:.9;background:var(--btn-grad,var(--accent))}
+/* Graphite theme — primary = brand gradient + soft purple glow + hover lift;
+   secondary = raised graphite surface, borderless, hover lift. */
+[data-theme="studio"] .btn-primary{background:linear-gradient(180deg,#7C4DFF 0%,#C28DFF 100%);color:#fff;border:none;box-shadow:var(--btn-glow);transition:all .2s ease-out}
+[data-theme="studio"] .btn-primary:hover{background:linear-gradient(180deg,#9163FF 0%,#D09CFF 100%);opacity:1;transform:translateY(-2px);box-shadow:0 10px 24px rgba(124,77,255,.32)}
+[data-theme="studio"] .btn:not(.btn-primary):not(.btn-danger){background:var(--surface-2);border:1px solid transparent;color:#fff;transition:all .2s ease-out}
+[data-theme="studio"] .btn:not(.btn-primary):not(.btn-danger):hover{background:var(--surface-hover);border-color:transparent;transform:translateY(-2px)}
 .btn-ghost{background:transparent;border-color:transparent;color:var(--muted)}
 .btn-ghost:hover{background:var(--surface-2);color:var(--text)}
 .btn-danger{background:var(--red-bg);color:var(--red);border-color:transparent}
@@ -1605,24 +1641,26 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .ti.ps{border-left-color:var(--border);opacity:.55}
 /* Dusk task priority — feeds a gradient left stripe (.ti::before below)
    instead of a solid border + inset glow. */
-[data-theme="studio"] .ti.pu{--ti-stripe:#e0574e;border-left:none;box-shadow:none}
-[data-theme="studio"] .ti.ph{--ti-stripe:#e8974a;border-left:none;box-shadow:none}
-[data-theme="studio"] .ti.pm{--ti-stripe:#e0bd7d;border-left:none;box-shadow:none}
-[data-theme="studio"] .ti.pl{--ti-stripe:#8f9cc0;border-left:none;box-shadow:none}
+[data-theme="studio"] .ti.pu{--ti-stripe:#FF646E;border-left:none;box-shadow:none}
+[data-theme="studio"] .ti.ph{--ti-stripe:#FF8A5D;border-left:none;box-shadow:none}
+[data-theme="studio"] .ti.pm{--ti-stripe:#FFC44D;border-left:none;box-shadow:none}
+[data-theme="studio"] .ti.pl{--ti-stripe:#6E86C0;border-left:none;box-shadow:none}
 /* Dusk task list: roomier rounded rows with a gradient priority stripe.
    The .tcard turns into a transparent gap container; each .ti becomes its
    own rounded surface (look-book style). */
 [data-theme="studio"] .tcard{background:transparent;border:none;border-radius:0;overflow:visible;display:flex;flex-direction:column;gap:7px}
-[data-theme="studio"] .tcard .ti{background:var(--surface-2);border:1px solid var(--border);border-radius:11px;border-left:none;padding:11px 14px 11px 16px;box-shadow:none}
-/* Urgent tasks get a bold red border + soft glow so they stand out. */
-[data-theme="studio"] .tcard .ti.pu{border-color:#e0574e;box-shadow:inset 0 0 0 1px #e0574e, 0 0 16px -7px rgba(224,87,78,.6)}
-[data-theme="studio"] .tcard .ti:last-of-type{border-bottom:1px solid var(--border)}
+[data-theme="studio"] .tcard .ti{background:#282431;border:none;border-radius:11px;border-left:none;padding:11px 14px 11px 16px;box-shadow:0 2px 10px rgba(0,0,0,.18);transition:background .2s ease-out,box-shadow .2s ease-out,transform .2s ease-out}
+/* Urgent tasks get a bold red ring + soft glow so they stand out. */
+[data-theme="studio"] .tcard .ti.pu{box-shadow:inset 0 0 0 1.5px #FF646E, 0 0 18px -7px rgba(255,100,110,.55)}
 [data-theme="studio"] .ti{position:relative;overflow:hidden}
 [data-theme="studio"] .ti::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--ti-stripe,var(--border-strong))}
 [data-theme="studio"] .ti.pn{--ti-stripe:var(--muted-2)}
 [data-theme="studio"] .ti.ps{--ti-stripe:#6f6878}
 [data-theme="studio"] .ti.rem-overdue{--ti-stripe:var(--red)}
-[data-theme="studio"] .ti:hover{background:var(--surface-hover)}
+[data-theme="studio"] .ti:hover{background:#343040}
+/* Selected task row — the brand gradient (wire a .sel class to use it). */
+[data-theme="studio"] .tcard .ti.sel,[data-theme="studio"] .tcard .ti.selected{background:linear-gradient(180deg,#744BFF 0%,#A36BFF 100%);box-shadow:0 8px 20px -8px rgba(124,77,255,.5)}
+[data-theme="studio"] .tcard .ti.sel .tit,[data-theme="studio"] .tcard .ti.selected .tit{color:#fff}
 /* Sub-steps: a slightly-inset, darker drawer that tucks under its parent
    task — clearly part of it, pushing the row below down, without widening
    the parent's card. */
@@ -1644,7 +1682,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 .bucket-sec:last-child{margin-bottom:0}
 .bucket-hdr{display:flex;align-items:center;gap:8px;margin-bottom:9px;padding-left:2px}
 .bucket-hdr .bh{font-size:12.5px;font-weight:750;letter-spacing:.01em;color:var(--text-2)}
-[data-theme="studio"] .bucket-hdr .bh{background:var(--head-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+[data-theme="studio"] .bucket-hdr .bh{color:#CEC7E8}
 .bucket-cnt{font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:1px 7px;font-variant-numeric:tabular-nums}
 .bucket-drop{min-height:46px}
 .bucket-drop.is-empty{border:1.5px dashed var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center}
@@ -1730,10 +1768,14 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 
 /* ━━━ HABITS (aside) ━━━ */
 .hab-list{display:flex;flex-direction:column;gap:6px}
-.hc{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;display:flex;align-items:center;gap:9px;transition:all .15s}
+.hc{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;display:flex;align-items:center;gap:9px;transition:all .18s ease-out}
 .hc:hover{border-color:var(--border-strong)}
-.hc.done{background:color-mix(in srgb,var(--accent) 15%,var(--surface-2));border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.hc.done{background:var(--sage-bg);border-color:color-mix(in srgb,var(--sage) 45%,var(--border))}
 .hc.rest{opacity:.7}
+/* Graphite: habit cards are flat graphite; done = success-green, streak = cyan. */
+[data-theme="studio"] .hc{background:#282431;border:none;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+[data-theme="studio"] .hc.done{background:color-mix(in srgb,#00D9A3 12%,#282431);box-shadow:0 2px 8px rgba(0,0,0,.15)}
+[data-theme="studio"] .hc-streak{color:#27D7FF}
 /* Habit description textarea — auto-grows to fit content. Critical:
    overflow:hidden so the textarea NEVER shows an internal scrollbar
    (we manage height via JS oninput / on render). resize:none stops
@@ -1862,13 +1904,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
    and show the not-allowed cursor so the lock is obvious. */
 .ti.has-steps input[type=checkbox]{opacity:.4;cursor:not-allowed}
 .hc-tick{width:19px;height:19px;border-radius:50%;border:1.6px solid var(--muted-2);background:transparent;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;flex-shrink:0;cursor:pointer;color:var(--muted);transition:all .15s;padding:0}
-.hc-tick:hover{border-color:var(--accent)}
-.hc.done .hc-tick{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.hc-tick:hover{border-color:var(--sage)}
+.hc.done .hc-tick{background:var(--sage);border-color:var(--sage);color:#08221c}
 .hc.rest .hc-tick{border-style:dashed;color:var(--muted-2)}
 .hc-name{font-size:12px;font-weight:500;color:var(--text);flex:1;line-height:1.3;min-width:0;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hc-rest{font-size:8.5px;font-weight:600;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:1px 6px;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em}
 .hc-streak{font-size:10.5px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
-.hc.done .hc-streak{color:var(--accent)}
+.hc.done .hc-streak{color:var(--sage)}
 .hc-edit{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0;opacity:.55;padding:2px;line-height:1}
 .hc-edit:hover{opacity:1;color:var(--accent)}
 
@@ -2877,9 +2919,13 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <symbol id="logo" viewBox="0 0 24 24">
-      <path d="M12 20.4 C6.9 17.6 3.4 13.1 3.4 8.5 C7.1 9.2 10.1 13 12 20.4 Z" fill="#b291ea" fill-opacity=".9"/>
-      <path d="M12 20.4 C17.1 17.6 20.6 13.1 20.6 8.5 C16.9 9.2 13.9 13 12 20.4 Z" fill="#b291ea" fill-opacity=".9"/>
-      <path d="M12 2.3 C8.6 8 8.6 15 12 20.4 C15.4 15 15.4 8 12 2.3 Z" fill="#8f66df" fill-opacity=".95"/>
+      <linearGradient id="logoGrad" gradientUnits="userSpaceOnUse" x1="4" y1="21" x2="20" y2="3">
+        <stop offset="0" stop-color="#7C4DFF"/>
+        <stop offset="1" stop-color="#C28DFF"/>
+      </linearGradient>
+      <path d="M12 20.4 C6.9 17.6 3.4 13.1 3.4 8.5 C7.1 9.2 10.1 13 12 20.4 Z" fill="url(#logoGrad)" fill-opacity=".82"/>
+      <path d="M12 20.4 C17.1 17.6 20.6 13.1 20.6 8.5 C16.9 9.2 13.9 13 12 20.4 Z" fill="url(#logoGrad)" fill-opacity=".82"/>
+      <path d="M12 2.3 C8.6 8 8.6 15 12 20.4 C15.4 15 15.4 8 12 2.3 Z" fill="url(#logoGrad)"/>
     </symbol>
     <symbol id="i-today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></symbol>
     <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></symbol>
@@ -2962,12 +3008,12 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
         <span class="us-trigger-ic">⌕</span><span class="us-trigger-txt">Search…</span><span class="us-trigger-kbd">Ctrl K</span>
       </button>
       <nav class="s-nav" id="s-nav">
-        <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico1)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico1" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#f0d0a2"/><stop offset="1" stop-color="#d4914f"/></linearGradient></defs><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
-        <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico2)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico2" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#b3bfe0"/><stop offset="1" stop-color="#7581a8"/></linearGradient></defs><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
-        <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico3)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico3" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#f2d493"/><stop offset="1" stop-color="#d8a271"/></linearGradient></defs><rect x="3" y="4" width="7" height="7" rx="1.4"/><rect x="14" y="4" width="7" height="7" rx="1.4"/><rect x="3" y="15" width="7" height="6" rx="1.4"/><rect x="14" y="15" width="7" height="6" rx="1.4"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
-        <a href="#diary" data-route-link="diary"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico5)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico5" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#f4a88f"/><stop offset="1" stop-color="#d886a0"/></linearGradient></defs><path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2V5Z"/><path d="M4 18h16"/></svg></span><span class="label">Diary</span><span class="dot"></span></a>
-        <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico6)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico6" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#cabff8"/><stop offset="1" stop-color="#8b98bd"/></linearGradient></defs><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5v-17Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v5H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M8 7h8M8 11h6"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
-        <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="url(#navico7)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="navico7" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="21" y2="21"><stop offset="0" stop-color="#ddd2d9"/><stop offset="1" stop-color="#dcab7d"/></linearGradient></defs><path d="M12 3c-2 0-3.5 1.5-3.5 3.5 0 .4-.3.8-.7.9A3 3 0 0 0 6 10c0 .6.2 1.2.6 1.6-.4.5-.6 1-.6 1.7a3 3 0 0 0 2.4 3c.2 1.6 1.5 2.7 3.1 2.7s2.9-1.1 3.1-2.7a3 3 0 0 0 2.4-3c0-.7-.2-1.2-.6-1.7.4-.4.6-1 .6-1.6a3 3 0 0 0-1.8-2.6c-.4-.1-.7-.5-.7-.9C15.5 4.5 14 3 12 3Z"/><path d="M12 3v16"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
+        <a href="#today" data-route-link="today"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></span><span class="label">Today</span><span class="dot"></span></a>
+        <a href="#calendar" data-route-link="calendar"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg></span><span class="label">Calendar</span><span class="dot"></span></a>
+        <a href="#projects" data-route-link="projects"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.4"/><rect x="14" y="4" width="7" height="7" rx="1.4"/><rect x="3" y="15" width="7" height="6" rx="1.4"/><rect x="14" y="15" width="7" height="6" rx="1.4"/></svg></span><span class="label">Projects</span><span class="dot"></span></a>
+        <a href="#diary" data-route-link="diary"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2V5Z"/><path d="M4 18h16"/></svg></span><span class="label">Diary</span><span class="dot"></span></a>
+        <a href="#notebook" data-route-link="notebook"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5v-17Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v5H6.5A2.5 2.5 0 0 1 4 19.5Z"/><path d="M8 7h8M8 11h6"/></svg></span><span class="label">Notebook</span><span class="dot"></span></a>
+        <a href="#brain" data-route-link="brain"><span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-2 0-3.5 1.5-3.5 3.5 0 .4-.3.8-.7.9A3 3 0 0 0 6 10c0 .6.2 1.2.6 1.6-.4.5-.6 1-.6 1.7a3 3 0 0 0 2.4 3c.2 1.6 1.5 2.7 3.1 2.7s2.9-1.1 3.1-2.7a3 3 0 0 0 2.4-3c0-.7-.2-1.2-.6-1.7.4-.4.6-1 .6-1.6a3 3 0 0 0-1.8-2.6c-.4-.1-.7-.5-.7-.9C15.5 4.5 14 3 12 3Z"/><path d="M12 3v16"/></svg></span><span class="label">Brain</span><span class="dot"></span></a>
       </nav>
       <div class="s-sep"></div>
       <div class="s-foot">
@@ -3792,7 +3838,7 @@ input[type="time"].input,input[type="date"].input{font-family:inherit;color-sche
 <script>
 // App version — bump in lockstep with sw.js CACHE on every deploy. Shown in
 // Settings and used to detect "new version available" via service worker.
-const APP_VERSION='v234';
+const APP_VERSION='v235';
 const APP_BUILD_DATE='2026-04-24';
 // ───────── TRIAL / SUBSCRIPTION (the "Pro gate" seam) ─────────
 // Model: free for TRIAL_DAYS, then a subscription is required. The actual
@@ -6627,7 +6673,7 @@ const yest=()=>{const d=new Date();d.setDate(d.getDate()-1);return`${d.getFullYe
 function addDaysToDateStr(ds,n){const [y,m,d]=ds.split('-').map(Number);const dt=new Date(Date.UTC(y,m-1,d));dt.setUTCDate(dt.getUTCDate()+n);return dt.toISOString().slice(0,10);}
 const fmt=d=>{try{return new Date(d+'T12:00:00').toLocaleDateString('en-ZA',{day:'numeric',month:'short'});}catch(e){return d;}};
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const gTxt=()=>{const h=new Date().getHours();const name=(CU&&CU.displayName||'').split(/\s+/)[0];const n=name?', '+name:'';return h<12?'Good morning'+n+'.':h<17?'Good afternoon'+n+'.':'Good evening'+n+'.';};
+const gTxt=()=>{const h=new Date().getHours();const name=(CU&&CU.displayName||'').split(/\s+/)[0];const g=h<12?'Good morning':h<17?'Good afternoon':'Good evening';return name?`${g}, <span class="gr-name">${esc(name)}</span>.`:`${g}.`;};
 const dTxt=()=>new Date().toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 function bump(l){const t=tod(),y=yest();if(l.lastDate===t)return;l.streak=(l.lastDate===y)?(l.streak||0)+1:1;l.lastDate=t;l.total=(l.total||0)+1;}
 function bumpH(h){const t=tod(),y=yest();if(h.lastDate===t){h.doneToday=true;return;}h.streak=(h.lastDate===y)?(h.streak||0)+1:1;h.lastDate=t;h.total=(h.total||0)+1;h.doneToday=true;}
@@ -16772,7 +16818,7 @@ function openTagPicker(p,anchorBtn){
 }
 function render(){
   const g=document.getElementById('gr'),d=document.getElementById('ds');
-  if(g)g.textContent=gTxt();if(d)d.textContent=dTxt();
+  if(g)g.innerHTML=gTxt();if(d)d.textContent=dTxt();
   rUpcom();rCal();rFocus();rHabits();rTasks();rBuilds();rIdeas();rResources();rNotes();
   rAttention();rTodayWeek();setBrainTab(UI.brainTab);
   refreshTipCard();
@@ -17484,6 +17530,15 @@ document.addEventListener('click',e=>{
 <script>
 (function(){
 try{
+  // ── Design Mode retired for the Graphite redesign ──────────────────────
+  // The base [data-theme="studio"] stylesheet is now the SINGLE source of
+  // truth for the palette. Design Mode used to re-inject a per-user config
+  // with !important (forcing gradients onto task rows, the sidebar, etc.),
+  // which directly fights the new "neutral graphite surfaces, purple only
+  // for intent" system. The editor code below is kept intact but inert so it
+  // can be revived later; on load we just clear any override it left behind.
+  var _oldDesign=document.getElementById('los-design-style'); if(_oldDesign)_oldDesign.remove();
+  return;
   var REC={RS:['var(--surface, #221b34)'],RS2:['var(--surface-2, #2b2340)'],R1:['#211934'],R2:['#9d76ec'],R3:['#4a3f6b'],R4:['#b3a6da'],
     R5:['#211934','#9d76ec'],R6:['#211934','#4a3f6b'],R7:['#211934','#b3a6da'],
     R8:['#9d76ec','#4a3f6b'],R9:['#9d76ec','#b3a6da'],R10:['#4a3f6b','#b3a6da'],
