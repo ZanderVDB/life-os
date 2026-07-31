@@ -16,7 +16,7 @@
  */
 export const ROUTES = [
   { id: 'today', label: 'Today', icon: 'today' },
-  { id: 'calendar', label: 'Calendar', icon: 'calendar', placeholder: true },
+  { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'projects', label: 'Projects', icon: 'projects', placeholder: true },
   { id: 'diary', label: 'Diary', icon: 'diary', placeholder: true },
   { id: 'library', label: 'Library', icon: 'library', placeholder: true },

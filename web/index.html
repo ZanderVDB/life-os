@@ -726,6 +726,200 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
   .task-placeholder{transition:none}
 }
 
+/* ══ CALENDAR (Phase D3) ══════════════════════════════════════════════
+   Month, Agenda, Plan. Source-calendar colour appears only INSIDE an event's
+   own representation — a small edge or dot — never across the shell. Purple
+   stays selection, red stays conflict, green stays completion. */
+.cal-head{display:grid;grid-template-columns:1fr auto;gap:14px 20px;align-items:start}
+.cal-head-main{display:flex;flex-direction:column;gap:8px}
+.cal-period{display:flex;align-items:center;gap:6px}
+.cal-period-label{font-size:15px;font-weight:600;color:var(--text-2);min-width:150px}
+.cal-nav{width:30px;height:30px;border-radius:9px;color:var(--text-2);font-size:18px;
+  display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
+.cal-nav:hover{background:var(--surface-2);color:var(--text)}
+.cal-today{height:30px;font-size:12.5px}
+.cal-head-side{display:flex;align-items:center;gap:10px}
+.cal-modes button{min-width:72px}
+.cal-layers{grid-column:1/-1;display:flex;gap:7px;flex-wrap:wrap}
+.cal-layer{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;
+  border-radius:8px;font-size:12px;font-weight:500;color:var(--muted);
+  background:var(--surface-2);border:1px solid transparent;
+  transition:color var(--t-hover),border-color var(--t-hover),background var(--t-hover)}
+.cal-layer:hover{color:var(--text-2)}
+.cal-layer.is-on{color:var(--text);border-color:var(--border-strong)}
+.cl-dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.cal-layer.is-on .cl-events{background:var(--accent)}
+.cal-layer.is-on .cl-reminders{background:var(--warn)}
+.cal-layer.is-on .cl-tasks{background:var(--p-low)}
+.cal-layer.is-on .cl-habits{background:var(--ok)}
+
+/* ── Month ── */
+.cal-month{display:flex;flex-direction:column;gap:8px}
+.cm-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding:0 2px}
+.cm-dow span{font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);text-align:left;padding-left:8px}
+.cm-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));
+  grid-auto-rows:minmax(112px,auto);gap:6px}
+.cm-cell{background:var(--surface);border-radius:12px;padding:7px 8px 6px;
+  display:flex;flex-direction:column;gap:5px;min-width:0;cursor:pointer;
+  border:1px solid transparent;position:relative;
+  transition:background var(--t-hover),border-color var(--t-hover)}
+.cm-cell:hover{background:var(--surface-2);border-color:var(--border)}
+.cm-cell.is-outside{opacity:.42}
+.cm-cell.is-today .cm-num>span{background:var(--accent);color:#fff;border-radius:7px;
+  min-width:22px;text-align:center}
+.cm-cell.is-selected{border-color:var(--accent);background:var(--accent-soft)}
+.cm-num{display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;
+  color:var(--text-2)}
+.cm-num>span{padding:1px 5px}
+.cm-flag{font-size:11px;font-weight:800;color:var(--danger);margin-left:auto}
+.cm-flag.is-warn{color:var(--warn)}
+.cm-items{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.cm-ev{display:flex;align-items:center;gap:5px;min-width:0;font-size:11.5px;
+  color:var(--text-2);border-radius:5px;padding:1px 3px;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  transition:background var(--t-hover),color var(--t-hover)}
+.cm-ev:hover{background:var(--surface-3);color:var(--text)}
+.cm-ev b{font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;font-size:10.5px}
+.cm-ev-t{overflow:hidden;text-overflow:ellipsis}
+.cm-ev.is-allday{background:rgba(255,255,255,.045)}
+/* Source-calendar colour: a 3px edge, nothing more. */
+.cm-src{width:3px;height:11px;border-radius:2px;flex-shrink:0}
+.cm-due{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--p-high-ink);
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.cm-due i{width:5px;height:5px;border-radius:1px;background:var(--p-high);
+  transform:rotate(45deg);flex-shrink:0}
+.cm-more{font-size:10.5px;color:var(--muted);font-weight:600}
+.cm-foot{display:flex;gap:4px;align-items:center}
+.cm-chip{font-size:9.5px;font-weight:700;border-radius:4px;padding:0 4px;
+  font-variant-numeric:tabular-nums}
+.cm-plan{background:rgba(78,143,196,.16);color:var(--p-low-ink)}
+.cm-habit{background:rgba(0,217,163,.14);color:var(--ok)}
+/* Workload: a restrained left edge, never a heatmap. */
+.cm-cell::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:2px;
+  border-radius:2px;background:transparent;transition:background var(--t-hover)}
+.cm-cell.load-moderate::before{background:rgba(138,93,255,.30)}
+.cm-cell.load-busy::before{background:rgba(240,145,61,.45)}
+.cm-cell.load-overloaded::before{background:rgba(240,86,110,.55)}
+
+/* ── Agenda ── */
+.cal-agenda{display:flex;flex-direction:column;gap:6px;max-width:860px}
+.ag-group{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--label);margin:20px 0 6px;padding-left:2px}
+.ag-group:first-child{margin-top:0}
+.ag-day{display:grid;grid-template-columns:52px 1fr;gap:12px;padding:6px 0}
+.ag-date{display:flex;flex-direction:column;align-items:center;padding-top:6px}
+.ag-dow{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase}
+.ag-num{font-size:19px;font-weight:700;color:var(--text-2);line-height:1.1}
+.ag-items{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ag-item{display:flex;align-items:center;gap:9px;min-width:0;width:100%;text-align:left;
+  background:var(--surface);border-radius:10px;padding:9px 12px;min-height:42px;
+  transition:background var(--t-hover)}
+.ag-item:hover{background:var(--surface-2)}
+.ag-time{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;
+  min-width:56px;flex-shrink:0}
+.ag-title{flex:1;min-width:0;font-size:var(--fs-task);color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ag-meta{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--muted);flex-shrink:0}
+.ag-src{width:3px;height:20px;border-radius:2px;flex-shrink:0}
+.ag-meet{background:rgba(78,143,196,.16);color:var(--p-low-ink);border-radius:4px;
+  padding:1px 5px;font-weight:600;font-size:10px}
+/* Each type reads differently — never all rendered as event bars. */
+.ag-reminder{background:transparent;border:1px dashed var(--border)}
+.ag-reminder.is-overdue{border-color:rgba(255,196,77,.5)}
+.ag-reminder.is-done .ag-title{color:var(--muted);text-decoration:line-through}
+.ag-check{width:17px;height:17px;border-radius:5px;border:1.6px solid var(--muted);
+  flex-shrink:0;transition:background var(--t-hover),border-color var(--t-hover)}
+.ag-check:hover{border-color:var(--ok)}
+.ag-reminder.is-done .ag-check{background:var(--ok);border-color:var(--ok)}
+.ag-deadline{background:transparent;border-left:2px solid var(--p-high);border-radius:0 10px 10px 0}
+.ag-flag{width:7px;height:7px;background:var(--p-high);transform:rotate(45deg);flex-shrink:0}
+.ag-block{background:rgba(78,143,196,.07);border-left:2px solid var(--p-low);
+  border-radius:0 10px 10px 0}
+.ag-plan{width:7px;height:7px;border-radius:2px;background:var(--p-low);flex-shrink:0}
+.ag-badge{font-size:10px;font-weight:600;color:var(--muted);background:var(--surface-2);
+  border-radius:4px;padding:1px 6px;flex-shrink:0}
+.ag-badge.is-warn{background:rgba(255,196,77,.14);color:var(--warn)}
+.ag-ro{opacity:.7}
+
+/* ── Plan ── */
+.cal-plan{overflow-x:auto}
+.pl-grid{display:grid;grid-template-columns:54px repeat(7,minmax(112px,1fr));gap:5px;min-width:820px}
+.pl-axis{display:flex;flex-direction:column;padding-top:42px}
+.pl-hour{flex:1;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;
+  text-align:right;padding-right:7px;transform:translateY(-6px)}
+.pl-day{display:flex;flex-direction:column;min-width:0}
+.pl-day-head{display:flex;align-items:baseline;gap:6px;padding:0 0 6px 2px;height:36px}
+.pl-dow{font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase}
+.pl-num{font-size:15px;font-weight:700;color:var(--text-2)}
+.pl-day.is-today .pl-num{color:var(--accent)}
+.pl-allday{display:flex;flex-direction:column;gap:3px;margin-bottom:4px}
+.pl-ad{font-size:10.5px;background:var(--surface-2);border-radius:5px;padding:2px 6px;
+  color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl-canvas{position:relative;flex:1;min-height:calc(var(--pl-hours)*46px);
+  background:var(--surface);border-radius:10px;overflow:hidden}
+.pl-line{display:block;height:calc(100%/var(--pl-hours));
+  border-bottom:1px solid rgba(255,255,255,.045)}
+.pl-ev,.pl-block{position:absolute;left:3px;right:3px;border-radius:7px;padding:3px 6px;
+  font-size:10.5px;line-height:1.28;overflow:hidden;cursor:pointer;
+  transition:transform var(--d-fast) var(--e-out),box-shadow var(--t-hover)}
+.pl-ev{background:var(--surface-3);border-left:3px solid var(--src, var(--accent));color:var(--text-2)}
+.pl-ev:hover,.pl-block:hover{box-shadow:var(--e2);transform:translateY(-1px)}
+.pl-ev b,.pl-block b{color:var(--muted);font-variant-numeric:tabular-nums;font-size:9.5px}
+.pl-block{background:rgba(78,143,196,.14);border:1px dashed rgba(78,143,196,.45);
+  color:var(--p-low-ink)}
+.pl-tag{display:block;font-size:9px;color:var(--muted);font-weight:600}
+
+/* ── Rail ── */
+.cs-load{font-size:11.5px;color:var(--muted);margin-bottom:10px}
+.cs-load b{color:var(--text-2);text-transform:capitalize}
+.cs-sec{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.cs-lab{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted)}
+.cs-row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  font-size:var(--fs-rail);color:var(--text-2);padding:5px 4px;border-radius:7px;min-width:0;
+  transition:background var(--t-hover)}
+.cs-row:hover{background:rgba(255,255,255,.035)}
+.cs-row>span{font-size:10.5px;color:var(--muted);min-width:48px;flex-shrink:0;
+  font-variant-numeric:tabular-nums}
+.cs-row>b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-row>i{width:3px;height:15px;border-radius:2px;flex-shrink:0;background:var(--accent)}
+.cs-plan{background:var(--p-low)}
+.cs-rem{background:var(--warn)}
+.cs-due{background:var(--p-high)}
+.cs-hab{background:var(--ok)}
+.cs-add{width:100%;margin-top:4px}
+.rl-list{display:flex;flex-direction:column;gap:3px}
+.rl-row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  font-size:var(--fs-rail);color:var(--text-2);padding:6px 4px;border-radius:7px;min-width:0}
+.rl-row.is-warn .rl-t{color:var(--warn)}
+.rl-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rl-s{font-size:10.5px;color:var(--muted);flex-shrink:0}
+.rl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.pq-item{background:var(--surface-2);border-radius:8px;padding:7px 9px;font-size:12px;
+  color:var(--text-2);border-left:2px solid var(--p-marker,var(--muted));
+  display:flex;flex-direction:column;gap:1px;cursor:grab}
+.pq-item span{font-size:10px;color:var(--muted)}
+.cal-note{margin-top:10px;font-size:10.5px}
+
+@media (max-width:1280px){
+  .cm-grid{grid-auto-rows:minmax(94px,auto)}
+  .cm-ev-t{font-size:11px}
+}
+@media (max-width:900px){
+  .cal-head{grid-template-columns:1fr}
+  .cal-head-side{justify-content:space-between}
+  /* Labels give way to dots rather than being squeezed unreadable. */
+  .cm-grid{grid-auto-rows:minmax(64px,auto);gap:4px}
+  .cm-items .cm-ev-t,.cm-ev b,.cm-due{display:none}
+  .cm-ev{width:6px;height:6px;border-radius:50%;padding:0;background:var(--accent)}
+  .cm-items{flex-direction:row;flex-wrap:wrap;gap:3px;align-items:center}
+  .cm-src{display:none}
+  .cm-cell{padding:5px}
+  .ag-day{grid-template-columns:40px 1fr;gap:8px}
+  .ag-meta{display:none}
+}
+
 /* ── Ambient stars ──────────────────────────────────────────────────
    Decorative only: behind everything, never interactive, never in the
    layout. Fixed so it does not repaint on scroll. */

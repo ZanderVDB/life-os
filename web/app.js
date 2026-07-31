@@ -15,6 +15,8 @@ import { openTaskModal } from './task-modal.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
 import { initDrag, isDragging } from './drag.js';
+import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHtml,
+  iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { settingsHtml } from './settings.js';
 
 const CFG = window.LIFE_OS_CONFIG;
@@ -544,6 +546,7 @@ async function loadRoute() {
   const ph = PLACEHOLDERS[state.route];
   head.innerHTML = `<p class="eyebrow">Life OS</p><h1>${esc(route.label)}</h1>
     <p class="sub">${esc(ph.tagline)}</p>`;
+  if (route === 'calendar') return loadCalendar();
   scroll.innerHTML = placeholderHtml(route, ph);
 }
 
@@ -1470,3 +1473,154 @@ function renderSettings() {
 }
 
 initAuth();
+
+/* ══ Calendar ═══════════════════════════════════════════════════════════
+ * Month, Agenda and Plan share one range request — they differ in how they
+ * present time, not in what they can see. Layers filter client-side, so
+ * toggling one never costs a round trip.
+ *
+ * All data is synthetic in this phase; no Google account is connected. */
+async function loadCalendar() {
+  const head = document.querySelector('.page-head');
+  const scroll = document.getElementById('main-scroll');
+  if (head) head.innerHTML = calendarHeaderHtml();
+  cal.loading = !cal.data;
+  scroll.innerHTML = calendarBodyHtml();
+  wireCalendarHeader();
+
+  try {
+    const r = currentRange();
+    const [range, open] = await Promise.all([
+      api(`/api/v1/workspaces/${ws()}/calendar/range?from=${r.from}&to=${r.to}`),
+      api(`/api/v1/workspaces/${ws()}/tasks?status=open&limit=50`).catch(() => ({ tasks: [] })),
+    ]);
+    // The planning queue is tasks with no block in view — Plan's whole purpose.
+    const scheduled = new Set(range.blocks.map((b) => b.taskId));
+    range.unscheduled = (open.tasks ?? []).filter((t) => !scheduled.has(t.id) && !t.dueDate);
+    cal.data = range;
+    cal.error = null;
+  } catch (e) {
+    cal.error = e.message;
+  }
+  cal.loading = false;
+  if (state.route !== 'calendar') return;
+  scroll.innerHTML = calendarBodyHtml();
+  wireCalendar();
+  renderCalendarRail();
+}
+
+/** Re-renders ONLY the calendar canvas — never the whole route. */
+function paintCalendar() {
+  const scroll = document.getElementById('main-scroll');
+  const period = document.getElementById('cal-period');
+  if (period) period.textContent = periodLabelSafe();
+  scroll.innerHTML = calendarBodyHtml();
+  wireCalendar();
+  renderCalendarRail();
+}
+const periodLabelSafe = () => {
+  const el = document.createElement('div');
+  el.innerHTML = calendarHeaderHtml();
+  return el.querySelector('#cal-period')?.textContent ?? '';
+};
+
+function renderCalendarRail() {
+  const rail = document.getElementById('rail');
+  if (!rail) return;
+  rail.innerHTML = calendarRailHtml();
+  rail.querySelectorAll('[data-day]').forEach((el) => {
+    el.onclick = () => selectDay(el.dataset.day);
+  });
+  rail.querySelectorAll('[data-event]').forEach((el) => {
+    el.onclick = () => openEventPreview(el.dataset.event);
+  });
+}
+
+function wireCalendarHeader() {
+  document.querySelectorAll('[data-mode]').forEach((b) => {
+    b.onclick = () => {
+      if (cal.mode === b.dataset.mode) return;
+      cal.mode = b.dataset.mode;
+      document.querySelectorAll('[data-mode]').forEach((x) =>
+        x.setAttribute('aria-selected', String(x.dataset.mode === cal.mode)));
+      loadCalendar();
+    };
+  });
+  document.querySelectorAll('[data-cal]').forEach((b) => {
+    b.onclick = () => {
+      const step = cal.mode === 'plan' ? 7 : 0;
+      if (b.dataset.cal === 'today') cal.anchor = new Date();
+      else if (cal.mode === 'month') {
+        cal.anchor = new Date(cal.anchor.getFullYear(),
+          cal.anchor.getMonth() + (b.dataset.cal === 'next' ? 1 : -1), 1);
+      } else if (step) {
+        cal.anchor = new Date(cal.anchor.getTime()
+          + (b.dataset.cal === 'next' ? step : -step) * 86400000);
+      }
+      loadCalendar();
+    };
+  });
+  // Layers filter what is already loaded — no round trip, no flash.
+  document.querySelectorAll('[data-layer]').forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.layer;
+      cal.layers[id] = !cal.layers[id];
+      b.classList.toggle('is-on', cal.layers[id]);
+      b.setAttribute('aria-pressed', String(cal.layers[id]));
+      paintCalendar();
+    };
+  });
+  document.getElementById('cal-add')?.addEventListener('click', () =>
+    toast('The Add menu arrives with the event editor.'));
+  document.getElementById('cal-retry')?.addEventListener('click', () => loadCalendar());
+}
+
+function wireCalendar() {
+  document.querySelectorAll('.cm-cell').forEach((c) => {
+    c.onclick = () => selectDay(c.dataset.day);
+    c.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDay(c.dataset.day); }
+    };
+  });
+  document.querySelectorAll('[data-event]').forEach((el) => {
+    el.onclick = (e) => { e.stopPropagation(); openEventPreview(el.dataset.event); };
+  });
+  document.querySelectorAll('[data-reminder]').forEach((el) => {
+    el.onclick = (e) => { e.stopPropagation(); toggleReminder(el.dataset.reminder); };
+  });
+}
+
+/** Selecting a day updates the cell and the rail — never the whole page. */
+function selectDay(day) {
+  const prev = document.querySelector('.cm-cell.is-selected');
+  cal.selected = cal.selected === day ? null : day;
+  prev?.classList.remove('is-selected');
+  const next = document.querySelector(`.cm-cell[data-day="${day}"]`);
+  if (cal.selected && next) { next.classList.add('is-selected'); pulse(next); }
+  renderCalendarRail();
+}
+
+function openEventPreview(id) {
+  const e = cal.data?.events.find((x) => x.id === id);
+  if (!e) return;
+  const when = e.isAllDay ? 'All day'
+    : `${new Date(e.startsAt).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+  toast(`${e.title} — ${when}${e.location ? ` · ${e.location}` : ''}`);
+}
+
+async function toggleReminder(id) {
+  const r = cal.data?.reminders.find((x) => x.id === id);
+  if (!r) return;
+  const wasDone = r.status === 'done';
+  r.status = wasDone ? 'open' : 'done';
+  paintCalendar();
+  try {
+    await api(`/api/v1/workspaces/${ws()}/reminders/${id}/${wasDone ? 'reopen' : 'complete'}`,
+      { method: 'POST' });
+    saved(wasDone ? 'Reopened' : 'Done');
+  } catch (e) {
+    r.status = wasDone ? 'done' : 'open';
+    paintCalendar();
+    toast(e.message, true);
+  }
+}
