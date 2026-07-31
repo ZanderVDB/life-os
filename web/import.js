@@ -24,6 +24,32 @@ drop.addEventListener('drop', (e) => {
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/**
+ * Returns a token that is valid right now, from the live Firebase session.
+ *
+ * Reading the value the Today page happened to leave in localStorage is not
+ * good enough: ID tokens last an hour, and this page is usually opened long
+ * after signing in. Asking Firebase directly also means the sign-in state shown
+ * here can never disagree with the real one.
+ */
+async function freshToken() {
+  if (!CFG.isConfigured) throw new Error('This deployment is not configured — no Firebase settings.');
+  const [{ initializeApp, getApps }, auth] = await Promise.all([
+    import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js'),
+    import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'),
+  ]);
+  const app = getApps().length ? getApps()[0] : initializeApp(CFG.firebase);
+  const a = auth.getAuth(app);
+
+  const user = await new Promise((resolve) => {
+    const stop = auth.onAuthStateChanged(a, (u) => { stop(); resolve(u); });
+  });
+  if (!user) {
+    throw new Error('You are not signed in. Open Today, sign in, then come back to this page.');
+  }
+  return user.getIdToken(/* forceRefresh */ true);
+}
+
 async function handle(f) {
   out.innerHTML = `<div class="card">Reading <b>${esc(f.name)}</b>…</div>`;
   let json;
@@ -39,11 +65,18 @@ async function handle(f) {
       + 'Re-run the exporter until verification passes.');
   }
 
-  const token = localStorage.getItem('los2_token');
+  // Mint a FRESH token rather than trusting localStorage. Firebase ID tokens
+  // expire after an hour, and the stored one is whatever the Today page last
+  // wrote — very likely stale by the time someone opens this page.
+  let token;
+  try {
+    token = await freshToken();
+  } catch (e) {
+    return fail(esc(e.message));
+  }
   const workspaceId = localStorage.getItem('los2_ws');
-  if (!token || !workspaceId) {
-    return fail('Sign in on the Today page first — this preview needs your workspace id and a valid token. '
-      + 'Open <a href="./index.html">Today</a>, sign in, then come back.');
+  if (!workspaceId) {
+    return fail('Open <a href="./index.html">Today</a> once so the workspace is known, then come back.');
   }
 
   out.innerHTML = '<div class="card">Building the plan…</div>';
