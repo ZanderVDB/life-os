@@ -286,3 +286,30 @@ test('env: DEV_AUTH_BYPASS cannot be set in staging or production', () => {
     } as any), /DEV_AUTH_BYPASS/, `${NODE_ENV} accepted a bypass token`);
   }
 });
+
+/* ── Database connection: Railway hands out two URLs, not one ────────── */
+
+test('db: TLS is chosen correctly for each Railway connection URL shape', async () => {
+  const { sslModeFor } = await import('../src/db/client.js');
+
+  // Public TCP proxy — crosses the internet, so TLS is mandatory.
+  assert.equal(sslModeFor('postgresql://u:p@viaduct.proxy.rlwy.net:41234/railway'), 'require');
+  assert.equal(sslModeFor('postgresql://u:p@containers-us-west-1.railway.app:7432/railway'), 'require');
+
+  // Private network — Railway's internal Postgres does not serve TLS, so
+  // forcing it here would simply fail to connect.
+  assert.equal(sslModeFor('postgresql://u:p@postgres.railway.internal:5432/railway'), false);
+
+  // Local development.
+  assert.equal(sslModeFor('postgresql://u:p@localhost:5432/life_os_v2'), false);
+  assert.equal(sslModeFor('postgresql://u:p@127.0.0.1:5432/life_os_v2'), false);
+  assert.equal(sslModeFor('postgresql://pglite/in-memory'), false);
+
+  // An explicit sslmode in the URL always wins, so this is overridable from
+  // Railway without a code change.
+  assert.equal(sslModeFor('postgresql://u:p@postgres.railway.internal:5432/r?sslmode=require'), 'require');
+  assert.equal(sslModeFor('postgresql://u:p@viaduct.proxy.rlwy.net:41234/r?sslmode=disable'), false);
+
+  // An unknown host defaults to requiring TLS — the safe direction to fail.
+  assert.equal(sslModeFor('postgresql://u:p@db.somewhere-else.com:5432/x'), 'require');
+});
