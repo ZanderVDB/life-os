@@ -37,6 +37,16 @@
   --name-grad:linear-gradient(180deg,#C89BFF 0%,#8A5DFF 100%);
   /* Status — meaning only */
   --ok:#00D9A3; --warn:#FFC44D; --danger:#FF646E;
+  /* ── Priority (Phase C4) ───────────────────────────────────────────────
+     Five levels, one token set. Each has a marker colour, a surface tint and
+     a label colour, so a card, the Up-next chip and the selector all speak
+     with the same voice. Intensity descends deliberately: urgent is loud,
+     someday is nearly silent. */
+  --p-urgent:#F0566E;  --p-urgent-bg:rgba(240,86,110,.10); --p-urgent-ink:#FF8A9C;
+  --p-high:#F0913D;    --p-high-bg:rgba(240,145,61,.09);   --p-high-ink:#FFB36B;
+  --p-medium:#7C6BD8;  --p-medium-bg:rgba(124,107,216,.07);--p-medium-ink:#A99BF0;
+  --p-low:#4E8FC4;     --p-low-bg:rgba(78,143,196,.06);    --p-low-ink:#87B8E0;
+  --p-someday:#6C6484; --p-someday-bg:transparent;         --p-someday-ink:#8D85A6;
   /* Elevation */
   --e1:0 2px 8px rgba(0,0,0,.14); --e2:0 8px 24px rgba(0,0,0,.22);
   --e3:0 14px 34px rgba(0,0,0,.32);
@@ -228,13 +238,6 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .hb-row{display:flex;align-items:center;gap:11px;padding:8px 6px;border-radius:9px;
   transition:background var(--t-hover)}
 .hb-row:hover{background:rgba(255,255,255,.035)}
-.hb-tick{width:21px;height:21px;flex-shrink:0;border-radius:50%;border:1.6px solid var(--muted);
-  display:grid;place-items:center;color:transparent;position:relative;
-  transition:background var(--d-fast) var(--e-out),border-color var(--d-fast) var(--e-out),
-    color var(--d-fast) var(--e-out),transform var(--d-fast) var(--e-out)}
-.hb-tick:hover{border-color:var(--ok)}
-.hb-tick:active{transform:scale(.9)}
-.hb-row.is-done .hb-tick{background:var(--ok);border-color:var(--ok);color:#08221c}
 .hb-name{flex:1;min-width:0;font-size:var(--fs-rail);color:var(--text-2);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color var(--t-hover)}
 .hb-row.is-done .hb-name{color:var(--muted)}
@@ -242,20 +245,6 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .hb-streak{font-size:10px;font-weight:700;color:var(--ok);background:rgba(0,217,163,.12);
   border-radius:6px;padding:2px 7px;font-variant-numeric:tabular-nums}
 
-/* Quick capture — structured task entry. Deliberately unlike the composer,
-   which is future natural-language capture and must stay distinct. */
-.qc-form{display:flex;flex-direction:column;gap:9px}
-.qc-input{background:var(--surface-2);border:1px solid transparent;border-radius:10px;
-  padding:10px 12px;font-size:var(--fs-rail);color:var(--text);width:100%;
-  transition:border-color var(--t-hover),box-shadow var(--t-hover)}
-.qc-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(138,93,255,.15)}
-.qc-row{display:flex;gap:8px}
-.qc-sel{flex:1;min-width:0;background:var(--surface-2);border:1px solid transparent;
-  border-radius:9px;padding:8px 9px;font-size:11.5px;color:var(--text-2)}
-.qc-sel:focus{outline:none;border-color:var(--accent)}
-.qc-actions{display:flex;gap:8px;align-items:center}
-.qc-actions .btn{font-size:12.5px}
-.qc-actions .btn-ghost{padding:0 9px}
 
 .rail-link{font-size:12px;color:var(--accent);padding:4px 0 0;text-align:left;
   transition:opacity var(--t-hover)}
@@ -339,43 +328,68 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .empty{color:var(--muted);font-size:12px;font-style:italic;padding:13px 4px;
   text-align:center;pointer-events:none;line-height:1.5}
 
-/* ── Task card ──────────────────────────────────────────────────────── */
-.task{background:#282431;border-radius:12px;padding:var(--row-pad-y) 12px var(--row-pad-y) 16px;position:relative;
-  overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.14);display:flex;align-items:flex-start;gap:10px;
-  transition:transform var(--t-hover),background var(--t-hover),box-shadow var(--t-hover)}
-.task:hover{background:#343040;transform:translateY(-2px);box-shadow:var(--e2)}
-.task::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--stripe,#5b546e)}
-/* Priority is a marker, not an alarm.
-   A full red ring on every urgent task made a normal board look like a page of
-   errors. Red outlines are now reserved for genuine errors and destructive
-   confirmations. Urgent keeps a red stripe and the faintest tint; high gets a
-   quiet warm stripe; medium — the default, and most of the board — gets no
-   colour at all, because a colour every row shares communicates nothing. */
-.task.p-urgent{--stripe:#E5576A;background:linear-gradient(90deg,rgba(229,87,106,.07),transparent 42%),#282431}
-.task.p-high{--stripe:#D98A4E}
-.task.p-medium{--stripe:#4a4458}
-.task.p-low{--stripe:#3f3a4d}
-.task.p-someday{--stripe:#35313f}
-.task::before{opacity:.9}
-.task.p-medium::before,.task.p-low::before,.task.p-someday::before{opacity:.65}
-.task.dragging{opacity:.5}
-.tick{width:19px;height:19px;border-radius:50%;border:1.6px solid var(--muted);background:none;
-  flex-shrink:0;display:grid;place-items:center;font-size:11px;color:transparent;margin-top:1px;
-  transition:border-color var(--t-hover),background var(--t-hover),color var(--t-hover)}
-.tick:hover{border-color:var(--ok)}
-.t-body{flex:1;min-width:0}
-.t-title{font-size:var(--fs-task);line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  cursor:pointer;text-align:left;width:100%;color:var(--text)}
-.t-meta{display:flex;gap:8px;align-items:center;margin-top:4px;font-size:10.5px;color:var(--muted)}
-.t-area{background:var(--surface);border-radius:6px;padding:1px 7px;max-width:96px;overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap}
-.t-actions{display:flex;gap:2px;opacity:0;transition:opacity var(--t-hover)}
+/* ── Task card ──────────────────────────────────────────────────────
+   Title and metadata read as ONE unit: the meta line sits directly beneath
+   the title, dot-separated, and is omitted entirely when there is nothing to
+   say. Actions form a single vertically-centred group on the right. */
+.task{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;gap:11px;background:#282431;border-radius:12px;
+  padding:10px 10px 10px 16px;overflow:hidden;
+  box-shadow:0 1px 3px rgba(0,0,0,.16);
+  transition:background var(--t-hover),box-shadow var(--t-hover),transform var(--t-hover)}
+.task:hover{background:#312D3D;box-shadow:var(--e2)}
+.task.dragging{opacity:.45}
+.task::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--p-marker,var(--p-someday))}
+
+/* Priority. Urgent alone earns an outline — and a soft one, so it reads as
+   important rather than as an invalid form field. */
+.task.pri-urgent{--p-marker:var(--p-urgent);background:linear-gradient(90deg,var(--p-urgent-bg),transparent 46%),#282431;
+  box-shadow:inset 0 0 0 1px rgba(240,86,110,.42),0 1px 3px rgba(0,0,0,.16)}
+.task.pri-urgent:hover{box-shadow:inset 0 0 0 1px rgba(240,86,110,.6),var(--e2)}
+.task.pri-high{--p-marker:var(--p-high);background:linear-gradient(90deg,var(--p-high-bg),transparent 40%),#282431}
+.task.pri-medium{--p-marker:var(--p-medium)}
+.task.pri-low{--p-marker:var(--p-low)}
+.task.pri-someday{--p-marker:var(--p-someday)}
+.task.pri-someday .t-title{color:var(--text-2)}
+
+.t-tick{width:20px;height:20px;flex-shrink:0;border-radius:50%;
+  border:1.6px solid var(--muted);background:none;position:relative;
+  transition:border-color var(--t-hover),background var(--t-hover),transform var(--d-fast) var(--e-out)}
+.t-tick:hover{border-color:var(--ok);transform:scale(1.08)}
+.t-tick:active{transform:scale(.92)}
+.t-main{min-width:0}
+.t-title{display:block;width:100%;text-align:left;font-size:var(--fs-task);line-height:1.4;
+  color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:color var(--t-hover)}
+.t-title:hover{color:#fff}
+.t-meta{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:11px;
+  color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tm-sep{opacity:.45}
+.tm-area{color:var(--text-2)}
+.tm-due{color:var(--text-2)}
+.tm-legacy{font-style:italic;opacity:.85}
+.tm-steps.is-all{color:var(--ok)}
+
+/* One aligned action group. Every control is the same size, centred on the
+   card's vertical axis — nothing floats at the top edge. */
+.t-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;
+  opacity:0;transition:opacity var(--t-hover)}
 .task:hover .t-actions,.task:focus-within .t-actions{opacity:1}
-.icon-btn{width:27px;height:27px;border-radius:7px;display:grid;place-items:center;color:var(--muted);
-  font-size:13px;transition:background var(--t-hover),color var(--t-hover)}
-.icon-btn:hover{background:rgba(255,255,255,.07);color:#fff}
-.grip{cursor:grab;color:var(--muted);font-size:12px;opacity:0;transition:opacity var(--t-hover)}
-.task:hover .grip{opacity:.55}
+.t-btn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+  color:var(--muted);transition:background var(--t-hover),color var(--t-hover)}
+.t-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+.t-grip{width:22px;height:30px;display:grid;place-items:center;color:var(--muted);
+  cursor:grab;opacity:.5}
+.t-grip:active{cursor:grabbing}
+
+/* The quiet save indicator — silent by default, a whisper when it speaks. */
+.save-state{position:fixed;bottom:calc(var(--composer-h) + 34px);left:50%;
+  transform:translateX(-50%) translateY(6px);z-index:280;
+  background:var(--surface-2);border-radius:99px;padding:6px 15px;font-size:11.5px;
+  color:var(--text-2);box-shadow:var(--e2);opacity:0;pointer-events:none;
+  transition:opacity var(--d-base) var(--e-out),transform var(--d-base) var(--e-out)}
+.save-state.is-on{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ── History ────────────────────────────────────────────────────────── */
 .history{max-width:840px}
@@ -524,6 +538,164 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .mobile-bar{display:none}
 .drawer-scrim{display:none}
 
+/* ── Modal — centred, never a drawer ────────────────────────────────
+   A dialog over the board keeps context visible; the old right drawer covered
+   the rail and compressed the workspace into an admin form. */
+.modal-scrim{position:fixed;inset:0;background:rgba(9,8,14,.66);z-index:200;
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+body.modal-open{overflow:hidden}
+.modal{position:fixed;z-index:201;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(620px,calc(100vw - 48px));max-height:min(86vh,780px);
+  display:flex;flex-direction:column;background:var(--rail);border-radius:18px;
+  box-shadow:var(--e3),0 0 0 1px rgba(255,255,255,.05);overflow:hidden}
+.modal-narrow{width:min(480px,calc(100vw - 48px))}
+
+.m-head{display:flex;align-items:flex-start;gap:12px;padding:20px 20px 14px;
+  border-bottom:1px solid var(--hairline);flex-shrink:0}
+.m-title{flex:1;min-width:0;background:none;border:none;resize:none;overflow:hidden;
+  font-size:19px;font-weight:600;line-height:1.35;color:var(--text);padding:0;
+  font-family:inherit}
+.m-title:focus{outline:none}
+.m-title::placeholder{color:var(--muted);font-weight:450}
+.m-tick{width:24px;height:24px;flex-shrink:0;margin-top:2px;border-radius:50%;
+  border:1.8px solid var(--muted);display:grid;place-items:center;color:transparent;
+  transition:background var(--t-hover),border-color var(--t-hover),color var(--t-hover)}
+.m-tick:hover{border-color:var(--ok)}
+.m-tick.is-done{background:var(--ok);border-color:var(--ok);color:#08221c}
+.m-close{width:30px;height:30px;flex-shrink:0;border-radius:8px;color:var(--muted);
+  font-size:20px;line-height:1;display:grid;place-items:center;
+  transition:background var(--t-hover),color var(--t-hover)}
+.m-close:hover{background:rgba(255,255,255,.07);color:#fff}
+
+.m-body{padding:18px 20px;overflow-y:auto;flex:1;min-height:0;
+  display:flex;flex-direction:column;gap:14px}
+.m-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.m-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.m-field>span{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted)}
+.m-input{width:100%;background:var(--surface);border:1px solid transparent;border-radius:10px;
+  padding:9px 11px;font-size:13.5px;color:var(--text);font-family:inherit;
+  transition:border-color var(--t-hover),box-shadow var(--t-hover)}
+.m-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(138,93,255,.15)}
+.m-notes{min-height:84px;resize:vertical;line-height:1.6}
+/* The priority control wears the priority it sets. */
+.pri-select[data-pri="urgent"]{color:var(--p-urgent-ink);border-color:rgba(240,86,110,.4)}
+.pri-select[data-pri="high"]{color:var(--p-high-ink);border-color:rgba(240,145,61,.34)}
+.pri-select[data-pri="medium"]{color:var(--p-medium-ink)}
+.pri-select[data-pri="low"]{color:var(--p-low-ink)}
+.pri-select[data-pri="someday"]{color:var(--p-someday-ink)}
+
+.m-legacy{display:flex;align-items:center;gap:9px;background:var(--surface);
+  border-radius:10px;padding:9px 12px;font-size:12.5px}
+.m-legacy-label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.m-legacy-value{color:var(--text);font-style:italic}
+.m-legacy-note{margin-left:auto;font-size:10.5px;color:var(--muted)}
+
+.m-steps-block{display:flex;flex-direction:column;gap:8px}
+.m-steps-head{display:flex;align-items:center;gap:8px;font-size:10.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.m-steps-count{margin-left:auto;letter-spacing:0;font-size:10px;background:var(--surface);
+  border-radius:6px;padding:1px 7px}
+.m-steps{display:flex;flex-direction:column;gap:5px}
+.m-step{display:flex;align-items:center;gap:9px;background:var(--surface);border-radius:9px;
+  padding:6px 8px 6px 10px}
+.ms-tick{width:17px;height:17px;flex-shrink:0;border-radius:5px;border:1.5px solid var(--muted);
+  display:grid;place-items:center;color:transparent;
+  transition:background var(--t-hover),border-color var(--t-hover),color var(--t-hover)}
+.ms-tick:hover{border-color:var(--ok)}
+.m-step.is-done .ms-tick{background:var(--ok);border-color:var(--ok);color:#08221c}
+.ms-name{flex:1;min-width:0;background:none;border:none;font-size:13px;color:var(--text);
+  padding:3px 4px;border-radius:6px;font-family:inherit}
+.ms-name:focus{outline:none;background:var(--surface-2)}
+.m-step.is-done .ms-name{color:var(--muted);text-decoration:line-through}
+.ms-del{width:26px;height:26px;border-radius:7px;color:var(--muted);font-size:16px;
+  display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
+.ms-del:hover{background:rgba(255,100,110,.12);color:var(--danger)}
+.m-step-add .m-input{font-size:13px}
+
+.m-soon{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted);
+  padding-top:2px}
+.m-soon-tag{background:var(--surface);border-radius:6px;padding:3px 9px;font-size:10px;
+  letter-spacing:.05em;text-transform:uppercase}
+
+.m-foot{display:flex;align-items:center;gap:8px;padding:14px 20px;
+  border-top:1px solid var(--hairline);flex-shrink:0}
+.m-save-state{margin-left:auto;font-size:11.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.m-danger{color:var(--danger)}
+.m-danger:hover{background:rgba(255,100,110,.1)}
+
+/* Habit modal extras */
+.h-stats{display:flex;gap:22px}
+.h-stat{display:flex;flex-direction:column;gap:2px}
+.h-stat .n{font-size:24px;font-weight:700;letter-spacing:-.5px;line-height:1;
+  font-variant-numeric:tabular-nums}
+.h-stat .l{font-size:11px;color:var(--muted)}
+.h-days.is-hidden{display:none}
+.h-day-row{display:flex;gap:5px}
+.h-day{width:34px;height:34px;border-radius:9px;background:var(--surface);
+  font-size:12px;color:var(--muted);
+  transition:background var(--t-hover),color var(--t-hover)}
+.h-day:hover{background:var(--surface-2);color:var(--text-2)}
+.h-day[aria-pressed="true"]{background:var(--accent-soft);color:#fff;font-weight:600}
+.h-recent{display:flex;flex-direction:column;gap:7px}
+.h-recent-label{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted)}
+.h-recent-row{display:flex;gap:4px}
+.h-dot{width:14px;height:14px;border-radius:4px;background:var(--surface-2)}
+.h-dot.is-done{background:var(--ok);opacity:.85}
+.h-recent-note{font-size:10.5px;color:var(--muted)}
+
+/* ── Habit ring ─────────────────────────────────────────────────────
+   An SVG ring whose stroke carries progress, so a multi-count habit shows
+   partial fill instead of an all-or-nothing tick. Green is completion, and
+   completion only — it appears nowhere else in the app. */
+.hb-add{margin-left:auto;width:24px;height:24px;border-radius:7px;color:var(--muted);
+  font-size:17px;line-height:1;display:grid;place-items:center;
+  transition:background var(--t-hover),color var(--t-hover)}
+.hb-add:hover{background:rgba(255,255,255,.07);color:#fff}
+.hb-count{margin-left:auto;font-size:10px;font-weight:700;color:var(--muted);
+  background:var(--surface-2);border-radius:6px;padding:1px 7px;letter-spacing:0}
+.hb-count+.hb-add{margin-left:6px}
+.hb-list{display:flex;flex-direction:column;gap:1px}
+.hb-row{display:flex;align-items:center;gap:11px;padding:7px 6px;border-radius:10px;
+  transition:background var(--t-hover)}
+.hb-row:hover{background:rgba(255,255,255,.035)}
+.hb-ring{position:relative;width:32px;height:32px;flex-shrink:0;display:grid;
+  place-items:center;border-radius:50%}
+.hb-ring svg{position:absolute;inset:0;width:32px;height:32px;transform:rotate(-90deg)}
+.hr-track{fill:none;stroke:rgba(255,255,255,.10);stroke-width:2.4}
+.hr-fill{fill:none;stroke:var(--ok);stroke-width:2.4;stroke-linecap:round;
+  transition:stroke-dashoffset var(--d-slow) var(--e-out)}
+.hr-mark{position:relative;color:transparent;display:grid;place-items:center;
+  transition:color var(--d-fast) var(--e-out),transform var(--d-fast) var(--e-out)}
+.hb-ring:hover .hr-track{stroke:rgba(0,217,163,.3)}
+.hb-row.is-done .hr-mark{color:var(--ok)}
+.hb-name{flex:1;min-width:0;text-align:left;font-size:var(--fs-rail);color:var(--text-2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  transition:color var(--t-hover)}
+.hb-name:hover{color:var(--text)}
+.hb-row.is-done .hb-name{color:var(--muted)}
+.hb-prog{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+/* A zero streak is quiet, not broken — an em dash, not a red nought. */
+.hb-streak{font-size:11px;font-weight:700;color:var(--muted);min-width:26px;text-align:right;
+  font-variant-numeric:tabular-nums}
+.hb-streak.is-live{color:var(--ok)}
+.hs-unit{font-weight:500;opacity:.7;font-size:9.5px;margin-left:1px}
+
+/* ── Ambient stars ──────────────────────────────────────────────────
+   Decorative only: behind everything, never interactive, never in the
+   layout. Fixed so it does not repaint on scroll. */
+#los-stars{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;
+  pointer-events:none;user-select:none}
+/* Only the shell needs lifting above the star layer. Listing the fixed
+   elements here as well set `position:relative` on them, which silently
+   overrode `.modal{position:fixed}` and threw the dialog off centre — every
+   one of them already carries its own position and z-index. */
+.shell{position:relative;z-index:1}
+@media (prefers-reduced-motion:reduce){#los-stars{display:none}}
+html[data-motion="reduced"] #los-stars{display:none}
+
 @media (max-width:1500px){ :root{--gutter:40px} }
 @media (max-width:1360px){ :root{--rail-w:320px;--gutter:32px} }
 
@@ -566,7 +738,15 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
   .composer{left:0;right:0;padding:10px 16px calc(12px + env(safe-area-inset-bottom))}
   .hist-row{grid-template-columns:18px 1fr;row-gap:4px}
   .hist-meta{grid-column:2}
-  .panel{width:100%;padding-bottom:calc(26px + env(safe-area-inset-bottom))}
+  /* Bottom sheet, not a desktop dialog crushed to 375px. */
+  .modal{left:0;right:0;bottom:0;top:auto;transform:none;width:100%;
+    max-height:92vh;border-radius:20px 20px 0 0}
+  .modal-narrow{width:100%}
+  .m-body{padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+  .m-grid{grid-template-columns:1fr}
+  .m-foot{padding-bottom:calc(14px + env(safe-area-inset-bottom));flex-wrap:wrap}
+  .t-actions{opacity:1}
+  .t-btn{width:44px;height:44px}
   .set-row{flex-wrap:wrap}
 }
 
@@ -588,13 +768,20 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
   .seg button{display:grid;place-items:center}
   .mobile-bar .m-btn{flex:0 0 44px}   /* flex was shrinking these to 32px wide */
 
-  .tick{width:24px;height:24px;font-size:14px;position:relative}
-  .tick::after{content:'';position:absolute;top:50%;left:50%;
+  /* Small round controls: visible size kept, hit area grown to 44px. A 44px
+     tick would dominate a 50px card and a 44px ring would break the rail's
+     rhythm, so the finger target is the overlay, not the paint.
+     `.tick` is the pre-C4 name and is kept so older surfaces stay covered. */
+  .tick,.t-tick,.hb-ring,.hb-add,.m-tick,.m-close{position:relative}
+  .tick::after,.t-tick::after,.hb-ring::after,.hb-add::after,
+  .m-tick::after,.m-close::after{content:'';position:absolute;top:50%;left:50%;
     width:44px;height:44px;transform:translate(-50%,-50%)}
+  .tick{width:24px;height:24px;font-size:14px}
 
-  .t-title{position:relative;padding:6px 0}
-  .t-title::after{content:'';position:absolute;top:50%;left:0;right:0;
-    height:44px;transform:translateY(-50%)}
+  /* Text buttons stretch to the full row instead of hugging their glyphs. */
+  .t-title,.hb-name,.un-title{position:relative;padding:6px 0}
+  .t-title::after,.hb-name::after,.un-title::after{content:'';position:absolute;
+    top:50%;left:0;right:0;height:44px;transform:translateY(-50%)}
 }
 
 @media (prefers-reduced-motion:reduce){

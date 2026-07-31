@@ -249,9 +249,15 @@ test('account menu: keyboard, dismissal, and a guarded sign-out', () => {
   assert.ok(!/data-route="settings"/.test(app), 'a second, competing Settings entry exists');
 });
 
-test('history is reachable from Today, not from the sidebar', () => {
-  assert.match(app, /function todayHeaderActions/, 'Today has no History affordance');
-  assert.match(app, /data-route="history"/, 'no link to Completed');
+test('history is reachable, and never from the sidebar', () => {
+  // C4 removed the Completed control from the Today header: finished work was
+  // competing for attention with what still needs doing. The route stays,
+  // reached from the account menu, so nothing became unreachable.
+  assert.ok(!/function todayHeaderActions/.test(app),
+    'the Completed control is back in the Today header');
+  assert.match(app, /'history'/, 'the Completed route was removed entirely');
+  assert.match(app, /data-am="history"[\s\S]{0,80}Completed/,
+    'Completed has no entry in the account menu');
   assert.match(app, /data-route="today"[\s\S]{0,120}Back to Today/, 'History cannot get back');
   // Buckets still exclude completed work.
   assert.match(app, /t\.status !== 'done'/, 'buckets no longer exclude completed tasks');
@@ -269,30 +275,28 @@ test('rail: Up Next selection is deterministic and explainable', () => {
   assert.ok(fn.indexOf('Next scheduled') < fn.indexOf('Urgent today'), 'scheduled does not win first');
   assert.ok(fn.indexOf('Urgent today') < fn.indexOf('High priority today'), 'priority order is wrong');
   // Raw legacy time is shown as legacy text, never as a real timestamp.
-  assert.match(app, /legacyScheduledTimeRaw[\s\S]{0,200}Kept exactly as written/,
+  // The label moved into the task modal when the drawer was replaced.
+  const modal = read('task-modal.js');
+  assert.match(modal, /legacyScheduledTimeRaw[\s\S]{0,400}kept exactly as written/i,
     'raw legacy time is not labelled as legacy');
 });
 
 test('rail: no dashboard cards, no fake Upcoming', () => {
-  const rail = app.slice(app.indexOf('function renderRail'), app.indexOf('const habitRowHtml'));
+  const rail = app.slice(app.indexOf('function renderRail'), app.indexOf('function habitRowHtml'));
   for (const gone of ['Your day', 'Recently finished', 'Active work', 'All areas']) {
     assert.ok(!rail.includes(gone), `the rail still carries the "${gone}" card`);
   }
   // Upcoming is omitted entirely rather than rendered empty, because there is
   // no calendar and every imported task has no due date.
   assert.ok(!/Upcoming|Up next in your calendar/i.test(rail), 'a fake Upcoming card exists');
-  for (const wanted of ['Up next', 'Habits today', 'Quick capture']) {
+  // C4 removed Quick Capture: "Add task" already sits two feet away, task
+  // creation was never the hard part, and the composer is the real capture
+  // path. The space below Habits is left honestly empty for Upcoming.
+  for (const wanted of ['Up next', 'Habits today']) {
     assert.ok(rail.includes(wanted), `the rail is missing "${wanted}"`);
   }
-});
-
-test('rail: quick capture is structured entry, distinct from the composer', () => {
-  assert.match(app, /id="qc-form"/);
-  assert.match(app, /id="qc-bucket"/, 'quick capture cannot choose a bucket');
-  assert.match(app, /id="qc-area"/, 'quick capture cannot choose an Area');
-  assert.match(app, /id="qc-full"/, 'quick capture cannot hand off to full detail');
-  // It posts a real task; the composer posts nothing at all.
-  assert.match(app, /qc-form'\)\?\.addEventListener\('submit'/);
+  // Stripped of comments: the C4 rail comment explains the removal by name.
+  assert.ok(!/qc-form|qc-input|quickCapture/i.test(code(app)), 'Quick Capture came back');
 });
 
 test('habits: optimistic tick with rollback, and green means done only', () => {
@@ -301,18 +305,41 @@ test('habits: optimistic tick with rollback, and green means done only', () => {
   assert.match(fn, /const before = \{/, 'no snapshot to roll back to');
   assert.match(fn, /Object\.assign\(h, before\)/, 'a failed tick does not roll back');
   // Completion is the ONLY thing wearing green.
-  assert.match(html, /\.hb-row\.is-done \.hb-tick\{background:var\(--ok\)/);
-  const railCss = html.slice(html.indexOf('.hb-count'), html.indexOf('.qc-form'));
-  assert.ok(!/var\(--accent\)/.test(railCss), 'purple and green are mixed in the habit rows');
+  // C4 replaced the tick with a progress ring; green is still the only colour
+  // completion wears, and the rail must not borrow the brand purple for it.
+  assert.match(html, /\.hr-fill\{fill:none;stroke:var\(--ok\)/, 'the ring is not green');
+  assert.match(html, /\.hb-row\.is-done \.hr-mark\{color:var\(--ok\)/, 'the mark is not green');
+  const ring = html.slice(html.indexOf('.hb-ring{'), html.indexOf('.hb-name{'));
+  assert.ok(!/var\(--accent\)/.test(ring), 'purple and green are mixed in the habit rows');
 });
 
 test('priority is a marker, not an alarm', () => {
-  const rule = html.slice(html.indexOf('.task.p-urgent{'), html.indexOf('.task.dragging'));
-  // The full red ring is gone; red survives only as a stripe and a faint tint.
-  assert.ok(!/inset 0 0 0 1\.5px/.test(rule), 'urgent still draws a full red outline');
-  assert.match(rule, /\.task\.p-urgent\{--stripe:#E5576A/, 'urgent lost its marker entirely');
-  // Medium is the default and most of the board — it must add no colour.
-  assert.match(rule, /\.task\.p-medium\{--stripe:#4a4458\}/, 'medium priority still adds colour noise');
+  // C4 renamed `.p-*` to `.pri-*` and restored all five levels. Urgent regained
+  // a 1px outline at 42% alpha — deliberately softer than the 1.5px full-alpha
+  // ring C3 removed, so it reads as important rather than as an error state.
+  const rule = html.slice(html.indexOf('.task.pri-urgent{'), html.indexOf('.task.pri-high{'));
+  assert.ok(!/inset 0 0 0 1\.5px/.test(rule), 'urgent draws the old alarm ring');
+  assert.match(rule, /box-shadow:inset 0 0 0 1px rgba\(240,86,110,\.42\)/,
+    'urgent lost its marker entirely');
+  // C3 made medium colourless. C4 reverses that deliberately: the brief asked
+  // for all five levels to be tellable apart. Medium keeps the quietest tint of
+  // the four that have one, so the default still recedes.
+  // Parsed with one static regex, not a built one: a template literal eats the
+  // backslashes, and `\d` silently becomes a literal "d" that matches nothing.
+  const tint = new Map<string, number>();
+  for (const t of html.match(/--p-\w+-bg:[^;]+/g) ?? []) {
+    const name = t.slice(0, t.indexOf(':'));
+    const value = t.slice(t.indexOf(':') + 1);
+    const a = value.match(/,\s*(\.\d+|\d?\.?\d+)\)$/);
+    tint.set(name.slice(4, -3), value === 'transparent' ? 0 : Number(a?.[1] ?? 1));
+  }
+  const alpha = (p: string) => tint.get(p) ?? 0;
+  assert.equal(tint.size, 5, 'there are not exactly five priority tints');
+  assert.match(html, /--p-someday-bg:transparent/, 'someday should carry no tint at all');
+  for (const louder of ['urgent', 'high']) {
+    assert.ok(alpha(louder) > alpha('medium'),
+      `medium is not quieter than ${louder} — the default adds colour noise`);
+  }
 });
 
 test('large screens scale by token, never by zoom', () => {
@@ -429,9 +456,12 @@ test('pwa: the update prompt can be postponed and never interrupts editing', () 
     'postponing writes to the server');
 });
 
-test('mutable assets are served no-cache so a deploy cannot leave stale JS', () => {
-  assert.match(server, /const revalidate = ext === '\.html' \|\| ext === '\.js' \|\| ext === '\.json'/,
-    'HTML/JS/JSON are not revalidated');
+test('mutable assets are served no-store so a deploy cannot leave stale JS', () => {
+  // `no-cache` without an ETag or Last-Modified left three separate stale-asset
+  // incidents, so these are now `no-store` — strictly stronger.
+  assert.match(server, /ext === '\.html' \|\| ext === '\.js' \|\| ext === '\.json'/,
+    'HTML/JS/JSON are not singled out');
+  assert.match(server, /no-store/, 'mutable assets may still be cached');
   assert.match(server, /'cache-control': 'no-store'[\s\S]{0,200}service-worker-allowed/,
     'sw.js is not served no-store');
 });
@@ -459,8 +489,13 @@ test('touch: essential controls are never hover-only and meet 44px', () => {
   assert.match(coarse, /min-height:44px/, 'no 44px minimum is applied');
   assert.match(coarse, /\.icon-btn\{width:44px;height:44px/);
   // Where the visible control stays small, the hit area is extended instead.
-  assert.match(coarse, /\.tick::after\{[^}]*width:44px;height:44px/, 'the tick has no 44px hit area');
-  assert.match(coarse, /\.t-title::after\{[^}]*height:44px/, 'the title has no 44px hit area');
+  // One selector list now covers every small round control, not just `.tick`.
+  assert.match(coarse, /\.t-tick::after/, 'the task tick has no expanded hit area');
+  assert.match(coarse, /\.hb-ring::after/, 'the habit ring has no expanded hit area');
+  assert.match(coarse, /width:44px;height:44px;transform:translate\(-50%,-50%\)/,
+    'the hit-area overlay is not 44px');
+  assert.match(coarse, /\.t-title::after/, 'the title has no expanded hit area');
+  assert.match(coarse, /right:0;height:44px/, 'text targets do not span the row at 44px');
 });
 
 test('accessibility: focus, landmarks and reduced motion are honoured', () => {
@@ -470,8 +505,14 @@ test('accessibility: focus, landmarks and reduced motion are honoured', () => {
   assert.match(app, /aria-label="Main"/, 'the nav has no accessible name');
   assert.match(app, /aria-current="page"/, 'the active route is not announced');
   assert.match(app, /aria-expanded/, 'the drawer button has no expanded state');
-  assert.match(app, /setAttribute\('role', 'dialog'\)/, 'the detail panel is not a dialog');
-  assert.match(app, /setAttribute\('aria-modal', 'true'\)/, 'the detail panel is not modal');
+  // C4 replaced the side drawer with a centred dialog, so the modal semantics
+  // moved out of app.js into their own modules. Both are checked, because
+  // "the task editor is a dialog" must hold wherever the editor lives.
+  for (const f of ['task-modal.js', 'habit-modal.js']) {
+    const src = read(f);
+    assert.match(src, /setAttribute\('role', 'dialog'\)/, `${f} is not a dialog`);
+    assert.match(src, /setAttribute\('aria-modal', 'true'\)/, `${f} is not modal`);
+  }
 });
 
 test('the Life OS lockup uses an inline self-contained gradient', () => {

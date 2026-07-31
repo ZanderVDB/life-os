@@ -10,6 +10,10 @@
  */
 import { ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
 import { initServiceWorker } from './pwa.js';
+import { flip, pulse, collapseOut, reducedMotion } from './motion.js';
+import { openTaskModal } from './task-modal.js';
+import { openHabitModal } from './habit-modal.js';
+import { initStars } from './stars.js';
 import { settingsHtml } from './settings.js';
 
 const CFG = window.LIFE_OS_CONFIG;
@@ -86,6 +90,11 @@ const ICON = {
   menu: '<path d="M3.5 6h13M3.5 10h13M3.5 14h13"/>',
   sparkle: '<path d="M10 3.5 11.4 8 16 9.4 11.4 10.8 10 15.4 8.6 10.8 4 9.4 8.6 8 10 3.5Z"/>',
   check: '<path d="m4.5 10.5 3.5 3.5 7.5-8"/>',
+  chevL: '<path d="m12 5-5 5 5 5"/>',
+  chevR: '<path d="m8 5 5 5-5 5"/>',
+  dots: '<circle cx="10" cy="4.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="15.5" r="1.4" fill="currentColor" stroke="none"/>',
+  grip: '<circle cx="7.5" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="7.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="7.5" cy="15" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="15" r="1.2" fill="currentColor" stroke="none"/>',
+  pencil: '<path d="M13.5 3.5 16.5 6.5 7 16H4v-3z"/>',
 };
 const icon = (name, size = 20) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 20 20" fill="none" stroke="currentColor"
@@ -185,10 +194,12 @@ async function boot() {
   // Habits populate the rail as soon as they arrive. Deliberately not awaited:
   // Today must never wait on a secondary system to appear.
   loadHabits().then(renderRail).catch(() => {});
-  // Just the count, for the Completed button beside the Today heading.
+  // Kept in state for the account menu's Completed entry; no longer surfaced
+  // on Today, where finished work was competing with what still needs doing.
   api(`/api/v1/workspaces/${ws()}/tasks?status=done&limit=1`)
-    .then((r) => { state.historyTotal = r.total; if (state.route === 'today') wireHeaderCount(); })
+    .then((r) => { state.historyTotal = r.total; })
     .catch(() => {});
+  initStars();
   initServiceWorker();
 }
 
@@ -489,7 +500,6 @@ async function loadRoute() {
       await loadTasks();
       scroll.innerHTML = todayHtml();
       wireToday();
-      wireHeader();
       renderRail();
     } catch (e) {
       scroll.innerHTML = errorHtml(e.message);
@@ -504,7 +514,7 @@ async function loadRoute() {
       <div class="page-actions">
         <button class="btn btn-ghost" data-route="today">${icon('today', 16)}<span>Back to Today</span></button>
       </div>`;
-    wireHeader();
+    head.querySelector('[data-route]').onclick = () => go('today');
     scroll.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
     try {
       await loadHistory(true);
@@ -533,17 +543,6 @@ async function loadRoute() {
 const errorHtml = (msg) => `<div class="state"><b>That did not load</b>${esc(msg)}
   <div style="margin-top:16px"><button class="btn" id="retry">Try again</button></div></div>`;
 
-function todayHeaderActions() {
-  // History lives beside Today, not in the sidebar: finished work is content
-  // history, not a section of your life.
-  return `<div class="page-actions">
-    <button class="btn btn-ghost" data-route="history">
-      ${icon('check', 16)}<span>Completed</span>
-      ${state.historyTotal ? `<span class="pa-count">${state.historyTotal}</span>` : ''}
-    </button>
-  </div>`;
-}
-
 function greetingHtml() {
   const h = new Date().getHours();
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
@@ -552,17 +551,24 @@ function greetingHtml() {
     { weekday: 'long', day: 'numeric', month: 'long' });
   return `<p class="eyebrow">${esc(dateStr)}</p>
     <h1>${greet}${first ? `, <span class="nm">${esc(first)}</span>` : ''}.</h1>
-    <p class="sub">Here is what is in front of you.</p>
-    ${todayHeaderActions()}`;
+    <p class="sub">Here is what is in front of you.</p>`;
 }
 
-/* ── Today ───────────────────────────────────────────────────────────── */
+/* ── Today ───────────────────────────────────────────────────────────────
+ * Rendering rule for this page: the board is built ONCE per route entry.
+ * Every mutation after that patches the DOM in place — it never rebuilds
+ * `main-scroll`. Rebuilding is what produced the "save flicker": the whole
+ * board was destroyed, every card re-entered with the staggered rise, and the
+ * eye read a page reload rather than one task changing.
+ */
 function todayHtml() {
   return `<div class="toolbar">
       <button class="btn btn-primary" id="add">Add task</button>
-      <button class="chip" data-area="" aria-pressed="${!state.areaFilter}">All areas</button>
-      ${state.me.areas.map((a) => `<button class="chip" data-area="${a.id}"
-        aria-pressed="${state.areaFilter === a.id}">${esc(a.name)}</button>`).join('')}
+      <div class="filters" role="group" aria-label="Filter by area">
+        <button class="chip" data-area="" aria-pressed="${!state.areaFilter}">All areas</button>
+        ${state.me.areas.map((a) => `<button class="chip" data-area="${a.id}"
+          aria-pressed="${state.areaFilter === a.id}">${esc(a.name)}</button>`).join('')}
+      </div>
     </div>
     <div class="buckets">${BUCKETS.map(bucketHtml).join('')}</div>`;
 }
@@ -570,171 +576,297 @@ function todayHtml() {
 function bucketHtml(b) {
   const list = inBucket(b.id);
   return `<section class="bucket ${b.id === 'future' ? 'future' : ''}" aria-label="${b.label}">
-    <div class="bucket-head"><h2>${b.label}</h2><span class="bucket-count">${list.length}</span></div>
-    <div class="drop stagger${list.length ? '' : ' is-empty'}" data-bucket="${b.id}">
-      ${list.length ? list.map(taskHtml).join('')
-        : `<div class="empty">${b.id === 'today' ? 'Nothing planned for today' : 'Empty'}</div>`}
+    <div class="bucket-head"><h2>${b.label}</h2>
+      <span class="bucket-count" data-count="${b.id}">${list.length}</span></div>
+    <div class="drop${list.length ? '' : ' is-empty'}" data-bucket="${b.id}">
+      ${list.length ? list.map((t) => taskHtml(t)).join('') : emptyHtml(b)}
     </div></section>`;
 }
 
-function taskHtml(t, i) {
-  const steps = t.steps || [];
-  const doneSteps = steps.filter((s) => s.completed).length;
-  return `<article class="task p-${t.priority}" data-id="${t.id}" draggable="true" tabindex="0"
-      style="--i:${i}" aria-label="${esc(t.title)}">
-    <button class="tick" data-act="toggle" aria-label="Mark done">${icon('check', 13)}</button>
-    <div class="t-body">
+const emptyHtml = (b) => `<div class="empty">${
+  b.id === 'today' ? 'Nothing planned for today' : 'Empty'}</div>`;
+
+/**
+ * The card. Metadata sits directly under the title as ONE dot-separated line,
+ * so title and context read as a single unit rather than the title floating
+ * above an isolated corner label. Nothing empty is rendered — a card with no
+ * area, date or steps simply has no second line and is shorter for it.
+ */
+function taskHtml(t) {
+  const steps = t.steps ?? [];
+  const done = steps.filter((s) => s.completed).length;
+  const bits = [];
+  if (t.areaId) bits.push(`<span class="tm-area">${esc(areaName(t.areaId))}</span>`);
+  if (t.dueDate) bits.push(`<span class="tm-due">${esc(fmtDate(t.dueDate))}</span>`);
+  if (t.scheduledAt) bits.push(`<span>${esc(fmtTime(t.scheduledAt))}</span>`);
+  else if (t.legacyScheduledTimeRaw) {
+    bits.push(`<span class="tm-legacy" title="Time from the old app, kept as written">${esc(t.legacyScheduledTimeRaw)}</span>`);
+  }
+  if (steps.length) {
+    bits.push(`<span class="tm-steps ${done === steps.length ? 'is-all' : ''}">${done}/${steps.length} steps</span>`);
+  }
+
+  return `<article class="task pri-${t.priority}" data-id="${t.id}" draggable="true" tabindex="0"
+      aria-label="${esc(t.title)}">
+    <button class="t-tick" data-act="toggle" aria-label="Mark done"></button>
+    <div class="t-main">
       <button class="t-title" data-act="open" title="${esc(t.title)}">${esc(t.title)}</button>
-      <div class="t-meta">
-        ${t.dueDate ? `<span>${esc(fmtDate(t.dueDate))}</span>` : ''}
-        ${steps.length ? `<span>${doneSteps}/${steps.length} steps</span>` : ''}
-        ${t.areaId ? `<span class="t-area">${esc(areaName(t.areaId))}</span>` : ''}
-      </div>
+      ${bits.length ? `<div class="t-meta">${bits.join('<span class="tm-sep">·</span>')}</div>` : ''}
     </div>
     <div class="t-actions">
-      <button class="icon-btn" data-act="menu" aria-label="Move task" title="Move (M)">⇄</button>
-      <button class="icon-btn" data-act="open" aria-label="Open task" title="Open (Enter)">✎</button>
+      <button class="t-btn" data-act="back" aria-label="Move to previous bucket" title="Move earlier (Alt ←)">${icon('chevL', 16)}</button>
+      <button class="t-btn" data-act="fwd" aria-label="Move to next bucket" title="Move later (Alt →)">${icon('chevR', 16)}</button>
+      <button class="t-btn" data-act="menu" aria-label="More actions" title="More (M)">${icon('dots', 16)}</button>
+      <span class="t-grip" aria-hidden="true" title="Drag to move">${icon('grip', 16)}</span>
     </div>
-    <span class="grip" aria-hidden="true">⠿</span>
   </article>`;
 }
+
 const fmtDate = (iso) => new Date(`${iso}T12:00:00`)
   .toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-
-function wireHeaderCount() {
-  const btn = document.querySelector('.page-actions [data-route="history"]');
-  if (!btn || !state.historyTotal) return;
-  if (!btn.querySelector('.pa-count')) {
-    const b = document.createElement('span');
-    b.className = 'pa-count';
-    b.textContent = String(state.historyTotal);
-    btn.appendChild(b);
-  }
-}
-
-function wireHeader() {
-  document.querySelectorAll('.page-actions [data-route]').forEach((el) => {
-    el.onclick = () => go(el.dataset.route);
-  });
-}
+const fmtTime = (iso) => new Date(iso)
+  .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 function wireToday() {
-  document.getElementById('add').onclick = () => openDetail(null);
+  document.getElementById('add').onclick = () => openTask(null);
   document.querySelectorAll('[data-area]').forEach((el) => {
-    el.onclick = () => { setAreaFilter(el.dataset.area || null); };
+    el.onclick = () => setAreaFilter(el.dataset.area || null);
   });
-  wireTaskCards();
+  wireBoard();
 }
 
+/**
+ * Filtering re-renders the board, but through FLIP — cards that survive the
+ * filter glide to their new positions instead of the list blinking.
+ */
 function setAreaFilter(id) {
   state.areaFilter = id;
   if (state.route !== 'today') { go('today'); return; }
-  document.getElementById('main-scroll').innerHTML = todayHtml();
-  wireToday();
+  document.querySelectorAll('.chip[data-area]').forEach((c) => {
+    c.setAttribute('aria-pressed', String((c.dataset.area || null) === id));
+  });
+  flip(document.querySelectorAll('.task'), () => {
+    for (const b of BUCKETS) rebuildBucket(b.id);
+  });
+  wireBoard();
   renderRail();
 }
 
-function wireTaskCards() {
-  document.querySelectorAll('.task').forEach((el) => {
-    const id = el.dataset.id;
-    el.querySelectorAll('[data-act]').forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const act = b.dataset.act;
-        if (act === 'toggle') return run(() => toggleTask(id));
-        if (act === 'open') return openDetail(id);
-        if (act === 'menu') return openMoveMenu(id, b);
-      };
-    });
-    el.onkeydown = (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); openDetail(id); }
-      else if (e.key === ' ') { e.preventDefault(); run(() => toggleTask(id)); }
-      else if (e.key.toLowerCase() === 'm') { e.preventDefault(); openMoveMenu(id, el); }
-      else if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); run(() => nudge(id, -1)); }
-      else if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); run(() => nudge(id, 1)); }
-      else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); run(() => shiftBucket(id, -1)); }
-      else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); run(() => shiftBucket(id, 1)); }
-    };
-    el.ondragstart = (e) => { e.dataTransfer.setData('text/plain', id); el.classList.add('dragging'); };
-    el.ondragend = () => el.classList.remove('dragging');
-  });
+/** Replaces one bucket's rows. Used by filtering and by moves. */
+function rebuildBucket(bucketId) {
+  const drop = document.querySelector(`.drop[data-bucket="${bucketId}"]`);
+  if (!drop) return;
+  const list = inBucket(bucketId);
+  drop.classList.toggle('is-empty', list.length === 0);
+  drop.innerHTML = list.length
+    ? list.map((t) => taskHtml(t)).join('')
+    : emptyHtml(BUCKETS.find((b) => b.id === bucketId));
+  const badge = document.querySelector(`[data-count="${bucketId}"]`);
+  if (badge && badge.textContent !== String(list.length)) {
+    badge.textContent = String(list.length);
+    pulse(badge);
+  }
+}
 
+function wireBoard() {
+  document.querySelectorAll('.task').forEach(wireCard);
   document.querySelectorAll('.drop').forEach((zone) => {
     zone.ondragover = (e) => { e.preventDefault(); zone.classList.add('over'); };
     zone.ondragleave = () => zone.classList.remove('over');
     zone.ondrop = (e) => {
       e.preventDefault(); zone.classList.remove('over');
-      const id = e.dataTransfer.getData('text/plain'); if (!id) return;
+      const id = e.dataTransfer.getData('text/plain');
+      if (!id) return;
       const after = [...zone.querySelectorAll('.task:not(.dragging)')]
         .find((c) => e.clientY < c.getBoundingClientRect().top + c.offsetHeight / 2);
-      run(() => moveTask(id, zone.dataset.bucket, after ? { beforeTaskId: after.dataset.id } : {}));
+      moveTask(id, zone.dataset.bucket, after ? { beforeTaskId: after.dataset.id } : {});
     };
   });
 }
 
-/** Every movement path converges here: drag, menu, keyboard, touch. */
-async function moveTask(id, bucket, anchor = {}) {
-  await api(`/api/v1/workspaces/${ws()}/tasks/${id}/move`,
-    { method: 'POST', body: { bucket, ...anchor } });
-  await refreshToday();
-  document.querySelector(`.task[data-id="${id}"]`)?.focus();
+function wireCard(el) {
+  const id = el.dataset.id;
+  el.querySelectorAll('[data-act]').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const act = b.dataset.act;
+      if (act === 'toggle') return toggleTask(id);
+      if (act === 'open') return openTask(id);
+      if (act === 'menu') return openTaskMenu(id, b);
+      if (act === 'back') return shiftBucket(id, -1);
+      if (act === 'fwd') return shiftBucket(id, 1);
+    };
+  });
+  el.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); openTask(id); }
+    else if (e.key === ' ') { e.preventDefault(); toggleTask(id); }
+    else if (e.key.toLowerCase() === 'm') { e.preventDefault(); openTaskMenu(id, el); }
+    else if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); nudge(id, -1); }
+    else if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); nudge(id, 1); }
+    else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); shiftBucket(id, -1); }
+    else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); shiftBucket(id, 1); }
+  };
+  el.ondragstart = (e) => { e.dataTransfer.setData('text/plain', id); el.classList.add('dragging'); };
+  el.ondragend = () => el.classList.remove('dragging');
 }
+
+/* ══ Mutations — optimistic, targeted, never a rebuild ═══════════════════
+ *
+ * Each of these updates local state, patches the affected DOM, fires the API
+ * in the background, and rolls back if the server disagrees. `loadRoute` is
+ * never called, `main-scroll` is never replaced, and scroll and focus survive.
+ */
+
+/** Re-renders ONE card in place, preserving its DOM position. */
+function patchCard(id) {
+  const el = document.querySelector(`.task[data-id="${id}"]`);
+  const t = findTask(id);
+  if (!el || !t) return;
+  const wasFocused = el.contains(document.activeElement);
+  el.outerHTML = taskHtml(t);
+  const next = document.querySelector(`.task[data-id="${id}"]`);
+  if (next) { wireCard(next); if (wasFocused) next.focus(); }
+}
+
 async function toggleTask(id) {
   const t = findTask(id);
+  if (!t) return;
   const wasDone = t.status === 'done';
-  await api(`/api/v1/workspaces/${ws()}/tasks/${id}/${wasDone ? 'uncomplete' : 'complete'}`,
-    { method: 'POST' });
-  await refreshToday();
-  toast(wasDone ? 'Moved back to active' : 'Done — moved to History');
+  const card = document.querySelector(`.task[data-id="${id}"]`);
+  const bucket = t.bucket;
+
+  // Completing removes it from the board — collapse the row so the cards
+  // below close the gap rather than jumping.
+  const apply = () => {
+    state.tasks = state.tasks.filter((x) => x.id !== id);
+    rebuildBucket(bucket);
+    wireBoard();
+    renderRail();
+  };
+  if (card && !wasDone) collapseOut(card, apply); else apply();
+
+  try {
+    await api(`/api/v1/workspaces/${ws()}/tasks/${id}/${wasDone ? 'uncomplete' : 'complete'}`,
+      { method: 'POST' });
+    state.historyTotal += wasDone ? -1 : 1;
+    saved(wasDone ? 'Moved back to active' : 'Done');
+  } catch (e) {
+    // Put it back exactly where it was.
+    state.tasks.push(t);
+    flip(document.querySelectorAll('.task'), () => { rebuildBucket(bucket); });
+    wireBoard(); renderRail();
+    toast(e.message, true);
+  }
 }
-async function nudge(id, dir) {
+
+async function moveTask(id, bucket, anchor = {}) {
+  const t = findTask(id);
+  if (!t) return;
+  const before = { bucket: t.bucket, position: t.position };
+  const from = t.bucket;
+
+  // Predict the landing position so the optimistic order matches the server's.
+  const target = inBucket(bucket).filter((x) => x.id !== id);
+  let pos;
+  if (anchor.beforeTaskId) {
+    const i = target.findIndex((x) => x.id === anchor.beforeTaskId);
+    const prev = i > 0 ? target[i - 1].position : 0;
+    pos = (prev + (target[i]?.position ?? prev + 2000)) / 2;
+  } else if (anchor.afterTaskId) {
+    const i = target.findIndex((x) => x.id === anchor.afterTaskId);
+    const next = target[i + 1]?.position;
+    pos = next ? (target[i].position + next) / 2 : target[i].position + 1000;
+  } else {
+    pos = (target[target.length - 1]?.position ?? 0) + 1000;
+  }
+
+  flip(document.querySelectorAll('.task'), () => {
+    t.bucket = bucket; t.position = pos;
+    rebuildBucket(from);
+    if (bucket !== from) rebuildBucket(bucket);
+  });
+  wireBoard(); renderRail();
+  document.querySelector(`.task[data-id="${id}"]`)?.focus();
+
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/tasks/${id}/move`,
+      { method: 'POST', body: { bucket, ...anchor } });
+    // Adopt the server's real position without moving anything visually.
+    t.position = r.task.position;
+    saved('Moved');
+  } catch (e) {
+    flip(document.querySelectorAll('.task'), () => {
+      Object.assign(t, before);
+      rebuildBucket(from);
+      if (bucket !== from) rebuildBucket(bucket);
+    });
+    wireBoard(); renderRail();
+    toast(e.message, true);
+  }
+}
+
+function nudge(id, dir) {
   const t = findTask(id);
   const list = inBucket(t.bucket);
   const target = list[list.findIndex((x) => x.id === id) + dir];
   if (!target) return;
-  await moveTask(id, t.bucket, dir < 0 ? { beforeTaskId: target.id } : { afterTaskId: target.id });
-}
-async function shiftBucket(id, dir) {
-  const t = findTask(id);
-  const next = BUCKETS[BUCKETS.findIndex((b) => b.id === t.bucket) + dir];
-  if (!next) return;
-  await moveTask(id, next.id);
-  toast(`Moved to ${next.label}`);
-}
-async function refreshToday() {
-  await loadTasks();
-  if (state.route === 'today') {
-    document.getElementById('main-scroll').innerHTML = todayHtml();
-    wireToday();
-  }
-  renderRail();
+  moveTask(id, t.bucket, dir < 0 ? { beforeTaskId: target.id } : { afterTaskId: target.id });
 }
 
-/* ── Move menu: the path that never needs drag ───────────────────────── */
-function openMoveMenu(id, anchorEl) {
+function shiftBucket(id, dir) {
+  const t = findTask(id);
+  const i = BUCKETS.findIndex((b) => b.id === t.bucket);
+  const next = BUCKETS[i + dir];
+  if (!next) return;
+  moveTask(id, next.id);
+}
+
+/** The quiet save indicator — silent by default, only ever a whisper. */
+let saveTimer;
+function saved(msg = 'Saved') {
+  let el = document.getElementById('save-state');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'save-state';
+    el.className = 'save-state';
+    el.setAttribute('role', 'status');
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('is-on');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => el.classList.remove('is-on'), 1600);
+}
+
+/* ── Task overflow menu ──────────────────────────────────────────────── */
+function openTaskMenu(id, anchorEl) {
   closeMenu();
   const t = findTask(id);
   const r = anchorEl.getBoundingClientRect();
   const m = document.createElement('div');
-  m.className = 'menu'; m.setAttribute('role', 'menu');
+  m.className = 'menu';
+  m.setAttribute('role', 'menu');
   m.innerHTML = `<div class="menu-label">Move to</div>
     ${BUCKETS.map((b) => `<button role="menuitem" data-b="${b.id}" ${b.id === t.bucket ? 'disabled' : ''}>
       <span>${b.label}</span>${b.id === t.bucket ? '<kbd>current</kbd>' : ''}</button>`).join('')}
     <div class="menu-label">Order</div>
     <button role="menuitem" data-o="top"><span>Move to top</span><kbd>Alt ↑</kbd></button>
-    <button role="menuitem" data-o="bottom"><span>Move to bottom</span><kbd>Alt ↓</kbd></button>`;
+    <button role="menuitem" data-o="bottom"><span>Move to bottom</span><kbd>Alt ↓</kbd></button>
+    <div class="am-sep"></div>
+    <button role="menuitem" data-x="open"><span>Open task</span><kbd>↵</kbd></button>`;
   document.body.appendChild(m);
-  m.style.left = `${Math.max(8, Math.min(r.left, innerWidth - m.offsetWidth - 12))}px`;
+  m.style.left = `${Math.max(8, Math.min(r.left - 140, innerWidth - m.offsetWidth - 12))}px`;
   m.style.top = `${Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 12)}px`;
 
   m.querySelectorAll('button').forEach((b) => {
     b.onclick = () => {
       closeMenu();
-      if (b.dataset.b) return run(() => moveTask(id, b.dataset.b));
+      if (b.dataset.x === 'open') return openTask(id);
+      if (b.dataset.b) return moveTask(id, b.dataset.b);
       const list = inBucket(t.bucket).filter((x) => x.id !== id);
       if (!list.length) return;
-      run(() => moveTask(id, t.bucket, b.dataset.o === 'top'
-        ? { beforeTaskId: list[0].id } : { afterTaskId: list[list.length - 1].id }));
+      moveTask(id, t.bucket, b.dataset.o === 'top'
+        ? { beforeTaskId: list[0].id } : { afterTaskId: list[list.length - 1].id });
     };
   });
   m.querySelector('button:not([disabled])')?.focus();
@@ -743,62 +875,106 @@ function openMoveMenu(id, anchorEl) {
 }
 function closeMenu() { state.menu?.remove(); state.menu = null; }
 
-/* ── History ─────────────────────────────────────────────────────────── */
-function historyHtml() {
-  const shown = state.history.length;
-  const more = shown < state.historyTotal;
-  const rows = state.history.map((t, i) => {
-    const when = t.completedAt
-      ? new Date(t.completedAt).toLocaleDateString(undefined,
-        { day: 'numeric', month: 'short', year: 'numeric' })
-      : 'date unknown';
-    const steps = t.steps || [];
-    return `<div class="hist-row" data-id="${t.id}" tabindex="0" role="button"
-        style="--i:${i}" aria-label="${esc(t.title)}">
-      <span class="hist-tick" aria-hidden="true">${icon('check', 13)}</span>
-      <span class="hist-title">${esc(t.title)}</span>
-      <span class="hist-meta">
-        ${steps.length ? `<span>${steps.filter((s) => s.completed).length}/${steps.length} steps</span>` : ''}
-        ${t.areaId ? `<span class="t-area">${esc(areaName(t.areaId))}</span>` : ''}
-        <span class="hist-when${t.completedAt ? '' : ' unknown'}">${esc(when)}</span>
-      </span></div>`;
-  }).join('');
-
-  return `<section class="history">
-    <div class="bucket-head"><h2>Completed</h2><span class="bucket-count">${state.historyTotal}</span></div>
-    ${shown ? `<div class="hist-list stagger">${rows}</div>`
-      : '<div class="empty"><b>Nothing completed yet</b>Finished work collects here.</div>'}
-    ${more ? `<button class="btn" id="hist-more" style="margin-top:14px">
-        Show ${Math.min(HISTORY_PAGE, state.historyTotal - shown)} more
-        <span style="color:var(--muted)"> · ${shown} of ${state.historyTotal}</span></button>`
-      : shown ? `<p class="hist-end">That is all ${state.historyTotal}.</p>` : ''}
-  </section>`;
-}
-
-function wireHistory() {
-  document.getElementById('hist-more')?.addEventListener('click', () => run(async () => {
-    await loadHistory();
-    document.getElementById('main-scroll').innerHTML = historyHtml();
-    wireHistory();
-  }));
-  document.querySelectorAll('.hist-row').forEach((el) => {
-    const open = () => openDetail(el.dataset.id, true);
-    el.onclick = open;
-    el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+/* ── Task modal ──────────────────────────────────────────────────────── */
+function openTask(id, prefillTitle = '') {
+  const t = id ? findTask(id) : null;
+  const ctl = openTaskModal({
+    task: t,
+    areas: state.me.areas,
+    prefillTitle,
+    onSave: async (body) => {
+      if (t) {
+        const before = { ...t };
+        Object.assign(t, body);
+        const bucketChanged = before.bucket !== body.bucket;
+        if (bucketChanged) {
+          flip(document.querySelectorAll('.task'), () => {
+            rebuildBucket(before.bucket); rebuildBucket(body.bucket);
+          });
+          wireBoard();
+        } else patchCard(t.id);
+        renderRail();
+        try {
+          await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}`, { method: 'PATCH', body });
+          saved();
+        } catch (e) {
+          Object.assign(t, before);
+          rebuildBucket(before.bucket); rebuildBucket(body.bucket);
+          wireBoard(); renderRail();
+          throw e;
+        }
+      } else {
+        const r = await api(`/api/v1/workspaces/${ws()}/tasks`, { method: 'POST', body });
+        state.tasks.push({ ...r.task, steps: [] });
+        flip(document.querySelectorAll('.task'), () => rebuildBucket(body.bucket));
+        wireBoard(); renderRail();
+        saved('Task created');
+      }
+    },
+    onToggle: () => toggleTask(t.id),
+    onArchive: async () => {
+      const bucket = t.bucket;
+      state.tasks = state.tasks.filter((x) => x.id !== t.id);
+      rebuildBucket(bucket); wireBoard(); renderRail();
+      try {
+        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/archive`, { method: 'POST' });
+        saved('Archived');
+      } catch (e) { toast(e.message, true); }
+    },
+    onDelete: async () => {
+      const bucket = t.bucket;
+      state.tasks = state.tasks.filter((x) => x.id !== t.id);
+      rebuildBucket(bucket); wireBoard(); renderRail();
+      try {
+        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}`, { method: 'DELETE' });
+        saved('Deleted');
+      } catch (e) { toast(e.message, true); }
+    },
+    steps: {
+      add: async (title) => {
+        const r = await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps`,
+          { method: 'POST', body: { title } });
+        t.steps = [...(t.steps ?? []), r.step ?? { id: r.id, title, completed: false }];
+        ctl.close(true); patchCard(t.id); openTask(t.id);
+      },
+      toggle: async (sid, completed) => {
+        const s = t.steps.find((x) => x.id === sid);
+        if (s) s.completed = completed;
+        ctl.close(true); patchCard(t.id); openTask(t.id);
+        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps/${sid}`,
+          { method: 'PATCH', body: { completed } });
+        saved();
+      },
+      rename: async (sid, title) => {
+        const s = t.steps.find((x) => x.id === sid);
+        if (s) s.title = title;
+        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps/${sid}`,
+          { method: 'PATCH', body: { title } });
+        saved();
+      },
+      remove: async (sid) => {
+        t.steps = t.steps.filter((x) => x.id !== sid);
+        ctl.close(true); patchCard(t.id); openTask(t.id);
+        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps/${sid}`, { method: 'DELETE' });
+        saved();
+      },
+    },
   });
 }
 
 /* ── Right rail ──────────────────────────────────────────────────────────
- * One question: what needs my attention next, and what can I act on quickly?
+ * Two things only: what to do next, and today's habits.
  *
- * Not a dashboard. Counts already visible in Today are not repeated here — a
- * number earns a card only if it changes a decision.
+ * Quick Capture was removed — "Add task" already exists two feet away, task
+ * creation was never the hard part, and the future composer is the real
+ * natural-language capture path. A second form was noise.
+ *
+ * Space below Habits is deliberately left empty. It is where Upcoming
+ * (calendar + reminders) lands, and filling it now with something invented
+ * would be worse than an honest gap.
  */
 
-/**
- * Deterministic and explainable. Every branch returns WHY it was chosen, so the
- * card can say so rather than looking arbitrary.
- */
+/** Deterministic and explainable — each branch returns the reason it chose. */
 export function pickUpNext(tasks) {
   const active = tasks.filter((t) => t.status !== 'done');
   if (!active.length) return null;
@@ -830,7 +1006,7 @@ function renderRail() {
   const now = new Date();
   const next = pickUpNext(state.tasks);
   const hs = state.habits ?? [];
-  const due = hs.filter((h) => h.dueToday);
+  const due = hs.filter((h) => h.dueToday && !h.archivedAt);
   const doneCount = due.filter((h) => h.completedToday).length;
 
   rail.innerHTML = `
@@ -845,11 +1021,11 @@ function renderRail() {
         <div class="un-why">${esc(next.why)}</div>
         <button class="un-title" data-un-open="${next.task.id}">${esc(next.task.title)}</button>
         <div class="un-meta">
-          ${next.task.areaId ? `<span class="t-area">${esc(areaName(next.task.areaId))}</span>` : ''}
+          ${next.task.areaId ? `<span class="tm-area">${esc(areaName(next.task.areaId))}</span>` : ''}
           ${next.task.priority !== 'medium'
             ? `<span class="un-pri pri-${next.task.priority}">${esc(next.task.priority)}</span>` : ''}
           ${next.task.legacyScheduledTimeRaw
-            ? `<span class="un-legacy" title="Kept exactly as written in the old app">${esc(next.task.legacyScheduledTimeRaw)}</span>`
+            ? `<span class="tm-legacy" title="Time from the old app, kept as written">${esc(next.task.legacyScheduledTimeRaw)}</span>`
             : ''}
         </div>
         <div class="un-actions">
@@ -860,86 +1036,69 @@ function renderRail() {
     </div>
 
     <div class="rail-card habits-card">
-      <h3>Habits today${due.length ? ` <span class="hb-count">${doneCount}/${due.length}</span>` : ''}</h3>
+      <h3>Habits today${due.length ? ` <span class="hb-count">${doneCount}/${due.length}</span>` : ''}
+        <button class="hb-add" id="hb-add" aria-label="Add a habit" title="Add a habit">+</button></h3>
       ${!state.habitsLoaded ? '<p class="rail-quiet">Loading…</p>'
         : state.habitsError ? `<p class="rail-quiet" style="color:var(--danger)">
              Could not load habits.<br><span style="color:var(--muted)">${esc(state.habitsError)}</span>
              <button class="rail-link" id="hb-retry">Try again</button></p>`
         : due.length ? `<div class="hb-list">${due.map(habitRowHtml).join('')}</div>`
-        : hs.length ? `<p class="rail-quiet">Nothing due today.
-             <button class="rail-link" data-rail-nav="settings">Manage habits →</button></p>`
-        : `<p class="rail-quiet">No habits yet.
-             <button class="rail-link" data-rail-nav="settings">Add one in Settings →</button></p>`}
-    </div>
-
-    <div class="rail-card qc-card">
-      <h3>Quick capture</h3>
-      <form class="qc-form" id="qc-form" autocomplete="off">
-        <input class="qc-input" id="qc-title" placeholder="What needs doing?" aria-label="Task title">
-        <div class="qc-row">
-          <select class="qc-sel" id="qc-bucket" aria-label="When">
-            ${BUCKETS.map((b) => `<option value="${b.id}">${b.label}</option>`).join('')}
-          </select>
-          <select class="qc-sel" id="qc-area" aria-label="Area">
-            <option value="">No area</option>
-            ${state.me.areas.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="qc-actions">
-          <button class="btn btn-primary" type="submit">Add task</button>
-          <button class="btn btn-ghost" type="button" id="qc-full">More detail…</button>
-        </div>
-      </form>
+        : hs.length ? '<p class="rail-quiet">Nothing due today.</p>'
+        : '<p class="rail-quiet">No habits yet. Add one to start building a streak.</p>'}
     </div>`;
 
   wireRail();
 }
 
-const habitRowHtml = (h) => `<div class="hb-row ${h.completedToday ? 'is-done' : ''}" data-habit="${h.id}">
-  <button class="hb-tick" data-habit-toggle="${h.id}" aria-pressed="${h.completedToday}"
-    aria-label="${h.completedToday ? 'Undo' : 'Complete'} ${esc(h.name)}">${h.completedToday ? icon('check', 13) : ''}</button>
-  <span class="hb-name">${esc(h.name)}</span>
-  ${h.targetCount > 1 ? `<span class="hb-prog">${h.todayCount}/${h.targetCount}</span>` : ''}
-  ${h.streak > 1 ? `<span class="hb-streak" title="${h.streak} day streak">${h.streak}d</span>` : ''}
-</div>`;
+/**
+ * The habit row: an animated ring, the name, and the streak.
+ *
+ * The ring is an SVG circle whose stroke-dashoffset carries the progress, so a
+ * multi-count habit shows partial fill rather than an all-or-nothing tick. The
+ * circumference is computed once (2πr for r=13) and lives in a CSS variable.
+ */
+const RING_C = 81.68;   // 2 * PI * 13
+
+function habitRowHtml(h) {
+  const pct = h.targetCount > 1 ? Math.min(1, (h.todayCount ?? 0) / h.targetCount)
+    : (h.completedToday ? 1 : 0);
+  const offset = RING_C * (1 - pct);
+  return `<div class="hb-row ${h.completedToday ? 'is-done' : ''}" data-habit="${h.id}">
+    <button class="hb-ring" data-habit-toggle="${h.id}" aria-pressed="${h.completedToday}"
+      aria-label="${h.completedToday ? 'Undo' : 'Complete'} ${esc(h.name)}">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <circle class="hr-track" cx="16" cy="16" r="13"/>
+        <circle class="hr-fill" cx="16" cy="16" r="13"
+          style="stroke-dasharray:${RING_C};stroke-dashoffset:${offset.toFixed(2)}"/>
+      </svg>
+      <span class="hr-mark">${icon('check', 13)}</span>
+    </button>
+    <button class="hb-name" data-habit-open="${h.id}" title="Edit ${esc(h.name)}">${esc(h.name)}</button>
+    ${h.targetCount > 1 ? `<span class="hb-prog">${h.todayCount ?? 0}/${h.targetCount}</span>` : ''}
+    <span class="hb-streak ${h.streak > 0 ? 'is-live' : ''}"
+      title="${h.streak > 0 ? `${h.streak} day streak` : 'No streak yet — today can start one'}">
+      ${h.streak > 0 ? `${h.streak}<span class="hs-unit">d</span>` : '—'}</span>
+  </div>`;
+}
 
 function wireRail() {
   const rail = document.getElementById('rail');
-  rail.querySelectorAll('[data-rail-nav]').forEach((el) => { el.onclick = () => go(el.dataset.railNav); });
   rail.querySelector('[data-un-open]')?.addEventListener('click',
-    (e) => openDetail(e.currentTarget.dataset.unOpen));
+    (e) => openTask(e.currentTarget.dataset.unOpen));
   rail.querySelector('[data-un-done]')?.addEventListener('click',
-    (e) => run(() => toggleTask(e.currentTarget.dataset.unDone)));
+    (e) => toggleTask(e.currentTarget.dataset.unDone));
   rail.querySelector('[data-un-defer]')?.addEventListener('click',
-    (e) => run(() => shiftBucket(e.currentTarget.dataset.unDefer, 1)));
+    (e) => shiftBucket(e.currentTarget.dataset.unDefer, 1));
 
   rail.querySelector('#hb-retry')?.addEventListener('click',
     () => run(async () => { await loadHabits(); renderRail(); }));
+  rail.querySelector('#hb-add')?.addEventListener('click', () => editHabit(null));
+
   rail.querySelectorAll('[data-habit-toggle]').forEach((el) => {
     el.onclick = () => toggleHabit(el.dataset.habitToggle);
   });
-
-  rail.querySelector('#qc-form')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    run(async () => {
-      const input = rail.querySelector('#qc-title');
-      const title = input.value.trim();
-      if (!title) return;
-      await api(`/api/v1/workspaces/${ws()}/tasks`, {
-        method: 'POST',
-        body: {
-          title,
-          bucket: rail.querySelector('#qc-bucket').value,
-          areaId: rail.querySelector('#qc-area').value || null,
-        },
-      });
-      await refreshToday();
-      document.getElementById('qc-title')?.focus();
-      toast('Task added');
-    });
-  });
-  rail.querySelector('#qc-full')?.addEventListener('click', () => {
-    openDetail(null, false, rail.querySelector('#qc-title').value.trim());
+  rail.querySelectorAll('[data-habit-open]').forEach((el) => {
+    el.onclick = () => editHabit(el.dataset.habitOpen);
   });
 }
 
@@ -947,13 +1106,10 @@ function wireRail() {
 async function loadHabits() {
   state.habitsError = null;
   try {
-    const r = await api(`/api/v1/workspaces/${ws()}/habits`);
+    const r = await api(`/api/v1/workspaces/${ws()}/habits?includeArchived=true&historyDays=14`);
     state.habits = r.habits ?? [];
   } catch (e) {
-    // A habits failure must not take Today down — but it must NOT masquerade
-    // as "you have no habits" either. Swallowing this made a real failure
-    // indistinguishable from an empty state, which is precisely the kind of
-    // dishonest UI this app avoids everywhere else.
+    // Must not take Today down — and must NOT masquerade as "no habits".
     state.habits = [];
     state.habitsError = e.message;
     console.error('[habits] load failed:', e);
@@ -961,10 +1117,27 @@ async function loadHabits() {
   state.habitsLoaded = true;
 }
 
-/**
- * Optimistic: the tick flips immediately and rolls back if the server
- * disagrees. Waiting on a round-trip for a checkbox feels broken.
- */
+/** Patches ONE habit row rather than re-rendering the rail. */
+function patchHabitRow(id) {
+  const row = document.querySelector(`.hb-row[data-habit="${id}"]`);
+  const h = (state.habits ?? []).find((x) => x.id === id);
+  if (!row || !h) return renderRail();
+  const keepFocus = row.contains(document.activeElement);
+  row.outerHTML = habitRowHtml(h);
+  const next = document.querySelector(`.hb-row[data-habit="${id}"]`);
+  next?.querySelector('[data-habit-toggle]')?.addEventListener('click', () => toggleHabit(id));
+  next?.querySelector('[data-habit-open]')?.addEventListener('click', () => editHabit(id));
+  if (keepFocus) next?.querySelector('[data-habit-toggle]')?.focus();
+  // Keep the header tally honest without redrawing the card.
+  const due = (state.habits ?? []).filter((x) => x.dueToday && !x.archivedAt);
+  const badge = document.querySelector('.hb-count');
+  if (badge) {
+    const text = `${due.filter((x) => x.completedToday).length}/${due.length}`;
+    if (badge.textContent !== text) { badge.textContent = text; pulse(badge); }
+  }
+}
+
+/** Optimistic tick with rollback. A checkbox must never wait on a round trip. */
 async function toggleHabit(id) {
   const h = (state.habits ?? []).find((x) => x.id === id);
   if (!h) return;
@@ -973,19 +1146,81 @@ async function toggleHabit(id) {
   h.completedToday = goingDone;
   h.todayCount = goingDone ? h.targetCount : 0;
   h.streak = goingDone ? (h.streak ?? 0) + 1 : Math.max(0, (h.streak ?? 1) - 1);
-  renderRail();
+  patchHabitRow(id);
+  if (goingDone) celebrateHabit(id);
 
   try {
     const r = await api(`/api/v1/workspaces/${ws()}/habits/${id}/${goingDone ? 'check' : 'uncheck'}`,
       { method: 'POST', body: goingDone ? { count: h.targetCount } : {} });
     h.todayCount = r.completedCount;
     h.completedToday = r.completed;
-    renderRail();
+    patchHabitRow(id);
   } catch (e) {
     Object.assign(h, before);
-    renderRail();
+    patchHabitRow(id);
     toast(e.message, true);
   }
+}
+
+/** A single restrained pulse on completion. No confetti, no bounce. */
+function celebrateHabit(id) {
+  if (reducedMotion()) return;
+  const ring = document.querySelector(`.hb-row[data-habit="${id}"] .hb-ring`);
+  ring?.animate(
+    [{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }],
+    { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' },
+  );
+}
+
+/** Recent-history dots for the habit modal, oldest first. */
+function recentDays(h) {
+  const done = new Set((h.recentDates ?? []));
+  const out = [];
+  const d = new Date();
+  for (let i = 13; i >= 0; i--) {
+    const day = new Date(d);
+    day.setDate(d.getDate() - i);
+    const iso = day.toISOString().slice(0, 10);
+    out.push({
+      done: done.has(iso) || (i === 0 && h.completedToday),
+      label: day.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }),
+    });
+  }
+  return out;
+}
+
+function editHabit(id) {
+  const h = id ? (state.habits ?? []).find((x) => x.id === id) : null;
+  openHabitModal({
+    habit: h,
+    areas: state.me.areas,
+    recent: h ? recentDays(h) : [],
+    onSave: async (body) => {
+      if (h) {
+        await api(`/api/v1/workspaces/${ws()}/habits/${h.id}`, { method: 'PATCH', body });
+      } else {
+        await api(`/api/v1/workspaces/${ws()}/habits`, { method: 'POST', body });
+      }
+      await loadHabits(); renderRail();
+      saved(h ? 'Habit saved' : 'Habit added');
+    },
+    onArchive: async () => {
+      await api(`/api/v1/workspaces/${ws()}/habits/${h.id}`, { method: 'DELETE' });
+      await loadHabits(); renderRail();
+      saved('Archived. Its history was kept.');
+    },
+    onRestore: async () => {
+      await api(`/api/v1/workspaces/${ws()}/habits/${h.id}`,
+        { method: 'PATCH', body: { isActive: true } });
+      await loadHabits(); renderRail();
+      saved('Restored');
+    },
+    onDelete: async () => {
+      await api(`/api/v1/workspaces/${ws()}/habits/${h.id}?permanent=true`, { method: 'DELETE' });
+      await loadHabits(); renderRail();
+      saved('Deleted');
+    },
+  });
 }
 
 /* ── Placeholders ────────────────────────────────────────────────────── */
@@ -1119,118 +1354,5 @@ function renderSettings() {
   document.getElementById('main-scroll').innerHTML = settingsHtml(state);
   wireSettings();
 }
-
-/* ── Task detail ─────────────────────────────────────────────────────── */
-function openDetail(id, fromHistory = false, prefillTitle = '') {
-  const t = id ? (fromHistory ? state.history.find((x) => x.id === id) : findTask(id)) : null;
-  const scrim = document.createElement('div'); scrim.className = 'scrim';
-  const p = document.createElement('aside');
-  p.className = 'panel'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-modal', 'true');
-  p.innerHTML = `
-    <h3>${t ? 'Task' : 'New task'}</h3>
-    <div class="field"><label for="d-title">Title</label>
-      <input id="d-title" class="input" value="${esc(t?.title || prefillTitle)}" placeholder="What needs doing?"></div>
-    <div class="row">
-      <div class="field"><label for="d-bucket">When</label>
-        <select id="d-bucket" class="sel">${BUCKETS.map((b) =>
-          `<option value="${b.id}" ${t?.bucket === b.id ? 'selected' : ''}>${b.label}</option>`).join('')}</select></div>
-      <div class="field"><label for="d-priority">Priority</label>
-        <select id="d-priority" class="sel">${PRIORITIES.map((x) =>
-          `<option value="${x}" ${(t?.priority || 'medium') === x ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}</select></div>
-    </div>
-    <div class="row">
-      <div class="field"><label for="d-area">Area</label>
-        <select id="d-area" class="sel"><option value="">No area</option>
-          ${state.me.areas.map((a) => `<option value="${a.id}" ${t?.areaId === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
-      <div class="field"><label for="d-due">Due date</label>
-        <input id="d-due" class="input" type="date" value="${t?.dueDate || ''}"></div>
-    </div>
-    <div class="field"><label for="d-notes">Notes</label>
-      <textarea id="d-notes" class="ta" placeholder="Anything worth remembering">${esc(t?.notes || '')}</textarea></div>
-    ${t?.legacyScheduledTimeRaw ? `<div class="field"><label>Legacy time</label>
-      <div class="input" style="color:var(--text-2)">${esc(t.legacyScheduledTimeRaw)}
-        <span style="color:var(--muted);font-size:11px"> · kept exactly as written</span></div></div>` : ''}
-    ${t ? `<div class="field"><label>Steps</label>
-      <div class="steps" id="d-steps">${(t.steps || []).map(stepHtml).join('')
-        || '<div class="empty" style="padding:8px">No steps yet.</div>'}</div>
-      <div class="row"><input id="d-step" class="input" placeholder="Add a step…"><button class="btn" id="d-step-add">Add</button></div>
-    </div>` : ''}
-    <div class="panel-foot">
-      <button class="btn btn-primary" id="d-save">${t ? 'Save' : 'Create task'}</button>
-      ${t ? `<button class="btn" id="d-archive">Archive</button>
-        <button class="btn btn-danger" id="d-del" style="margin-left:auto">Delete</button>` : ''}
-    </div>`;
-
-  document.body.append(scrim, p);
-  function onEsc(e) { if (e.key === 'Escape') close(); }
-  const close = () => { scrim.remove(); p.remove(); document.removeEventListener('keydown', onEsc); };
-  scrim.onclick = close;
-  document.addEventListener('keydown', onEsc);
-  p.querySelector('#d-title').focus();
-
-  const after = async () => {
-    close();
-    if (state.route === 'history') {
-      await loadHistory(true);
-      document.getElementById('main-scroll').innerHTML = historyHtml();
-      wireHistory();
-      await loadTasks(); renderRail();
-    } else {
-      await refreshToday();
-    }
-  };
-
-  p.querySelector('#d-save').onclick = () => run(async () => {
-    const body = {
-      title: p.querySelector('#d-title').value.trim(),
-      bucket: p.querySelector('#d-bucket').value,
-      priority: p.querySelector('#d-priority').value,
-      areaId: p.querySelector('#d-area').value || null,
-      dueDate: p.querySelector('#d-due').value || null,
-      notes: p.querySelector('#d-notes').value || null,
-    };
-    if (!body.title) return toast('A title is needed.', true);
-    if (t) await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}`, { method: 'PATCH', body });
-    else await api(`/api/v1/workspaces/${ws()}/tasks`, { method: 'POST', body });
-    await after();
-    toast(t ? 'Saved' : 'Task created');
-  });
-
-  if (t) {
-    p.querySelector('#d-archive').onclick = () => run(async () => {
-      await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/archive`, { method: 'POST' });
-      await after(); toast('Archived');
-    });
-    p.querySelector('#d-del').onclick = () => run(async () => {
-      if (!confirm('Delete this task permanently?')) return;
-      await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}`, { method: 'DELETE' });
-      await after(); toast('Deleted');
-    });
-    const reopen = async () => { const wasHistory = fromHistory; await after(); openDetail(t.id, wasHistory); };
-    const addStep = () => run(async () => {
-      const input = p.querySelector('#d-step');
-      const title = input.value.trim(); if (!title) return;
-      await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps`, { method: 'POST', body: { title } });
-      await reopen();
-    });
-    p.querySelector('#d-step-add').onclick = addStep;
-    p.querySelector('#d-step').onkeydown = (e) => { if (e.key === 'Enter') addStep(); };
-    p.querySelectorAll('.step').forEach((rowEl) => {
-      const sid = rowEl.dataset.id;
-      rowEl.querySelector('input').onchange = (e) => run(async () => {
-        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps/${sid}`,
-          { method: 'PATCH', body: { completed: e.target.checked } });
-        await reopen();
-      });
-      rowEl.querySelector('button').onclick = () => run(async () => {
-        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps/${sid}`, { method: 'DELETE' });
-        await reopen();
-      });
-    });
-  }
-}
-const stepHtml = (s) => `<div class="step ${s.completed ? 'done' : ''}" data-id="${s.id}">
-  <input type="checkbox" ${s.completed ? 'checked' : ''} aria-label="Step done">
-  <span>${esc(s.title)}</span><button aria-label="Delete step">×</button></div>`;
 
 initAuth();

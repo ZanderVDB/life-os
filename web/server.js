@@ -139,19 +139,27 @@ const server = createServer(async (req, res) => {
     const body = await readFile(file);
     const ext = extname(file);
     /**
-     * HTML and JS are served no-cache.
+     * HTML, JS and JSON are served `no-store`, not `no-cache`.
      *
-     * These filenames are stable — there is no content hash in them — so a
-     * cached `app.js` keeps running against a redeployed API until it expires.
-     * Five minutes of that is five minutes of confusing, unreproducible bugs.
-     * The files are a few kilobytes; revalidating them costs nothing worth
-     * having. Images and fonts, whose content does not change under a given
-     * name, can still be cached.
+     * These filenames carry no content hash, so a cached `app.js` keeps
+     * running against a redeployed API. `no-cache` is meant to force
+     * revalidation, but it only works if the response carries a validator —
+     * and these have no ETag or Last-Modified, so browsers were free to serve
+     * them from memory anyway. That produced the exact symptom the version
+     * indicator then hid: a fresh `config.js` reporting the new build while a
+     * stale `app.js` ran underneath it.
+     *
+     * `no-store` forbids keeping a copy at all. These files are a few
+     * kilobytes; re-fetching them costs far less than a class of bug that
+     * looks like "the deploy did not work".
+     *
+     * Images and fonts keep their cache — their content genuinely does not
+     * change under a given name.
      */
-    const revalidate = ext === '.html' || ext === '.js' || ext === '.json';
+    const mutable = ext === '.html' || ext === '.js' || ext === '.json';
     res.writeHead(200, {
       'content-type': TYPES[ext] ?? 'application/octet-stream',
-      'cache-control': revalidate ? 'no-cache' : 'public, max-age=300',
+      'cache-control': mutable ? 'no-store' : 'public, max-age=300',
       'x-content-type-options': 'nosniff',
       'referrer-policy': 'strict-origin-when-cross-origin',
     });
