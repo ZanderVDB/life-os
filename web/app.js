@@ -14,6 +14,7 @@ import { flip, pulse, collapseOut, reducedMotion } from './motion.js';
 import { openTaskModal } from './task-modal.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
+import { initDrag, isDragging } from './drag.js';
 import { settingsHtml } from './settings.js';
 
 const CFG = window.LIFE_OS_CONFIG;
@@ -200,6 +201,12 @@ async function boot() {
     .then((r) => { state.historyTotal = r.total; })
     .catch(() => {});
   initStars();
+  // One drag system for mouse, pen and touch. `settled: true` because the
+  // placeholder already put the card in its final slot before release.
+  initDrag({
+    getScrollRoot: () => document.getElementById('main-scroll'),
+    onDrop: (id, bucket, anchor) => moveTask(id, bucket, anchor, { settled: true }),
+  });
   initServiceWorker();
 }
 
@@ -606,7 +613,7 @@ function taskHtml(t) {
     bits.push(`<span class="tm-steps ${done === steps.length ? 'is-all' : ''}">${done}/${steps.length} steps</span>`);
   }
 
-  return `<article class="task pri-${t.priority}" data-id="${t.id}" draggable="true" tabindex="0"
+  return `<article class="task pri-${t.priority}" data-id="${t.id}" tabindex="0"
       aria-label="${esc(t.title)}">
     <button class="t-tick" data-act="toggle" aria-label="Mark done"></button>
     <div class="t-main">
@@ -670,18 +677,10 @@ function rebuildBucket(bucketId) {
 
 function wireBoard() {
   document.querySelectorAll('.task').forEach(wireCard);
-  document.querySelectorAll('.drop').forEach((zone) => {
-    zone.ondragover = (e) => { e.preventDefault(); zone.classList.add('over'); };
-    zone.ondragleave = () => zone.classList.remove('over');
-    zone.ondrop = (e) => {
-      e.preventDefault(); zone.classList.remove('over');
-      const id = e.dataTransfer.getData('text/plain');
-      if (!id) return;
-      const after = [...zone.querySelectorAll('.task:not(.dragging)')]
-        .find((c) => e.clientY < c.getBoundingClientRect().top + c.offsetHeight / 2);
-      moveTask(id, zone.dataset.bucket, after ? { beforeTaskId: after.dataset.id } : {});
-    };
-  });
+  // Drop zones carry no handlers: dragging is pointer-based and owned by
+  // drag.js, which shows a live insertion placeholder instead of a target
+  // outline. Native HTML5 DnD cannot preview an insertion gap and never fires
+  // on touch at all.
 }
 
 function wireCard(el) {
@@ -706,8 +705,7 @@ function wireCard(el) {
     else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); shiftBucket(id, -1); }
     else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); shiftBucket(id, 1); }
   };
-  el.ondragstart = (e) => { e.dataTransfer.setData('text/plain', id); el.classList.add('dragging'); };
-  el.ondragend = () => el.classList.remove('dragging');
+
 }
 
 /* ══ Mutations — optimistic, targeted, never a rebuild ═══════════════════
@@ -728,22 +726,48 @@ function patchCard(id) {
   if (next) { wireCard(next); if (wasFocused) next.focus(); }
 }
 
+/**
+ * Completing a task, in stages, so the act reads as finishing something rather
+ * than as a row vanishing:
+ *
+ *   1. the tick fills immediately — no waiting on the network
+ *   2. the title and metadata soften
+ *   3. the card collapses out of the flow
+ *   4. the neighbours close the gap, then the bucket count ticks over
+ *
+ * The bucket is NOT rebuilt. Replacing the markup would destroy node identity
+ * for every remaining card, which is precisely why the gap used to snap shut
+ * instead of closing. Only the completed card's node is removed.
+ */
 async function toggleTask(id) {
   const t = findTask(id);
   if (!t) return;
   const wasDone = t.status === 'done';
   const card = document.querySelector(`.task[data-id="${id}"]`);
   const bucket = t.bucket;
+  const index = card ? [...card.parentNode.children].indexOf(card) : -1;
+  const parent = card?.parentNode ?? null;
 
-  // Completing removes it from the board — collapse the row so the cards
-  // below close the gap rather than jumping.
-  const apply = () => {
+  // Stage 1 + 2: immediate acknowledgement on the card itself.
+  if (card && !wasDone) card.classList.add('is-completing');
+
+  const removeNode = () => {
     state.tasks = state.tasks.filter((x) => x.id !== id);
+    card?.remove();
+    const drop = document.querySelector(`.drop[data-bucket="${bucket}"]`);
+    if (drop) drop.classList.toggle('is-empty', !drop.querySelector('.task'));
+    syncBucketCounts();
+  };
+
+  if (card && !wasDone) {
+    // Stage 3: collapse. `collapseOut` is guaranteed by `settle`, so a hidden
+    // tab cannot strand the card mid-animation.
+    collapseOut(card, removeNode);
+  } else {
+    removeNode();
     rebuildBucket(bucket);
     wireBoard();
-    renderRail();
-  };
-  if (card && !wasDone) collapseOut(card, apply); else apply();
+  }
 
   try {
     await api(`/api/v1/workspaces/${ws()}/tasks/${id}/${wasDone ? 'uncomplete' : 'complete'}`,
@@ -751,15 +775,30 @@ async function toggleTask(id) {
     state.historyTotal += wasDone ? -1 : 1;
     saved(wasDone ? 'Moved back to active' : 'Done');
   } catch (e) {
-    // Put it back exactly where it was.
+    // Put it back exactly where it was, visibly.
     state.tasks.push(t);
-    flip(document.querySelectorAll('.task'), () => { rebuildBucket(bucket); });
-    wireBoard(); renderRail();
+    if (parent && index >= 0) {
+      card?.classList.remove('is-completing');
+      if (card) {
+        card.style.removeProperty('overflow');
+        card.style.removeProperty('height');
+        parent.insertBefore(card, parent.children[index] ?? null);
+      }
+      flip(document.querySelectorAll('.task'), () => { syncBucketCounts(); });
+    } else {
+      rebuildBucket(bucket); wireBoard();
+    }
     toast(e.message, true);
   }
 }
 
-async function moveTask(id, bucket, anchor = {}) {
+/**
+ * @param {object} opts  `settled: true` means the DOM already shows the final
+ *   arrangement — the drop path, where the placeholder put the card in place
+ *   before release. Rebuilding there would destroy node identity and produce
+ *   exactly the second reshuffle this phase is meant to remove.
+ */
+async function moveTask(id, bucket, anchor = {}, opts = {}) {
   const t = findTask(id);
   if (!t) return;
   const before = { bucket: t.bucket, position: t.position };
@@ -780,13 +819,19 @@ async function moveTask(id, bucket, anchor = {}) {
     pos = (target[target.length - 1]?.position ?? 0) + 1000;
   }
 
-  flip(document.querySelectorAll('.task'), () => {
+  if (opts.settled) {
+    // Only the model moves; the board is already right.
     t.bucket = bucket; t.position = pos;
-    rebuildBucket(from);
-    if (bucket !== from) rebuildBucket(bucket);
-  });
-  wireBoard(); renderRail();
-  document.querySelector(`.task[data-id="${id}"]`)?.focus();
+    syncBucketCounts();
+  } else {
+    flip(document.querySelectorAll('.task'), () => {
+      t.bucket = bucket; t.position = pos;
+      rebuildBucket(from);
+      if (bucket !== from) rebuildBucket(bucket);
+    });
+    wireBoard();
+    document.querySelector(`.task[data-id="${id}"]`)?.focus();
+  }
 
   try {
     const r = await api(`/api/v1/workspaces/${ws()}/tasks/${id}/move`,
@@ -795,13 +840,26 @@ async function moveTask(id, bucket, anchor = {}) {
     t.position = r.task.position;
     saved('Moved');
   } catch (e) {
+    // Rollback is always visual, including after a drop: the user must see the
+    // card return rather than silently find it somewhere else later.
     flip(document.querySelectorAll('.task'), () => {
       Object.assign(t, before);
       rebuildBucket(from);
       if (bucket !== from) rebuildBucket(bucket);
     });
-    wireBoard(); renderRail();
+    wireBoard();
     toast(e.message, true);
+  }
+}
+
+/** Keeps the per-bucket tallies honest when the rows moved without a rebuild. */
+function syncBucketCounts() {
+  for (const b of BUCKETS) {
+    const badge = document.querySelector(`[data-count="${b.id}"]`);
+    const drop = document.querySelector(`.drop[data-bucket="${b.id}"]`);
+    if (!badge || !drop) continue;
+    const n = drop.querySelectorAll('.task').length;
+    if (badge.textContent !== String(n)) { badge.textContent = String(n); pulse(badge); }
   }
 }
 
@@ -974,37 +1032,34 @@ function openTask(id, prefillTitle = '') {
  * would be worse than an honest gap.
  */
 
-/** Deterministic and explainable — each branch returns the reason it chose. */
-export function pickUpNext(tasks) {
-  const active = tasks.filter((t) => t.status !== 'done');
-  if (!active.length) return null;
-  const rank = { urgent: 0, high: 1, medium: 2, low: 3, someday: 4 };
-  const byOrder = (a, b) => a.position - b.position;
-  const inB = (b) => active.filter((t) => t.bucket === b).sort(byOrder);
-
-  const scheduled = active.filter((t) => t.scheduledAt)
-    .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
-  if (scheduled.length) return { task: scheduled[0], why: 'Next scheduled' };
-
-  const today = inB('today');
-  const urgent = today.filter((t) => t.priority === 'urgent');
-  if (urgent.length) return { task: urgent[0], why: 'Urgent today' };
-  const high = today.filter((t) => t.priority === 'high');
-  if (high.length) return { task: high[0], why: 'High priority today' };
-  if (today.length) return { task: today[0], why: 'First in Today' };
-
-  const week = inB('week');
-  if (week.length) return { task: week[0], why: 'First this week' };
-
-  const rest = [...active].sort((a, b) => (rank[a.priority] - rank[b.priority]) || byOrder(a, b));
-  return rest.length ? { task: rest[0], why: 'Next open task' } : null;
-}
+/**
+ * Up Next was removed in C4.1, deliberately and not as a stopgap.
+ *
+ * A next-action recommendation is only honest when the system can see what the
+ * day actually contains. Life OS cannot yet: there is no Calendar, no
+ * Reminders, no scheduled times, no due dates on the imported tasks and no
+ * project deadlines. What Up Next produced was therefore a restatement of the
+ * first card already visible on the board — the appearance of intelligence
+ * without any.
+ *
+ * ARCHITECTURE NOTE, kept for whoever restores it. A real Up Next should rank
+ * against, at minimum:
+ *   - calendar events happening now or imminently
+ *   - scheduled task times and due dates
+ *   - reminders that have fired
+ *   - habits still open for the day
+ *   - project deadlines
+ *   - the user's stated focus
+ *   - AI-derived context about the week
+ * Restore it only once Calendar and Reminders exist. Until then the rail is
+ * intentionally short: an empty column is more honest than a filler card, and
+ * the space below Habits is reserved for Upcoming.
+ */
 
 function renderRail() {
   const rail = document.getElementById('rail');
   if (!rail || !state.me) return;
   const now = new Date();
-  const next = pickUpNext(state.tasks);
   const hs = state.habits ?? [];
   const due = hs.filter((h) => h.dueToday && !h.archivedAt);
   const doneCount = due.filter((h) => h.completedToday).length;
@@ -1013,26 +1068,6 @@ function renderRail() {
     <div class="rail-when">
       <span class="rw-day">${now.toLocaleDateString(undefined, { weekday: 'long' })}</span>
       <span class="rw-date">${now.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}</span>
-    </div>
-
-    <div class="rail-card up-next">
-      <h3>Up next</h3>
-      ${next ? `
-        <div class="un-why">${esc(next.why)}</div>
-        <button class="un-title" data-un-open="${next.task.id}">${esc(next.task.title)}</button>
-        <div class="un-meta">
-          ${next.task.areaId ? `<span class="tm-area">${esc(areaName(next.task.areaId))}</span>` : ''}
-          ${next.task.priority !== 'medium'
-            ? `<span class="un-pri pri-${next.task.priority}">${esc(next.task.priority)}</span>` : ''}
-          ${next.task.legacyScheduledTimeRaw
-            ? `<span class="tm-legacy" title="Time from the old app, kept as written">${esc(next.task.legacyScheduledTimeRaw)}</span>`
-            : ''}
-        </div>
-        <div class="un-actions">
-          <button class="btn btn-primary" data-un-done="${next.task.id}">Mark done</button>
-          <button class="btn" data-un-defer="${next.task.id}">Later</button>
-        </div>`
-      : '<p class="rail-quiet">Nothing open. Enjoy it.</p>'}
     </div>
 
     <div class="rail-card habits-card">
@@ -1051,45 +1086,67 @@ function renderRail() {
 }
 
 /**
- * The habit row: an animated ring, the name, and the streak.
+ * The habit row: a closed progress ring, the name, the streak.
  *
- * The ring is an SVG circle whose stroke-dashoffset carries the progress, so a
- * multi-count habit shows partial fill rather than an all-or-nothing tick. The
- * circumference is computed once (2πr for r=13) and lives in a CSS variable.
+ * Geometry notes, because all three were wrong before:
+ *
+ * 1. `pathLength="100"` re-declares the path's length as 100 user units, so
+ *    dasharray/dashoffset are exact percentages. The previous code hard-coded
+ *    2*PI*13 = 81.68, but a browser draws <circle> as four Bezier arcs whose
+ *    real length is 81.155 — every partial fill was off and the seam misjoined.
+ * 2. The ring <svg> carries `.hr-svg`, and the CSS targets `.hb-ring>svg.hr-svg`.
+ *    The old unscoped `.hb-ring svg` also hit the check icon inside .hr-mark and
+ *    forced it to 32px, absolute and rotated -90deg — the "arrow tail".
+ * 3. Butt caps. A round cap adds half the stroke width beyond each end, which
+ *    overshoots the seam at 100% and paints a floating dot at 0%.
  */
-const RING_C = 81.68;   // 2 * PI * 13
+function habitPct(h) {
+  const target = Math.max(1, h.targetCount ?? 1);
+  if (target > 1) return Math.min(1, (h.todayCount ?? 0) / target);
+  return h.completedToday ? 1 : 0;
+}
+
+/** Centre content: check when complete, count while partial, nothing at zero. */
+function habitCentre(h) {
+  const target = Math.max(1, h.targetCount ?? 1);
+  if (h.completedToday) return `<span class="hr-mark">${icon('check', 14)}</span>`;
+  if (target > 1 && (h.todayCount ?? 0) > 0) {
+    return `<span class="hr-count">${h.todayCount}</span>`;
+  }
+  return '<span class="hr-mark"></span>';
+}
+
+function streakHtml(h) {
+  const n = h.streak ?? 0;
+  return `<span class="hb-streak ${n > 0 ? '' : 'is-zero'}"
+    title="${n > 0 ? `${n} day streak` : 'No streak yet — today can start one'}"
+    >${n > 0 ? `${n}<span class="hs-unit">d</span>` : '—'}</span>`;
+}
 
 function habitRowHtml(h) {
-  const pct = h.targetCount > 1 ? Math.min(1, (h.todayCount ?? 0) / h.targetCount)
-    : (h.completedToday ? 1 : 0);
-  const offset = RING_C * (1 - pct);
+  const pct = habitPct(h);
+  const target = Math.max(1, h.targetCount ?? 1);
+  const label = h.completedToday ? 'Undo' : (target > 1 ? 'Add one to' : 'Complete');
   return `<div class="hb-row ${h.completedToday ? 'is-done' : ''}" data-habit="${h.id}">
-    <button class="hb-ring" data-habit-toggle="${h.id}" aria-pressed="${h.completedToday}"
-      aria-label="${h.completedToday ? 'Undo' : 'Complete'} ${esc(h.name)}">
-      <svg viewBox="0 0 32 32" aria-hidden="true">
-        <circle class="hr-track" cx="16" cy="16" r="13"/>
-        <circle class="hr-fill" cx="16" cy="16" r="13"
-          style="stroke-dasharray:${RING_C};stroke-dashoffset:${offset.toFixed(2)}"/>
+    <button class="hb-ring" data-habit-toggle="${h.id}" aria-pressed="${!!h.completedToday}"
+      aria-label="${label} ${esc(h.name)}"
+      ${target > 1 ? `aria-valuenow="${h.todayCount ?? 0}" aria-valuemax="${target}"` : ''}>
+      <svg class="hr-svg" viewBox="0 0 32 32" aria-hidden="true">
+        <circle class="hr-track" cx="16" cy="16" r="13" pathLength="100"/>
+        <circle class="hr-fill ${pct === 0 ? 'is-empty' : ''}" cx="16" cy="16" r="13"
+          pathLength="100" stroke-dasharray="100"
+          stroke-dashoffset="${(100 - pct * 100).toFixed(2)}"/>
       </svg>
-      <span class="hr-mark">${icon('check', 13)}</span>
+      ${habitCentre(h)}
     </button>
     <button class="hb-name" data-habit-open="${h.id}" title="Edit ${esc(h.name)}">${esc(h.name)}</button>
-    ${h.targetCount > 1 ? `<span class="hb-prog">${h.todayCount ?? 0}/${h.targetCount}</span>` : ''}
-    <span class="hb-streak ${h.streak > 0 ? 'is-live' : ''}"
-      title="${h.streak > 0 ? `${h.streak} day streak` : 'No streak yet — today can start one'}">
-      ${h.streak > 0 ? `${h.streak}<span class="hs-unit">d</span>` : '—'}</span>
+    ${target > 1 ? `<span class="hb-prog">${h.todayCount ?? 0}/${target}</span>` : ''}
+    ${streakHtml(h)}
   </div>`;
 }
 
 function wireRail() {
   const rail = document.getElementById('rail');
-  rail.querySelector('[data-un-open]')?.addEventListener('click',
-    (e) => openTask(e.currentTarget.dataset.unOpen));
-  rail.querySelector('[data-un-done]')?.addEventListener('click',
-    (e) => toggleTask(e.currentTarget.dataset.unDone));
-  rail.querySelector('[data-un-defer]')?.addEventListener('click',
-    (e) => shiftBucket(e.currentTarget.dataset.unDefer, 1));
-
   rail.querySelector('#hb-retry')?.addEventListener('click',
     () => run(async () => { await loadHabits(); renderRail(); }));
   rail.querySelector('#hb-add')?.addEventListener('click', () => editHabit(null));
@@ -1117,18 +1174,50 @@ async function loadHabits() {
   state.habitsLoaded = true;
 }
 
-/** Patches ONE habit row rather than re-rendering the rail. */
+/**
+ * Updates ONE habit row IN PLACE.
+ *
+ * Deliberately not `outerHTML =`. Replacing the node gives the browser a brand
+ * new <circle> already sitting at its final stroke-dashoffset, so the CSS
+ * transition has no start value to interpolate from and the ring snaps instead
+ * of filling. Measured: 60ms after a click the offset was already final.
+ * Mutating the existing nodes is what makes the fill animate at all.
+ */
 function patchHabitRow(id) {
   const row = document.querySelector(`.hb-row[data-habit="${id}"]`);
   const h = (state.habits ?? []).find((x) => x.id === id);
   if (!row || !h) return renderRail();
-  const keepFocus = row.contains(document.activeElement);
-  row.outerHTML = habitRowHtml(h);
-  const next = document.querySelector(`.hb-row[data-habit="${id}"]`);
-  next?.querySelector('[data-habit-toggle]')?.addEventListener('click', () => toggleHabit(id));
-  next?.querySelector('[data-habit-open]')?.addEventListener('click', () => editHabit(id));
-  if (keepFocus) next?.querySelector('[data-habit-toggle]')?.focus();
-  // Keep the header tally honest without redrawing the card.
+
+  const target = Math.max(1, h.targetCount ?? 1);
+  const pct = habitPct(h);
+
+  row.classList.toggle('is-done', !!h.completedToday);
+
+  const fill = row.querySelector('.hr-fill');
+  if (fill) {
+    // Toggle emptiness BEFORE the offset so the fade and the sweep run together.
+    fill.classList.toggle('is-empty', pct === 0);
+    fill.setAttribute('stroke-dashoffset', (100 - pct * 100).toFixed(2));
+  }
+
+  const ring = row.querySelector('.hb-ring');
+  ring?.setAttribute('aria-pressed', String(!!h.completedToday));
+  ring?.setAttribute('aria-label',
+    `${h.completedToday ? 'Undo' : (target > 1 ? 'Add one to' : 'Complete')} ${h.name}`);
+  if (target > 1) ring?.setAttribute('aria-valuenow', String(h.todayCount ?? 0));
+
+  // Centre content is the only part that genuinely changes shape.
+  const centre = row.querySelector('.hr-mark,.hr-count');
+  const wanted = habitCentre(h);
+  if (centre && centre.outerHTML !== wanted) centre.outerHTML = wanted;
+
+  const prog = row.querySelector('.hb-prog');
+  if (prog) prog.textContent = `${h.todayCount ?? 0}/${target}`;
+
+  const streak = row.querySelector('.hb-streak');
+  if (streak) streak.outerHTML = streakHtml(h);
+
+  // The header tally stays honest without redrawing the card.
   const due = (state.habits ?? []).filter((x) => x.dueToday && !x.archivedAt);
   const badge = document.querySelector('.hb-count');
   if (badge) {
@@ -1137,37 +1226,62 @@ function patchHabitRow(id) {
   }
 }
 
-/** Optimistic tick with rollback. A checkbox must never wait on a round trip. */
+/**
+ * Optimistic tick with rollback. A checkbox must never wait on a round trip.
+ *
+ * For a target-count habit each press adds one, and only the last one completes
+ * it. Pressing a completed habit clears it back to zero — an "undo", not a
+ * decrement, which is what the ring's full-to-empty sweep reads as.
+ */
 async function toggleHabit(id) {
   const h = (state.habits ?? []).find((x) => x.id === id);
-  if (!h) return;
-  const before = { todayCount: h.todayCount, completedToday: h.completedToday, streak: h.streak };
-  const goingDone = !h.completedToday;
-  h.completedToday = goingDone;
-  h.todayCount = goingDone ? h.targetCount : 0;
-  h.streak = goingDone ? (h.streak ?? 0) + 1 : Math.max(0, (h.streak ?? 1) - 1);
+  if (!h || h._busy) return;
+  const target = Math.max(1, h.targetCount ?? 1);
+  const before = {
+    todayCount: h.todayCount, completedToday: h.completedToday, streak: h.streak,
+  };
+
+  const wasDone = !!h.completedToday;
+  const nextCount = wasDone ? 0 : Math.min(target, (h.todayCount ?? 0) + 1);
+  const nowDone = nextCount >= target;
+
+  h.todayCount = nextCount;
+  h.completedToday = nowDone;
+  // The streak only moves when completion itself changes.
+  if (nowDone !== wasDone) {
+    h.streak = nowDone ? (h.streak ?? 0) + 1 : Math.max(0, (h.streak ?? 1) - 1);
+  }
+  h._busy = true;
   patchHabitRow(id);
-  if (goingDone) celebrateHabit(id);
+  if (nowDone && !wasDone) celebrateHabit(id);
 
   try {
-    const r = await api(`/api/v1/workspaces/${ws()}/habits/${id}/${goingDone ? 'check' : 'uncheck'}`,
-      { method: 'POST', body: goingDone ? { count: h.targetCount } : {} });
-    h.todayCount = r.completedCount;
-    h.completedToday = r.completed;
-    patchHabitRow(id);
+    const r = await api(
+      `/api/v1/workspaces/${ws()}/habits/${id}/${wasDone ? 'uncheck' : 'check'}`,
+      { method: 'POST', body: wasDone ? {} : { count: nextCount } },
+    );
+    // Adopt the server's numbers; they are the truth.
+    h.todayCount = r.completedCount ?? h.todayCount;
+    h.completedToday = r.completed ?? h.completedToday;
+    if (typeof r.streak === 'number') h.streak = r.streak;
   } catch (e) {
     Object.assign(h, before);
-    patchHabitRow(id);
     toast(e.message, true);
+  } finally {
+    h._busy = false;
+    patchHabitRow(id);
   }
 }
 
-/** A single restrained pulse on completion. No confetti, no bounce. */
+/**
+ * A single restrained response on completion — one soft pulse of the ring.
+ * No confetti, no particles, no bounce.
+ */
 function celebrateHabit(id) {
   if (reducedMotion()) return;
   const ring = document.querySelector(`.hb-row[data-habit="${id}"] .hb-ring`);
   ring?.animate(
-    [{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }],
+    [{ transform: 'scale(1)' }, { transform: 'scale(1.10)' }, { transform: 'scale(1)' }],
     { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' },
   );
 }

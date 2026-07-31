@@ -214,22 +214,8 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .rail-when{display:flex;align-items:baseline;gap:8px;padding:0 3px 2px}
 .rw-day{font-size:calc(var(--fs-rail) + 1px);font-weight:600;color:var(--text-2)}
 .rw-date{font-size:var(--fs-rail);color:var(--muted)}
-
-.up-next .un-why{font-size:9.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
-  color:var(--accent);margin-bottom:8px}
-.un-title{display:block;width:100%;text-align:left;font-size:calc(var(--fs-rail) + 2px);
-  line-height:1.45;color:var(--text);margin-bottom:10px;
-  transition:color var(--t-hover)}
-.un-title:hover{color:var(--accent)}
-.un-meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:14px}
-.un-pri{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
-  border-radius:6px;padding:2px 8px;background:var(--surface-2);color:var(--muted)}
-.un-pri.pri-urgent{background:rgba(229,87,106,.15);color:#E5576A}
-.un-pri.pri-high{background:rgba(217,138,78,.14);color:#D98A4E}
 .un-legacy{font-size:10.5px;color:var(--muted);background:var(--surface-2);
   border-radius:6px;padding:2px 8px;font-style:italic}
-.un-actions{display:flex;gap:8px}
-.un-actions .btn{flex:1;font-size:12.5px}
 
 /* Habits — green means completed, and nothing else in the app uses it. */
 .hb-count{margin-left:auto;font-size:10px;font-weight:700;color:var(--muted);
@@ -663,25 +649,77 @@ body.modal-open{overflow:hidden}
 .hb-row:hover{background:rgba(255,255,255,.035)}
 .hb-ring{position:relative;width:32px;height:32px;flex-shrink:0;display:grid;
   place-items:center;border-radius:50%}
-.hb-ring svg{position:absolute;inset:0;width:32px;height:32px;transform:rotate(-90deg)}
-.hr-track{fill:none;stroke:rgba(255,255,255,.10);stroke-width:2.4}
-.hr-fill{fill:none;stroke:var(--ok);stroke-width:2.4;stroke-linecap:round;
-  transition:stroke-dashoffset var(--d-slow) var(--e-out)}
-.hr-mark{position:relative;color:transparent;display:grid;place-items:center;
-  transition:color var(--d-fast) var(--e-out),transform var(--d-fast) var(--e-out)}
+/* Scoped with `>` and a class. The old rule was `.hb-ring svg`, which also
+   matched the check icon nested in .hr-mark and forced it to 32px, absolute,
+   inset:0 and rotate(-90deg) — a checkmark blown up 2.5x, stretched across the
+   whole control and turned on its side. That was the "arrow tail". */
+.hb-ring>svg.hr-svg{position:absolute;inset:0;width:32px;height:32px;
+  transform:rotate(-90deg);pointer-events:none}
+.hr-track{fill:none;stroke:rgba(255,255,255,.10);stroke-width:2.6}
+/* pathLength="100" makes the dash units exact percentages. Hard-coding 2*PI*r
+   was wrong: a browser renders <circle> as four Bezier arcs whose real length
+   is 81.155, not 81.681, so every partial fill drifted and the seam misjoined.
+   `butt` caps, not `round`: a round cap adds half the stroke width past each
+   end, overshooting the seam when full and leaving a dot when empty. */
+.hr-fill{fill:none;stroke:var(--ok);stroke-width:2.6;stroke-linecap:butt;
+  transition:stroke-dashoffset var(--d-slow) var(--e-out),opacity var(--d-fast) linear}
+.hr-fill.is-empty{opacity:0}
 .hb-ring:hover .hr-track{stroke:rgba(0,217,163,.3)}
-.hb-row.is-done .hr-mark{color:var(--ok)}
+
+/* Centre content: a check when complete, the count while partial, nothing
+   otherwise. Sized in its own right so no ancestor rule can stretch it. */
+.hr-mark{position:relative;width:14px;height:14px;display:grid;place-items:center;
+  color:var(--ok);opacity:0;transform:scale(.6);
+  transition:opacity var(--d-fast) var(--e-out),transform var(--d-fast) var(--e-out)}
+.hr-mark>svg{width:14px;height:14px;position:static;transform:none}
+.hb-row.is-done .hr-mark{opacity:1;transform:scale(1)}
+.hr-count{position:relative;font-size:9.5px;font-weight:700;color:var(--ok);
+  font-variant-numeric:tabular-nums;letter-spacing:-.2px}
 .hb-name{flex:1;min-width:0;text-align:left;font-size:var(--fs-rail);color:var(--text-2);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   transition:color var(--t-hover)}
 .hb-name:hover{color:var(--text)}
 .hb-row.is-done .hb-name{color:var(--muted)}
 .hb-prog{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
-/* A zero streak is quiet, not broken — an em dash, not a red nought. */
-.hb-streak{font-size:11px;font-weight:700;color:var(--muted);min-width:26px;text-align:right;
+/* Beside the name, not pinned to the row's right edge: a badge floating at the
+   far side is hard to associate with the habit it belongs to. Zero stays quiet. */
+.hb-streak{font-size:10.5px;font-weight:700;color:var(--ok);flex-shrink:0;
+  background:rgba(0,217,163,.12);border-radius:5px;padding:1px 5px;
   font-variant-numeric:tabular-nums}
-.hb-streak.is-live{color:var(--ok)}
-.hs-unit{font-weight:500;opacity:.7;font-size:9.5px;margin-left:1px}
+.hb-streak.is-zero{color:var(--muted);background:transparent;padding:1px 0;
+  opacity:.55;font-weight:500}
+.hs-unit{font-weight:500;opacity:.75;font-size:9px;margin-left:.5px}
+
+/* Completion acknowledgement: the tick fills, then the text softens, then the
+   card collapses. Restrained on purpose — no confetti, no particles. */
+.task.is-completing{background:linear-gradient(90deg,rgba(0,217,163,.10),transparent 55%),#282431;
+  box-shadow:inset 0 0 0 1px rgba(0,217,163,.30)}
+.task.is-completing .t-title{color:var(--muted);text-decoration:line-through;
+  text-decoration-color:rgba(0,217,163,.55);transition:color var(--d-fast) var(--e-out)}
+.task.is-completing .t-meta,.task.is-completing .t-actions{opacity:.35;
+  transition:opacity var(--d-fast) var(--e-out)}
+.task.is-completing .t-tick{background:var(--ok);border-color:var(--ok);color:#08221c}
+
+/* ── Task dragging ───────────────────────────────────────────────────
+   The placeholder IS the proposed position. It is a real element in the real
+   layout, so what the user sees during a drag is the future board rather than
+   a hint about it. The lifted card keeps its exact size and follows the
+   pointer; everything else slides via FLIP. */
+.task-placeholder{border-radius:var(--radius);border:1.5px dashed var(--border-strong);
+  background:rgba(138,93,255,.05);box-sizing:border-box;
+  transition:height var(--d-fast) var(--e-out)}
+.task.is-dragging{box-shadow:var(--e3);opacity:.96;cursor:grabbing;
+  transform-origin:center;will-change:transform;border-color:var(--accent)}
+body.is-dragging-task{cursor:grabbing;user-select:none;-webkit-user-select:none}
+/* A card is grabbable anywhere that is not a control. */
+.task{cursor:grab}
+.task:active{cursor:grabbing}
+body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
+/* An emptied bucket must keep a target while the pointer is over it. */
+.drop.is-empty{min-height:52px}
+@media (prefers-reduced-motion:reduce){
+  .task-placeholder{transition:none}
+}
 
 /* ── Ambient stars ──────────────────────────────────────────────────
    Decorative only: behind everything, never interactive, never in the
@@ -779,8 +817,8 @@ html[data-motion="reduced"] #los-stars{display:none}
   .tick{width:24px;height:24px;font-size:14px}
 
   /* Text buttons stretch to the full row instead of hugging their glyphs. */
-  .t-title,.hb-name,.un-title{position:relative;padding:6px 0}
-  .t-title::after,.hb-name::after,.un-title::after{content:'';position:absolute;
+  .t-title,.hb-name{position:relative;padding:6px 0}
+  .t-title::after,.hb-name::after{content:'';position:absolute;
     top:50%;left:0;right:0;height:44px;transform:translateY(-50%)}
 }
 

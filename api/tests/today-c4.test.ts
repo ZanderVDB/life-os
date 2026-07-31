@@ -184,15 +184,20 @@ test('card: small controls keep a 44px hit area on touch', () => {
 /* ── Habits ──────────────────────────────────────────────────────────── */
 
 test('habits: the control is a ring, not a checkbox', () => {
-  assert.ok(appCode.includes('RING_C'), 'no ring circumference');
-  assert.match(app, /2 \* PI \* 13|2 \* Math\.PI \* 13|81\.68/, 'the circumference is unexplained');
+  // C4.1 replaced the computed circumference with pathLength="100". Hard-coding
+  // 2*PI*r was wrong — the browser's real Bezier path length is 81.155, not
+  // 81.681 — so the constant it used to assert must NOT come back.
+  assert.ok(!appCode.includes('RING_C'), 'the hard-coded circumference returned');
+  assert.match(appCode, /pathLength="100"/, 'the ring does not declare its length');
   assert.match(appCode, /stroke-dashoffset/, 'the ring does not carry progress');
   assert.ok(appCode.includes('hr-fill') && appCode.includes('hr-track'),
     'the ring has no track/fill pair');
 });
 
 test('habits: partial progress shows for multi-count habits', () => {
-  assert.match(appCode, /targetCount > 1/, 'a 3-of-5 habit reads as all-or-nothing');
+  // The branch moved into habitPct() when check/undo were unified in C4.1.
+  assert.match(appCode, /function habitPct/, 'no shared fill calculation');
+  assert.match(appCode, /target > 1/, 'a 3-of-5 habit reads as all-or-nothing');
 });
 
 test('habits: the streak is shown and updates optimistically', () => {

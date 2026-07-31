@@ -264,37 +264,19 @@ test('history is reachable, and never from the sidebar', () => {
   assert.match(app, /includeCompleted=false/, 'Today still asks for completed tasks');
 });
 
-test('rail: Up Next selection is deterministic and explainable', () => {
-  assert.match(app, /export function pickUpNext/);
-  const fn = app.slice(app.indexOf('export function pickUpNext'), app.indexOf('function renderRail'));
-  // Every branch returns a reason, so the card can say why.
-  for (const why of ['Next scheduled', 'Urgent today', 'High priority today',
-    'First in Today', 'First this week', 'Next open task']) {
-    assert.ok(fn.includes(why), `the "${why}" branch is missing`);
-  }
-  assert.ok(fn.indexOf('Next scheduled') < fn.indexOf('Urgent today'), 'scheduled does not win first');
-  assert.ok(fn.indexOf('Urgent today') < fn.indexOf('High priority today'), 'priority order is wrong');
-  // Raw legacy time is shown as legacy text, never as a real timestamp.
-  // The label moved into the task modal when the drawer was replaced.
-  const modal = read('task-modal.js');
-  assert.match(modal, /legacyScheduledTimeRaw[\s\S]{0,400}kept exactly as written/i,
-    'raw legacy time is not labelled as legacy');
-});
-
 test('rail: no dashboard cards, no fake Upcoming', () => {
-  const rail = app.slice(app.indexOf('function renderRail'), app.indexOf('function habitRowHtml'));
+  const rail = app.slice(app.indexOf('function renderRail'), app.indexOf('function wireRail'));
   for (const gone of ['Your day', 'Recently finished', 'Active work', 'All areas']) {
     assert.ok(!rail.includes(gone), `the rail still carries the "${gone}" card`);
   }
   // Upcoming is omitted entirely rather than rendered empty, because there is
   // no calendar and every imported task has no due date.
   assert.ok(!/Upcoming|Up next in your calendar/i.test(rail), 'a fake Upcoming card exists');
-  // C4 removed Quick Capture: "Add task" already sits two feet away, task
-  // creation was never the hard part, and the composer is the real capture
-  // path. The space below Habits is left honestly empty for Upcoming.
-  for (const wanted of ['Up next', 'Habits today']) {
-    assert.ok(rail.includes(wanted), `the rail is missing "${wanted}"`);
-  }
+  // C4 removed Quick Capture; C4.1 removed Up Next as well, because without
+  // Calendar or Reminders it only restated the top of the board. The rail is
+  // deliberately short rather than padded — see the note in app.js.
+  assert.ok(rail.includes('Habits today'), 'the rail is missing "Habits today"');
+  assert.ok(!/Up next/i.test(rail), 'Up Next came back');
   // Stripped of comments: the C4 rail comment explains the removal by name.
   assert.ok(!/qc-form|qc-input|quickCapture/i.test(code(app)), 'Quick Capture came back');
 });
@@ -308,7 +290,10 @@ test('habits: optimistic tick with rollback, and green means done only', () => {
   // C4 replaced the tick with a progress ring; green is still the only colour
   // completion wears, and the rail must not borrow the brand purple for it.
   assert.match(html, /\.hr-fill\{fill:none;stroke:var\(--ok\)/, 'the ring is not green');
-  assert.match(html, /\.hb-row\.is-done \.hr-mark\{color:var\(--ok\)/, 'the mark is not green');
+  // C4.1 gave .hr-mark a permanent green and reveals it with opacity, so the
+  // check can fade in rather than appear at full strength.
+  assert.match(html, /\.hr-mark\{[^}]*color:var\(--ok\)/, 'the mark is not green');
+  assert.match(html, /\.hb-row\.is-done \.hr-mark\{opacity:1/, 'the mark is not revealed when done');
   const ring = html.slice(html.indexOf('.hb-ring{'), html.indexOf('.hb-name{'));
   assert.ok(!/var\(--accent\)/.test(ring), 'purple and green are mixed in the habit rows');
 });
