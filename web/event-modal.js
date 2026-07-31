@@ -512,7 +512,7 @@ export function openEventModal(ctx) {
 /* ── Add menu ──────────────────────────────────────────────────────────
  * Four item types, because Calendar has four. Nothing here silently fails:
  * each entry either opens a working flow or is not shown. */
-export function openAddMenu(anchor, handlers) {
+export function openAddMenu(anchor, handlers, onClose) {
   document.querySelector('.cal-menu')?.remove();
   const menu = document.createElement('div');
   menu.className = 'menu cal-menu';
@@ -522,8 +522,7 @@ export function openAddMenu(anchor, handlers) {
   const items = [
     ['event', 'Event', 'Something that occupies time', 'var(--accent)'],
     ['reminder', 'Reminder', 'Something to be reminded about', 'var(--warn)'],
-    ['task', 'Scheduled task', 'Plan when you will do a task', 'var(--p-low)'],
-    ['habit', 'Habit', 'Something you repeat', 'var(--ok)'],
+    ['task', 'Schedule a task', 'Set aside time for something', 'var(--p-low)'],
   ].filter(([k]) => handlers[k]);
 
   menu.innerHTML = items.map(([k, label, hint, colour]) => `
@@ -549,6 +548,7 @@ export function openAddMenu(anchor, handlers) {
     document.removeEventListener('click', away, true);
     document.removeEventListener('keydown', onEsc, true);
     if (anchor?.isConnected) anchor.focus();
+    onClose?.();
   };
   const onEsc = (e) => { if (e.key === 'Escape') { e.preventDefault(); closeMenu(); } };
   document.addEventListener('keydown', onEsc, true);

@@ -984,7 +984,6 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
 /* Workload: a restrained left edge, never a heatmap. */
 .cm-cell::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:2px;
   border-radius:2px;background:transparent;transition:background var(--t-hover)}
-.cm-cell.load-moderate::before{background:rgba(138,93,255,.30)}
 .cm-cell.load-busy::before{background:rgba(240,145,61,.45)}
 .cm-cell.load-overloaded::before{background:rgba(240,86,110,.55)}
 
@@ -1143,12 +1142,6 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cm-flag.is-warn{color:var(--warn);background:rgba(255,196,77,.14)}
 .cm-chip{min-width:15px;height:15px;display:inline-grid;place-items:center}
 .cm-rem{background:rgba(255,196,77,.16);color:var(--warn)}
-/* Habits are a 4px arc, not a green number. An empty day must not read as busy
-   because three habits were ticked. */
-.cm-habit-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;
-  background:conic-gradient(var(--ok) var(--hb),rgba(255,255,255,.10) 0);
-  opacity:.5;margin-left:auto}
-.cm-cell:hover .cm-habit-dot{opacity:.85}
 
 /* ── Hover preview ── */
 .hov{position:fixed;z-index:300;width:264px;max-width:calc(100vw - 24px);
@@ -1320,12 +1313,225 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cm-add-body{display:flex;flex-direction:column;gap:1px;min-width:0}
 
 @media (max-width:900px){
-  .cm-habit-dot{display:none}
 }
 @media (max-width:640px){
   .modal-reminder{left:0;right:0;bottom:0;top:auto;transform:none;width:100%;
     max-height:92vh;border-radius:20px 20px 0 0}
   .hov{display:none}
+}
+
+/* ══ D4.2 — CONSOLIDATION AND CLARITY ═══════════════════════════════════ */
+
+/* ── §4 Centring ────────────────────────────────────────────────────────
+   Month, Agenda and Plan share ONE outer bound, so the canvas never shifts
+   horizontally when you change mode. Previously each mode found its own width
+   and Agenda in particular sat far left in a wide window. */
+.cal-head,.cal-month,.cal-agenda,.cal-plan{width:100%;max-width:var(--cal-max);
+  margin-inline:auto}
+:root{--cal-max:1180px}
+@media (min-width:1600px){:root{--cal-max:1340px}}
+@media (min-width:2100px){:root{--cal-max:1520px}}
+
+/* ── §3 Header as one system ────────────────────────────────────────────
+   Mode control and Add share a height, a radius and a baseline. They are two
+   separate controls that look like they were designed together. */
+.cal-head{display:flex;flex-direction:column;gap:14px}
+.cal-head-row{display:flex;align-items:flex-end;justify-content:space-between;gap:20px}
+.cal-head-sub{align-items:center}
+.cal-head-main{display:flex;flex-direction:column;gap:9px;min-width:0}
+.cal-head-side{display:flex;align-items:center;gap:10px;flex-shrink:0}
+
+.cal-period{display:flex;align-items:center;gap:3px}
+.cal-period-label{font-size:15px;font-weight:600;color:var(--text-2);
+  min-width:168px;padding:0 4px;
+  transition:opacity var(--d-fast) var(--e-out)}
+.cal-period-label.is-swapping{opacity:0}
+.cal-nav{width:30px;height:30px;border-radius:9px;color:var(--muted);
+  display:grid;place-items:center;
+  transition:background var(--t-hover),color var(--t-hover)}
+.cal-nav svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.cal-nav:hover{background:var(--surface-2);color:var(--text)}
+.cal-nav:active{transform:scale(.94)}
+.cal-today{height:30px;padding:0 12px;border-radius:9px;font-size:12.5px;font-weight:600;
+  color:var(--muted);transition:background var(--t-hover),color var(--t-hover)}
+.cal-today:hover{background:var(--surface-2);color:var(--text)}
+
+/* Mode control: one track, one sliding pill. */
+.cal-modes{position:relative;display:flex;height:38px;padding:3px;border-radius:11px;
+  background:var(--surface-2);flex-shrink:0}
+.cal-mode-pill{position:absolute;top:3px;bottom:3px;left:3px;border-radius:8px;
+  width:calc((100% - 6px) / var(--mode-n));
+  transform:translateX(calc(var(--mode-i) * 100%));
+  background:var(--accent);box-shadow:0 2px 8px rgba(124,77,255,.30);
+  transition:transform var(--t-select)}
+.cal-modes button{position:relative;z-index:1;height:32px;padding:0 15px;border-radius:8px;
+  font-size:12.5px;font-weight:600;color:var(--muted);white-space:nowrap;
+  transition:color var(--t-select)}
+.cal-modes button:hover{color:var(--text-2)}
+.cal-modes button[aria-selected="true"]{color:#fff}
+.cal-modes button:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+
+/* Add: same height and radius family as the mode track. */
+.cal-add{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 16px 0 13px;
+  border-radius:11px;font-size:13px;font-weight:600;color:#fff;
+  background:var(--brand);box-shadow:var(--glow);
+  transition:transform var(--d-fast) var(--e-out),box-shadow var(--t-hover)}
+.cal-add svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round}
+.cal-add:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(124,77,255,.34)}
+.cal-add:active{transform:translateY(0) scale(.98)}
+.cal-add[aria-expanded="true"]{box-shadow:0 0 0 3px rgba(138,93,255,.25)}
+
+/* ── §24 Legend ── */
+.cal-legend-btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;
+  border-radius:8px;font-size:11.5px;font-weight:500;color:var(--muted);
+  transition:background var(--t-hover),color var(--t-hover)}
+.cal-legend-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;
+  stroke-linecap:round}
+.cal-legend-btn:hover{background:var(--surface-2);color:var(--text-2)}
+.legend{position:fixed;z-index:300;width:300px;max-width:calc(100vw - 24px);
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:13px;
+  box-shadow:var(--e3);padding:14px 15px;display:flex;flex-direction:column;gap:13px}
+.legend[hidden]{display:none}
+.legend h4{margin:0;font-size:12.5px;font-weight:600;color:var(--text)}
+.lg-group{display:flex;flex-direction:column;gap:6px}
+.lg-lab{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted)}
+.lg-row{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--text-2);
+  line-height:1.4}
+.lg-row b{font-weight:600;color:var(--text)}
+.lg-row>i{flex-shrink:0}
+.lg-src{width:3px;height:14px;border-radius:2px;background:var(--accent)}
+.lg-due{width:7px;height:7px;background:var(--p-high);transform:rotate(45deg)}
+.lg-rem{width:8px;height:8px;border-radius:50%;background:var(--warn)}
+.lg-plan{width:8px;height:8px;border-radius:2px;background:var(--p-low)}
+.lg-clash{width:13px;height:13px;border-radius:50%;background:rgba(240,86,110,.16)}
+.lg-load{width:3px;height:16px;border-radius:2px;background:var(--border-strong)}
+.lg-load.load-busy{background:var(--warn)}
+.lg-load.load-overloaded{background:var(--danger)}
+.lg-note{margin:0;font-size:11px;color:var(--muted);line-height:1.5;
+  padding-top:11px;border-top:1px solid var(--hairline)}
+
+/* ── §7 Workload: two marked states only, and never purple ──────────────
+   Purple means selection everywhere else in Life OS. Using it for
+   "moderately busy" meant one colour carried two unrelated meanings. */
+.cm-cell.load-moderate::before{background:transparent}
+.cm-cell.load-busy::before{background:var(--warn);opacity:.55}
+.cm-cell.load-overloaded::before{background:var(--danger);opacity:.65}
+
+/* ── §8 Clash indicator: an icon with a count, not a bare number ── */
+.cm-flag{display:inline-flex;align-items:center;gap:2px;width:auto;min-width:14px;
+  height:14px;padding:0 3px;border-radius:7px;font-size:9.5px;font-weight:700}
+.cm-flag svg{width:9px;height:9px;fill:none;stroke:currentColor;stroke-width:2.2;
+  stroke-linecap:round}
+
+/* ── §11/§12 Canvas transitions ─────────────────────────────────────────
+   Direction is the message: forward slides left, back slides right, mode
+   change crossfades in place. Transform and opacity only. */
+@keyframes cal-in-left{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes cal-in-right{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+@keyframes cal-in-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.cal-canvas-next{animation:cal-in-left var(--d-slow) var(--e-out) backwards}
+.cal-canvas-prev{animation:cal-in-right var(--d-slow) var(--e-out) backwards}
+.cal-canvas-mode{animation:cal-in-fade var(--d-base) var(--e-out) backwards}
+@media (prefers-reduced-motion:reduce){
+  .cal-canvas-next,.cal-canvas-prev,.cal-canvas-mode{animation:none}
+}
+html[data-motion="reduced"] .cal-canvas-next,
+html[data-motion="reduced"] .cal-canvas-prev,
+html[data-motion="reduced"] .cal-canvas-mode{animation:none}
+
+/* ── §5 Stable rail ─────────────────────────────────────────────────────
+   Calendar is one section, so its rail keeps one shell. Only the middle
+   contextual card changes with the mode. */
+.rail-ctx{animation:cal-in-fade var(--d-base) var(--e-out) backwards}
+.rail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin-bottom:11px}
+.rail-head h3{margin:0}
+.rail-src-btn{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;
+  border-radius:7px;font-size:11px;color:var(--muted);background:var(--surface-2);
+  transition:color var(--t-hover)}
+.rail-src-btn:hover{color:var(--text-2)}
+.rail-src-dot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.rail-src-dot.is-error{background:var(--danger)}
+
+@media (max-width:900px){
+  .cal-head-row{flex-direction:column;align-items:stretch;gap:12px}
+  .cal-head-side{justify-content:space-between}
+  .cal-modes{flex:1}
+  .cal-modes button{flex:1;padding:0 8px}
+  .cal-period-label{min-width:0;flex:1}
+  .legend{left:12px!important;right:12px;width:auto}
+}
+
+/* ── §17 Schedule a task ── */
+.modal-schedule{width:min(560px,calc(100vw - 40px));position:fixed}
+.st-mark{width:9px;height:9px;border-radius:2px;background:var(--p-low);flex-shrink:0;
+  margin-top:14px}
+.st-title{font-size:19px;font-weight:600;margin:0;flex:1}
+.st-list{display:flex;flex-direction:column;gap:5px;max-height:210px;overflow-y:auto;
+  scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.st-list::-webkit-scrollbar{width:8px}
+.st-list::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.st-task{display:flex;flex-direction:column;gap:4px;text-align:left;padding:9px 11px;
+  border-radius:9px;background:var(--surface-2);border-left:2.5px solid var(--p-marker,var(--muted));
+  transition:background var(--t-hover),box-shadow var(--t-hover)}
+.st-task.pri-urgent{--p-marker:var(--p-urgent)}
+.st-task.pri-high{--p-marker:var(--p-high)}
+.st-task.pri-medium{--p-marker:var(--p-medium)}
+.st-task.pri-low{--p-marker:var(--p-low)}
+.st-task.pri-someday{--p-marker:var(--p-someday)}
+.st-task:hover{background:var(--surface-3)}
+.st-task.is-sel{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.st-task:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(138,93,255,.22)}
+.st-task-t{font-size:12.5px;color:var(--text);line-height:1.35}
+.st-task-m{display:flex;flex-wrap:wrap;gap:5px}
+.st-task-m>span{font-size:10px;color:var(--muted);background:var(--surface);
+  border-radius:4px;padding:1px 5px}
+.st-pri{text-transform:capitalize}
+.st-due{color:var(--p-high-ink)}
+.st-durations{display:flex;flex-wrap:wrap;gap:5px}
+.st-check{margin-top:6px;padding:9px 11px;border-radius:9px;font-size:11.5px;
+  line-height:1.45;color:var(--text-2);
+  transition:background var(--t-hover),color var(--t-hover)}
+.st-check b{font-weight:600;font-variant-numeric:tabular-nums}
+.st-check.is-clear{background:rgba(0,217,163,.07);color:var(--text-2)}
+.st-check.has-clash{background:rgba(240,145,61,.09);color:var(--p-high-ink)}
+.st-empty{display:flex;flex-direction:column;gap:7px;align-items:flex-start;
+  padding:20px 0 8px}
+.st-empty-t{font-size:14px;font-weight:600;color:var(--text-2)}
+.st-empty-s{font-size:12px;color:var(--muted);line-height:1.5}
+.st-empty .btn{margin-top:8px}
+
+/* ── §19 Read-only detail ───────────────────────────────────────────────
+   Deliberately unlike the editors: no input shells, no Save. The absence of
+   a form is the message that Life OS cannot change this. */
+.modal-detail{width:min(560px,calc(100vw - 40px));position:fixed}
+.dt-head{display:flex;align-items:flex-start;gap:11px}
+.dt-accent{width:4px;align-self:stretch;min-height:30px;border-radius:2px;flex-shrink:0;
+  margin-top:2px}
+.dt-title{flex:1;margin:0;font-size:20px;font-weight:600;line-height:1.32;color:var(--text)}
+.dt-body{padding-top:4px}
+.dt-rows{margin:0;display:flex;flex-direction:column;gap:1px}
+.dt-row{display:grid;grid-template-columns:96px 1fr;gap:14px;padding:9px 0;
+  border-bottom:1px solid var(--hairline)}
+.dt-row:last-child{border-bottom:none}
+.dt-row dt{font-size:11.5px;font-weight:600;color:var(--muted)}
+.dt-row dd{margin:0;font-size:12.5px;color:var(--text-2);line-height:1.5;
+  overflow-wrap:anywhere}
+.dt-note{margin:14px 0 0;padding:10px 12px;border-radius:9px;font-size:11.5px;
+  line-height:1.5;color:var(--muted);background:var(--surface-2);
+  border-left:2px solid var(--border-strong)}
+.dt-foot{gap:8px}
+.dt-meet{background:rgba(78,143,196,.16);color:var(--p-low-ink);text-decoration:none}
+.dt-meet:hover{background:rgba(78,143,196,.26)}
+.dt-foot .btn{text-decoration:none;display:inline-flex;align-items:center}
+
+@media (max-width:640px){
+  .modal-schedule,.modal-detail{left:0;right:0;bottom:0;top:auto;transform:none;
+    width:100%;max-height:92vh;border-radius:20px 20px 0 0}
+  .dt-row{grid-template-columns:1fr;gap:3px}
 }
 
 /* ── Ambient stars ──────────────────────────────────────────────────

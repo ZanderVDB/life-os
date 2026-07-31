@@ -324,16 +324,19 @@ test('plan: only relevant hours are shown by default', () => {
 
 /* ── Add menu ────────────────────────────────────────────────────────── */
 
-test('add menu: four types, and nothing that silently fails', () => {
+test('add menu: three types, and nothing that silently fails', () => {
   assert.match(evCode, /export function openAddMenu/, 'no Add menu');
   // Entries are filtered by whether a handler exists, so a missing flow is
   // simply not offered rather than offered and broken.
   assert.match(evCode, /\.filter\(\(\[k\]\) => handlers\[k\]\)/,
     'the menu can show an entry with no handler');
+  // D4.2 removed Habit: it is a Calendar LAYER, not a Calendar creation flow.
+  // Habits are managed on Today and in Settings.
   const wired = body(appCode, 'function calendarAddMenu(anchor, day = null)');
-  for (const k of ['event:', 'reminder:', 'habit:']) {
+  for (const k of ['event:', 'reminder:', 'task:']) {
     assert.ok(wired.includes(k), `the Add menu has no ${k} handler`);
   }
+  assert.ok(!wired.includes('habit:'), 'Habit creation returned to the Calendar Add menu');
 });
 
 /* ── Synthetic data boundary ─────────────────────────────────────────── */

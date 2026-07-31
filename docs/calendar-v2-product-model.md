@@ -193,3 +193,31 @@ not shown.
 **The user's real Google Calendar is not connected in D1–D4.** No scopes are
 requested, no live calls are made, and all Calendar content is synthetic and
 clearly marked.
+
+## Clarity rule (locked in D4.2)
+
+> **Nothing persistent in Life OS should make the user stop and wonder what it means.**
+
+Every visual indicator must satisfy at least one of:
+
+- universally recognisable;
+- clearly labelled;
+- explained through concise hover/focus detail;
+- explained by a small legend;
+- **removed**, because its value is too low to justify the cost of learning it.
+
+A tooltip is not sufficient on its own for an indicator that repeats throughout
+the interface and forms part of everyday scanning. If someone scans Month fifty
+times a week, every mark in it is either instantly legible or it is friction.
+
+### Applied in D4.2
+
+| Indicator | Decision |
+|---|---|
+| Habit completion pie in the month cell | **Removed.** It was the most repeated mark in Month and nobody could say what it meant. Habits now appear in the selected-day rail, in words. |
+| Workload edge colour | **Reduced to two states.** Busy (amber) and Heavily booked (red) only; everything else unmarked. The old four-state ramp used purple for "moderate", and purple already means selection. |
+| Conflict marker | **Kept, with an icon, a count and an accessible label.** Explained on hover and in the legend. |
+| Source-calendar colour | **Kept.** It sits inside the event's own representation and is explained in the legend. |
+
+Colour is never the only carrier of meaning. Purple means selected or
+interactive, everywhere, and nothing else.

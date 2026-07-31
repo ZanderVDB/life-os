@@ -22,7 +22,7 @@ import { flip, pulse, reducedMotion, settle } from './motion.js';
 const MODES = [
   { id: 'month', label: 'Month' },
   { id: 'agenda', label: 'Agenda' },
-  { id: 'plan', label: 'Plan' },
+  { id: 'plan', label: 'Plan week' },
 ];
 const LAYERS = [
   { id: 'events', label: 'Events' },
@@ -119,6 +119,10 @@ function workload(dayIso) {
     if (e.startsAt && e.endsAt) minutes += (new Date(e.endsAt) - new Date(e.startsAt)) / 60000;
   }
   for (const b of blocks) minutes += (new Date(b.endsAt) - new Date(b.startsAt)) / 60000;
+  // Only two marked states, both meaning "look at this day". Everything else
+  // is unmarked. A four-colour ramp asked the user to decode a legend just to
+  // read an ordinary week, and used purple — which means selection everywhere
+  // else in Life OS — for "moderately busy".
   if (allDay && minutes === 0) return 'moderate';
   if (minutes === 0) return 'open';
   if (minutes < 150) return 'moderate';
@@ -154,29 +158,93 @@ function periodLabel() {
   return 'Next 60 days';
 }
 
+/**
+ * Calendar header.
+ *
+ * The mode control and + Add are one visual system: same height, same radius,
+ * same baseline. They were previously unrelated shapes sitting next to each
+ * other — a segmented control beside an oversized purple block.
+ *
+ * They stay SEPARATE controls though. Switching how you look at time and
+ * creating something new are different acts, and merging them would make the
+ * mode control feel like a menu.
+ */
 export function calendarHeaderHtml() {
+  const active = MODES.findIndex((m) => m.id === cal.mode);
   return `<div class="cal-head">
-    <div class="cal-head-main">
-      <h1>Calendar</h1>
-      <div class="cal-period">
-        <button class="cal-nav" data-cal="prev" aria-label="Previous period">‹</button>
-        <span class="cal-period-label" id="cal-period">${esc(periodLabel())}</span>
-        <button class="cal-nav" data-cal="next" aria-label="Next period">›</button>
-        <button class="btn btn-ghost cal-today" data-cal="today">Today</button>
+    <div class="cal-head-row">
+      <div class="cal-head-main">
+        <h1>Calendar</h1>
+        <div class="cal-period">
+          <button class="cal-nav" data-cal="prev" aria-label="Previous period">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 5-5 5 5 5"/></svg></button>
+          <span class="cal-period-label" id="cal-period">${esc(periodLabel())}</span>
+          <button class="cal-nav" data-cal="next" aria-label="Next period">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 5 5 5-5 5"/></svg></button>
+          <button class="cal-today" data-cal="today">Today</button>
+        </div>
+      </div>
+
+      <div class="cal-head-side">
+        <div class="cal-modes" role="tablist" aria-label="Calendar mode"
+          style="--mode-i:${active};--mode-n:${MODES.length}">
+          <span class="cal-mode-pill" aria-hidden="true"></span>
+          ${MODES.map((m) => `<button role="tab" data-mode="${m.id}"
+            aria-selected="${cal.mode === m.id}"
+            tabindex="${cal.mode === m.id ? 0 : -1}">${m.label}</button>`).join('')}
+        </div>
+        <button class="cal-add" id="cal-add" aria-haspopup="menu" aria-expanded="false">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>
+          <span>Add</span>
+        </button>
       </div>
     </div>
-    <div class="cal-head-side">
-      <div class="seg cal-modes" role="tablist" aria-label="Calendar mode">
-        ${MODES.map((m) => `<button role="tab" data-mode="${m.id}"
-          aria-selected="${cal.mode === m.id}">${m.label}</button>`).join('')}
+
+    <div class="cal-head-row cal-head-sub">
+      <div class="cal-layers" role="group" aria-label="Visible layers">
+        ${LAYERS.map((l) => `<button class="cal-layer ${cal.layers[l.id] ? 'is-on' : ''}"
+          data-layer="${l.id}" aria-pressed="${cal.layers[l.id]}">
+          <span class="cl-dot cl-${l.id}"></span>${l.label}</button>`).join('')}
       </div>
-      <button class="btn btn-primary cal-add" id="cal-add" aria-haspopup="menu">+ Add</button>
+      <button class="cal-legend-btn" id="cal-legend" aria-haspopup="dialog"
+        aria-label="What the calendar symbols mean">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/>
+          <path d="M10 9v4.5M10 6.6v.1"/></svg>
+        <span>Key</span>
+      </button>
     </div>
-    <div class="cal-layers" role="group" aria-label="Visible layers">
-      ${LAYERS.map((l) => `<button class="cal-layer ${cal.layers[l.id] ? 'is-on' : ''}"
-        data-layer="${l.id}" aria-pressed="${cal.layers[l.id]}">
-        <span class="cl-dot cl-${l.id}"></span>${l.label}</button>`).join('')}
+  </div>`;
+}
+
+/**
+ * The legend.
+ *
+ * Locked product rule: nothing persistent in Life OS should make you stop and
+ * wonder what it means. Anything repeated across the interface must be
+ * self-explanatory or explained somewhere unobtrusive and findable. This is
+ * that somewhere — one compact popover, not a permanent sidebar.
+ */
+export function legendHtml() {
+  return `<div class="legend" role="dialog" aria-label="Calendar key">
+    <h4>What you are looking at</h4>
+    <div class="lg-group"><span class="lg-lab">On a day</span>
+      <div class="lg-row"><i class="lg-src"></i>
+        <span>A coloured edge on an event is the calendar it came from</span></div>
+      <div class="lg-row"><i class="lg-due"></i><span>A task deadline</span></div>
+      <div class="lg-row"><i class="lg-rem"></i><span>A reminder</span></div>
+      <div class="lg-row"><i class="lg-plan"></i><span>Work you have planned time for</span></div>
+      <div class="lg-row"><i class="lg-clash"></i><span>Two events overlap</span></div>
     </div>
+    <div class="lg-group"><span class="lg-lab">How full a day is</span>
+      <div class="lg-row"><i class="lg-load load-busy"></i>
+        <span><b>Busy</b> — more than 2½ hours committed</span></div>
+      <div class="lg-row"><i class="lg-load load-overloaded"></i>
+        <span><b>Heavily booked</b> — more than 5½ hours committed</span></div>
+      <div class="lg-row"><i class="lg-load"></i>
+        <span>No mark means the day has room</span></div>
+    </div>
+    <p class="lg-note">Purple always means selected or interactive — never how
+      busy a day is.</p>
   </div>`;
 }
 
@@ -222,9 +290,6 @@ function monthCellHtml(d, month, todayIso) {
   const extra = (ordered.length - shown.length)
     + (deadlines.length - shownDue.length) + reminders.length;
 
-  const habitRatio = habit && cal.data?.habitTotal
-    ? `${habit.done}/${cal.data.habitTotal}` : null;
-
   return `<div class="cm-cell ${outside ? 'is-outside' : ''} ${day === todayIso ? 'is-today' : ''}
       ${cal.selected === day ? 'is-selected' : ''} load-${load}"
       role="gridcell" tabindex="0" data-day="${day}"
@@ -249,8 +314,9 @@ function monthCellHtml(d, month, todayIso) {
         aria-label="${blocks.length} planned work block${blocks.length > 1 ? 's' : ''}">${blocks.length}</span>` : ''}
       ${reminders.length ? `<span class="cm-chip cm-rem"
         aria-label="${reminders.length} reminder${reminders.length > 1 ? 's' : ''}">${reminders.length}</span>` : ''}
-      ${habitRatio ? `<span class="cm-habit-dot" aria-label="${habitRatio} habits done"
-        style="--hb:${(habit.done / Math.max(1, cal.data.habitTotal) * 100).toFixed(0)}%"></span>` : ''}
+      <!-- The habit pie is gone. It was the most repeated mark in Month and
+           nobody could say what it meant, which failed the clarity rule.
+           Habits now appear only in the selected-day rail, in words. -->
     </div>
   </div>`;
 }

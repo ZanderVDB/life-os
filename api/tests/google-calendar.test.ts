@@ -279,15 +279,13 @@ test('ui: no browser prompt, confirm or alert for normal creation', () => {
   });
 });
 
-test('ui: habits are a faint arc in Month, never a green count', () => {
-  assert.match(calendar, /cm-habit-dot/, 'the habit summary is missing');
+test('ui: habits are absent from the Month cell entirely', () => {
+  // D4.1 demoted the green count to a faint arc. D4.2 removed even that: it
+  // was the most repeated mark in Month and nobody could say what it meant,
+  // which fails the clarity rule. Habits now live in the selected-day rail.
+  assert.ok(!calendar.includes('cm-habit-dot'), 'the habit arc is back in the cell');
   assert.ok(!/cm-chip cm-habit/.test(calendar), 'the green habit count is back');
-  assert.match(html, /\.cm-habit-dot\{[^}]*opacity:\.5/, 'the habit signal is not understated');
-  // And it comes after events, deadlines and reminders in the cell.
-  const cell = calendar.slice(calendar.indexOf('function monthCellHtml'),
-    calendar.indexOf('function describeDay'));
-  assert.ok(cell.indexOf('cm-ev') < cell.indexOf('cm-habit-dot'), 'habits outrank events');
-  assert.ok(cell.indexOf('cm-due') < cell.indexOf('cm-habit-dot'), 'habits outrank deadlines');
+  assert.match(calendar, /cs-habit/, 'habit detail vanished instead of moving to the rail');
 });
 
 test('ui: the selected day is a tint and a border, not a heavy fill', () => {
@@ -356,11 +354,12 @@ test('ui: pickers are shared, so the two editors cannot drift apart', () => {
     'the date grid is not keyboard operable');
 });
 
-test('ui: the add menu offers all four types and none that do nothing', () => {
+test('ui: the add menu offers three types and none that do nothing', () => {
   const em = read('event-modal.js');
-  for (const k of ["'event'", "'reminder'", "'task'", "'habit'"]) {
+  for (const k of ["'event'", "'reminder'", "'task'"]) {
     assert.ok(em.includes(k), `the add menu is missing ${k}`);
   }
+  assert.ok(!em.includes("'habit'"), 'Habit creation returned to the Calendar Add menu');
   assert.match(em, /\.filter\(\(\[k\]\) => handlers\[k\]\)/, 'an entry can appear with no handler');
   assert.match(em, /cm-add-ico/, 'menu entries have no icon');
   assert.match(em, /onEsc/, 'Escape does not close the add menu');

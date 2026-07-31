@@ -18,9 +18,11 @@ import { initDrag, isDragging } from './drag.js';
 import { openEventModal, openAddMenu } from './event-modal.js';
 import { initPlanDrag } from './plan-drag.js';
 import { openReminderModal } from './reminder-modal.js';
+import { openScheduleTaskModal } from './schedule-task-modal.js';
+import { openDetailSheet } from './detail-sheet.js';
 import { initHoverPreview, closeHoverPreview } from './hover-preview.js';
 import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHtml,
-  planHours, itemsForDay, hoverRender, freeWindowsFor,
+  planHours, itemsForDay, hoverRender, freeWindowsFor, legendHtml,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { settingsHtml } from './settings.js';
 
@@ -1516,6 +1518,13 @@ initAuth();
  *
  * All data is synthetic in this phase; no Google account is connected. */
 async function loadCalendar() {
+  // Restore the last mode once, before anything renders, so the pill is right
+  // on the first frame rather than snapping after a flash of Month.
+  if (!cal.restored) {
+    cal.restored = true;
+    const saved_ = localStorage.getItem('los2_cal_mode');
+    if (MODE_IDS.includes(saved_)) cal.mode = saved_;
+  }
   const head = document.getElementById('page-head');
   const scroll = document.getElementById('main-scroll');
   if (head) head.innerHTML = calendarHeaderHtml();
@@ -1545,6 +1554,7 @@ async function loadCalendar() {
   cal.loading = false;
   if (state.route !== 'calendar') return;
   scroll.innerHTML = calendarBodyHtml();
+  applyCanvasEnter(scroll);
   wireCalendar();
   renderCalendarRail();
 
@@ -1585,6 +1595,20 @@ function paintCalendar() {
   wireCalendar();
   renderCalendarRail();
 }
+
+/**
+ * Marks the canvas so it enters from the direction you travelled.
+ *
+ * The class is applied to the CANVAS, not the scroll region, so the header and
+ * rail stay put — only the thing that actually changed moves.
+ */
+function applyCanvasEnter(scroll) {
+  const canvas = scroll.firstElementChild;
+  if (!canvas || !cal.enter) { cal.enter = null; return; }
+  const cls = { next: 'cal-canvas-next', prev: 'cal-canvas-prev', mode: 'cal-canvas-mode' }[cal.enter];
+  if (cls) canvas.classList.add(cls);
+  cal.enter = null;
+}
 const periodLabelSafe = () => {
   const el = document.createElement('div');
   el.innerHTML = calendarHeaderHtml();
@@ -1617,29 +1641,54 @@ function renderCalendarRail() {
 }
 
 function wireCalendarHeader() {
+  const modes = document.querySelector('.cal-modes');
   document.querySelectorAll('[data-mode]').forEach((b) => {
     b.onclick = () => {
       if (cal.mode === b.dataset.mode) return;
       cal.mode = b.dataset.mode;
-      document.querySelectorAll('[data-mode]').forEach((x) =>
-        x.setAttribute('aria-selected', String(x.dataset.mode === cal.mode)));
+      localStorage.setItem('los2_cal_mode', cal.mode);
+      // The pill glides because only its --mode-i changes; the buttons are
+      // never re-rendered, so nothing flashes.
+      const i = MODE_IDS.indexOf(cal.mode);
+      modes?.style.setProperty('--mode-i', String(i));
+      document.querySelectorAll('[data-mode]').forEach((x) => {
+        const on = x.dataset.mode === cal.mode;
+        x.setAttribute('aria-selected', String(on));
+        x.tabIndex = on ? 0 : -1;
+      });
+      cal.enter = 'mode';
       loadCalendar();
+    };
+    // Arrow keys move between modes, as a tablist should.
+    b.onkeydown = (e) => {
+      const d = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+      if (!d) return;
+      e.preventDefault();
+      const i = (MODE_IDS.indexOf(cal.mode) + d + MODE_IDS.length) % MODE_IDS.length;
+      document.querySelector(`[data-mode="${MODE_IDS[i]}"]`)?.click();
+      document.querySelector(`[data-mode="${MODE_IDS[i]}"]`)?.focus();
     };
   });
   document.querySelectorAll('[data-cal]').forEach((b) => {
     b.onclick = () => {
+      const dir = b.dataset.cal;
       const step = cal.mode === 'plan' ? 7 : 0;
-      if (b.dataset.cal === 'today') cal.anchor = new Date();
+      if (dir === 'today') cal.anchor = new Date();
       else if (cal.mode === 'month') {
         cal.anchor = new Date(cal.anchor.getFullYear(),
-          cal.anchor.getMonth() + (b.dataset.cal === 'next' ? 1 : -1), 1);
+          cal.anchor.getMonth() + (dir === 'next' ? 1 : -1), 1);
       } else if (step) {
         cal.anchor = new Date(cal.anchor.getTime()
-          + (b.dataset.cal === 'next' ? step : -step) * 86400000);
+          + (dir === 'next' ? step : -step) * 86400000);
       }
+      // Direction is the message: forward enters from the right.
+      cal.enter = dir === 'next' ? 'next' : dir === 'prev' ? 'prev' : 'mode';
       loadCalendar();
     };
   });
+
+  const legendBtn = document.getElementById('cal-legend');
+  legendBtn?.addEventListener('click', () => toggleLegend(legendBtn));
   // Layers filter what is already loaded — no round trip, no flash.
   document.querySelectorAll('[data-layer]').forEach((b) => {
     b.onclick = () => {
@@ -1680,10 +1729,18 @@ function selectDay(day) {
   renderCalendarRail();
 }
 
-/** Opens the event editor. Create and edit are the same modal. */
+/**
+ * Opens an event.
+ *
+ * A REAL Google event opens read-only detail, never a form. Life OS cannot
+ * write to Google in this phase, and a form with a Save button would promise
+ * something that does not exist. Local and synthetic events still open the
+ * editor, because those Life OS can actually change.
+ */
 function openEvent(id, defaultDay = null) {
   const ev = id ? cal.data?.events.find((x) => x.id === id) : null;
   if (id && !ev) return;
+  if (ev && ev.syncState === 'synced') return openEventDetail(ev);
   openEventModal({
     event: ev,
     calendars: cal.data?.calendars ?? [],
@@ -1732,22 +1789,16 @@ function flashEvent(id) {
 }
 
 function calendarAddMenu(anchor, day = null) {
+  anchor.setAttribute('aria-expanded', 'true');
   openAddMenu(anchor, {
     event: () => openEvent(null, day ?? cal.selected ?? undefined),
     reminder: () => addReminder(day ?? cal.selected),
-    // Scheduled Task sends you to Plan, where the queue and the free windows
-    // are — scheduling without seeing the week would be guesswork.
-    task: () => {
-      if (cal.mode !== 'plan') {
-        cal.mode = 'plan';
-        loadCalendar();
-        saved('Drag a task from the queue onto a free slot');
-      } else {
-        document.querySelector('.pq-card')?.focus();
-      }
-    },
-    habit: () => editHabit(null),
-  });
+    task: () => openScheduleTask({ day: day ?? cal.selected ?? null }),
+    // Habit is deliberately absent. Habits are a Calendar LAYER, not a
+    // Calendar creation flow — you review habit history here and manage
+    // habits on Today or in Settings. Offering creation just because the
+    // layer exists would put the same concept in three places.
+  }, () => anchor.setAttribute('aria-expanded', 'false'));
 }
 
 /** Reminders are Life OS records, never Google events. */
@@ -1890,3 +1941,121 @@ async function moveBlock(blockId, startsAt, endsAt) {
     toast(e.message, true);
   }
 }
+
+const MODE_IDS = ['month', 'agenda', 'plan'];
+
+/**
+ * The legend popover.
+ *
+ * Deliberately a popover and not a permanent panel: a legend that is always on
+ * screen is an admission that the interface needs a manual. This is here for
+ * the first week and for the one indicator you cannot place.
+ */
+function toggleLegend(btn) {
+  const open = document.querySelector('.legend');
+  if (open) { open.remove(); return; }
+  const host = document.createElement('div');
+  host.innerHTML = legendHtml();
+  const el = host.firstElementChild;
+  document.body.appendChild(el);
+
+  const b = btn.getBoundingClientRect();
+  el.style.left = `${Math.max(12, Math.min(b.left, window.innerWidth - el.offsetWidth - 12))}px`;
+  el.style.top = `${Math.min(b.bottom + 8, window.innerHeight - el.offsetHeight - 12)}px`;
+  if (!reducedMotion()) {
+    el.animate([{ opacity: 0, translate: '0 -6px' }, { opacity: 1, translate: '0 0' }],
+      { duration: 160, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  }
+
+  const away = (e) => {
+    if (el.contains(e.target) || e.target === btn) return;
+    el.remove();
+    document.removeEventListener('click', away, true);
+    document.removeEventListener('keydown', esc, true);
+  };
+  const esc = (e) => { if (e.key === 'Escape') { el.remove(); btn.focus(); away({ target: document.body }); } };
+  setTimeout(() => {
+    document.addEventListener('click', away, true);
+    document.addEventListener('keydown', esc, true);
+  }, 0);
+}
+
+/**
+ * Opens the scheduling flow. Reached from + Add, from a clicked Plan slot, and
+ * from a queue card's Schedule button — all three land here so the conflict
+ * check and the one-write-on-confirm rule cannot diverge between them.
+ */
+function openScheduleTask({ day = null, time = null, taskId = null } = {}) {
+  const scheduled = new Set((cal.data?.blocks ?? []).map((b) => b.taskId));
+  const pool = [
+    ...(cal.data?.deadlines ?? []),
+    ...(cal.data?.unscheduled ?? []),
+  ].filter((t) => !scheduled.has(t.id));
+  // De-duplicate: a task with a due date can appear in both collections.
+  const seen = new Set();
+  let tasks = pool.filter((t) => (seen.has(t.id) ? false : seen.add(t.id)));
+  if (taskId) tasks = [...tasks].sort((a, b) => (a.id === taskId ? -1 : b.id === taskId ? 1 : 0));
+
+  openScheduleTaskModal({
+    tasks,
+    day,
+    time,
+    areaName: (id) => (state.me?.areas ?? []).find((a) => a.id === id)?.name ?? null,
+    conflictsAt: (dayIso, startMin, endMin) => {
+      const { events, blocks } = itemsForDay(dayIso);
+      const mins = (d) => { const x = new Date(d); return x.getHours() * 60 + x.getMinutes(); };
+      const out = [];
+      for (const e of events) {
+        if (e.isAllDay || !e.startsAt || !e.endsAt) continue;
+        // Respect Google's free/busy: an event marked free does not block time.
+        if (e.transparency === 'transparent') continue;
+        if (mins(e.startsAt) < endMin && mins(e.endsAt) > startMin) out.push(e.title);
+      }
+      for (const b of blocks) {
+        if (mins(b.startsAt) < endMin && mins(b.endsAt) > startMin) out.push(b.title);
+      }
+      return out;
+    },
+    onSchedule: (id, startsAt, endsAt) => scheduleTask(id, startsAt, endsAt),
+    onOpenTasks: () => go('today'),
+  });
+}
+
+/** Read-only detail for a synced Google event. No Save, no Edit. */
+function openEventDetail(ev) {
+  const when = ev.isAllDay
+    ? (ev.endDate && ev.endDate !== ev.startDate
+      ? `All day · ${prettyDay(ev.startDate)} – ${prettyDay(ev.endDate)}`
+      : `All day · ${prettyDay(ev.startDate)}`)
+    : `${new Date(ev.startsAt).toLocaleDateString(undefined,
+      { weekday: 'long', day: 'numeric', month: 'long' })}
+`
+      + `${hhmmOf(ev.startsAt)} – ${hhmmOf(ev.endsAt)}`;
+  const going = (ev.attendees ?? []).filter((a) => a.responseStatus === 'accepted').length;
+  const links = (cal.data?.links ?? []).filter((l) => l.sourceId === ev.id);
+
+  openDetailSheet({
+    title: ev.title,
+    accent: ev.calendarColor,
+    rows: [
+      ['When', when],
+      ['Calendar', ev.calendarName],
+      ev.location ? ['Where', ev.location] : null,
+      ev.recurrence ? ['Repeats', 'Yes'] : null,
+      ev.attendees?.length ? ['Guests', `${going} of ${ev.attendees.length} going`] : null,
+      ev.transparency === 'transparent' ? ['Shows as', 'Free'] : null,
+      ev.visibility && ev.visibility !== 'default' ? ['Visibility', ev.visibility] : null,
+      ev.description ? ['Details', ev.description] : null,
+      links.length ? ['Life OS', `${links.length} linked item${links.length > 1 ? 's' : ''}`] : null,
+    ].filter(Boolean),
+    meetLink: ev.hangoutLink ?? null,
+    externalLink: ev.providerHtmlLink ?? null,
+    // Stated plainly rather than implied by a missing button.
+    note: 'This event lives in Google Calendar. Life OS can read it but not change it.',
+  });
+}
+
+const prettyDay = (d) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined,
+  { weekday: 'short', day: 'numeric', month: 'short' });
+const hhmmOf = (t) => new Date(t).toLocaleTimeString(undefined,
+  { hour: '2-digit', minute: '2-digit' });
