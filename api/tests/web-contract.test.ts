@@ -13,7 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { freshDb } from './helpers.js';
 import { buildApp } from '../src/app.js';
-import { loadEnv } from '../src/env.js';
+import { loadEnv, corsOrigins } from '../src/env.js';
 import { EXPORT_FORMAT } from '../src/lib/legacy-import.js';
 
 const TOKEN = 'test-bypass-token';
@@ -21,7 +21,7 @@ const env = loadEnv({
   NODE_ENV: 'test', PORT: '8080', LOG_LEVEL: 'fatal',
   DATABASE_URL: 'postgresql://unused/unused',
   FIREBASE_PROJECT_ID: 'test-project',
-  CORS_ORIGINS: 'http://localhost:5173',
+  CORS_ALLOWED_ORIGINS: 'http://localhost:5173',
   DEV_AUTH_BYPASS: TOKEN,
 } as any);
 
@@ -224,4 +224,65 @@ test('web contract: import preview returns counts only, and leaks no text to the
   assert.ok(!asText.includes('SECRET BUSINESS'), 'Business text leaked into the preview');
   assert.ok(!asText.includes('Personal one'), 'task text leaked into the preview');
   assert.ok(!asText.includes('Personal two'), 'task text leaked into the preview');
+});
+
+/* ── CORS: staging must answer preflight for the exact origin only ───── */
+
+test('cors: preflight succeeds for an allowed origin and is refused for others', async () => {
+  const { db } = await freshDb();
+  const corsEnv = loadEnv({
+    NODE_ENV: 'test', PORT: '8080', LOG_LEVEL: 'fatal',
+    DATABASE_URL: 'postgresql://unused/unused',
+    FIREBASE_PROJECT_ID: 'test-project',
+    CORS_ALLOWED_ORIGINS: 'https://life-os-v2-web-staging.up.railway.app,http://localhost:5173',
+    DEV_AUTH_BYPASS: TOKEN,
+  } as any);
+  const app = buildApp(db, corsEnv);
+  await app.ready();
+
+  const allowed = 'https://life-os-v2-web-staging.up.railway.app';
+  const pre = await app.inject({
+    method: 'OPTIONS', url: '/api/v1/me',
+    headers: { origin: allowed, 'access-control-request-method': 'GET',
+      'access-control-request-headers': 'authorization' },
+  });
+  assert.ok(pre.statusCode < 300, `preflight failed: ${pre.statusCode}`);
+  assert.equal(pre.headers['access-control-allow-origin'], allowed);
+
+  // An origin that is not on the list must not be echoed back.
+  const foreign = await app.inject({
+    method: 'OPTIONS', url: '/api/v1/me',
+    headers: { origin: 'https://evil.example.com', 'access-control-request-method': 'GET' },
+  });
+  assert.notEqual(foreign.headers['access-control-allow-origin'], 'https://evil.example.com');
+  assert.notEqual(foreign.headers['access-control-allow-origin'], '*');
+
+  // An authenticated GET from the allowed origin still carries the header.
+  const real = await app.inject({ method: 'GET', url: '/api/v1/me',
+    headers: { ...auth(), origin: allowed } });
+  assert.equal(real.statusCode, 200);
+  assert.equal(real.headers['access-control-allow-origin'], allowed);
+});
+
+test('cors: a wildcard origin is refused at boot, not silently honoured', () => {
+  assert.throws(() => loadEnv({
+    NODE_ENV: 'staging', PORT: '8080', LOG_LEVEL: 'info',
+    DATABASE_URL: 'postgresql://unused/unused',
+    FIREBASE_PROJECT_ID: 'p', CORS_ALLOWED_ORIGINS: '*',
+  } as any) && corsOrigins(loadEnv({
+    NODE_ENV: 'staging', PORT: '8080', LOG_LEVEL: 'info',
+    DATABASE_URL: 'postgresql://unused/unused',
+    FIREBASE_PROJECT_ID: 'p', CORS_ALLOWED_ORIGINS: '*',
+  } as any)), /must not contain/);
+});
+
+test('env: DEV_AUTH_BYPASS cannot be set in staging or production', () => {
+  for (const NODE_ENV of ['staging', 'production']) {
+    assert.throws(() => loadEnv({
+      NODE_ENV, PORT: '8080', LOG_LEVEL: 'info',
+      DATABASE_URL: 'postgresql://unused/unused',
+      FIREBASE_PROJECT_ID: 'p', CORS_ALLOWED_ORIGINS: 'https://x.example',
+      DEV_AUTH_BYPASS: 'anything',
+    } as any), /DEV_AUTH_BYPASS/, `${NODE_ENV} accepted a bypass token`);
+  }
 });

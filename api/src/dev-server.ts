@@ -47,7 +47,7 @@ const env = loadEnv({
   DATABASE_URL: 'postgresql://pglite/in-memory',
   FIREBASE_PROJECT_ID: 'local-dev',
   // Allow any local origin so `npx serve web` on any port can talk to this.
-  CORS_ORIGINS: 'http://localhost:5173,http://localhost:3000,http://localhost:4173,http://127.0.0.1:5173',
+  CORS_ALLOWED_ORIGINS: 'http://localhost:5173,http://localhost:3000,http://localhost:4173,http://127.0.0.1:5173',
   DEV_AUTH_BYPASS: DEV_TOKEN,
 } as any);
 

@@ -14,7 +14,7 @@ const env = loadEnv({
   NODE_ENV: 'test', PORT: '8080', LOG_LEVEL: 'fatal',
   DATABASE_URL: 'postgresql://unused/unused',
   FIREBASE_PROJECT_ID: 'test-project',
-  CORS_ORIGINS: 'http://localhost:5173',
+  CORS_ALLOWED_ORIGINS: 'http://localhost:5173',
   DEV_AUTH_BYPASS: TOKEN,
 } as any);
 

@@ -7,6 +7,12 @@ const Env = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   FIREBASE_PROJECT_ID: z.string().min(1, 'FIREBASE_PROJECT_ID is required'),
+  /**
+   * Comma-separated exact origins. Never `*` — the API is credential-bearing,
+   * and a wildcard would let any site drive it with a user's token.
+   */
+  CORS_ALLOWED_ORIGINS: z.string().default(''),
+  /** Superseded name, still read so an older deploy does not lose its CORS. */
   CORS_ORIGINS: z.string().default(''),
   /** Test/local escape hatch only. MUST be empty in staging/production. */
   DEV_AUTH_BYPASS: z.string().optional(),
@@ -30,5 +36,10 @@ export function loadEnv(raw: NodeJS.ProcessEnv = process.env): AppEnv {
 }
 
 export function corsOrigins(env: AppEnv): string[] {
-  return env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
+  const raw = `${env.CORS_ALLOWED_ORIGINS},${env.CORS_ORIGINS}`;
+  const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  // A wildcard here would be a silent, total hole. Refuse it outright rather
+  // than letting a convenient value reach production.
+  if (list.includes('*')) throw new Error('CORS_ALLOWED_ORIGINS must not contain "*".');
+  return [...new Set(list)];
 }
