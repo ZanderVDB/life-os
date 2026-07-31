@@ -16,6 +16,7 @@ import type { Db } from '../db/client.js';
 import {
   calendars, calendarEvents, calendarEventAttendees, reminders,
   taskScheduleBlocks, calendarItemLinks, tasks, habitEntries, habits,
+  reminderRecurrenceRules,
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { isStagingCleanupAllowed } from '../lib/import-writer.js';
@@ -53,6 +54,23 @@ const BlockBody = z.object({
   endsAt: z.string().datetime(),
 });
 
+/**
+ * A recurrence rule, in the shape the reminder_recurrence_rules table stores.
+ *
+ * Deliberately structured rather than an RRULE string: "monthly on day 25" is
+ * something Life OS has to reason about — to work out the next occurrence and
+ * whether it is overdue — and parsing an RRULE every time to answer that would
+ * be doing the same work twice.
+ */
+const RecurrenceBody = z.object({
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']),
+  interval: z.number().int().min(1).max(52).default(1),
+  byWeekday: z.array(z.number().int().min(0).max(6)).nullish(),
+  byMonthDay: z.array(z.number().int().min(1).max(31)).nullish(),
+  until: z.string().regex(ISO_DATE).nullish(),
+  count: z.number().int().min(1).max(999).nullish(),
+});
+
 const ReminderBody = z.object({
   title: z.string().trim().min(1).max(500),
   notes: z.string().max(4000).nullish(),
@@ -60,6 +78,9 @@ const ReminderBody = z.object({
   dueTime: z.string().regex(/^\d{2}:\d{2}$/).nullish(),
   areaId: z.string().uuid().nullish(),
   leadDays: z.number().int().min(0).max(90).default(0),
+  // Zod strips unknown keys, so an unlisted `recurrence` vanished without an
+  // error and the modal's Repeat control never persisted anything.
+  recurrence: RecurrenceBody.nullish(),
 });
 
 /** Day offset from today, as a Date at a given local hour. */
@@ -129,6 +150,14 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       lte(reminders.dueDate, q.data.to),
     )).orderBy(asc(reminders.dueDate));
 
+    // Recurrence travels with the reminder so the UI can say "every month on
+    // the 25th" rather than showing a bare date.
+    const rules = rems.length
+      ? await db.select().from(reminderRecurrenceRules)
+        .where(eq(reminderRecurrenceRules.workspaceId, workspaceId))
+      : [];
+    const ruleFor = new Map(rules.map((r) => [r.reminderId, r]));
+
     const blocks = await db.select({
       id: taskScheduleBlocks.id,
       taskId: taskScheduleBlocks.taskId,
@@ -187,7 +216,7 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
         isReadOnly: calById.get(e.calendarId)?.isReadOnly ?? true,
         attendees: byEvent.get(e.id) ?? [],
       })),
-      reminders: rems,
+      reminders: rems.map((r) => ({ ...r, recurrence: ruleFor.get(r.id) ?? null })),
       blocks,
       deadlines,
       habitDays,
@@ -291,11 +320,30 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
     const { workspaceId } = req.params as { workspaceId: string };
     const b = ReminderBody.safeParse(req.body);
     if (!b.success) throw badRequest(b.error.issues[0]!.message);
+    const { recurrence, ...fields } = b.data;
+
+    // Reminders created through the app are the user's own records, not
+    // demonstration data — `isSynthetic` was left true from the seed work and
+    // would have made real reminders eligible for the staging cleanup.
     const [row] = await db.insert(reminders).values({
-      workspaceId, ...b.data, isSynthetic: true,
+      workspaceId, ...fields, isSynthetic: false,
     }).returning();
+    if (!row) throw badRequest('Could not create the reminder.');
+
+    if (recurrence) {
+      await db.insert(reminderRecurrenceRules).values({
+        workspaceId,
+        reminderId: row.id,
+        frequency: recurrence.frequency,
+        interval: recurrence.interval,
+        byWeekday: recurrence.byWeekday ?? null,
+        byMonthDay: recurrence.byMonthDay ?? null,
+        until: recurrence.until ?? null,
+        count: recurrence.count ?? null,
+      });
+    }
     reply.code(201);
-    return { reminder: row };
+    return { reminder: { ...row, recurrence: recurrence ?? null } };
   });
 
   app.post('/api/v1/workspaces/:workspaceId/reminders/:id/complete', pre, async (req) => {

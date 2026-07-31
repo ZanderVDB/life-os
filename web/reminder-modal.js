@@ -63,7 +63,8 @@ export function openReminderModal(ctx) {
     title: r?.title ?? '',
     dueDate: r?.dueDate ?? defaultDay ?? iso(new Date()),
     dueTime: r?.dueTime ?? '',
-    repeat: r?.recurrence ?? '',
+    repeat: ({ DAILY: 'daily', WEEKLY: 'weekly', MONTHLY: 'monthly',
+      YEARLY: 'yearly' })[r?.recurrence?.frequency] ?? '',
     leadDays: r?.leadDays ?? 0,
     areaId: r?.areaId ?? '',
     notes: r?.notes ?? '',
@@ -250,7 +251,15 @@ export function openReminderModal(ctx) {
         leadDays: v.leadDays,
         areaId: v.areaId || null,
         notes: v.notes || null,
-        recurrence: v.repeat || null,
+        // The API stores a structured rule, not a word, so it can work out the
+        // next occurrence without re-parsing a string every time.
+        recurrence: v.repeat ? {
+          frequency: { daily: 'DAILY', weekly: 'WEEKLY',
+            monthly: 'MONTHLY', yearly: 'YEARLY' }[v.repeat],
+          interval: 1,
+          ...(v.repeat === 'weekly' ? { byWeekday: [parseIso(f.dueDate).getDay()] } : {}),
+          ...(v.repeat === 'monthly' ? { byMonthDay: [parseIso(f.dueDate).getDate()] } : {}),
+        } : null,
       });
       close(true);
     } catch (e) {
