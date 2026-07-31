@@ -26,7 +26,7 @@ const state = {
   me: null, prefs: {}, token: null,
   tasks: [], history: [], historyTotal: 0,
   route: 'today', areaFilter: null, menu: null, settingsTab: 'account',
-  habits: [], habitsLoaded: false,
+  habits: [], habitsLoaded: false, habitsError: null,
 };
 
 const root = document.getElementById('root');
@@ -862,7 +862,12 @@ function renderRail() {
     <div class="rail-card habits-card">
       <h3>Habits today${due.length ? ` <span class="hb-count">${doneCount}/${due.length}</span>` : ''}</h3>
       ${!state.habitsLoaded ? '<p class="rail-quiet">Loading…</p>'
+        : state.habitsError ? `<p class="rail-quiet" style="color:var(--danger)">
+             Could not load habits.<br><span style="color:var(--muted)">${esc(state.habitsError)}</span>
+             <button class="rail-link" id="hb-retry">Try again</button></p>`
         : due.length ? `<div class="hb-list">${due.map(habitRowHtml).join('')}</div>`
+        : hs.length ? `<p class="rail-quiet">Nothing due today.
+             <button class="rail-link" data-rail-nav="settings">Manage habits →</button></p>`
         : `<p class="rail-quiet">No habits yet.
              <button class="rail-link" data-rail-nav="settings">Add one in Settings →</button></p>`}
     </div>
@@ -908,6 +913,8 @@ function wireRail() {
   rail.querySelector('[data-un-defer]')?.addEventListener('click',
     (e) => run(() => shiftBucket(e.currentTarget.dataset.unDefer, 1)));
 
+  rail.querySelector('#hb-retry')?.addEventListener('click',
+    () => run(async () => { await loadHabits(); renderRail(); }));
   rail.querySelectorAll('[data-habit-toggle]').forEach((el) => {
     el.onclick = () => toggleHabit(el.dataset.habitToggle);
   });
@@ -938,11 +945,18 @@ function wireRail() {
 
 /* ── Habits ──────────────────────────────────────────────────────────── */
 async function loadHabits() {
+  state.habitsError = null;
   try {
     const r = await api(`/api/v1/workspaces/${ws()}/habits`);
-    state.habits = r.habits;
-  } catch {
-    state.habits = [];   // A habits failure must never take Today down with it.
+    state.habits = r.habits ?? [];
+  } catch (e) {
+    // A habits failure must not take Today down — but it must NOT masquerade
+    // as "you have no habits" either. Swallowing this made a real failure
+    // indistinguishable from an empty state, which is precisely the kind of
+    // dishonest UI this app avoids everywhere else.
+    state.habits = [];
+    state.habitsError = e.message;
+    console.error('[habits] load failed:', e);
   }
   state.habitsLoaded = true;
 }
