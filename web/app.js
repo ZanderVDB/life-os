@@ -1547,6 +1547,32 @@ async function loadCalendar() {
   scroll.innerHTML = calendarBodyHtml();
   wireCalendar();
   renderCalendarRail();
+
+  // Returning from Google: the callback stored the connection and the calendar
+  // list, but not the events — a long import must not hold the redirect open.
+  // Run that first sync here instead, so connecting produces a calendar with
+  // things in it rather than an empty grid and an unexplained "Sync now".
+  const back = new URLSearchParams(location.hash.split('?')[1] ?? '');
+  if (back.get('calendar') === 'connected' && !cal.firstSyncDone) {
+    cal.firstSyncDone = true;
+    history.replaceState(null, '', '#calendar');
+    await syncGoogle();
+  } else if (back.get('calendar') === 'error') {
+    history.replaceState(null, '', '#calendar');
+    toast(connectErrorMessage(back.get('reason')), true);
+  }
+}
+
+/** Google failures explained in product terms, not error codes. */
+function connectErrorMessage(reason) {
+  return {
+    declined: 'You did not approve access, so nothing was connected.',
+    expired_state: 'That took too long. Try connecting again.',
+    scope_not_granted: 'Google did not grant calendar read access. Try again and '
+      + 'leave the calendar permission ticked.',
+    no_lasting_grant: 'Google did not return a lasting grant. Try connecting again.',
+    not_configured: 'Google Calendar is not configured on this server yet.',
+  }[reason] ?? 'Could not finish connecting to Google Calendar.';
 }
 
 /** Re-renders ONLY the calendar canvas — never the whole route. */

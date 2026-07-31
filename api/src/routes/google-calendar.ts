@@ -162,7 +162,7 @@ export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: G
       const set = await G.exchangeCode(cfg, q.code, entry.verifier);
       // Refuse anything broader or narrower than what we asked for.
       if (!set.scopes.includes(G.GOOGLE_SCOPE)) return fail('scope_not_granted');
-      if (!set.refreshToken) return fail('no_refresh_token');
+      if (!set.refreshToken) return fail('no_lasting_grant');
 
       const email = await G.fetchAccountEmail(set.accessToken);
       const providerAccountId = email ?? `google:${entry.workspaceId}`;

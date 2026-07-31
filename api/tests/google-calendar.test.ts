@@ -84,7 +84,7 @@ test('oauth: PKCE challenge is S256 and the verifier never leaves the server', (
 test('oauth: offline access is requested so a refresh token actually arrives', () => {
   assert.match(client, /access_type: 'offline'/, 'no refresh token will be issued');
   assert.match(client, /prompt: 'consent'/, 'reconnect would arrive without a refresh token');
-  assert.match(route, /if \(!set\.refreshToken\) return fail\('no_refresh_token'\)/,
+  assert.match(route, /if \(!set\.refreshToken\) return fail\('no_lasting_grant'\)/,
     'a connection without a refresh token is accepted');
 });
 
