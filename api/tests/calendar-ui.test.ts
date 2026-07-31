@@ -365,3 +365,29 @@ test('data: the seed covers the shapes that actually cause trouble', () => {
   assert.match(calRoute, /isoDay\(-3\)/, 'no overdue reminder in the synthetic set');
   assert.match(calRoute, /at\(2, 14, 30\)/, 'no overlapping events in the synthetic set');
 });
+
+/* ── D4.2: no orphaned floating UI ───────────────────────────────────── */
+
+test('layout: every hidden-toggled element actually hides', () => {
+  // An author `display:` rule beats the UA's `[hidden]{display:none}`, so any
+  // element toggled via the hidden ATTRIBUTE and given a display value needs an
+  // explicit `[hidden]` rule. Without it .hov rendered as an unlabelled 264px
+  // bar floating over every Calendar mode, and the event editor's "More
+  // options" was permanently expanded.
+  const toggled = ['hov', 'ev-adv'];
+  for (const cls of toggled) {
+    const rule = new RegExp(`\\.${cls}\\{[^}]*display:`);
+    if (!rule.test(html)) continue;         // no display set, UA rule applies
+    assert.match(html, new RegExp(`\\.${cls}\\[hidden\\]\\{display:none\\}`),
+      `.${cls} sets display but has no [hidden] rule — it can never hide`);
+  }
+});
+
+test('layout: the hover shell starts hidden and empties on close', () => {
+  const hov = read('hover-preview.js');
+  assert.match(hov, /el\.hidden = true/, 'the preview shell starts visible');
+  assert.match(hov, /el\.innerHTML = ''/, 'closing leaves stale content behind');
+  assert.match(hov, /export function closeHoverPreview/, 'no way to force-close');
+  // Repainting the canvas must close it, or it anchors to a removed node.
+  assert.match(code(app), /closeHoverPreview\(\);/, 'a repaint can strand the preview');
+});
