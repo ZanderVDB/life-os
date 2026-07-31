@@ -15,7 +15,10 @@ import { openTaskModal } from './task-modal.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
 import { initDrag, isDragging } from './drag.js';
+import { openEventModal, openAddMenu } from './event-modal.js';
+import { initPlanDrag } from './plan-drag.js';
 import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHtml,
+  planHours, itemsForDay,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { settingsHtml } from './settings.js';
 
@@ -205,6 +208,27 @@ async function boot() {
   initStars();
   // One drag system for mouse, pen and touch. `settled: true` because the
   // placeholder already put the card in its final slot before release.
+  // Plan-mode scheduling. Separate from task-board dragging: this one drops
+  // work onto a time axis rather than into a list.
+  initPlanDrag({
+    hours: () => planHours(),
+    conflictsAt: (day, startMin, endMin, ignoreBlockId) => {
+      const { events, blocks } = itemsForDay(day);
+      const clash = [];
+      const mins = (d) => { const x = new Date(d); return x.getHours() * 60 + x.getMinutes(); };
+      for (const e of events) {
+        if (e.isAllDay || !e.startsAt || !e.endsAt) continue;
+        if (mins(e.startsAt) < endMin && mins(e.endsAt) > startMin) clash.push(e.title);
+      }
+      for (const b of blocks) {
+        if (b.id === ignoreBlockId) continue;
+        if (mins(b.startsAt) < endMin && mins(b.endsAt) > startMin) clash.push(b.title);
+      }
+      return clash;
+    },
+    onCreate: (taskId, startsAt, endsAt) => scheduleTask(taskId, startsAt, endsAt),
+    onMove: (blockId, startsAt, endsAt) => moveBlock(blockId, startsAt, endsAt),
+  });
   initDrag({
     getScrollRoot: () => document.getElementById('main-scroll'),
     onDrop: (id, bucket, anchor) => moveTask(id, bucket, anchor, { settled: true }),
@@ -543,10 +567,14 @@ async function loadRoute() {
     return;
   }
 
+  // Calendar is a real section now, so it must branch BEFORE the placeholder
+  // header is written — `route` here is the route OBJECT, not its id, which is
+  // why an earlier `route === 'calendar'` check never fired.
+  if (state.route === 'calendar') return loadCalendar();
+
   const ph = PLACEHOLDERS[state.route];
   head.innerHTML = `<p class="eyebrow">Life OS</p><h1>${esc(route.label)}</h1>
     <p class="sub">${esc(ph.tagline)}</p>`;
-  if (route === 'calendar') return loadCalendar();
   scroll.innerHTML = placeholderHtml(route, ph);
 }
 
@@ -1062,6 +1090,10 @@ function openTask(id, prefillTitle = '') {
 function renderRail() {
   const rail = document.getElementById('rail');
   if (!rail || !state.me) return;
+  // The rail belongs to the route. Habits are the Today rail; Calendar has its
+  // own, which changes by mode. Without this guard the deferred habit load
+  // clobbered the Calendar rail a moment after it rendered.
+  if (state.route === 'calendar') return renderCalendarRail();
   const now = new Date();
   const hs = state.habits ?? [];
   const due = hs.filter((h) => h.dueToday && !h.archivedAt);
@@ -1481,7 +1513,7 @@ initAuth();
  *
  * All data is synthetic in this phase; no Google account is connected. */
 async function loadCalendar() {
-  const head = document.querySelector('.page-head');
+  const head = document.getElementById('page-head');
   const scroll = document.getElementById('main-scroll');
   if (head) head.innerHTML = calendarHeaderHtml();
   cal.loading = !cal.data;
@@ -1532,8 +1564,10 @@ function renderCalendarRail() {
     el.onclick = () => selectDay(el.dataset.day);
   });
   rail.querySelectorAll('[data-event]').forEach((el) => {
-    el.onclick = () => openEventPreview(el.dataset.event);
+    el.onclick = () => openEvent(el.dataset.event);
   });
+  const addDay = rail.querySelector('[data-cal-add-day]');
+  addDay?.addEventListener('click', () => calendarAddMenu(addDay, addDay.dataset.calAddDay));
 }
 
 function wireCalendarHeader() {
@@ -1570,8 +1604,8 @@ function wireCalendarHeader() {
       paintCalendar();
     };
   });
-  document.getElementById('cal-add')?.addEventListener('click', () =>
-    toast('The Add menu arrives with the event editor.'));
+  const addBtn = document.getElementById('cal-add');
+  addBtn?.addEventListener('click', () => calendarAddMenu(addBtn));
   document.getElementById('cal-retry')?.addEventListener('click', () => loadCalendar());
 }
 
@@ -1583,7 +1617,7 @@ function wireCalendar() {
     };
   });
   document.querySelectorAll('[data-event]').forEach((el) => {
-    el.onclick = (e) => { e.stopPropagation(); openEventPreview(el.dataset.event); };
+    el.onclick = (e) => { e.stopPropagation(); openEvent(el.dataset.event); };
   });
   document.querySelectorAll('[data-reminder]').forEach((el) => {
     el.onclick = (e) => { e.stopPropagation(); toggleReminder(el.dataset.reminder); };
@@ -1600,12 +1634,78 @@ function selectDay(day) {
   renderCalendarRail();
 }
 
-function openEventPreview(id) {
-  const e = cal.data?.events.find((x) => x.id === id);
-  if (!e) return;
-  const when = e.isAllDay ? 'All day'
-    : `${new Date(e.startsAt).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
-  toast(`${e.title} — ${when}${e.location ? ` · ${e.location}` : ''}`);
+/** Opens the event editor. Create and edit are the same modal. */
+function openEvent(id, defaultDay = null) {
+  const ev = id ? cal.data?.events.find((x) => x.id === id) : null;
+  if (id && !ev) return;
+  openEventModal({
+    event: ev,
+    calendars: cal.data?.calendars ?? [],
+    defaultDay,
+    links: (cal.data?.links ?? []).filter((l) => l.sourceId === id),
+    onSave: async (body) => {
+      const r = ev
+        ? await api(`/api/v1/workspaces/${ws()}/calendar/events/${ev.id}`,
+          { method: 'PATCH', body })
+        : await api(`/api/v1/workspaces/${ws()}/calendar/events`,
+          { method: 'POST', body });
+      // Settle the saved event into the calendar without reloading the route.
+      const saved_ = r.event;
+      const cals = cal.data.calendars;
+      const c = cals.find((x) => x.id === saved_.calendarId);
+      const merged = { ...saved_, calendarName: c?.name ?? null,
+        calendarColor: c?.color ?? null, isReadOnly: c?.isReadOnly ?? false,
+        attendees: ev?.attendees ?? [] };
+      if (ev) {
+        const i = cal.data.events.findIndex((x) => x.id === ev.id);
+        if (i > -1) cal.data.events[i] = merged;
+      } else {
+        cal.data.events.push(merged);
+      }
+      paintCalendar();
+      flashEvent(merged.id);
+      saved(ev ? 'Event saved' : 'Event created');
+    },
+    onDelete: async () => {
+      await api(`/api/v1/workspaces/${ws()}/calendar/events/${ev.id}`, { method: 'DELETE' });
+      cal.data.events = cal.data.events.filter((x) => x.id !== ev.id);
+      paintCalendar();
+      saved('Event deleted');
+    },
+  });
+}
+
+/** A brief highlight so a saved event is findable on the canvas. */
+function flashEvent(id) {
+  if (reducedMotion()) return;
+  const el = document.querySelector(`[data-event="${id}"]`);
+  if (!el) return;
+  el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  el.animate([{ background: 'var(--accent-soft)' }, { background: 'transparent' }],
+    { duration: 900, easing: 'ease-out' });
+}
+
+function calendarAddMenu(anchor, day = null) {
+  openAddMenu(anchor, {
+    event: () => openEvent(null, day ?? cal.selected ?? undefined),
+    reminder: () => addReminder(day ?? cal.selected),
+    habit: () => editHabit(null),
+  });
+}
+
+/** Reminders are Life OS records — a small prompt, not the event editor. */
+async function addReminder(day) {
+  const title = prompt('What should you be reminded about?');
+  if (!title?.trim()) return;
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/reminders`, {
+      method: 'POST',
+      body: { title: title.trim(), dueDate: day ?? iso(new Date()) },
+    });
+    cal.data.reminders.push(r.reminder);
+    paintCalendar();
+    saved('Reminder added');
+  } catch (e) { toast(e.message, true); }
 }
 
 async function toggleReminder(id) {
@@ -1620,6 +1720,50 @@ async function toggleReminder(id) {
     saved(wasDone ? 'Reopened' : 'Done');
   } catch (e) {
     r.status = wasDone ? 'done' : 'open';
+    paintCalendar();
+    toast(e.message, true);
+  }
+}
+
+/** Drops a task into a time slot. One write, after the drop. */
+async function scheduleTask(taskId, startsAt, endsAt) {
+  const task = (cal.data?.unscheduled ?? []).find((t) => t.id === taskId)
+    ?? (cal.data?.deadlines ?? []).find((t) => t.id === taskId);
+  const optimistic = {
+    id: `tmp-${taskId}`, taskId, startsAt, endsAt,
+    title: task?.title ?? 'Task', priority: task?.priority ?? 'medium',
+    areaId: task?.areaId ?? null, dueDate: task?.dueDate ?? null,
+  };
+  cal.data.blocks.push(optimistic);
+  paintCalendar();
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/calendar/blocks`,
+      { method: 'POST', body: { taskId, startsAt, endsAt } });
+    // Adopt the real id without moving anything visually.
+    const i = cal.data.blocks.findIndex((b) => b.id === optimistic.id);
+    if (i > -1) cal.data.blocks[i] = { ...optimistic, id: r.block.id };
+    paintCalendar();
+    saved('Scheduled');
+  } catch (e) {
+    cal.data.blocks = cal.data.blocks.filter((b) => b.id !== optimistic.id);
+    paintCalendar();
+    toast(e.message, true);
+  }
+}
+
+/** Moves or resizes a block. Rolls back to the original slot on failure. */
+async function moveBlock(blockId, startsAt, endsAt) {
+  const b = cal.data?.blocks.find((x) => x.id === blockId);
+  if (!b) return;
+  const before = { startsAt: b.startsAt, endsAt: b.endsAt };
+  b.startsAt = startsAt; b.endsAt = endsAt;
+  paintCalendar();
+  try {
+    await api(`/api/v1/workspaces/${ws()}/calendar/blocks/${blockId}`,
+      { method: 'PATCH', body: { startsAt, endsAt } });
+    saved('Moved');
+  } catch (e) {
+    Object.assign(b, before);
     paintCalendar();
     toast(e.message, true);
   }

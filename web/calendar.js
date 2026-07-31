@@ -379,10 +379,17 @@ function planDayHtml(d, todayIso, hours) {
         style="top:${top(e.startsAt).toFixed(2)}%;height:${Math.max(3, height(e.startsAt, e.endsAt)).toFixed(2)}%;
           --src:${esc(e.calendarColor || 'var(--accent)')}">
         <b>${esc(hhmm(new Date(e.startsAt)))}</b> ${esc(e.title)}</div>`).join('')}
-      ${blocks.map((b) => `<div class="pl-block" data-block="${b.id}"
-        style="top:${top(b.startsAt).toFixed(2)}%;height:${Math.max(3, height(b.startsAt, b.endsAt)).toFixed(2)}%">
-        <b>${esc(hhmm(new Date(b.startsAt)))}</b> ${esc(b.title)}
-        <span class="pl-tag">planned</span></div>`).join('')}
+      ${blocks.map((b) => {
+        const st = new Date(b.startsAt); const en = new Date(b.endsAt);
+        const sm = st.getHours() * 60 + st.getMinutes();
+        const em = en.getHours() * 60 + en.getMinutes();
+        return `<div class="pl-block" data-block="${b.id}" data-task="${b.taskId}"
+          data-start-min="${sm}" data-end-min="${em}"
+          style="top:${top(b.startsAt).toFixed(2)}%;height:${Math.max(3, height(b.startsAt, b.endsAt)).toFixed(2)}%">
+          <b>${esc(hhmm(st))}</b> ${esc(b.title)}
+          <span class="pl-tag">planned</span>
+          <span class="pl-resize" aria-hidden="true"></span></div>`;
+      }).join('')}
     </div>
   </div>`;
 }
@@ -514,5 +521,7 @@ export function calendarBodyHtml() {
   if (cal.mode === 'plan') return planHtml();
   return agendaHtml();
 }
+
+export const planHours = () => ({ start: PLAN_START, end: PLAN_END });
 
 export { cal, currentRange, itemsForDay, workload, conflictsOn, monthGrid, weekOf, iso, parseIso };
