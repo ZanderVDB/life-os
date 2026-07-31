@@ -22,7 +22,7 @@ import { openScheduleTaskModal } from './schedule-task-modal.js';
 import { openDetailSheet } from './detail-sheet.js';
 import { initHoverPreview, closeHoverPreview } from './hover-preview.js';
 import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHtml,
-  planHours, itemsForDay, hoverRender, freeWindowsFor, legendHtml,
+  planHours, itemsForDay, hoverRender, freeWindowsFor, legendHtml, sourcesPopoverHtml,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { settingsHtml } from './settings.js';
 
@@ -1618,7 +1618,15 @@ const periodLabelSafe = () => {
 function renderCalendarRail() {
   const rail = document.getElementById('rail');
   if (!rail) return;
+  // Only the contextual band is swapped when the mode changes; the context
+  // and attention cards keep their nodes, so the rail never flashes.
+  const prevMode = rail.querySelector('[data-rail-ctx]')?.dataset.railCtx;
   rail.innerHTML = calendarRailHtml();
+  const ctx = rail.querySelector('[data-rail-ctx]');
+  if (ctx && prevMode && prevMode !== cal.mode && !reducedMotion()) {
+    ctx.animate([{ opacity: 0, translate: '0 6px' }, { opacity: 1, translate: '0 0' }],
+      { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  }
   rail.querySelectorAll('[data-day]').forEach((el) => {
     el.onclick = () => selectDay(el.dataset.day);
   });
@@ -1628,13 +1636,9 @@ function renderCalendarRail() {
   const addDay = rail.querySelector('[data-cal-add-day]');
   addDay?.addEventListener('click', () => calendarAddMenu(addDay, addDay.dataset.calAddDay));
 
-  const connect = rail.querySelector('#cal-connect');
-  connect?.addEventListener('click', () => connectGoogle(connect));
-  rail.querySelector('#cal-sync')?.addEventListener('click', () => syncGoogle());
-  rail.querySelector('#cal-disconnect')?.addEventListener('click', () => disconnectGoogle());
-  rail.querySelectorAll('[data-calendar]').forEach((cb) => {
-    cb.onchange = () => setCalendarVisible(cb.dataset.calendar, cb.checked);
-  });
+  const srcBtn = rail.querySelector('#cal-sources');
+  srcBtn?.addEventListener('click', () => toggleSources(srcBtn));
+  rail.querySelector('#cal-sync-retry')?.addEventListener('click', () => syncGoogle());
   rail.querySelectorAll('[data-schedule]').forEach((b) => {
     b.onclick = (e) => { e.stopPropagation(); scheduleFromQueue(b.dataset.schedule); };
   });
@@ -2059,3 +2063,49 @@ const prettyDay = (d) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined,
   { weekday: 'short', day: 'numeric', month: 'short' });
 const hhmmOf = (t) => new Date(t).toLocaleTimeString(undefined,
   { hour: '2-digit', minute: '2-digit' });
+
+/**
+ * Source management as a popover.
+ *
+ * It used to occupy the whole Agenda rail, which meant the mode least
+ * concerned with plumbing showed the most of it. Connection state stays
+ * visible in the rail context card; the controls appear when asked for.
+ */
+function toggleSources(btn) {
+  const open = document.querySelector('.sources');
+  if (open) { open.remove(); return; }
+  const host = document.createElement('div');
+  host.innerHTML = sourcesPopoverHtml();
+  const el = host.firstElementChild;
+  document.body.appendChild(el);
+
+  const b = btn.getBoundingClientRect();
+  el.style.left = `${Math.max(12, Math.min(b.left - el.offsetWidth + b.width,
+    window.innerWidth - el.offsetWidth - 12))}px`;
+  el.style.top = `${Math.min(b.bottom + 8, window.innerHeight - el.offsetHeight - 12)}px`;
+  if (!reducedMotion()) {
+    el.animate([{ opacity: 0, translate: '0 -6px' }, { opacity: 1, translate: '0 0' }],
+      { duration: 160, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  }
+
+  const close = () => {
+    el.remove();
+    document.removeEventListener('click', away, true);
+    document.removeEventListener('keydown', esc, true);
+  };
+  const away = (e) => { if (!el.contains(e.target) && e.target !== btn) close(); };
+  const esc = (e) => { if (e.key === 'Escape') { close(); btn.focus(); } };
+  setTimeout(() => {
+    document.addEventListener('click', away, true);
+    document.addEventListener('keydown', esc, true);
+  }, 0);
+
+  const connect = el.querySelector('#cal-connect');
+  connect?.addEventListener('click', () => connectGoogle(connect));
+  el.querySelector('#cal-sync')?.addEventListener('click', () => { close(); syncGoogle(); });
+  el.querySelector('#cal-disconnect')?.addEventListener('click', () => { close(); disconnectGoogle(); });
+  el.querySelectorAll('[data-calendar]').forEach((cb) => {
+    cb.onchange = () => setCalendarVisible(cb.dataset.calendar, cb.checked);
+  });
+  el.querySelector('button')?.focus();
+}

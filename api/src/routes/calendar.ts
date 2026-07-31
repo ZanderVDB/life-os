@@ -18,8 +18,12 @@ import {
   taskScheduleBlocks, calendarItemLinks, tasks, habitEntries, habits,
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
+import { isStagingCleanupAllowed } from '../lib/import-writer.js';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Typed verbatim to confirm. Long enough that it cannot be an accident. */
+const CONFIRM_PHRASE = 'DELETE SYNTHETIC CALENDAR DATA';
 
 const RangeQuery = z.object({
   from: z.string().regex(ISO_DATE, 'from must be YYYY-MM-DD'),
@@ -492,10 +496,54 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
     };
   });
 
-  app.delete('/api/v1/workspaces/:workspaceId/calendar/synthetic', pre, async (req) => {
+  /* ── Synthetic cleanup: preview, then confirm ────────────────────────
+   * Deliberately two calls. Deleting demonstration data next to 500+ real
+   * Google events is exactly the operation that should not happen behind one
+   * opaque request — you see the counts first, then type the phrase.
+   *
+   * Counts only. No event titles, ever. */
+  app.get('/api/v1/workspaces/:workspaceId/calendar/synthetic/preview', pre, async (req) => {
     const { workspaceId } = req.params as { workspaceId: string };
-    const removed = await clearSynthetic(db, workspaceId);
-    return { removed };
+    if (!isStagingCleanupAllowed(process.env.NODE_ENV ?? 'development')) {
+      throw badRequest('Synthetic cleanup is not available in production.');
+    }
+    return { ...(await syntheticCounts(db, workspaceId)), confirmPhrase: CONFIRM_PHRASE };
+  });
+
+  app.post('/api/v1/workspaces/:workspaceId/calendar/synthetic/cleanup', pre, async (req) => {
+    const { workspaceId } = req.params as { workspaceId: string };
+    if (!isStagingCleanupAllowed(process.env.NODE_ENV ?? 'development')) {
+      throw badRequest('Synthetic cleanup is not available in production.');
+    }
+    const b = z.object({ confirm: z.string() }).safeParse(req.body);
+    if (!b.success || b.data.confirm !== CONFIRM_PHRASE) {
+      throw badRequest(`To confirm, send exactly: ${CONFIRM_PHRASE}`);
+    }
+
+    const before = await syntheticCounts(db, workspaceId);
+    // One transaction: a partial cleanup that removed calendars but left
+    // reminders would be worse than none.
+    await db.transaction(async (tx) => { await clearSynthetic(tx as unknown as Db, workspaceId); });
+    const after = await syntheticCounts(db, workspaceId);
+
+    // Audit line carries counts only — never a title, never an id.
+    app.log.info({
+      workspaceId,
+      removed: {
+        calendars: before.syntheticCalendars - after.syntheticCalendars,
+        events: before.syntheticEvents - after.syntheticEvents,
+        reminders: before.syntheticReminders - after.syntheticReminders,
+        blocks: before.syntheticBlocks - after.syntheticBlocks,
+      },
+      retained: {
+        googleCalendars: after.googleCalendars,
+        googleEvents: after.googleEvents,
+        tasks: after.tasks,
+        habits: after.habits,
+      },
+    }, 'synthetic calendar cleanup');
+
+    return { removed: before, remaining: after };
   });
 }
 
@@ -516,4 +564,43 @@ async function clearSynthetic(db: Db, workspaceId: string) {
     await db.delete(calendars).where(eq(calendars.id, c.id));
   }
   return { calendars: synthCals.length };
+}
+
+/**
+ * Counts on both sides of the line: what cleanup would remove, and what it
+ * must leave completely alone.
+ */
+async function syntheticCounts(db: Db, workspaceId: string) {
+  const n = async (table: any, where: any) => {
+    const [row] = await db.select({ c: sql<number>`count(*)::int` }).from(table).where(where);
+    return row?.c ?? 0;
+  };
+  const synthCalIds = (await db.select({ id: calendars.id }).from(calendars).where(and(
+    eq(calendars.workspaceId, workspaceId), eq(calendars.isSynthetic, true),
+  ))).map((r) => r.id);
+
+  return {
+    syntheticCalendars: synthCalIds.length,
+    syntheticEvents: await n(calendarEvents, and(
+      eq(calendarEvents.workspaceId, workspaceId), eq(calendarEvents.isSynthetic, true))),
+    syntheticReminders: await n(reminders, and(
+      eq(reminders.workspaceId, workspaceId), eq(reminders.isSynthetic, true))),
+    syntheticBlocks: await n(taskScheduleBlocks, and(
+      eq(taskScheduleBlocks.workspaceId, workspaceId),
+      eq(taskScheduleBlocks.isSynthetic, true))),
+    // Everything below is RETAINED. Listed so the preview shows what survives,
+    // not only what disappears.
+    googleCalendars: await n(calendars, and(
+      eq(calendars.workspaceId, workspaceId), eq(calendars.isSynthetic, false))),
+    googleEvents: await n(calendarEvents, and(
+      eq(calendarEvents.workspaceId, workspaceId), eq(calendarEvents.isSynthetic, false))),
+    realReminders: await n(reminders, and(
+      eq(reminders.workspaceId, workspaceId), eq(reminders.isSynthetic, false))),
+    realBlocks: await n(taskScheduleBlocks, and(
+      eq(taskScheduleBlocks.workspaceId, workspaceId),
+      eq(taskScheduleBlocks.isSynthetic, false))),
+    tasks: await n(tasks, eq(tasks.workspaceId, workspaceId)),
+    habits: await n(habits, eq(habits.workspaceId, workspaceId)),
+    habitEntries: await n(habitEntries, eq(habitEntries.workspaceId, workspaceId)),
+  };
 }

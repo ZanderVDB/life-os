@@ -182,9 +182,14 @@ test('month: selecting a day patches the cell and rail, not the page', () => {
 /* ── Rail ────────────────────────────────────────────────────────────── */
 
 test('rail: changes by mode, and never shows daily habits', () => {
-  assert.match(calCode, /if \(cal\.mode === 'month'\) return monthRailHtml/, 'no per-mode rail');
-  assert.match(calCode, /function planRailHtml/, 'Plan has no rail');
-  assert.match(calCode, /function agendaRailHtml/, 'Agenda has no rail');
+  // D4.3 replaced the three independent rails with one shell whose middle band
+  // changes. The branch moved into railModeHtml; the per-mode builders remain
+  // as the content of that band.
+  assert.match(calCode, /function railModeHtml/, 'no per-mode rail content');
+  assert.match(calCode, /if \(cal\.mode === 'plan'\) return planRailHtml/,
+    'the mode band does not branch');
+  assert.match(calCode, /function planRailHtml/, 'Plan has no rail content');
+  assert.match(calCode, /function agendaRailHtml/, 'Agenda has no rail content');
   // Habits belong to Today. Calendar may summarise them inside a selected day,
   // but must not carry the daily habit list.
   assert.ok(!/Habits today/.test(calendar), 'the Today habit rail leaked into Calendar');

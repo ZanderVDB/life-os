@@ -519,32 +519,50 @@ function nowPct(hours) {
   return p >= 0 && p <= 100 ? p : null;
 }
 
+/**
+ * One day column in Plan week.
+ *
+ * WEEKDAY EMPHASIS, decided against real data: seven equal columns at 1440px
+ * gave each day about 110px, which is too narrow to read an event title. Work
+ * is overwhelmingly planned Monday to Friday, so weekdays take the space and
+ * weekends keep a narrower column. Nothing is hidden — a weekend with events
+ * brightens back to full weight, because a hidden commitment is worse than a
+ * cramped one.
+ */
 function planDayHtml(d, todayIso, hours) {
   const day = iso(d);
   const { events, blocks } = itemsForDay(day);
+  const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+  const load = workload(day);
+
   const top = (dt) => {
     const t = new Date(dt);
-    return ((t.getHours() + t.getMinutes() / 60) - PLAN_START) / hours.length * 100;
+    return ((t.getHours() + t.getMinutes() / 60) - hours[0]) / hours.length * 100;
   };
   const height = (a, b) => (new Date(b) - new Date(a)) / 3600000 / hours.length * 100;
   const timed = events.filter((e) => !e.isAllDay && e.startsAt);
   const allDay = events.filter((e) => e.isAllDay);
+  const free = freeWindows(day);
 
-  return `<div class="pl-day ${day === todayIso ? 'is-today' : ''}" data-day="${day}">
+  return `<div class="pl-day ${day === todayIso ? 'is-today' : ''}
+      ${isWeekend ? 'is-weekend' : ''} ${events.length || blocks.length ? 'has-events' : ''}"
+      data-day="${day}">
     <div class="pl-day-head">
       <span class="pl-dow">${d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
       <span class="pl-num">${d.getDate()}</span>
+      ${load === 'busy' || load === 'overloaded'
+        ? `<span class="pl-load load-${load}">${load === 'busy' ? 'busy' : 'full'}</span>` : ''}
     </div>
     ${allDay.length ? `<div class="pl-allday">${allDay.map((e) =>
       `<span class="pl-ad" data-event="${e.id}">${esc(e.title)}</span>`).join('')}</div>` : ''}
     <div class="pl-canvas" data-drop-day="${day}">
       ${hours.map(() => '<span class="pl-line"></span>').join('')}
-      ${freeWindows(day).map(([a, b]) => `<div class="pl-free"
+      ${free.map(([a, b]) => `<div class="pl-free"
         style="top:${pctOf(a, hours).toFixed(2)}%;height:${(pctOf(b, hours) - pctOf(a, hours)).toFixed(2)}%"
-        aria-hidden="true"></div>`).join('')}
+        title="Free ${fmtMin(a)}–${fmtMin(b)}">
+        <span class="pl-free-label">Free ${fmtMin(a)}–${fmtMin(b)}</span></div>`).join('')}
       ${day === todayIso && nowPct(hours) !== null
-        ? `<div class="pl-now" style="top:${nowPct(hours).toFixed(2)}%"
-             aria-label="Now"></div>` : ''}
+        ? `<div class="pl-now" style="top:${nowPct(hours).toFixed(2)}%" aria-label="Now"></div>` : ''}
       ${timed.map((e) => `<div class="pl-ev" data-event="${e.id}"
         style="top:${top(e.startsAt).toFixed(2)}%;height:${Math.max(3, height(e.startsAt, e.endsAt)).toFixed(2)}%;
           --src:${esc(e.calendarColor || 'var(--accent)')}">
@@ -564,51 +582,127 @@ function planDayHtml(d, todayIso, hours) {
   </div>`;
 }
 
+const fmtMin = (m) =>
+  `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
 /* ── Rail, per mode ────────────────────────────────────────────────────
  * The rail changes with the mode and shows nothing when it has nothing
  * useful. Daily Habits deliberately do NOT appear here — they are strongest on
  * Today, and repeating them in every Calendar mode devalues both surfaces. */
+/**
+ * The Calendar rail - ONE shell, three contexts.
+ *
+ * Calendar is a single section, so its rail keeps a stable structure and only
+ * the middle band changes with the mode. Previously each mode built its own
+ * rail from scratch, which made switching feel like moving between three
+ * different applications.
+ *
+ *   A. Context    - the period or selected date, and the connection state
+ *   B. Mode       - selected day / upcoming summary / planning queue
+ *   C. Attention  - conflicts, overdue reminders, unplanned deadlines
+ *
+ * A and C are identical everywhere. Only B is replaced, and it crossfades.
+ */
 export function calendarRailHtml() {
-  if (cal.mode === 'month') return monthRailHtml();
+  return `${railContextHtml()}
+    <div class="rail-ctx" data-rail-ctx="${cal.mode}">${railModeHtml()}</div>
+    ${railAttentionHtml()}`;
+}
+
+/** A - always present, always the same shape. */
+function railContextHtml() {
+  const conn = cal.data?.connection ?? null;
+  const period = cal.selected
+    ? parseIso(cal.selected).toLocaleDateString(undefined,
+      { weekday: 'long', day: 'numeric', month: 'long' })
+    : periodLabel();
+  const state = !conn ? 'none' : conn.status === 'error' ? 'error' : 'ok';
+
+  return `<div class="rail-card rail-context">
+    <div class="rail-head">
+      <h3>${esc(period)}</h3>
+      <button class="rail-src-btn" id="cal-sources" aria-haspopup="dialog">
+        <span class="rail-src-dot ${state === 'error' ? 'is-error' : ''}"></span>
+        ${state === 'none' ? 'Connect' : state === 'error' ? 'Reconnect' : 'Sources'}
+      </button>
+    </div>
+    <div class="rail-sync">${state === 'none' ? 'No calendar connected'
+      : esc(lastSyncedWord(conn.lastSyncedAt))}</div>
+  </div>`;
+}
+
+/** B - the only part that changes with the mode. */
+function railModeHtml() {
+  if (cal.mode === 'month') {
+    return cal.selected ? selectedRailHtml() : monthOverviewHtml();
+  }
   if (cal.mode === 'plan') return planRailHtml();
   return agendaRailHtml();
 }
 
-function monthRailHtml() {
+/** C - always present; renders nothing when there is nothing wrong. */
+function railAttentionHtml() {
   const d = cal.data;
   if (!d) return '';
-  const grid = monthGrid(cal.anchor);
-  const inMonth = grid.filter((x) => x.getMonth() === cal.anchor.getMonth()).map(iso);
-  const clashes = inMonth.flatMap((day) => conflictsOn(day).map((c) => ({ day, c })));
   const todayIso = iso(new Date());
-  const overdue = d.reminders.filter((r) => r.status === 'open' && r.dueDate < todayIso);
-  const birthdays = d.events.filter((e) => e.eventType === 'birthday'
-    && inMonth.includes(e.startDate));
-  const noPlan = d.deadlines.filter((t) => inMonth.includes(t.dueDate)
-    && !d.blocks.some((b) => b.taskId === t.id));
+  const scope = cal.mode === 'plan' ? weekOf(cal.anchor).map(iso)
+    : monthGrid(cal.anchor).filter((x) => x.getMonth() === cal.anchor.getMonth()).map(iso);
 
-  const sel = cal.selected ? selectedRailHtml() : '';
-  const attention = clashes.length || overdue.length || noPlan.length;
+  const clashes = scope.flatMap((day) => conflictsOn(day).map((c) => ({ day, c })));
+  const overdue = (d.reminders ?? []).filter((r) => r.status === 'open' && r.dueDate < todayIso);
+  const unplanned = (d.deadlines ?? []).filter((t) => scope.includes(t.dueDate)
+    && !(d.blocks ?? []).some((b) => b.taskId === t.id));
+  const syncError = d.connection?.status === 'error';
 
-  return `${sel}
-    ${attention ? `<div class="rail-card">
-      <h3>Needs attention</h3>
-      <div class="rl-list">
-        ${clashes.slice(0, 3).map(({ day, c }) => `<button class="rl-row is-warn" data-day="${day}">
-          <span class="rl-t">${esc(c[0].title)} clashes with ${esc(c[1].title)}</span>
-          <span class="rl-s">${esc(parseIso(day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</span>
-        </button>`).join('')}
-        ${overdue.slice(0, 3).map((r) => `<div class="rl-row is-warn">
-          <span class="rl-t">${esc(r.title)}</span><span class="rl-s">overdue</span></div>`).join('')}
-        ${noPlan.slice(0, 3).map((t) => `<div class="rl-row">
-          <span class="rl-t">${esc(t.title)}</span>
-          <span class="rl-s">due, no planned work</span></div>`).join('')}
-      </div></div>` : ''}
-    ${birthdays.length ? `<div class="rail-card"><h3>This month</h3>
-      <div class="rl-list">${birthdays.map((b) => `<div class="rl-row">
-        <span class="rl-t">${esc(b.title)}</span>
-        <span class="rl-s">${esc(parseIso(b.startDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</span>
-      </div>`).join('')}</div></div>` : ''}`;
+  if (!clashes.length && !overdue.length && !unplanned.length && !syncError) return '';
+
+  return `<div class="rail-card rail-attention">
+    <h3>Needs attention</h3>
+    <div class="rl-list">
+      ${syncError ? `<div class="rl-row is-warn">
+        <span class="rl-t">Calendar sync failed</span>
+        <button class="rl-s rail-link" id="cal-sync-retry">Retry</button></div>` : ''}
+      ${clashes.slice(0, 3).map(({ day, c }) => `<button class="rl-row is-warn" data-day="${day}">
+        <span class="rl-t">${esc(c[0].title)} overlaps ${esc(c[1].title)}</span>
+        <span class="rl-s">${esc(prettyShort(day))}</span>
+      </button>`).join('')}
+      ${overdue.slice(0, 3).map((r) => `<div class="rl-row is-warn">
+        <span class="rl-t">${esc(r.title)}</span><span class="rl-s">overdue</span></div>`).join('')}
+      ${unplanned.slice(0, 3).map((t) => `<button class="rl-row" data-schedule="${t.id}">
+        <span class="rl-t">${esc(t.title)}</span>
+        <span class="rl-s">due, not planned</span></button>`).join('')}
+    </div>
+  </div>`;
+}
+
+/** Month with nothing selected: what the month holds, briefly. */
+function monthOverviewHtml() {
+  const d = cal.data;
+  if (!d) return '';
+  const days = monthGrid(cal.anchor)
+    .filter((x) => x.getMonth() === cal.anchor.getMonth()).map(iso);
+  const inMonth = (e) => days.includes(e.isAllDay ? e.startDate : iso(new Date(e.startsAt)));
+  const events = (d.events ?? []).filter((e) => (e.isAllDay ? e.startDate : e.startsAt) && inMonth(e));
+  const birthdays = events.filter((e) => e.eventType === 'birthday');
+  const allDay = events.filter((e) => e.isAllDay && e.eventType !== 'birthday');
+  const busy = days.filter((day) => ['busy', 'overloaded'].includes(workload(day)));
+
+  return `<div class="rail-card">
+    <h3>This month</h3>
+    <div class="rl-list">
+      <div class="rl-row"><span class="rl-t">Events</span>
+        <span class="rl-s">${events.length}</span></div>
+      ${allDay.length ? `<div class="rl-row"><span class="rl-t">All-day</span>
+        <span class="rl-s">${allDay.length}</span></div>` : ''}
+      ${busy.length ? `<div class="rl-row"><span class="rl-t">Busy days</span>
+        <span class="rl-s">${busy.length}</span></div>` : ''}
+    </div>
+    ${birthdays.length ? `<div class="cs-sec"><span class="cs-lab">Birthdays</span>
+      ${birthdays.map((b) => `<div class="cs-row"><i style="background:var(--p-medium)"></i>
+        <span>${esc(prettyShort(b.startDate))}</span><b>${esc(b.title)}</b></div>`).join('')}
+    </div>` : ''}
+    <p class="rail-quiet cal-hint">Pick a day to see what is on it.</p>
+  </div>`;
 }
 
 function selectedRailHtml() {
@@ -670,17 +764,45 @@ const loadWord = (l) => ({
  * account is connected." Product UI does not talk about synthetic data; it
  * says whether a calendar is connected and what Life OS can do with it.
  */
+/**
+ * Agenda's mode context: what is coming, summarised. Source management moved
+ * to a popover - it was dominating the rail on the one mode where the user is
+ * least interested in plumbing.
+ */
 function agendaRailHtml() {
   const d = cal.data;
   if (!d) return '';
-  const conn = d.connection ?? null;
-  const cals = (d.calendars ?? []).filter((c) => !c.isSynthetic);
+  const today = new Date();
+  const horizon = Array.from({ length: 61 }, (_, i) => iso(addDays(today, i)));
+  const count = (pick) => horizon.reduce((n, day) => n + pick(itemsForDay(day)).length, 0);
 
-  if (!conn || conn.status === 'disconnected') {
-    return `<div class="rail-card cal-connect">
-      <h3>Calendar sources</h3>
+  return `<div class="rail-card">
+    <h3>Coming up</h3>
+    <div class="rl-list">
+      <div class="rl-row"><span class="rl-t">Events</span>
+        <span class="rl-s">${count((x) => x.events)}</span></div>
+      <div class="rl-row"><span class="rl-t">Reminders</span>
+        <span class="rl-s">${count((x) => x.reminders)}</span></div>
+      <div class="rl-row"><span class="rl-t">Deadlines</span>
+        <span class="rl-s">${count((x) => x.deadlines)}</span></div>
+      <div class="rl-row"><span class="rl-t">Planned work</span>
+        <span class="rl-s">${count((x) => x.blocks)}</span></div>
+    </div>
+    <p class="rail-quiet cal-hint">Next 60 days. Use the filters above to narrow it.</p>
+  </div>`;
+}
+
+/** Source management, on demand rather than permanently in the rail. */
+export function sourcesPopoverHtml() {
+  const d = cal.data;
+  const conn = d?.connection ?? null;
+  const cals = (d?.calendars ?? []).filter((c) => !c.isSynthetic);
+
+  if (!conn) {
+    return `<div class="sources" role="dialog" aria-label="Calendar sources">
+      <h4>Calendar sources</h4>
       <p class="cs-connect-copy">Connect Google Calendar to see your real events
-        in Month, Agenda and Plan.</p>
+        in Month, Agenda and Plan week.</p>
       <ul class="cs-connect-list">
         <li>Life OS reads your calendars and events.</li>
         <li>It cannot create, change or delete anything in Google.</li>
@@ -691,33 +813,27 @@ function agendaRailHtml() {
     </div>`;
   }
 
-  const syncing = conn.status === 'syncing';
-  const failed = conn.status === 'error';
-  return `<div class="rail-card">
-    <h3>Calendar sources</h3>
+  return `<div class="sources" role="dialog" aria-label="Calendar sources">
+    <h4>Calendar sources</h4>
     <div class="cs-account">
-      <span class="cs-acct-dot ${failed ? 'is-error' : 'is-ok'}"></span>
+      <span class="cs-acct-dot ${conn.status === 'error' ? 'is-error' : 'is-ok'}"></span>
       <div class="cs-acct-body">
         <b>${esc(conn.accountEmail ?? 'Google account')}</b>
-        <span>${failed ? 'Needs reconnecting' : 'Connected · Read-only'}</span>
+        <span>${conn.status === 'error' ? 'Needs reconnecting' : 'Connected · Read-only'}</span>
       </div>
     </div>
-    ${failed && conn.lastError ? `<div class="cs-alert"><span>${esc(conn.lastError)}</span></div>` : ''}
     <div class="cs-sources">
-      ${cals.length ? cals.map((c) => `<label class="cs-source">
-        <input type="checkbox" class="cs-vis" data-calendar="${c.id}"
-          ${c.isVisible ? 'checked' : ''}>
+      ${cals.map((c) => `<label class="cs-source">
+        <input type="checkbox" class="cs-vis" data-calendar="${c.id}" ${c.isVisible ? 'checked' : ''}>
         <span class="cs-box"></span>
         <i class="cs-dot" style="background:${esc(c.color || 'var(--accent)')}"></i>
         <span class="cs-name">${esc(c.name)}</span>
         ${c.isReadOnly ? '<span class="cs-ro">read-only</span>' : ''}
-      </label>`).join('')
-      : '<p class="rail-quiet">No calendars yet.</p>'}
+      </label>`).join('')}
     </div>
     <div class="cs-sync">
-      <span>${syncing ? 'Syncing…' : lastSyncedWord(conn.lastSyncedAt)}</span>
-      <button class="btn btn-ghost cs-sync-now" id="cal-sync"
-        ${syncing ? 'disabled' : ''}>Sync now</button>
+      <span>${esc(lastSyncedWord(conn.lastSyncedAt))}</span>
+      <button class="btn btn-ghost cs-sync-now" id="cal-sync">Sync now</button>
     </div>
     <button class="rail-link cs-disconnect" id="cal-disconnect">Disconnect</button>
   </div>`;
