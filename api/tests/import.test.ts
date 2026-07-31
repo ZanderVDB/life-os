@@ -232,7 +232,7 @@ test('the summary is counts-only and carries no task text', () => {
   assert.equal(s.profileChosen!.name, 'Personal');
   assert.deepEqual(s.profilesIgnored.map((p) => p.id), ['p_x9zxkv4']);
   assert.deepEqual(s.profilesIgnored.map((p) => p.name), ['Business']);
-  assert.ok(s.profilesIgnored[0].reason, 'an ignored profile must say why');
+  assert.ok(s.profilesIgnored[0]?.reason, 'an ignored profile must say why');
 });
 
 test('a missing Personal document is an error, not a silent empty import', () => {

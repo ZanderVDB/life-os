@@ -6,7 +6,9 @@
     "lib": ["ES2023"],
     "types": ["node"],
     "outDir": "dist",
-    "rootDir": ".",
+    // Must be "src", not ".". With ".", tsc emits dist/src/index.js and the
+    // start command `node dist/index.js` silently has nothing to run.
+    "rootDir": "src",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,

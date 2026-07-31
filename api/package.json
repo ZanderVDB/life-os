@@ -10,12 +10,13 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/db/migrate.js && node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "test": "tsx --test tests/*.test.ts",
-    "dev:local": "tsx src/dev-server.ts"
+    "dev:local": "tsx src/dev-server.ts",
+    "db:migrate:deploy": "node dist/db/migrate.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

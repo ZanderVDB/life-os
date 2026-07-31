@@ -140,7 +140,7 @@ test('signature: a token signed by a DIFFERENT key is rejected', async () => {
 
 test('signature: a tampered payload is rejected', async () => {
   const { token, jwks } = await signedWith('RS256', goodClaims());
-  const [h, p, s] = token.split('.');
+  const [h, p, s] = token.split('.') as [string, string, string];
   const claims = JSON.parse(Buffer.from(p, 'base64url').toString());
   claims.sub = 'someone-else';                       // escalate to another user
   const forged = `${h}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.${s}`;
