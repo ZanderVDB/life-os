@@ -73,6 +73,15 @@ export interface ImportPlan {
   };
   steps: { total: number };
   excluded: { collection: string; count: number; reason: string }[];
+  /** How many tasks carried each retired field that this import drops. */
+  retiredFields: Record<string, number>;
+  duplicateRisk: {
+    duplicateLegacyIdsInFile: number;
+    tasksCarryingLegacyId: number;
+    areasCarryingLegacyId: number;
+  };
+  /** Record counts inside profiles we never read. Counts only, no content. */
+  excludedProfiles: { id: string; name: string | null; collections: { collection: string; count: number }[] }[];
 }
 
 /** "3:30pm" / "10am" / "14:05" → minutes since midnight, or null. */
@@ -115,6 +124,29 @@ function unbox(v: any): any {
  * Which profile is authoritative? Personal. Chosen explicitly rather than by
  * position, so a differently-ordered export cannot silently import Business.
  */
+/**
+ * Counts the records inside a profile document WITHOUT reading any content.
+ *
+ * Used to report how much of the Business profile is being left behind. It
+ * touches only array lengths and key counts — no title, note or free-text
+ * value is read, copied or returned. Saying "10 reminders excluded" is a
+ * useful check; showing what those reminders say is not, and would defeat the
+ * point of excluding them.
+ */
+export function countProfileRecords(doc: any): { collection: string; count: number }[] {
+  const data = doc?.data ?? doc ?? {};
+  const out: { collection: string; count: number }[] = [];
+  for (const [key, value] of Object.entries(data)) {
+    if (key.startsWith('_') || key === 'updatedAt') continue;
+    let count = 0;
+    if (Array.isArray(value)) count = value.length;
+    else if (value && typeof value === 'object') count = Object.keys(value).length;
+    else continue;
+    if (count > 0) out.push({ collection: key, count });
+  }
+  return out.sort((a, b) => b.count - a.count);
+}
+
 export function chooseProfile(exp: any): { chosen: any | null; ignored: { id: string; name: string | null; reason: string }[] } {
   const profiles: any[] = Array.isArray(exp?.profiles) ? exp.profiles : [];
   const ignored: { id: string; name: string | null; reason: string }[] = [];
@@ -155,6 +187,9 @@ export function buildImportPlan(exp: any): ImportPlan {
     tasks: { plan: [], total: 0, skipped: [], byBucket: {}, byPriority: {}, withDueDate: 0, withUnparseableTime: 0, completed: 0 },
     steps: { total: 0 },
     excluded: [],
+    retiredFields: {},
+    duplicateRisk: { duplicateLegacyIdsInFile: 0, tasksCarryingLegacyId: 0, areasCarryingLegacyId: 0 },
+    excludedProfiles: [],
   };
 
   if (exp?.exportFormat !== EXPORT_FORMAT) {
@@ -209,13 +244,25 @@ export function buildImportPlan(exp: any): ImportPlan {
   const byPriority: Record<string, number> = {};
   let withDueDate = 0, withUnparseableTime = 0, completed = 0, stepTotal = 0;
   const seenLegacyIds = new Set<string>();
+  /** How many tasks carried each retired field that this import drops. */
+  const retiredFieldCounts: Record<string, number> = {};
+  let duplicateLegacyIds = 0;
 
   for (const t of legacyTasks) {
+    // Count retired fields on EVERY task, including ones later skipped, so the
+    // number reflects what is in the file rather than what survived mapping.
+    for (const f of RETIRED_TASK_FIELDS) {
+      const v = unbox((t as any)?.[f]);
+      if (v !== undefined && v !== null && v !== false && v !== '') {
+        retiredFieldCounts[f] = (retiredFieldCounts[f] ?? 0) + 1;
+      }
+    }
+
     const legacyId = String(unbox(t?.id) ?? '').trim();
     const title = String(unbox(t?.text) ?? '').trim();
     if (!legacyId) { bump('missing id'); continue; }
     if (!title) { bump('empty title'); continue; }
-    if (seenLegacyIds.has(legacyId)) { bump('duplicate legacy id'); continue; }
+    if (seenLegacyIds.has(legacyId)) { bump('duplicate legacy id'); duplicateLegacyIds++; continue; }
     seenLegacyIds.add(legacyId);
 
     const done = unbox(t?.done) === true;
@@ -312,6 +359,22 @@ export function buildImportPlan(exp: any): ImportPlan {
     },
     steps: { total: stepTotal },
     excluded,
+    retiredFields: retiredFieldCounts,
+    duplicateRisk: {
+      // Duplicates inside the file itself.
+      duplicateLegacyIdsInFile: duplicateLegacyIds,
+      // Every task carries a legacy_id, unique per workspace, so re-running a
+      // real import updates rather than duplicates. This is the count that
+      // would be protected by that constraint.
+      tasksCarryingLegacyId: taskPlan.length,
+      areasCarryingLegacyId: areaPlan.length,
+    },
+    // What is being left behind in the profiles we do not read. Counts only —
+    // the content of those records is never opened.
+    excludedProfiles: ignored.map((p) => ({
+      id: p.id, name: p.name,
+      collections: countProfileRecords(exp?.documents?.[p.id]),
+    })),
   };
 }
 
@@ -337,5 +400,8 @@ export function summarisePlan(plan: ImportPlan) {
     },
     steps: plan.steps.total,
     excluded: plan.excluded,
+    retiredFields: plan.retiredFields,
+    duplicateRisk: plan.duplicateRisk,
+    excludedProfiles: plan.excludedProfiles,
   };
 }

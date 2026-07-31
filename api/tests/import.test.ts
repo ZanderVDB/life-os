@@ -242,3 +242,32 @@ test('a missing Personal document is an error, not a silent empty import', () =>
   assert.equal(plan.ok, false);
   assert.match(plan.errors.join(' '), /Personal profile document/);
 });
+
+test('preview reports excluded-profile counts, retired fields and duplicate risk', () => {
+  const s = summarisePlan(buildImportPlan(fixture()));
+
+  // Excluded Business profile: counts only, and NO content.
+  const biz = s.excludedProfiles.find((p) => p.name === 'Business');
+  assert.ok(biz, 'the Business profile is not reported as excluded');
+  const byName = Object.fromEntries(biz!.collections.map((c) => [c.collection, c.count]));
+  assert.equal(byName.reminders, 10, 'Business reminder count wrong');
+  assert.equal(byName.tasks, 1, 'Business task count wrong');
+  assert.equal(byName.people, 1);
+  // The fixture's Business task text must not appear anywhere in the summary.
+  assert.ok(!JSON.stringify(s).includes('BUSINESS TASK'), 'Business task text leaked');
+  assert.ok(!JSON.stringify(s).includes('business reminder'), 'Business reminder text leaked');
+  assert.ok(!JSON.stringify(s).includes('business diary'), 'Business diary text leaked');
+
+  // Retired fields: counted from the file, including on tasks later skipped.
+  assert.equal(s.retiredFields.daily, 1, 'daily not counted');
+  assert.equal(s.retiredFields.linkedPersonId, 1, 'linkedPersonId not counted');
+  assert.equal(s.retiredFields.linkedPromiseId, 1);
+  assert.equal(s.retiredFields.lastCheckedAt, 1);
+  assert.equal(s.retiredFields.dailyDate, 1);
+  assert.equal(s.retiredFields.dailySince, 1);
+
+  // Duplicate risk.
+  assert.equal(s.duplicateRisk.duplicateLegacyIdsInFile, 1, 'the duplicate id in the fixture was not counted');
+  assert.equal(s.duplicateRisk.tasksCarryingLegacyId, s.tasks.total);
+  assert.equal(s.duplicateRisk.areasCarryingLegacyId, s.areas.total);
+});

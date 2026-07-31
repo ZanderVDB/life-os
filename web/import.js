@@ -136,6 +136,50 @@ function render(p, filename) {
       </table>
     </div>` : ''}
 
+    ${(p.excludedProfiles || []).length ? `<h2>Excluded profiles — never read</h2>
+    <div class="card">
+      <p style="margin:0 0 14px;color:var(--text-2);font-size:13px;line-height:1.65">
+        Record counts only. The contents of these profiles are not opened, not
+        parsed and not sent anywhere — this is here so you can see the size of
+        what is being left behind, not what it says.</p>
+      ${p.excludedProfiles.map((prof) => `
+        <div style="margin-bottom:14px">
+          <div style="font-size:13px;margin-bottom:6px"><b>${esc(prof.name || prof.id)}</b>
+            <span class="pill skip">excluded</span>
+            <span style="color:var(--muted)">·
+              ${prof.collections.reduce((n, c) => n + c.count, 0)} records total</span></div>
+          <table><thead><tr><th>Collection</th><th>Records</th></tr></thead>
+            <tbody>${prof.collections.map((c) =>
+              `<tr><td>${esc(c.collection)}</td><td>${c.count}</td></tr>`).join('')}</tbody></table>
+        </div>`).join('')}
+    </div>` : ''}
+
+    ${Object.keys(p.retiredFields || {}).length ? `<h2>Retired fields dropped</h2>
+    <div class="card">
+      <p style="margin:0 0 14px;color:var(--text-2);font-size:13px;line-height:1.65">
+        These fields belonged to features that no longer exist. The count is how
+        many tasks in the file carry a value that this import will not bring across.</p>
+      <table><thead><tr><th>Field</th><th>Tasks affected</th></tr></thead>
+        <tbody>${countRows(p.retiredFields)}</tbody></table>
+    </div>` : ''}
+
+    ${p.duplicateRisk ? `<h2>Duplicate risk</h2>
+    <div class="card">
+      <table><tbody>
+        <tr><td>Duplicate legacy ids inside the file</td>
+            <td>${p.duplicateRisk.duplicateLegacyIdsInFile}
+            ${p.duplicateRisk.duplicateLegacyIdsInFile ? '<span class="pill warn">skipped, first kept</span>' : '<span class="pill ok">none</span>'}</td></tr>
+        <tr><td>Tasks carrying a legacy id</td><td>${p.duplicateRisk.tasksCarryingLegacyId}
+            <span class="pill ok">protected by a unique index</span></td></tr>
+        <tr><td>Areas carrying a legacy id</td><td>${p.duplicateRisk.areasCarryingLegacyId}
+            <span class="pill ok">protected by a unique index</span></td></tr>
+      </tbody></table>
+      <p style="margin:14px 0 0;color:var(--text-2);font-size:13px;line-height:1.65">
+        Every imported record keeps its legacy id, and that id is unique per
+        workspace in the database. Running a real import twice therefore updates
+        the same rows rather than creating a second copy.</p>
+    </div>` : ''}
+
     ${problems.length ? `<h2>Problems</h2><div class="card"><table><tbody>
       ${problems.map(([kind, m]) => `<tr><td style="width:90px"><span class="pill ${kind}">${
         kind === 'err' ? 'error' : 'warning'}</span></td><td>${esc(m)}</td></tr>`).join('')}
