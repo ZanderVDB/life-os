@@ -139,14 +139,17 @@ test('the web client contains no Firestore code at all', () => {
     ['firebasejs/10.7.1/firebase-app.js', 'firebasejs/10.7.1/firebase-auth.js']);
 });
 
-test('composer: Legacy geometry — full width, capped, opaque, bordered', () => {
-  const rule = html.slice(html.indexOf('.composer-inner{'), html.indexOf('/* \u2500\u2500 Buttons'));
+test('composer: full width, capped, opaque, and present rather than disabled', () => {
+  const rule = html.slice(html.indexOf('.composer-inner{'), html.indexOf('/* ── Buttons'));
   assert.match(rule, /max-width:var\(--composer-max\)/, 'the composer is not capped at Legacy width');
-  assert.match(rule, /background:#17161F/, 'composer background drifted');
-  assert.match(rule, /border:1px solid #353046/, 'composer has no border');
-  assert.match(rule, /backdrop-filter:blur\(10px\)/, 'composer has no blur');
+  assert.match(rule, /min-height:var\(--composer-h\)/, 'the composer does not scale with the viewport');
+  assert.match(rule, /border:1px solid/, 'composer has no border');
+  assert.match(rule, /backdrop-filter:blur/, 'composer has no blur');
   // .62 opacity made it read as broken rather than as pending.
   assert.ok(!/opacity:\.\d/.test(rule), 'the composer is translucent');
+  // Its mark carries the brand accent; a grey disabled glyph reads as broken.
+  assert.match(rule, /\.composer-inner \.ico\{color:#9E7BFF/,
+    'the composer icon is not a brand-purple mark');
   assert.match(html, /\.composer\{position:fixed;left:var\(--sidebar-w\);right:0/,
     'the composer stops at the rail instead of spanning to the edge');
 });
@@ -210,8 +213,128 @@ test('the AI composer is inert — no handler, no network call', () => {
   assert.match(composer, /aria-disabled="true"/, 'composer is not marked disabled');
   assert.ok(!/fetch\(|anthropic|onclick|addEventListener/i.test(composer),
     'the composer has behaviour attached');
-  assert.match(app, /Coming in v2/);
+  assert.match(composer, /Ask Life OS or capture a thought/, 'composer copy is not the honest one');
   assert.ok(!/anthropic/i.test(app + html + sw + pwa), 'something references Anthropic');
+});
+
+/* ── Phase C3 ────────────────────────────────────────────────────────── */
+
+test('nav: Completed and Settings are not primary destinations', () => {
+  const primary = routes.slice(routes.indexOf('export const ROUTES'), routes.indexOf('SECONDARY_ROUTES'));
+  assert.ok(!/id: 'history'/.test(primary), 'Completed is still in the primary nav');
+  assert.ok(!/id: 'settings'/.test(primary), 'Settings is still in the primary nav');
+  assert.deepEqual(
+    [...primary.matchAll(/id: '([a-z]+)'/g)].map((m) => m[1]),
+    ['today', 'calendar', 'projects', 'diary', 'library', 'brain'],
+  );
+  // Both remain real, bookmarkable routes.
+  assert.match(routes, /SECONDARY_ROUTES[\s\S]*history[\s\S]*settings/);
+  assert.match(app, /ALL_ROUTE_IDS\.includes\(id\)/, 'secondary routes are not reachable by URL');
+});
+
+test('account menu: keyboard, dismissal, and a guarded sign-out', () => {
+  assert.match(app, /aria-haspopup="menu"/, 'the account block is not a menu trigger');
+  assert.match(app, /function openAccountMenu/);
+  // Arrow keys, Home/End and Escape.
+  for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape']) {
+    assert.ok(app.includes(`'${key}'`), `the account menu ignores ${key}`);
+  }
+  assert.match(app, /document\.addEventListener\('click', onOutsideAccount\)/,
+    'the menu does not close on an outside click');
+  // Sign out is the one irreversible item; it is last and confirmed.
+  const menu = app.slice(app.indexOf('function openAccountMenu'), app.indexOf('function onOutsideAccount'));
+  assert.ok(menu.indexOf("data-am=\"settings\"") < menu.indexOf("data-am=\"signout\""),
+    'sign out is not last in the menu');
+  assert.match(menu, /if \(confirm\('Sign out/, 'sign out is not confirmed');
+  assert.ok(!/data-route="settings"/.test(app), 'a second, competing Settings entry exists');
+});
+
+test('history is reachable from Today, not from the sidebar', () => {
+  assert.match(app, /function todayHeaderActions/, 'Today has no History affordance');
+  assert.match(app, /data-route="history"/, 'no link to Completed');
+  assert.match(app, /data-route="today"[\s\S]{0,120}Back to Today/, 'History cannot get back');
+  // Buckets still exclude completed work.
+  assert.match(app, /t\.status !== 'done'/, 'buckets no longer exclude completed tasks');
+  assert.match(app, /includeCompleted=false/, 'Today still asks for completed tasks');
+});
+
+test('rail: Up Next selection is deterministic and explainable', () => {
+  assert.match(app, /export function pickUpNext/);
+  const fn = app.slice(app.indexOf('export function pickUpNext'), app.indexOf('function renderRail'));
+  // Every branch returns a reason, so the card can say why.
+  for (const why of ['Next scheduled', 'Urgent today', 'High priority today',
+    'First in Today', 'First this week', 'Next open task']) {
+    assert.ok(fn.includes(why), `the "${why}" branch is missing`);
+  }
+  assert.ok(fn.indexOf('Next scheduled') < fn.indexOf('Urgent today'), 'scheduled does not win first');
+  assert.ok(fn.indexOf('Urgent today') < fn.indexOf('High priority today'), 'priority order is wrong');
+  // Raw legacy time is shown as legacy text, never as a real timestamp.
+  assert.match(app, /legacyScheduledTimeRaw[\s\S]{0,200}Kept exactly as written/,
+    'raw legacy time is not labelled as legacy');
+});
+
+test('rail: no dashboard cards, no fake Upcoming', () => {
+  const rail = app.slice(app.indexOf('function renderRail'), app.indexOf('const habitRowHtml'));
+  for (const gone of ['Your day', 'Recently finished', 'Active work', 'All areas']) {
+    assert.ok(!rail.includes(gone), `the rail still carries the "${gone}" card`);
+  }
+  // Upcoming is omitted entirely rather than rendered empty, because there is
+  // no calendar and every imported task has no due date.
+  assert.ok(!/Upcoming|Up next in your calendar/i.test(rail), 'a fake Upcoming card exists');
+  for (const wanted of ['Up next', 'Habits today', 'Quick capture']) {
+    assert.ok(rail.includes(wanted), `the rail is missing "${wanted}"`);
+  }
+});
+
+test('rail: quick capture is structured entry, distinct from the composer', () => {
+  assert.match(app, /id="qc-form"/);
+  assert.match(app, /id="qc-bucket"/, 'quick capture cannot choose a bucket');
+  assert.match(app, /id="qc-area"/, 'quick capture cannot choose an Area');
+  assert.match(app, /id="qc-full"/, 'quick capture cannot hand off to full detail');
+  // It posts a real task; the composer posts nothing at all.
+  assert.match(app, /qc-form'\)\?\.addEventListener\('submit'/);
+});
+
+test('habits: optimistic tick with rollback, and green means done only', () => {
+  assert.match(app, /async function toggleHabit/);
+  const fn = app.slice(app.indexOf('async function toggleHabit'));
+  assert.match(fn, /const before = \{/, 'no snapshot to roll back to');
+  assert.match(fn, /Object\.assign\(h, before\)/, 'a failed tick does not roll back');
+  // Completion is the ONLY thing wearing green.
+  assert.match(html, /\.hb-row\.is-done \.hb-tick\{background:var\(--ok\)/);
+  const railCss = html.slice(html.indexOf('.hb-count'), html.indexOf('.qc-form'));
+  assert.ok(!/var\(--accent\)/.test(railCss), 'purple and green are mixed in the habit rows');
+});
+
+test('priority is a marker, not an alarm', () => {
+  const rule = html.slice(html.indexOf('.task.p-urgent{'), html.indexOf('.task.dragging'));
+  // The full red ring is gone; red survives only as a stripe and a faint tint.
+  assert.ok(!/inset 0 0 0 1\.5px/.test(rule), 'urgent still draws a full red outline');
+  assert.match(rule, /\.task\.p-urgent\{--stripe:#E5576A/, 'urgent lost its marker entirely');
+  // Medium is the default and most of the board — it must add no colour.
+  assert.match(rule, /\.task\.p-medium\{--stripe:#4a4458\}/, 'medium priority still adds colour noise');
+});
+
+test('large screens scale by token, never by zoom', () => {
+  assert.ok(!/zoom:/.test(html), 'the app uses CSS zoom');
+  assert.match(html, /@media \(min-width:1600px\)/, 'no large-screen breakpoint');
+  const big = html.slice(html.indexOf('@media (min-width:1600px)'));
+  for (const token of ['--fs-task', '--fs-nav', '--fs-h1', '--row-pad-y', '--btn-h',
+    '--composer-h', '--stack-gap', '--gutter', '--rail-w']) {
+    assert.ok(big.includes(token), `${token} does not scale`);
+  }
+  // Every clamp floor is the shipped laptop value, so 1440px is untouched.
+  assert.match(big, /--fs-task:clamp\(13px/);
+  assert.match(big, /--fs-h1:clamp\(34px/);
+  assert.match(big, /--gutter:clamp\(56px/);
+  assert.match(big, /--rail-w:clamp\(380px/);
+});
+
+test('sidebar: one restrained convention for unfinished sections', () => {
+  // Five repetitions of the word "soon" read as a list of apologies.
+  assert.match(html, /\.nav a \.soon\{width:5px;height:5px;border-radius:50%/,
+    'unfinished sections still shout');
+  assert.match(html, /font-size:0/, 'the "soon" text is still visible');
 });
 
 /* ── PWA ─────────────────────────────────────────────────────────────── */

@@ -250,3 +250,74 @@ export const STATUSES = ['open', 'done', 'cancelled'] as const;
 export type Bucket = (typeof BUCKETS)[number];
 export type Priority = (typeof PRIORITIES)[number];
 export type Status = (typeof STATUSES)[number];
+
+/* ── habits ──────────────────────────────────────────────────────────────
+ * A habit is a recurring intention, NOT a task. Keeping them in separate
+ * tables is deliberate: the legacy app blurred habits into `routineLog`
+ * alongside diary journal text, which made it impossible to reason about
+ * either one. Here a habit has a schedule and a completion history; a diary
+ * entry is writing. They never share a row.
+ */
+export const habits = pgTable('habits', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  // Classifies only — losing an Area must never lose the habit.
+  areaId: uuid('area_id').references(() => areas.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  /** daily | weekly | specific_days | times_per_week */
+  frequencyType: text('frequency_type').notNull().default('daily'),
+  /** Shape depends on frequencyType, e.g. { days: [1,3,5] } for specific_days. */
+  frequencyConfig: jsonb('frequency_config'),
+  /** How many completions make a day "done". 1 for a simple yes/no habit. */
+  targetCount: integer('target_count').notNull().default(1),
+  color: text('color').notNull().default('sage'),
+  position: integer('position').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  legacyId: text('legacy_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+}, (t) => ({
+  byWorkspace: index('habits_workspace_position_idx').on(t.workspaceId, t.position),
+  byActive: index('habits_active_idx').on(t.workspaceId, t.isActive),
+  legacyUnique: uniqueIndex('habits_legacy_idx').on(t.workspaceId, t.legacyId)
+    .where(sql`${t.legacyId} is not null`),
+  freqCheck: check('habits_frequency_check',
+    sql`${t.frequencyType} in ('daily','weekly','specific_days','times_per_week')`),
+  targetCheck: check('habits_target_check', sql`${t.targetCount} >= 1`),
+}));
+
+export const habitEntries = pgTable('habit_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  habitId: uuid('habit_id').notNull().references(() => habits.id, { onDelete: 'cascade' }),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  /** The DAY this counts for, in the user's own reckoning — a date, not a timestamp. */
+  entryDate: date('entry_date').notNull(),
+  completedCount: integer('completed_count').notNull().default(1),
+  /** When it was actually ticked. Null for imported history with no timestamp. */
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  /** user | import | system — provenance, so imported history is never mistaken for a live tick. */
+  source: text('source').notNull().default('user'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // One row per habit per day. Ticking twice updates the count; it never
+  // creates a second row, which is what makes the import idempotent.
+  uniquePerDay: uniqueIndex('habit_entries_unique_day').on(t.habitId, t.entryDate),
+  byWorkspaceDate: index('habit_entries_workspace_date_idx').on(t.workspaceId, t.entryDate),
+  countCheck: check('habit_entries_count_check', sql`${t.completedCount} >= 0`),
+  sourceCheck: check('habit_entries_source_check', sql`${t.source} in ('user','import','system')`),
+}));
+
+export const habitsRelations = relations(habits, ({ many, one }) => ({
+  entries: many(habitEntries),
+  area: one(areas, { fields: [habits.areaId], references: [areas.id] }),
+}));
+export const habitEntriesRelations = relations(habitEntries, ({ one }) => ({
+  habit: one(habits, { fields: [habitEntries.habitId], references: [habits.id] }),
+}));
+
+export const FREQUENCY_TYPES = ['daily', 'weekly', 'specific_days', 'times_per_week'] as const;
+export const ENTRY_SOURCES = ['user', 'import', 'system'] as const;
+export type FrequencyType = (typeof FREQUENCY_TYPES)[number];

@@ -14,6 +14,7 @@ export const SETTINGS_TABS = [
   { id: 'account', label: 'Account' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'areas', label: 'Areas' },
+  { id: 'habits', label: 'Habits' },
   { id: 'app', label: 'App' },
   { id: 'integrations', label: 'Integrations' },
   { id: 'data', label: 'Privacy & data' },
@@ -90,6 +91,38 @@ export function settingsHtml(state) {
         <input class="input" id="new-area" placeholder="New area name">
         <button class="btn" id="add-area">Add area</button>
       </div>`,
+
+    habits: () => {
+      const hs = state.habits ?? [];
+      const active = hs.filter((h) => !h.archivedAt);
+      const archived = hs.filter((h) => h.archivedAt);
+      return `
+      <p class="setting-intro">Habits are recurring intentions, kept separately from
+        tasks and from your diary. Tick them from the rail on Today.</p>
+      ${active.length ? `<div class="habit-list">
+        ${active.map((h) => `<div class="habit-row" data-habit-row="${h.id}">
+          <span class="habit-dot" style="--hc:var(--ok)"></span>
+          <input class="area-input" value="${esc(h.name)}" data-habit-name="${h.id}"
+            aria-label="Habit name">
+          <select class="qc-sel habit-freq" data-habit-freq="${h.id}" aria-label="Frequency">
+            <option value="daily" ${h.frequencyType === 'daily' ? 'selected' : ''}>Every day</option>
+            <option value="weekly" ${h.frequencyType === 'weekly' ? 'selected' : ''}>Weekly</option>
+            <option value="times_per_week" ${h.frequencyType === 'times_per_week' ? 'selected' : ''}>Some days</option>
+          </select>
+          <span class="area-meta">${h.streak > 0 ? `${h.streak}d streak` : 'no streak yet'}</span>
+          <button class="icon-btn" data-habit-archive="${h.id}"
+            aria-label="Archive ${esc(h.name)}" title="Archive">&#8595;</button>
+        </div>`).join('')}
+      </div>` : '<p class="rail-quiet">No habits yet. Add your first below.</p>'}
+      <div class="area-add">
+        <input class="input" id="new-habit" placeholder="New habit, e.g. Read for 20 minutes">
+        <button class="btn" id="add-habit">Add habit</button>
+      </div>
+      ${archived.length ? `<div class="setting-help" style="margin-top:16px">
+        <b>Archived (${archived.length})</b>
+        Archived habits keep their history and stop appearing on Today.
+      </div>` : ''}`;
+    },
 
     app: () => `
       ${row('Version', `<span id="build-id">${esc(window.LIFE_OS_BUILD || 'unknown')}</span>`)}

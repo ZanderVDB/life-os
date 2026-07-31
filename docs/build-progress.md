@@ -942,3 +942,94 @@ Seven PNGs, all `.v2.` filenames so no cached old icon can be served:
    contradicted the new no-staging-language rule.
 
 121 tests passing. Task data untouched. Legacy untouched.
+
+---
+
+# PHASE C3 — TODAY, RIGHT RAIL AND HABITS — 2026-07-31
+
+The shell geometry from C2 is the foundation; this phase improves on Legacy
+rather than copying it further.
+
+## Navigation
+
+Primary sidebar is now six destinations: **Today · Calendar · Projects · Diary
+· Library · Brain.**
+
+- **Completed** left the sidebar. Finished work is content history, not a
+  section of a life. It is reached from a quiet button beside the Today heading
+  (with a count) and from the account menu, and `#history` remains a real
+  bookmarkable route.
+- **Settings** left the sidebar. It is account-level, so it lives behind the
+  account block at the bottom-left — a proper menu with arrow-key, Home/End and
+  Escape support, outside-click dismissal, and a confirmed sign-out placed last
+  behind a divider.
+- Unfinished sections now carry **one 5px dot**, not five repetitions of the
+  word "soon".
+
+## Right rail — rebuilt around a question
+
+"What needs my attention next, and what can I act on quickly?"
+
+Removed: the oversized date card, generic activity statistics, the full Area
+dashboard and the completed-task summary — all of it repeated what Today
+already showed on screen.
+
+Now: a one-line date, **Up next**, **Habits today**, **Quick capture**.
+
+**Upcoming is deliberately absent.** There is no calendar yet and every
+imported task has zero due dates, so the card would have been a permanently
+empty panel. Quality over filling a slot.
+
+### Up next
+Deterministic and explainable — each branch returns the reason, which the card
+displays: scheduled → urgent today → high today → first in Today → first this
+week → first open. Raw legacy time strings show as italic legacy text, never
+dressed up as a real timestamp.
+
+## Habits — a real v2 system
+
+Two tables, `habits` and `habit_entries`, migration `0001_habits`.
+
+**Deliberately not tasks, and deliberately not entangled with the diary.** The
+legacy app kept habit checks inside `routineLog` next to journal text, which
+made both impossible to reason about.
+
+`habit_entries` is unique on `(habit_id, entry_date)` — ticking twice updates a
+count rather than inserting a row, which is also what makes the import
+idempotent. Undo deletes the row rather than storing a zero, because an absent
+entry and a zero entry would otherwise both mean "not done".
+
+Deleting a habit **archives** by default: a habit's value is its history.
+
+## Habits import — preview built, NOT run
+
+History comes from each habit's own `checkedDates` — explicit and unambiguous.
+
+**`routineLog` is never mined for completions.** Its `checks` are routine items
+that cannot be matched to a habit, so they are counted and reported. Its
+`journal` is diary writing and is never opened. A test asserts diary text
+cannot reach the plan, the summary or the database.
+
+## Priority — calmed
+
+The full red ring on every urgent task made an ordinary board look like a page
+of errors. Red outlines are now reserved for genuine errors and destructive
+confirmations. Urgent keeps a red stripe and the faintest tint; high gets a
+quiet warm stripe; **medium — the default and most of the board — adds no
+colour at all**, because a colour every row shares communicates nothing.
+
+## Large screens
+
+Fluid tokens above **1600px** only, with every `clamp()` floor set to the value
+that already shipped. Verified: 1440px is byte-identical to before (h1 34px,
+task 13px, rail 380, gutter 40). At 2560px: h1 46px, nav 16px, task 15.5px,
+rail 460, gutter 75, composer 61px, buttons 43px. No `zoom` anywhere.
+
+## Composer
+
+Taller (52→66px fluid), full opacity, a real hover state, brand-purple mark
+instead of a grey glyph, and honest copy: "Ask Life OS or capture a thought"
+with a quiet "Soon". The softening is expressed as a **colour**, not opacity —
+translucency is what made it read as broken.
+
+147 tests passing. Task data untouched. Legacy untouched.

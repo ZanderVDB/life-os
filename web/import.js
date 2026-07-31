@@ -7,10 +7,24 @@
 const CFG = window.LIFE_OS_CONFIG;
 const out = document.getElementById('out');
 let lastPreview = null;   // { preview, fingerprint, exportJson, token, workspaceId }
+/** 'tasks' | 'habits' — which system this preview is for. */
+let mode = 'tasks';
 const drop = document.getElementById('drop');
 const file = document.getElementById('file');
 
 try { document.getElementById('apihost').textContent = new URL(CFG.apiBaseUrl).host; } catch { /* leave default */ }
+
+document.querySelectorAll('[data-mode]').forEach((el) => {
+  el.onclick = () => {
+    mode = el.dataset.mode;
+    document.querySelectorAll('[data-mode]').forEach((b) =>
+      b.setAttribute('aria-selected', String(b.dataset.mode === mode)));
+    document.getElementById('page-h1').textContent =
+      mode === 'habits' ? 'Habits import preview' : 'Legacy import preview';
+    out.innerHTML = '';
+    lastPreview = null;
+  };
+});
 
 document.getElementById('pick').onclick = () => file.click();
 file.onchange = () => file.files[0] && handle(file.files[0]);
@@ -88,7 +102,8 @@ async function handle(f) {
 
   out.innerHTML = '<div class="card">Building the plan…</div>';
   try {
-    const res = await fetch(`${CFG.apiBaseUrl}/api/v1/workspaces/${workspaceId}/import/legacy/preview`, {
+    const endpoint = mode === 'habits' ? 'import/habits/preview' : 'import/legacy/preview';
+    const res = await fetch(`${CFG.apiBaseUrl}/api/v1/workspaces/${workspaceId}/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ export: json }),
@@ -96,8 +111,9 @@ async function handle(f) {
     const data = await res.json();
     if (!res.ok) return fail(esc(data?.error?.message || `Request failed (${res.status})`));
     lastPreview = { preview: data.preview, fingerprint: data.fingerprint,
-      exportJson: json, token, workspaceId, filename: f.name };
-    render(data.preview, f.name);
+      exportJson: json, token, workspaceId, filename: f.name, mode };
+    if (mode === 'habits') renderHabits(data.preview, f.name, data.confirmPhrase);
+    else render(data.preview, f.name);
   } catch (e) {
     fail(`Could not reach the API at <code>${esc(CFG.apiBaseUrl)}</code>. ${esc(e.message)}`);
   }
@@ -427,4 +443,136 @@ function renderResult(r) {
         ? `<span class="pill warn">${esc(d.unknownAreaKeys.join(', '))}</span>` : '<span class="pill ok">none</span>')}
     </tbody></table></div>
     <p style="margin-top:22px"><a href="./index.html">Open Today →</a></p>`;
+}
+
+/* ══ Habits preview ═══════════════════════════════════════════════════════
+ * Counts only. Habit names never appear here — the summary from the API does
+ * not contain them, and this screen renders only what it is given.
+ */
+function renderHabits(p, filename, confirmPhrase) {
+  const s = p.source || {};
+  const ni = p.notImported || {};
+  const skipped = p.habits.skipped || [];
+
+  out.innerHTML = `
+    ${p.ok ? '' : `<div class="card"><span class="pill err">Plan not usable</span>
+      <p style="margin:12px 0 0;font-size:13.5px;line-height:1.65;color:var(--text-2)">
+        ${esc((p.errors || [])[0] || 'This export cannot be imported as-is.')}</p></div>`}
+
+    <h2>Source</h2>
+    <div class="card"><table><tbody>
+      <tr><td>File</td><td>${esc(filename)}</td></tr>
+      <tr><td>Created by app</td><td>${esc(s.appVersion || '—')}</td></tr>
+      <tr><td>Verification</td><td>${s.verified
+        ? '<span class="pill ok">verified</span>'
+        : `<span class="pill err">${esc(s.verificationStatus || 'not verified')}</span>`}</td></tr>
+      <tr><td>Profile chosen</td><td><b>${esc(p.profileChosen?.name || '—')}</b>
+        <span class="pill ok">only this one</span></td></tr>
+      <tr><td>Profiles ignored</td><td>${(p.profilesIgnored || []).length
+        ? `${esc(p.profilesIgnored.map((x) => x.name || x.id).join(', '))} <span class="pill skip">never read</span>`
+        : '<span class="pill skip">none</span>'}</td></tr>
+      <tr><td>Would write</td><td><span class="pill skip">no — dry run</span></td></tr>
+    </tbody></table></div>
+
+    <h2>Would create</h2>
+    <div class="grid">
+      <div class="stat"><div class="n">${p.habits.total}</div><div class="l">Habits</div></div>
+      <div class="stat"><div class="n">${p.entries.total}</div><div class="l">History entries</div></div>
+      <div class="stat"><div class="n">${p.entries.duplicatesCollapsed}</div><div class="l">Duplicate days merged</div></div>
+      <div class="stat"><div class="n">${p.entries.invalidDates}</div><div class="l">Unreadable dates</div></div>
+    </div>
+
+    <h2>History range</h2>
+    <div class="card"><table><tbody>
+      <tr><td>Earliest completion</td><td>${esc(p.entries.earliest || 'none')}</td></tr>
+      <tr><td>Latest completion</td><td>${esc(p.entries.latest || 'none')}</td></tr>
+    </tbody></table></div>
+
+    ${skipped.length ? `<h2>Skipped</h2><div class="card"><table>
+      <thead><tr><th>Reason</th><th>Count</th></tr></thead>
+      <tbody>${skipped.map((r) => `<tr><td>${esc(r.reason)}</td><td>${r.count}</td></tr>`).join('')}</tbody>
+    </table></div>` : ''}
+
+    <h2>Deliberately not imported</h2>
+    <div class="card">
+      <p style="margin:0 0 14px;color:var(--text-2);font-size:13px;line-height:1.65">
+        Legacy kept routine checks and diary writing in the same place. Only a
+        habit's own completion list is read. Everything below is counted and
+        left alone.</p>
+      <table><thead><tr><th>What</th><th>Amount</th><th>Why</th></tr></thead><tbody>
+        <tr><td>Routine check marks</td><td>${ni.routineCheckMarks ?? 0}</td>
+          <td><span class="pill warn">cannot be matched to a habit</span></td></tr>
+        <tr><td>Days with routine checks</td><td>${ni.routineCheckDays ?? 0}</td>
+          <td><span class="pill warn">ambiguous</span></td></tr>
+        <tr><td>Days of diary writing</td><td>${ni.journalDays ?? 0}</td>
+          <td><span class="pill skip">never opened — diary arrives with its own system</span></td></tr>
+      </tbody></table>
+    </div>
+
+    ${(p.warnings || []).length ? `<h2>Warnings</h2><div class="card"><table><tbody>
+      ${p.warnings.map((w) => `<tr><td style="width:90px"><span class="pill warn">warning</span></td>
+        <td>${esc(w)}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+
+    <div class="note" style="margin-top:24px;border-left-color:var(--ok);background:rgba(0,217,163,.06)">
+      <b>Nothing has been imported.</b> Everything above is a dry run.
+    </div>
+
+    ${p.ok ? `<h2>Import</h2>
+    <div class="card">
+      <p style="margin:0 0 14px;color:var(--text-2);font-size:13.5px;line-height:1.7">
+        Type <code>${esc(confirmPhrase)}</code> exactly to enable the import button.</p>
+      <input id="hb-confirm" placeholder="${esc(confirmPhrase)}" autocomplete="off" spellcheck="false"
+        style="width:100%;background:var(--surface-2);border:1px solid transparent;border-radius:10px;
+               padding:11px 13px;font-size:14px;color:var(--text);font-family:inherit">
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-primary" id="hb-go" disabled style="opacity:.45;pointer-events:none">
+          Import ${p.habits.total} habits</button>
+      </div>
+    </div>` : ''}`;
+
+  if (!p.ok) return;
+  const input = document.getElementById('hb-confirm');
+  const go = document.getElementById('hb-go');
+  input.addEventListener('input', () => {
+    const ok = input.value.trim() === confirmPhrase;
+    go.disabled = !ok;
+    go.style.opacity = ok ? '1' : '.45';
+    go.style.pointerEvents = ok ? 'auto' : 'none';
+  });
+  go.onclick = () => doHabitImport(p, confirmPhrase);
+}
+
+async function doHabitImport(p, phrase) {
+  const { workspaceId, token, exportJson } = lastPreview;
+  out.innerHTML = '<div class="card">Importing habits… do not close this page.</div>';
+  try {
+    const res = await fetch(`${CFG.apiBaseUrl}/api/v1/workspaces/${workspaceId}/import/habits/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        export: exportJson,
+        approved: { habits: p.habits.total, entries: p.entries.total },
+        confirm: phrase,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return fail(`${esc(data?.error?.message || 'The import was refused.')} <b>Nothing was written.</b>`);
+    }
+    out.innerHTML = `
+      <h2>Habits imported</h2>
+      <div class="note" style="border-left-color:var(--ok);background:rgba(0,217,163,.06)">
+        <b>Imported successfully.</b> Run id <code>${esc(data.runId)}</code>.
+        Re-running the same file is now blocked.
+      </div>
+      <div class="grid">
+        <div class="stat"><div class="n">${data.written.habits}</div><div class="l">Habits</div></div>
+        <div class="stat"><div class="n">${data.written.entries}</div><div class="l">History entries</div></div>
+      </div>
+      <p style="margin-top:22px"><a href="./index.html">Open Today →</a></p>`;
+  } catch (e) {
+    fail(`The import could not complete: ${esc(e.message)}. A retry is safe — the same file
+      cannot be imported twice.`);
+  }
 }

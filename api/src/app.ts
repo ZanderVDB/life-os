@@ -13,6 +13,7 @@ import { registerAreaRoutes } from './routes/areas.js';
 import { registerTaskRoutes } from './routes/tasks.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerPreferenceRoutes } from './routes/preferences.js';
+import { registerHabitRoutes } from './routes/habits.js';
 
 export const API_VERSION = '0.1.0';
 
@@ -61,6 +62,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerTaskRoutes(app, db, guards);
   registerImportRoutes(app, db, guards, env);
   registerPreferenceRoutes(app, db, guards);
+  registerHabitRoutes(app, db, guards);
 
   /** One error shape. Internals are logged, never returned. */
   app.setErrorHandler((err, req, reply) => {

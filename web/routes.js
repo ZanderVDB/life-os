@@ -7,16 +7,29 @@
  * again when it comes back. A section that says "being rebuilt" is honest; a
  * missing one is not.
  */
+/**
+ * PRIMARY navigation — the six places Life OS keeps your life.
+ *
+ * Completed is not here: finished work is content history, not a section, and
+ * it belongs beside Today rather than competing with it. Settings is not here
+ * either: it is account-level, reached from the account block at the bottom.
+ */
 export const ROUTES = [
   { id: 'today', label: 'Today', icon: 'today' },
-  { id: 'history', label: 'Completed', icon: 'check' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', placeholder: true },
   { id: 'projects', label: 'Projects', icon: 'projects', placeholder: true },
   { id: 'diary', label: 'Diary', icon: 'diary', placeholder: true },
   { id: 'library', label: 'Library', icon: 'library', placeholder: true },
   { id: 'brain', label: 'Brain', icon: 'brain', placeholder: true },
-  { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
+
+/** Real routes that are reachable but not in the primary list. */
+export const SECONDARY_ROUTES = [
+  { id: 'history', label: 'Completed' },
+  { id: 'settings', label: 'Settings' },
+];
+
+export const ALL_ROUTE_IDS = [...ROUTES, ...SECONDARY_ROUTES].map((r) => r.id);
 
 /**
  * Placeholder copy — product voice, not migration commentary.

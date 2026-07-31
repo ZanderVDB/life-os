@@ -8,7 +8,7 @@
  * indicator — nothing else. That is what makes transitions continuous instead
  * of a full-page flash (design-system.md §11).
  */
-import { ROUTES, PLACEHOLDERS } from './routes.js';
+import { ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
 import { initServiceWorker } from './pwa.js';
 import { settingsHtml } from './settings.js';
 
@@ -26,6 +26,7 @@ const state = {
   me: null, prefs: {}, token: null,
   tasks: [], history: [], historyTotal: 0,
   route: 'today', areaFilter: null, menu: null, settingsTab: 'account',
+  habits: [], habitsLoaded: false,
 };
 
 const root = document.getElementById('root');
@@ -181,9 +182,13 @@ async function boot() {
 
   renderShell();
   await loadRoute();
-  // A small slice of history so the rail can show recent wins. Failure here
-  // must never block the app — the rail simply shows nothing.
-  loadHistory(true).then(renderRail).catch(() => {});
+  // Habits populate the rail as soon as they arrive. Deliberately not awaited:
+  // Today must never wait on a secondary system to appear.
+  loadHabits().then(renderRail).catch(() => {});
+  // Just the count, for the Completed button beside the Today heading.
+  api(`/api/v1/workspaces/${ws()}/tasks?status=done&limit=1`)
+    .then((r) => { state.historyTotal = r.total; if (state.route === 'today') wireHeaderCount(); })
+    .catch(() => {});
   initServiceWorker();
 }
 
@@ -237,18 +242,20 @@ function renderShell() {
                ${state.route === r.id ? 'aria-current="page"' : ''}>
               <span class="ico">${icon(r.icon)}</span>
               <span>${r.label}</span>
-              ${r.placeholder ? '<span class="soon">soon</span>' : '<span></span>'}
+              ${r.placeholder ? '<span class="soon" title="Coming soon">soon</span>' : '<span></span>'}
             </a>`).join('')}
         </nav>
 
         <div class="side-foot">
-          <a class="who" href="#settings" data-route="settings">
+          <button class="who" id="account-btn" aria-haspopup="menu" aria-expanded="false"
+            aria-controls="account-menu">
             <span class="avatar">${esc(initial)}</span>
             <span class="who-text">
               <span class="who-name">${esc(state.me.user.displayName || state.me.user.email)}</span>
               <span class="who-sub">${esc(state.me.workspace.name)} workspace</span>
             </span>
-          </a>
+            <span class="who-chev" aria-hidden="true">⌃</span>
+          </button>
         </div>
       </aside>
 
@@ -278,8 +285,8 @@ function renderShell() {
            aria-label="Life OS assistant — not yet connected"
            title="The assistant arrives in a later phase of v2">
         <span class="ico">${icon('sparkle', 18)}</span>
-        <span class="composer-text">Ask Life OS anything, or capture a thought…</span>
-        <span class="composer-badge">Coming in v2</span>
+        <span class="composer-text">Ask Life OS or capture a thought</span>
+        <span class="composer-badge">Soon</span>
       </div>
     </div>`;
 
@@ -309,6 +316,14 @@ function wireShell() {
   });
   window.__closeDrawer = () => setDrawer(false);
 
+  const accountBtn = document.getElementById('account-btn');
+  accountBtn?.addEventListener('click', (e) => { e.stopPropagation(); openAccountMenu(); });
+  accountBtn?.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault(); openAccountMenu();
+    }
+  });
+
   const palette = () => toast('The command palette arrives with search in a later phase.');
   document.getElementById('cmdk')?.addEventListener('click', palette);
   document.getElementById('cmdk-m')?.addEventListener('click', palette);
@@ -324,6 +339,82 @@ function wireShell() {
   window.addEventListener('resize', () => positionPill(true));
 }
 
+/* ── Account menu ────────────────────────────────────────────────────────
+ * Settings is account-level, not a content section, so it is reached from the
+ * person — not from a seventh item in the primary list.
+ *
+ * Sign out sits at the bottom behind a divider and is never the first thing
+ * focus lands on: it is the one irreversible action in the menu.
+ */
+function openAccountMenu() {
+  if (document.getElementById('account-menu')) return closeAccountMenu();
+  const btn = document.getElementById('account-btn');
+  const r = btn.getBoundingClientRect();
+
+  const m = document.createElement('div');
+  m.className = 'menu account-menu';
+  m.id = 'account-menu';
+  m.setAttribute('role', 'menu');
+  m.innerHTML = `
+    <div class="am-head">
+      <div class="am-name">${esc(state.me.user.displayName || 'Life OS')}</div>
+      <div class="am-mail">${esc(state.me.user.email)}</div>
+      <div class="am-ws">${esc(state.me.workspace.name)} workspace</div>
+    </div>
+    <button role="menuitem" data-am="settings">${icon('settings', 17)}<span>Settings</span></button>
+    <button role="menuitem" data-am="history">${icon('check', 17)}<span>Completed</span></button>
+    <div class="am-sep"></div>
+    <div class="am-meta" id="am-update">Version ${esc(window.LIFE_OS_BUILD || 'unknown')}</div>
+    <button role="menuitem" data-am="signout" class="am-danger">Sign out</button>`;
+  document.body.appendChild(m);
+
+  m.style.left = `${Math.max(8, r.left)}px`;
+  m.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
+  btn.setAttribute('aria-expanded', 'true');
+
+  const items = [...m.querySelectorAll('[role="menuitem"]')];
+  items[0]?.focus();
+
+  m.addEventListener('keydown', (e) => {
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeAccountMenu(); btn.focus(); }
+    else if (e.key === 'Tab') closeAccountMenu();
+  });
+
+  m.querySelectorAll('[data-am]').forEach((el) => {
+    el.onclick = () => {
+      const what = el.dataset.am;
+      closeAccountMenu();
+      if (what === 'signout') {
+        // Confirmed, because it is the only destructive item here.
+        if (confirm('Sign out of Life OS on this device?')) window.__signOut?.();
+        return;
+      }
+      go(what);
+    };
+  });
+
+  setTimeout(() => document.addEventListener('click', onOutsideAccount), 0);
+  window.__refreshUpdateLine?.();
+}
+
+function onOutsideAccount(e) {
+  const m = document.getElementById('account-menu');
+  if (!m) return;
+  if (m.contains(e.target) || document.getElementById('account-btn')?.contains(e.target)) return;
+  closeAccountMenu();
+}
+
+function closeAccountMenu() {
+  document.getElementById('account-menu')?.remove();
+  document.getElementById('account-btn')?.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', onOutsideAccount);
+}
+
 /**
  * Moves the single shared indicator. translateY only, so it composites on the
  * GPU. It snaps into place the first time it is revealed and glides after that
@@ -334,6 +425,8 @@ function positionPill(snap = false) {
   const pill = document.getElementById('nav-pill');
   const active = nav?.querySelector('a[aria-current="page"]');
   if (!nav || !pill) return;
+  // History and Settings live outside the nav list, so the indicator has
+  // nowhere to sit. It fades rather than jumping to an unrelated item.
   if (!active) { pill.style.opacity = '0'; return; }
   pill.style.opacity = '1';
   pill.style.setProperty('--pill-h', `${active.offsetHeight}px`);
@@ -356,9 +449,11 @@ function positionPill(snap = false) {
   }
 }
 
+// History and Settings are real, bookmarkable routes even though neither
+// appears in the primary sidebar.
 const routeFromHash = () => {
   const id = (location.hash || '#today').slice(1).split('?')[0];
-  return ROUTES.some((r) => r.id === id) ? id : 'today';
+  return ALL_ROUTE_IDS.includes(id) ? id : 'today';
 };
 
 async function go(id) {
@@ -370,6 +465,7 @@ async function go(id) {
     else a.removeAttribute('aria-current');
   });
   positionPill();
+  closeAccountMenu();
   window.__closeDrawer?.();
   await loadRoute();
 }
@@ -393,6 +489,7 @@ async function loadRoute() {
       await loadTasks();
       scroll.innerHTML = todayHtml();
       wireToday();
+      wireHeader();
       renderRail();
     } catch (e) {
       scroll.innerHTML = errorHtml(e.message);
@@ -403,7 +500,11 @@ async function loadRoute() {
 
   if (state.route === 'history') {
     head.innerHTML = `<p class="eyebrow">Today</p><h1>Completed</h1>
-      <p class="sub">Everything you have finished, newest first.</p>`;
+      <p class="sub">Everything you have finished, newest first.</p>
+      <div class="page-actions">
+        <button class="btn btn-ghost" data-route="today">${icon('today', 16)}<span>Back to Today</span></button>
+      </div>`;
+    wireHeader();
     scroll.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
     try {
       await loadHistory(true);
@@ -432,6 +533,17 @@ async function loadRoute() {
 const errorHtml = (msg) => `<div class="state"><b>That did not load</b>${esc(msg)}
   <div style="margin-top:16px"><button class="btn" id="retry">Try again</button></div></div>`;
 
+function todayHeaderActions() {
+  // History lives beside Today, not in the sidebar: finished work is content
+  // history, not a section of your life.
+  return `<div class="page-actions">
+    <button class="btn btn-ghost" data-route="history">
+      ${icon('check', 16)}<span>Completed</span>
+      ${state.historyTotal ? `<span class="pa-count">${state.historyTotal}</span>` : ''}
+    </button>
+  </div>`;
+}
+
 function greetingHtml() {
   const h = new Date().getHours();
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
@@ -440,7 +552,8 @@ function greetingHtml() {
     { weekday: 'long', day: 'numeric', month: 'long' });
   return `<p class="eyebrow">${esc(dateStr)}</p>
     <h1>${greet}${first ? `, <span class="nm">${esc(first)}</span>` : ''}.</h1>
-    <p class="sub">Here is what is in front of you.</p>`;
+    <p class="sub">Here is what is in front of you.</p>
+    ${todayHeaderActions()}`;
 }
 
 /* ── Today ───────────────────────────────────────────────────────────── */
@@ -487,6 +600,23 @@ function taskHtml(t, i) {
 }
 const fmtDate = (iso) => new Date(`${iso}T12:00:00`)
   .toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+function wireHeaderCount() {
+  const btn = document.querySelector('.page-actions [data-route="history"]');
+  if (!btn || !state.historyTotal) return;
+  if (!btn.querySelector('.pa-count')) {
+    const b = document.createElement('span');
+    b.className = 'pa-count';
+    b.textContent = String(state.historyTotal);
+    btn.appendChild(b);
+  }
+}
+
+function wireHeader() {
+  document.querySelectorAll('.page-actions [data-route]').forEach((el) => {
+    el.onclick = () => go(el.dataset.route);
+  });
+}
 
 function wireToday() {
   document.getElementById('add').onclick = () => openDetail(null);
@@ -658,75 +788,190 @@ function wireHistory() {
   });
 }
 
-/* ── Right rail ──────────────────────────────────────────────────────── */
+/* ── Right rail ──────────────────────────────────────────────────────────
+ * One question: what needs my attention next, and what can I act on quickly?
+ *
+ * Not a dashboard. Counts already visible in Today are not repeated here — a
+ * number earns a card only if it changes a decision.
+ */
+
+/**
+ * Deterministic and explainable. Every branch returns WHY it was chosen, so the
+ * card can say so rather than looking arbitrary.
+ */
+export function pickUpNext(tasks) {
+  const active = tasks.filter((t) => t.status !== 'done');
+  if (!active.length) return null;
+  const rank = { urgent: 0, high: 1, medium: 2, low: 3, someday: 4 };
+  const byOrder = (a, b) => a.position - b.position;
+  const inB = (b) => active.filter((t) => t.bucket === b).sort(byOrder);
+
+  const scheduled = active.filter((t) => t.scheduledAt)
+    .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
+  if (scheduled.length) return { task: scheduled[0], why: 'Next scheduled' };
+
+  const today = inB('today');
+  const urgent = today.filter((t) => t.priority === 'urgent');
+  if (urgent.length) return { task: urgent[0], why: 'Urgent today' };
+  const high = today.filter((t) => t.priority === 'high');
+  if (high.length) return { task: high[0], why: 'High priority today' };
+  if (today.length) return { task: today[0], why: 'First in Today' };
+
+  const week = inB('week');
+  if (week.length) return { task: week[0], why: 'First this week' };
+
+  const rest = [...active].sort((a, b) => (rank[a.priority] - rank[b.priority]) || byOrder(a, b));
+  return rest.length ? { task: rest[0], why: 'Next open task' } : null;
+}
+
 function renderRail() {
   const rail = document.getElementById('rail');
   if (!rail || !state.me) return;
   const now = new Date();
-  const active = state.tasks.filter((t) => t.status !== 'done');
-  const activeTotal = active.length;
-  const todayCount = active.filter((t) => t.bucket === 'today').length;
-  const urgent = active.filter((t) => t.priority === 'urgent').length;
-  // The single most pressing thing, by priority then position — a useful
-  // pointer, not a status report about the migration.
-  const rank = { urgent: 0, high: 1, medium: 2, low: 3, someday: 4 };
-  const focus = [...active].filter((t) => t.bucket === 'today')
-    .sort((a, b) => (rank[a.priority] - rank[b.priority]) || (a.position - b.position))[0];
-  const done = state.history.slice(0, 3);
+  const next = pickUpNext(state.tasks);
+  const hs = state.habits ?? [];
+  const due = hs.filter((h) => h.dueToday);
+  const doneCount = due.filter((h) => h.completedToday).length;
 
   rail.innerHTML = `
-    <div class="rail-card rail-today">
-      <div class="rail-date">${now.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}</div>
-      <div class="rail-day">${now.toLocaleDateString(undefined, { weekday: 'long' })}</div>
-      ${focus ? `<div class="rail-focus">
-        <span class="rail-focus-label">Next up</span>
-        <span class="rail-focus-title">${esc(focus.title)}</span>
-      </div>` : ''}
+    <div class="rail-when">
+      <span class="rw-day">${now.toLocaleDateString(undefined, { weekday: 'long' })}</span>
+      <span class="rw-date">${now.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}</span>
     </div>
 
-    <div class="rail-card">
-      <h3>Your day</h3>
-      <div class="rail-stats">
-        <div class="rail-stat"><span class="n">${todayCount}</span><span class="l">in Today</span></div>
-        <div class="rail-stat"><span class="n">${activeTotal}</span><span class="l">open in all</span></div>
-        ${urgent ? `<div class="rail-stat"><span class="n urgent">${urgent}</span><span class="l">urgent</span></div>` : ''}
-      </div>
+    <div class="rail-card up-next">
+      <h3>Up next</h3>
+      ${next ? `
+        <div class="un-why">${esc(next.why)}</div>
+        <button class="un-title" data-un-open="${next.task.id}">${esc(next.task.title)}</button>
+        <div class="un-meta">
+          ${next.task.areaId ? `<span class="t-area">${esc(areaName(next.task.areaId))}</span>` : ''}
+          ${next.task.priority !== 'medium'
+            ? `<span class="un-pri pri-${next.task.priority}">${esc(next.task.priority)}</span>` : ''}
+          ${next.task.legacyScheduledTimeRaw
+            ? `<span class="un-legacy" title="Kept exactly as written in the old app">${esc(next.task.legacyScheduledTimeRaw)}</span>`
+            : ''}
+        </div>
+        <div class="un-actions">
+          <button class="btn btn-primary" data-un-done="${next.task.id}">Mark done</button>
+          <button class="btn" data-un-defer="${next.task.id}">Later</button>
+        </div>`
+      : '<p class="rail-quiet">Nothing open. Enjoy it.</p>'}
     </div>
 
-    <div class="rail-card">
-      <h3>Areas</h3>
-      <div class="rail-areas">
-        <button class="rail-area" data-rail-area="" aria-pressed="${!state.areaFilter}">
-          <span>All areas</span><span class="n">${activeTotal}</span></button>
-        ${state.me.areas.map((a) => `<button class="rail-area" data-rail-area="${a.id}"
-          aria-pressed="${state.areaFilter === a.id}">
-          <span>${esc(a.name)}</span>
-          <span class="n">${state.tasks.filter((t) => t.areaId === a.id && t.status !== 'done').length}</span>
-        </button>`).join('')}
-      </div>
+    <div class="rail-card habits-card">
+      <h3>Habits today${due.length ? ` <span class="hb-count">${doneCount}/${due.length}</span>` : ''}</h3>
+      ${!state.habitsLoaded ? '<p class="rail-quiet">Loading…</p>'
+        : due.length ? `<div class="hb-list">${due.map(habitRowHtml).join('')}</div>`
+        : `<p class="rail-quiet">No habits yet.
+             <button class="rail-link" data-rail-nav="settings">Add one in Settings →</button></p>`}
     </div>
 
-    <div class="rail-card">
-      <h3>Recently finished</h3>
-      ${done.length ? `<div class="rail-done">${done.map((t) => `
-        <div class="rail-done-row"><span class="tick-mini">${icon('check', 11)}</span>
-          <span>${esc(t.title)}</span></div>`).join('')}
-        <button class="rail-link" data-rail-nav="history">See all completed →</button>`
-      : '<p class="rail-quiet">Nothing finished yet today.</p>'}
-    </div>
+    <div class="rail-card qc-card">
+      <h3>Quick capture</h3>
+      <form class="qc-form" id="qc-form" autocomplete="off">
+        <input class="qc-input" id="qc-title" placeholder="What needs doing?" aria-label="Task title">
+        <div class="qc-row">
+          <select class="qc-sel" id="qc-bucket" aria-label="When">
+            ${BUCKETS.map((b) => `<option value="${b.id}">${b.label}</option>`).join('')}
+          </select>
+          <select class="qc-sel" id="qc-area" aria-label="Area">
+            <option value="">No area</option>
+            ${state.me.areas.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="qc-actions">
+          <button class="btn btn-primary" type="submit">Add task</button>
+          <button class="btn btn-ghost" type="button" id="qc-full">More detail…</button>
+        </div>
+      </form>
+    </div>`;
 
-    <button class="btn btn-primary" id="rail-add" style="width:100%">Quick add task</button>`;
+  wireRail();
+}
 
-  rail.querySelectorAll('[data-rail-area]').forEach((el) => {
-    el.onclick = () => setAreaFilter(el.dataset.railArea || null);
+const habitRowHtml = (h) => `<div class="hb-row ${h.completedToday ? 'is-done' : ''}" data-habit="${h.id}">
+  <button class="hb-tick" data-habit-toggle="${h.id}" aria-pressed="${h.completedToday}"
+    aria-label="${h.completedToday ? 'Undo' : 'Complete'} ${esc(h.name)}">${h.completedToday ? icon('check', 13) : ''}</button>
+  <span class="hb-name">${esc(h.name)}</span>
+  ${h.targetCount > 1 ? `<span class="hb-prog">${h.todayCount}/${h.targetCount}</span>` : ''}
+  ${h.streak > 1 ? `<span class="hb-streak" title="${h.streak} day streak">${h.streak}d</span>` : ''}
+</div>`;
+
+function wireRail() {
+  const rail = document.getElementById('rail');
+  rail.querySelectorAll('[data-rail-nav]').forEach((el) => { el.onclick = () => go(el.dataset.railNav); });
+  rail.querySelector('[data-un-open]')?.addEventListener('click',
+    (e) => openDetail(e.currentTarget.dataset.unOpen));
+  rail.querySelector('[data-un-done]')?.addEventListener('click',
+    (e) => run(() => toggleTask(e.currentTarget.dataset.unDone)));
+  rail.querySelector('[data-un-defer]')?.addEventListener('click',
+    (e) => run(() => shiftBucket(e.currentTarget.dataset.unDefer, 1)));
+
+  rail.querySelectorAll('[data-habit-toggle]').forEach((el) => {
+    el.onclick = () => toggleHabit(el.dataset.habitToggle);
   });
-  rail.querySelectorAll('[data-rail-nav]').forEach((el) => {
-    el.onclick = () => go(el.dataset.railNav);
+
+  rail.querySelector('#qc-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    run(async () => {
+      const input = rail.querySelector('#qc-title');
+      const title = input.value.trim();
+      if (!title) return;
+      await api(`/api/v1/workspaces/${ws()}/tasks`, {
+        method: 'POST',
+        body: {
+          title,
+          bucket: rail.querySelector('#qc-bucket').value,
+          areaId: rail.querySelector('#qc-area').value || null,
+        },
+      });
+      await refreshToday();
+      document.getElementById('qc-title')?.focus();
+      toast('Task added');
+    });
   });
-  rail.querySelector('#rail-add').onclick = async () => {
-    if (state.route !== 'today') await go('today');
-    openDetail(null);
-  };
+  rail.querySelector('#qc-full')?.addEventListener('click', () => {
+    openDetail(null, false, rail.querySelector('#qc-title').value.trim());
+  });
+}
+
+/* ── Habits ──────────────────────────────────────────────────────────── */
+async function loadHabits() {
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/habits`);
+    state.habits = r.habits;
+  } catch {
+    state.habits = [];   // A habits failure must never take Today down with it.
+  }
+  state.habitsLoaded = true;
+}
+
+/**
+ * Optimistic: the tick flips immediately and rolls back if the server
+ * disagrees. Waiting on a round-trip for a checkbox feels broken.
+ */
+async function toggleHabit(id) {
+  const h = (state.habits ?? []).find((x) => x.id === id);
+  if (!h) return;
+  const before = { todayCount: h.todayCount, completedToday: h.completedToday, streak: h.streak };
+  const goingDone = !h.completedToday;
+  h.completedToday = goingDone;
+  h.todayCount = goingDone ? h.targetCount : 0;
+  h.streak = goingDone ? (h.streak ?? 0) + 1 : Math.max(0, (h.streak ?? 1) - 1);
+  renderRail();
+
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/habits/${id}/${goingDone ? 'check' : 'uncheck'}`,
+      { method: 'POST', body: goingDone ? { count: h.targetCount } : {} });
+    h.todayCount = r.completedCount;
+    h.completedToday = r.completed;
+    renderRail();
+  } catch (e) {
+    Object.assign(h, before);
+    renderRail();
+    toast(e.message, true);
+  }
 }
 
 /* ── Placeholders ────────────────────────────────────────────────────── */
@@ -802,6 +1047,48 @@ function wireSettings() {
   document.getElementById('new-area')?.addEventListener('keydown',
     (e) => { if (e.key === 'Enter') addArea(); });
 
+  // Habits management
+  document.querySelectorAll('[data-habit-name]').forEach((el) => {
+    const id = el.dataset.habitName;
+    const original = el.value;
+    el.onblur = () => run(async () => {
+      const name = el.value.trim();
+      if (!name || name === original) { el.value = original; return; }
+      await api(`/api/v1/workspaces/${ws()}/habits/${id}`, { method: 'PATCH', body: { name } });
+      await loadHabits(); renderSettings(); renderRail();
+      toast('Habit renamed');
+    });
+    el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); if (e.key === 'Escape') el.value = original; };
+  });
+  document.querySelectorAll('[data-habit-freq]').forEach((el) => {
+    el.onchange = () => run(async () => {
+      await api(`/api/v1/workspaces/${ws()}/habits/${el.dataset.habitFreq}`,
+        { method: 'PATCH', body: { frequencyType: el.value } });
+      await loadHabits(); renderSettings(); renderRail();
+      toast('Schedule updated');
+    });
+  });
+  document.querySelectorAll('[data-habit-archive]').forEach((el) => {
+    el.onclick = () => run(async () => {
+      const h = (state.habits ?? []).find((x) => x.id === el.dataset.habitArchive);
+      if (!confirm(`Archive "${h?.name}"? Its history is kept and it stops appearing on Today.`)) return;
+      await api(`/api/v1/workspaces/${ws()}/habits/${el.dataset.habitArchive}`, { method: 'DELETE' });
+      await loadHabits(); renderSettings(); renderRail();
+      toast('Habit archived. Its history was kept.');
+    });
+  });
+  const addHabit = () => run(async () => {
+    const input = document.getElementById('new-habit');
+    const name = input.value.trim();
+    if (!name) return;
+    await api(`/api/v1/workspaces/${ws()}/habits`, { method: 'POST', body: { name } });
+    await loadHabits(); renderSettings(); renderRail();
+    toast('Habit added');
+  });
+  document.getElementById('add-habit')?.addEventListener('click', addHabit);
+  document.getElementById('new-habit')?.addEventListener('keydown',
+    (e) => { if (e.key === 'Enter') addHabit(); });
+
   document.getElementById('do-install')?.addEventListener('click', () => run(async () => {
     const ok = await window.__promptInstall?.();
     if (ok) { renderSettings(); toast('Life OS installed'); }
@@ -820,7 +1107,7 @@ function renderSettings() {
 }
 
 /* ── Task detail ─────────────────────────────────────────────────────── */
-function openDetail(id, fromHistory = false) {
+function openDetail(id, fromHistory = false, prefillTitle = '') {
   const t = id ? (fromHistory ? state.history.find((x) => x.id === id) : findTask(id)) : null;
   const scrim = document.createElement('div'); scrim.className = 'scrim';
   const p = document.createElement('aside');
@@ -828,7 +1115,7 @@ function openDetail(id, fromHistory = false) {
   p.innerHTML = `
     <h3>${t ? 'Task' : 'New task'}</h3>
     <div class="field"><label for="d-title">Title</label>
-      <input id="d-title" class="input" value="${esc(t?.title || '')}" placeholder="What needs doing?"></div>
+      <input id="d-title" class="input" value="${esc(t?.title || prefillTitle)}" placeholder="What needs doing?"></div>
     <div class="row">
       <div class="field"><label for="d-bucket">When</label>
         <select id="d-bucket" class="sel">${BUCKETS.map((b) =>

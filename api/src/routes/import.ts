@@ -16,6 +16,10 @@ import {
   CLEANUP_CONFIRM, IMPORT_STEP, cleanupCandidates, deleteSyntheticTasks,
   isStagingCleanupAllowed,
 } from '../lib/import-writer.js';
+import { buildHabitImportPlan, summariseHabitPlan } from '../lib/habit-import.js';
+import {
+  executeHabitImport, habitSourceFingerprint, HABIT_CONFIRM, HABIT_IMPORT_STEP,
+} from '../lib/habit-import-writer.js';
 import { badRequest, conflict, forbidden } from '../lib/errors.js';
 import type { AppEnv } from '../env.js';
 
@@ -110,6 +114,59 @@ export function registerImportRoutes(app: AppInstance, db: Db, guards: Guards, e
       ok: true, runId: result.runId, written: result.written,
       detail: result.detail, warnings: result.warnings,
     };
+  });
+
+  /* ── Habits import ──────────────────────────────────────────────────
+   * Same safety model as Tasks: preview writes nothing, execute demands the
+   * approved counts and a typed phrase, and the same file cannot land twice.
+   */
+  app.post(`${base}/import/habits/preview`, pre, async (req) => {
+    const body = z.object({ export: z.record(z.any()) }).safeParse(req.body);
+    if (!body.success) throw badRequest('Send { "export": <the parsed export JSON> }.');
+    const plan = buildHabitImportPlan(body.data.export);
+    return {
+      preview: summariseHabitPlan(plan),
+      fingerprint: habitSourceFingerprint(body.data.export),
+      confirmPhrase: HABIT_CONFIRM(plan.habits.total),
+      wouldWrite: false,
+    };
+  });
+
+  app.post(`${base}/import/habits/execute`, pre, async (req, reply) => {
+    const parsed = z.object({
+      export: z.record(z.any()),
+      approved: z.object({
+        habits: z.number().int().nonnegative(),
+        entries: z.number().int().nonnegative(),
+      }),
+      confirm: z.string(),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest('Send { export, approved: {habits,entries}, confirm }.');
+    }
+    const { export: exp, approved, confirm } = parsed.data;
+    const expected = HABIT_CONFIRM(approved.habits);
+    if (confirm.trim() !== expected) {
+      throw badRequest(`To proceed, the confirmation must be exactly "${expected}".`);
+    }
+
+    const result = await executeHabitImport(db, req.workspaceId!, exp, approved);
+    if (!result.ok) {
+      await db.insert(migrationRuns).values({
+        workspaceId: req.workspaceId!, phase: 'v2-relaunch', step: HABIT_IMPORT_STEP,
+        status: 'failed', dryRun: false, sourceRef: result.fingerprint,
+        error: { messages: result.errors }, finishedAt: new Date(),
+      });
+      reply.code(409);
+      return {
+        error: {
+          code: 'IMPORT_REFUSED', message: result.errors[0] ?? 'The import was refused.',
+          details: { errors: result.errors, wroteAnything: false }, requestId: req.id,
+        },
+      };
+    }
+    req.log.info({ runId: result.runId, written: result.written }, 'habit import committed');
+    return { ok: true, runId: result.runId, written: result.written, warnings: result.warnings };
   });
 
   /** Import history for this workspace — counts and status only. */
