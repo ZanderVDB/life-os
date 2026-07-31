@@ -7,6 +7,12 @@
       "runtimeArgs": ["server.js"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "v2-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve", "web", "-l", "5173", "--no-clipboard"],
+      "port": 5173
     }
   ]
 }

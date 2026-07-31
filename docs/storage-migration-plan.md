@@ -1,7 +1,18 @@
 # Life OS — Storage Migration Plan
 
-**Status: PLAN ONLY. No migration has run. No infrastructure exists.**
-**Created 2026-07-31 · approach LOCKED 2026-07-31.**
+**Status: SUPERSEDED for tasks. No migration has run. No infrastructure exists.**
+**Created 2026-07-31 · superseded 2026-07-31.**
+
+> **This plan no longer describes what we are doing.** We are not migrating the
+> legacy app system-by-system; we are building a clean v2 baseline and
+> relaunching from it — see [v2-relaunch-plan.md](v2-relaunch-plan.md).
+>
+> The dual-write / switch-reads / stop-legacy-writes sequence below assumed both
+> systems had to run against the same data. In the relaunch they do not: v2 has
+> its own database, and legacy data arrives once through a verified export.
+>
+> **Still valid:** the R2 file-storage plan, the quota policy, and the principle
+> that new UI is built against the new API rather than retrofitted.
 
 > **Locked:** system-by-system migration through *define model → create schema
 > → import → validate → dual-write → switch reads → stop legacy writes → retain

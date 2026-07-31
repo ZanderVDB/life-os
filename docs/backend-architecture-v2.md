@@ -1,7 +1,16 @@
 # Life OS — Backend Architecture v2
 
-**Status: DESIGN ONLY. Nothing here has been built or provisioned.**
-**Created 2026-07-31 · app version at writing: v239**
+**Status: BUILT AS CODE, NOT PROVISIONED.**
+The API in `/api` implements this design and has 55 passing tests against real
+Postgres. **No Railway service, database or environment variable exists** — see
+[staging-setup.md](staging-setup.md) for the steps only Zander can perform.
+**Created 2026-07-31 · updated 2026-07-31 for the v2 clean relaunch.**
+
+> **Superseding decision:** we are not migrating the legacy app in place. We are
+> building a clean v2 baseline and relaunching from it — see
+> [v2-relaunch-plan.md](v2-relaunch-plan.md). The dual-write and cutover
+> machinery described further down is retained for reference but is **not** the
+> current plan.
 
 > **Architecture decision recorded:** Life OS v2 will move toward a
 > Railway-hosted backend with **Railway PostgreSQL** for structured data and

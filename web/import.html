@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-theme="graphite">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Import preview · Life OS</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --app-bg:linear-gradient(180deg,#1A1624 0%,#141220 52%,#111018 100%);
+  --surface:#211E2C;--surface-2:#2A2536;--surface-3:#322C40;--hairline:#332E43;
+  --text:#F4F2FA;--text-2:#B5ABC9;--muted:#766D8B;--label:#CEC7E8;
+  --brand:linear-gradient(180deg,#7C4DFF 0%,#C28DFF 100%);
+  --ok:#00D9A3;--warn:#FFC44D;--danger:#FF646E;
+  --e2:0 8px 24px rgba(0,0,0,.22);--d-fast:140ms;--e-out:cubic-bezier(.2,.7,.2,1);
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--app-bg);background-attachment:fixed;color:var(--text);
+  font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;padding:40px 24px 100px}
+.wrap{max-width:820px;margin:0 auto}
+a{color:#C28DFF}
+h1{font-size:30px;font-weight:800;letter-spacing:-.8px;margin:0 0 8px}
+.sub{color:var(--text-2);font-size:14px;line-height:1.65;margin:0 0 26px;max-width:62ch}
+h2{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--label);margin:30px 0 12px;font-weight:600}
+.card{background:var(--surface);border-radius:16px;padding:22px;box-shadow:var(--e2);margin-bottom:16px}
+.note{border-left:3px solid var(--warn);background:rgba(255,196,77,.07);border-radius:10px;padding:14px 16px;
+  font-size:13px;line-height:1.65;color:var(--text-2);margin-bottom:22px}
+.note b{color:var(--text)}
+button{font:inherit;color:inherit;border:none;cursor:pointer}
+.btn{background:var(--surface-2);border-radius:10px;padding:11px 18px;font-size:13.5px;
+  transition:transform var(--d-fast) var(--e-out),background var(--d-fast) var(--e-out)}
+.btn:hover{background:var(--surface-3);transform:translateY(-2px)}
+.btn-primary{background:var(--brand);font-weight:600;box-shadow:0 6px 18px rgba(124,77,255,.22)}
+.drop{border:2px dashed var(--hairline);border-radius:14px;padding:38px 22px;text-align:center;
+  transition:border-color var(--d-fast) var(--e-out),background var(--d-fast) var(--e-out)}
+.drop.over{border-color:#8A5DFF;background:rgba(138,93,255,.07)}
+.drop p{color:var(--muted);font-size:13px;margin:10px 0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{background:var(--surface-2);border-radius:12px;padding:15px 16px}
+.stat .n{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.stat .l{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+  padding:8px 10px;font-weight:600}
+td{padding:9px 10px;border-top:1px solid var(--hairline);color:var(--text-2)}
+td:first-child{color:var(--text)}
+.pill{display:inline-block;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:600}
+.pill.ok{background:rgba(0,217,163,.15);color:var(--ok)}
+.pill.skip{background:rgba(118,109,139,.2);color:var(--muted)}
+.pill.warn{background:rgba(255,196,77,.15);color:var(--warn)}
+.pill.err{background:rgba(255,100,110,.15);color:var(--danger)}
+.hidden{display:none}
+code{background:var(--surface-2);border-radius:5px;padding:1px 6px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Legacy import preview</h1>
+  <p class="sub">Load your verified v242 export to see exactly what a Life OS v2 import
+     <em>would</em> create. Nothing is written. Nothing is imported. This is a dry run.</p>
+
+  <div class="note">
+    <b>What happens to the file.</b> It is read in this browser and sent only to
+    <span id="apihost">your own API</span> to be counted. It is never stored, never logged,
+    and never sent to Anthropic or any other service. The response contains
+    <b>counts only</b> — no task titles, no notes, no personal text.
+    <b>Business profile data is excluded entirely</b> and never appears in the plan.
+  </div>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <button class="btn btn-primary" id="pick">Choose export file…</button>
+      <p>or drop the <code>.json</code> export here</p>
+      <input type="file" id="file" accept="application/json,.json" class="hidden">
+    </div>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script type="module" src="./config.js"></script>
+<script type="module" src="./import.js"></script>
+</body>
+</html>

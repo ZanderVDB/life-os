@@ -10,6 +10,34 @@
 > **Rollback floor in place:** a VERIFIED export exists (v242 — 2 profiles,
 > 4 documents, 3 verified, 98.9 KB). See `firestore-export-restore.md`.
 
+## Update 2026-07-31 — the export is now the v2 input
+
+With the [clean relaunch](v2-relaunch-plan.md), the verified v242 export stops
+being only a rollback floor and becomes the **source for v2's first import**.
+
+What the import mapper does, all enforced by tests in `api/tests/import.test.ts`:
+
+- **Reads the Personal profile only**, selected by name. A test proves Business
+  is excluded even when it is listed first in the file, so nothing depends on
+  ordering.
+- **Refuses an unverified export.** Both the browser page and the API check
+  `verification.ok` before doing anything.
+- **Preserves `legacy_id`**, unique per workspace, so a real import can run
+  twice without duplicating anything.
+- **Drops retired fields** rather than inventing homes for them
+  (`linkedPersonId`, `linkedPromiseId`, `daily`, `dailyDate`, `dailySince`,
+  `lastCheckedAt`).
+- **Maps `task.project` → Area**, collapsing names that differ only by case or
+  surrounding whitespace.
+- **Keeps unparseable `scheduledTime` verbatim** in
+  `legacy_scheduled_time_raw` instead of guessing or discarding it.
+- **Reports counts only.** No task title, note or free-text field appears in the
+  response — a test asserts the serialised payload contains none of the source
+  text.
+
+**There is no import write path in the code.** The preview is a dry run. Nothing
+is deleted from Firestore, and the legacy app is untouched.
+
 ---
 
 ## ⛔ Profile decision (locked 2026-07-31)

@@ -510,3 +510,84 @@ Bump `APP_VERSION` (index.html) **and** `CACHE` (sw.js) together, then:
 railway up --detach --service life-os
 git push origin HEAD:main
 ```
+
+---
+
+# v2 CLEAN RELAUNCH — baseline delivered
+
+**Decision (2026-07-31):** stop migrating the legacy app system-by-system.
+Build a clean v2 baseline on Railway and relaunch from it. The legacy app keeps
+running untouched. Full reasoning in [v2-relaunch-plan.md](v2-relaunch-plan.md).
+
+This supersedes the phased in-place migration described earlier in this file.
+Phases A1/A2/A3 still stand — the verified v242 export is the input to v2.
+
+## Delivered
+
+### Backend — `/api`
+Node + TypeScript + Fastify + Zod + Drizzle + Pino, as locked in Phase 0.5.
+
+- **9 tables**, one generated migration `api/drizzle/0000_baseline.sql`:
+  `users`, `workspaces`, `workspace_memberships`, `areas`, `tasks`,
+  `task_steps`, `task_activity`, `user_preferences`, `migration_runs`
+- **Auth:** Firebase ID tokens verified against Google's public JWKS.
+  **No service-account key exists or is needed.**
+- **Endpoints:** `/health`, `/ready`, `/health/version`, `/api/v1/me`,
+  Areas CRUD, Tasks CRUD + `/complete` `/uncomplete` `/archive` `/move`,
+  task steps, and `POST …/import/legacy/preview` (counts only, writes nothing)
+- **Local dev:** `npm run dev:local` runs the whole API on PGlite. No database
+  to provision, no Docker, no cloud account. In-memory, discarded on exit.
+
+### Web — `/web`
+- `index.html` — Today shell: four buckets, task cards, detail panel, Move menu
+- `app.js` — all API calls; **no Firestore code exists in v2**
+- `import.html` / `import.js` — dry-run preview of a verified v242 export
+- `config.js` — ships with `FILL_ME_IN` placeholders and fails loudly
+
+### Tests — 55 passing, real Postgres via PGlite
+| File | Tests | Covers |
+|---|---|---|
+| `api/tests/schema.test.ts` | 15 | constraints, isolation, cascade rules |
+| `api/tests/api.test.ts` | 14 | routes, auth, validation, ordering |
+| `api/tests/import.test.ts` | 19 | mapping, Business exclusion, idempotency |
+| `api/tests/web-contract.test.ts` | 7 | the exact fields `/web` reads |
+
+`web-contract.test.ts` exists because the web app is plain JS and never imports
+a type from the API — nothing else would catch a rename. It earned its keep
+immediately: it caught the import page rendering four fields the API has never
+returned.
+
+## Bugs found and fixed during browser verification
+
+1. **Empty body + JSON content-type → 400.** `api()` sent
+   `Content-Type: application/json` on every request including the ones with no
+   body. Fastify rejected those before routing, silently breaking `/complete`,
+   `/uncomplete`, `/archive` and every DELETE. The `inject()`-based tests never
+   reproduced it because they don't set that header.
+   Fixed on both sides: the client only sends the header when there is a body,
+   and the server now parses an empty JSON body as `{}` instead of erroring.
+2. **Fastify 4xx reported as 500.** The error handler only special-cased
+   `ZodError` and `ApiError`; everything else became a 500. Framework errors
+   that already carry a correct 4xx now keep it.
+3. **`animation-fill-mode: both` beat `.task.done`.** An animation's applied
+   value outranks a normal declaration, so `to{opacity:1}` permanently won over
+   `.task.done{opacity:.55}` — completed tasks stopped looking dim once the
+   entry animation finished. All fill modes changed to `backwards`.
+4. **Move button was hover-gated on touch.** `@media (hover:none)` alone misses
+   tablets that report `hover: hover`. Now also keyed on `pointer: coarse` and
+   viewport width, with 44px tap targets — the non-drag path must never be
+   unreachable.
+
+## Verified end-to-end in a browser against the live API
+Create with due date / priority / area, add step, complete (persisted with
+`completed_at`), delete, `Alt+↓` reorder (position 2000 → 4000), Move menu
+between buckets, `Alt+←` bucket shift, mobile layout at 375px with no
+horizontal scroll.
+
+## NOT done — needs your account
+**No Railway resources were created.** No service, no database, no variable.
+Every remaining step is in [staging-setup.md](staging-setup.md).
+
+## NOT built — deliberately
+Calendar, Projects, Library, Brain, AI, file uploads, and the import **write**
+path. Preview only, by instruction.

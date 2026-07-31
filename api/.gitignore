@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Env files. The root .gitignore covers these too; repeated here so the rule
+# travels with the api directory.
+.env
+.env.*
+!.env.example

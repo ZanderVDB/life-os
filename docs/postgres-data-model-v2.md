@@ -1,8 +1,17 @@
 # Life OS — PostgreSQL Data Model v2
 
-**Status: DESIGN ONLY. No database exists. No migration has run.**
-**Created 2026-07-31.** Destination for structured data: **Railway PostgreSQL**
-(reasoning in `backend-architecture-v2.md` §2).
+**Status: IMPLEMENTED AS CODE. No database is provisioned; no migration has run
+against a real server.**
+
+The authoritative schema now lives in `api/src/db/schema.ts`, with the generated
+migration at `api/drizzle/0000_baseline.sql` (9 tables). It is exercised by 55
+tests against genuine Postgres via PGlite. **Where this document and the code
+disagree, the code wins** — treat this file as the reasoning behind the schema,
+not the schema itself.
+
+**Created 2026-07-31 · updated 2026-07-31.** Destination: **Railway PostgreSQL**
+(reasoning in `backend-architecture-v2.md` §2). Provisioning steps that need
+Zander's account are in [staging-setup.md](staging-setup.md).
 
 ---
 
