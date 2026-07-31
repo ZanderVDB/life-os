@@ -305,3 +305,47 @@ Areas replace Personal/Business profiles as the life-classification.
 | A5 data census | ✅ delivered by the A2 inspector |
 
 **No user data has been migrated, deleted or modified at any point.**
+
+## Correction 2026-07-31 — the second profile is "Trifusion", not "Business"
+
+Every earlier note in this file and elsewhere called the non-Personal profile
+"Business". Running the real v242 export through the import preview showed its
+actual name is **Trifusion**.
+
+**Nothing was affected by the mistake.** `chooseProfile()` identifies the
+Personal profile *positively* — by `id === 'main'`, `mode === 'personal'`, or an
+exact case-insensitive name match — and excludes every other profile whatever it
+is called. It never looked for the string "Business". Tests now assert this
+across several names, including a "Personal Admin" decoy that must not be
+mistaken for "Personal".
+
+Read "Business profile" as "the excluded second profile" throughout this file.
+
+### Preview counts from the real export (dry run, nothing written)
+
+Personal: **71 tasks**, 2 Areas, 20 steps, 50 already completed, 0 with a due
+date, 15 with a time kept verbatim, 0 duplicate legacy ids, 0 skipped.
+
+Trifusion (excluded, never read): 28 records — reminders 10, peopleLevelNames 5,
+people 4, calendarDefaults 3, growthFocus 3, notebook 1, peopleSettings 1,
+routineLog 1.
+
+Present in Personal but not part of this baseline: reminders 10, habits 5,
+diary 50, notebook 3, projects 12, brain ideas 2, brain notes 1, people 4,
+peopleLevelNames 5, peopleSettings 1. `dayNotes` and `customEvents` confirmed
+0/0 again, as in Phase A2.
+
+Retired fields that would be dropped: `dailySince` 37, `dailyDate` 36,
+`lastCheckedAt` 6, `prevCheckedAt` 6. **No task carries `linkedPersonId` or
+`linkedPromiseId`** — nothing in Tasks depends on the retired People system.
+
+**Zero due dates is real, not a parsing failure.** Legacy has exactly one write
+site for the field, `t.dueDate = v` taken from an `<input type="date">`, whose
+value is always `YYYY-MM-DD` — precisely the format the importer accepts. A
+regression test now pins that agreement, because a mismatch would show up as a
+plausible-looking zero rather than an error.
+
+Both profiles hold identical People and reminder counts, consistent with the
+cross-profile contamination found in Phase A2. Both are excluded regardless.
+
+**No import has been written. The import writer does not exist.**

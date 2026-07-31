@@ -591,3 +591,119 @@ Every remaining step is in [staging-setup.md](staging-setup.md).
 ## NOT built — deliberately
 Calendar, Projects, Library, Brain, AI, file uploads, and the import **write**
 path. Preview only, by instruction.
+
+---
+
+# STAGING PROVISIONED AND VERIFIED — 2026-07-31
+
+Deployed commit: `dfda653` (+ `8e4e585`, `b4873dd`, `e5e75db`, `0ba1bd0`,
+`b127e04`, `5285bbb`, `a7b564e`).
+
+## Railway resources created
+
+All inside project `life-os`, environment **`v2-staging`**. Legacy's
+`production` environment and its `life-os` service were not touched.
+
+| Service | Purpose |
+|---|---|
+| `life-os-v2-postgres-staging` | Postgres. 9 tables, 29 indexes. |
+| `life-os-v2-api-staging` | Fastify API, root dir `api`, Railpack, Node 22. |
+| `life-os-v2-web-staging` | Static shell, root dir `web`, runtime config. |
+
+- API: `https://life-os-v2-api-staging-v2-staging.up.railway.app`
+- Web: `https://life-os-v2-web-staging-v2-staging.up.railway.app`
+
+Variables (names only): API — `NODE_ENV`, `LOG_LEVEL`, `DATABASE_URL`
+(Railway reference, never copied), `FIREBASE_PROJECT_ID`,
+`CORS_ALLOWED_ORIGINS`. Web — `API_BASE_URL`, `FIREBASE_API_KEY`,
+`FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`.
+`PORT` and `DEV_AUTH_BYPASS` deliberately absent.
+
+## Problems found before provisioning, all fixed
+
+1. **`rootDir: "."`** made tsc emit `dist/src/index.js`, so the start command
+   `node dist/index.js` had nothing to run. Found by simulating the Railway
+   build locally rather than discovering it on the first deploy.
+2. **The migration ran through `tsx`**, a devDependency. Railpack ships a
+   production-only runtime layer, so it would have been absent. Now compiled JS.
+3. **`npm run typecheck` excluded the tests**, and `tsx --test` only strips
+   types — nothing type-checked them at all. Added `tsconfig.test.json`; it
+   immediately found two real errors.
+4. **TLS was forced on every non-localhost host.** Railway's `DATABASE_URL`
+   points at `postgres.railway.internal`, which does not serve TLS, so this
+   would have failed to connect. Verified against both real URL shapes.
+5. **`iat` and `auth_time` were never validated.** jose does not check either
+   by default, but Firebase's spec requires both to be in the past.
+6. **Logs could leak private content** — redaction covered credentials but not
+   task titles, notes, emails or export bodies.
+7. **Cold-boot race**: Railway's private network needs a moment, and the
+   migration runs immediately. Now retries connection errors only.
+
+## End-to-end results
+
+Verified against real Railway Postgres from a real browser session.
+
+| Check | Result |
+|---|---|
+| Web loads, no console errors | PASS |
+| Google sign-in | PASS |
+| Token accepted by the API | PASS |
+| `/health`, `/ready`, `/health/version` | PASS — `database: ok`, Node v22.23.1 |
+| `/api/v1/me` | PASS |
+| Exactly one user / workspace / owner membership | PASS — 1 / 1 / 1 |
+| Personal + Work seeded | PASS |
+| Refresh and repeat sign-in create no duplicates | PASS — counts unchanged |
+| Task create, edit, steps | PASS |
+| Due date saves and renders | PASS — stored `2026-08-14`, renders `Fri Aug 14 2026` |
+| Bucket movement via the Move button | PASS — three `moved_bucket` entries |
+| No Firestore code in the client | PASS — imports only `firebase-app` and `firebase-auth` |
+| Legacy still online | PASS — HTTP 200, still `v244` |
+| Rows created by anything other than authenticated requests | NONE |
+
+Not exercised on staging: uncompletion, reorder-within-bucket, keyboard
+movement and the touch-viewport Move menu. All are covered by the automated
+suite and were verified in a browser against the local API.
+
+**A PGlite-vs-postgres-js difference was specifically checked**: `date` columns
+come back as `YYYY-MM-DD` strings through Drizzle on real Postgres, matching the
+test environment. Had they returned `Date` objects, every due date would have
+rendered "Invalid Date" and no test would have caught it.
+
+## Import preview — RUN, NOT IMPORTED
+
+Source: the verified v242 export. **Nothing was written. `migration_runs` = 0.
+Every task in staging has `legacy_id = null`.**
+
+| | |
+|---|---|
+| Profile chosen | Personal |
+| Profile ignored | **Trifusion** (28 records) — never read |
+| Tasks | 71 · today 53, week 5, month 6, future 7 |
+| Priorities | medium 26, high 20, urgent 15, low 7, someday 3 |
+| Areas | 2, none merging into the defaults |
+| Steps | 20 |
+| Already completed | 50 |
+| With a due date | **0** |
+| Time kept verbatim | 15 |
+| Duplicate legacy ids | 0 |
+| Skipped | none |
+
+Deferred systems present but not imported: reminders 10, habits 5, diary 50,
+notebook 3, projects 12, brain ideas 2, brain notes 1, people 4.
+
+Retired fields dropped: `dailySince` 37, `dailyDate` 36, `lastCheckedAt` 6,
+`prevCheckedAt` 6. No task carries `linkedPersonId` or `linkedPromiseId`.
+
+### Two findings worth recording
+
+- **The second profile is named "Trifusion", not "Business".** Every earlier
+  document said Business. Selection was never affected — `chooseProfile()`
+  identifies Personal positively and excludes everything else, so the name of
+  the excluded profile is irrelevant. Tests now assert this across several
+  names, including a "Personal Admin" decoy.
+- **Zero tasks have a due date.** Investigated rather than assumed: legacy has
+  exactly one write site, `t.dueDate = v` from an `<input type="date">`, whose
+  value is always `YYYY-MM-DD` — precisely what the importer accepts. There is
+  no format mismatch, so the zero is real.
+- Both profiles hold identical People and reminder counts, consistent with the
+  cross-profile contamination found in Phase A2. Both are excluded regardless.

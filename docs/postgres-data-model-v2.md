@@ -1,11 +1,13 @@
 # Life OS — PostgreSQL Data Model v2
 
-**Status: IMPLEMENTED AS CODE. No database is provisioned; no migration has run
-against a real server.**
+**Status: DEPLOYED TO STAGING.** Migration `0000_baseline` is applied to
+`life-os-v2-postgres-staging`; all 9 tables and 29 indexes verified present.
+No legacy data has been imported — every table was empty until a real
+sign-in, and `migration_runs` is still 0.
 
 The authoritative schema now lives in `api/src/db/schema.ts`, with the generated
 migration at `api/drizzle/0000_baseline.sql` (9 tables). It is exercised by 55
-tests against genuine Postgres via PGlite. **Where this document and the code
+tests against genuine Postgres (PGlite locally, real Railway Postgres in staging). **Where this document and the code
 disagree, the code wins** — treat this file as the reasoning behind the schema,
 not the schema itself.
 
@@ -577,3 +579,27 @@ document ceiling that today's architecture will eventually hit** (audit D3).
 - `book_pages` is the one place where true revisions may be worth adding later
   (a `book_page_revisions` table), because long-form writing is where losing
   work hurts most. **Not in v1.**
+
+---
+
+## Applied to staging — 2026-07-31
+
+Migration `0000_baseline` applied to `life-os-v2-postgres-staging`
+(`drizzle.__drizzle_migrations` count = 1). Verified present: all 9 tables and
+29 indexes, including the constraints that carry the design decisions —
+`workspaces_one_primary_idx` (one primary workspace per user),
+`areas_workspace_name_idx` (Area names unique per workspace, case- and
+whitespace-folded), `tasks_legacy_idx` and `areas_legacy_idx` (legacy ids unique
+per workspace, which is what makes a re-run of the real import idempotent),
+`users_email_lower_idx` and `workspace_memberships_unique`.
+
+**Driver note.** Tests run on PGlite; staging runs postgres-js. These can differ
+in how column types are returned, so it was checked explicitly: `date` columns
+come back as `'YYYY-MM-DD'` strings through Drizzle on both. The web shell does
+`new Date(dueDate + 'T12:00:00')`, so a `Date` object here would have rendered
+"Invalid Date" on every dated card with no test failing.
+
+**Connection.** Railway exposes `DATABASE_URL` (private,
+`postgres.railway.internal`, no TLS) and `DATABASE_PUBLIC_URL` (public proxy,
+TLS required). `sslModeFor()` picks per host; an explicit `?sslmode=` overrides.
+Pool: 10 per instance, `idle_timeout` 30s, `connect_timeout` 10s.

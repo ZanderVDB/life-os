@@ -1,8 +1,24 @@
 # Staging setup — exact manual actions
 
-**Status:** nothing has been provisioned. No Railway service, database or
-environment variable has been created by this work. Everything below is a step
-**you** perform, because each one needs your account.
+**Status: PROVISIONED AND VERIFIED — 2026-07-31.** Everything below has been
+done. It is kept as the record of how staging was built and how to rebuild it.
+
+| Resource | Name |
+|---|---|
+| Environment | `v2-staging` (Railway project `life-os`) |
+| Database | `life-os-v2-postgres-staging` |
+| API | `life-os-v2-api-staging` — `https://life-os-v2-api-staging-v2-staging.up.railway.app` |
+| Web | `life-os-v2-web-staging` — `https://life-os-v2-web-staging-v2-staging.up.railway.app` |
+
+Legacy's `production` environment and its `life-os` service were not modified.
+
+**Two things differ from the instructions below, learned by doing it:**
+
+1. **Root Directory cannot be set from the Railway CLI** — it is a dashboard-only
+   setting, and it is the step most easily missed. Miss it and the service
+   builds from the repo root and silently runs the *legacy* `server.js`.
+2. **`railway redeploy` alone does not pick up new variables** — it replays the
+   existing deployment. Use `railway redeploy --from-source`.
 
 The code is complete and tested without any of it. You can run the whole stack
 locally today — see [Run it locally right now](#run-it-locally-right-now).

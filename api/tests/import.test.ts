@@ -271,3 +271,51 @@ test('preview reports excluded-profile counts, retired fields and duplicate risk
   assert.equal(s.duplicateRisk.tasksCarryingLegacyId, s.tasks.total);
   assert.equal(s.duplicateRisk.areasCarryingLegacyId, s.areas.total);
 });
+
+test('the excluded profile is chosen by NOT being Personal, whatever it is called', () => {
+  // The real export's second profile is named "Trifusion", not "Business".
+  // Selection must never depend on the excluded profile's name — it works by
+  // positively identifying Personal, so any other name is excluded the same way.
+  for (const otherName of ['Trifusion', 'Business', 'Side Project', '', 'Personal Admin']) {
+    const exp = fixture({
+      profiles: [
+        { id: 'p_other', name: otherName, mode: 'business' },
+        { id: 'main', name: 'Personal', mode: 'personal' },
+      ],
+    });
+    const { chosen, ignored } = chooseProfile(exp);
+    assert.equal(chosen.id, 'main', `Personal not chosen when the other profile is "${otherName}"`);
+    assert.equal(ignored.length, 1);
+    assert.equal(ignored[0]!.id, 'p_other');
+  }
+});
+
+test('a profile whose name merely CONTAINS "personal" is not mistaken for Personal', () => {
+  // "Personal Admin" must not win over the real Personal profile. The name test
+  // is anchored, so only an exact match counts.
+  const exp = fixture({
+    profiles: [
+      { id: 'p_decoy', name: 'Personal Admin', mode: 'business' },
+      { id: 'main', name: 'Personal', mode: 'personal' },
+    ],
+  });
+  assert.equal(chooseProfile(exp).chosen.id, 'main');
+});
+
+test('legacy dueDate format matches what the importer accepts', () => {
+  // Legacy writes t.dueDate from an <input type="date">, whose value is always
+  // 'YYYY-MM-DD'. If that parser were ever loosened or tightened out of step,
+  // every due date would be silently dropped — which is exactly the kind of
+  // failure a preview reports as a plausible-looking zero.
+  const exp = fixture();
+  exp.documents.main.data.tasks = [
+    { id: 'd1', text: 'has due', done: false, bucket: 'today', dueDate: '2026-08-14' },
+    { id: 'd2', text: 'no due', done: false, bucket: 'today' },
+    { id: 'd3', text: 'empty due', done: false, bucket: 'today', dueDate: '' },
+  ];
+  const plan = buildImportPlan(exp);
+  assert.equal(plan.tasks.withDueDate, 1, 'a YYYY-MM-DD due date must be recognised');
+  assert.equal(plan.tasks.plan.find((t) => t.legacyId === 'd1')!.dueDate, '2026-08-14');
+  assert.equal(plan.tasks.plan.find((t) => t.legacyId === 'd2')!.dueDate, null);
+  assert.equal(plan.tasks.plan.find((t) => t.legacyId === 'd3')!.dueDate, null);
+});

@@ -1,9 +1,10 @@
 # Life OS — Backend Architecture v2
 
-**Status: BUILT AS CODE, NOT PROVISIONED.**
-The API in `/api` implements this design and has 55 passing tests against real
-Postgres. **No Railway service, database or environment variable exists** — see
-[staging-setup.md](staging-setup.md) for the steps only Zander can perform.
+**Status: DEPLOYED TO STAGING.**
+The API in `/api` implements this design, has 78 passing tests, and runs at
+`https://life-os-v2-api-staging-v2-staging.up.railway.app` in the `v2-staging`
+Railway environment. **Production is untouched.** Resource list and manual
+steps: [staging-setup.md](staging-setup.md).
 **Created 2026-07-31 · updated 2026-07-31 for the v2 clean relaunch.**
 
 > **Superseding decision:** we are not migrating the legacy app in place. We are
@@ -530,3 +531,52 @@ The app has **no export at all today** — a real gap for a personal life system
 **It does not fix:** touch drag-and-drop (D4), timezone handling (D9),
 notebook sanitisation (D13), or notifications-when-closed (D14) — those remain
 client/product work.
+
+---
+
+## Firebase token validation — as implemented and tested (2026-07-31)
+
+`api/src/auth/firebase.ts`. Verified against Google's public JWKS at
+`https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`.
+**No service-account key exists, and none is needed.** Earlier drafts of this
+document mention `FIREBASE_PRIVATE_KEY` — that is obsolete; there is no such
+variable anywhere.
+
+| Claim | Enforced | How |
+|---|---|---|
+| Signature | yes | `jwtVerify` against the JWKS |
+| Algorithm | yes | pinned to `RS256`; nothing else is accepted |
+| Issuer | yes | must equal `https://securetoken.google.com/<project>` |
+| Audience | yes | must equal the project id exactly, string not array |
+| Expiry | yes | enforced, **and required to be present** |
+| Issued-at | yes | must exist and not be in the future |
+| `auth_time` | yes | must exist and not be in the future |
+| Subject | yes | non-empty string |
+| Email | yes | required — anonymous and phone sign-in unsupported by design |
+
+Clock tolerance is 60 seconds, so ordinary skew does not reject a fresh token.
+
+**Cross-project rejection.** Google signs every Firebase project's tokens with
+the same keys, so a validly signed token from another project passes the
+signature check. The `aud` and `iss` checks are what reject it — not the
+signature. Tested explicitly.
+
+**Identity is derived only from the verified token.** No route reads a uid from
+a query string, route parameter or request body, and no workspace is reachable
+without a membership row. `resolveWorkspace` answers 403 otherwise. All asserted
+by tests.
+
+15 tests in `api/tests/auth-claims.test.ts` cover this using real RS256 key
+pairs — signature, tampered payload, wrong key, non-RS256 algorithm, expiry,
+`iat`, `auth_time`, issuer, audience, cross-project, subject and email. No real
+Firebase token is used, printed or stored.
+
+## Logging
+
+Redaction happens at the logger. Logs record that something happened, never what
+it said: task titles, notes, step text, export bodies, emails and display names
+are redacted at the top level and one level down, and `Authorization`, cookies
+and `DATABASE_URL` never appear. URLs are logged as bare paths — query strings
+are dropped wholesale rather than filtered. Every request and every error
+carries a UUID `requestId`, which is also returned in the error body, so a user
+report can be traced without any private content in the log.

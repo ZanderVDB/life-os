@@ -105,3 +105,30 @@ stay exactly as they are until you decide otherwise.
   `sw.js` cache-bumping ritual is a recurring source of stale-deploy bugs, and
   the baseline is better off without one until it is actually needed.
 - Whether Firebase Auth stays. The design assumes it might not.
+
+---
+
+## Status 2026-07-31 — staging is live
+
+| | |
+|---|---|
+| Web | `https://life-os-v2-web-staging-v2-staging.up.railway.app` |
+| API | `https://life-os-v2-api-staging-v2-staging.up.railway.app` |
+| Database | `life-os-v2-postgres-staging` — 9 tables, 29 indexes |
+| Environment | Railway `v2-staging`, isolated from Legacy's `production` |
+| Tests | 78 passing |
+
+Sign-in, workspace provisioning, Area seeding and task operations are all
+verified against real Railway Postgres from a real browser. Legacy is untouched
+and still serving `v244`.
+
+The import preview has been run against the real verified v242 export: **71
+tasks, Personal only, nothing written.** Details in
+[legacy-data-decision.md](legacy-data-decision.md) and
+[build-progress.md](build-progress.md).
+
+**Step 3 of the order of work — building the import writer — is blocked on
+Zander approving those counts.** That gate is deliberate.
+
+One correction to the plan above: the excluded profile is named **Trifusion**,
+not Business. Selection was never affected — Personal is identified positively.
