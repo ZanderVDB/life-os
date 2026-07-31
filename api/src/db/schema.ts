@@ -321,3 +321,403 @@ export const habitEntriesRelations = relations(habitEntries, ({ one }) => ({
 export const FREQUENCY_TYPES = ['daily', 'weekly', 'specific_days', 'times_per_week'] as const;
 export const ENTRY_SOURCES = ['user', 'import', 'system'] as const;
 export type FrequencyType = (typeof FREQUENCY_TYPES)[number];
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CALENDAR (Phase D2) — see /docs/calendar-v2-data-model.md
+
+   Kept in this file rather than its own module because drizzle-kit bundles as
+   CJS and cannot resolve the ESM './schema-calendar.js' specifier; habits are
+   inline here for the same reason.
+
+   Design rules, locked in /docs/calendar-v2-product-model.md:
+    • Events, Reminders, Tasks and Habits are DIFFERENT THINGS. Reminders and
+      task blocks are Life OS records in their own tables. They never
+      masquerade as Google events, and are never pushed to Google as events
+      merely to make them appear on a calendar canvas.
+    • Google is authoritative for EVENTS only. Every column mirroring a Google
+      field is named after it, so a reader can tell at a glance what
+      round-trips and what does not.
+    • Life OS-only relationships live in calendar_item_links, never overloaded
+      onto a Google event field.
+    • OAuth tokens are NEVER stored here. The token columns hold references
+      into encrypted storage plus non-secret metadata.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export const CALENDAR_PROVIDERS = ['google', 'synthetic'] as const;
+export const CONNECTION_STATUSES = ['active', 'needs_reauth', 'revoked', 'error'] as const;
+export const ACCESS_ROLES = ['owner', 'writer', 'reader', 'freeBusyReader'] as const;
+export const EVENT_STATUSES = ['confirmed', 'tentative', 'cancelled'] as const;
+export const TRANSPARENCY = ['opaque', 'transparent'] as const;   // busy | free
+export const VISIBILITY = ['default', 'public', 'private', 'confidential'] as const;
+export const SYNC_STATES = ['synced', 'pending_push', 'push_failed', 'local_only'] as const;
+export const ATTENDEE_RESPONSES = ['needsAction', 'declined', 'tentative', 'accepted'] as const;
+export const REMINDER_STATUSES = ['open', 'done', 'dismissed'] as const;
+export const LINK_KINDS = [
+  'preparation', 'follow_up', 'scheduled_block', 'project', 'library', 'diary',
+] as const;
+
+const EMPTY_JSON_ARRAY = sql`'[]'::jsonb`;
+
+/* ── calendar_connections ────────────────────────────────────────────────
+ * One row per connected provider account. `accessTokenRef`/`refreshTokenRef`
+ * are POINTERS into encrypted storage, never the tokens themselves — a token
+ * must never be readable from a database dump or a log line. */
+export const calendarConnections = pgTable('calendar_connections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  provider: text('provider').notNull().default('google'),
+  providerAccountId: text('provider_account_id').notNull(),
+  accountEmail: text('account_email'),
+  status: text('status').notNull().default('active'),
+  // Encrypted-store references, plus the scopes actually GRANTED — which can
+  // be narrower than the scopes requested. Write paths must check these
+  // rather than assuming the request succeeded in full.
+  accessTokenRef: text('access_token_ref'),
+  refreshTokenRef: text('refresh_token_ref'),
+  tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+  grantedScopes: jsonb('granted_scopes').$type<string[]>().notNull().default(EMPTY_JSON_ARRAY),
+  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  disconnectedAt: timestamp('disconnected_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byWorkspace: index('cal_conn_ws_idx').on(t.workspaceId),
+  uniqueAccount: uniqueIndex('cal_conn_account_idx')
+    .on(t.workspaceId, t.provider, t.providerAccountId),
+  statusCheck: check('cal_conn_status',
+    sql`${t.status} IN ('active','needs_reauth','revoked','error')`),
+}));
+
+/* ── calendars ───────────────────────────────────────────────────────────
+ * A calendar the connection can see. `accessRole` is Google's, and it decides
+ * whether Life OS may offer editing at all — never assume write access. */
+export const calendars = pgTable('calendars', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  connectionId: uuid('connection_id')
+    .references(() => calendarConnections.id, { onDelete: 'cascade' }),
+  providerCalendarId: text('provider_calendar_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  color: text('color'),
+  timeZone: text('time_zone'),
+  accessRole: text('access_role').notNull().default('reader'),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  isVisible: boolean('is_visible').notNull().default(true),
+  // Derived from accessRole and stored, so the UI never re-derives it and
+  // never accidentally offers an edit control on a read-only calendar.
+  isReadOnly: boolean('is_read_only').notNull().default(true),
+  isSynthetic: boolean('is_synthetic').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byWorkspace: index('calendars_ws_idx').on(t.workspaceId),
+  uniquePerWorkspace: uniqueIndex('calendars_provider_idx')
+    .on(t.workspaceId, t.providerCalendarId),
+  roleCheck: check('calendars_role',
+    sql`${t.accessRole} IN ('owner','writer','reader','freeBusyReader')`),
+}));
+
+/* ── calendar_sync_states ────────────────────────────────────────────────
+ * One row per calendar. The sync token is the whole point: Google returns it
+ * after a full sync and it makes every later sync incremental.
+ *
+ * When Google invalidates it (410 GONE), `tokenInvalidatedAt` is stamped and a
+ * controlled FULL resync runs for that calendar only. Never a guess at what
+ * changed in between, and never a delete of Life OS-only data. */
+export const calendarSyncStates = pgTable('calendar_sync_states', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  calendarId: uuid('calendar_id').notNull()
+    .references(() => calendars.id, { onDelete: 'cascade' }),
+  syncToken: text('sync_token'),
+  nextPageToken: text('next_page_token'),
+  fullSyncCompletedAt: timestamp('full_sync_completed_at', { withTimezone: true }),
+  lastIncrementalAt: timestamp('last_incremental_at', { withTimezone: true }),
+  tokenInvalidatedAt: timestamp('token_invalidated_at', { withTimezone: true }),
+  isSyncing: boolean('is_syncing').notNull().default(false),
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniquePerCalendar: uniqueIndex('cal_sync_calendar_idx').on(t.calendarId),
+  byWorkspace: index('cal_sync_ws_idx').on(t.workspaceId),
+}));
+
+/* ── calendar_events ─────────────────────────────────────────────────────
+ * Mirrors a Google event. The identity columns matter more than they look:
+ *
+ *   providerEventId   — the id to write back to
+ *   icalUid           — stable across copies of an invitation
+ *   recurringEventId  — the SERIES this instance belongs to
+ *   originalStartTime — which occurrence an exception replaces
+ *   etag + sequence   — optimistic concurrency, so a stale write is rejected
+ *
+ * Without all five, editing one occurrence of a recurring event corrupts the
+ * series. That is the failure mode this table is shaped against. */
+export const calendarEvents = pgTable('calendar_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  calendarId: uuid('calendar_id').notNull()
+    .references(() => calendars.id, { onDelete: 'cascade' }),
+
+  providerEventId: text('provider_event_id'),
+  icalUid: text('ical_uid'),
+  recurringEventId: text('recurring_event_id'),
+  originalStartTime: timestamp('original_start_time', { withTimezone: true }),
+
+  title: text('title'),
+  description: text('description'),
+  location: text('location'),
+
+  isAllDay: boolean('is_all_day').notNull().default(false),
+  startsAt: timestamp('starts_at', { withTimezone: true }),
+  endsAt: timestamp('ends_at', { withTimezone: true }),
+  // An all-day event is a DATE, not an instant — storing it only as a
+  // timestamp shifts it across time zones. Both forms are kept, and the
+  // all-day flag says which one is authoritative.
+  startDate: date('start_date'),
+  endDate: date('end_date'),
+  timeZone: text('time_zone'),
+
+  recurrence: jsonb('recurrence').$type<string[]>(),
+  status: text('status').notNull().default('confirmed'),
+  transparency: text('transparency').notNull().default('opaque'),
+  visibility: text('visibility').notNull().default('default'),
+  providerColorId: text('provider_color_id'),
+  eventType: text('event_type'),
+  conferenceData: jsonb('conference_data'),
+  hangoutLink: text('hangout_link'),
+  organizerEmail: text('organizer_email'),
+  organizerName: text('organizer_name'),
+  providerHtmlLink: text('provider_html_link'),
+  sourceUrl: text('source_url'),
+
+  etag: text('etag'),
+  sequence: integer('sequence').notNull().default(0),
+  providerCreatedAt: timestamp('provider_created_at', { withTimezone: true }),
+  providerUpdatedAt: timestamp('provider_updated_at', { withTimezone: true }),
+  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+  syncState: text('sync_state').notNull().default('local_only'),
+  isSynthetic: boolean('is_synthetic').notNull().default(false),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byWorkspace: index('cal_events_ws_idx').on(t.workspaceId),
+  byRange: index('cal_events_range_idx').on(t.workspaceId, t.startsAt, t.endsAt),
+  byCalendar: index('cal_events_calendar_idx').on(t.calendarId),
+  bySeries: index('cal_events_series_idx').on(t.workspaceId, t.recurringEventId),
+  // Idempotent upserts depend on this: a re-delivered change must UPDATE the
+  // same row rather than insert a duplicate. Partial, because synthetic and
+  // local-only events legitimately have no provider id.
+  uniqueProviderEvent: uniqueIndex('cal_events_provider_idx')
+    .on(t.calendarId, t.providerEventId)
+    .where(sql`${t.providerEventId} IS NOT NULL`),
+  statusCheck: check('cal_events_status',
+    sql`${t.status} IN ('confirmed','tentative','cancelled')`),
+  transparencyCheck: check('cal_events_transparency',
+    sql`${t.transparency} IN ('opaque','transparent')`),
+  syncStateCheck: check('cal_events_sync_state',
+    sql`${t.syncState} IN ('synced','pending_push','push_failed','local_only')`),
+}));
+
+/* ── calendar_event_attendees ────────────────────────────────────────────
+ * `responseStatus` is READ-ONLY from Life OS in this phase: changing another
+ * person's RSVP is not ours to do. */
+export const calendarEventAttendees = pgTable('calendar_event_attendees', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  eventId: uuid('event_id').notNull()
+    .references(() => calendarEvents.id, { onDelete: 'cascade' }),
+  email: text('email'),
+  displayName: text('display_name'),
+  responseStatus: text('response_status').notNull().default('needsAction'),
+  isOptional: boolean('is_optional').notNull().default(false),
+  isOrganizer: boolean('is_organizer').notNull().default(false),
+  isSelf: boolean('is_self').notNull().default(false),
+  comment: text('comment'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byEvent: index('cal_attendees_event_idx').on(t.eventId),
+  uniquePerEvent: uniqueIndex('cal_attendees_unique_idx').on(t.eventId, t.email)
+    .where(sql`${t.email} IS NOT NULL`),
+}));
+
+/* ── calendar_event_reminders ────────────────────────────────────────────
+ * Google's per-event notification overrides — "notify me 10 minutes before
+ * this event". NOT the same concept as a Life OS Reminder, which is its own
+ * item type with its own table below. The names are Google's, kept as-is so
+ * the mapping stays obvious. */
+export const calendarEventReminders = pgTable('calendar_event_reminders', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  eventId: uuid('event_id').notNull()
+    .references(() => calendarEvents.id, { onDelete: 'cascade' }),
+  method: text('method').notNull().default('popup'),
+  minutesBefore: integer('minutes_before').notNull(),
+  usesDefault: boolean('uses_default').notNull().default(false),
+}, (t) => ({ byEvent: index('cal_ev_reminders_event_idx').on(t.eventId) }));
+
+/* ── calendar_event_attachments ──────────────────────────────────────────
+ * Google Drive attachment METADATA only. Life OS does not copy the file, and
+ * must not imply it holds one. */
+export const calendarEventAttachments = pgTable('calendar_event_attachments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  eventId: uuid('event_id').notNull()
+    .references(() => calendarEvents.id, { onDelete: 'cascade' }),
+  fileId: text('file_id'),
+  fileUrl: text('file_url'),
+  title: text('title'),
+  mimeType: text('mime_type'),
+  iconLink: text('icon_link'),
+}, (t) => ({ byEvent: index('cal_ev_attach_event_idx').on(t.eventId) }));
+
+/* ── reminders ───────────────────────────────────────────────────────────
+ * A Life OS record, permanently. A reminder asks for attention ON OR BEFORE a
+ * date and does not occupy a duration, so it is not an event and must never be
+ * pushed to Google as one. */
+export const reminders = pgTable('reminders', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  areaId: uuid('area_id').references(() => areas.id, { onDelete: 'set null' }),
+  title: text('title').notNull(),
+  notes: text('notes'),
+  dueDate: date('due_date'),
+  dueTime: text('due_time'),          // 'HH:MM' local; null means all-day
+  timeZone: text('time_zone'),
+  status: text('status').notNull().default('open'),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  // Deferral is a first-class action rather than an edit of the due date:
+  // the original intent is worth keeping.
+  deferredTo: date('deferred_to'),
+  // How many days early this should start asking for attention.
+  leadDays: integer('lead_days').notNull().default(0),
+  isSynthetic: boolean('is_synthetic').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byWorkspace: index('reminders_ws_idx').on(t.workspaceId),
+  byDue: index('reminders_due_idx').on(t.workspaceId, t.dueDate),
+  statusCheck: check('reminders_status',
+    sql`${t.status} IN ('open','done','dismissed')`),
+}));
+
+/* ── reminder_recurrence_rules ───────────────────────────────────────────
+ * RRULE-shaped, so a later move to full iCal semantics is mechanical rather
+ * than a rewrite. */
+export const reminderRecurrenceRules = pgTable('reminder_recurrence_rules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  reminderId: uuid('reminder_id').notNull()
+    .references(() => reminders.id, { onDelete: 'cascade' }),
+  frequency: text('frequency').notNull(),          // DAILY|WEEKLY|MONTHLY|YEARLY
+  interval: integer('interval').notNull().default(1),
+  byWeekday: jsonb('by_weekday').$type<number[]>(),
+  byMonthDay: jsonb('by_month_day').$type<number[]>(),
+  until: date('until'),
+  count: integer('count'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniquePerReminder: uniqueIndex('reminder_rrule_idx').on(t.reminderId),
+  freqCheck: check('reminder_rrule_freq',
+    sql`${t.frequency} IN ('DAILY','WEEKLY','MONTHLY','YEARLY')`),
+}));
+
+/* ── task_schedule_blocks ────────────────────────────────────────────────
+ * "I will do this task at this time."
+ *
+ * DELIBERATELY separate from tasks.due_date. A task due Friday that you plan
+ * to do on Wednesday morning has both, and they mean different things.
+ * Collapsing them is exactly the mistake this table exists to prevent.
+ *
+ * Nothing here touches project_id or Area semantics. */
+export const taskScheduleBlocks = pgTable('task_schedule_blocks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  taskId: uuid('task_id').notNull()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+  timeZone: text('time_zone'),
+  // Set only if the user chose to mirror this block onto a real calendar.
+  // Null is the normal case: planning time is private to Life OS.
+  mirroredEventId: uuid('mirrored_event_id')
+    .references(() => calendarEvents.id, { onDelete: 'set null' }),
+  isSynthetic: boolean('is_synthetic').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byWorkspace: index('task_blocks_ws_idx').on(t.workspaceId),
+  byRange: index('task_blocks_range_idx').on(t.workspaceId, t.startsAt),
+  byTask: index('task_blocks_task_idx').on(t.taskId),
+}));
+
+/* ── calendar_item_links ─────────────────────────────────────────────────
+ * Life OS-ONLY relationships. A polymorphic edge, so Projects and Library can
+ * arrive without a migration.
+ *
+ * These are never written into Google event fields. If a link is ever mirrored
+ * to Google it goes into a PRIVATE extended property, and the user is told
+ * plainly that other Google Calendar users will not see it. */
+export const calendarItemLinks = pgTable('calendar_item_links', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  sourceType: text('source_type').notNull(),   // event | reminder | task | habit
+  sourceId: uuid('source_id').notNull(),
+  targetType: text('target_type').notNull(),   // task | project | library | diary
+  targetId: uuid('target_id').notNull(),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byWorkspace: index('cal_links_ws_idx').on(t.workspaceId),
+  bySource: index('cal_links_source_idx').on(t.workspaceId, t.sourceType, t.sourceId),
+  byTarget: index('cal_links_target_idx').on(t.workspaceId, t.targetType, t.targetId),
+  uniqueEdge: uniqueIndex('cal_links_unique_idx')
+    .on(t.sourceType, t.sourceId, t.targetType, t.targetId, t.kind),
+}));
+
+/* ── relations ───────────────────────────────────────────────────────── */
+export const calendarConnectionsRelations = relations(calendarConnections, ({ many }) => ({
+  calendars: many(calendars),
+}));
+export const calendarsRelations = relations(calendars, ({ one, many }) => ({
+  connection: one(calendarConnections, {
+    fields: [calendars.connectionId], references: [calendarConnections.id],
+  }),
+  events: many(calendarEvents),
+}));
+export const calendarEventsRelations = relations(calendarEvents, ({ one, many }) => ({
+  calendar: one(calendars, {
+    fields: [calendarEvents.calendarId], references: [calendars.id],
+  }),
+  attendees: many(calendarEventAttendees),
+  eventReminders: many(calendarEventReminders),
+  attachments: many(calendarEventAttachments),
+}));
+export const remindersRelations = relations(reminders, ({ one }) => ({
+  area: one(areas, { fields: [reminders.areaId], references: [areas.id] }),
+}));
+export const taskScheduleBlocksRelations = relations(taskScheduleBlocks, ({ one }) => ({
+  task: one(tasks, { fields: [taskScheduleBlocks.taskId], references: [tasks.id] }),
+}));
+
+export type CalendarProvider = (typeof CALENDAR_PROVIDERS)[number];
+export type AccessRole = (typeof ACCESS_ROLES)[number];
+export type EventStatus = (typeof EVENT_STATUSES)[number];
+export type SyncState = (typeof SYNC_STATES)[number];

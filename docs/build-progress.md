@@ -1033,3 +1033,18 @@ with a quiet "Soon". The softening is expressed as a **colour**, not opacity —
 translucency is what made it read as broken.
 
 147 tests passing. Task data untouched. Legacy untouched.
+
+## Phase D1-D2 — Calendar foundation (2026-07-31)
+
+Product model and PostgreSQL foundation for Calendar. **No UI yet** and the
+real Google Calendar is NOT connected.
+
+- Locked Month / Agenda / Plan as the only modes; removed Day, 3 Day, Week,
+  Bars/Expanded Month and the Events/Reminders/Habits tabs. See
+  [calendar-v2-product-model.md](calendar-v2-product-model.md).
+- One timeline with independently filterable layers, not several calendar
+  apps sharing a page.
+- 11 Calendar tables, migration `0002_calendar.sql`, purely additive —
+  no existing table is altered, so imported Task and Habit data cannot move.
+- 19 new schema tests against real Postgres (PGlite). 220 pass, 0 fail.
+- Still to do: D3 (Calendar UI on synthetic data) and D4 (approval).

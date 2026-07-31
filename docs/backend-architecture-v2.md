@@ -600,3 +600,13 @@ storage and never sync.
 `PUT` was missing when the preferences route shipped, which fails only at a real
 browser's preflight — server-side tests never see it. There is now a test that
 asserts the full set.
+
+## Calendar sync (Phase D, designed not built)
+
+All Google sync and writes run on the Railway backend; the browser never
+sees a Google token. The old direct-from-browser architecture is retired.
+
+Full design in [calendar-google-sync.md](calendar-google-sync.md): staged
+scopes (readonly first, write only when editing is requested), per-calendar
+sync tokens, controlled full resync on 410 GONE, idempotent upserts, and
+etag/sequence conflict detection.

@@ -159,3 +159,16 @@ is not ready teaches people the app has fewer parts than it does.
 
 Still deliberately absent: the AI backend (the composer is visibly disabled),
 and every deferred legacy system.
+
+## Phase D — Calendar
+
+| Step | Scope | State |
+|---|---|---|
+| D1 | Audit, product model, data model | done |
+| D2 | PostgreSQL Calendar foundation | done |
+| D3 | Calendar UI on synthetic staging data | next |
+| D4 | Visual and interaction approval | next |
+| D5-D9 | Google OAuth, read sync, write sync, Legacy reminders, Today | blocked on D4 |
+
+The user's real Google Calendar is not connected before D5, and D5 does not
+start until the Month/Agenda/Plan experience is approved.

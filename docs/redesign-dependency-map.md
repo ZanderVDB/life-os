@@ -209,3 +209,13 @@ graph TD
   ST["Storage model decision<br/>(one record → many)"] -.informs.-> T
   ST -.informs.-> PERF
 ```
+
+## Calendar dependencies (Phase D)
+
+- Calendar UI (D3) depends on the D2 schema — done.
+- Google connection (D5) depends on D4 visual approval.
+- Plan mode depends on the existing Task system — no Task change required.
+- Event->Project and Event->Library links exist as relationship
+  architecture only (`calendar_item_links`); Projects and Library are not
+  built, and no control implies they are live.
+- Today's compact week strip (D9) depends on Calendar being approved first.

@@ -314,9 +314,22 @@ test('data: this phase cannot have moved the imported rows', () => {
   // 4 areas / 5 habits / 131 habit entries) live in staging and cannot be
   // asserted from here. What CAN be asserted is the thing that protects them:
   // C4.1 is frontend-only, so no schema, no migration and no writer changed.
+  // Phase D2 adds 0002_calendar.sql. What must hold is that the change is
+  // ADDITIVE: the task and habit migrations are untouched, so the imported
+  // rows cannot have moved.
   const migrations = readdirSync(join('..', 'api', 'drizzle'))
-    .filter((f) => f.endsWith('.sql'));
-  assert.equal(migrations.length, 2, 'a migration was added or removed this phase');
+    .filter((f) => f.endsWith('.sql')).sort();
+  assert.deepEqual(migrations.slice(0, 2), ['0000_baseline.sql', '0001_habits.sql'],
+    'an existing migration was renamed or removed');
+  const calendar = readFileSync(join('..', 'api', 'drizzle', '0002_calendar.sql'), 'utf8');
+  for (const destructive of ['DROP TABLE', 'DROP COLUMN', 'ALTER COLUMN', 'DELETE FROM']) {
+    assert.ok(!calendar.toUpperCase().includes(destructive),
+      `the calendar migration contains ${destructive} — it must be purely additive`);
+  }
+  for (const existing of ['"tasks"', '"habits"', '"habit_entries"', '"task_steps"']) {
+    assert.ok(!new RegExp(`ALTER TABLE ${existing}`).test(calendar),
+      `the calendar migration alters ${existing}`);
+  }
 
   // No destructive verb may reach the database from the web client at all.
   for (const f of ['app.js', 'drag.js', 'motion.js', 'habit-modal.js', 'task-modal.js']) {

@@ -603,3 +603,18 @@ come back as `'YYYY-MM-DD'` strings through Drizzle on both. The web shell does
 `postgres.railway.internal`, no TLS) and `DATABASE_PUBLIC_URL` (public proxy,
 TLS required). `sslModeFor()` picks per host; an explicit `?sslmode=` overrides.
 Pool: 10 per instance, `idle_timeout` 30s, `connect_timeout` 10s.
+
+## Calendar tables (Phase D2)
+
+11 tables added by `0002_calendar.sql`. Full detail in
+[calendar-v2-data-model.md](calendar-v2-data-model.md).
+
+The rules that extend the existing model:
+
+- Reminders and task schedule blocks are Life OS records with their own
+  tables. They are never represented as Google events.
+- `tasks.due_date` and `task_schedule_blocks.starts_at` are different
+  concepts and must never be collapsed into one.
+- OAuth tokens are stored as encrypted-store references, never values.
+- The `(calendar_id, provider_event_id)` unique index is partial so sync
+  upserts stay idempotent while local-only events remain possible.
