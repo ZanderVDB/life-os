@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Offline · Life OS</title>
+<style>
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;
+    background:linear-gradient(180deg,#1A1624 0%,#141220 52%,#111018 100%);
+    color:#F4F2FA;font-family:Inter,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:340px;text-align:center}
+  h1{font-size:19px;font-weight:700;margin:22px 0 10px;letter-spacing:-.3px}
+  p{color:#B5ABC9;font-size:14px;line-height:1.7;margin:0 0 22px}
+  button{background:linear-gradient(180deg,#7C4DFF,#C28DFF);border:none;color:#fff;font:inherit;
+    font-weight:600;font-size:13px;border-radius:10px;padding:11px 20px;cursor:pointer;
+    box-shadow:0 6px 18px rgba(124,77,255,.22)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <svg width="46" height="46" viewBox="0 0 24 24" role="img" aria-label="Life OS">
+      <defs><linearGradient id="l" gradientUnits="userSpaceOnUse" x1="4" y1="21" x2="20" y2="3">
+        <stop offset="0" stop-color="#7C4DFF"/><stop offset="1" stop-color="#C28DFF"/></linearGradient></defs>
+      <path d="M12 20.4C6.9 17.6 3.4 13.1 3.4 8.5 7.1 9.2 10.1 13 12 20.4Z" fill="url(#l)" fill-opacity=".82"/>
+      <path d="M12 20.4c5.1-2.8 8.6-7.3 8.6-11.9-3.7.7-6.7 4.5-8.6 11.9Z" fill="url(#l)" fill-opacity=".82"/>
+      <path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z" fill="url(#l)"/>
+    </svg>
+    <h1>You are offline</h1>
+    <!-- Honest about the limitation: v2 deliberately does not cache private
+         task data, so there is genuinely nothing to show until the network
+         returns. Pretending otherwise would mean writing a diary to disk. -->
+    <p>Life OS keeps your tasks on the server and never stores them on this device,
+       so there is nothing to show until you are back online.</p>
+    <button onclick="location.reload()">Try again</button>
+  </div>
+</body>
+</html>

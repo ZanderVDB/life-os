@@ -33,6 +33,18 @@ const TYPES = {
 };
 
 /** Env-derived config, or null when nothing is configured. */
+/**
+ * A stable id for this deployment.
+ *
+ * Railway sets RAILWAY_GIT_COMMIT_SHA on every build, which is exactly what a
+ * build id should be: it changes when and only when the code does. The fallback
+ * is a boot timestamp, so a locally-run server still gets a distinct id rather
+ * than silently sharing a cache with the previous run.
+ */
+const BUILD_ID = (process.env.RAILWAY_GIT_COMMIT_SHA
+  ?? process.env.BUILD_ID
+  ?? `dev-${Date.now().toString(36)}`).slice(0, 12);
+
 function runtimeConfig() {
   const {
     API_BASE_URL, FIREBASE_API_KEY, FIREBASE_AUTH_DOMAIN,
@@ -53,6 +65,7 @@ window.LIFE_OS_CONFIG = {
 };
 window.LIFE_OS_CONFIG.isConfigured = ${JSON.stringify(configured)}
   && Boolean(window.LIFE_OS_CONFIG.apiBaseUrl);
+window.LIFE_OS_BUILD = ${JSON.stringify(BUILD_ID)};
 `;
 }
 
@@ -64,6 +77,27 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end('{"status":"ok","service":"life-os-v2-web"}');
+    }
+
+    /**
+     * The service worker is generated per request so its cache name carries the
+     * build id. A new deployment therefore lands in a brand-new cache, and the
+     * worker file itself differs byte-for-byte — which is what makes the
+     * browser notice an update at all.
+     */
+    if (url.pathname === '/sw.js') {
+      const src = await readFile(join(ROOT, 'sw.js'), 'utf8');
+      res.writeHead(200, {
+        'content-type': TYPES['.js'],
+        'cache-control': 'no-store',
+        'service-worker-allowed': '/',
+      });
+      return res.end(src.replace(/__BUILD_ID__/g, BUILD_ID));
+    }
+
+    if (url.pathname === '/version') {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      return res.end(JSON.stringify({ build: BUILD_ID, service: 'life-os-v2-web' }));
     }
 
     if (url.pathname === '/config.js') {

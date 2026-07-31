@@ -194,3 +194,20 @@ authentication first, so a non-200 would prove nothing).
 
 **Note on redeploys:** `railway redeploy` replays the existing deployment and
 does not pick up new variables or new commits. Use `railway redeploy --from-source`.
+
+---
+
+## Phase C1 additions — 2026-07-31
+
+The web service now serves a PWA. Two new endpoints:
+
+| Path | Purpose |
+|---|---|
+| `GET /version` | `{ build, service }` — confirms which commit is live |
+| `GET /sw.js` | generated per request with the build id substituted, `no-store` |
+
+The build id comes from `RAILWAY_GIT_COMMIT_SHA`, which Railway sets
+automatically — **no variable to add**. It is visible in Settings → App →
+Version, so you can always tell what a browser is actually running.
+
+`GET /healthz` remains the health-check path for the web service.

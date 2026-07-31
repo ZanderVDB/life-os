@@ -4,143 +4,248 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Life OS</title>
+<meta name="description" content="Your calm home for everything.">
+<meta name="theme-color" content="#141220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Life OS">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
 <style>
-/* ═══ Life OS v2 — locked design system (design-system.md) ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   Life OS v2 — application shell
+   Locked design system: design-system.md. Purple is the BRAND, not the
+   background. Gradient is reserved for the mark, the primary CTA, the
+   greeting name and one hero moment per screen.
+   ═══════════════════════════════════════════════════════════════════════ */
 :root{
+  /* Canvas & surfaces */
   --app-bg:linear-gradient(180deg,#1A1624 0%,#141220 52%,#111018 100%);
-  --sidebar:#17151F; --rail:#1D1A28;
+  --sidebar:#17151F; --rail:#1A1824;
   --surface:#211E2C; --surface-2:#2A2536; --surface-3:#322C40;
   --hairline:#332E43;
+  /* Text */
   --text:#F4F2FA; --text-2:#B5ABC9; --muted:#766D8B; --label:#CEC7E8;
-  --accent:#8A5DFF; --brand:linear-gradient(180deg,#7C4DFF 0%,#C28DFF 100%);
+  /* The one accent */
+  --accent:#8A5DFF; --accent-soft:rgba(138,93,255,.16);
+  --brand:linear-gradient(180deg,#7C4DFF 0%,#C28DFF 100%);
   --name-grad:linear-gradient(180deg,#C89BFF 0%,#8A5DFF 100%);
-  --ok:#00D9A3; --danger:#FF646E;
-  --e1:0 2px 8px rgba(0,0,0,.14); --e2:0 8px 24px rgba(0,0,0,.22); --e3:0 14px 34px rgba(0,0,0,.32);
+  /* Status — meaning only */
+  --ok:#00D9A3; --warn:#FFC44D; --danger:#FF646E;
+  /* Elevation */
+  --e1:0 2px 8px rgba(0,0,0,.14); --e2:0 8px 24px rgba(0,0,0,.22);
+  --e3:0 14px 34px rgba(0,0,0,.32);
   --glow:0 6px 18px rgba(124,77,255,.22);
-  --d-fast:140ms; --d-base:200ms; --d-slow:260ms;
+  /* Motion (§7) */
+  --d-instant:90ms; --d-fast:140ms; --d-base:200ms; --d-slow:260ms; --d-slower:320ms;
   --e-out:cubic-bezier(.2,.7,.2,1); --e-inout:cubic-bezier(.4,0,.2,1);
-  --sidebar-w:232px;
+  --t-hover:var(--d-fast) var(--e-out);
+  --t-select:var(--d-base) var(--e-out);
+  --t-page:var(--d-slow) var(--e-out);
+  /* Layout tokens — Expanded / Compact / Drawer plug in here (§11) */
+  --sidebar-w:236px; --rail-w:300px; --composer-h:64px;
+  --radius:14px; --radius-lg:18px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
 body{
   font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   background:var(--app-bg);background-attachment:fixed;color:var(--text);
-  -webkit-font-smoothing:antialiased;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
 }
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;border:none;background:none}
+a{color:inherit}
 :focus-visible{outline:2px solid rgba(138,93,255,.75);outline-offset:2px;border-radius:8px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* ── Motion utilities ───────────────────────────────────────────────── */
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
-/* fill-mode is `backwards`, never `both`. `both` keeps the final keyframe applied
-   forever, and an animation's applied value outranks a normal declaration — so
-   `to{opacity:1}` would permanently beat `.task.done{opacity:.55}` and completed
-   tasks would stop looking dim. `backwards` still hides the element during any
-   delay, then hands control back to the stylesheet once it finishes. */
+@keyframes lotusSettle{from{opacity:0;transform:scale(.82) translateY(4px)}to{opacity:1;transform:none}}
+@keyframes wordmarkIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{0%{background-position:-320px 0}100%{background-position:320px 0}}
+/* fill-mode is `backwards`, never `both`: `both` keeps the final keyframe
+   applied forever, and an animation outranks a normal declaration — so
+   `to{opacity:1}` would permanently beat rules like `.task.done{opacity:.55}`. */
 .rise{animation:rise var(--d-slow) var(--e-out) backwards}
 .stagger>*{animation:rise var(--d-slow) var(--e-out) backwards;animation-delay:calc(var(--i,0)*30ms)}
 
-/* ── Shell ── */
-.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;min-height:100vh}
-.sidebar{background:var(--sidebar);padding:18px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
-.logo{display:flex;align-items:center;gap:10px;padding:4px 10px 24px}
-.logo svg{filter:drop-shadow(0 0 5px rgba(124,77,255,.28))}
-.logo-word{font-family:'Playfair Display',Georgia,serif;font-size:20px;font-weight:500;letter-spacing:-.2px}
-.nav{display:flex;flex-direction:column;gap:5px;position:relative;flex:1}
-.nav a{display:grid;grid-template-columns:22px 1fr;align-items:center;gap:12px;padding:11px 12px;
-  border-radius:10px;font-size:13.5px;font-weight:450;color:#9189A7;text-decoration:none;
-  transition:color var(--d-fast) var(--e-out),background var(--d-fast) var(--e-out);position:relative;z-index:1}
-.nav a:hover{background:rgba(255,255,255,.045);color:#EAE6F4}
-.nav a.active{background:var(--brand);color:#fff;font-weight:600;
-  box-shadow:0 6px 18px -6px rgba(124,77,255,.55),inset 0 1px 0 rgba(255,255,255,.12)}
-.nav a[aria-disabled]{opacity:.42;pointer-events:none}
-.nav-soon{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-left:auto}
-.side-foot{font-size:11px;color:var(--muted);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
-.side-foot button{color:var(--text-2);font-size:12px;text-align:left;padding:6px 0}
+/* ══ SHELL ══════════════════════════════════════════════════════════════
+   Three columns, persistent. Only .main-scroll crossfades between routes —
+   the sidebar and rail never redraw (§11: "transitions are continuous"). */
+.shell{display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr) var(--rail-w);
+  min-height:100vh;min-height:100dvh}
 
-.main{padding:32px 32px 120px 44px;max-width:1500px;width:100%}
-.page-head{margin-bottom:28px}
-h1{font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.06;margin:0 0 6px;color:#F6F3FF}
+/* ── Left sidebar ───────────────────────────────────────────────────── */
+.sidebar{background:var(--sidebar);display:flex;flex-direction:column;
+  padding:20px 14px 14px;position:sticky;top:0;height:100vh;height:100dvh;z-index:40}
+.logo{display:flex;align-items:center;gap:11px;padding:2px 10px 22px;text-decoration:none}
+.logo-mark{flex-shrink:0;filter:drop-shadow(0 0 6px rgba(124,77,255,.3))}
+.logo-word{font-family:'Playfair Display',Georgia,serif;font-size:21px;font-weight:500;
+  letter-spacing:-.2px;line-height:1;color:#F6F3FF}
+.intro .logo-mark{animation:lotusSettle 620ms var(--e-out) backwards}
+.intro .logo-word{animation:wordmarkIn 520ms var(--e-out) 180ms backwards}
+
+.cmdk{display:flex;align-items:center;gap:9px;width:100%;background:rgba(255,255,255,.045);
+  border-radius:10px;padding:9px 11px;margin-bottom:16px;color:var(--muted);font-size:13px;
+  transition:background var(--t-hover),color var(--t-hover)}
+.cmdk:hover{background:rgba(255,255,255,.075);color:var(--text-2)}
+.cmdk kbd{margin-left:auto;font-family:inherit;font-size:10.5px;letter-spacing:.04em;
+  background:rgba(255,255,255,.07);border-radius:5px;padding:2px 6px;color:var(--muted)}
+
+.nav{position:relative;display:flex;flex-direction:column;gap:3px;flex:1;min-height:0}
+/* THE sliding indicator: one element, translateY only, GPU-composited.
+   It never disappears — it snaps on first reveal and glides thereafter. */
+.nav-pill{position:absolute;left:0;right:0;height:var(--pill-h,42px);border-radius:11px;
+  background:var(--brand);box-shadow:0 6px 18px -7px rgba(124,77,255,.6),
+  inset 0 1px 0 rgba(255,255,255,.13);
+  transform:translate3d(0,var(--pill-y,0px),0);will-change:transform;
+  transition:transform var(--t-select);pointer-events:none;z-index:0}
+.nav-pill.snap{transition:none}
+.nav a{display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:13px;
+  padding:11px 12px;border-radius:11px;font-size:13.5px;font-weight:450;color:#9189A7;
+  text-decoration:none;position:relative;z-index:1;
+  transition:color var(--t-hover),transform var(--t-hover)}
+.nav a .ico{display:grid;place-items:center;transition:transform var(--t-hover),opacity var(--t-hover)}
+.nav a:hover{color:#EAE6F4}
+.nav a:hover .ico{transform:translateX(1px);opacity:1}
+.nav a[aria-current="page"]{color:#fff;font-weight:600}   /* weight, not brightness */
+.nav a .soon{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);
+  opacity:.75}
+.nav a[aria-current="page"] .soon{color:rgba(255,255,255,.6)}
+
+.side-foot{padding:12px 6px 0;border-top:1px solid rgba(255,255,255,.05);margin-top:8px}
+.who{display:flex;align-items:center;gap:10px;padding:8px 6px;border-radius:10px;
+  text-decoration:none;transition:background var(--t-hover)}
+.who:hover{background:rgba(255,255,255,.045)}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--brand);display:grid;
+  place-items:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.who-text{min-width:0}
+.who-name{font-size:12.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who-sub{font-size:10.5px;color:var(--muted)}
+
+/* ── Main column ────────────────────────────────────────────────────── */
+.main{display:flex;flex-direction:column;min-width:0;min-height:100vh;min-height:100dvh}
+.page-head{padding:30px 34px 0;flex-shrink:0}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 8px}
+h1{font-size:32px;font-weight:800;letter-spacing:-.9px;line-height:1.08;margin:0 0 6px;color:#F6F3FF}
 h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .sub{font-size:14px;color:var(--text-2);margin:0}
-.toolbar{display:flex;gap:10px;align-items:center;margin:22px 0 20px;flex-wrap:wrap}
-.btn{background:var(--surface-2);border-radius:10px;padding:9px 14px;font-size:13px;color:#fff;
-  transition:transform var(--d-fast) var(--e-out),background var(--d-fast) var(--e-out),box-shadow var(--d-fast) var(--e-out)}
+.main-scroll{flex:1;min-height:0;overflow-y:auto;padding:22px 34px 140px;
+  animation:fade var(--t-page) backwards}
+.toolbar{display:flex;gap:9px;align-items:center;margin:0 0 20px;flex-wrap:wrap}
+
+/* ── Right rail ─────────────────────────────────────────────────────── */
+.rail{background:var(--rail);padding:26px 18px 130px;position:sticky;top:0;height:100vh;
+  height:100dvh;overflow-y:auto;display:flex;flex-direction:column;gap:14px;z-index:30}
+.rail-card{background:var(--surface);border-radius:var(--radius);padding:15px 16px;box-shadow:var(--e1)}
+.rail-card h3{font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--label);margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.rail-card h3 .pend{font-size:8.5px;letter-spacing:.08em;background:rgba(255,255,255,.06);
+  color:var(--muted);border-radius:5px;padding:2px 6px;margin-left:auto;text-transform:uppercase}
+.rail-date{font-size:26px;font-weight:800;letter-spacing:-.7px;line-height:1;margin-bottom:4px}
+.rail-day{font-size:12.5px;color:var(--text-2)}
+.rail-stat{display:flex;align-items:baseline;gap:9px;margin-bottom:9px}
+.rail-stat:last-child{margin-bottom:0}
+.rail-stat .n{font-size:21px;font-weight:700;letter-spacing:-.4px;min-width:30px}
+.rail-stat .l{font-size:12px;color:var(--text-2)}
+.rail-areas{display:flex;flex-direction:column;gap:2px}
+.rail-area{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:9px;
+  font-size:12.5px;color:var(--text-2);width:100%;text-align:left;
+  transition:background var(--t-hover),color var(--t-hover)}
+.rail-area:hover{background:rgba(255,255,255,.045);color:var(--text)}
+.rail-area[aria-pressed="true"]{background:var(--accent-soft);color:#fff}
+.rail-area .n{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rail-empty{font-size:12px;color:var(--muted);line-height:1.6}
+.rail-empty b{display:block;color:var(--text-2);font-weight:500;margin-bottom:3px}
+
+/* ── Global composer (AI location, not yet connected) ───────────────── */
+.composer{position:fixed;left:var(--sidebar-w);right:var(--rail-w);bottom:0;z-index:50;
+  padding:16px 34px 22px;
+  background:linear-gradient(180deg,rgba(17,16,24,0) 0%,rgba(17,16,24,.86) 42%,#111018 100%);
+  pointer-events:none}
+.composer-inner{pointer-events:auto;max-width:780px;margin:0 auto;display:flex;align-items:center;
+  gap:12px;background:var(--surface-2);border-radius:15px;padding:12px 15px;box-shadow:var(--e2);
+  opacity:.62;cursor:not-allowed}
+.composer-inner .ico{color:var(--muted);flex-shrink:0;display:grid;place-items:center}
+.composer-text{flex:1;font-size:13.5px;color:var(--muted);min-width:0;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.composer-badge{font-size:9.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);background:rgba(255,255,255,.06);border-radius:6px;padding:3px 8px;flex-shrink:0}
+
+/* ── Buttons / chips ────────────────────────────────────────────────── */
+.btn{background:var(--surface-2);border-radius:10px;padding:9px 15px;font-size:13px;color:#fff;
+  transition:transform var(--t-hover),background var(--t-hover),box-shadow var(--t-hover)}
 .btn:hover{background:var(--surface-3);transform:translateY(-2px)}
 .btn:active{transform:scale(.97)}
 .btn-primary{background:var(--brand);font-weight:600;box-shadow:var(--glow)}
-.btn-primary:hover{background:linear-gradient(180deg,#9163FF,#D09CFF);transform:translateY(-2px)}
+.btn-primary:hover{background:linear-gradient(180deg,#9163FF,#D09CFF)}
 .btn-ghost{background:none;color:var(--text-2)}
 .btn-ghost:hover{background:rgba(255,255,255,.05)}
-.chip{background:var(--surface-2);border-radius:99px;padding:6px 12px;font-size:12px;color:var(--text-2)}
-.chip.on{background:rgba(138,93,255,.2);color:#fff}
+.btn-danger{background:none;color:var(--danger)}
+.btn-danger:hover{background:rgba(255,100,110,.1)}
+.btn[disabled]{opacity:.42;pointer-events:none}
+.chip{background:var(--surface-2);border-radius:99px;padding:6px 13px;font-size:12px;color:var(--text-2);
+  transition:background var(--t-hover),color var(--t-hover)}
+.chip:hover{background:var(--surface-3);color:var(--text)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);color:#fff}
 
-/* ── Buckets: independent workspaces, not table cells ── */
-.buckets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start;margin-bottom:20px}
-.bucket{background:var(--surface);border-radius:16px;padding:16px 14px 14px;box-shadow:var(--e2)}
+/* ── Buckets ────────────────────────────────────────────────────────── */
+.buckets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start}
+.bucket{background:var(--surface);border-radius:var(--radius-lg);padding:16px 14px 14px;box-shadow:var(--e2)}
 .bucket.future{grid-column:1/-1}
 .bucket-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-left:2px}
-.bucket-head h2{font-size:11.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--label);margin:0}
-.bucket-count{font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-2);border-radius:6px;padding:1px 7px}
-.drop{min-height:52px;display:flex;flex-direction:column;gap:8px;border-radius:12px;transition:background var(--d-fast) var(--e-out)}
-.drop.over{background:rgba(138,93,255,.09);outline:2px dashed rgba(138,93,255,.45);outline-offset:3px}
-.empty{color:var(--muted);font-size:12.5px;padding:16px 10px;text-align:center;line-height:1.6}
-.empty b{display:block;color:var(--text-2);font-weight:500;margin-bottom:3px}
+.bucket-head h2{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--label);margin:0}
+.bucket-count{font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-2);
+  border-radius:6px;padding:1px 7px;font-variant-numeric:tabular-nums}
+.drop{min-height:50px;display:flex;flex-direction:column;gap:8px;border-radius:12px;
+  transition:background var(--t-hover)}
+.drop.over{background:var(--accent-soft);outline:2px dashed rgba(138,93,255,.45);outline-offset:3px}
+.empty{color:var(--muted);font-size:12.5px;padding:18px 10px;text-align:center;line-height:1.6}
+.empty b{display:block;color:var(--text-2);font-weight:500;margin-bottom:4px}
 
-/* ── Task card ── */
-.task{background:#282431;border-radius:12px;padding:11px 12px 11px 16px;position:relative;overflow:hidden;
-  box-shadow:0 1px 4px rgba(0,0,0,.14);display:flex;align-items:flex-start;gap:10px;
-  transition:transform var(--d-fast) var(--e-out),background var(--d-fast) var(--e-out),box-shadow var(--d-fast) var(--e-out)}
+/* ── Task card ──────────────────────────────────────────────────────── */
+.task{background:#282431;border-radius:12px;padding:11px 12px 11px 16px;position:relative;
+  overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.14);display:flex;align-items:flex-start;gap:10px;
+  transition:transform var(--t-hover),background var(--t-hover),box-shadow var(--t-hover)}
 .task:hover{background:#343040;transform:translateY(-2px);box-shadow:var(--e2)}
 .task::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--stripe,#5b546e)}
 .task.p-urgent{--stripe:#FF646E;box-shadow:inset 0 0 0 1.5px #FF646E,0 0 18px -7px rgba(255,100,110,.55)}
 .task.p-high{--stripe:#FF8A5D}.task.p-medium{--stripe:#FFC44D}
 .task.p-low{--stripe:#6E86C0}.task.p-someday{--stripe:#6f6878}
-.task.done{opacity:.55}
-.task.done .t-title{text-decoration:line-through;color:var(--muted)}
-.task.dragging{opacity:.55}
-.tick{width:19px;height:19px;border-radius:50%;border:1.6px solid var(--muted);background:none;flex-shrink:0;
-  display:grid;place-items:center;font-size:11px;color:transparent;margin-top:1px;
-  transition:all var(--d-fast) var(--e-out)}
+.task.dragging{opacity:.5}
+.tick{width:19px;height:19px;border-radius:50%;border:1.6px solid var(--muted);background:none;
+  flex-shrink:0;display:grid;place-items:center;font-size:11px;color:transparent;margin-top:1px;
+  transition:border-color var(--t-hover),background var(--t-hover),color var(--t-hover)}
 .tick:hover{border-color:var(--ok)}
-.task.done .tick{background:var(--ok);border-color:var(--ok);color:#08221c}
 .t-body{flex:1;min-width:0}
-.t-title{font-size:13px;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.t-title{font-size:13px;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  cursor:pointer;text-align:left;width:100%;color:var(--text)}
 .t-meta{display:flex;gap:8px;align-items:center;margin-top:4px;font-size:10.5px;color:var(--muted)}
-.t-area{background:var(--surface);border-radius:6px;padding:1px 7px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.t-steps{color:var(--muted)}
-.t-actions{display:flex;gap:2px;opacity:0;transition:opacity var(--d-fast) var(--e-out)}
+.t-area{background:var(--surface);border-radius:6px;padding:1px 7px;max-width:96px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.t-actions{display:flex;gap:2px;opacity:0;transition:opacity var(--t-hover)}
 .task:hover .t-actions,.task:focus-within .t-actions{opacity:1}
-.icon-btn{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--muted);font-size:13px;
-  transition:background var(--d-fast) var(--e-out),color var(--d-fast) var(--e-out)}
+.icon-btn{width:27px;height:27px;border-radius:7px;display:grid;place-items:center;color:var(--muted);
+  font-size:13px;transition:background var(--t-hover),color var(--t-hover)}
 .icon-btn:hover{background:rgba(255,255,255,.07);color:#fff}
-.grip{cursor:grab;color:var(--muted);font-size:12px;opacity:0;transition:opacity var(--d-fast)}
-.task:hover .grip{opacity:.6}
-/* The Move button is the only way to move a task without dragging, so it must
-   never depend on hover alone. Reveal it whenever the pointer is coarse, the
-   device reports no hover, OR the viewport is narrow — a touch device that
-   claims `hover: hover` (tablet with a trackpad) would otherwise hide it. */
-@media (hover:none),(pointer:coarse),(max-width:768px){
-  .grip{display:none}
-  .t-actions{opacity:1}
-  /* 26px is a fine mouse target and a bad thumb one. 44px is the accessible
-     minimum, and with drag unavailable here these buttons are the only route. */
-  .icon-btn{width:44px;height:44px;font-size:16px}
-  .tick{width:24px;height:24px;font-size:13px}
-}
+.grip{cursor:grab;color:var(--muted);font-size:12px;opacity:0;transition:opacity var(--t-hover)}
+.task:hover .grip{opacity:.55}
 
-/* ── History: deliberately quieter than the buckets ──
-   No card shadow, no priority stripes, no hover lift. Completed work is a
-   record to read, not a board to work from — it must not compete with Today. */
-.history{max-width:820px}
-.hist-list{display:flex;flex-direction:column}
+/* ── History ────────────────────────────────────────────────────────── */
+.history{max-width:840px}
 .hist-row{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:12px;
-  padding:11px 12px;border-radius:10px;cursor:pointer;
-  border-bottom:1px solid var(--hairline);
-  transition:background var(--d-fast) var(--e-out)}
+  padding:11px 12px;border-radius:10px;cursor:pointer;border-bottom:1px solid var(--hairline);
+  transition:background var(--t-hover)}
 .hist-row:last-child{border-bottom:none}
 .hist-row:hover{background:rgba(255,255,255,.035)}
 .hist-tick{color:var(--ok);font-size:12px;opacity:.75}
@@ -148,66 +253,185 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .hist-meta{display:flex;gap:10px;align-items:center;font-size:10.5px;color:var(--muted)}
 .hist-when.unknown{font-style:italic;opacity:.7}
 .hist-end{font-size:12px;color:var(--muted);margin:16px 0 0;padding-left:2px}
-@media (max-width:768px){
-  .hist-row{grid-template-columns:18px 1fr;row-gap:4px}
-  .hist-meta{grid-column:2}
-}
 
-/* ── Move menu (the non-drag path) ── */
-.menu{position:fixed;z-index:200;background:var(--surface-2);border-radius:12px;padding:6px;box-shadow:var(--e3);
-  min-width:190px;animation:rise var(--d-base) var(--e-out) backwards}
-.menu-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:7px 10px 5px}
-.menu button{display:flex;width:100%;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;font-size:13px;
-  color:var(--text-2);text-align:left;transition:background var(--d-fast) var(--e-out),color var(--d-fast) var(--e-out)}
-.menu button:hover,.menu button.sel{background:rgba(138,93,255,.18);color:#fff}
-.menu button[disabled]{opacity:.4;pointer-events:none}
-.menu kbd{margin-left:auto;font-size:10px;color:var(--muted);font-family:inherit}
+/* ── Placeholder pages ──────────────────────────────────────────────── */
+.placeholder{max-width:560px;padding:44px 0 0}
+.placeholder .ph-ico{width:56px;height:56px;border-radius:16px;background:var(--surface);
+  display:grid;place-items:center;color:var(--accent);margin-bottom:22px;box-shadow:var(--e1)}
+.placeholder h2{font-size:19px;font-weight:700;letter-spacing:-.3px;margin:0 0 10px}
+.placeholder p{font-size:14px;line-height:1.7;color:var(--text-2);margin:0 0 10px}
+.placeholder .ph-note{font-size:12.5px;color:var(--muted);margin-top:20px;padding-top:18px;
+  border-top:1px solid var(--hairline);line-height:1.65}
 
-/* ── Detail panel ── */
-.scrim{position:fixed;inset:0;background:rgba(10,8,16,.6);z-index:150;animation:fade var(--d-base) var(--e-out) backwards}
-.panel{position:fixed;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--rail);z-index:151;
-  padding:26px 24px;overflow-y:auto;box-shadow:var(--e3);
+/* ── Settings ───────────────────────────────────────────────────────── */
+.settings{max-width:660px;display:flex;flex-direction:column;gap:16px}
+.set-card{background:var(--surface);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--e1)}
+.set-card h2{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--label);margin:0 0 4px}
+.set-card .set-hint{font-size:12.5px;color:var(--muted);margin:0 0 16px;line-height:1.6}
+.set-row{display:flex;align-items:center;gap:16px;padding:12px 0;border-top:1px solid var(--hairline)}
+.set-row:first-of-type{border-top:none;padding-top:4px}
+.set-label{flex:1;min-width:0}
+.set-label .t{font-size:13.5px;margin-bottom:2px}
+.set-label .d{font-size:11.5px;color:var(--muted);line-height:1.5}
+.seg{display:flex;background:var(--surface-2);border-radius:9px;padding:3px;gap:2px;flex-shrink:0}
+.seg button{padding:6px 13px;border-radius:7px;font-size:12px;color:var(--text-2);
+  transition:background var(--t-hover),color var(--t-hover)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:#fff;font-weight:600}
+.scope{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;border-radius:5px;
+  padding:2px 7px;flex-shrink:0}
+.scope.server{background:rgba(138,93,255,.15);color:#C9B0FF}
+.scope.device{background:rgba(255,255,255,.06);color:var(--muted)}
+.area-row{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--hairline)}
+.area-row:first-of-type{border-top:none}
+.area-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.area-name{flex:1;font-size:13.5px}
+.area-meta{font-size:11px;color:var(--muted)}
+
+/* ── Dialog / panel / menu ──────────────────────────────────────────── */
+.scrim{position:fixed;inset:0;background:rgba(10,8,16,.62);z-index:150;
+  animation:fade var(--d-base) var(--e-out) backwards}
+.panel{position:fixed;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--rail);
+  z-index:151;padding:26px 24px;overflow-y:auto;box-shadow:var(--e3);
   animation:slidein var(--d-slow) var(--e-out) backwards}
 @keyframes slidein{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
-.panel h3{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--label);margin:0 0 14px;font-weight:600}
-.field{margin-bottom:16px}
-.field label{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600}
-.input,.ta,.sel{width:100%;background:var(--surface);border:1px solid transparent;border-radius:10px;padding:10px 12px;
-  font-size:14px;transition:border-color var(--d-fast) var(--e-out),box-shadow var(--d-fast) var(--e-out)}
-.input:focus,.ta:focus,.sel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(138,93,255,.15)}
+.panel h3{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--label);
+  margin:0 0 16px;font-weight:600}
+.field{margin-bottom:15px}
+.field label{display:block;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px;font-weight:600}
+.input,.ta,.sel{width:100%;background:var(--surface);border:1px solid transparent;border-radius:10px;
+  padding:10px 12px;font-size:14px;
+  transition:border-color var(--t-hover),box-shadow var(--t-hover)}
+.input:focus,.ta:focus,.sel:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(138,93,255,.15)}
 .ta{min-height:96px;resize:vertical;line-height:1.6}
 .row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
 .steps{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
-.step{display:flex;align-items:center;gap:9px;background:var(--surface);border-radius:9px;padding:8px 10px;font-size:13px}
+.step{display:flex;align-items:center;gap:9px;background:var(--surface);border-radius:9px;
+  padding:8px 10px;font-size:13px}
 .step input[type=checkbox]{accent-color:var(--ok);width:15px;height:15px}
 .step.done span{text-decoration:line-through;color:var(--muted)}
 .step button{margin-left:auto;color:var(--muted);font-size:13px}
 .panel-foot{display:flex;gap:8px;margin-top:24px;padding-top:18px;border-top:1px solid var(--hairline)}
+.menu{position:fixed;z-index:200;background:var(--surface-2);border-radius:12px;padding:6px;
+  box-shadow:var(--e3);min-width:196px;animation:rise var(--d-base) var(--e-out) backwards}
+.menu-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+  padding:7px 10px 5px}
+.menu button{display:flex;width:100%;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;
+  font-size:13px;color:var(--text-2);text-align:left;
+  transition:background var(--t-hover),color var(--t-hover)}
+.menu button:hover{background:var(--accent-soft);color:#fff}
+.menu button[disabled]{opacity:.4;pointer-events:none}
+.menu kbd{margin-left:auto;font-size:10px;color:var(--muted);font-family:inherit}
 
-/* ── Sign-in + status ── */
-.center{min-height:100vh;display:grid;place-items:center;padding:24px}
-.card{background:var(--surface);border-radius:18px;padding:34px 32px;max-width:400px;width:100%;box-shadow:var(--e2);text-align:center}
-.card h2{margin:14px 0 8px;font-size:22px;font-weight:700}
-.card p{color:var(--text-2);font-size:14px;line-height:1.6;margin:0 0 22px}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface-2);
-  border-radius:12px;padding:11px 18px;font-size:13px;box-shadow:var(--e3);z-index:300;animation:rise var(--d-base) var(--e-out) backwards}
+/* ── Loading / error / toast ────────────────────────────────────────── */
+.skeleton{background:linear-gradient(90deg,var(--surface) 8%,var(--surface-2) 18%,var(--surface) 28%);
+  background-size:640px 100%;animation:shimmer 1.4s linear infinite;border-radius:12px;height:52px;
+  margin-bottom:8px}
+.spinner{width:17px;height:17px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+.state{max-width:460px;padding:40px 0;color:var(--text-2);font-size:14px;line-height:1.7}
+.state b{display:block;color:var(--text);font-size:16px;font-weight:600;margin-bottom:8px}
+.toast{position:fixed;bottom:calc(var(--composer-h) + 30px);left:50%;transform:translateX(-50%);
+  background:var(--surface-2);border-radius:12px;padding:11px 18px;font-size:13px;box-shadow:var(--e3);
+  z-index:300;animation:rise var(--d-base) var(--e-out) backwards;max-width:calc(100vw - 32px)}
 .toast.err{color:var(--danger)}
-.hidden{display:none!important}
 
-@media (max-width:1024px){.buckets{grid-template-columns:1fr;gap:16px}.bucket.future{grid-column:auto}}
-@media (max-width:768px){
-  .app{grid-template-columns:1fr}
-  .sidebar{position:static;height:auto;flex-direction:row;align-items:center;padding:12px 16px;gap:12px}
-  .nav{flex-direction:row;overflow-x:auto;gap:4px}.nav a{grid-template-columns:auto;padding:9px 12px}
-  .nav a span:not(.nav-soon){display:none}.side-foot{display:none}
-  .main{padding:20px 16px 100px}
-  h1{font-size:26px}
+/* ── Update prompt (PWA) ────────────────────────────────────────────── */
+.updater{position:fixed;bottom:calc(var(--composer-h) + 30px);left:50%;transform:translateX(-50%);
+  z-index:310;background:var(--surface-2);border-radius:14px;padding:13px 15px 13px 18px;
+  box-shadow:var(--e3);display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);
+  animation:rise var(--d-slow) var(--e-out) backwards}
+.updater .u-text{font-size:13px;line-height:1.5}
+.updater .u-text b{display:block;font-weight:600}
+.updater .u-text span{color:var(--muted);font-size:11.5px}
+
+/* ── Mobile shell ───────────────────────────────────────────────────── */
+.mobile-bar{display:none}
+.drawer-scrim{display:none}
+
+@media (max-width:1240px){
+  :root{--rail-w:264px}
 }
-@media (prefers-reduced-motion:reduce){*{animation-duration:1ms!important;transition-duration:1ms!important}}
+@media (max-width:1080px){
+  /* Tablet: two columns. The rail moves under the content rather than
+     vanishing — its information stays reachable without a gesture. */
+  .shell{grid-template-columns:var(--sidebar-w) minmax(0,1fr)}
+  .rail{position:static;height:auto;grid-column:2;padding:0 34px 40px;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+  .composer{right:0}
+  .buckets{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:768px){
+  :root{--sidebar-w:0px;--composer-h:58px}
+  .shell{grid-template-columns:1fr}
+  /* Sidebar becomes a drawer (§11: architected for it from the start). */
+  .sidebar{position:fixed;top:0;bottom:0;left:0;width:270px;transform:translateX(-100%);
+    transition:transform var(--d-slow) var(--e-out);box-shadow:var(--e3);z-index:120;height:100dvh}
+  body.drawer-open .sidebar{transform:none}
+  .drawer-scrim{display:block;position:fixed;inset:0;background:rgba(10,8,16,.6);z-index:110;
+    opacity:0;pointer-events:none;transition:opacity var(--d-base) var(--e-out)}
+  body.drawer-open .drawer-scrim{opacity:1;pointer-events:auto}
+
+  .mobile-bar{display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;
+    background:rgba(23,21,31,.94);backdrop-filter:blur(12px);padding:10px 14px;
+    padding-top:calc(10px + env(safe-area-inset-top))}
+  .mobile-bar .m-btn{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;
+    color:var(--text-2);transition:background var(--t-hover)}
+  .mobile-bar .m-btn:hover{background:rgba(255,255,255,.06)}
+  .mobile-bar .m-title{font-family:'Playfair Display',Georgia,serif;font-size:17px;font-weight:500}
+
+  .page-head{padding:18px 16px 0}
+  h1{font-size:25px;letter-spacing:-.6px}
+  .main-scroll{padding:16px 16px calc(150px + env(safe-area-inset-bottom))}
+  .buckets{grid-template-columns:1fr;gap:14px}
+  .bucket.future{grid-column:auto}
+  .rail{padding:0 16px 30px;grid-template-columns:1fr}
+  .composer{left:0;right:0;padding:12px 16px calc(14px + env(safe-area-inset-bottom))}
+  .hist-row{grid-template-columns:18px 1fr;row-gap:4px}
+  .hist-meta{grid-column:2}
+  .panel{width:100%;padding-bottom:calc(26px + env(safe-area-inset-bottom))}
+  .set-row{flex-wrap:wrap}
+}
+
+/* The Move button is the ONLY non-drag way to move a task, so it must never
+   depend on hover. A tablet that reports `hover: hover` would otherwise hide it. */
+@media (hover:none),(pointer:coarse),(max-width:768px){
+  .grip{display:none}
+  .t-actions{opacity:1}
+  .icon-btn{width:44px;height:44px;font-size:16px}
+  .task{padding:12px 8px 12px 16px;gap:12px}
+  .hist-row{padding:14px 12px;min-height:44px}
+
+  /* Every interactive control gets a 44px minimum. Where making the control
+     itself 44px would wreck the layout — a 44px tick would dominate a task
+     card, a 44px chip row would not fit — the VISIBLE size is kept and the
+     hit area is extended with a transparent overlay instead. */
+  .nav a,.cmdk,.who,.chip,.rail-area,.seg button,.btn{min-height:44px}
+  .chip{display:inline-flex;align-items:center}
+  .seg button{display:grid;place-items:center}
+  .mobile-bar .m-btn{flex:0 0 44px}   /* flex was shrinking these to 32px wide */
+
+  .tick{width:24px;height:24px;font-size:14px;position:relative}
+  .tick::after{content:'';position:absolute;top:50%;left:50%;
+    width:44px;height:44px;transform:translate(-50%,-50%)}
+
+  .t-title{position:relative;padding:6px 0}
+  .t-title::after{content:'';position:absolute;top:50%;left:0;right:0;
+    height:44px;transform:translateY(-50%)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:1ms!important;animation-iteration-count:1!important;
+    transition-duration:1ms!important;scroll-behavior:auto!important}
+}
+html[data-motion="reduced"] *{animation-duration:1ms!important;transition-duration:1ms!important}
 </style>
 </head>
 <body>
-<div id="root" class="center"><div class="card"><p>Starting Life OS…</p></div></div>
+<div id="root"><div class="state" style="padding:60px 34px"><span class="spinner"></span></div></div>
+<div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
 
 <script type="module" src="./config.js"></script>
 <script type="module" src="./app.js"></script>

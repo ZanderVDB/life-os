@@ -580,3 +580,23 @@ and `DATABASE_URL` never appear. URLs are logged as bare paths — query strings
 are dropped wholesale rather than filtered. Every request and every error
 carries a UUID `requestId`, which is also returned in the error body, so a user
 report can be traced without any private content in the log.
+
+---
+
+## Preferences API (2026-07-31)
+
+`GET/PUT /api/v1/preferences` backs the Settings screen. Keys are **allow-listed
+server-side** (`appearance`, `sounds`, `reducedMotion`); an unknown key or an
+invalid value returns 400 rather than being stored. A settings endpoint that
+accepts arbitrary keys eventually becomes the place someone stores what should
+have been a column.
+
+The user/device split is deliberate and documented in `pwa-v2.md`: account-scoped
+preferences live in `user_preferences` and follow the person to any device;
+device-scoped ones (API override, dev token, update postponement) live in browser
+storage and never sync.
+
+**CORS note:** the allowed-methods list must name every verb any route uses.
+`PUT` was missing when the preferences route shipped, which fails only at a real
+browser's preflight — server-side tests never see it. There is now a test that
+asserts the full set.

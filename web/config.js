@@ -27,3 +27,10 @@ window.LIFE_OS_CONFIG = {
 /** Loud, early failure beats a confusing sign-in error later. */
 window.LIFE_OS_CONFIG.isConfigured = Object.values(window.LIFE_OS_CONFIG.firebase)
   .every((v) => v && v !== PLACEHOLDER);
+
+/**
+ * Build identifier, shown in Settings. A deployed server replaces this whole
+ * file with one carrying the real commit sha; this value only appears when the
+ * committed fallback is being served, which is itself worth knowing.
+ */
+window.LIFE_OS_BUILD = 'local-dev';

@@ -778,3 +778,88 @@ screen, buckets, History pagination and re-import refusal.
 - Re-import: 409 `IMPORT_REFUSED`, `wroteAnything: false`, still 71 tasks.
 
 96 tests passing.
+
+---
+
+# PHASE C1 — APPLICATION SHELL AND PWA RESTORED — 2026-07-31
+
+**The v2 baseline UI was a temporary functional prototype, not the product.**
+It proved the API and the data; it was never the Life OS experience. The full
+shell is now restored around it, inside the locked design system.
+
+## What was restored
+
+| Element | State |
+|---|---|
+| Left sidebar | Logo lockup, command-palette entry, 8 destinations, sliding indicator, account footer |
+| Main content region | Persistent header + crossfading content column |
+| Right rail | 6 cards, first-class on desktop, reflows below content on tablet/mobile |
+| Global AI composer | Position and treatment restored, visibly **disabled** |
+| Settings | New route: appearance, motion, sounds, account, workspace, Areas, app/version/updates |
+| Placeholder routes | Calendar, Projects, Diary, Library, Brain |
+| Mobile shell | Drawer navigation, 44px targets, no horizontal overflow |
+| PWA | Manifest, icons, service worker, install prompt, update flow |
+
+## Shell architecture
+
+The sidebar, rail and composer render **once**. A route change replaces only
+`.main-scroll` and moves the nav indicator — a test asserts `loadRoute` never
+touches `root.innerHTML` or calls `renderShell`. That is what makes transitions
+continuous rather than a full-page flash.
+
+The indicator is a single element moved with `translate3d` on the Y axis only,
+transitioning `transform` at 200ms — the locked timing. It snaps on first
+reveal and glides after.
+
+## Right rail contents
+
+Date · active-work counts · Area filters with live counts · quick-add. Habits
+and Up-next are present but explicitly marked **not connected**, with copy
+saying the data is safe in the legacy export. **No card shows invented data.**
+
+## Settings persistence boundaries
+
+| Scope | Where | What |
+|---|---|---|
+| Account | `user_preferences` via `/api/v1/preferences` | appearance, motion, sounds |
+| Device | `localStorage` / `sessionStorage` | API override, dev token, update postponement, rail state |
+
+Preference keys are allow-listed server-side; an unknown key or an invalid value
+is a 400 rather than a silently stored row.
+
+## Bugs found and fixed during this phase
+
+1. **The nav indicator was positioned off-screen.** `offsetTop` is already
+   measured from the positioned `.nav`, so also subtracting `nav.offsetTop`
+   pushed the pill to −122px. Found by measuring, not by looking.
+2. **The indicator could freeze permanently.** Releasing the no-transition class
+   used `requestAnimationFrame`, which is suspended entirely while a tab is in
+   the background — anyone opening Life OS in a background tab would have got a
+   pill that never moved again. Now a timer, which still fires.
+3. **CORS blocked every preference write.** The allowed-methods list was
+   `GET, POST, PATCH, DELETE, OPTIONS` — **`PUT` was missing**, so Settings
+   failed at the preflight. Invisible to server-side tests; only a real browser
+   shows it. Now tested for every verb the client uses.
+4. **Touch targets under 44px** across nav, chips, the tick, task titles, rail
+   filters, and the mobile bar buttons — which flex had squeezed to 32px wide.
+   Where a 44px control would wreck the layout, the visible size is kept and the
+   hit area extended with a transparent overlay.
+
+## PWA
+
+Full lifecycle documented in [pwa-v2.md](pwa-v2.md). The essentials: the cache
+name is **derived from the build id, never hand-typed** — which is what caused
+the legacy stale-cache problem — the worker never activates itself, and the
+user is asked before any reload.
+
+**Nothing from the API is ever cached.** Enforced in three independent places.
+Offline shows an honest message rather than an empty app, because caching task
+text would write private content to disk in plaintext.
+
+Verified across two successive builds: install → wait → prompt → Later → Update
+→ single reload → old cache deleted, with no reload loop.
+
+## Boundaries respected
+
+No Firestore read or write. No Trifusion access. No new legacy system imported.
+No task data altered. Legacy untouched. 116 tests passing.

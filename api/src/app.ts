@@ -12,6 +12,7 @@ import { registerMeRoutes } from './routes/me.js';
 import { registerAreaRoutes } from './routes/areas.js';
 import { registerTaskRoutes } from './routes/tasks.js';
 import { registerImportRoutes } from './routes/import.js';
+import { registerPreferenceRoutes } from './routes/preferences.js';
 
 export const API_VERSION = '0.1.0';
 
@@ -47,7 +48,9 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   app.register(cors, {
     origin: origins.length ? origins : false,
     credentials: false,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    // Must list every method any route uses. A missing verb fails only in a
+    // real browser, at the preflight — server-side tests never notice.
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
   const guards = makeAuth(db, env);
@@ -57,6 +60,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerAreaRoutes(app, db, guards);
   registerTaskRoutes(app, db, guards);
   registerImportRoutes(app, db, guards, env);
+  registerPreferenceRoutes(app, db, guards);
 
   /** One error shape. Internals are logged, never returned. */
   app.setErrorHandler((err, req, reply) => {

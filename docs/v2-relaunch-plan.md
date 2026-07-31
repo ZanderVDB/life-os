@@ -144,3 +144,18 @@ of the source so the same file cannot be imported twice, and leaves the database
 untouched if any part fails.
 
 **No import has been executed.** Legacy and Firestore are untouched.
+
+## Phase C1 — the shell is back (2026-07-31)
+
+The v2 baseline UI was a **temporary functional prototype**. It existed to prove
+the API and the imported data, and it was never the Life OS experience. Phase C1
+places that working Task system inside the real application shell: left sidebar,
+main region, right rail, global composer position, Settings, and a proper PWA.
+
+Sections that are not yet rebuilt — Calendar, Projects, Diary, Library, Brain —
+**keep their place in navigation** and open polished placeholders that say what
+is happening and where the data is. Removing a destination because its feature
+is not ready teaches people the app has fewer parts than it does.
+
+Still deliberately absent: the AI backend (the composer is visibly disabled),
+and every deferred legacy system.

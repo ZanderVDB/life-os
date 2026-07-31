@@ -313,3 +313,48 @@ test('db: TLS is chosen correctly for each Railway connection URL shape', async 
   // An unknown host defaults to requiring TLS — the safe direction to fail.
   assert.equal(sslModeFor('postgresql://u:p@db.somewhere-else.com:5432/x'), 'require');
 });
+
+test('cors: every method the web client uses is allowed at preflight', async () => {
+  // A missing verb here fails only in a real browser, at the preflight — which
+  // is exactly how PUT /preferences shipped broken. Assert the whole set.
+  const { db } = await freshDb();
+  const app = buildApp(db, loadEnv({
+    NODE_ENV: 'test', PORT: '8080', LOG_LEVEL: 'fatal',
+    DATABASE_URL: 'postgresql://unused/unused', FIREBASE_PROJECT_ID: 'test-project',
+    CORS_ALLOWED_ORIGINS: 'https://web.example', DEV_AUTH_BYPASS: TOKEN,
+  } as any));
+  await app.ready();
+
+  for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
+    const res = await app.inject({
+      method: 'OPTIONS', url: '/api/v1/preferences',
+      headers: { origin: 'https://web.example', 'access-control-request-method': method },
+    });
+    const allowed = String(res.headers['access-control-allow-methods'] ?? '');
+    assert.ok(allowed.includes(method), `${method} is not in access-control-allow-methods`);
+  }
+});
+
+test('preferences: allow-listed keys only, and values are validated', async () => {
+  const { call } = await setup();
+  const initial = (await call('GET', '/api/v1/preferences')).body;
+  assert.equal(initial.preferences.appearance, 'system');
+  assert.ok(Array.isArray(initial.deviceScoped), 'device-scoped keys are declared');
+
+  const ok = await call('PUT', '/api/v1/preferences', { reducedMotion: 'always' });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.preferences.reducedMotion, 'always');
+  // Persisted, not just echoed.
+  assert.equal((await call('GET', '/api/v1/preferences')).body.preferences.reducedMotion, 'always');
+  // Other keys keep their defaults.
+  assert.equal((await call('GET', '/api/v1/preferences')).body.preferences.sounds, 'off');
+
+  // An unknown key must be refused rather than quietly stored.
+  assert.equal((await call('PUT', '/api/v1/preferences', { somethingElse: 'x' })).status, 400);
+  // An invalid value for a known key must be refused too.
+  assert.equal((await call('PUT', '/api/v1/preferences', { appearance: 'neon' })).status, 400);
+
+  // Writing twice updates in place rather than creating a second row.
+  await call('PUT', '/api/v1/preferences', { reducedMotion: 'system' });
+  assert.equal((await call('GET', '/api/v1/preferences')).body.preferences.reducedMotion, 'system');
+});
