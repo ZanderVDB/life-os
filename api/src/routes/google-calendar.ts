@@ -10,7 +10,7 @@
  * support is a separate, separately-approved phase.
  */
 import type { AppInstance, Guards } from '../types.js';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
@@ -392,6 +392,12 @@ async function syncEvents(
       updatedAt: new Date(),
     }).onConflictDoUpdate({
       target: [calendarEvents.calendarId, calendarEvents.providerEventId],
+      // The index is PARTIAL (`WHERE provider_event_id IS NOT NULL`), and
+      // Postgres refuses to match ON CONFLICT to a partial index unless the
+      // statement repeats the predicate. Without this every event insert threw
+      // "no unique or exclusion constraint matching the ON CONFLICT
+      // specification", so a connection synced its calendar list and no events.
+      targetWhere: isNotNull(calendarEvents.providerEventId),
       set: {
         ...row,
         syncState: 'synced',
