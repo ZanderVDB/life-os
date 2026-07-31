@@ -17,8 +17,10 @@ import { initStars } from './stars.js';
 import { initDrag, isDragging } from './drag.js';
 import { openEventModal, openAddMenu } from './event-modal.js';
 import { initPlanDrag } from './plan-drag.js';
+import { openReminderModal } from './reminder-modal.js';
+import { initHoverPreview, closeHoverPreview } from './hover-preview.js';
 import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHtml,
-  planHours, itemsForDay,
+  planHours, itemsForDay, hoverRender, freeWindowsFor,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { settingsHtml } from './settings.js';
 
@@ -206,6 +208,7 @@ async function boot() {
     .then((r) => { state.historyTotal = r.total; })
     .catch(() => {});
   initStars();
+  initHoverPreview(hoverRender);
   // One drag system for mouse, pen and touch. `settled: true` because the
   // placeholder already put the card in its final slot before release.
   // Plan-mode scheduling. Separate from task-board dragging: this one drops
@@ -1522,10 +1525,15 @@ async function loadCalendar() {
 
   try {
     const r = currentRange();
-    const [range, open] = await Promise.all([
+    const [range, open, integration] = await Promise.all([
       api(`/api/v1/workspaces/${ws()}/calendar/range?from=${r.from}&to=${r.to}`),
       api(`/api/v1/workspaces/${ws()}/tasks?status=open&limit=50`).catch(() => ({ tasks: [] })),
+      api(`/api/v1/workspaces/${ws()}/integrations/google-calendar`)
+        .catch(() => ({ configured: false, connection: null })),
     ]);
+    range.connection = integration.connection;
+    range.googleConfigured = integration.configured;
+    cal.areas = state.me?.areas ?? [];
     // The planning queue is tasks with no block in view — Plan's whole purpose.
     const scheduled = new Set(range.blocks.map((b) => b.taskId));
     range.unscheduled = (open.tasks ?? []).filter((t) => !scheduled.has(t.id) && !t.dueDate);
@@ -1543,6 +1551,7 @@ async function loadCalendar() {
 
 /** Re-renders ONLY the calendar canvas — never the whole route. */
 function paintCalendar() {
+  closeHoverPreview();
   const scroll = document.getElementById('main-scroll');
   const period = document.getElementById('cal-period');
   if (period) period.textContent = periodLabelSafe();
@@ -1568,6 +1577,17 @@ function renderCalendarRail() {
   });
   const addDay = rail.querySelector('[data-cal-add-day]');
   addDay?.addEventListener('click', () => calendarAddMenu(addDay, addDay.dataset.calAddDay));
+
+  const connect = rail.querySelector('#cal-connect');
+  connect?.addEventListener('click', () => connectGoogle(connect));
+  rail.querySelector('#cal-sync')?.addEventListener('click', () => syncGoogle());
+  rail.querySelector('#cal-disconnect')?.addEventListener('click', () => disconnectGoogle());
+  rail.querySelectorAll('[data-calendar]').forEach((cb) => {
+    cb.onchange = () => setCalendarVisible(cb.dataset.calendar, cb.checked);
+  });
+  rail.querySelectorAll('[data-schedule]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); scheduleFromQueue(b.dataset.schedule); };
+  });
 }
 
 function wireCalendarHeader() {
@@ -1689,40 +1709,116 @@ function calendarAddMenu(anchor, day = null) {
   openAddMenu(anchor, {
     event: () => openEvent(null, day ?? cal.selected ?? undefined),
     reminder: () => addReminder(day ?? cal.selected),
+    // Scheduled Task sends you to Plan, where the queue and the free windows
+    // are — scheduling without seeing the week would be guesswork.
+    task: () => {
+      if (cal.mode !== 'plan') {
+        cal.mode = 'plan';
+        loadCalendar();
+        saved('Drag a task from the queue onto a free slot');
+      } else {
+        document.querySelector('.pq-card')?.focus();
+      }
+    },
     habit: () => editHabit(null),
   });
 }
 
-/** Reminders are Life OS records — a small prompt, not the event editor. */
-async function addReminder(day) {
-  const title = prompt('What should you be reminded about?');
-  if (!title?.trim()) return;
+/** Reminders are Life OS records, never Google events. */
+function addReminder(day, existing = null) {
+  openReminderModal({
+    reminder: existing,
+    areas: state.me?.areas ?? [],
+    defaultDay: day ?? cal.selected ?? undefined,
+    onSave: async (body) => {
+      const r = await api(`/api/v1/workspaces/${ws()}/reminders`, { method: 'POST', body });
+      cal.data.reminders.push(r.reminder);
+      paintCalendar();
+      saved('Reminder added');
+    },
+  });
+}
+
+/* ── Google Calendar connection ─────────────────────────────────────────
+ * The browser never sees a token. It asks the API for an authorize URL and
+ * follows it; everything else happens server-side. */
+async function connectGoogle(btn) {
+  btn.classList.add('is-busy');
+  btn.textContent = 'Opening Google…';
   try {
-    const r = await api(`/api/v1/workspaces/${ws()}/reminders`, {
-      method: 'POST',
-      body: { title: title.trim(), dueDate: day ?? iso(new Date()) },
-    });
-    cal.data.reminders.push(r.reminder);
-    paintCalendar();
-    saved('Reminder added');
+    const r = await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar/connect`,
+      { method: 'POST' });
+    window.location.href = r.authorizeUrl;
+  } catch (e) {
+    btn.classList.remove('is-busy');
+    btn.textContent = 'Connect Google Calendar';
+    toast(e.message, true);
+  }
+}
+
+async function syncGoogle() {
+  if (cal.data?.connection) cal.data.connection.status = 'syncing';
+  renderCalendarRail();
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar/sync`,
+      { method: 'POST' });
+    await loadCalendar();
+    saved(r.created || r.updated
+      ? `Synced ${r.created + r.updated} event${r.created + r.updated === 1 ? '' : 's'}`
+      : 'Up to date');
+  } catch (e) {
+    if (cal.data?.connection) {
+      cal.data.connection.status = 'error';
+      cal.data.connection.lastError = e.message;
+    }
+    renderCalendarRail();
+    toast(e.message, true);
+  }
+}
+
+async function disconnectGoogle() {
+  if (!confirm('Disconnect Google Calendar? Your Google events will be removed '
+    + 'from Life OS. Nothing in Google Calendar itself is changed.')) return;
+  try {
+    await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar/disconnect`,
+      { method: 'POST' });
+    cal.data = null;
+    await loadCalendar();
+    saved('Disconnected');
   } catch (e) { toast(e.message, true); }
 }
 
-async function toggleReminder(id) {
-  const r = cal.data?.reminders.find((x) => x.id === id);
-  if (!r) return;
-  const wasDone = r.status === 'done';
-  r.status = wasDone ? 'open' : 'done';
+async function setCalendarVisible(id, visible) {
+  const c = cal.data?.calendars.find((x) => x.id === id);
+  if (c) c.isVisible = visible;
   paintCalendar();
   try {
-    await api(`/api/v1/workspaces/${ws()}/reminders/${id}/${wasDone ? 'reopen' : 'complete'}`,
-      { method: 'POST' });
-    saved(wasDone ? 'Reopened' : 'Done');
+    await api(`/api/v1/workspaces/${ws()}/calendars/${id}`,
+      { method: 'PATCH', body: { isVisible: visible } });
   } catch (e) {
-    r.status = wasDone ? 'done' : 'open';
+    if (c) c.isVisible = !visible;
     paintCalendar();
     toast(e.message, true);
   }
+}
+
+/** Schedules a queued task without dragging — keyboard and touch path. */
+async function scheduleFromQueue(taskId) {
+  const hrs = planHours();
+  const week = weekOf(cal.anchor).map(iso);
+  // First free window of at least an hour, from today onward.
+  for (const day of week) {
+    if (day < iso(new Date())) continue;
+    for (const [from, to] of freeWindowsFor(day)) {
+      if (to - from < 60) continue;
+      const mk = (min) => {
+        const [y, m, d] = day.split('-').map(Number);
+        return new Date(y, m - 1, d, Math.floor(min / 60), min % 60).toISOString();
+      };
+      return scheduleTask(taskId, mk(from), mk(from + 60));
+    }
+  }
+  toast('No free hour left this week. Try another week.', true);
 }
 
 /** Drops a task into a time slot. One write, after the drop. */

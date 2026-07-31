@@ -201,8 +201,12 @@ test('editor: no native browser chrome anywhere', () => {
   assert.ok(!/type="checkbox"/.test(eventModal), 'a native checkbox square is back');
   assert.match(html, /\.ev-select select\{appearance:none/, 'the native select arrow shows');
   assert.match(html, /\.sw-track\{/, 'the all-day toggle is not a custom switch');
-  assert.match(evCode, /function datePickerHtml/, 'no custom date picker');
-  assert.match(evCode, /function timeOptions/, 'no custom time picker');
+  // D4.1 moved both pickers into pickers.js so the Event and Reminder editors
+  // share one implementation rather than each growing their own.
+  assert.match(evCode, /from '\.\/pickers\.js'/, 'the editor has no custom pickers');
+  const pickers = read('pickers.js');
+  assert.match(pickers, /export function datePickerPopover/, 'no custom date picker');
+  assert.match(pickers, /export function timePickerPopover/, 'no custom time picker');
   // One shell, one height.
   assert.match(html, /\.ev-ctl\{height:38px/, 'controls do not share one height');
   assert.match(html, /:focus-visible\{outline:none;border-color:var\(--accent\)/,

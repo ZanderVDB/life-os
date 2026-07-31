@@ -19,6 +19,7 @@
  * once is how an event form becomes an admin panel.
  */
 import { reducedMotion, settle } from './motion.js';
+import { datePickerPopover, timePickerPopover } from './pickers.js';
 
 const RISE_IN = [{ opacity: 0, translate: '0 10px', scale: '0.985' },
   { opacity: 1, translate: '0 0', scale: '1' }];
@@ -72,50 +73,8 @@ function toInstant(dayIso, time) {
   return d.toISOString();
 }
 
-/* ── Custom date picker ────────────────────────────────────────────────
- * A real month grid, not three number boxes and not the browser's white
- * dialog. Keyboard-operable: arrows move by day/week, Enter picks. */
-function datePickerHtml(value) {
-  const d = value ? parseIso(value) : new Date();
-  return `<div class="dp" data-dp-month="${d.getFullYear()}-${d.getMonth()}">
-    <div class="dp-head">
-      <button type="button" class="dp-nav" data-dp="prev" aria-label="Previous month">‹</button>
-      <span class="dp-label">${MONTHS[d.getMonth()]} ${d.getFullYear()}</span>
-      <button type="button" class="dp-nav" data-dp="next" aria-label="Next month">›</button>
-    </div>
-    <div class="dp-dow">${DOW.map((x) => `<span>${x}</span>`).join('')}</div>
-    <div class="dp-grid">${dpGrid(d.getFullYear(), d.getMonth(), value)}</div>
-  </div>`;
-}
-
-function dpGrid(year, month, selected) {
-  const first = new Date(year, month, 1);
-  const lead = (first.getDay() + 6) % 7;
-  const todayIso = iso(new Date());
-  const cells = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(year, month, 1 - lead + i);
-    const v = iso(d);
-    cells.push(`<button type="button" class="dp-day
-      ${d.getMonth() !== month ? 'is-out' : ''} ${v === selected ? 'is-sel' : ''}
-      ${v === todayIso ? 'is-today' : ''}" data-date="${v}"
-      tabindex="${v === selected ? 0 : -1}">${d.getDate()}</button>`);
-  }
-  return cells.join('');
-}
-
-/** Time picker: a styled list on a 15-minute grid, not a native time input. */
-function timeOptions(selected) {
-  const out = [];
-  for (let h = 0; h < 24; h++) {
-    for (const m of [0, 15, 30, 45]) {
-      const v = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      out.push(`<button type="button" class="tp-opt ${v === selected ? 'is-sel' : ''}"
-        data-time="${v}">${v}</button>`);
-    }
-  }
-  return out.join('');
-}
+/* Date/time pickers live in pickers.js so the Event and Reminder editors
+   cannot drift apart. */
 
 /**
  * @param {object} ctx
@@ -374,71 +333,40 @@ export function openEventModal(ctx) {
   /* ── Custom pickers ──────────────────────────────────────────────── */
   const pop = $('#ev-pop');
   let popFor = null;
+  const closePop = () => { pop.hidden = true; pop.innerHTML = ''; popFor = null; };
 
-  function closePop() { pop.hidden = true; pop.innerHTML = ''; popFor = null; }
-
-  function openPicker(btn) {
-    const kind = btn.dataset.picker;
-    const target = btn.dataset.target;
-    if (popFor === target) return closePop();
-    popFor = target;
-    pop.innerHTML = kind === 'date'
-      ? datePickerHtml(f[target])
-      : `<div class="tp">${timeOptions(f[target])}</div>`;
-    pop.hidden = false;
-    // Anchored to the control, clamped inside the dialog.
-    const b = btn.getBoundingClientRect();
-    const d = dlg.getBoundingClientRect();
-    pop.style.left = `${Math.min(b.left - d.left, d.width - pop.offsetWidth - 12)}px`;
-    pop.style.top = `${Math.min(b.bottom - d.top + 6, d.height - pop.offsetHeight - 12)}px`;
-    if (kind === 'time') pop.querySelector('.tp-opt.is-sel')?.scrollIntoView({ block: 'center' });
-    wirePop(kind, target, btn);
-  }
-
-  function wirePop(kind, target, btn) {
-    if (kind === 'time') {
-      pop.querySelectorAll('[data-time]').forEach((o) => {
-        o.onclick = () => {
-          f[target] = o.dataset.time;
-          btn.textContent = o.dataset.time;
-          // Keep end after start without arguing with the user.
-          if (target === 'startTime' && f.endTime <= f.startTime) {
-            const [h, m] = f.startTime.split(':').map(Number);
-            const e = new Date(); e.setHours(h + 1, m, 0, 0);
-            f.endTime = hhmm(e); $('#ev-et').textContent = f.endTime;
+  dlg.querySelectorAll('[data-picker]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      if (readOnly) return;
+      const target = btn.dataset.target;
+      if (popFor === target) return closePop();
+      popFor = target;
+      if (btn.dataset.picker === 'date') {
+        datePickerPopover(pop, dlg, btn, f[target], (v) => {
+          f[target] = v;
+          btn.textContent = prettyDate(v);
+          // Keep the end on or after the start without arguing with the user.
+          if (target === 'startDate' && f.endDate < f.startDate) {
+            f.endDate = f.startDate;
+            $('#ev-ed').textContent = prettyDate(f.endDate);
           }
           closePop();
-        };
-      });
-      return;
-    }
-    const rewire = () => wirePop('date', target, btn);
-    pop.querySelectorAll('[data-date]').forEach((o) => {
-      o.onclick = () => {
-        f[target] = o.dataset.date;
-        btn.textContent = prettyDate(o.dataset.date);
-        if (target === 'startDate' && f.endDate < f.startDate) {
-          f.endDate = f.startDate; $('#ev-ed').textContent = prettyDate(f.endDate);
-        }
-        closePop();
-      };
-    });
-    pop.querySelectorAll('[data-dp]').forEach((n) => {
-      n.onclick = () => {
-        const host = pop.querySelector('.dp');
-        let [y, mo] = host.dataset.dpMonth.split('-').map(Number);
-        mo += n.dataset.dp === 'next' ? 1 : -1;
-        if (mo < 0) { mo = 11; y--; } else if (mo > 11) { mo = 0; y++; }
-        host.dataset.dpMonth = `${y}-${mo}`;
-        host.querySelector('.dp-label').textContent = `${MONTHS[mo]} ${y}`;
-        host.querySelector('.dp-grid').innerHTML = dpGrid(y, mo, f[target]);
-        rewire();
-      };
-    });
-  }
-
-  dlg.querySelectorAll('[data-picker]').forEach((b) => {
-    b.onclick = (e) => { e.stopPropagation(); if (!readOnly) openPicker(b); };
+        });
+      } else {
+        timePickerPopover(pop, dlg, btn, f[target], (v) => {
+          f[target] = v;
+          btn.textContent = v;
+          if (target === 'startTime' && f.endTime <= f.startTime) {
+            const [h, m] = f.startTime.split(':').map(Number);
+            const e2 = new Date(); e2.setHours(h + 1, m, 0, 0);
+            f.endTime = hhmm(e2);
+            $('#ev-et').textContent = f.endTime;
+          }
+          closePop();
+        });
+      }
+    };
   });
   dlg.addEventListener('click', (e) => {
     if (!pop.hidden && !pop.contains(e.target) && !e.target.closest('[data-picker]')) closePop();
@@ -589,17 +517,22 @@ export function openAddMenu(anchor, handlers) {
   const menu = document.createElement('div');
   menu.className = 'menu cal-menu';
   menu.setAttribute('role', 'menu');
+  // Each type gets its own dot colour, matching the layer control, so the menu
+  // and the canvas agree about what an Event or a Reminder looks like.
   const items = [
-    ['event', 'Event', 'Something that occupies time'],
-    ['reminder', 'Reminder', 'Something to be reminded about'],
-    ['task', 'Scheduled task', 'Plan when you will do a task'],
-    ['habit', 'Habit', 'Something you repeat'],
+    ['event', 'Event', 'Something that occupies time', 'var(--accent)'],
+    ['reminder', 'Reminder', 'Something to be reminded about', 'var(--warn)'],
+    ['task', 'Scheduled task', 'Plan when you will do a task', 'var(--p-low)'],
+    ['habit', 'Habit', 'Something you repeat', 'var(--ok)'],
   ].filter(([k]) => handlers[k]);
 
-  menu.innerHTML = items.map(([k, label, hint]) => `
+  menu.innerHTML = items.map(([k, label, hint, colour]) => `
     <button role="menuitem" data-add="${k}">
-      <span class="cm-add-l">${label}</span>
-      <span class="cm-add-h">${hint}</span>
+      <span class="cm-add-ico"><i style="background:${colour}"></i></span>
+      <span class="cm-add-body">
+        <span class="cm-add-l">${label}</span>
+        <span class="cm-add-h">${hint}</span>
+      </span>
     </button>`).join('');
   document.body.appendChild(menu);
 
@@ -611,7 +544,14 @@ export function openAddMenu(anchor, handlers) {
       { duration: 150, easing: 'cubic-bezier(.2,.7,.2,1)' });
   }
 
-  const closeMenu = () => { menu.remove(); document.removeEventListener('click', away, true); };
+  const closeMenu = () => {
+    menu.remove();
+    document.removeEventListener('click', away, true);
+    document.removeEventListener('keydown', onEsc, true);
+    if (anchor?.isConnected) anchor.focus();
+  };
+  const onEsc = (e) => { if (e.key === 'Escape') { e.preventDefault(); closeMenu(); } };
+  document.addEventListener('keydown', onEsc, true);
   const away = (e) => { if (!menu.contains(e.target) && e.target !== anchor) closeMenu(); };
   setTimeout(() => document.addEventListener('click', away, true), 0);
   menu.querySelectorAll('[data-add]').forEach((el) => {

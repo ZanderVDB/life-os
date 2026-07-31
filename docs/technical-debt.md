@@ -293,3 +293,23 @@ blur-save), D13 (notebook sanitisation), D14 (notifications when closed).
 `storage-migration-plan.md` § *Risks specific to this migration*: dual-write
 divergence, calendar re-consent, notebook cell mangling, free-text
 `scheduledTime` parsing, and partial-run recovery.
+
+## Google Calendar token encryption — key rotation (D4.1)
+
+Refresh tokens are encrypted at rest with AES-256-GCM using a single key from
+`GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY`. The stored format carries a `v1.` prefix
+so a future scheme is distinguishable, but there is currently **no key id and no
+rotation path**: changing the key invalidates every stored token and every user
+must reconnect.
+
+Acceptable now (staging, one user). Before production this needs a key id in the
+prefix and a decrypt-with-old / re-encrypt-with-new migration.
+
+## OAuth pending-state storage (D4.1)
+
+In-flight PKCE verifiers live in an in-process `Map`, deliberately: they are
+valid for seconds and must not survive a restart. This is correct for a
+single-instance deployment and **breaks on horizontal scale** — a callback
+landing on a different instance than the one that issued the state would be
+rejected as expired. Needs shared storage (Redis or a short-lived table) before
+running more than one API instance.

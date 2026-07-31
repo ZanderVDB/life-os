@@ -208,40 +208,125 @@ function monthCellHtml(d, month, todayIso) {
   const hasConflict = conflictsOn(day).length > 0;
   const overdueRem = reminders.some((r) => r.status === 'open' && r.dueDate < todayIso);
 
-  // Timed events read best in time order; all-day ones sit above them.
+  // Priority order is fixed: commitments, then deadlines, then reminders, then
+  // planned work, then a count. Habits are LAST and deliberately faint — an
+  // otherwise empty day must not look busy because three habits were ticked.
   const ordered = [...events].sort((a, b) => {
     if (a.isAllDay !== b.isAllDay) return a.isAllDay ? -1 : 1;
     return new Date(a.startsAt ?? 0) - new Date(b.startsAt ?? 0);
   });
   const SHOWN = 3;
   const shown = ordered.slice(0, SHOWN);
-  const extra = (ordered.length - shown.length) + deadlines.length + reminders.length;
+  const room = SHOWN - shown.length;
+  const shownDue = deadlines.slice(0, Math.max(0, room));
+  const extra = (ordered.length - shown.length)
+    + (deadlines.length - shownDue.length) + reminders.length;
+
+  const habitRatio = habit && cal.data?.habitTotal
+    ? `${habit.done}/${cal.data.habitTotal}` : null;
 
   return `<div class="cm-cell ${outside ? 'is-outside' : ''} ${day === todayIso ? 'is-today' : ''}
       ${cal.selected === day ? 'is-selected' : ''} load-${load}"
       role="gridcell" tabindex="0" data-day="${day}"
-      aria-label="${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}, ${ordered.length} events${hasConflict ? ', has a clash' : ''}">
+      aria-label="${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}, ${describeDay(day)}">
     <div class="cm-num">
-      <span>${d.getDate()}</span>
-      ${hasConflict ? '<span class="cm-flag" title="Overlapping events">!</span>' : ''}
-      ${overdueRem ? '<span class="cm-flag is-warn" title="Overdue reminder">•</span>' : ''}
+      <span class="cm-date">${d.getDate()}</span>
+      ${hasConflict ? '<span class="cm-flag" aria-label="Overlapping events">!</span>' : ''}
+      ${overdueRem ? '<span class="cm-flag is-warn" aria-label="Overdue reminder">!</span>' : ''}
     </div>
     <div class="cm-items">
       ${shown.map((e) => `<span class="cm-ev ${e.isAllDay ? 'is-allday' : ''}"
-        data-event="${e.id}" title="${esc(e.title)}">
+        data-event="${e.id}" data-hover="event">
         <i class="cm-src" style="background:${esc(e.calendarColor || 'var(--accent)')}"></i>
-        ${e.isAllDay ? '' : `<b>${esc(hhmm(new Date(e.startsAt)))}</b>`}
+        ${e.isAllDay ? '' : `<b>${esc(shortTime(new Date(e.startsAt)))}</b>`}
         <span class="cm-ev-t">${esc(e.title)}</span></span>`).join('')}
-      ${deadlines.slice(0, 1).map((t) => `<span class="cm-due" title="Due: ${esc(t.title)}">
-        <i></i>${esc(t.title)}</span>`).join('')}
+      ${shownDue.map((t) => `<span class="cm-due" data-hover="due">
+        <i></i><span class="cm-ev-t">${esc(t.title)}</span></span>`).join('')}
       ${extra > 0 ? `<span class="cm-more">+${extra} more</span>` : ''}
     </div>
     <div class="cm-foot">
-      ${blocks.length ? `<span class="cm-chip cm-plan" title="${blocks.length} planned work block(s)">${blocks.length}◱</span>` : ''}
-      ${habit && habit.done ? `<span class="cm-chip cm-habit" title="${habit.done} habits completed">${habit.done}</span>` : ''}
+      ${blocks.length ? `<span class="cm-chip cm-plan"
+        aria-label="${blocks.length} planned work block${blocks.length > 1 ? 's' : ''}">${blocks.length}</span>` : ''}
+      ${reminders.length ? `<span class="cm-chip cm-rem"
+        aria-label="${reminders.length} reminder${reminders.length > 1 ? 's' : ''}">${reminders.length}</span>` : ''}
+      ${habitRatio ? `<span class="cm-habit-dot" aria-label="${habitRatio} habits done"
+        style="--hb:${(habit.done / Math.max(1, cal.data.habitTotal) * 100).toFixed(0)}%"></span>` : ''}
     </div>
   </div>`;
 }
+
+/** Screen-reader summary — the same facts the hover preview shows visually. */
+function describeDay(day) {
+  const { events, reminders, deadlines, blocks } = itemsForDay(day);
+  const bits = [];
+  if (events.length) bits.push(`${events.length} event${events.length > 1 ? 's' : ''}`);
+  if (deadlines.length) bits.push(`${deadlines.length} deadline${deadlines.length > 1 ? 's' : ''}`);
+  if (reminders.length) bits.push(`${reminders.length} reminder${reminders.length > 1 ? 's' : ''}`);
+  if (blocks.length) bits.push(`${blocks.length} planned block${blocks.length > 1 ? 's' : ''}`);
+  if (conflictsOn(day).length) bits.push('has a clash');
+  return bits.length ? bits.join(', ') : 'nothing scheduled';
+}
+
+/** 09:00 rather than 09:00 AM — month cells have no room for a meridiem. */
+function shortTime(d) {
+  const h = d.getHours(); const m = d.getMinutes();
+  return m ? `${h}:${String(m).padStart(2, '0')}` : `${h}`;
+}
+
+/* ── Hover preview content ────────────────────────────────────────────
+ * Same facts on hover and on focus. Compact by design: this is a glance, not
+ * the selected-day rail. */
+export const hoverRender = {
+  day(dayIso) {
+    const { events, reminders, deadlines, blocks } = itemsForDay(dayIso);
+    if (!events.length && !reminders.length && !deadlines.length && !blocks.length) return null;
+    const d = parseIso(dayIso);
+    const timed = events.filter((e) => !e.isAllDay && e.startsAt)
+      .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+    const next = timed[0] ?? events[0];
+    const clash = conflictsOn(dayIso).length;
+    return `<div class="hov-head">
+        <b>${esc(d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))}</b>
+        <span class="hov-load load-${workload(dayIso)}">${workload(dayIso)}</span>
+      </div>
+      ${next ? `<div class="hov-next">
+        <i style="background:${esc(next.calendarColor || 'var(--accent)')}"></i>
+        <span>${next.isAllDay ? 'All day' : esc(hhmm(new Date(next.startsAt)))}</span>
+        <b>${esc(next.title)}</b></div>` : ''}
+      <div class="hov-counts">
+        ${events.length > 1 ? `<span>${events.length - 1} more event${events.length > 2 ? 's' : ''}</span>` : ''}
+        ${deadlines.length ? `<span class="is-due">${deadlines.length} deadline${deadlines.length > 1 ? 's' : ''}</span>` : ''}
+        ${reminders.length ? `<span class="is-rem">${reminders.length} reminder${reminders.length > 1 ? 's' : ''}</span>` : ''}
+        ${blocks.length ? `<span class="is-plan">${blocks.length} planned</span>` : ''}
+        ${clash ? `<span class="is-clash">${clash} clash${clash > 1 ? 'es' : ''}</span>` : ''}
+      </div>`;
+  },
+
+  event(id) {
+    const e = cal.data?.events.find((x) => x.id === id);
+    if (!e) return null;
+    const when = e.isAllDay
+      ? (e.endDate && e.endDate !== e.startDate
+        ? `All day · ${esc(prettyShort(e.startDate))} – ${esc(prettyShort(e.endDate))}`
+        : 'All day')
+      : `${esc(hhmm(new Date(e.startsAt)))} – ${esc(hhmm(new Date(e.endsAt)))}`;
+    const going = (e.attendees ?? []).filter((a) => a.responseStatus === 'accepted').length;
+    return `<div class="hov-head"><b>${esc(e.title)}</b></div>
+      <div class="hov-when">${when}</div>
+      <div class="hov-meta">
+        <span class="hov-cal"><i style="background:${esc(e.calendarColor || 'var(--accent)')}"></i>
+          ${esc(e.calendarName ?? 'Calendar')}</span>
+        ${e.location ? `<span>${esc(e.location)}</span>` : ''}
+        ${e.recurrence ? '<span>Repeats</span>' : ''}
+        ${e.attendees?.length ? `<span>${going}/${e.attendees.length} going</span>` : ''}
+        ${e.hangoutLink ? '<span class="hov-meet">Google Meet</span>' : ''}
+        ${e.isReadOnly ? '<span class="hov-ro">Read-only</span>' : ''}
+      </div>`;
+  },
+};
+
+const prettyShort = (s) => parseIso(s).toLocaleDateString(undefined,
+  { day: 'numeric', month: 'short' });
 
 /* ── Agenda ───────────────────────────────────────────────────────────── */
 /** Chronology is primary. Categories are filters, never the structure. */
@@ -445,41 +530,182 @@ function selectedRailHtml() {
   const day = cal.selected;
   const { events, reminders, deadlines, blocks, habit } = itemsForDay(day);
   const d = parseIso(day);
+  const clashes = conflictsOn(day);
+  const empty = !events.length && !reminders.length && !deadlines.length && !blocks.length;
+  const load = workload(day);
+
   return `<div class="rail-card cal-sel">
     <h3>${esc(d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))}</h3>
-    <div class="cs-load">Workload: <b>${workload(day)}</b></div>
+
+    ${empty ? `<div class="cs-empty">
+        <span class="cs-empty-t">Nothing planned</span>
+        <span class="cs-empty-s">A clear day. Add something if you need to.</span>
+      </div>`
+      : `<div class="cs-load load-${load}"><i></i>${esc(loadWord(load))}</div>`}
+
+    ${clashes.length ? `<div class="cs-alert">
+      ${clashes.map(([a, b]) => `<span><b>${esc(a.title)}</b> overlaps <b>${esc(b.title)}</b></span>`).join('')}
+    </div>` : ''}
+
     ${events.length ? `<div class="cs-sec"><span class="cs-lab">Events</span>
       ${events.map((e) => `<button class="cs-row" data-event="${e.id}">
         <i style="background:${esc(e.calendarColor || 'var(--accent)')}"></i>
         <span>${e.isAllDay ? 'All day' : esc(hhmm(new Date(e.startsAt)))}</span>
         <b>${esc(e.title)}</b></button>`).join('')}</div>` : ''}
+
     ${blocks.length ? `<div class="cs-sec"><span class="cs-lab">Planned work</span>
       ${blocks.map((b) => `<div class="cs-row"><i class="cs-plan"></i>
         <span>${esc(hhmm(new Date(b.startsAt)))}</span><b>${esc(b.title)}</b></div>`).join('')}</div>` : ''}
+
     ${reminders.length ? `<div class="cs-sec"><span class="cs-lab">Reminders</span>
-      ${reminders.map((r) => `<div class="cs-row"><i class="cs-rem"></i>
-        <span>${r.dueTime ? esc(r.dueTime) : '—'}</span><b>${esc(r.title)}</b></div>`).join('')}</div>` : ''}
-    ${deadlines.length ? `<div class="cs-sec"><span class="cs-lab">Deadlines</span>
-      ${deadlines.map((t) => `<div class="cs-row"><i class="cs-due"></i>
-        <span>due</span><b>${esc(t.title)}</b></div>`).join('')}</div>` : ''}
-    ${habit?.done ? `<div class="cs-sec"><span class="cs-lab">Habits</span>
-      <div class="cs-row"><i class="cs-hab"></i><b>${habit.done} completed</b></div></div>` : ''}
-    ${!events.length && !reminders.length && !deadlines.length && !blocks.length
-      ? '<p class="rail-quiet">Nothing planned. A clear day.</p>' : ''}
+      ${reminders.map((r) => `<div class="cs-row ${r.status === 'done' ? 'is-done' : ''}">
+        <i class="cs-rem"></i>
+        <span>${r.dueTime ? esc(r.dueTime) : 'Any time'}</span><b>${esc(r.title)}</b></div>`).join('')}</div>` : ''}
+
+    ${deadlines.length ? `<div class="cs-sec"><span class="cs-lab">Due</span>
+      ${deadlines.map((t) => `<div class="cs-row pri-${t.priority}"><i class="cs-due"></i>
+        <span>${esc(t.priority)}</span><b>${esc(t.title)}</b></div>`).join('')}</div>` : ''}
+
+    ${habit?.done ? `<div class="cs-habit">
+      ${habit.done} of ${cal.data?.habitTotal ?? habit.done} habits done</div>` : ''}
+
     <button class="btn btn-primary cs-add" data-cal-add-day="${day}">Add to this day</button>
   </div>`;
 }
 
+const loadWord = (l) => ({
+  open: 'Open day', moderate: 'A few commitments',
+  busy: 'Busy day', overloaded: 'Heavily booked',
+}[l] ?? l);
+
+/**
+ * Calendar sources — the real connection surface.
+ *
+ * This replaced a developer-facing card that said "Synthetic data. No Google
+ * account is connected." Product UI does not talk about synthetic data; it
+ * says whether a calendar is connected and what Life OS can do with it.
+ */
 function agendaRailHtml() {
   const d = cal.data;
   if (!d) return '';
-  return `<div class="rail-card"><h3>Sources</h3>
-    <div class="rl-list">${(d.calendars ?? []).map((c) => `<div class="rl-row">
-      <i class="rl-dot" style="background:${esc(c.color || 'var(--accent)')}"></i>
-      <span class="rl-t">${esc(c.name)}</span>
-      <span class="rl-s">${c.isReadOnly ? 'read-only' : 'editable'}</span></div>`).join('')}</div>
-    <p class="rail-quiet cal-note">Synthetic data. No Google account is connected.</p>
+  const conn = d.connection ?? null;
+  const cals = (d.calendars ?? []).filter((c) => !c.isSynthetic);
+
+  if (!conn || conn.status === 'disconnected') {
+    return `<div class="rail-card cal-connect">
+      <h3>Calendar sources</h3>
+      <p class="cs-connect-copy">Connect Google Calendar to see your real events
+        in Month, Agenda and Plan.</p>
+      <ul class="cs-connect-list">
+        <li>Life OS reads your calendars and events.</li>
+        <li>It cannot create, change or delete anything in Google.</li>
+        <li>You can disconnect at any time.</li>
+      </ul>
+      <button class="btn btn-primary cs-connect" id="cal-connect">
+        Connect Google Calendar</button>
+    </div>`;
+  }
+
+  const syncing = conn.status === 'syncing';
+  const failed = conn.status === 'error';
+  return `<div class="rail-card">
+    <h3>Calendar sources</h3>
+    <div class="cs-account">
+      <span class="cs-acct-dot ${failed ? 'is-error' : 'is-ok'}"></span>
+      <div class="cs-acct-body">
+        <b>${esc(conn.accountEmail ?? 'Google account')}</b>
+        <span>${failed ? 'Needs reconnecting' : 'Connected · Read-only'}</span>
+      </div>
+    </div>
+    ${failed && conn.lastError ? `<div class="cs-alert"><span>${esc(conn.lastError)}</span></div>` : ''}
+    <div class="cs-sources">
+      ${cals.length ? cals.map((c) => `<label class="cs-source">
+        <input type="checkbox" class="cs-vis" data-calendar="${c.id}"
+          ${c.isVisible ? 'checked' : ''}>
+        <span class="cs-box"></span>
+        <i class="cs-dot" style="background:${esc(c.color || 'var(--accent)')}"></i>
+        <span class="cs-name">${esc(c.name)}</span>
+        ${c.isReadOnly ? '<span class="cs-ro">read-only</span>' : ''}
+      </label>`).join('')
+      : '<p class="rail-quiet">No calendars yet.</p>'}
+    </div>
+    <div class="cs-sync">
+      <span>${syncing ? 'Syncing…' : lastSyncedWord(conn.lastSyncedAt)}</span>
+      <button class="btn btn-ghost cs-sync-now" id="cal-sync"
+        ${syncing ? 'disabled' : ''}>Sync now</button>
+    </div>
+    <button class="rail-link cs-disconnect" id="cal-disconnect">Disconnect</button>
   </div>`;
+}
+
+function lastSyncedWord(ts) {
+  if (!ts) return 'Not synced yet';
+  const mins = Math.round((Date.now() - new Date(ts)) / 60000);
+  if (mins < 1) return 'Synced just now';
+  if (mins < 60) return `Synced ${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `Synced ${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+  return `Synced ${new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
+}
+
+/**
+ * Planning queue — compact cards, not narrow grey bars.
+ *
+ * Each carries what you need to decide WHEN to do it: area, priority, due
+ * date, duration. Dragging is one way to schedule, never the only way: there
+ * is a Schedule button that works with a keyboard and with a finger.
+ */
+function queueCardHtml(t, kind) {
+  const area = areaNameFor(t.areaId);
+  return `<div class="pq-card pri-${t.priority}" data-queue-task="${t.id}" tabindex="0"
+      role="listitem" aria-label="${esc(t.title)}${area ? `, ${esc(area)}` : ''}">
+    <div class="pq-top">
+      <span class="pq-title">${esc(t.title)}</span>
+      <button class="pq-sched" data-schedule="${t.id}"
+        aria-label="Schedule ${esc(t.title)}">Schedule</button>
+    </div>
+    <div class="pq-meta">
+      ${area ? `<span class="pq-area">${esc(area)}</span>` : ''}
+      <span class="pq-pri pri-dot-${t.priority}">${esc(t.priority)}</span>
+      ${t.dueDate ? `<span class="pq-due ${kind === 'due' ? 'is-soon' : ''}">
+        due ${esc(prettyShort(t.dueDate))}</span>` : ''}
+      ${t.estimateMinutes ? `<span class="pq-dur">${t.estimateMinutes}m</span>` : ''}
+      ${t.steps?.length ? `<span class="pq-steps">
+        ${t.steps.filter((x) => x.completed).length}/${t.steps.length} steps</span>` : ''}
+    </div>
+  </div>`;
+}
+
+function areaNameFor(id) {
+  if (!id) return null;
+  return (cal.areas ?? []).find((a) => a.id === id)?.name ?? null;
+}
+
+/**
+ * Free windows inside planning hours, after events and existing blocks.
+ * Deliberately not "every empty minute": anything shorter than 30 minutes is
+ * not a usable work window and is not offered as one.
+ */
+function freeWindows(dayIso) {
+  const hrs = planHours();
+  const { events, blocks } = itemsForDay(dayIso);
+  const busy = [];
+  const mins = (d) => { const x = new Date(d); return x.getHours() * 60 + x.getMinutes(); };
+  for (const e of events) {
+    if (e.isAllDay || !e.startsAt || !e.endsAt) continue;
+    busy.push([mins(e.startsAt), mins(e.endsAt)]);
+  }
+  for (const b of blocks) busy.push([mins(b.startsAt), mins(b.endsAt)]);
+  busy.sort((a, b) => a[0] - b[0]);
+
+  const out = [];
+  let cursor = hrs.start * 60;
+  for (const [s0, e0] of busy) {
+    if (s0 > cursor) out.push([cursor, Math.min(s0, hrs.end * 60)]);
+    cursor = Math.max(cursor, e0);
+  }
+  if (cursor < hrs.end * 60) out.push([cursor, hrs.end * 60]);
+  return out.filter(([a, b]) => b - a >= 30);
 }
 
 function planRailHtml() {
@@ -488,24 +714,31 @@ function planRailHtml() {
   const week = weekOf(cal.anchor).map(iso);
   const scheduled = new Set(d.blocks.map((b) => b.taskId));
   const queue = (d.unscheduled ?? []).filter((t) => !scheduled.has(t.id));
-  const dueSoon = d.deadlines.filter((t) => !scheduled.has(t.id));
-  const openHours = week.reduce((n, day) => n + (workload(day) === 'open' ? 1 : 0), 0);
+  const dueSoon = (d.deadlines ?? []).filter((t) => !scheduled.has(t.id));
+  const freeMins = week.reduce((n, day) =>
+    n + freeWindows(day).reduce((m, [a, b]) => m + (b - a), 0), 0);
 
-  return `<div class="rail-card"><h3>Planning queue</h3>
+  return `<div class="rail-card">
+      <h3>Planning queue</h3>
       ${dueSoon.length ? `<div class="cs-sec"><span class="cs-lab">Due soon, not planned</span>
-        ${dueSoon.slice(0, 5).map((t) => `<div class="pq-item pri-${t.priority}" draggable="false"
-          data-queue-task="${t.id}"><b>${esc(t.title)}</b>
-          <span>due ${esc(parseIso(t.dueDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</span>
-        </div>`).join('')}</div>` : ''}
+        <div role="list" class="pq-list">${dueSoon.slice(0, 4).map((t) => queueCardHtml(t, 'due')).join('')}</div>
+      </div>` : ''}
       ${queue.length ? `<div class="cs-sec"><span class="cs-lab">Unscheduled</span>
-        ${queue.slice(0, 8).map((t) => `<div class="pq-item pri-${t.priority}"
-          data-queue-task="${t.id}"><b>${esc(t.title)}</b></div>`).join('')}</div>`
-        : '<p class="rail-quiet">Nothing waiting to be scheduled.</p>'}
+        <div role="list" class="pq-list">${queue.slice(0, 8).map((t) => queueCardHtml(t, 'open')).join('')}</div>
+      </div>`
+      : (!dueSoon.length ? `<div class="cs-empty">
+          <span class="cs-empty-t">Nothing waiting</span>
+          <span class="cs-empty-s">Every open task already has time set aside.</span>
+        </div>` : '')}
     </div>
     <div class="rail-card"><h3>This week</h3>
       <div class="rl-list">
-        <div class="rl-row"><span class="rl-t">Clear days</span><span class="rl-s">${openHours}</span></div>
-        <div class="rl-row"><span class="rl-t">Planned blocks</span><span class="rl-s">${d.blocks.length}</span></div>
+        <div class="rl-row"><span class="rl-t">Free time in planning hours</span>
+          <span class="rl-s">${Math.round(freeMins / 60)}h</span></div>
+        <div class="rl-row"><span class="rl-t">Planned blocks</span>
+          <span class="rl-s">${d.blocks.length}</span></div>
+        <div class="rl-row"><span class="rl-t">Planning hours</span>
+          <span class="rl-s">${planHours().start}:00–${planHours().end}:00</span></div>
       </div>
     </div>`;
 }
@@ -522,6 +755,7 @@ export function calendarBodyHtml() {
   return agendaHtml();
 }
 
+export const freeWindowsFor = (day) => freeWindows(day);
 export const planHours = () => ({ start: PLAN_START, end: PLAN_END });
 
 export { cal, currentRange, itemsForDay, workload, conflictsOn, monthGrid, weekOf, iso, parseIso };
