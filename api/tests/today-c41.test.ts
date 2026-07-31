@@ -339,3 +339,41 @@ test('data: dragging can never write more than once per drop', () => {
   // Checked against the raw source: dragCode has its comments stripped.
   assert.match(drag, /Nothing is written while dragging/, 'the rule is not recorded');
 });
+
+/* ── Follow-up corrections ───────────────────────────────────────────── */
+
+test('drag: the card takes the destination bucket\'s width', () => {
+  // Future spans the full row (grid-column:1/-1) while Today, This Week and
+  // This Month share it, so a card carried between them changes width.
+  assert.match(html, /\.bucket\.future\{grid-column:1\/-1\}/, 'Future is no longer full-width');
+  assert.match(dragCode, /function adoptWidth/, 'the card keeps its original width');
+  assert.match(dragCode, /if \(parentChanged\) adoptWidth\(zone\)/,
+    'width is not adopted when the bucket changes');
+  // Measured after the placeholder lands: an empty drop zone carries a 1.5px
+  // dashed border, so measuring first reported a width 3px short.
+  const fn = body(dragCode, 'function updateInsertion(x, y)');
+  const flipAt = fn.indexOf('flipSiblings(');
+  assert.ok(fn.indexOf('adoptWidth(zone)') > flipAt,
+    'width is measured before the placeholder lands, while .is-empty still applies');
+  // The placeholder must follow the card's new height, not the other way round.
+  assert.match(dragCode, /session\.ph\.style\.height = `\$\{h\}px`/,
+    'the gap does not follow the resized card');
+  assert.match(html, /transition:width var\(--d-base\)[^}]*height var\(--d-base\)/,
+    'the resize snaps instead of easing');
+});
+
+test('stars: every mark is a star, spread on a jittered grid', () => {
+  const s = code(read('stars.js'));
+  // No circles at all — the shape rule is now uniform.
+  assert.ok(!/<circle/.test(s), 'circular stars are back');
+  assert.ok(!/<rect/.test(s), 'square stars are back');
+  assert.match(s, /starPath\(x, y, r, waist\)/, 'the star shape takes no waist');
+  // Variety: chunky bodies with short points AND sharp long-armed sparkles.
+  assert.match(s, /0\.20 \+ rand\(\) \* 0\.16/, 'large stars lost their sharp waist');
+  assert.match(s, /0\.38 \+ rand\(\) \* 0\.20/, 'small stars lost their chunky waist');
+  // Jittered grid, not uniform random — uniform sampling clumps and leaves
+  // bald patches, which is what read as "scattered".
+  assert.match(s, /const cols =/, 'placement is not gridded');
+  assert.match(s, /gx \* cw \+ cw \* \(0\.18 \+ rand\(\) \* 0\.64\)/,
+    'stars are not jittered within their cell');
+});

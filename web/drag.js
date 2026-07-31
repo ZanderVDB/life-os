@@ -188,7 +188,48 @@ function updateInsertion(x, y) {
     document.querySelectorAll('.drop').forEach((d) => {
       d.classList.toggle('is-empty', !d.querySelector('.task,.task-placeholder'));
     });
+
+    // Buckets are not all the same width — Future spans the full row while the
+    // other three share it. A card carried between them must take on the
+    // destination's width, or it hangs over the edges and reads as not
+    // belonging to the list it is about to join.
+    //
+    // Measured HERE, after the placeholder has landed and `.is-empty` has been
+    // cleared: an empty drop zone carries a 1.5px dashed border, so measuring
+    // it first reported a width 3px short. The resulting placeholder height
+    // change is part of this same FLIP, so the cards below it slide rather
+    // than jump.
+    if (parentChanged) adoptWidth(zone);
   });
+}
+
+/**
+ * Resizes the lifted card to the destination bucket's width, and the
+ * placeholder to whatever height the card becomes at that width — a long title
+ * wraps to two lines in a narrow bucket and one in a wide one, so the gap has
+ * to follow the card, not the other way round.
+ *
+ * The grab point is kept proportional, so a card that shrinks does not jump out
+ * from under the pointer.
+ */
+function adoptWidth(zone) {
+  const width = zone.clientWidth;
+  if (!width || Math.abs(width - session.width) < 1) return;
+
+  const ratio = session.width ? session.grabX / session.width : 0.5;
+  session.width = width;
+  session.grabX = Math.min(width - 8, ratio * width);
+
+  const card = session.card;
+  card.style.width = `${width}px`;
+  // Let the card reflow at its new width before measuring the height it needs.
+  card.style.height = 'auto';
+  const h = card.getBoundingClientRect().height;
+  card.style.height = `${h}px`;
+  session.height = h;
+  session.ph.style.height = `${h}px`;
+
+  position(session.lastX, session.lastY);
 }
 
 /** Finds the .drop under the pointer, tolerating small gaps between buckets. */

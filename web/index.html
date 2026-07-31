@@ -709,7 +709,12 @@ body.modal-open{overflow:hidden}
   background:rgba(138,93,255,.05);box-sizing:border-box;
   transition:height var(--d-fast) var(--e-out)}
 .task.is-dragging{box-shadow:var(--e3);opacity:.96;cursor:grabbing;
-  transform-origin:center;will-change:transform;border-color:var(--accent)}
+  transform-origin:center;will-change:transform;border-color:var(--accent);
+  /* Width and height are animated because the card CHANGES SIZE when it moves
+     between buckets of different widths — Future spans the full row. Snapping
+     between the two sizes reads as a glitch; easing reads as the card fitting
+     itself to where it is going. */
+  transition:width var(--d-base) var(--e-out),height var(--d-base) var(--e-out)}
 body.is-dragging-task{cursor:grabbing;user-select:none;-webkit-user-select:none}
 /* A card is grabbable anywhere that is not a control. */
 .task{cursor:grab}
