@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Life OS">
+  <!-- Maskable: Android crops to a circle, so the mark sits inside the 80%
+       safe zone and the background bleeds fully to the edges. Deliberately a
+       separate drawing, not the standard icon in a bigger box. -->
+  <defs>
+    <linearGradient id="mtile" x1="0" y1="0" x2="0" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#221D33"/><stop offset="1" stop-color="#14121D"/>
+    </linearGradient>
+    <linearGradient id="mpetal" x1="150" y1="370" x2="362" y2="142" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6D3BFF"/><stop offset="1" stop-color="#C99BFF"/>
+    </linearGradient>
+    <radialGradient id="mhalo" cx="256" cy="280" r="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8A5DFF" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#8A5DFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#mtile)"/>
+  <circle cx="256" cy="270" r="170" fill="url(#mhalo)"/>
+  <g transform="translate(256 256) scale(11.4) translate(-12 -11.4)">
+    <path d="M12 20.4C6.9 17.6 3.4 13.1 3.4 8.5 7.1 9.2 10.1 13 12 20.4Z" fill="url(#mpetal)" fill-opacity=".8"/>
+    <path d="M12 20.4c5.1-2.8 8.6-7.3 8.6-11.9-3.7.7-6.7 4.5-8.6 11.9Z" fill="url(#mpetal)" fill-opacity=".8"/>
+    <path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z" fill="url(#mpetal)"/>
+  </g>
+</svg>

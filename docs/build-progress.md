@@ -863,3 +863,82 @@ Verified across two successive builds: install → wait → prompt → Later →
 
 No Firestore read or write. No Trifusion access. No new legacy system imported.
 No task data altered. Legacy untouched. 116 tests passing.
+
+---
+
+# PHASE C2 — LEGACY VISUAL PARITY — 2026-07-31
+
+**Root cause of the C1 regression: the shell was reconstructed from
+`design-system.md` instead of ported from the Legacy stylesheet.**
+
+The design system carries principles. It does not carry the numbers — a 56px
+gutter, a 380px rail, a 2200px ceiling, a 1544px composer. Rebuilding from
+principles produced something that satisfied every written rule and still
+looked nothing like the approved product.
+
+Full measurements in [legacy-v2-visual-parity-audit.md](legacy-v2-visual-parity-audit.md).
+
+## The single biggest error
+
+Legacy nests the content and rail inside the main column:
+
+```css
+.app       { grid-template-columns: var(--sidebar-w) 1fr; }
+.main-wrap { grid-template-columns: minmax(0,1fr) var(--rail-w);
+             gap:56px; padding:32px 32px 140px 44px;
+             max-width:2200px; margin:0 auto; }
+```
+
+C1 flattened that into one three-column grid with no gutter and no max-width.
+That one omission produced the dead centre, the detached rail, the compressed
+buckets and the "admin dashboard" feel. **Every reported symptom traces to it.**
+
+## Ported from Legacy verbatim
+
+Sidebar 232 · rail 380 · gutter 56 · content max 2200 · padding 32/32/140/44 ·
+section gap 28 · rail gap 14, sticky at 22 · buckets 3×`minmax(0,1fr)` gap 20 ·
+bucket radius 16, padding 15/14/13 · row gap 7 · count chip border · empty
+states 12px italic · dashed empty drop zones · h1 34px/−1px · sub 13px muted ·
+page header a baseline row with actions right · nav gap 5, items 44px, icon box
+22 · indicator fixed 44px with its OWN gradient `#7C4DFF→#9A67FF` · composer
+`left:232 right:0`, capped 1544 centred, `#17161F` + blur + `1px #353046`
+border, full opacity.
+
+**The task row was already at parity** — `#282431`, radius 12, padding
+11/14/11/16, 13px title, 4px stripe. It looked small because the container was
+wrong, not the type.
+
+## Right rail — reworked
+
+Was: five cards, two of them reading "not connected" and "safe in the legacy
+export". That is staging status, not a product.
+
+Now: **Today** (date + next-up task), **Your day** (counts), **Areas** (live
+filters), **Recently finished** (last three, links to History), quick add. No
+migration commentary anywhere in the everyday UI — a test now enforces that.
+
+## Settings — restored to Legacy's tabbed structure
+
+Six tabs over Legacy `.setting-row` cards: Account · Appearance · Areas · App ·
+Integrations · Privacy & data. Appearance has a live swatch preview. Areas can
+now be **renamed and removed**, with removal explaining that tasks are kept.
+App gives browser-specific install steps. Integrations lists only what exists.
+
+## App icon — new, versioned
+
+A compact application mark: the lotus alone on a graphite tile with a purple
+halo. No wordmark — it is unreadable at 32px. The maskable variant is a separate
+drawing, not the same art rescaled, because Android crops to a circle.
+
+Seven PNGs, all `.v2.` filenames so no cached old icon can be served:
+192, 256, 512, maskable 192, maskable 512, apple-touch 180, favicon 32.
+
+## Bugs found in C2
+
+1. **CRLF defeated the test comment-stripper.** `//.*$` never matched because of
+   the trailing `\r`, so the service-worker test read its own
+   "Deliberately NOT skipWaiting()" comment as the call it forbids.
+2. Two shell tests still asserted the C1 layout and copy, and one directly
+   contradicted the new no-staging-language rule.
+
+121 tests passing. Task data untouched. Legacy untouched.

@@ -19,43 +19,41 @@ export const ROUTES = [
 ];
 
 /**
- * Placeholder copy. Each says what is happening and where the data is — never
- * a bare "coming soon", and never fake content standing in for the real thing.
+ * Placeholder copy — product voice, not migration commentary.
+ *
+ * These screens are part of the everyday app, so they say what is coming and
+ * reassure that nothing was lost. Technical detail about exports and imports
+ * belongs in the migration tools and the docs, never here.
  */
 export const PLACEHOLDERS = {
   calendar: {
-    tagline: 'Not yet connected.',
-    body: 'Calendar is being rebuilt on the new Life OS v2 foundation. Nothing is shown '
-      + 'here because showing invented events would be worse than showing none.',
-    note: 'Your Google Calendar connection and any legacy events are untouched in the '
-      + 'legacy app and in the verified export. Nothing has been migrated or deleted.',
+    tagline: 'Coming soon.',
+    body: 'Your calendar, habits and daily rhythm will live here — one view of '
+      + 'what the day actually holds.',
+    note: 'Nothing you have saved has been lost.',
   },
   projects: {
-    tagline: 'Not yet connected.',
-    body: 'Projects is being rebuilt. In v2 a Project is an outcome you are working '
-      + 'towards — distinct from an Area, which is a part of your life.',
-    note: 'Your 12 legacy project records are preserved in the verified export and have '
-      + 'not been imported. Tasks already carry a project field ready for them.',
+    tagline: 'Coming soon.',
+    body: 'Projects are outcomes you are working towards. Tasks will roll up '
+      + 'into them, so you can see progress rather than just a list.',
+    note: 'Nothing you have saved has been lost.',
   },
   diary: {
-    tagline: 'Not yet connected.',
-    body: 'Diary is being rebuilt. Entries are personal writing, and they deserve a '
-      + 'considered home rather than a quick port.',
-    note: 'Your 50 legacy diary days are preserved in the verified export and have not '
-      + 'been imported.',
+    tagline: 'Coming soon.',
+    body: 'A place to write. Personal writing deserves a considered home, so '
+      + 'it is being built with care rather than rushed.',
+    note: 'Nothing you have saved has been lost.',
   },
   library: {
-    tagline: 'Not yet connected.',
-    body: 'Library is being rebuilt as books, sections and pages — replacing the flat '
-      + 'legacy notebook structure.',
-    note: 'Your legacy notebook sections are preserved in the verified export and have '
-      + 'not been imported.',
+    tagline: 'Coming soon.',
+    body: 'Books, sections and pages — somewhere to keep the things you want '
+      + 'to return to.',
+    note: 'Nothing you have saved has been lost.',
   },
   brain: {
-    tagline: 'Not yet connected.',
-    body: 'Brain is being rebuilt. Ideas, resources and knowledge become one system '
-      + 'instead of three separate lists.',
-    note: 'Your legacy Brain items are preserved in the verified export and have not '
-      + 'been imported.',
+    tagline: 'Coming soon.',
+    body: 'Ideas, resources and knowledge in one place instead of three '
+      + 'separate lists.',
+    note: 'Nothing you have saved has been lost.',
   },
 };

@@ -9,7 +9,8 @@
  * of a full-page flash (design-system.md §11).
  */
 import { ROUTES, PLACEHOLDERS } from './routes.js';
-import { initServiceWorker, installState } from './pwa.js';
+import { initServiceWorker } from './pwa.js';
+import { settingsHtml } from './settings.js';
 
 const CFG = window.LIFE_OS_CONFIG;
 const BUCKETS = [
@@ -24,7 +25,7 @@ const HISTORY_PAGE = 25;
 const state = {
   me: null, prefs: {}, token: null,
   tasks: [], history: [], historyTotal: 0,
-  route: 'today', areaFilter: null, menu: null,
+  route: 'today', areaFilter: null, menu: null, settingsTab: 'account',
 };
 
 const root = document.getElementById('root');
@@ -180,6 +181,9 @@ async function boot() {
 
   renderShell();
   await loadRoute();
+  // A small slice of history so the rail can show recent wins. Failure here
+  // must never block the app — the rail simply shows nothing.
+  loadHistory(true).then(renderRail).catch(() => {});
   initServiceWorker();
 }
 
@@ -256,11 +260,17 @@ function renderShell() {
           <button class="m-btn" id="cmdk-m" style="margin-left:auto"
             aria-label="Search and commands">${icon('search')}</button>
         </div>
-        <header class="page-head" id="page-head"></header>
-        <div class="main-scroll" id="main-scroll" tabindex="-1"></div>
+        <!-- Legacy's nested grid: content and rail sit inside the main column,
+             separated by a real gutter and capped so a wide screen does not
+             stretch the page edge to edge. -->
+        <div class="main-wrap">
+          <div class="main-col">
+            <header class="page-head" id="page-head"></header>
+            <div class="main-scroll" id="main-scroll" tabindex="-1"></div>
+          </div>
+          <aside class="rail" id="rail" aria-label="Context"></aside>
+        </div>
       </main>
-
-      <aside class="rail" id="rail" aria-label="Context"></aside>
     </div>
 
     <div class="composer" id="composer">
@@ -409,8 +419,7 @@ async function loadRoute() {
   if (state.route === 'settings') {
     head.innerHTML = `<p class="eyebrow">Life OS</p><h1>Settings</h1>
       <p class="sub">Your account, your workspace, and how the app behaves.</p>`;
-    scroll.innerHTML = settingsHtml();
-    wireSettings();
+    renderSettings();
     return;
   }
 
@@ -449,9 +458,9 @@ function bucketHtml(b) {
   const list = inBucket(b.id);
   return `<section class="bucket ${b.id === 'future' ? 'future' : ''}" aria-label="${b.label}">
     <div class="bucket-head"><h2>${b.label}</h2><span class="bucket-count">${list.length}</span></div>
-    <div class="drop stagger" data-bucket="${b.id}">
-      ${list.length ? list.map(taskHtml).join('') : `<div class="empty"><b>Nothing here yet</b>${
-        b.id === 'today' ? 'Add what matters most today.' : 'Move a task here when you are ready.'}</div>`}
+    <div class="drop stagger${list.length ? '' : ' is-empty'}" data-bucket="${b.id}">
+      ${list.length ? list.map(taskHtml).join('')
+        : `<div class="empty">${b.id === 'today' ? 'Nothing planned for today' : 'Empty'}</div>`}
     </div></section>`;
 }
 
@@ -654,21 +663,34 @@ function renderRail() {
   const rail = document.getElementById('rail');
   if (!rail || !state.me) return;
   const now = new Date();
-  const activeTotal = state.tasks.filter((t) => t.status !== 'done').length;
-  const urgent = state.tasks.filter((t) => t.priority === 'urgent' && t.status !== 'done').length;
+  const active = state.tasks.filter((t) => t.status !== 'done');
+  const activeTotal = active.length;
+  const todayCount = active.filter((t) => t.bucket === 'today').length;
+  const urgent = active.filter((t) => t.priority === 'urgent').length;
+  // The single most pressing thing, by priority then position — a useful
+  // pointer, not a status report about the migration.
+  const rank = { urgent: 0, high: 1, medium: 2, low: 3, someday: 4 };
+  const focus = [...active].filter((t) => t.bucket === 'today')
+    .sort((a, b) => (rank[a.priority] - rank[b.priority]) || (a.position - b.position))[0];
+  const done = state.history.slice(0, 3);
 
   rail.innerHTML = `
-    <div class="rail-card">
+    <div class="rail-card rail-today">
       <div class="rail-date">${now.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}</div>
       <div class="rail-day">${now.toLocaleDateString(undefined, { weekday: 'long' })}</div>
+      ${focus ? `<div class="rail-focus">
+        <span class="rail-focus-label">Next up</span>
+        <span class="rail-focus-title">${esc(focus.title)}</span>
+      </div>` : ''}
     </div>
 
     <div class="rail-card">
-      <h3>Active work</h3>
-      <div class="rail-stat"><span class="n">${activeTotal}</span><span class="l">open tasks</span></div>
-      <div class="rail-stat"><span class="n">${state.tasks.filter((t) => t.bucket === 'today' && t.status !== 'done').length}</span><span class="l">in Today</span></div>
-      ${urgent ? `<div class="rail-stat"><span class="n" style="color:var(--danger)">${urgent}</span>
-        <span class="l">marked urgent</span></div>` : ''}
+      <h3>Your day</h3>
+      <div class="rail-stats">
+        <div class="rail-stat"><span class="n">${todayCount}</span><span class="l">in Today</span></div>
+        <div class="rail-stat"><span class="n">${activeTotal}</span><span class="l">open in all</span></div>
+        ${urgent ? `<div class="rail-stat"><span class="n urgent">${urgent}</span><span class="l">urgent</span></div>` : ''}
+      </div>
     </div>
 
     <div class="rail-card">
@@ -685,21 +707,21 @@ function renderRail() {
     </div>
 
     <div class="rail-card">
-      <h3>Habits <span class="pend">not connected</span></h3>
-      <p class="rail-empty"><b>Being rebuilt for v2</b>
-        Your habit history is safe in the legacy export and has not been imported.</p>
-    </div>
-
-    <div class="rail-card">
-      <h3>Up next <span class="pend">not connected</span></h3>
-      <p class="rail-empty"><b>Calendar arrives later</b>
-        Nothing is shown here rather than something invented.</p>
+      <h3>Recently finished</h3>
+      ${done.length ? `<div class="rail-done">${done.map((t) => `
+        <div class="rail-done-row"><span class="tick-mini">${icon('check', 11)}</span>
+          <span>${esc(t.title)}</span></div>`).join('')}
+        <button class="rail-link" data-rail-nav="history">See all completed →</button>`
+      : '<p class="rail-quiet">Nothing finished yet today.</p>'}
     </div>
 
     <button class="btn btn-primary" id="rail-add" style="width:100%">Quick add task</button>`;
 
   rail.querySelectorAll('[data-rail-area]').forEach((el) => {
     el.onclick = () => setAreaFilter(el.dataset.railArea || null);
+  });
+  rail.querySelectorAll('[data-rail-nav]').forEach((el) => {
+    el.onclick = () => go(el.dataset.railNav);
   });
   rail.querySelector('#rail-add').onclick = async () => {
     if (state.route !== 'today') await go('today');
@@ -710,106 +732,62 @@ function renderRail() {
 /* ── Placeholders ────────────────────────────────────────────────────── */
 const placeholderHtml = (route, ph) => `<div class="placeholder rise">
   <div class="ph-ico">${icon(route.icon, 26)}</div>
-  <h2>${esc(route.label)} is being rebuilt for Life OS v2</h2>
+  <h2>${esc(route.label)} is coming</h2>
   <p>${esc(ph.body)}</p>
   <p class="ph-note">${esc(ph.note)}</p>
 </div>`;
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function settingsHtml() {
-  const p = state.prefs;
-  const seg = (key, options) => `<div class="seg" role="group" aria-label="${key}">
-    ${options.map(([v, label]) => `<button data-pref="${key}" data-value="${v}"
-      aria-pressed="${(p[key] ?? options[0][0]) === v}">${label}</button>`).join('')}</div>`;
-  const install = installState();
-
-  return `<div class="settings">
-    <section class="set-card">
-      <h2>Appearance and behaviour</h2>
-      <p class="set-hint">These follow your account to any device you sign in on.</p>
-      <div class="set-row">
-        <div class="set-label"><div class="t">Theme</div>
-          <div class="d">Life OS is designed dark. A light theme is not part of v2.</div></div>
-        <span class="scope server">Account</span>
-        ${seg('appearance', [['system', 'System'], ['dark', 'Always dark']])}
-      </div>
-      <div class="set-row">
-        <div class="set-label"><div class="t">Motion</div>
-          <div class="d">Following the system also respects your OS reduce-motion setting.</div></div>
-        <span class="scope server">Account</span>
-        ${seg('reducedMotion', [['system', 'Follow system'], ['always', 'Reduce']])}
-      </div>
-      <div class="set-row">
-        <div class="set-label"><div class="t">Sounds</div>
-          <div class="d">Off until v2 has anything worth making a sound about.</div></div>
-        <span class="scope server">Account</span>
-        ${seg('sounds', [['off', 'Off'], ['on', 'On']])}
-      </div>
-    </section>
-
-    <section class="set-card">
-      <h2>Account</h2>
-      <p class="set-hint">One person, one workspace. Life is not split into profiles.</p>
-      <div class="set-row"><div class="set-label"><div class="t">Signed in as</div>
-        <div class="d">${esc(state.me.user.email)}</div></div></div>
-      <div class="set-row"><div class="set-label"><div class="t">Workspace</div>
-        <div class="d">${esc(state.me.workspace.name)} · ${esc(state.me.workspace.role)} · primary</div></div></div>
-      <div class="set-row"><div class="set-label"><div class="t">Sign out</div>
-        <div class="d">Clears this device's session and stored token.</div></div>
-        <button class="btn btn-danger" id="sign-out">Sign out</button></div>
-    </section>
-
-    <section class="set-card">
-      <h2>Areas</h2>
-      <p class="set-hint">Areas divide your life inside one workspace. Removing an Area never
-        deletes the work inside it.</p>
-      ${state.me.areas.map((a) => `<div class="area-row">
-        <span class="area-dot"></span>
-        <span class="area-name">${esc(a.name)}</span>
-        <span class="area-meta">${a.isSystem ? 'built in' : 'imported'} ·
-          ${state.tasks.filter((t) => t.areaId === a.id).length} active</span>
-      </div>`).join('')}
-      <div style="margin-top:16px;display:flex;gap:9px">
-        <input class="input" id="new-area" placeholder="New area name" style="flex:1">
-        <button class="btn" id="add-area">Add</button>
-      </div>
-    </section>
-
-    <section class="set-card">
-      <h2>App</h2>
-      <p class="set-hint">Installation and updates belong to this device only.</p>
-      <div class="set-row"><div class="set-label"><div class="t">Version</div>
-        <div class="d" id="build-id">${esc(window.LIFE_OS_BUILD || 'unknown')}</div></div>
-        <span class="scope device">Device</span></div>
-      <div class="set-row"><div class="set-label"><div class="t">Installation</div>
-        <div class="d" id="install-status">${esc(install.label)}</div></div>
-        <span class="scope device">Device</span>
-        ${install.canInstall ? '<button class="btn" id="do-install">Install</button>' : ''}
-      </div>
-      <div class="set-row"><div class="set-label"><div class="t">Updates</div>
-        <div class="d" id="update-status">Up to date.</div></div>
-        <button class="btn" id="check-update">Check now</button></div>
-      <div class="set-row"><div class="set-label"><div class="t">Removing the app</div>
-        <div class="d">Browsers do not let a site uninstall itself. Remove it the way you would
-          any installed app — from your home screen, dock, or the browser's app list.</div></div></div>
-    </section>
-  </div>`;
-}
-
 function wireSettings() {
+  document.querySelectorAll('[data-stab]').forEach((el) => {
+    el.onclick = () => { state.settingsTab = el.dataset.stab; renderSettings(); };
+  });
+
   document.querySelectorAll('[data-pref]').forEach((el) => {
     el.onclick = () => run(async () => {
       const { pref, value } = el.dataset;
       const r = await api('/api/v1/preferences', { method: 'PUT', body: { [pref]: value } });
       state.prefs = r.preferences;
       applyPreferences();
-      document.getElementById('main-scroll').innerHTML = settingsHtml();
-      wireSettings();
+      renderSettings();
       toast('Saved');
     });
   });
 
-  document.getElementById('sign-out').onclick = () => window.__signOut?.();
+  document.getElementById('sign-out')?.addEventListener('click', () => window.__signOut?.());
+
+  // Areas — rename on blur, remove with confirmation, add inline.
+  document.querySelectorAll('[data-area-name]').forEach((el) => {
+    const id = el.dataset.areaName;
+    const original = el.value;
+    const save = () => run(async () => {
+      const name = el.value.trim();
+      if (!name || name === original) { el.value = original; return; }
+      await api(`/api/v1/workspaces/${ws()}/areas/${id}`, { method: 'PATCH', body: { name } });
+      state.me = await api('/api/v1/me');
+      renderSettings(); renderRail();
+      toast('Area renamed');
+    });
+    el.onblur = save;
+    el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); if (e.key === 'Escape') el.value = original; };
+  });
+
+  document.querySelectorAll('[data-area-del]').forEach((el) => {
+    el.onclick = () => run(async () => {
+      const id = el.dataset.areaDel;
+      const area = state.me.areas.find((a) => a.id === id);
+      const n = state.tasks.filter((t) => t.areaId === id).length;
+      const msg = n
+        ? `Remove "${area.name}"? Its ${n} task${n === 1 ? '' : 's'} will stay — they just lose this label.`
+        : `Remove "${area.name}"?`;
+      if (!confirm(msg)) return;
+      await api(`/api/v1/workspaces/${ws()}/areas/${id}`, { method: 'DELETE' });
+      state.me = await api('/api/v1/me');
+      await loadTasks();
+      renderSettings(); renderRail();
+      toast('Area removed. Its tasks were kept.');
+    });
+  });
 
   const addArea = () => run(async () => {
     const input = document.getElementById('new-area');
@@ -817,20 +795,28 @@ function wireSettings() {
     if (!name) return;
     await api(`/api/v1/workspaces/${ws()}/areas`, { method: 'POST', body: { name } });
     state.me = await api('/api/v1/me');
-    document.getElementById('main-scroll').innerHTML = settingsHtml();
-    wireSettings(); renderRail();
+    renderSettings(); renderRail();
     toast('Area added');
   });
-  document.getElementById('add-area').onclick = addArea;
-  document.getElementById('new-area').onkeydown = (e) => { if (e.key === 'Enter') addArea(); };
+  document.getElementById('add-area')?.addEventListener('click', addArea);
+  document.getElementById('new-area')?.addEventListener('keydown',
+    (e) => { if (e.key === 'Enter') addArea(); });
 
-  document.getElementById('do-install')?.addEventListener('click', () => window.__promptInstall?.());
-  document.getElementById('check-update').onclick = () => run(async () => {
+  document.getElementById('do-install')?.addEventListener('click', () => run(async () => {
+    const ok = await window.__promptInstall?.();
+    if (ok) { renderSettings(); toast('Life OS installed'); }
+  }));
+  document.getElementById('check-update')?.addEventListener('click', () => run(async () => {
     const el = document.getElementById('update-status');
     el.textContent = 'Checking…';
     const found = await window.__checkForUpdate?.();
     el.textContent = found ? 'An update is ready — see the prompt.' : 'You are on the latest version.';
-  });
+  }));
+}
+
+function renderSettings() {
+  document.getElementById('main-scroll').innerHTML = settingsHtml(state);
+  wireSettings();
 }
 
 /* ── Task detail ─────────────────────────────────────────────────────── */

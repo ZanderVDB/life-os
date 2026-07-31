@@ -24,6 +24,7 @@ const app = read('app.js');
 const sw = read('sw.js');
 const pwa = read('pwa.js');
 const routes = read('routes.js');
+const settings = read('settings.js');
 const server = read('server.js');
 const manifest = JSON.parse(read('manifest.webmanifest'));
 
@@ -36,22 +37,34 @@ const manifest = JSON.parse(read('manifest.webmanifest'));
  */
 const code = (src: string) => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
-  .split('\n')
-  .map((l) => l.replace(/(^|[^:])\/\/.*$/, '$1'))
-  .join('\n');
+  // Not anchored with `$`: these files have CRLF endings, and the trailing \r
+  // defeated the anchor so line comments survived the strip — which made the
+  // service-worker test read its own "Deliberately NOT skipWaiting()" comment
+  // as the call it promises not to make.
+  .replace(/(^|[^:])\/\/[^\r\n]*/g, '$1');
 
 /* ── Shell structure ─────────────────────────────────────────────────── */
 
 test('shell: the three-column layout and every region exist', () => {
   assert.match(html, /\.shell\{display:grid/, 'no shell grid');
-  assert.match(html, /grid-template-columns:var\(--sidebar-w\) minmax\(0,1fr\) var\(--rail-w\)/,
-    'sidebar / main / rail columns not declared');
+  // Legacy's structure: TWO top-level columns, with content + rail nested
+  // inside so they can share a gutter and a max-width.
+  assert.match(html, /\.shell\{display:grid;grid-template-columns:var\(--sidebar-w\) minmax\(0,1fr\)/,
+    'the app is not two columns');
+  assert.match(html, /\.main-wrap\{display:grid;grid-template-columns:minmax\(0,1fr\) var\(--rail-w\)/,
+    'content and rail are not a nested grid');
   for (const sel of ['.sidebar', '.rail', '.composer', '.main-scroll', '.mobile-bar']) {
     assert.ok(html.includes(sel), `${sel} missing from the stylesheet`);
   }
-  // Widths are tokens so Compact / Icon-only / Drawer modes can plug in later.
-  assert.match(html, /--sidebar-w:\s*\d+px/);
-  assert.match(html, /--rail-w:\s*\d+px/);
+  // These exact numbers are ported from Legacy v244. They ARE the approved
+  // design and cannot be re-derived from principles — which is precisely how
+  // the first attempt regressed.
+  assert.match(html, /--sidebar-w:232px/, 'sidebar width drifted from Legacy');
+  assert.match(html, /--rail-w:380px/, 'rail width drifted from Legacy');
+  assert.match(html, /--gutter:56px/, 'the content/rail gutter drifted from Legacy');
+  assert.match(html, /--content-max:2200px/, 'the content max-width drifted from Legacy');
+  assert.match(html, /--composer-max:1544px/, 'the composer max-width drifted from Legacy');
+  assert.match(html, /padding:32px 32px 140px 44px/, 'main-wrap padding drifted from Legacy');
 });
 
 test('shell: renders once — a route change must not redraw the sidebar or rail', () => {
@@ -87,15 +100,20 @@ test('nav: every section keeps a destination, unfinished ones are marked', () =>
   }
 });
 
-test('placeholders: say what is happening and never fake data', () => {
-  const { PLACEHOLDERS } = { PLACEHOLDERS: routes };
+test('placeholders: product voice, reassuring, never fake data', () => {
   for (const id of ['calendar', 'projects', 'diary', 'library', 'brain']) {
-    const block = PLACEHOLDERS.slice(PLACEHOLDERS.indexOf(`${id}: {`));
+    const block = routes.slice(routes.indexOf(`${id}: {`));
     const copy = block.slice(0, block.indexOf('},'));
-    assert.match(copy, /rebuilt|not been imported|preserved/i, `${id} copy does not explain itself`);
+    // Says what the section will BE, and that nothing was lost — without
+    // narrating the migration at someone just trying to use their app.
+    assert.match(copy, /will live here|will roll up|A place to|somewhere to keep|in one place/i,
+      `${id} does not describe what it will be`);
+    assert.match(copy, /Nothing you have saved has been lost/, `${id} does not reassure`);
+    assert.ok(!/export|import|migrat|legacy/i.test(copy),
+      `${id} narrates the migration in product UI`);
   }
-  // The heading is generated, not hard-coded per section.
-  assert.match(app, /is being rebuilt for Life OS v2/);
+  // One generated heading, not hard-coded per section.
+  assert.match(app, /is coming</);
 });
 
 test('there is no Personal/Business profile switcher anywhere', () => {
@@ -119,6 +137,71 @@ test('the web client contains no Firestore code at all', () => {
   const imports = app.match(/firebasejs\/[\d.]+\/firebase-[a-z]+\.js/g) ?? [];
   assert.deepEqual([...new Set(imports)].sort(),
     ['firebasejs/10.7.1/firebase-app.js', 'firebasejs/10.7.1/firebase-auth.js']);
+});
+
+test('composer: Legacy geometry — full width, capped, opaque, bordered', () => {
+  const rule = html.slice(html.indexOf('.composer-inner{'), html.indexOf('/* \u2500\u2500 Buttons'));
+  assert.match(rule, /max-width:var\(--composer-max\)/, 'the composer is not capped at Legacy width');
+  assert.match(rule, /background:#17161F/, 'composer background drifted');
+  assert.match(rule, /border:1px solid #353046/, 'composer has no border');
+  assert.match(rule, /backdrop-filter:blur\(10px\)/, 'composer has no blur');
+  // .62 opacity made it read as broken rather than as pending.
+  assert.ok(!/opacity:\.\d/.test(rule), 'the composer is translucent');
+  assert.match(html, /\.composer\{position:fixed;left:var\(--sidebar-w\);right:0/,
+    'the composer stops at the rail instead of spanning to the edge');
+});
+
+test('nav indicator uses Legacy geometry, not the button gradient', () => {
+  const rule = html.slice(html.indexOf('.nav-pill{'), html.indexOf('.nav-pill.snap'));
+  assert.match(rule, /height:44px/, 'the indicator is not 44px');
+  assert.match(rule, /linear-gradient\(180deg,#7C4DFF 0%,#9A67FF 100%\)/,
+    'the indicator uses the wrong gradient');
+  assert.ok(!/var\(--brand\)/.test(rule), 'the indicator reuses the button gradient');
+});
+
+test('settings: Legacy tabbed structure with every required group', () => {
+  for (const id of ['account', 'appearance', 'areas', 'app', 'integrations', 'data']) {
+    assert.ok(settings.includes("id: '" + id + "'"), 'the ' + id + ' settings tab is missing');
+  }
+  assert.match(html, /\.setting-row\{display:flex;align-items:center;justify-content:space-between/,
+    'setting rows are not the Legacy shape');
+  assert.match(html, /\.settings-tabs\{display:flex/, 'settings are not tabbed');
+  // Area management must be complete, not read-only.
+  assert.match(settings, /data-area-name=/, 'Areas cannot be renamed');
+  assert.match(settings, /data-area-del=/, 'Areas cannot be removed');
+  assert.match(settings, /lose this label|never deletes/i, 'removal does not explain reassignment');
+  assert.ok(!/profile/i.test(settings), 'settings mention profiles');
+});
+
+test('no staging or migration language in the everyday UI', () => {
+  const banned = /not connected|legacy export|being rebuilt for|verified export|has not been imported/i;
+  for (const [name, src] of Object.entries({ app, routes, settings })) {
+    assert.ok(!banned.test(src), name + ' shows migration commentary in normal UI');
+  }
+});
+
+test('icons: every required file exists at the right dimensions', () => {
+  const dims = (file: string) => {
+    const b = readFileSync(join(WEB, 'icons', file));
+    assert.equal(b.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', file + ' is not a PNG');
+    return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
+  };
+  const expected: Record<string, number> = {
+    'icon-192.v2.png': 192, 'icon-256.v2.png': 256, 'icon-512.v2.png': 512,
+    'maskable-192.v2.png': 192, 'maskable-512.v2.png': 512,
+    'apple-touch-icon.v2.png': 180, 'favicon-32.v2.png': 32,
+  };
+  for (const [file, size] of Object.entries(expected)) {
+    const d = dims(file);
+    assert.equal(d.w, size, file + ' is ' + d.w + 'px wide, expected ' + size);
+    assert.equal(d.h, size, file + ' is ' + d.h + 'px tall, expected ' + size);
+  }
+  // The maskable variant is a SEPARATE drawing, not the same art rescaled —
+  // Android crops to a circle and a rounded-square tile would be clipped.
+  const std = readFileSync(join(WEB, 'icons', 'app-icon.svg'), 'utf8');
+  const msk = readFileSync(join(WEB, 'icons', 'app-icon-maskable.svg'), 'utf8');
+  assert.notEqual(std, msk, 'the maskable icon is a copy of the standard one');
+  assert.ok(!/Playfair|<text/.test(std), 'the app icon contains a wordmark');
 });
 
 test('the AI composer is inert — no handler, no network call', () => {
@@ -146,14 +229,30 @@ test('manifest: meets the installability requirements', () => {
   const pngs = manifest.icons.filter((i: any) => i.type === 'image/png');
   assert.ok(pngs.some((i: any) => i.sizes === '192x192'), 'no 192px PNG icon');
   assert.ok(pngs.some((i: any) => i.sizes === '512x512'), 'no 512px PNG icon');
-  assert.ok(manifest.icons.some((i: any) => String(i.purpose).includes('maskable')),
-    'no maskable icon');
+  const maskable = manifest.icons.filter((i: any) => String(i.purpose).includes('maskable'));
+  assert.ok(maskable.some((i: any) => i.sizes === '192x192'), 'no 192px maskable icon');
+  assert.ok(maskable.some((i: any) => i.sizes === '512x512'), 'no 512px maskable icon');
+
+  // A stable id keeps future deploys updating the SAME installed app rather
+  // than creating a duplicate installation.
+  assert.ok(manifest.id, 'no manifest id');
+  assert.ok(!String(manifest.id).includes('web-anchor'), 'the v2 manifest borrows the Legacy identity');
+
+  // Versioned filenames, so a cached old icon can never be served.
+  for (const i of pngs) {
+    assert.match(i.src, /\.v2\.png$/, i.src + ' is not a versioned v2 filename');
+  }
+  assert.ok(!JSON.stringify(manifest).includes('/icon.svg'),
+    'the old icon filename is still referenced');
 
   // Every declared icon file must actually exist.
   for (const i of manifest.icons) {
     assert.ok(existsSync(join(WEB, i.src.replace('./', ''))), `${i.src} does not exist`);
   }
   assert.match(html, /<link rel="manifest"/);
+  assert.match(html, /rel="apple-touch-icon" href="\.\/icons\/apple-touch-icon\.v2\.png"/,
+    'no Apple touch icon');
+  assert.ok(!/icons\/icon\.svg|icon-192\.png"/.test(html), 'the head references old icon files');
 });
 
 test('service worker: cache name is versioned and namespaced to v2', () => {
@@ -224,8 +323,9 @@ test('mobile: the sidebar becomes a drawer and the rail stays reachable', () => 
   assert.match(mobile, /\.mobile-bar\{display:flex/, 'no mobile navigation bar');
   // The rail moves below the content — it must never simply disappear.
   assert.ok(!/\.rail\{display:none/.test(html), 'the rail is hidden with no alternative');
-  const tablet = html.slice(html.indexOf('@media (max-width:1080px)'));
+  const tablet = html.slice(html.indexOf('@media (max-width:1180px)'));
   assert.match(tablet, /\.rail\{position:static/, 'the rail does not reflow below content');
+  assert.match(tablet, /grid-template-columns:repeat\(auto-fit/, 'the rail does not become a card row');
 });
 
 test('touch: essential controls are never hover-only and meet 44px', () => {

@@ -18,6 +18,7 @@ const SCOPE = './';
 let waitingWorker = null;
 let installPrompt = null;
 let reloading = false;
+let installedKnown = false;
 
 /** True when the page is already running as an installed app. */
 const isStandalone = () =>
@@ -25,13 +26,23 @@ const isStandalone = () =>
   || window.matchMedia('(display-mode: window-controls-overlay)').matches
   || window.navigator.standalone === true;
 
+/**
+ * What we can honestly say about installation.
+ *
+ * `installed` is true only when we can actually observe it — running in
+ * standalone mode, the appinstalled event, or getInstalledRelatedApps. A
+ * browser that simply never fires beforeinstallprompt (Safari, Firefox) is
+ * reported as "not installed", never as "cannot be installed", because Add to
+ * Home Screen still works there and Settings explains how.
+ */
 export function installState() {
-  if (isStandalone()) return { label: 'Installed and running as an app.', canInstall: false };
-  if (installPrompt) return { label: 'Not installed. This browser can install it now.', canInstall: true };
-  return {
-    label: 'Not installed. Use your browser\'s "Install app" or "Add to Home Screen" option.',
-    canInstall: false,
-  };
+  if (isStandalone() || installedKnown) {
+    return { label: 'Installed on this device.', canInstall: false, installed: true };
+  }
+  if (installPrompt) {
+    return { label: 'Ready to install.', canInstall: true, installed: false };
+  }
+  return { label: 'Not installed on this device.', canInstall: false, installed: false };
 }
 
 export async function initServiceWorker() {
@@ -45,7 +56,19 @@ export async function initServiceWorker() {
     const el = document.getElementById('install-status');
     if (el) el.textContent = installState().label;
   });
+  // Some Chromium builds can confirm an existing installation directly.
+  if (navigator.getInstalledRelatedApps) {
+    navigator.getInstalledRelatedApps().then((apps) => {
+      if (apps.length) {
+        installedKnown = true;
+        const el = document.getElementById('install-status');
+        if (el) el.textContent = installState().label;
+      }
+    }).catch(() => {});
+  }
+
   window.addEventListener('appinstalled', () => {
+    installedKnown = true;
     installPrompt = null;
     const el = document.getElementById('install-status');
     if (el) el.textContent = 'Installed and running as an app.';

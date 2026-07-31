@@ -32,8 +32,9 @@ const SHELL = [
   './routes.js',
   './pwa.js',
   './config.js',
+  './settings.js',
   './manifest.webmanifest',
-  './icons/icon.svg',
+  './icons/app-icon.svg',
   './offline.html',
 ];
 

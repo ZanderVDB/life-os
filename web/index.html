@@ -10,8 +10,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Life OS">
 <link rel="manifest" href="./manifest.webmanifest">
-<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml">
+<link rel="icon" href="./icons/favicon-32.v2.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.v2.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
@@ -27,7 +28,7 @@
   --app-bg:linear-gradient(180deg,#1A1624 0%,#141220 52%,#111018 100%);
   --sidebar:#17151F; --rail:#1A1824;
   --surface:#211E2C; --surface-2:#2A2536; --surface-3:#322C40;
-  --hairline:#332E43;
+  --border:#332E43; --border-strong:#3d3652; --hairline:#332E43;
   /* Text */
   --text:#F4F2FA; --text-2:#B5ABC9; --muted:#766D8B; --label:#CEC7E8;
   /* The one accent */
@@ -47,7 +48,10 @@
   --t-select:var(--d-base) var(--e-out);
   --t-page:var(--d-slow) var(--e-out);
   /* Layout tokens — Expanded / Compact / Drawer plug in here (§11) */
-  --sidebar-w:236px; --rail-w:300px; --composer-h:64px;
+  /* Ported verbatim from Legacy v244. These numbers ARE the approved design;
+     they are not derivable from the design system's principles. */
+  --sidebar-w:232px; --rail-w:380px; --gutter:56px; --content-max:2200px;
+  --composer-max:1544px; --composer-h:64px;
   --radius:14px; --radius-lg:18px;
 }
 *{box-sizing:border-box}
@@ -80,8 +84,15 @@ a{color:inherit}
 /* ══ SHELL ══════════════════════════════════════════════════════════════
    Three columns, persistent. Only .main-scroll crossfades between routes —
    the sidebar and rail never redraw (§11: "transitions are continuous"). */
-.shell{display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr) var(--rail-w);
+/* Legacy structure: the app is TWO columns. Content and rail form a nested
+   grid with a 56px gutter and a 2200px ceiling — flattening this into one
+   three-column grid is what produced the dead centre and the detached rail. */
+.shell{display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr);
   min-height:100vh;min-height:100dvh}
+.main-wrap{display:grid;grid-template-columns:minmax(0,1fr) var(--rail-w);
+  gap:var(--gutter);padding:32px 32px 140px 44px;max-width:var(--content-max);
+  margin:0 auto;width:100%}
+.main-col{min-width:0;display:flex;flex-direction:column;gap:28px}
 
 /* ── Left sidebar ───────────────────────────────────────────────────── */
 .sidebar{background:var(--sidebar);display:flex;flex-direction:column;
@@ -100,17 +111,20 @@ a{color:inherit}
 .cmdk kbd{margin-left:auto;font-family:inherit;font-size:10.5px;letter-spacing:.04em;
   background:rgba(255,255,255,.07);border-radius:5px;padding:2px 6px;color:var(--muted)}
 
-.nav{position:relative;display:flex;flex-direction:column;gap:3px;flex:1;min-height:0}
+.nav{position:relative;display:flex;flex-direction:column;gap:5px;flex:1;min-height:0}
 /* THE sliding indicator: one element, translateY only, GPU-composited.
    It never disappears — it snaps on first reveal and glides thereafter. */
-.nav-pill{position:absolute;left:0;right:0;height:var(--pill-h,42px);border-radius:11px;
-  background:var(--brand);box-shadow:0 6px 18px -7px rgba(124,77,255,.6),
-  inset 0 1px 0 rgba(255,255,255,.13);
+/* Legacy's indicator has its OWN gradient (#7C4DFF→#9A67FF), not the button
+   gradient, and a fixed 44px height rather than the item's own. */
+.nav-pill{position:absolute;left:0;right:0;height:44px;border-radius:10px;
+  background:linear-gradient(180deg,#7C4DFF 0%,#9A67FF 100%);
+  box-shadow:0 6px 18px -6px rgba(124,77,255,.5),
+  inset 0 1px 0 rgba(255,255,255,.12);
   transform:translate3d(0,var(--pill-y,0px),0);will-change:transform;
   transition:transform var(--t-select);pointer-events:none;z-index:0}
 .nav-pill.snap{transition:none}
-.nav a{display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:13px;
-  padding:11px 12px;border-radius:11px;font-size:13.5px;font-weight:450;color:#9189A7;
+.nav a{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:13px;
+  min-height:44px;padding:0 12px;border-radius:10px;font-size:13.5px;font-weight:450;color:#9189A7;
   text-decoration:none;position:relative;z-index:1;
   transition:color var(--t-hover),transform var(--t-hover)}
 .nav a .ico{display:grid;place-items:center;transition:transform var(--t-hover),opacity var(--t-hover)}
@@ -133,48 +147,67 @@ a{color:inherit}
 
 /* ── Main column ────────────────────────────────────────────────────── */
 .main{display:flex;flex-direction:column;min-width:0;min-height:100vh;min-height:100dvh}
-.page-head{padding:30px 34px 0;flex-shrink:0}
+/* Legacy's header is a baseline-aligned ROW with actions pushed right. */
+.page-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
 .eyebrow{font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
-  color:var(--muted);margin:0 0 8px}
-h1{font-size:32px;font-weight:800;letter-spacing:-.9px;line-height:1.08;margin:0 0 6px;color:#F6F3FF}
+  color:var(--muted);margin:0 0 8px;flex-basis:100%}
+h1{font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.06;margin:0;color:#F6F3FF}
 h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-.sub{font-size:14px;color:var(--text-2);margin:0}
-.main-scroll{flex:1;min-height:0;overflow-y:auto;padding:22px 34px 140px;
-  animation:fade var(--t-page) backwards}
+.sub{font-size:13px;color:var(--muted);margin:0}
+.main-scroll{min-width:0;animation:fade var(--t-page) backwards}
 .toolbar{display:flex;gap:9px;align-items:center;margin:0 0 20px;flex-wrap:wrap}
 
 /* ── Right rail ─────────────────────────────────────────────────────── */
-.rail{background:var(--rail);padding:26px 18px 130px;position:sticky;top:0;height:100vh;
-  height:100dvh;overflow-y:auto;display:flex;flex-direction:column;gap:14px;z-index:30}
-.rail-card{background:var(--surface);border-radius:var(--radius);padding:15px 16px;box-shadow:var(--e1)}
+/* Legacy's rail is a sticky COLUMN inside the content grid — not a full-height
+   panel welded to the viewport edge. It shares the page canvas. */
+.rail{display:flex;flex-direction:column;gap:14px;position:sticky;top:22px;
+  align-self:start;max-height:calc(100vh - 60px);overflow-y:auto;padding-right:2px;z-index:30}
+.rail-card{background:var(--surface);border-radius:var(--radius);padding:16px 17px;box-shadow:var(--e2)}
 .rail-card h3{font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
-  color:var(--label);margin:0 0 12px;display:flex;align-items:center;gap:8px}
-.rail-card h3 .pend{font-size:8.5px;letter-spacing:.08em;background:rgba(255,255,255,.06);
-  color:var(--muted);border-radius:5px;padding:2px 6px;margin-left:auto;text-transform:uppercase}
-.rail-date{font-size:26px;font-weight:800;letter-spacing:-.7px;line-height:1;margin-bottom:4px}
+  color:var(--label);margin:0 0 13px}
+.rail-today{background:linear-gradient(180deg,#2A2440 0%,#231E36 100%)}
+.rail-date{font-size:27px;font-weight:800;letter-spacing:-.7px;line-height:1;margin-bottom:5px}
 .rail-day{font-size:12.5px;color:var(--text-2)}
-.rail-stat{display:flex;align-items:baseline;gap:9px;margin-bottom:9px}
-.rail-stat:last-child{margin-bottom:0}
-.rail-stat .n{font-size:21px;font-weight:700;letter-spacing:-.4px;min-width:30px}
-.rail-stat .l{font-size:12px;color:var(--text-2)}
-.rail-areas{display:flex;flex-direction:column;gap:2px}
-.rail-area{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:9px;
+.rail-focus{margin-top:15px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07)}
+.rail-focus-label{display:block;font-size:9.5px;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.rail-focus-title{display:block;font-size:13.5px;line-height:1.5;color:var(--text);
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.rail-stats{display:flex;gap:20px}
+.rail-stat{display:flex;flex-direction:column;gap:2px}
+.rail-stat .n{font-size:23px;font-weight:700;letter-spacing:-.5px;line-height:1;
+  font-variant-numeric:tabular-nums}
+.rail-stat .n.urgent{color:var(--danger)}
+.rail-stat .l{font-size:11px;color:var(--muted)}
+.rail-areas{display:flex;flex-direction:column;gap:1px}
+.rail-area{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:9px;
   font-size:12.5px;color:var(--text-2);width:100%;text-align:left;
   transition:background var(--t-hover),color var(--t-hover)}
 .rail-area:hover{background:rgba(255,255,255,.045);color:var(--text)}
 .rail-area[aria-pressed="true"]{background:var(--accent-soft);color:#fff}
 .rail-area .n{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
-.rail-empty{font-size:12px;color:var(--muted);line-height:1.6}
-.rail-empty b{display:block;color:var(--text-2);font-weight:500;margin-bottom:3px}
+.rail-done{display:flex;flex-direction:column;gap:9px}
+.rail-done-row{display:grid;grid-template-columns:14px 1fr;gap:9px;align-items:center;
+  font-size:12.5px;color:var(--text-2)}
+.rail-done-row span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tick-mini{color:var(--ok);opacity:.8;display:grid;place-items:center}
+.rail-link{font-size:12px;color:var(--muted);padding:9px 0 0;text-align:left;
+  transition:color var(--t-hover)}
+.rail-link:hover{color:var(--accent)}
+.rail-quiet{font-size:12.5px;color:var(--muted);margin:0;line-height:1.6}
 
 /* ── Global composer (AI location, not yet connected) ───────────────── */
-.composer{position:fixed;left:var(--sidebar-w);right:var(--rail-w);bottom:0;z-index:50;
-  padding:16px 34px 22px;
-  background:linear-gradient(180deg,rgba(17,16,24,0) 0%,rgba(17,16,24,.86) 42%,#111018 100%);
-  pointer-events:none}
-.composer-inner{pointer-events:auto;max-width:780px;margin:0 auto;display:flex;align-items:center;
-  gap:12px;background:var(--surface-2);border-radius:15px;padding:12px 15px;box-shadow:var(--e2);
-  opacity:.62;cursor:not-allowed}
+/* Legacy: spans from the sidebar to the RIGHT EDGE (over the rail), capped at
+   1544px and centred. Full opacity with a real border — the previous .62 made
+   it read as broken rather than as pending. */
+.composer{position:fixed;left:var(--sidebar-w);right:0;bottom:0;z-index:50;
+  padding:12px 28px env(safe-area-inset-bottom,14px);
+  background:linear-gradient(to top,#111018 72%,transparent);pointer-events:none}
+.composer-inner{pointer-events:auto;max-width:var(--composer-max);margin:0 auto;
+  display:flex;align-items:center;gap:10px;background:#17161F;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid #353046;border-radius:var(--radius);padding:8px 8px 8px 12px;
+  box-shadow:var(--e3);min-height:46px;cursor:not-allowed}
 .composer-inner .ico{color:var(--muted);flex-shrink:0;display:grid;place-items:center}
 .composer-text{flex:1;font-size:13.5px;color:var(--muted);min-width:0;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
@@ -199,19 +232,21 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .chip[aria-pressed="true"]{background:var(--accent-soft);color:#fff}
 
 /* ── Buckets ────────────────────────────────────────────────────────── */
-.buckets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start}
-.bucket{background:var(--surface);border-radius:var(--radius-lg);padding:16px 14px 14px;box-shadow:var(--e2)}
+.buckets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;
+  margin-bottom:20px;align-items:start}
+.bucket{background:var(--surface);border-radius:16px;padding:15px 14px 13px;box-shadow:var(--e2)}
 .bucket.future{grid-column:1/-1}
 .bucket-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-left:2px}
 .bucket-head h2{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
   color:var(--label);margin:0}
 .bucket-count{font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-2);
-  border-radius:6px;padding:1px 7px;font-variant-numeric:tabular-nums}
-.drop{min-height:50px;display:flex;flex-direction:column;gap:8px;border-radius:12px;
+  border:1px solid var(--border);border-radius:6px;padding:1px 7px;font-variant-numeric:tabular-nums}
+.drop{min-height:46px;display:flex;flex-direction:column;gap:7px;border-radius:12px;
   transition:background var(--t-hover)}
+.drop.is-empty{border:1.5px dashed var(--border);align-items:center;justify-content:center}
 .drop.over{background:var(--accent-soft);outline:2px dashed rgba(138,93,255,.45);outline-offset:3px}
-.empty{color:var(--muted);font-size:12.5px;padding:18px 10px;text-align:center;line-height:1.6}
-.empty b{display:block;color:var(--text-2);font-weight:500;margin-bottom:4px}
+.empty{color:var(--muted);font-size:12px;font-style:italic;padding:13px 4px;
+  text-align:center;pointer-events:none;line-height:1.5}
 
 /* ── Task card ──────────────────────────────────────────────────────── */
 .task{background:#282431;border-radius:12px;padding:11px 12px 11px 16px;position:relative;
@@ -263,30 +298,59 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .placeholder .ph-note{font-size:12.5px;color:var(--muted);margin-top:20px;padding-top:18px;
   border-top:1px solid var(--hairline);line-height:1.65}
 
-/* ── Settings ───────────────────────────────────────────────────────── */
-.settings{max-width:660px;display:flex;flex-direction:column;gap:16px}
-.set-card{background:var(--surface);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--e1)}
-.set-card h2{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
-  color:var(--label);margin:0 0 4px}
-.set-card .set-hint{font-size:12.5px;color:var(--muted);margin:0 0 16px;line-height:1.6}
-.set-row{display:flex;align-items:center;gap:16px;padding:12px 0;border-top:1px solid var(--hairline)}
-.set-row:first-of-type{border-top:none;padding-top:4px}
-.set-label{flex:1;min-width:0}
-.set-label .t{font-size:13.5px;margin-bottom:2px}
-.set-label .d{font-size:11.5px;color:var(--muted);line-height:1.5}
+/* ── Settings — ported from Legacy's tabbed .setting-row structure ──── */
+.settings{max-width:760px}
+.settings-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 20px;padding-bottom:2px}
+.stab{border-radius:9px;padding:8px 14px;font-size:12.5px;color:var(--muted);
+  transition:background var(--t-hover),color var(--t-hover)}
+.stab:hover{background:rgba(255,255,255,.045);color:var(--text-2)}
+.stab[aria-selected="true"]{background:var(--accent-soft);color:#fff;font-weight:600}
+.settings-panel{display:flex;flex-direction:column;gap:10px}
+.setting-row{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:14px 16px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius)}
+.setting-label-wrap{min-width:0}
+.setting-label{font-size:13px;font-weight:500;color:var(--text)}
+.setting-desc{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.55}
+.setting-right{flex-shrink:0;display:flex;align-items:center;gap:8px}
+.setting-intro{font-size:12.5px;color:var(--muted);line-height:1.65;margin:0 0 6px;max-width:60ch}
+.setting-ok{font-size:12px;font-weight:600;color:var(--ok);background:rgba(0,217,163,.12);
+  border-radius:7px;padding:4px 10px}
+.setting-pending{font-size:11.5px;color:var(--muted);background:var(--surface-2);
+  border-radius:7px;padding:4px 10px}
+.setting-help{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:15px 17px;font-size:12.5px;color:var(--text-2);line-height:1.7}
+.setting-help b{display:block;color:var(--text);font-size:13px;font-weight:600;margin-bottom:8px}
+.setting-help ul{margin:0;padding-left:18px}
+.setting-help li{margin-bottom:5px}
+.setting-preview{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:15px 17px}
+.sp-label{display:block;font-size:9.5px;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:11px}
+.sp-demo{display:flex;align-items:center;gap:9px}
+.sp-swatch{width:22px;height:22px;border-radius:7px;flex-shrink:0}
+.sp-brand{background:var(--brand)}.sp-surface{background:var(--surface-2)}
+.sp-ok{background:var(--ok)}.sp-danger{background:var(--danger)}
+.sp-text{font-size:12px;color:var(--muted);margin-left:4px}
 .seg{display:flex;background:var(--surface-2);border-radius:9px;padding:3px;gap:2px;flex-shrink:0}
 .seg button{padding:6px 13px;border-radius:7px;font-size:12px;color:var(--text-2);
   transition:background var(--t-hover),color var(--t-hover)}
 .seg button[aria-pressed="true"]{background:var(--accent-soft);color:#fff;font-weight:600}
-.scope{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;border-radius:5px;
-  padding:2px 7px;flex-shrink:0}
-.scope.server{background:rgba(138,93,255,.15);color:#C9B0FF}
-.scope.device{background:rgba(255,255,255,.06);color:var(--muted)}
-.area-row{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--hairline)}
-.area-row:first-of-type{border-top:none}
-.area-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex-shrink:0}
-.area-name{flex:1;font-size:13.5px}
-.area-meta{font-size:11px;color:var(--muted)}
+
+.area-list{display:flex;flex-direction:column;gap:8px}
+.area-row{display:flex;align-items:center;gap:11px;padding:10px 14px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius)}
+.area-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.area-input{flex:1;min-width:0;background:transparent;border:1px solid transparent;
+  border-radius:8px;padding:5px 8px;font-size:13.5px;color:var(--text);
+  transition:background var(--t-hover),border-color var(--t-hover)}
+.area-input:hover{background:rgba(255,255,255,.035)}
+.area-input:focus{outline:none;background:var(--surface-2);border-color:var(--accent)}
+.area-meta{font-size:11px;color:var(--muted);flex-shrink:0}
+.area-lock{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  background:var(--surface-2);border-radius:6px;padding:3px 8px;flex-shrink:0}
+.area-add{display:flex;gap:9px;margin-top:12px}
+.area-add .input{flex:1}
 
 /* ── Dialog / panel / menu ──────────────────────────────────────────── */
 .scrim{position:fixed;inset:0;background:rgba(10,8,16,.62);z-index:150;
@@ -351,17 +415,21 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .mobile-bar{display:none}
 .drawer-scrim{display:none}
 
-@media (max-width:1240px){
-  :root{--rail-w:264px}
-}
-@media (max-width:1080px){
-  /* Tablet: two columns. The rail moves under the content rather than
-     vanishing — its information stays reachable without a gesture. */
-  .shell{grid-template-columns:var(--sidebar-w) minmax(0,1fr)}
-  .rail{position:static;height:auto;grid-column:2;padding:0 34px 40px;
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
-  .composer{right:0}
+@media (max-width:1500px){ :root{--gutter:40px} }
+@media (max-width:1360px){ :root{--rail-w:320px;--gutter:32px} }
+
+@media (max-width:1180px){
+  /* Tablet: the rail moves BELOW the content as a row of cards — Legacy's
+     behaviour. It never simply disappears. */
+  .main-wrap{grid-template-columns:minmax(0,1fr);gap:28px;padding:28px 28px 140px 28px}
+  .rail{position:static;max-height:none;overflow:visible;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+  .rail-today{grid-column:1/-1}
   .buckets{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:1024px){
+  .buckets{grid-template-columns:1fr;gap:16px}
+  .bucket.future{grid-column:auto}
 }
 @media (max-width:768px){
   :root{--sidebar-w:0px;--composer-h:58px}
@@ -382,13 +450,11 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
   .mobile-bar .m-btn:hover{background:rgba(255,255,255,.06)}
   .mobile-bar .m-title{font-family:'Playfair Display',Georgia,serif;font-size:17px;font-weight:500}
 
-  .page-head{padding:18px 16px 0}
+  .main-wrap{padding:16px 16px calc(150px + env(safe-area-inset-bottom));gap:22px}
+  .main-col{gap:20px}
   h1{font-size:25px;letter-spacing:-.6px}
-  .main-scroll{padding:16px 16px calc(150px + env(safe-area-inset-bottom))}
-  .buckets{grid-template-columns:1fr;gap:14px}
-  .bucket.future{grid-column:auto}
-  .rail{padding:0 16px 30px;grid-template-columns:1fr}
-  .composer{left:0;right:0;padding:12px 16px calc(14px + env(safe-area-inset-bottom))}
+  .rail{grid-template-columns:1fr}
+  .composer{left:0;right:0;padding:10px 16px calc(12px + env(safe-area-inset-bottom))}
   .hist-row{grid-template-columns:18px 1fr;row-gap:4px}
   .hist-meta{grid-column:2}
   .panel{width:100%;padding-bottom:calc(26px + env(safe-area-inset-bottom))}
