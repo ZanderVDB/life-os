@@ -440,6 +440,19 @@ function planHtml() {
   </div>`;
 }
 
+/** Minutes-from-midnight as a percentage of the visible planning window. */
+function pctOf(min, hours) {
+  return ((min - hours[0] * 60) / (hours.length * 60)) * 100;
+}
+
+/** The current-time marker, or null when now is outside planning hours. */
+function nowPct(hours) {
+  const n = new Date();
+  const mins = n.getHours() * 60 + n.getMinutes();
+  const p = pctOf(mins, hours);
+  return p >= 0 && p <= 100 ? p : null;
+}
+
 function planDayHtml(d, todayIso, hours) {
   const day = iso(d);
   const { events, blocks } = itemsForDay(day);
@@ -460,6 +473,12 @@ function planDayHtml(d, todayIso, hours) {
       `<span class="pl-ad" data-event="${e.id}">${esc(e.title)}</span>`).join('')}</div>` : ''}
     <div class="pl-canvas" data-drop-day="${day}">
       ${hours.map(() => '<span class="pl-line"></span>').join('')}
+      ${freeWindows(day).map(([a, b]) => `<div class="pl-free"
+        style="top:${pctOf(a, hours).toFixed(2)}%;height:${(pctOf(b, hours) - pctOf(a, hours)).toFixed(2)}%"
+        aria-hidden="true"></div>`).join('')}
+      ${day === todayIso && nowPct(hours) !== null
+        ? `<div class="pl-now" style="top:${nowPct(hours).toFixed(2)}%"
+             aria-label="Now"></div>` : ''}
       ${timed.map((e) => `<div class="pl-ev" data-event="${e.id}"
         style="top:${top(e.startsAt).toFixed(2)}%;height:${Math.max(3, height(e.startsAt, e.endsAt)).toFixed(2)}%;
           --src:${esc(e.calendarColor || 'var(--accent)')}">
@@ -759,3 +778,73 @@ export const freeWindowsFor = (day) => freeWindows(day);
 export const planHours = () => ({ start: PLAN_START, end: PLAN_END });
 
 export { cal, currentRange, itemsForDay, workload, conflictsOn, monthGrid, weekOf, iso, parseIso };
+
+/**
+ * Agenda regroup — moving an item between date groups without a rebuild.
+ *
+ * The naive version replaces the whole Agenda, which flashes, loses scroll
+ * position and destroys node identity. This collapses the item out of its old
+ * group, repaints, then FLIPs everything into place — so the eye follows one
+ * item moving rather than the page reloading.
+ *
+ * Google events are read-only in this phase, so nothing calls this yet. The
+ * architecture exists now because it constrains how Agenda renders: if the
+ * regroup path were added later, it would find a view that rebuilds itself and
+ * cannot be animated. That is exactly how C4's FLIP ended up invisible.
+ */
+export function regroupAgendaItem(itemId, repaint) {
+  const el = document.querySelector(`.ag-item[data-event="${itemId}"]`);
+  const scroller = document.getElementById('main-scroll');
+  const scrollTop = scroller?.scrollTop ?? 0;
+
+  if (!el || reducedMotion()) {
+    repaint();
+    if (scroller) scroller.scrollTop = scrollTop;
+    return;
+  }
+
+  // Measure every item and group heading BEFORE the change.
+  const tracked = [...document.querySelectorAll('.ag-item,.ag-group,.ag-day')];
+  const first = new Map();
+  for (const n of tracked) {
+    const key = n.dataset.event ?? n.dataset.day ?? n.textContent?.trim();
+    if (key) first.set(key, n.getBoundingClientRect());
+  }
+
+  const oldGroup = el.closest('.ag-day');
+  const wasLastInGroup = oldGroup?.querySelectorAll('.ag-item').length === 1;
+
+  // Soften and collapse out of the old position.
+  const out = el.animate(
+    [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(10px)' }],
+    { duration: 160, easing: 'cubic-bezier(.4,0,.9,.4)' },
+  );
+
+  settle(out, 160, () => {
+    repaint();
+    if (scroller) scroller.scrollTop = scrollTop;
+
+    const after = [...document.querySelectorAll('.ag-item,.ag-group,.ag-day')];
+    for (const n of after) {
+      const key = n.dataset.event ?? n.dataset.day ?? n.textContent?.trim();
+      const prev = key && first.get(key);
+      if (!prev) {
+        // New to the view — the moved item, or a group that just opened.
+        n.animate(
+          [{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }],
+          { duration: 220, easing: 'cubic-bezier(.2,.7,.2,1)' },
+        );
+        continue;
+      }
+      const now = n.getBoundingClientRect();
+      const dy = prev.top - now.top;
+      if (Math.abs(dy) < 1) continue;
+      n.animate(
+        [{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+        { duration: 220, easing: 'cubic-bezier(.2,.7,.2,1)' },
+      );
+    }
+    // An emptied group closes rather than leaving a stray heading behind.
+    if (wasLastInGroup) pulse(document.querySelector('.ag-group'));
+  });
+}
