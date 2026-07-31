@@ -46,6 +46,10 @@ export interface PlannedTask {
   legacyScheduledTimeRaw: string | null;
   areaLegacyKey: string | null; position: number;
   completedAt: string | null;
+  /** Legacy `ord`. Drives relative order; null when absent or malformed. */
+  legacyOrd: number | null;
+  /** Legacy `date`, used as created_at only when it parses to a real date. */
+  legacyCreatedAt: string | null;
   steps: { title: string; completed: boolean; position: number }[];
 }
 export interface ImportPlan {
@@ -320,6 +324,21 @@ export function buildImportPlan(exp: any): ImportPlan {
       status, bucket, priority, dueDate, scheduledAt, legacyScheduledTimeRaw,
       areaLegacyKey,
       position: typeof t?.ord === 'number' ? t.ord : taskPlan.length,
+      // Kept separate from `position` so the writer can tell a real legacy
+      // ordering from a fallback and apply a deterministic tie-break.
+      legacyOrd: (() => {
+        const o = unbox(t?.ord);
+        return typeof o === 'number' && Number.isFinite(o) ? o : null;
+      })(),
+      legacyCreatedAt: (() => {
+        const d = unbox(t?.date);
+        if (typeof d !== 'string' || !d.trim()) return null;
+        const parsed = new Date(ISO_DATE.test(d) ? `${d}T12:00:00Z` : d);
+        // Only trust a date that actually parses AND is not in the future —
+        // a task cannot have been created after the export was taken.
+        if (Number.isNaN(parsed.getTime())) return null;
+        return parsed.toISOString();
+      })(),
       completedAt: typeof doneAt === 'number' ? new Date(doneAt).toISOString() : null,
       steps,
     });

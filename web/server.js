@@ -103,10 +103,21 @@ const server = createServer(async (req, res) => {
     }
 
     const body = await readFile(file);
+    const ext = extname(file);
+    /**
+     * HTML and JS are served no-cache.
+     *
+     * These filenames are stable — there is no content hash in them — so a
+     * cached `app.js` keeps running against a redeployed API until it expires.
+     * Five minutes of that is five minutes of confusing, unreproducible bugs.
+     * The files are a few kilobytes; revalidating them costs nothing worth
+     * having. Images and fonts, whose content does not change under a given
+     * name, can still be cached.
+     */
+    const revalidate = ext === '.html' || ext === '.js' || ext === '.json';
     res.writeHead(200, {
-      'content-type': TYPES[extname(file)] ?? 'application/octet-stream',
-      // HTML must not be cached or a deploy leaves people on the old shell.
-      'cache-control': extname(file) === '.html' ? 'no-cache' : 'public, max-age=300',
+      'content-type': TYPES[ext] ?? 'application/octet-stream',
+      'cache-control': revalidate ? 'no-cache' : 'public, max-age=300',
       'x-content-type-options': 'nosniff',
       'referrer-policy': 'strict-origin-when-cross-origin',
     });

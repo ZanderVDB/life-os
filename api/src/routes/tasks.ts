@@ -7,7 +7,7 @@
  * task management is impossible on a phone in the legacy app.
  */
 import type { AppInstance, Guards } from '../types.js';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import { tasks, taskSteps, taskActivity, areas, BUCKETS, PRIORITIES } from '../db/schema.js';
@@ -15,6 +15,22 @@ import { badRequest, notFound } from '../lib/errors.js';
 
 /** Sparse spacing so a single move rewrites one row, not the whole bucket. */
 const GAP = 1000;
+
+/**
+ * Query-string boolean.
+ *
+ * NOT `z.coerce.boolean()` — that is `Boolean(value)`, so the string "false"
+ * becomes **true** and `?includeCompleted=false` silently does nothing. Query
+ * parameters are always strings, so they need a parser that reads them.
+ */
+const queryBool = (def: boolean) => z.preprocess((v) => {
+  if (v === undefined || v === '') return def;
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toLowerCase();
+  if (['false', '0', 'no', 'off'].includes(s)) return false;
+  if (['true', '1', 'yes', 'on'].includes(s)) return true;
+  return def;
+}, z.boolean());
 
 const TaskCreate = z.object({
   title: z.string().trim().min(1, 'Title is required.').max(500),
@@ -60,18 +76,36 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
     const q = z.object({
       bucket: z.enum(BUCKETS).optional(),
       areaId: z.string().uuid().optional(),
-      includeArchived: z.coerce.boolean().default(false),
-      includeCompleted: z.coerce.boolean().default(true),
+      includeArchived: queryBool(false),
+      includeCompleted: queryBool(true),
+      /** Exactly one status — how the History view asks for completed only. */
+      status: z.enum(['open', 'done', 'cancelled']).optional(),
+      /** History can be long; the buckets never are. */
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+      offset: z.coerce.number().int().min(0).default(0),
     }).parse(req.query ?? {});
 
     const where = [eq(tasks.workspaceId, wsId)];
     if (q.bucket) where.push(eq(tasks.bucket, q.bucket));
     if (q.areaId) where.push(eq(tasks.areaId, q.areaId));
     if (!q.includeArchived) where.push(isNull(tasks.archivedAt));
-    if (!q.includeCompleted) where.push(eq(tasks.status, 'open'));
+    if (q.status) where.push(eq(tasks.status, q.status));
+    else if (!q.includeCompleted) where.push(eq(tasks.status, 'open'));
 
-    const rows = await db.select().from(tasks).where(and(...where))
-      .orderBy(asc(tasks.bucket), asc(tasks.position), asc(tasks.createdAt));
+    // History reads newest-first by completion time; buckets read by position.
+    // `completed_at` can be null for an imported task whose legacy record had
+    // no doneAt, so those sort last rather than jumping to the top.
+    const order = q.status === 'done'
+      ? [sql`${tasks.completedAt} desc nulls last`, desc(tasks.createdAt)]
+      : [asc(tasks.bucket), asc(tasks.position), asc(tasks.createdAt)];
+
+    let query = db.select().from(tasks).where(and(...where)).orderBy(...order).$dynamic();
+    if (q.limit !== undefined) query = query.limit(q.limit).offset(q.offset);
+    const rows = await query;
+
+    const [totalRow] = await db.select({ n: sql<number>`count(*)::int` })
+      .from(tasks).where(and(...where));
+    const total = totalRow?.n ?? rows.length;
     const ids = rows.map((r) => r.id);
     const steps = ids.length
       ? await db.select().from(taskSteps)
@@ -83,7 +117,7 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
       const list = byTask.get(s.taskId) ?? [];
       list.push(s); byTask.set(s.taskId, list);
     }
-    return { tasks: rows.map((t) => ({ ...t, steps: byTask.get(t.id) ?? [] })) };
+    return { tasks: rows.map((t) => ({ ...t, steps: byTask.get(t.id) ?? [] })), total };
   });
 
   // ── create ──────────────────────────────────────────────────────────

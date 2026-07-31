@@ -172,3 +172,25 @@ A Railway Postgres instance plus a small always-on API service. Both sit in
 Railway's usage-based billing. If you want to avoid paying for staging while
 it is idle, delete the two services when you are not using them — the schema is
 in version control and rebuilds from `api/drizzle/` in seconds.
+
+---
+
+## Import writer deployed — 2026-07-31
+
+New staging endpoints on `life-os-v2-api-staging`:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST …/import/legacy/preview` | dry run, counts only, writes nothing |
+| `POST …/import/legacy/execute` | the irreversible one — requires approved counts and the typed phrase |
+| `GET …/import/legacy/runs` | import history, counts and status only |
+| `GET …/staging/cleanup/preview` | lists non-imported tasks |
+| `POST …/staging/cleanup` | deletes only named, non-imported tasks |
+
+The cleanup endpoints do not exist in production: `isStagingCleanupAllowed()`
+returns false for `NODE_ENV=production`, asserted directly by a test rather than
+inferred from an HTTP response (in production the request would be stopped by
+authentication first, so a non-200 would prove nothing).
+
+**Note on redeploys:** `railway redeploy` replays the existing deployment and
+does not pick up new variables or new commits. Use `railway redeploy --from-source`.

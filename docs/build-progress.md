@@ -707,3 +707,74 @@ Retired fields dropped: `dailySince` 37, `dailyDate` 36, `lastCheckedAt` 6,
   no format mismatch, so the zero is real.
 - Both profiles hold identical People and reminder counts, consistent with the
   cross-profile contamination found in Phase A2. Both are excluded regardless.
+
+---
+
+# IMPORT WRITER BUILT AND DEPLOYED TO STAGING — 2026-07-31
+
+Preview approved: Personal authoritative, Trifusion excluded, 71 tasks (21
+active / 50 completed), 20 steps, 2 Areas, 0 duplicates, 0 due dates, 15
+scheduled-time values kept verbatim.
+
+**The real import has NOT been run.** The writer is deployed and waiting at the
+confirmation screen.
+
+## What was built
+
+- `api/src/lib/import-writer.ts` — transactional writer, source fingerprint,
+  approved-count gate, position assignment, staging-only cleanup.
+- `api/src/routes/import.ts` — `/import/legacy/execute`, `/import/legacy/runs`,
+  `/staging/cleanup/preview`, `/staging/cleanup`.
+- `api/src/routes/tasks.ts` — `status` filter, pagination and a `total`, so the
+  History view can page rather than loading everything.
+- `web/app.js` — buckets show ACTIVE work only; a History view, paged 25 at a
+  time, newest-first.
+- `web/import.js` — final confirmation screen requiring the typed phrase
+  `IMPORT 71 TASKS`, plus a result screen.
+
+## Completed-task handling (as approved)
+
+All 50 completed tasks import as history. `completed_at` comes from legacy
+`doneAt` where present. **Where `doneAt` is missing, `completed_at` is left
+NULL** — a stand-in date would be invented precision. Those rows show "date
+unknown" in History and sort last. Completed tasks never appear in the four
+active buckets and never count toward a bucket badge.
+
+## Idempotency and rollback
+
+One transaction covers Areas, tasks, steps, activity and the `migration_runs`
+row, so a failure leaves the database exactly as it was and a retry cannot
+duplicate. A SHA-256 fingerprint of the export (header + Personal document only,
+so an ignored profile cannot make an imported file look new) is recorded; the
+same file is refused on a second attempt. A refused import is written to
+`migration_runs` outside the transaction, so the audit trail survives.
+
+## Staging cleanup — deliberately not a reset
+
+Tasks only, named explicitly by the caller, never rows carrying a `legacy_id`,
+never in production, and requiring the typed phrase `DELETE N STAGING TASKS`.
+Users, workspaces, memberships and Areas are unreachable through it.
+
+## Bugs found while building this
+
+1. **`z.coerce.boolean()` made `?includeCompleted=false` mean TRUE.** Zod's
+   coercion is `Boolean(value)`, and the string `"false"` is truthy — so that
+   filter had never worked. Replaced with a parser that reads query strings.
+2. **JS was served with a 5-minute cache.** Filenames carry no content hash, so
+   after a redeploy a browser would keep running the old `app.js` against the
+   new API for up to five minutes. HTML, JS and JSON are now `no-cache`. This
+   was found because it bit the local verification first.
+
+## Verified locally, end to end
+
+A synthetic export with the same proportions as the real one (71 tasks, 50
+completed, 21 active, 2 Areas, buckets 53/5/6/7, 15 unparseable times) was run
+through the whole browser flow: preview, confirmation screen, typed-phrase gate
+(four wrong variants stayed disabled, the exact phrase enabled), import, result
+screen, buckets, History pagination and re-import refusal.
+
+- Buckets: 7 + 1 + 6 + 7 = **21 active**, zero completed cards.
+- History: 50 total, 25 per page, newest first, unknown dates marked and last.
+- Re-import: 409 `IMPORT_REFUSED`, `wroteAnything: false`, still 71 tasks.
+
+96 tests passing.

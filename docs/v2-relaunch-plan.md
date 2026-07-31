@@ -132,3 +132,15 @@ Zander approving those counts.** That gate is deliberate.
 
 One correction to the plan above: the excluded profile is named **Trifusion**,
 not Business. Selection was never affected — Personal is identified positively.
+
+## Import writer — built, deployed, not yet run (2026-07-31)
+
+Step 3 of the order of work is now built. The writer is deployed to staging and
+stops at a confirmation screen requiring the typed phrase `IMPORT 71 TASKS`.
+
+It refuses anything that disagrees with the approved counts rather than adapting
+to it, writes Areas, tasks and steps in one transaction, records a fingerprint
+of the source so the same file cannot be imported twice, and leaves the database
+untouched if any part fails.
+
+**No import has been executed.** Legacy and Firestore are untouched.

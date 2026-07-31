@@ -6,6 +6,7 @@
  */
 const CFG = window.LIFE_OS_CONFIG;
 const out = document.getElementById('out');
+let lastPreview = null;   // { preview, fingerprint, exportJson, token, workspaceId }
 const drop = document.getElementById('drop');
 const file = document.getElementById('file');
 
@@ -33,6 +34,12 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
  * here can never disagree with the real one.
  */
 async function freshToken() {
+  // Same local-development bypass as the Today page: only ever against a
+  // localhost API, and only useful if that server was started with
+  // DEV_AUTH_BYPASS — which loadEnv() refuses to read in staging or production.
+  const dev = localStorage.getItem('los2_dev_token');
+  if (dev && /^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(CFG.apiBaseUrl)) return dev;
+
   if (!CFG.isConfigured) throw new Error('This deployment is not configured — no Firebase settings.');
   const [{ initializeApp, getApps }, auth] = await Promise.all([
     import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js'),
@@ -88,6 +95,8 @@ async function handle(f) {
     });
     const data = await res.json();
     if (!res.ok) return fail(esc(data?.error?.message || `Request failed (${res.status})`));
+    lastPreview = { preview: data.preview, fingerprint: data.fingerprint,
+      exportJson: json, token, workspaceId, filename: f.name };
     render(data.preview, f.name);
   } catch (e) {
     fail(`Could not reach the API at <code>${esc(CFG.apiBaseUrl)}</code>. ${esc(e.message)}`);
@@ -219,8 +228,203 @@ function render(p, filename) {
     </tbody></table></div>` : ''}
 
     <div class="note" style="margin-top:24px;border-left-color:var(--ok);background:rgba(0,217,163,.06)">
-      <b>Nothing was imported.</b> The write path is deliberately not built yet.
-      Check these numbers against what you expect to see; if they look right,
-      that is the green light to build the real import.
+      <b>Nothing has been imported.</b> Everything above is a dry run.
+    </div>
+
+    <h2>Import</h2>
+    <div class="card">
+      <p style="margin:0 0 16px;color:var(--text-2);font-size:13.5px;line-height:1.7">
+        Review the confirmation on the next screen. It is the last step before
+        anything is written, and it cannot be undone from this page.</p>
+      <button class="btn btn-primary" id="go-confirm">Continue to confirmation…</button>
     </div>`;
+
+  document.getElementById('go-confirm')?.addEventListener('click', () => renderConfirm());
+}
+
+/* ══ Final confirmation — the last screen before anything is written ══ */
+
+/**
+ * Deliberately NOT a single "Continue" button.
+ *
+ * The phrase has to be typed and it contains the task count, so a confirmation
+ * meant for one file cannot be clicked through against another. The API
+ * re-checks the same counts and refuses if they have moved.
+ */
+async function renderConfirm() {
+  if (!lastPreview) return;
+  const p = lastPreview.preview;
+  const active = p.tasks.total - p.tasks.completed;
+  const approved = {
+    tasks: p.tasks.total, steps: p.steps, areas: p.areas.total,
+    duplicateLegacyIds: (p.tasks.skipped || []).find((s) => s.reason === 'duplicate legacy id')?.count ?? 0,
+  };
+  const phrase = `IMPORT ${approved.tasks} TASKS`;
+
+  // What is sitting in staging that did NOT come from an import.
+  let cleanup = { count: 0, candidates: [] };
+  try {
+    const r = await fetch(`${CFG.apiBaseUrl}/api/v1/workspaces/${lastPreview.workspaceId}/staging/cleanup/preview`,
+      { headers: { Authorization: `Bearer ${lastPreview.token}` } });
+    if (r.ok) cleanup = await r.json();
+  } catch { /* optional context, never a blocker */ }
+
+  const row = (k, v) => `<tr><td>${k}</td><td>${v}</td></tr>`;
+  out.innerHTML = `
+    <h2>Confirm import</h2>
+    <div class="note" style="border-left-color:var(--danger);background:rgba(255,100,110,.07)">
+      <b>This writes to the staging database.</b> It is the first irreversible
+      action in the v2 relaunch. Legacy and Firestore are not touched by it.
+    </div>
+
+    <div class="card"><table><tbody>
+      ${row('Source file', esc(lastPreview.filename))}
+      ${row('Source app version', esc(p.source?.appVersion || '—'))}
+      ${row('Source profile', `<b>${esc(p.profileChosen?.name || '—')}</b>`)}
+      ${row('Excluded profile', (p.profilesIgnored || []).length
+        ? `${esc(p.profilesIgnored.map((x) => x.name || x.id).join(', '))} <span class="pill skip">never read</span>`
+        : '<span class="pill skip">none</span>')}
+      ${row('Verification', p.source?.verified
+        ? '<span class="pill ok">verified</span>' : '<span class="pill err">NOT VERIFIED</span>')}
+    </tbody></table></div>
+
+    <h2>What will be written</h2>
+    <div class="grid">
+      <div class="stat"><div class="n">${approved.tasks}</div><div class="l">Tasks</div></div>
+      <div class="stat"><div class="n">${active}</div><div class="l">Active</div></div>
+      <div class="stat"><div class="n">${p.tasks.completed}</div><div class="l">Completed history</div></div>
+      <div class="stat"><div class="n">${approved.steps}</div><div class="l">Task steps</div></div>
+      <div class="stat"><div class="n">${approved.areas}</div><div class="l">Areas</div></div>
+      <div class="stat"><div class="n">${p.tasks.withUnparseableTime}</div><div class="l">Times kept as raw text</div></div>
+    </div>
+
+    <h2>Estimated resulting database</h2>
+    <div class="card"><table><tbody>
+      ${row('Tasks', `${approved.tasks} imported${cleanup.count ? ` (+ ${cleanup.count} staging test record(s) unless removed)` : ''}`)}
+      ${row('Active in buckets', active)}
+      ${row('In Completed history', p.tasks.completed)}
+      ${row('Areas', `${approved.areas} imported + Personal and Work already present`)}
+      ${row('Task steps', approved.steps)}
+    </tbody></table></div>
+
+    ${cleanup.count ? `<h2>Staging test records</h2>
+    <div class="card">
+      <p style="margin:0 0 14px;color:var(--text-2);font-size:13px;line-height:1.65">
+        ${cleanup.count} task(s) in staging did not come from an import. Removing
+        them keeps the imported set clean. Imported records can never be deleted
+        by this action.</p>
+      <table><thead><tr><th>Title</th><th>Bucket</th><th>Status</th></tr></thead><tbody>
+        ${cleanup.candidates.map((c) => `<tr><td>${esc(c.title)}</td><td>${esc(c.bucket)}</td><td>${esc(c.status)}</td></tr>`).join('')}
+      </tbody></table>
+      <label style="display:flex;gap:9px;align-items:center;margin-top:14px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="do-clean" checked style="accent-color:#8A5DFF;width:15px;height:15px">
+        Remove these ${cleanup.count} test record(s) first
+      </label>
+    </div>` : ''}
+
+    ${(p.warnings || []).length ? `<h2>Warnings</h2><div class="card"><table><tbody>
+      ${p.warnings.map((w) => `<tr><td><span class="pill warn">warning</span></td><td>${esc(w)}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+
+    <h2>Excluded — not part of this import</h2>
+    <div class="card"><table><tbody>
+      ${row('Reminders, habits, diary, notebook, projects, Brain', '<span class="pill skip">deferred systems</span>')}
+      ${row('People and related settings', '<span class="pill skip">retired</span>')}
+      ${row('dayNotes, customEvents', '<span class="pill skip">confirmed empty</span>')}
+      ${row('Retired task fields', '<span class="pill skip">dropped</span>')}
+      ${row('project_id', '<span class="pill skip">null on every task</span>')}
+    </tbody></table></div>
+
+    <h2>Type to confirm</h2>
+    <div class="card">
+      <p style="margin:0 0 14px;color:var(--text-2);font-size:13.5px;line-height:1.7">
+        Type <code>${esc(phrase)}</code> exactly to enable the import button.</p>
+      <input id="confirm-text" placeholder="${esc(phrase)}" autocomplete="off" spellcheck="false"
+        style="width:100%;background:var(--surface-2);border:1px solid transparent;border-radius:10px;padding:11px 13px;font-size:14px;color:var(--text);font-family:inherit">
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="do-import" disabled
+          style="opacity:.45;pointer-events:none">Import ${approved.tasks} tasks</button>
+        <button class="btn" id="cancel-import">Cancel</button>
+      </div>
+    </div>`;
+
+  const input = document.getElementById('confirm-text');
+  const go = document.getElementById('do-import');
+  input.addEventListener('input', () => {
+    const ok = input.value.trim() === phrase;
+    go.disabled = !ok;
+    go.style.opacity = ok ? '1' : '.45';
+    go.style.pointerEvents = ok ? 'auto' : 'none';
+  });
+  document.getElementById('cancel-import').onclick = () => render(p, lastPreview.filename);
+  go.onclick = () => doImport(approved, phrase, cleanup);
+}
+
+async function doImport(approved, phrase, cleanup) {
+  const { workspaceId, token, exportJson } = lastPreview;
+  const wantsClean = document.getElementById('do-clean')?.checked;
+  out.innerHTML = '<div class="card">Importing… do not close this page.</div>';
+  try {
+    // Cleanup first, so a failure there stops before anything is imported.
+    if (wantsClean && cleanup.count) {
+      const ids = cleanup.candidates.map((c) => c.id);
+      const r = await fetch(`${CFG.apiBaseUrl}/api/v1/workspaces/${workspaceId}/staging/cleanup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ taskIds: ids, confirm: `DELETE ${ids.length} STAGING TASKS` }),
+      });
+      const cd = await r.json();
+      if (!r.ok) return fail(`Staging cleanup failed, so the import did not run. ${esc(cd?.error?.message || '')}`);
+    }
+
+    const res = await fetch(`${CFG.apiBaseUrl}/api/v1/workspaces/${workspaceId}/import/legacy/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ export: exportJson, approved, confirm: phrase }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const d = data?.error?.details;
+      const diff = d?.mismatches?.length
+        ? `<table style="margin-top:12px"><thead><tr><th>Field</th><th>Approved</th><th>Found</th></tr></thead>
+           <tbody>${d.mismatches.map((m) => `<tr><td>${esc(m.field)}</td><td>${m.approved}</td><td>${m.found}</td></tr>`).join('')}</tbody></table>`
+        : '';
+      return fail(`${esc(data?.error?.message || 'The import was refused.')} <b>Nothing was written.</b>${diff}`);
+    }
+    renderResult(data);
+  } catch (e) {
+    fail(`The import could not complete: ${esc(e.message)}. A retry is safe — the
+      same file cannot be imported twice, so nothing can be duplicated.`);
+  }
+}
+
+function renderResult(r) {
+  const d = r.detail;
+  const row = (k, v) => `<tr><td>${k}</td><td>${v}</td></tr>`;
+  out.innerHTML = `
+    <h2>Import complete</h2>
+    <div class="note" style="border-left-color:var(--ok);background:rgba(0,217,163,.06)">
+      <b>Imported successfully.</b> Run id <code>${esc(r.runId)}</code>.
+      Re-running the same file is now blocked, so this cannot be duplicated.
+    </div>
+    <div class="grid">
+      <div class="stat"><div class="n">${r.written.tasks}</div><div class="l">Tasks</div></div>
+      <div class="stat"><div class="n">${d.activeTasks}</div><div class="l">Active</div></div>
+      <div class="stat"><div class="n">${d.completedTasks}</div><div class="l">Completed</div></div>
+      <div class="stat"><div class="n">${r.written.steps}</div><div class="l">Steps</div></div>
+      <div class="stat"><div class="n">${d.areasCreated}</div><div class="l">Areas created</div></div>
+    </div>
+    <h2>Detail</h2>
+    <div class="card"><table><tbody>
+      ${row('Completed with a known date', d.completedWithTimestamp)}
+      ${row('Completed with an unknown date', d.completedWithoutTimestamp)}
+      ${row('Times parsed into scheduled_at', d.scheduledAtParsed)}
+      ${row('Times kept as raw legacy text', d.scheduledTimeKeptRaw)}
+      ${row('Created dates taken from legacy', d.createdAtFromLegacyDate)}
+      ${row('Existing Areas reused', d.areasReusedExisting)}
+      ${row('Tasks with no Area', d.tasksWithNoArea)}
+      ${row('Unmapped Area keys', d.unknownAreaKeys.length
+        ? `<span class="pill warn">${esc(d.unknownAreaKeys.join(', '))}</span>` : '<span class="pill ok">none</span>')}
+    </tbody></table></div>
+    <p style="margin-top:22px"><a href="./index.html">Open Today →</a></p>`;
 }

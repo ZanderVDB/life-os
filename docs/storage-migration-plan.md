@@ -275,3 +275,11 @@ A failed validation marks the run `failed` and **blocks the next step**.
 - No schema created in a real database.
 
 **This document is a plan awaiting approval.**
+
+## Still valid: the import shape (2026-07-31)
+
+Superseded as a *sequence*, but the record of what actually gets imported now
+lives here for continuity: **Areas, Tasks and Task Steps only.** Everything else
+— reminders, habits, diary, notebook, projects, Brain, People — stays in the
+verified legacy export until its own system exists in v2. The import is
+fingerprinted and idempotent, so it can be re-run safely without duplicating.

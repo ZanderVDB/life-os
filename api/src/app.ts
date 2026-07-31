@@ -56,7 +56,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerMeRoutes(app, db, guards);
   registerAreaRoutes(app, db, guards);
   registerTaskRoutes(app, db, guards);
-  registerImportRoutes(app, db, guards);
+  registerImportRoutes(app, db, guards, env);
 
   /** One error shape. Internals are logged, never returned. */
   app.setErrorHandler((err, req, reply) => {

@@ -16,7 +16,11 @@ const BUCKETS = [
 ];
 const PRIORITIES = ['urgent', 'high', 'medium', 'low', 'someday'];
 
-const state = { me: null, tasks: [], areaFilter: null, token: null, openTaskId: null, menu: null };
+const state = {
+  me: null, tasks: [], areaFilter: null, token: null, openTaskId: null, menu: null,
+  view: 'today', history: [], historyTotal: 0, historyLoading: false,
+};
+const HISTORY_PAGE = 25;
 const root = document.getElementById('root');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -137,11 +141,30 @@ async function loadAll() {
   renderApp();
 }
 async function loadTasks() {
-  const { tasks } = await api(`/api/v1/workspaces/${ws()}/tasks`);
+  // Active only. History is fetched separately and paged, because after the
+  // legacy import it is far longer than any bucket will ever be.
+  const { tasks } = await api(`/api/v1/workspaces/${ws()}/tasks?includeCompleted=false`);
   state.tasks = tasks;
 }
+
+async function loadHistory(reset = false) {
+  if (reset) { state.history = []; state.historyTotal = 0; }
+  state.historyLoading = true;
+  const offset = state.history.length;
+  const r = await api(`/api/v1/workspaces/${ws()}/tasks`
+    + `?status=done&limit=${HISTORY_PAGE}&offset=${offset}`);
+  state.history = [...state.history, ...r.tasks];
+  state.historyTotal = r.total;
+  state.historyLoading = false;
+}
+/**
+ * A bucket shows ACTIVE work only. Completed tasks move to History, so ticking
+ * something off clears it from the board and the count beside the heading
+ * always means "still to do".
+ */
 const inBucket = (b) => state.tasks
-  .filter((t) => t.bucket === b && (!state.areaFilter || t.areaId === state.areaFilter))
+  .filter((t) => t.bucket === b && t.status !== 'done'
+    && (!state.areaFilter || t.areaId === state.areaFilter))
   .sort((x, y) => x.position - y.position);
 const areaName = (id) => state.me.areas.find((a) => a.id === id)?.name || '';
 const findTask = (id) => state.tasks.find((t) => t.id === id);
@@ -158,7 +181,8 @@ function renderApp() {
     <aside class="sidebar">
       <div class="logo">${logoSvg(22)}<div class="logo-word">Life OS</div></div>
       <nav class="nav">
-        <a href="#today" class="active"><span aria-hidden="true">◎</span><span>Today</span></a>
+        <a href="#today" class="${state.view === 'today' ? 'active' : ''}" data-view="today"><span aria-hidden="true">◎</span><span>Today</span></a>
+        <a href="#history" class="${state.view === 'history' ? 'active' : ''}" data-view="history"><span aria-hidden="true">✓</span><span>History</span></a>
         <a aria-disabled="true"><span aria-hidden="true">▤</span><span>Calendar</span><span class="nav-soon">soon</span></a>
         <a aria-disabled="true"><span aria-hidden="true">▦</span><span>Projects</span><span class="nav-soon">soon</span></a>
         <a aria-disabled="true"><span aria-hidden="true">▧</span><span>Library</span><span class="nav-soon">soon</span></a>
@@ -175,6 +199,7 @@ function renderApp() {
         <h1>${greet}${first ? `, <span class="nm">${esc(first)}</span>` : ''}.</h1>
         <p class="sub">${esc(dateStr)}</p>
       </div>
+      ${state.view === 'history' ? historyHtml() : `
       <div class="toolbar">
         <button class="btn btn-primary" id="add">+ Add task</button>
         <button class="chip ${!state.areaFilter ? 'on' : ''}" data-area="">All areas</button>
@@ -182,14 +207,79 @@ function renderApp() {
       </div>
       <div class="buckets">
         ${BUCKETS.map((b) => bucketHtml(b)).join('')}
-      </div>
+      </div>`}
     </main>`;
+
+  root.querySelectorAll('[data-view]').forEach((el) => {
+    el.onclick = (e) => {
+      e.preventDefault();
+      state.view = el.dataset.view;
+      if (state.view === 'history' && !state.history.length) {
+        run(async () => { await loadHistory(true); renderApp(); });
+        return;
+      }
+      renderApp();
+    };
+  });
+
+  if (state.view === 'history') {
+    document.getElementById('hist-more')?.addEventListener('click', () => run(async () => {
+      await loadHistory(); renderApp();
+    }));
+    root.querySelectorAll('.hist-row').forEach((el) => {
+      el.onclick = () => openDetail(el.dataset.id, /* fromHistory */ true);
+      el.onkeydown = (e) => { if (e.key === 'Enter') openDetail(el.dataset.id, true); };
+    });
+    return;
+  }
 
   document.getElementById('add').onclick = () => openDetail(null);
   root.querySelectorAll('[data-area]').forEach((el) => {
     el.onclick = () => { state.areaFilter = el.dataset.area || null; renderApp(); };
   });
   wireTasks();
+}
+
+/**
+ * History — deliberately quiet.
+ *
+ * A plain dated list, not four more bucket cards. Completed work is a record to
+ * look back at, not a board to work from, so it must not compete with Today for
+ * attention. Loads a page at a time because after the legacy import this list
+ * starts at fifty and only grows.
+ */
+function historyHtml() {
+  const shown = state.history.length;
+  const more = shown < state.historyTotal;
+  const rows = state.history.map((t, i) => {
+    const when = t.completedAt
+      ? new Date(t.completedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'date unknown';
+    const steps = t.steps || [];
+    return `<div class="hist-row" data-id="${t.id}" tabindex="0" style="--i:${i}"
+        role="button" aria-label="${esc(t.title)}">
+      <span class="hist-tick" aria-hidden="true">✓</span>
+      <span class="hist-title">${esc(t.title)}</span>
+      <span class="hist-meta">
+        ${steps.length ? `<span>${steps.filter((x) => x.completed).length}/${steps.length} steps</span>` : ''}
+        ${t.areaId ? `<span class="t-area">${esc(areaName(t.areaId))}</span>` : ''}
+        <span class="hist-when${t.completedAt ? '' : ' unknown'}">${esc(when)}</span>
+      </span>
+    </div>`;
+  }).join('');
+
+  return `<section class="history">
+    <div class="bucket-head">
+      <h2>Completed</h2>
+      <span class="bucket-count">${state.historyTotal}</span>
+    </div>
+    ${shown ? `<div class="hist-list stagger">${rows}</div>` : `
+      <div class="empty"><b>Nothing completed yet</b>Finished work will collect here.</div>`}
+    ${more ? `<button class="btn" id="hist-more" style="margin-top:14px">
+        Show ${Math.min(HISTORY_PAGE, state.historyTotal - shown)} more
+        <span style="color:var(--muted)"> · ${shown} of ${state.historyTotal}</span>
+      </button>` : shown ? `<p class="hist-end">That is all ${state.historyTotal}.</p>` : ''}
+  </section>`;
 }
 
 function bucketHtml(b) {
@@ -332,8 +422,8 @@ function openMoveMenu(id, anchorEl) {
 function closeMenu() { state.menu?.remove(); state.menu = null; }
 
 /* ── Task detail — part of the baseline, not a bolted-on modal ───────── */
-function openDetail(id) {
-  const t = id ? findTask(id) : null;
+function openDetail(id, fromHistory = false) {
+  const t = id ? (fromHistory ? state.history.find((x) => x.id === id) : findTask(id)) : null;
   state.openTaskId = id;
   const scrim = document.createElement('div'); scrim.className = 'scrim';
   const p = document.createElement('aside');
@@ -386,7 +476,10 @@ function openDetail(id) {
     if (!body.title) return toast('A title is needed.', true);
     if (t) await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}`, { method: 'PATCH', body });
     else await api(`/api/v1/workspaces/${ws()}/tasks`, { method: 'POST', body });
-    close(); await loadTasks(); renderApp();
+    close();
+    await loadTasks();
+    if (state.view === 'history') await loadHistory(true);
+    renderApp();
     toast(t ? 'Saved' : 'Task created');
   });
 

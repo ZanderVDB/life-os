@@ -349,3 +349,21 @@ Both profiles hold identical People and reminder counts, consistent with the
 cross-profile contamination found in Phase A2. Both are excluded regardless.
 
 **No import has been written. The import writer does not exist.**
+
+## Import approved 2026-07-31 — writer built, import NOT yet run
+
+Approved source: Personal authoritative; **Trifusion excluded**; 71 tasks
+(21 active, 50 completed); 20 steps; 2 Areas; 0 duplicate legacy ids; 0 skipped;
+0 due dates; 15 scheduled-time values preserved verbatim.
+
+**Only Areas, Tasks and Task Steps are in this import.** Reminders, habits,
+diary, notebook, projects and Brain remain unimported and untouched in the
+legacy export. People and its settings stay retired and are never migrated.
+
+All 50 completed tasks are imported as history, keeping `completed_at` from
+legacy `doneAt` where it exists. **Where `doneAt` is absent, `completed_at` is
+NULL rather than a guess** — the record says "date unknown" instead of claiming
+a precision the source never had. Completed tasks are excluded from the four
+active buckets and from every active count.
+
+Life OS Legacy and Firestore remain untouched. No import has been executed.
