@@ -25,14 +25,41 @@ const env = loadEnv();
 // open would waste connections the running service needs.
 const { sql, db } = makeDb(env.DATABASE_URL, { max: 1 });
 
-try {
-  await migrate(db, { migrationsFolder });
-  console.log('[migrate] up to date');
-} catch (err) {
+/**
+ * Railway's private network (`*.railway.internal`) needs a moment to come up
+ * when a container starts, and this script runs immediately. A cold boot can
+ * therefore lose the race and see ECONNREFUSED / ENOTFOUND against a database
+ * that is perfectly healthy a second later.
+ *
+ * Retry only connection-level failures. A migration that fails because the SQL
+ * is wrong must fail on the first attempt — retrying that would just take
+ * longer to report the same real problem.
+ */
+const TRANSIENT = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|starting up|terminating connection/i;
+const ATTEMPTS = 6;
+
+let lastError: unknown;
+for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+  try {
+    await migrate(db, { migrationsFolder });
+    console.log('[migrate] up to date');
+    lastError = undefined;
+    break;
+  } catch (err) {
+    lastError = err;
+    const message = err instanceof Error ? err.message : String(err);
+    if (!TRANSIENT.test(message) || attempt === ATTEMPTS) break;
+    const waitMs = 500 * 2 ** (attempt - 1);   // 0.5s, 1s, 2s, 4s, 8s
+    console.log(`[migrate] database not reachable yet (attempt ${attempt}/${ATTEMPTS}), retrying in ${waitMs}ms`);
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+}
+
+if (lastError) {
   // Fail the deploy loudly. A service that starts against a half-migrated
   // database is far worse than one that refuses to start at all.
-  console.error('[migrate] FAILED:', err instanceof Error ? err.message : err);
+  console.error('[migrate] FAILED:', lastError instanceof Error ? lastError.message : lastError);
   process.exitCode = 1;
-} finally {
-  await sql.end();
 }
+
+await sql.end();
