@@ -36,7 +36,10 @@ test('discoverability and rail rules are documented', () => {
 test('reminders: reachable from Calendar in one action', () => {
   // D4.6 moved it behind one restrained utility control: a peer-sized button
   // gave reminder management equal status to the three core time views.
-  assert.match(calCode, /id="cal-util"/, 'no Calendar utility control');
+  // D4.7 emits both triggers from one helper, because a shared CLASS still let
+  // the two glyphs drift — Today drew its dots vertically and Calendar drew
+  // them horizontally.
+  assert.match(calCode, /utilityTriggerHtml\('cal-util'/, 'no Calendar utility control');
   assert.match(appCode, /'Manage reminders'/, 'the utility menu does not offer reminders');
   assert.match(appCode, /openRemindersView/, 'the entry does not open anything');
   // Not buried in Settings.
@@ -135,7 +138,7 @@ test('account: Sign out and version in Settings, Completed on Today', () => {
   // Completed is content, so it sits with the content.
   // D4.6 moved it out of the board flow: a running total of finished work was
   // competing with what still needs doing.
-  assert.match(appCode, /id="today-more"/, 'Today has no overflow control');
+  assert.match(appCode, /utilityTriggerHtml\('today-more'/, 'Today has no overflow control');
   assert.match(appCode, /View completed tasks/, 'the overflow does not offer history');
   assert.ok(!/today-history/.test(appCode), 'the count is back in the board');
   // It must be REACHABLE but not in the primary list — scoped to ROUTES, since

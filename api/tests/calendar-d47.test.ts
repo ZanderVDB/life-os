@@ -77,8 +77,12 @@ test('frame: the header and the body share one width and one anchor', () => {
 test('frame: the rail belongs to the Calendar, not to the page', () => {
   // A PAGE rail column changes .main-col's width, and the header and the canvas
   // are both centred inside .main-col — so opening the rail slid both sideways.
-  assert.match(css, /body:has\(\.cal-head\) \.main-wrap\{grid-template-columns:minmax\(0,1fr\)\}/,
-    'the page still reserves a rail column on Calendar, so the frame moves');
+  // Zero-width track, gutter kept: the frame must centre in exactly the column
+  // width it has centred in since D4.2, or the whole composition shifts. The
+  // first attempt dropped the track entirely, which widened .main-col by the
+  // gutter and slid everything 38px right.
+  assert.match(css, /body:has\(\.cal-head\) \.main-wrap\{grid-template-columns:minmax\(0,1fr\) 0\}/,
+    'the column the frame centres in changed width');
   assert.match(css, /body:has\(\.cal-head\) \.rail\{display:none\}/,
     'the page rail still renders behind the calendar rail');
   assert.match(calCode, /<aside class="cal-rail" id="cal-rail"/,
@@ -196,8 +200,20 @@ test('motion: the tablet layout stacks rather than crushing the grid', () => {
 
 test('utility: Today and Calendar use the same trigger component', () => {
   // They were 34px bare and 38px filled, with a menu class each.
-  assert.match(appCode, /class="util-btn" id="today-more"/, 'Today has its own trigger');
-  assert.match(calCode, /class="util-btn" id="cal-util"/, 'Calendar has its own trigger');
+  // A shared CLASS was not enough: the two glyphs still drifted, because the
+  // markup was hand-written 2000 lines apart. Today drew its three dots
+  // VERTICALLY and Calendar drew them horizontally, and the shared class made
+  // them the same size and shape while leaving them different controls.
+  assert.match(utilCode, /export const utilityTriggerHtml = \(id, label\)/,
+    'the trigger markup is not shared');
+  assert.match(appCode, /utilityTriggerHtml\('today-more', 'More actions'\)/,
+    'Today still hand-writes its trigger');
+  assert.match(calCode, /utilityTriggerHtml\('cal-util', 'Calendar options'\)/,
+    'Calendar still hand-writes its trigger');
+  // Horizontal: same cy, varying cx. A vertical glyph inverts these.
+  assert.match(utilCode, /cx="4\.5" cy="10"[\s\S]{0,80}cx="10" cy="10"[\s\S]{0,80}cx="15\.5" cy="10"/,
+    'the shared overflow glyph is not horizontal');
+  assert.ok(!/cx="10" cy="4\.5"/.test(appCode + calCode), 'a vertical dots glyph survives');
   for (const gone of ['today-more{', 'cal-util{', '.cal-util-menu', '.today-menu']) {
     assert.ok(!css.includes(gone), `the per-page control ${gone} survives`);
   }
@@ -212,7 +228,7 @@ test('utility: the trigger sits at the upper-right on both pages', () => {
   const side = calCode.slice(calCode.indexOf('cal-head-side'), calCode.indexOf('cal-head-sub'));
   assert.ok(side.indexOf('cal-add') < side.indexOf('cal-util'),
     'the overflow is not the last control in the header');
-  assert.match(appCode, /page-actions[\s\S]{0,200}util-btn" id="today-more"/,
+  assert.match(appCode, /page-actions[\s\S]{0,120}utilityTriggerHtml\('today-more'/,
     'Today\'s overflow left the page actions');
 });
 

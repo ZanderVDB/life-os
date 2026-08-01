@@ -11,7 +11,8 @@
 import { ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
 import { initServiceWorker } from './pwa.js';
 import { flip, pulse, collapseOut, reducedMotion, afterTransition } from './motion.js';
-import { openUtilityMenu, openUtilitySurface, closeUtility } from './utility-menu.js';
+import { openUtilityMenu, openUtilitySurface, closeUtility,
+  utilityTriggerHtml } from './utility-menu.js';
 import { openTaskModal } from './task-modal.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
@@ -106,7 +107,11 @@ const ICON = {
   check: '<path d="m4.5 10.5 3.5 3.5 7.5-8"/>',
   chevL: '<path d="m12 5-5 5 5 5"/>',
   chevR: '<path d="m8 5 5 5-5 5"/>',
-  dots: '<circle cx="10" cy="4.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="15.5" r="1.4" fill="currentColor" stroke="none"/>',
+  // Horizontal, matching utilityTriggerHtml. The app had both orientations —
+  // task rows and Today's overflow stacked them vertically, Calendar laid them
+  // flat — so "the ⋯ button" meant two different glyphs depending on where you
+  // were looking. One overflow mark, everywhere.
+  dots: '<circle cx="4.5" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.4" fill="currentColor" stroke="none"/>',
   grip: '<circle cx="7.5" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="7.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="7.5" cy="15" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="15" r="1.2" fill="currentColor" stroke="none"/>',
   pencil: '<path d="M13.5 3.5 16.5 6.5 7 16H4v-3z"/>',
 };
@@ -488,12 +493,7 @@ async function loadRoute() {
     // with what still needs doing.
     head.innerHTML = `${greetingHtml()}
       <div class="page-actions">
-        <button class="util-btn" id="today-more" aria-haspopup="menu" aria-expanded="false"
-          aria-label="More actions">
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <circle cx="10" cy="4.5" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
-            <circle cx="10" cy="15.5" r="1.5"/></svg>
-        </button>
+        ${utilityTriggerHtml('today-more', 'More actions')}
       </div>`;
     scroll.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
     try {

@@ -103,7 +103,7 @@ test('entry: reminders sits behind one restrained utility control', () => {
   // A peer-sized button gave reminder management equal status to the three
   // core time views.
   assert.ok(!/cal-remind/.test(calendar), 'the prominent Reminders button survives');
-  assert.match(calCode, /id="cal-util"/, 'there is no utility control');
+  assert.match(calCode, /utilityTriggerHtml\('cal-util'/, 'there is no utility control');
   const menu = body(appCode, 'function openCalendarUtility(anchor)');
   for (const label of ['Manage reminders', 'Calendar sources', 'Calendar key']) {
     assert.ok(menu.includes(label), `the utility menu is missing "${label}"`);
@@ -184,8 +184,10 @@ test('rail: the grid reclaims the width when the rail closes', () => {
   // it, so collapsing it slid the whole composition sideways on every
   // selection. The rail now lives inside the Calendar frame, and only the
   // canvas gives up width — from its right edge, so no day column moves.
-  assert.match(html, /body:has\(\.cal-head\) \.main-wrap\{grid-template-columns:minmax\(0,1fr\)\}/,
-    'the page still reserves a rail column on Calendar');
+  // The empty track and its gutter are kept at zero width on purpose: removing
+  // them widened .main-col and slid the whole composition 38px right.
+  assert.match(html, /body:has\(\.cal-head\) \.main-wrap\{grid-template-columns:minmax\(0,1fr\) 0\}/,
+    'the column the frame centres in changed width');
   assert.match(html, /\.cal-body\{[^}]*grid-template-columns:minmax\(0,1fr\) var\(--cal-rail-col\)/,
     'the frame does not give the rail its width');
   assert.match(html, /body\.cal-rail-open\{--cal-rail-col:calc\(var\(--cal-rail-w\) \+ var\(--cal-rail-gap\)\)\}/,
@@ -231,7 +233,7 @@ test('history: rows carry title, date and a way back', () => {
 
 test('history: the count is out of the board and behind an overflow', () => {
   assert.ok(!/today-history/.test(appCode), 'the completed count is back in the Today board');
-  assert.match(appCode, /id="today-more"/, 'Today has no overflow control');
+  assert.match(appCode, /utilityTriggerHtml\('today-more'/, 'Today has no overflow control');
   assert.match(appCode, /View completed tasks/, 'the overflow does not offer history');
   // Not in Settings, not in the sidebar.
   assert.ok(!/completed/i.test(read('settings.js').slice(0, 2000)), 'Completed moved into Settings');

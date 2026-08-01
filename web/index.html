@@ -1783,8 +1783,12 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 body.cal-rail-open{--cal-rail-col:calc(var(--cal-rail-w) + var(--cal-rail-gap))}
 
 /* On Calendar the page rail is unused: the calendar owns its own, inside the
-   frame, so the frame can stay still while only the canvas gives up width. */
-body:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr)}
+   frame, so the frame can stay still while only the canvas gives up width.
+   The empty second track and the gutter are KEPT at zero width deliberately —
+   dropping them widened .main-col by the gutter and slid the whole composition
+   38px right, which reads as a bigger gap on the left. The column the frame
+   centres in must stay exactly the width it has been since D4.2. */
+body:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr) 0}
 body:has(.cal-head) .rail{display:none}
 
 .cal-body{width:100%;max-width:var(--cal-max);margin-inline:auto;

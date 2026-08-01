@@ -18,6 +18,7 @@
  * account is connected and no Google call is made.
  */
 import { flip, pulse, reducedMotion, settle } from './motion.js';
+import { utilityTriggerHtml } from './utility-menu.js';
 
 const MODES = [
   { id: 'month', label: 'Month' },
@@ -232,12 +233,7 @@ export function calendarHeaderHtml() {
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>
           <span>Add</span>
         </button>
-        <button class="util-btn" id="cal-util" aria-haspopup="menu" aria-expanded="false"
-          aria-label="Calendar options">
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
-            <circle cx="15.5" cy="10" r="1.5"/></svg>
-        </button>
+        ${utilityTriggerHtml('cal-util', 'Calendar options')}
       </div>
     </div>
 

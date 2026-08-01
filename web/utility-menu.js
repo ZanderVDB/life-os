@@ -21,6 +21,22 @@ const OPEN_MS = 150;
 /** The one open utility surface. There is never a second. */
 let open = null;
 
+/**
+ * The trigger markup, so the two pages cannot drift apart again.
+ *
+ * They already had: Today drew three dots stacked VERTICALLY and Calendar drew
+ * them horizontally, from two hand-written SVGs sitting 2000 lines apart. The
+ * shared class made them the same size and the same shape and left them looking
+ * like different controls. Horizontal is the one — it is the overflow glyph the
+ * rest of the app uses.
+ */
+export const utilityTriggerHtml = (id, label) => `<button class="util-btn" id="${id}"
+  aria-haspopup="menu" aria-expanded="false" aria-label="${label}">
+  <svg viewBox="0 0 20 20" aria-hidden="true">
+    <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
+    <circle cx="15.5" cy="10" r="1.5"/></svg>
+</button>`;
+
 export const isUtilityOpen = () => !!open;
 export const openUtilityKind = () => open?.kind ?? null;
 
