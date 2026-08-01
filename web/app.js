@@ -401,7 +401,27 @@ function wireShell() {
     }
   });
   // The rail reflows between a column and a grid; the pill must follow the nav.
-  window.addEventListener('resize', () => positionPill(true));
+  window.addEventListener('resize', () => { positionPill(true); measureScrollbar(); });
+  measureScrollbar();
+}
+
+/**
+ * Publishes the scrollbar's width as `--sbw`.
+ *
+ * The Calendar frame centres itself on the window, and the only way to say
+ * "the window" in CSS is `100vw` — which INCLUDES the classic scrollbar. On a
+ * page long enough to scroll that put the whole calendar half a scrollbar
+ * right of centre, which is exactly the kind of small constant error that
+ * makes a layout look almost-right. Overlay scrollbars report 0 and the
+ * arithmetic collapses to plain 100vw.
+ */
+function measureScrollbar() {
+  // Measured off the root element's own box, not clientWidth: with
+  // `scrollbar-gutter:stable` the gutter is reserved whether or not the page
+  // scrolls, and clientWidth then reports the full window as if it were not.
+  // The root's border box is the width the layout actually gets.
+  const w = window.innerWidth - document.documentElement.getBoundingClientRect().width;
+  document.documentElement.style.setProperty('--sbw', `${Math.max(0, Math.round(w))}px`);
 }
 
 /**

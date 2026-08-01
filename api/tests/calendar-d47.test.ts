@@ -68,10 +68,53 @@ test('centring: three columns with a centre that cannot be squeezed', () => {
 /* ── §3/§11 One frame, and it does not move ──────────────────────────── */
 
 test('frame: the header and the body share one width and one anchor', () => {
-  assert.match(css, /\.cal-head,\.cal-month,\.cal-agenda,\.cal-plan\{width:100%;max-width:var\(--cal-max\)/,
-    'the header and the canvases do not share a frame');
-  assert.match(css, /\.cal-body\{width:100%;max-width:var\(--cal-max\);margin-inline:auto/,
-    'the calendar body is not the same frame as the header');
+  assert.match(css, /\.cal-head,\.cal-body\{width:auto;max-width:var\(--cal-max\);\s*margin-left:var\(--cal-inset\);margin-right:0\}/,
+    'the header and the body do not share a frame');
+  // Reminders is a Calendar surface, so leaving it must not slide the page.
+  assert.match(css, /\.rv\{width:auto;max-width:var\(--cal-max\);margin-left:var\(--cal-inset\)/,
+    'the Reminders workspace is not on the Calendar frame');
+});
+
+test('frame: centred on the WINDOW, not on the column beside the sidebar', () => {
+  // `margin-inline:auto` centres inside .main-col, which starts after the
+  // sidebar — so the calendar sat 84px right of the middle of the screen and
+  // left a visibly larger gap on the left. Every term below is a token this
+  // layout already uses, so it is derived rather than nudged.
+  assert.match(css, /--cal-win:calc\(100vw - var\(--sbw\)\)/, 'the window width is not defined');
+  assert.match(css, /--cal-wrap-offset:max\(0px, calc\(\(var\(--cal-win\) - var\(--sidebar-w\) - var\(--content-max\)\) \/ 2\)\)/,
+    'the wrap offset is not reconstructed');
+  assert.match(css, /--cal-col-left:calc\(var\(--sidebar-w\) \+ var\(--cal-wrap-offset\) \+ 44px\)/,
+    'the column origin is not reconstructed');
+  assert.match(css, /--cal-inset:max\(0px, calc\(\(var\(--cal-win\) - var\(--cal-max\)\) \/ 2 - var\(--cal-col-left\)\)\)/,
+    'the inset is not the distance to a window-centred frame');
+  // max(0px, …) is what makes a narrow window fall back to filling the column
+  // instead of pulling the frame off the left edge.
+  assert.ok(!/--cal-inset:calc\(/.test(css), 'the inset is unclamped and can go negative');
+});
+
+test('frame: the scrollbar is reserved and subtracted, not ignored', () => {
+  // Two separate errors this closes. The gutter appearing only on modes tall
+  // enough to scroll made Month render 15px narrower than Agenda; and 100vw
+  // INCLUDES the scrollbar, so without --sbw the frame sat half a scrollbar
+  // right of centre on any page that scrolls.
+  assert.match(css, /html\{scrollbar-gutter:stable\}/, 'the scrollbar gutter is not reserved');
+  assert.match(css, /:root\{--sbw:0px\}/, 'the scrollbar width has no default');
+  const fn = body(appCode, 'function measureScrollbar()');
+  assert.match(fn, /document\.documentElement\.getBoundingClientRect\(\)\.width/,
+    'clientWidth misreports once the gutter is reserved — measure the root box');
+  assert.match(fn, /setProperty\('--sbw'/, 'the measurement never reaches the CSS');
+  assert.match(appCode, /addEventListener\('resize', \(\) => \{ positionPill\(true\); measureScrollbar\(\); \}\)/,
+    'the scrollbar is measured once and never again');
+});
+
+test('frame: Agenda starts on the same left edge as Month', () => {
+  // Agenda led with a 64px date gutter, so its cards began ~80px further in
+  // than every other mode's content while the canvas edges matched — the modes
+  // looked like they were on different margins.
+  assert.match(css, /\.cal-body \.ag-day\{grid-template-columns:minmax\(0,1fr\)/,
+    'Agenda still reserves a date column beside its items');
+  assert.match(css, /\.cal-body \.ag-date\{flex-direction:row/,
+    'the date is still stacked as a gutter rather than labelled above');
 });
 
 test('frame: the rail belongs to the Calendar, not to the page', () => {
@@ -333,6 +376,6 @@ test('reminders: still no mode selector, and now aligned to the same frame', () 
   }
   assert.match(css, /\.rv-head-row\{grid-template-columns:1fr auto\}/,
     'the reminders header is not a two-zone row');
-  assert.match(css, /\.rv\{width:100%;max-width:var\(--cal-max\);margin-inline:auto/,
+  assert.match(css, /\.rv\{width:auto;max-width:var\(--cal-max\);margin-left:var\(--cal-inset\)/,
     'the reminder list is not on the Calendar frame');
 });

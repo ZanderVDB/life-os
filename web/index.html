@@ -96,6 +96,10 @@
   }
 }
 *{box-sizing:border-box}
+/* Reserve the scrollbar always. Without it the gutter appears only on modes
+   tall enough to scroll, so Month rendered 15px narrower than Agenda and the
+   page twitched sideways when you switched between them. */
+html{scrollbar-gutter:stable}
 html,body{margin:0;height:100%}
 body{
   font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
@@ -1658,8 +1662,10 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
   color:var(--muted);background:var(--surface-2);border-radius:6px;padding:3px 8px}
 
 /* §3-§5 The workspace itself. */
-.rv{width:100%;max-width:var(--cal-max);margin-inline:auto;display:flex;
-  flex-direction:column;gap:18px}
+/* D4.7: the workspace sits on the Calendar frame too, so leaving Reminders
+   does not slide the page sideways. */
+.rv{width:auto;max-width:var(--cal-max);margin-left:var(--cal-inset);margin-right:0;
+  display:flex;flex-direction:column;gap:18px}
 .rv-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .rv-filters{display:flex;gap:5px;flex-wrap:wrap}
 .rv-filter{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;
@@ -1782,6 +1788,28 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 :root{--cal-rail-w:320px; --cal-rail-gap:24px; --cal-rail-col:0px}
 body.cal-rail-open{--cal-rail-col:calc(var(--cal-rail-w) + var(--cal-rail-gap))}
 
+/* ── The frame is centred on the WINDOW, not on the column ──────────────
+   `margin-inline:auto` centres the frame inside .main-col, which begins after
+   the sidebar — so the calendar sat 84px right of the middle of the screen and
+   left a visibly bigger gap on the left. The eye includes the sidebar in the
+   page; the layout did not.
+
+   Derived, not nudged: reconstruct where .main-col's left edge is, work out
+   where a window-centred frame would start, and inset by the difference. Every
+   term is a token this layout already uses, so it holds at every width, and it
+   clamps to zero once the frame no longer fits — a narrow window falls back to
+   filling the column.
+
+   `--sbw` is the scrollbar, published by measureScrollbar(): 100vw includes it,
+   so without that term a scrolling page sits half a scrollbar off centre. */
+:root{--sbw:0px}
+body:has(.cal-head){
+  --cal-win:calc(100vw - var(--sbw));
+  --cal-wrap-offset:max(0px, calc((var(--cal-win) - var(--sidebar-w) - var(--content-max)) / 2));
+  --cal-col-left:calc(var(--sidebar-w) + var(--cal-wrap-offset) + 44px);
+  --cal-inset:max(0px, calc((var(--cal-win) - var(--cal-max)) / 2 - var(--cal-col-left)));
+}
+
 /* On Calendar the page rail is unused: the calendar owns its own, inside the
    frame, so the frame can stay still while only the canvas gives up width.
    The empty second track and the gutter are KEPT at zero width deliberately —
@@ -1791,8 +1819,13 @@ body.cal-rail-open{--cal-rail-col:calc(var(--cal-rail-w) + var(--cal-rail-gap))}
 body:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr) 0}
 body:has(.cal-head) .rail{display:none}
 
-.cal-body{width:100%;max-width:var(--cal-max);margin-inline:auto;
-  display:grid;grid-template-columns:minmax(0,1fr) var(--cal-rail-col);
+/* width:auto, not 100%: the frame fills what is left after the inset and is
+   then capped, so one rule covers both the wide case (capped at --cal-max,
+   window-centred) and the narrow case (inset 0, fills the column). */
+body:has(.cal-head) .page-head{display:block}
+.cal-head,.cal-body{width:auto;max-width:var(--cal-max);
+  margin-left:var(--cal-inset);margin-right:0}
+.cal-body{display:grid;grid-template-columns:minmax(0,1fr) var(--cal-rail-col);
   align-items:start;
   transition:grid-template-columns var(--d-slow) var(--e-out)}
 .cal-canvas{min-width:0}
@@ -1800,6 +1833,17 @@ body:has(.cal-head) .rail{display:none}
    so a second cap here would fight it. */
 .cal-body .cal-month,.cal-body .cal-agenda,.cal-body .cal-plan{max-width:none;
   margin-inline:0;width:100%}
+
+/* Agenda's day rows start at the same left edge as a Month cell.
+   They used to lead with a 64px date column, so the cards began 80px further
+   in than every other mode's content while the canvas edges matched — the
+   modes looked like they were on different margins. The date is a label above
+   its items now rather than a gutter beside them. */
+.cal-body .ag-day{grid-template-columns:minmax(0,1fr);gap:5px;padding:6px 0 10px}
+.cal-body .ag-date{flex-direction:row;align-items:baseline;gap:7px;
+  padding:0 0 1px 2px}
+.cal-body .ag-num{font-size:13.5px;font-weight:700;line-height:1.2}
+.cal-body .ag-dow{font-size:10.5px}
 
 /* The rail is clipped, not squeezed. Its content keeps a fixed width so nothing
    inside it re-wraps mid-transition — the reflow flicker §10 forbids. */
