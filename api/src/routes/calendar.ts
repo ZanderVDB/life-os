@@ -510,14 +510,38 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
     return { reminder: row };
   });
 
+  /**
+   * Resume.
+   *
+   * A reminder paused in March and resumed in August must not come back due in
+   * March. Rolling the rule forward to the first occurrence that is not in the
+   * past is the only unambiguous answer — the alternatives are firing
+   * immediately for a date that has passed, or silently inventing the months
+   * that were skipped.
+   *
+   * A one-off whose date has passed resumes as overdue, which IS accurate: it
+   * never happened and still has not.
+   */
   app.post('/api/v1/workspaces/:workspaceId/reminders/:id/resume', pre, async (req) => {
     const { workspaceId, id } = req.params as { workspaceId: string; id: string };
+    const [existing] = await db.select().from(reminders).where(and(
+      eq(reminders.id, id), eq(reminders.workspaceId, workspaceId),
+    ));
+    if (!existing) throw notFound('Reminder not found.');
+    const [rule] = await db.select().from(reminderRecurrenceRules)
+      .where(eq(reminderRecurrenceRules.reminderId, id));
+
+    const today = new Date().toISOString().slice(0, 10);
+    let due = existing.dueDate;
+    if (rule && due && due < today) {
+      // Bounded: a daily rule paused for years must not spin.
+      for (let i = 0; i < 500 && due < today; i++) due = nextAfter(due, rule);
+    }
+
     const [row] = await db.update(reminders)
-      .set({ status: 'open', updatedAt: new Date() })
-      .where(and(eq(reminders.id, id), eq(reminders.workspaceId, workspaceId)))
-      .returning();
-    if (!row) throw notFound('Reminder not found.');
-    return { reminder: row };
+      .set({ status: 'open', dueDate: due, updatedAt: new Date() })
+      .where(eq(reminders.id, id)).returning();
+    return { reminder: { ...row, recurrence: rule ?? null }, nextOccurrence: due };
   });
 
   /**

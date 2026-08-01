@@ -45,11 +45,24 @@ const cal = {
   data: null,
   loading: false,
   error: null,
-  // A sub-view of Calendar rather than a fourth mode: Month/Agenda/Plan answer
-  // "how am I viewing time", and a reminder list is not a view of time.
-  view: 'calendar',
-  reminderFilter: 'upcoming',
+  /*
+   * TWO independent concepts, because collapsing them into one is what caused
+   * the contradictory state:
+   *
+   *   mode    — how you are viewing TIME: month | agenda | plan
+   *   utility — a management surface layered beside Calendar, not over it:
+   *             none | reminders
+   *
+   * When `utility` is anything but 'none', the time-view controls are not
+   * merely hidden — they are not rendered at all, so there is nothing to click
+   * that could mutate calendar state behind the utility.
+   */
+  utility: 'none',
+  reminderFilter: 'active',
   reminders: null,
+  // Snapshot taken on entering a utility, restored on leaving, so returning
+  // lands on exactly the month you left rather than flashing through Month.
+  resume: null,
 };
 
 /* ── Date helpers ─────────────────────────────────────────────────────── */
@@ -174,7 +187,17 @@ function periodLabel() {
  * creating something new are different acts, and merging them would make the
  * mode control feel like a menu.
  */
+/**
+ * The Calendar header, or the utility's own header.
+ *
+ * A utility gets an entirely different header rather than a filtered version
+ * of this one. Hiding controls individually left the period label, the layer
+ * chips and the mode pill all still in the DOM and still wired — which is how
+ * pressing Today while managing reminders silently changed the month behind
+ * the workspace.
+ */
 export function calendarHeaderHtml() {
+  if (cal.utility === 'reminders') return remindersHeaderHtml();
   const active = MODES.findIndex((m) => m.id === cal.mode);
   return `<div class="cal-head">
     <div class="cal-head-row">
@@ -201,12 +224,14 @@ export function calendarHeaderHtml() {
       </div>
 
       <div class="cal-head-side">
-        <button class="cal-remind" id="cal-reminders"
-        aria-pressed="${cal.view === 'reminders'}">
+        <!-- Reminder management is not a peer of Month/Agenda/Plan, so it does
+           not get a peer-sized button. It lives behind one restrained utility
+           control with plain text labels. -->
+      <button class="cal-util" id="cal-util" aria-haspopup="menu"
+        aria-label="Calendar options">
         <svg viewBox="0 0 20 20" aria-hidden="true">
-          <path d="M10 3.5a4.5 4.5 0 0 0-4.5 4.5c0 4-1.5 5-1.5 5h12s-1.5-1-1.5-5A4.5 4.5 0 0 0 10 3.5Z"/>
-          <path d="M8.6 15.5a1.6 1.6 0 0 0 2.8 0"/></svg>
-        <span>Reminders</span>
+          <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
+          <circle cx="15.5" cy="10" r="1.5"/></svg>
       </button>
       <button class="cal-add" id="cal-add" aria-haspopup="menu" aria-expanded="false">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>
@@ -221,12 +246,7 @@ export function calendarHeaderHtml() {
           data-layer="${l.id}" aria-pressed="${cal.layers[l.id]}">
           <span class="cl-dot cl-${l.id}"></span>${l.label}</button>`).join('')}
       </div>
-      <button class="cal-legend-btn" id="cal-legend" aria-haspopup="dialog"
-        aria-label="What the calendar symbols mean">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/>
-          <path d="M10 9v4.5M10 6.6v.1"/></svg>
-        <span>Key</span>
-      </button>
+
     </div>
   </div>`;
 }
@@ -260,6 +280,32 @@ export function legendHtml() {
     </div>
     <p class="lg-note">Purple always means selected or interactive — never how
       busy a day is.</p>
+  </div>`;
+}
+
+/**
+ * The Reminders workspace header.
+ *
+ * No period, no Today, no mode pill, no layer chips — not hidden, absent. You
+ * are managing rules, not browsing a month, and the header says so.
+ */
+function remindersHeaderHtml() {
+  return `<div class="cal-head rv-head-wrap">
+    <div class="cal-head-row rv-head-row">
+      <div class="rv-head-left">
+        <button class="rv-back" id="rv-back">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 5-5 5 5 5"/></svg>
+          <span>Calendar</span>
+        </button>
+        <h1>Reminders</h1>
+      </div>
+      <div class="rv-head-right">
+        <button class="rv-new-btn" id="rv-new">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>
+          <span>New reminder</span>
+        </button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -700,38 +746,26 @@ const fmtMin = (m) =>
  * A and C are identical everywhere. Only B is replaced, and it crossfades.
  */
 export function calendarRailHtml() {
-  return `${railContextHtml()}
-    <div class="rail-ctx" data-rail-ctx="${cal.mode}">${railModeHtml()}</div>
+  // §11 No Calendar rail inside a utility. Reusing Month's rail there was what
+  // put a selected date and "Add to this day" beside a list of reminder rules.
+  if (cal.utility !== 'none') return '';
+
+  // §12 Contextual, not permanent. A rail kept for symmetry is empty space
+  // with a border, and Month with nothing selected has nothing to say.
+  if (cal.mode === 'month' && !cal.selected) return '';
+  if (cal.mode === 'agenda') return '';
+
+  return `<div class="rail-ctx" data-rail-ctx="${cal.mode}">${railModeHtml()}</div>
     ${railAttentionHtml()}`;
 }
 
-/** A - always present, always the same shape. */
-function railContextHtml() {
-  const conn = cal.data?.connection ?? null;
-  const period = cal.selected
-    ? parseIso(cal.selected).toLocaleDateString(undefined,
-      { weekday: 'long', day: 'numeric', month: 'long' })
-    : periodLabel();
-  const state = !conn ? 'none' : conn.status === 'error' ? 'error' : 'ok';
-
-  return `<div class="rail-card rail-context">
-    <div class="rail-head">
-      <h3>${esc(period)}</h3>
-      <button class="rail-src-btn" id="cal-sources" aria-haspopup="dialog">
-        <span class="rail-src-dot ${state === 'error' ? 'is-error' : ''}"></span>
-        ${state === 'none' ? 'Connect' : state === 'error' ? 'Reconnect' : 'Sources'}
-      </button>
-    </div>
-    <div class="rail-sync">${state === 'none' ? 'No calendar connected'
-      : esc(lastSyncedWord(conn.lastSyncedAt))}</div>
-  </div>`;
-}
+/** True when the rail should occupy space at all. */
+export const railIsOpen = () => cal.utility === 'none'
+  && ((cal.mode === 'month' && !!cal.selected) || cal.mode === 'plan');
 
 /** B - the only part that changes with the mode. */
 function railModeHtml() {
-  if (cal.mode === 'month') {
-    return cal.selected ? selectedRailHtml() : monthOverviewHtml();
-  }
+  if (cal.mode === 'month') return selectedRailHtml();
   if (cal.mode === 'plan') return planRailHtml();
   return agendaRailHtml();
 }

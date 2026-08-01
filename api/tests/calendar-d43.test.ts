@@ -97,14 +97,19 @@ test('cleanup: runs in a transaction and logs counts only', () => {
 
 /* ── §7 Stable rail ──────────────────────────────────────────────────── */
 
-test('rail: one shell, with only the mode band changing', () => {
-  for (const fn of ['railContextHtml', 'railModeHtml', 'railAttentionHtml']) {
+test('rail: contextual, with only the mode band changing', () => {
+  // D4.3 required a permanently stable rail. D4.6 revised that: a rail kept
+  // for symmetry is an empty column with a border, so the context card was
+  // removed (it duplicated the selected-day date) and the rail now appears
+  // only when it has something to say.
+  for (const fn of ['railModeHtml', 'railAttentionHtml']) {
     assert.match(calCode, new RegExp(`function ${fn}`), `the rail has no ${fn}`);
   }
   const shell = body(calCode, 'export function calendarRailHtml()');
-  assert.match(shell, /railContextHtml\(\)/, 'the context card is not always present');
   assert.match(shell, /data-rail-ctx="\$\{cal\.mode\}"/, 'the mode band is not identified');
   assert.match(shell, /railAttentionHtml\(\)/, 'the attention card is not always present');
+  assert.match(shell, /if \(cal\.mode === 'month' && !cal\.selected\) return ''/,
+    'Month renders an empty rail');
   // Per-mode rails are gone.
   assert.ok(!calCode.includes('function monthRailHtml'),
     'Month still builds its own rail from scratch');

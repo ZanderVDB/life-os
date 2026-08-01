@@ -1329,10 +1329,7 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cal-head,.cal-month,.cal-agenda,.cal-plan{width:100%;max-width:var(--cal-max);
   margin-inline:auto}
 :root{--cal-max:1180px}
-/* Calendar's rail holds a date, a short context card and an attention card —
-   far less than Today's habit rail, so it does not need Today's width. The
-   canvas is where the work is. */
-body:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr) 300px}
+
 @media (min-width:1600px){:root{--cal-max:1340px}}
 @media (min-width:2100px){:root{--cal-max:1520px}}
 
@@ -1722,6 +1719,70 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
   .rv-actions{opacity:1}
   .rv-status{margin-left:0}
 }
+
+/* ══ D4.6 ═══════════════════════════════════════════════════════════════ */
+
+/* §4 One restrained utility control, not a peer-sized Reminders button. */
+.cal-util{width:38px;height:38px;border-radius:11px;background:var(--surface-2);
+  color:var(--muted);display:grid;place-items:center;
+  transition:color var(--t-hover),background var(--t-hover)}
+.cal-util svg{width:18px;height:18px;fill:currentColor}
+.cal-util:hover{color:var(--text-2)}
+.cal-util-menu button,.today-menu button{display:flex;align-items:center;gap:10px;
+  width:100%;padding:9px 12px;border-radius:9px;font-size:13px;color:var(--text-2);
+  text-align:left;transition:background var(--t-hover),color var(--t-hover)}
+.cal-util-menu button:hover,.today-menu button:hover{background:var(--surface-3);color:var(--text)}
+.cal-util-menu,.today-menu{min-width:196px;padding:6px}
+.tm-count{margin-left:auto;font-size:11px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.today-more{width:34px;height:34px;border-radius:10px;color:var(--muted);
+  display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
+.today-more svg{width:18px;height:18px;fill:currentColor}
+.today-more:hover{background:var(--surface-2);color:var(--text-2)}
+
+/* §5 The Reminders workspace header — no period, no modes, no layers. */
+.rv-head-row{grid-template-columns:1fr auto}
+.rv-head-left{display:flex;align-items:center;gap:14px;min-width:0}
+.rv-head-left h1{margin:0}
+.rv-head-right{display:flex;align-items:center;gap:10px}
+.rv-back{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 8px;
+  border-radius:9px;font-size:12.5px;font-weight:600;color:var(--muted);
+  background:var(--surface-2);transition:color var(--t-hover)}
+.rv-back svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round}
+.rv-back:hover{color:var(--text)}
+/* Shares the Add button's shape deliberately, but not its class — a different
+   button wearing `cal-add` is how "is this the Calendar Add control?" starts. */
+.rv-new-btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 16px 0 13px;
+  border-radius:11px;font-size:13px;font-weight:600;color:#fff;
+  background:var(--brand);box-shadow:var(--glow);
+  transition:transform var(--d-fast) var(--e-out),box-shadow var(--t-hover)}
+.rv-new-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round}
+.rv-new-btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(124,77,255,.34)}
+.rv-new-btn:active{transform:translateY(0) scale(.98)}
+.rv-badge{background:rgba(255,196,77,.14)!important;color:var(--warn)!important;
+  border-radius:5px;padding:1px 7px;font-weight:600}
+
+/* §12/§17 The grid reclaims the rail's width when the rail has nothing to say.
+   A rail kept for symmetry is an empty column with a border. */
+body:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr) 0;
+  transition:grid-template-columns var(--d-slow) var(--e-out)}
+body:has(.cal-head) .rail{opacity:0;pointer-events:none;overflow:hidden;
+  transition:opacity var(--d-base) var(--e-out)}
+body.cal-rail-open:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr) 320px}
+body.cal-rail-open:has(.cal-head) .rail{opacity:1;pointer-events:auto}
+@media (prefers-reduced-motion:reduce){
+  body:has(.cal-head) .main-wrap,body:has(.cal-head) .rail{transition:none}
+}
+
+/* §15 Completed history rows. */
+.hist-list{display:flex;flex-direction:column;max-width:760px}
+.hist-restore{font-size:10.5px;font-weight:600;color:var(--muted);background:var(--surface-2);
+  border-radius:6px;padding:3px 9px;opacity:0;transition:opacity var(--t-hover),color var(--t-hover)}
+.hist-row:hover .hist-restore,.hist-restore:focus-visible{opacity:1}
+.hist-restore:hover{color:var(--accent)}
+.hist-more{margin-top:16px}
 
 /* ── Ambient stars ──────────────────────────────────────────────────
    Decorative only: behind everything, never interactive, never in the

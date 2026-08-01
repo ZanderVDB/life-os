@@ -252,10 +252,11 @@ test('history is reachable, and never from the sidebar', () => {
   assert.ok(!/function todayHeaderActions/.test(app),
     'the Completed control is back in the Today header');
   assert.match(app, /'history'/, 'the Completed route was removed entirely');
-  // D4.5 moved Completed out of the account popover and onto the end of the
-  // Today board, where content history belongs.
-  assert.match(app, /today-history/, 'Completed has no destination');
-  assert.match(app, /go\('history'\)/, 'the Completed link does not navigate');
+  // D4.5 moved Completed out of the account popover; D4.6 moved it again, out
+  // of the board flow and into Today's overflow menu, because a running total
+  // of finished work competed with what still needs doing.
+  assert.match(app, /View completed tasks/, 'Completed has no destination');
+  assert.match(app, /go\('history'\)/, 'the Completed action does not navigate');
   assert.match(app, /data-route="today"[\s\S]{0,120}Back to Today/, 'History cannot get back');
   // Buckets still exclude completed work.
   assert.match(app, /t\.status !== 'done'/, 'buckets no longer exclude completed tasks');

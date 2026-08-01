@@ -34,7 +34,10 @@ test('discoverability and rail rules are documented', () => {
 /* ── §2-§5 The workspace ─────────────────────────────────────────────── */
 
 test('reminders: reachable from Calendar in one action', () => {
-  assert.match(calCode, /id="cal-reminders"/, 'no Reminders entry in the Calendar header');
+  // D4.6 moved it behind one restrained utility control: a peer-sized button
+  // gave reminder management equal status to the three core time views.
+  assert.match(calCode, /id="cal-util"/, 'no Calendar utility control');
+  assert.match(appCode, /'Manage reminders'/, 'the utility menu does not offer reminders');
   assert.match(appCode, /openRemindersView/, 'the entry does not open anything');
   // Not buried in Settings.
   const tabs = settings.slice(settings.indexOf('SETTINGS_TABS'), settings.indexOf('];'));
@@ -43,8 +46,14 @@ test('reminders: reachable from Calendar in one action', () => {
 
 test('reminders: one workspace with filters, not five pages', () => {
   assert.match(view, /const FILTERS = \[/, 'no filters');
-  for (const f of ['upcoming', 'recurring', 'overdue', 'paused', 'completed']) {
+  // D4.6 cut this to Active and Paused. Recurring repeated what every card
+  // already says; Completed implied an ending that ticking one occurrence of a
+  // monthly rule had not caused; Overdue is a badge, not a kind of reminder.
+  for (const f of ['active', 'paused']) {
     assert.ok(view.includes(`'${f}'`), `the ${f} filter is missing`);
+  }
+  for (const gone of ['upcoming', 'recurring', 'completed']) {
+    assert.ok(!view.includes(`id: '${gone}'`), `the ${gone} filter came back`);
   }
   assert.match(view, /function filterReminders/, 'filters are not one list viewed differently');
 });
@@ -124,8 +133,11 @@ test('account: Sign out and version in Settings, Completed on Today', () => {
   assert.match(settings, /LIFE_OS_BUILD/, 'the build is not in Settings');
   assert.ok(!/who-chev/.test(appCode), 'the popover chevron survives');
   // Completed is content, so it sits with the content.
-  assert.match(appCode, /today-history/, 'Completed has no destination');
-  assert.match(html, /\.today-history\{/, 'the Completed link has no styling');
+  // D4.6 moved it out of the board flow: a running total of finished work was
+  // competing with what still needs doing.
+  assert.match(appCode, /id="today-more"/, 'Today has no overflow control');
+  assert.match(appCode, /View completed tasks/, 'the overflow does not offer history');
+  assert.ok(!/today-history/.test(appCode), 'the count is back in the board');
   // It must be REACHABLE but not in the primary list — scoped to ROUTES, since
   // SECONDARY_ROUTES legitimately carries it so the route resolves at all.
   const routes = read('routes.js');

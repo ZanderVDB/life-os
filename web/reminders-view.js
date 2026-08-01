@@ -10,16 +10,24 @@
  * This is about RULES, not dates. "Monthly on the 28th" is the thing the user
  * owns; the date it next lands on is a consequence.
  *
- * One workspace with filters, not five pages. Upcoming, Recurring, Overdue,
- * Completed and Paused are views of one list, because they are the same
- * records asked about differently.
+ * One workspace, two filters. See the note on FILTERS for why the other three
+ * were removed rather than kept for completeness.
+ */
+/*
+ * Two filters, not five.
+ *
+ * "Recurring" was a tab that repeated what every card already says on its own
+ * face. "Completed" was misleading: ticking one occurrence of a monthly
+ * reminder does not complete the rule, so a Completed tab implied an ending
+ * that had not happened. "Overdue" is a state of an active occurrence, not a
+ * kind of reminder — it belongs as a badge inside Active.
+ *
+ * What is left is the only distinction that changes what a reminder DOES:
+ * whether it is still firing.
  */
 const FILTERS = [
-  { id: 'upcoming', label: 'Upcoming' },
-  { id: 'recurring', label: 'Recurring' },
-  { id: 'overdue', label: 'Overdue' },
+  { id: 'active', label: 'Active' },
   { id: 'paused', label: 'Paused' },
-  { id: 'completed', label: 'Completed' },
 ];
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -55,7 +63,6 @@ export function remindersViewHtml(list, filter, areaName) {
           ${f.label}${counts[f.id] ? `<span class="rv-count">${counts[f.id]}</span>` : ''}
         </button>`).join('')}
       </div>
-      <button class="btn btn-primary rv-add" id="rv-add">New reminder</button>
     </div>
 
     ${shown.length ? `<div class="rv-list" role="list">
@@ -68,18 +75,16 @@ export function remindersViewHtml(list, filter, areaName) {
 }
 
 function filterReminders(list, filter) {
-  const today = new Date().toISOString().slice(0, 10);
-  switch (filter) {
-    case 'recurring': return list.filter((r) => r.recurrence && r.status !== 'done');
-    case 'overdue': return list.filter((r) => r.isOverdue);
-    case 'paused': return list.filter((r) => r.status === 'paused');
-    case 'completed': return list.filter((r) => r.status === 'done');
-    default:
-      // Upcoming excludes finished and paused: it is a list of things that
-      // are actually going to happen.
-      return list.filter((r) => r.status !== 'done' && r.status !== 'paused')
-        .sort((a, b) => (a.nextOccurrence ?? '9999').localeCompare(b.nextOccurrence ?? '9999'));
-  }
+  if (filter === 'paused') return list.filter((r) => r.status === 'paused');
+  // Active = every rule still firing. A completed one-off drops out; a
+  // recurring rule whose occurrence you ticked stays, because the rule did not
+  // end when the occurrence did.
+  return list.filter((r) => r.status !== 'paused' && !(r.status === 'done' && !r.recurrence))
+    .sort((a, b) => {
+      // Overdue first — it is the only thing here that needs acting on today.
+      if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+      return (a.nextOccurrence ?? '9999').localeCompare(b.nextOccurrence ?? '9999');
+    });
 }
 
 /**
@@ -103,13 +108,14 @@ function reminderCardHtml(r, areaName) {
     <button class="rv-body" data-rv-open="${r.id}">
       <span class="rv-title">${esc(r.title)}</span>
       <span class="rv-meta">
-        ${r.recurrenceText ? `<span class="rv-rule">${esc(r.recurrenceText)}</span>` : ''}
+        <span class="rv-rule">${esc(r.recurrenceText ?? 'Once')}</span>
         ${r.nextOccurrence && !done ? `<span class="rv-next">
           Next: ${esc(prettyFull(r.nextOccurrence))}${rel ? ` · ${esc(rel)}` : ''}</span>` : ''}
         ${r.dueTime ? `<span class="rv-time">${esc(r.dueTime)}</span>` : ''}
         ${area ? `<span class="rv-area">${esc(area)}</span>` : ''}
-        <span class="rv-status">${paused ? 'Paused' : done ? 'Completed'
-          : r.isOverdue ? 'Overdue' : 'Active'}</span>
+        ${r.isOverdue ? `<span class="rv-badge">Overdue${r.nextOccurrence
+          ? ` · ${esc(prettyFull(r.dueDate))}` : ''}</span>` : ''}
+        ${paused ? '<span class="rv-status">Paused</span>' : ''}
       </span>
     </button>
 
@@ -121,20 +127,9 @@ function reminderCardHtml(r, areaName) {
   </div>`;
 }
 
-const emptyTitle = (f) => ({
-  upcoming: 'No reminders coming up',
-  recurring: 'Nothing repeats yet',
-  overdue: 'Nothing overdue',
-  paused: 'Nothing paused',
-  completed: 'Nothing completed yet',
-}[f] ?? 'Nothing here');
-
-const emptyBody = (f) => ({
-  upcoming: 'Add a reminder and it will appear here with its next date.',
-  recurring: 'A reminder that repeats will show its rule here.',
-  overdue: 'Everything is on schedule.',
-  paused: 'Paused reminders keep their history but stop appearing on the calendar.',
-  completed: 'Reminders you finish will be listed here.',
-}[f] ?? '');
+const emptyTitle = (f) => (f === 'paused' ? 'Nothing paused' : 'No reminders yet');
+const emptyBody = (f) => (f === 'paused'
+  ? 'A paused reminder keeps its rule and its history but stops appearing on the calendar.'
+  : 'Add one and it will show its rule and its next date here.');
 
 export { FILTERS as REMINDER_FILTERS, filterReminders };

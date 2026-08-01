@@ -24,6 +24,7 @@ import { openDetailSheet } from './detail-sheet.js';
 import { initHoverPreview, closeHoverPreview } from './hover-preview.js';
 import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHtml,
   planHours, itemsForDay, hoverRender, freeWindowsFor, legendHtml, sourcesPopoverHtml,
+  railIsOpen,
   recurrenceWords,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { settingsHtml } from './settings.js';
@@ -384,7 +385,14 @@ function wireShell() {
 
   window.addEventListener('hashchange', () => {
     const r = routeFromHash();
-    if (r !== state.route) go(r);
+    if (r !== state.route) return go(r);
+    // Back/forward within Calendar moves between the calendar and its
+    // utilities without a route change, so it is handled here.
+    const u = utilityFromHash();
+    if (r === 'calendar' && u !== cal.utility) {
+      if (u === 'reminders') openRemindersView(false);
+      else closeRemindersView(false);
+    }
   });
   // The rail reflows between a column and a grid; the pill must follow the nav.
   window.addEventListener('resize', () => positionPill(true));
@@ -426,9 +434,23 @@ function positionPill(snap = false) {
 
 // History and Settings are real, bookmarkable routes even though neither
 // appears in the primary sidebar.
+/**
+ * `#calendar/reminders` is a real destination, not a flag on top of Month.
+ *
+ * That matters for refresh and for the browser's back button: reloading on the
+ * reminders URL must open reminders, and Back must leave it — neither of which
+ * a piece of in-memory state can do.
+ */
 const routeFromHash = () => {
-  const id = (location.hash || '#today').slice(1).split('?')[0];
+  const path = (location.hash || '#today').slice(1).split('?')[0];
+  const id = path.split('/')[0];
   return ALL_ROUTE_IDS.includes(id) ? id : 'today';
+};
+
+const utilityFromHash = () => {
+  const path = (location.hash || '').slice(1).split('?')[0];
+  const sub = path.split('/')[1];
+  return sub === 'reminders' ? 'reminders' : 'none';
 };
 
 async function go(id) {
@@ -458,13 +480,25 @@ async function loadRoute() {
   scroll.style.animation = '';
 
   if (state.route === 'today') {
-    head.innerHTML = greetingHtml();
+    // A quiet overflow, not a board item. Finished work is for recovery and
+    // reflection; putting a running total in the daily flow made it compete
+    // with what still needs doing.
+    head.innerHTML = `${greetingHtml()}
+      <div class="page-actions">
+        <button class="today-more" id="today-more" aria-haspopup="menu"
+          aria-label="More actions">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="10" cy="4.5" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
+            <circle cx="10" cy="15.5" r="1.5"/></svg>
+        </button>
+      </div>`;
     scroll.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
     try {
       await loadTasks();
       scroll.innerHTML = todayHtml();
       wireToday();
-      scroll.querySelector('.today-history')?.addEventListener('click', () => go('history'));
+      document.getElementById('today-more')?.addEventListener('click', (e) =>
+        openTodayMenu(e.currentTarget));
       renderRail();
     } catch (e) {
       scroll.innerHTML = errorHtml(e.message);
@@ -541,11 +575,7 @@ function todayHtml() {
       </div>
     </div>
     <div class="buckets">${BUCKETS.map(bucketHtml).join('')}</div>
-    <!-- Completed work is content, not account management, so it sits at the
-         end of the board rather than behind the person's name. Quiet, because
-         finished work should not compete with what still needs doing. -->
-    ${state.historyTotal ? `<button class="today-history" data-route="history">
-      ${icon('check', 15)}<span>${state.historyTotal} completed</span></button>` : ''}`;
+`;
 }
 
 function bucketHtml(b) {
@@ -1457,6 +1487,10 @@ async function loadCalendar() {
     const saved_ = localStorage.getItem('los2_cal_mode');
     if (MODE_IDS.includes(saved_)) cal.mode = saved_;
   }
+  // The URL is the source of truth for which surface is open, so a refresh on
+  // #calendar/reminders opens reminders rather than Month.
+  cal.utility = utilityFromHash();
+  if (cal.utility === 'reminders' && !cal.reminders) await loadReminders();
   const head = document.getElementById('page-head');
   const scroll = document.getElementById('main-scroll');
   if (head) head.innerHTML = calendarHeaderHtml();
@@ -1485,11 +1519,11 @@ async function loadCalendar() {
   }
   cal.loading = false;
   if (state.route !== 'calendar') return;
-  scroll.innerHTML = cal.view === 'reminders'
+  scroll.innerHTML = cal.utility === 'reminders'
     ? remindersViewHtml(cal.reminders ?? [], cal.reminderFilter, areaName)
     : calendarBodyHtml();
   applyCanvasEnter(scroll);
-  if (cal.view === 'reminders') wireRemindersView(); else wireCalendar();
+  if (cal.utility === 'reminders') wireRemindersView(); else wireCalendar();
   renderCalendarRail();
 
   // Returning from Google: the callback stored the connection and the calendar
@@ -1527,7 +1561,7 @@ function paintCalendar() {
   if (period) period.textContent = periodLabelSafe();
   // Respect the sub-view. Painting only the calendar body here is what made
   // the Reminders button toggle its own state and change nothing else.
-  if (cal.view === 'reminders') {
+  if (cal.utility === 'reminders') {
     scroll.innerHTML = remindersViewHtml(cal.reminders ?? [], cal.reminderFilter, areaName);
     wireRemindersView();
   } else {
@@ -1559,6 +1593,9 @@ const periodLabelSafe = () => {
 function renderCalendarRail() {
   const rail = document.getElementById('rail');
   if (!rail) return;
+  // The grid reclaims the width when the rail has nothing to show, rather than
+  // leaving a bordered empty column for symmetry.
+  document.body.classList.toggle('cal-rail-open', railIsOpen());
   // Only the contextual band is swapped when the mode changes; the context
   // and attention cards keep their nodes, so the rail never flashes.
   const prevMode = rail.querySelector('[data-rail-ctx]')?.dataset.railCtx;
@@ -1585,7 +1622,7 @@ function renderCalendarRail() {
     b.onclick = () => {
       if (b.dataset.insight === 'reminders') return openRemindersView();
       cal.mode = 'plan';
-      cal.view = 'calendar';
+      cal.utility = 'none';
       localStorage.setItem('los2_cal_mode', 'plan');
       loadCalendar();
     };
@@ -1613,7 +1650,7 @@ function wireCalendarHeader() {
       });
       cal.enter = 'mode';
       // Choosing a time view means leaving the reminder list.
-      cal.view = 'calendar';
+      cal.utility = 'none';
       loadCalendar();
     };
     // Arrow keys move between modes, as a tablist should.
@@ -1644,12 +1681,12 @@ function wireCalendarHeader() {
     };
   });
 
-  const remBtn = document.getElementById('cal-reminders');
-  remBtn?.addEventListener('click', () =>
-    (cal.view === 'reminders' ? closeRemindersView() : openRemindersView()));
+  const utilBtn = document.getElementById('cal-util');
+  utilBtn?.addEventListener('click', () => openCalendarUtility(utilBtn));
 
-  const legendBtn = document.getElementById('cal-legend');
-  legendBtn?.addEventListener('click', () => toggleLegend(legendBtn));
+  // The Reminders workspace has its own header, with its own controls.
+  document.getElementById('rv-back')?.addEventListener('click', () => closeRemindersView());
+  document.getElementById('rv-new')?.addEventListener('click', () => addReminder(null));
   // Layers filter what is already loaded — no round trip, no flash.
   document.querySelectorAll('[data-layer]').forEach((b) => {
     b.onclick = () => {
@@ -2218,20 +2255,94 @@ async function loadReminders() {
   }
 }
 
-async function openRemindersView() {
-  cal.view = 'reminders';
+/**
+ * Enters the Reminders workspace.
+ *
+ * Snapshots the calendar position first. Without that, leaving reminders
+ * rebuilt Month from whatever `cal.anchor` happened to be — and since the
+ * period controls were still live behind the workspace, that was often not
+ * where the user left.
+ */
+async function openRemindersView(push = true) {
+  cal.resume = { mode: cal.mode, anchor: new Date(cal.anchor), selected: cal.selected };
+  cal.utility = 'reminders';
+  // A utility has no selected day; leaving one behind is what leaked the
+  // Month rail into the reminder list.
+  cal.selected = null;
   cal.enter = 'mode';
-  document.getElementById('cal-reminders')?.setAttribute('aria-pressed', 'true');
+  if (push) history.pushState(null, '', '#calendar/reminders');
   await loadReminders();
   if (state.route !== 'calendar') return;
+  renderCalendarHeader();
   paintCalendar();
 }
 
-function closeRemindersView() {
-  cal.view = 'calendar';
+function closeRemindersView(push = true) {
+  const back = cal.resume;
+  cal.utility = 'none';
+  cal.resume = null;
+  if (back) {
+    cal.mode = back.mode;
+    cal.anchor = back.anchor;
+    cal.selected = back.selected;
+  }
   cal.enter = 'mode';
-  document.getElementById('cal-reminders')?.setAttribute('aria-pressed', 'false');
-  paintCalendar();
+  if (push) history.pushState(null, '', '#calendar');
+  renderCalendarHeader();
+  // Reload rather than repaint: the range for the restored period may not be
+  // the one currently in memory.
+  loadCalendar();
+}
+
+/** Redraws the header in place, so the mode pill never flashes. */
+function renderCalendarHeader() {
+  const head = document.getElementById('page-head');
+  if (head) head.innerHTML = calendarHeaderHtml();
+  wireCalendarHeader();
+}
+
+/** The Calendar utility menu — plain labels, no unexplained icons. */
+function openCalendarUtility(anchor) {
+  document.querySelector('.cal-util-menu')?.remove();
+  const menu = document.createElement('div');
+  menu.className = 'menu cal-util-menu';
+  menu.setAttribute('role', 'menu');
+  menu.innerHTML = [
+    ['reminders', 'Manage reminders'],
+    ['sources', 'Calendar sources'],
+    ['key', 'Calendar key'],
+  ].map(([k, label]) => `<button role="menuitem" data-cu="${k}">${label}</button>`).join('');
+  document.body.appendChild(menu);
+
+  const b = anchor.getBoundingClientRect();
+  menu.style.top = `${b.bottom + 6}px`;
+  menu.style.left = `${Math.min(b.left, window.innerWidth - menu.offsetWidth - 12)}px`;
+  if (!reducedMotion()) {
+    menu.animate([{ opacity: 0, translate: '0 -6px' }, { opacity: 1, translate: '0 0' }],
+      { duration: 150, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  }
+
+  const close = () => {
+    menu.remove();
+    document.removeEventListener('click', away, true);
+    document.removeEventListener('keydown', esc, true);
+  };
+  const away = (e) => { if (!menu.contains(e.target) && e.target !== anchor) close(); };
+  const esc = (e) => { if (e.key === 'Escape') { close(); anchor.focus(); } };
+  setTimeout(() => {
+    document.addEventListener('click', away, true);
+    document.addEventListener('keydown', esc, true);
+  }, 0);
+
+  menu.querySelectorAll('[data-cu]').forEach((b2) => {
+    b2.onclick = () => {
+      close();
+      if (b2.dataset.cu === 'reminders') return openRemindersView();
+      if (b2.dataset.cu === 'sources') return toggleSources(anchor);
+      return toggleLegend(anchor);
+    };
+  });
+  menu.querySelector('button').focus();
 }
 
 function wireRemindersView() {
@@ -2291,4 +2402,110 @@ async function pauseReminder(id) {
     paintCalendar();
     saved(paused ? 'Resumed' : 'Paused');
   } catch (e) { toast(e.message, true); }
+}
+
+/* ══ Completed history ══════════════════════════════════════════════════
+ *
+ * This renderer, and wireHistory below, were deleted by an earlier block
+ * replacement while the route still called them — so opening Completed threw
+ * "historyHtml is not defined". Same failure mode as toggleReminder: a
+ * refactor that removed a definition and left the call sites behind.
+ *
+ * History is for recovery and reflection, not a daily destination, so it is
+ * plain: what it was, when you finished it, and a way to put it back.
+ */
+function historyHtml() {
+  if (!state.history.length) {
+    return `<div class="state"><b>Nothing completed yet</b>
+      Finished tasks collect here, newest first.</div>`;
+  }
+  const more = state.history.length < state.historyTotal;
+  return `<div class="hist-list">
+      ${state.history.map(historyRowHtml).join('')}
+    </div>
+    ${more ? `<button class="btn hist-more" id="hist-more">
+      Show more (${state.historyTotal - state.history.length} left)</button>`
+    : `<p class="hist-end">That is all ${state.historyTotal} of them.</p>`}`;
+}
+
+function historyRowHtml(t) {
+  const when = t.completedAt
+    ? new Date(t.completedAt).toLocaleDateString(undefined,
+      { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
+  const area = t.areaId ? areaName(t.areaId) : null;
+  return `<div class="hist-row" data-hist="${t.id}">
+    <span class="hist-tick">${icon('check', 14)}</span>
+    <span class="hist-title">${esc(t.title)}</span>
+    <span class="hist-meta">
+      ${area ? `<span class="tm-area">${esc(area)}</span>` : ''}
+      <span class="hist-when ${when ? '' : 'unknown'}">${esc(when ?? 'date unknown')}</span>
+      <button class="hist-restore" data-restore="${t.id}">Restore</button>
+    </span>
+  </div>`;
+}
+
+function wireHistory() {
+  document.getElementById('hist-more')?.addEventListener('click', () => run(async () => {
+    await loadHistory();
+    document.getElementById('main-scroll').innerHTML = historyHtml();
+    wireHistory();
+  }));
+  document.querySelectorAll('[data-restore]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); restoreTask(b.dataset.restore); };
+  });
+  document.querySelectorAll('[data-hist]').forEach((row) => {
+    row.onclick = () => openTask(row.dataset.hist);
+  });
+}
+
+/** Puts a completed task back on the board. */
+async function restoreTask(id) {
+  const t = state.history.find((x) => x.id === id);
+  if (!t) return;
+  const row = document.querySelector(`[data-hist="${id}"]`);
+  try {
+    await api(`/api/v1/workspaces/${ws()}/tasks/${id}/uncomplete`, { method: 'POST' });
+    state.history = state.history.filter((x) => x.id !== id);
+    state.historyTotal = Math.max(0, state.historyTotal - 1);
+    if (row) collapseOut(row, () => {
+      document.getElementById('main-scroll').innerHTML = historyHtml();
+      wireHistory();
+    });
+    saved('Back on your board');
+  } catch (e) { toast(e.message, true); }
+}
+
+/** Today's overflow: secondary actions that should not sit in the board. */
+function openTodayMenu(anchor) {
+  document.querySelector('.today-menu')?.remove();
+  const menu = document.createElement('div');
+  menu.className = 'menu today-menu';
+  menu.setAttribute('role', 'menu');
+  menu.innerHTML = `<button role="menuitem" data-tm="history">
+    ${icon('check', 16)}<span>View completed tasks</span>
+    ${state.historyTotal ? `<span class="tm-count">${state.historyTotal}</span>` : ''}</button>`;
+  document.body.appendChild(menu);
+
+  const b = anchor.getBoundingClientRect();
+  menu.style.top = `${b.bottom + 6}px`;
+  menu.style.left = `${Math.min(b.left, window.innerWidth - menu.offsetWidth - 12)}px`;
+  if (!reducedMotion()) {
+    menu.animate([{ opacity: 0, translate: '0 -6px' }, { opacity: 1, translate: '0 0' }],
+      { duration: 150, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  }
+
+  const close = () => {
+    menu.remove();
+    document.removeEventListener('click', away, true);
+    document.removeEventListener('keydown', esc, true);
+  };
+  const away = (e) => { if (!menu.contains(e.target) && e.target !== anchor) close(); };
+  const esc = (e) => { if (e.key === 'Escape') { close(); anchor.focus(); } };
+  setTimeout(() => {
+    document.addEventListener('click', away, true);
+    document.addEventListener('keydown', esc, true);
+  }, 0);
+  menu.querySelector('[data-tm="history"]').onclick = () => { close(); go('history'); };
+  menu.querySelector('button').focus();
 }
