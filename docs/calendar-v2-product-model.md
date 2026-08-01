@@ -290,6 +290,18 @@ So:
 
 ### The Calendar frame
 
+The frame is centred on the **window**, sidebar included — not on the content
+column beside it. Centring inside the column put the calendar 84px right of the
+middle of the screen and left a visibly bigger gap on the left, because the
+sidebar is part of the page to the eye and was not part of the arithmetic. The
+inset is derived from the layout's own tokens and clamps to zero, so a narrow
+window falls back to filling the column.
+
+Two consequences of that, both load-bearing: `100vw` includes the scrollbar, so
+it must be subtracted or every scrolling page sits half a scrollbar off centre;
+and the scrollbar gutter is reserved always, or it appears only on the modes
+tall enough to scroll and Month renders narrower than Agenda.
+
 One frame holds the header, the canvas and the rail, and **its edges do not
 move**. Opening the selected-day rail takes width from the canvas's right edge
 only. Nothing that belongs to the page — the title, the period controls, the
