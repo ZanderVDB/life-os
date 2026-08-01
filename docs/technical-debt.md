@@ -331,3 +331,15 @@ skeleton only when there is genuinely nothing to show. The range endpoint is
 already shaped for this — `/calendar/range?from=&to=` is pure and cacheable —
 but the response contains private event titles, so it must stay in memory and
 never reach the service worker cache.
+
+## Today's rail renders on Completed (D4.7 §15, deferred)
+
+The Completed page is a Today sub-route, so it inherits Today's rail and shows
+"Habits Today" beside a list of finished tasks. Ticking a habit there is not
+wrong, but the rail is answering a question the page did not ask.
+
+Not changed in D4.7: the phase was scoped to Calendar, and the fix belongs to a
+Today pass — the rail should be contextual per route, the same principle D4.6
+applied to Calendar (a rail kept for symmetry is an empty column with a border).
+Deliberately not a one-off `if (route === 'history')`; that is how the Calendar
+rail ended up with five special cases before D4.6 removed them.
