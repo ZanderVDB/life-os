@@ -11,7 +11,7 @@
 import { ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
 import { initServiceWorker } from './pwa.js';
 import { flip, pulse, collapseOut, reducedMotion, afterTransition } from './motion.js';
-import { openUtilityMenu, openUtilitySurface, closeUtility, isUtilityOpen } from './utility-menu.js';
+import { openUtilityMenu, openUtilitySurface, closeUtility } from './utility-menu.js';
 import { openTaskModal } from './task-modal.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
