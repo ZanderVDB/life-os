@@ -1581,6 +1581,42 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
   pointer-events:none;padding-top:2px;opacity:0;transition:opacity var(--t-hover)}
 .pl-canvas:hover .pl-free-label{opacity:1}
 
+/* ── D4.4 Reminders in Month and Plan ────────────────────────────────────
+   A reminder asks for attention on a date; it does not occupy the day the way
+   an event does. Dotted rather than solid carries that without a legend. */
+.cm-rem-row{display:flex;align-items:center;gap:5px;min-width:0;width:100%;
+  font-size:11px;color:var(--text-2);border-radius:5px;padding:1px 3px;text-align:left;
+  border:1px dotted rgba(255,196,77,.42);background:transparent;
+  overflow:hidden;white-space:nowrap;
+  transition:background var(--t-hover),border-color var(--t-hover)}
+.cm-rem-row:hover{background:rgba(255,196,77,.08);border-color:rgba(255,196,77,.7)}
+.cm-rem-row.is-overdue{border-color:rgba(255,196,77,.85);color:var(--warn)}
+.cm-rem-row b{font-weight:600;color:var(--muted);font-size:10px;
+  font-variant-numeric:tabular-nums}
+.cm-rem-dot{width:5px;height:5px;border-radius:50%;background:var(--warn);flex-shrink:0}
+.cm-rem-rep{font-style:normal;font-size:9.5px;color:var(--muted);flex-shrink:0;margin-left:auto}
+
+/* Plan: date-only reminders sit ABOVE the axis so they cannot eat a free
+   window that is genuinely still free. */
+.pl-rem-ad{display:flex;align-items:center;gap:5px;width:100%;text-align:left;
+  font-size:10px;border-radius:5px;padding:2px 6px;color:var(--text-2);
+  border:1px dotted rgba(255,196,77,.45);background:transparent;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  transition:background var(--t-hover)}
+.pl-rem-ad:hover{background:rgba(255,196,77,.10)}
+.pl-rem-ad.is-overdue{border-color:var(--warn);color:var(--warn)}
+.pl-rem-ad>i{width:4px;height:4px;border-radius:50%;background:var(--warn);flex-shrink:0}
+.pl-rem-ad>span{overflow:hidden;text-overflow:ellipsis}
+/* Timed reminders are markers on the axis, never duration blocks. */
+.pl-rem{position:absolute;left:3px;right:3px;display:flex;align-items:center;gap:4px;
+  font-size:9.5px;color:var(--warn);z-index:2;pointer-events:auto;
+  transform:translateY(-50%);text-align:left}
+.pl-rem>i{width:5px;height:5px;border-radius:50%;background:var(--warn);flex-shrink:0;
+  box-shadow:0 0 0 2px var(--surface)}
+.pl-rem>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  background:var(--surface);padding:0 3px;border-radius:3px}
+.pl-rem:hover>span{color:var(--text)}
+
 /* ── Ambient stars ──────────────────────────────────────────────────
    Decorative only: behind everything, never interactive, never in the
    layout. Fixed so it does not repaint on scroll. */

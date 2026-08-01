@@ -23,6 +23,7 @@ import { openDetailSheet } from './detail-sheet.js';
 import { initHoverPreview, closeHoverPreview } from './hover-preview.js';
 import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHtml,
   planHours, itemsForDay, hoverRender, freeWindowsFor, legendHtml, sourcesPopoverHtml,
+  recurrenceWords,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { settingsHtml } from './settings.js';
 
@@ -1718,8 +1719,13 @@ function wireCalendar() {
   document.querySelectorAll('[data-event]').forEach((el) => {
     el.onclick = (e) => { e.stopPropagation(); openEvent(el.dataset.event); };
   });
-  document.querySelectorAll('[data-reminder]').forEach((el) => {
+  // The checkbox completes; the row opens detail. Clicking a reminder should
+  // not silently tick it off.
+  document.querySelectorAll('.ag-check[data-reminder]').forEach((el) => {
     el.onclick = (e) => { e.stopPropagation(); toggleReminder(el.dataset.reminder); };
+  });
+  document.querySelectorAll('[data-reminder]:not(.ag-check)').forEach((el) => {
+    el.onclick = (e) => { e.stopPropagation(); openReminderDetail(el.dataset.reminder); };
   });
 }
 
@@ -2108,4 +2114,137 @@ function toggleSources(btn) {
     cb.onchange = () => setCalendarVisible(cb.dataset.calendar, cb.checked);
   });
   el.querySelector('button')?.focus();
+}
+
+/* ══ Reminders ══════════════════════════════════════════════════════════ */
+
+/**
+ * Reminder detail — a Life OS record, so it gets a Life OS surface.
+ *
+ * Never the Event editor: a reminder has no duration, no attendees and no
+ * calendar, and pouring it into an event form would imply all three.
+ */
+function openReminderDetail(id) {
+  const r = (cal.data?.reminders ?? []).find((x) => x.id === id);
+  if (!r) return;
+  const words = recurrenceWords(r.recurrence);
+  const done = r.status === 'done';
+  const overdue = !done && r.dueDate < iso(new Date());
+
+  openDetailSheet({
+    title: r.title,
+    accent: 'var(--warn)',
+    rows: [
+      ['When', `${prettyDay(r.dueDate)}${r.dueTime ? ` at ${r.dueTime}` : ''}`],
+      words ? ['Repeats', words[0].toUpperCase() + words.slice(1)] : null,
+      r.leadDays ? ['Notify', `${r.leadDays} day${r.leadDays > 1 ? 's' : ''} before`] : null,
+      r.areaId ? ['Area', areaName(r.areaId)] : null,
+      r.notes ? ['Notes', r.notes] : null,
+      ['Status', done ? 'Done' : overdue ? 'Overdue' : 'Open'],
+    ].filter(Boolean),
+    actions: [
+      { label: done ? 'Mark not done' : 'Mark done', primary: !done,
+        onClick: () => toggleReminder(id) },
+      { label: 'Edit', onClick: () => editReminder(id) },
+    ],
+  });
+}
+
+function editReminder(id) {
+  const r = (cal.data?.reminders ?? []).find((x) => x.id === id);
+  if (!r) return;
+  openReminderModal({
+    reminder: r,
+    areas: state.me?.areas ?? [],
+    onSave: async (body) => {
+      const res = await api(`/api/v1/workspaces/${ws()}/reminders/${id}`,
+        { method: 'PATCH', body });
+      const i = cal.data.reminders.findIndex((x) => x.id === id);
+      if (i > -1) cal.data.reminders[i] = res.reminder;
+      paintCalendar();
+      saved('Reminder saved');
+    },
+    onDelete: async () => {
+      if (!confirm(`Delete "${r.title}"? This cannot be undone.`)) return;
+      await api(`/api/v1/workspaces/${ws()}/reminders/${id}`, { method: 'DELETE' });
+      cal.data.reminders = cal.data.reminders.filter((x) => x.id !== id);
+      paintCalendar();
+      saved('Reminder deleted');
+    },
+  });
+}
+
+
+/**
+ * Ticking a reminder.
+ *
+ * A recurring reminder ADVANCES rather than closing — the server works out the
+ * next occurrence, because the recurrence rule lives there and duplicating the
+ * date maths in the client is how the two drift apart.
+ *
+ * This function had been deleted by an earlier refactor while two call sites
+ * still referenced it, so the Agenda checkbox was throwing on click.
+ */
+async function toggleReminder(id) {
+  const r = cal.data?.reminders.find((x) => x.id === id);
+  if (!r || r._busy) return;
+  const before = { status: r.status, dueDate: r.dueDate, completedAt: r.completedAt };
+  const wasDone = r.status === 'done';
+
+  r._busy = true;
+  r.status = wasDone ? 'open' : 'done';
+  patchReminderRow(id);
+
+  try {
+    const res = await api(
+      `/api/v1/workspaces/${ws()}/reminders/${id}/${wasDone ? 'reopen' : 'complete'}`,
+      { method: 'POST' });
+    Object.assign(r, res.reminder);
+    if (res.advancedTo) {
+      saved(`Done — next on ${prettyDay(res.advancedTo)}`);
+      collapseReminder(id, () => paintCalendar());
+    } else if (!wasDone) {
+      saved('Done');
+      collapseReminder(id, () => paintCalendar());
+    } else {
+      saved('Reopened');
+      paintCalendar();
+    }
+  } catch (e) {
+    Object.assign(r, before);
+    patchReminderRow(id);
+    toast(e.message, true);
+  } finally {
+    r._busy = false;
+  }
+}
+
+/** Patches every rendering of ONE reminder without rebuilding the canvas. */
+function patchReminderRow(id) {
+  const r = cal.data?.reminders.find((x) => x.id === id);
+  if (!r) return;
+  document.querySelectorAll(`[data-reminder="${id}"]`).forEach((el) => {
+    const row = el.closest('.ag-reminder') ?? el;
+    row.classList.toggle('is-done', r.status === 'done');
+    if (el.classList.contains('ag-check')) {
+      el.setAttribute('aria-pressed', String(r.status === 'done'));
+    }
+  });
+}
+
+/**
+ * Collapses every rendering of a reminder before the repaint.
+ *
+ * A reminder can be on screen three times at once — a Month cell, the Agenda
+ * stream and the Plan strip — so completion has to collapse all of them or the
+ * repaint yanks the survivors away with no transition.
+ */
+function collapseReminder(id, done) {
+  const rows = [...document.querySelectorAll(`[data-reminder="${id}"]`)]
+    .map((el) => el.closest('.ag-reminder') ?? el)
+    .filter((el, i, a) => a.indexOf(el) === i);
+  if (!rows.length || reducedMotion()) return done();
+  let pending = rows.length;
+  const finish = () => { if (--pending <= 0) done(); };
+  for (const row of rows) collapseOut(row, finish);
 }

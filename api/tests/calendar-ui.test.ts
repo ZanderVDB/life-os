@@ -139,7 +139,9 @@ test('month: cell content is prioritised, with an honest overflow count', () => 
   const fn = body(calCode, 'function monthCellHtml(d, month, todayIso)');
   assert.match(fn, /const SHOWN = 3/, 'no cap on visible labels');
   assert.match(fn, /cm-more/, 'no overflow count — items just disappear');
-  assert.match(fn, /ordered\.length - shown\.length/, 'the count does not include hidden events');
+  // D4.4 renamed `shown` to `shownEv` when reminders joined the fill order,
+  // so the cell fills events -> deadlines -> reminders by priority.
+  assert.match(fn, /ordered\.length - shownEv\.length/, 'the count does not include hidden events');
   // All-day events sort above timed ones.
   assert.match(fn, /a\.isAllDay !== b\.isAllDay/, 'all-day events are not ordered first');
 });

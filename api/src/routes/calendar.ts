@@ -346,14 +346,88 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
     return { reminder: { ...row, recurrence: recurrence ?? null } };
   });
 
+  /**
+   * Completing a reminder.
+   *
+   * A RECURRING reminder is not finished when you tick it — it rolls to its
+   * next occurrence. Marking it permanently done would silently end a monthly
+   * obligation the user expected to keep seeing, which is the worst kind of
+   * data loss: invisible and only noticed when the payment is late.
+   *
+   * A one-off reminder closes normally.
+   */
   app.post('/api/v1/workspaces/:workspaceId/reminders/:id/complete', pre, async (req) => {
     const { workspaceId, id } = req.params as { workspaceId: string; id: string };
+    const [existing] = await db.select().from(reminders).where(and(
+      eq(reminders.id, id), eq(reminders.workspaceId, workspaceId),
+    ));
+    if (!existing) throw notFound('Reminder not found.');
+
+    const [rule] = await db.select().from(reminderRecurrenceRules)
+      .where(eq(reminderRecurrenceRules.reminderId, id));
+
+    if (rule && existing.dueDate) {
+      const next = nextOccurrence(existing.dueDate, rule);
+      // Past the end of the series? Then it really is finished.
+      const ended = (rule.until && next > rule.until) || !next;
+      const [row] = await db.update(reminders).set(
+        ended
+          ? { status: 'done', completedAt: new Date(), updatedAt: new Date() }
+          : { dueDate: next, status: 'open', completedAt: null, updatedAt: new Date() },
+      ).where(eq(reminders.id, id)).returning();
+      return { reminder: { ...row, recurrence: rule }, advancedTo: ended ? null : next };
+    }
+
     const [row] = await db.update(reminders)
       .set({ status: 'done', completedAt: new Date(), updatedAt: new Date() })
+      .where(eq(reminders.id, id)).returning();
+    return { reminder: row, advancedTo: null };
+  });
+
+  app.patch('/api/v1/workspaces/:workspaceId/reminders/:id', pre, async (req) => {
+    const { workspaceId, id } = req.params as { workspaceId: string; id: string };
+    const b = ReminderBody.partial().safeParse(req.body);
+    if (!b.success) throw badRequest(b.error.issues[0]!.message);
+    const { recurrence, ...fields } = b.data;
+
+    const [row] = await db.update(reminders)
+      .set({ ...fields, updatedAt: new Date() })
       .where(and(eq(reminders.id, id), eq(reminders.workspaceId, workspaceId)))
       .returning();
     if (!row) throw notFound('Reminder not found.');
-    return { reminder: row };
+
+    // `recurrence: undefined` means "not mentioned" and must leave the rule
+    // alone; `null` means "stop repeating". Conflating the two would silently
+    // drop a recurrence every time an unrelated field was edited.
+    if (recurrence !== undefined) {
+      await db.delete(reminderRecurrenceRules)
+        .where(eq(reminderRecurrenceRules.reminderId, id));
+      if (recurrence) {
+        await db.insert(reminderRecurrenceRules).values({
+          workspaceId, reminderId: id,
+          frequency: recurrence.frequency,
+          interval: recurrence.interval,
+          byWeekday: recurrence.byWeekday ?? null,
+          byMonthDay: recurrence.byMonthDay ?? null,
+          until: recurrence.until ?? null,
+          count: recurrence.count ?? null,
+        });
+      }
+    }
+    const [rule] = await db.select().from(reminderRecurrenceRules)
+      .where(eq(reminderRecurrenceRules.reminderId, id));
+    return { reminder: { ...row, recurrence: rule ?? null } };
+  });
+
+  app.delete('/api/v1/workspaces/:workspaceId/reminders/:id', pre, async (req, reply) => {
+    const { workspaceId, id } = req.params as { workspaceId: string; id: string };
+    // The rule cascades from the reminder.
+    const gone = await db.delete(reminders).where(and(
+      eq(reminders.id, id), eq(reminders.workspaceId, workspaceId),
+    )).returning({ id: reminders.id });
+    if (!gone.length) throw notFound('Reminder not found.');
+    reply.code(204);
+    return null;
   });
 
   app.post('/api/v1/workspaces/:workspaceId/reminders/:id/reopen', pre, async (req) => {
@@ -651,4 +725,57 @@ async function syntheticCounts(db: Db, workspaceId: string) {
     habits: await n(habits, eq(habits.workspaceId, workspaceId)),
     habitEntries: await n(habitEntries, eq(habitEntries.workspaceId, workspaceId)),
   };
+}
+
+/**
+ * The next date in a recurrence, from a given occurrence.
+ *
+ * Works in plain calendar dates, never in UTC instants. A monthly reminder on
+ * the 25th means the 25th wherever the user is; converting through UTC would
+ * shift it a day for anyone east or west of Greenwich at the month boundary.
+ */
+export function nextOccurrence(fromIso: string, rule: {
+  frequency: string; interval: number;
+  byWeekday?: number[] | null; byMonthDay?: number[] | null;
+}): string {
+  const [y, m, d] = fromIso.split('-').map(Number);
+  const step = Math.max(1, rule.interval ?? 1);
+  const at = new Date(y!, m! - 1, d!);
+  const out = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
+    + `-${String(dt.getDate()).padStart(2, '0')}`;
+
+  if (rule.frequency === 'DAILY') {
+    at.setDate(at.getDate() + step);
+    return out(at);
+  }
+
+  if (rule.frequency === 'WEEKLY') {
+    const days = (rule.byWeekday?.length ? rule.byWeekday : [at.getDay()]).slice().sort();
+    // Another weekday later in the same week?
+    const later = days.find((n) => n > at.getDay());
+    if (later !== undefined) {
+      at.setDate(at.getDate() + (later - at.getDay()));
+      return out(at);
+    }
+    // Otherwise the first listed day, `interval` weeks on.
+    const first = days[0]!;
+    at.setDate(at.getDate() + (7 * step) - (at.getDay() - first));
+    return out(at);
+  }
+
+  if (rule.frequency === 'MONTHLY') {
+    const target = rule.byMonthDay?.length ? rule.byMonthDay[0]! : d!;
+    const next = new Date(y!, m! - 1 + step, 1);
+    // Clamp: "day 31" in a 30-day month means the 30th, not the 1st of the
+    // month after — which is what naive date arithmetic produces.
+    const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(target, lastDay));
+    return out(next);
+  }
+
+  // YEARLY
+  const next = new Date(y! + step, m! - 1, 1);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(d!, lastDay));
+  return out(next);
 }

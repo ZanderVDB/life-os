@@ -60,7 +60,9 @@ export function openDetailSheet(ctx) {
         target="_blank" rel="noopener">Join Google Meet</a>` : ''}
       ${ctx.externalLink ? `<a class="btn btn-ghost" href="${esc(ctx.externalLink)}"
         target="_blank" rel="noopener">Open in Google Calendar</a>` : ''}
-      <button class="btn btn-primary" id="dt-done">Close</button>
+      ${(ctx.actions ?? []).map((a, i) => `<button
+        class="btn ${a.primary ? 'btn-primary' : ''}" data-dt-action="${i}">${esc(a.label)}</button>`).join('')}
+      <button class="btn ${(ctx.actions ?? []).length ? '' : 'btn-primary'}" id="dt-done">Close</button>
     </div>`;
 
   document.body.append(scrim, dlg);
@@ -99,6 +101,11 @@ export function openDetailSheet(ctx) {
   scrim.onclick = close;
   dlg.querySelector('#dt-close').onclick = close;
   dlg.querySelector('#dt-done').onclick = close;
+  // Actions are for Life OS records the app CAN change. Google events pass
+  // none, which is why their sheet has no action row at all.
+  dlg.querySelectorAll('[data-dt-action]').forEach((b) => {
+    b.onclick = () => { close(); ctx.actions[Number(b.dataset.dtAction)].onClick(); };
+  });
   dlg.querySelector('#dt-done').focus();
 
   return { close };

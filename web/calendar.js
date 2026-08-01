@@ -270,25 +270,30 @@ function monthHtml() {
  */
 function monthCellHtml(d, month, todayIso) {
   const day = iso(d);
-  const { events, reminders, deadlines, blocks, habit } = itemsForDay(day);
+  const { events, reminders, deadlines, blocks } = itemsForDay(day);
   const outside = d.getMonth() !== month;
   const load = workload(day);
   const hasConflict = conflictsOn(day).length > 0;
-  const overdueRem = reminders.some((r) => r.status === 'open' && r.dueDate < todayIso);
+  const openRem = reminders.filter((r) => r.status !== 'done');
+  const overdueRem = openRem.some((r) => r.dueDate < todayIso);
 
-  // Priority order is fixed: commitments, then deadlines, then reminders, then
-  // planned work, then a count. Habits are LAST and deliberately faint — an
-  // otherwise empty day must not look busy because three habits were ticked.
+  /*
+   * Cell content is filled by PRIORITY, not by type quota: events first, then
+   * deadlines, then reminders, and whatever does not fit becomes "+N more".
+   * A day with one event and three reminders should show the reminders rather
+   * than two empty slots and a count.
+   */
   const ordered = [...events].sort((a, b) => {
     if (a.isAllDay !== b.isAllDay) return a.isAllDay ? -1 : 1;
     return new Date(a.startsAt ?? 0) - new Date(b.startsAt ?? 0);
   });
   const SHOWN = 3;
-  const shown = ordered.slice(0, SHOWN);
-  const room = SHOWN - shown.length;
-  const shownDue = deadlines.slice(0, Math.max(0, room));
-  const extra = (ordered.length - shown.length)
-    + (deadlines.length - shownDue.length) + reminders.length;
+  const shownEv = ordered.slice(0, SHOWN);
+  const shownDue = deadlines.slice(0, Math.max(0, SHOWN - shownEv.length));
+  const shownRem = openRem.slice(0, Math.max(0, SHOWN - shownEv.length - shownDue.length));
+  const extra = (ordered.length - shownEv.length)
+    + (deadlines.length - shownDue.length)
+    + (openRem.length - shownRem.length);
 
   return `<div class="cm-cell ${outside ? 'is-outside' : ''} ${day === todayIso ? 'is-today' : ''}
       ${cal.selected === day ? 'is-selected' : ''} load-${load}"
@@ -296,29 +301,64 @@ function monthCellHtml(d, month, todayIso) {
       aria-label="${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}, ${describeDay(day)}">
     <div class="cm-num">
       <span class="cm-date">${d.getDate()}</span>
-      ${hasConflict ? '<span class="cm-flag" aria-label="Overlapping events">!</span>' : ''}
+      ${hasConflict ? `<span class="cm-flag" title="Overlapping events"
+        aria-label="${conflictsOn(day).length} conflict${conflictsOn(day).length > 1 ? 's' : ''}">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 6v5M10 14v.1"/></svg>
+        ${conflictsOn(day).length > 1 ? conflictsOn(day).length : ''}</span>` : ''}
       ${overdueRem ? '<span class="cm-flag is-warn" aria-label="Overdue reminder">!</span>' : ''}
     </div>
     <div class="cm-items">
-      ${shown.map((e) => `<span class="cm-ev ${e.isAllDay ? 'is-allday' : ''}"
+      ${shownEv.map((e) => `<span class="cm-ev ${e.isAllDay ? 'is-allday' : ''}"
         data-event="${e.id}" data-hover="event">
         <i class="cm-src" style="background:${esc(e.calendarColor || 'var(--accent)')}"></i>
         ${e.isAllDay ? '' : `<b>${esc(shortTime(new Date(e.startsAt)))}</b>`}
         <span class="cm-ev-t">${esc(e.title)}</span></span>`).join('')}
       ${shownDue.map((t) => `<span class="cm-due" data-hover="due">
         <i></i><span class="cm-ev-t">${esc(t.title)}</span></span>`).join('')}
+      ${shownRem.map((r) => reminderChipHtml(r, todayIso)).join('')}
       ${extra > 0 ? `<span class="cm-more">+${extra} more</span>` : ''}
     </div>
     <div class="cm-foot">
       ${blocks.length ? `<span class="cm-chip cm-plan"
         aria-label="${blocks.length} planned work block${blocks.length > 1 ? 's' : ''}">${blocks.length}</span>` : ''}
-      ${reminders.length ? `<span class="cm-chip cm-rem"
-        aria-label="${reminders.length} reminder${reminders.length > 1 ? 's' : ''}">${reminders.length}</span>` : ''}
-      <!-- The habit pie is gone. It was the most repeated mark in Month and
-           nobody could say what it meant, which failed the clarity rule.
-           Habits now appear only in the selected-day rail, in words. -->
     </div>
   </div>`;
+}
+
+/**
+ * A reminder in a Month cell.
+ *
+ * Dotted, never solid: a reminder asks for attention on a date, it does not
+ * occupy the day the way an event does, and the border carries that difference
+ * without needing a legend. Quieter than an event, louder than nothing.
+ */
+function reminderChipHtml(r, todayIso) {
+  const overdue = r.status !== 'done' && r.dueDate < todayIso;
+  return `<button class="cm-rem-row ${overdue ? 'is-overdue' : ''}"
+    data-reminder="${r.id}" data-hover="reminder"
+    aria-label="Reminder: ${esc(r.title)}${overdue ? ', overdue' : ''}">
+    <i class="cm-rem-dot" aria-hidden="true"></i>
+    ${r.dueTime ? `<b>${esc(r.dueTime)}</b>` : ''}
+    <span class="cm-ev-t">${esc(r.title)}</span>
+    ${r.recurrence ? '<i class="cm-rem-rep" aria-hidden="true" title="Repeats">\u21bb</i>' : ''}
+  </button>`;
+}
+
+/** Human wording for a stored recurrence rule. */
+export function recurrenceWords(rule) {
+  if (!rule) return null;
+  const DAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const every = rule.interval > 1 ? `every ${rule.interval} ` : 'every ';
+  if (rule.frequency === 'DAILY') return `${every}day`.replace('every 1 ', 'every ');
+  if (rule.frequency === 'WEEKLY') {
+    const d = rule.byWeekday?.length ? ` on ${rule.byWeekday.map((n) => DAY[n]).join(', ')}` : '';
+    return `${every}week${d}`;
+  }
+  if (rule.frequency === 'MONTHLY') {
+    const d = rule.byMonthDay?.length ? ` on day ${rule.byMonthDay.join(', ')}` : '';
+    return `${every}month${d}`;
+  }
+  return `${every}year`;
 }
 
 /** Screen-reader summary — the same facts the hover preview shows visually. */
@@ -365,6 +405,22 @@ export const hoverRender = {
         ${reminders.length ? `<span class="is-rem">${reminders.length} reminder${reminders.length > 1 ? 's' : ''}</span>` : ''}
         ${blocks.length ? `<span class="is-plan">${blocks.length} planned</span>` : ''}
         ${clash ? `<span class="is-clash">${clash} clash${clash > 1 ? 'es' : ''}</span>` : ''}
+      </div>`;
+  },
+
+  reminder(id) {
+    const r = (cal.data?.reminders ?? []).find((x) => x.id === id);
+    if (!r) return null;
+    const overdue = r.status !== 'done' && r.dueDate < iso(new Date());
+    const words = recurrenceWords(r.recurrence);
+    return `<div class="hov-head"><b>${esc(r.title)}</b></div>
+      <div class="hov-when">${esc(prettyShort(r.dueDate))}${r.dueTime ? ` · ${esc(r.dueTime)}` : ''}</div>
+      <div class="hov-meta">
+        <span>Reminder</span>
+        ${words ? `<span>${esc(words)}</span>` : ''}
+        ${r.leadDays ? `<span>${r.leadDays}d notice</span>` : ''}
+        ${overdue ? '<span class="is-clash">Overdue</span>' : ''}
+        ${r.status === 'done' ? '<span>Done</span>' : ''}
       </div>`;
   },
 
@@ -506,6 +562,20 @@ function planHtml() {
   </div>`;
 }
 
+/**
+ * A date-only reminder in Plan week's attention strip.
+ *
+ * It sits ABOVE the time axis deliberately. A reminder with no time does not
+ * occupy a slot, so putting it on the axis would make the day look busier than
+ * it is and would eat a free window that is genuinely still free.
+ */
+function planReminderHtml(r, todayIso) {
+  const overdue = r.dueDate < todayIso;
+  return `<button class="pl-rem-ad ${overdue ? 'is-overdue' : ''}" data-reminder="${r.id}"
+    aria-label="Reminder: ${esc(r.title)}${overdue ? ', overdue' : ''}">
+    <i aria-hidden="true"></i><span>${esc(r.title)}</span></button>`;
+}
+
 /** Minutes-from-midnight as a percentage of the visible planning window. */
 function pctOf(min, hours) {
   return ((min - hours[0] * 60) / (hours.length * 60)) * 100;
@@ -543,6 +613,8 @@ function planDayHtml(d, todayIso, hours) {
   const timed = events.filter((e) => !e.isAllDay && e.startsAt);
   const allDay = events.filter((e) => e.isAllDay);
   const free = freeWindows(day);
+  // Reminders share the day but not its capacity — see planReminderHtml.
+  const dayReminders = itemsForDay(day).reminders.filter((r) => r.status !== 'done');
 
   return `<div class="pl-day ${day === todayIso ? 'is-today' : ''}
       ${isWeekend ? 'is-weekend' : ''} ${events.length || blocks.length ? 'has-events' : ''}"
@@ -553,8 +625,10 @@ function planDayHtml(d, todayIso, hours) {
       ${load === 'busy' || load === 'overloaded'
         ? `<span class="pl-load load-${load}">${load === 'busy' ? 'busy' : 'full'}</span>` : ''}
     </div>
-    ${allDay.length ? `<div class="pl-allday">${allDay.map((e) =>
-      `<span class="pl-ad" data-event="${e.id}">${esc(e.title)}</span>`).join('')}</div>` : ''}
+    ${allDay.length || dayReminders.length ? `<div class="pl-allday">
+      ${allDay.map((e) => `<span class="pl-ad" data-event="${e.id}">${esc(e.title)}</span>`).join('')}
+      ${dayReminders.filter((r) => !r.dueTime).map((r) => planReminderHtml(r, todayIso)).join('')}
+    </div>` : ''}
     <div class="pl-canvas" data-drop-day="${day}">
       ${hours.map(() => '<span class="pl-line"></span>').join('')}
       ${free.map(([a, b]) => `<div class="pl-free"
@@ -567,6 +641,13 @@ function planDayHtml(d, todayIso, hours) {
         style="top:${top(e.startsAt).toFixed(2)}%;height:${Math.max(3, height(e.startsAt, e.endsAt)).toFixed(2)}%;
           --src:${esc(e.calendarColor || 'var(--accent)')}">
         <b>${esc(hhmm(new Date(e.startsAt)))}</b> ${esc(e.title)}</div>`).join('')}
+      ${dayReminders.filter((r) => r.dueTime).map((r) => {
+        const [h, m] = r.dueTime.split(':').map(Number);
+        return `<button class="pl-rem" data-reminder="${r.id}"
+          style="top:${pctOf(h * 60 + m, hours).toFixed(2)}%"
+          aria-label="Reminder at ${esc(r.dueTime)}: ${esc(r.title)}">
+          <i></i><span>${esc(r.title)}</span></button>`;
+      }).join('')}
       ${blocks.map((b) => {
         const st = new Date(b.startsAt); const en = new Date(b.endsAt);
         const sm = st.getHours() * 60 + st.getMinutes();
