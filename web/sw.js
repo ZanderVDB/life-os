@@ -34,6 +34,7 @@ const SHELL = [
   './config.js',
   './settings.js',
   './motion.js',
+  './utility-menu.js',
   './stars.js',
   './task-modal.js',
   './habit-modal.js',

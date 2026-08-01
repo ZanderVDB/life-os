@@ -10,7 +10,8 @@
  */
 import { ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
 import { initServiceWorker } from './pwa.js';
-import { flip, pulse, collapseOut, reducedMotion } from './motion.js';
+import { flip, pulse, collapseOut, reducedMotion, afterTransition } from './motion.js';
+import { openUtilityMenu, openUtilitySurface, closeUtility, isUtilityOpen } from './utility-menu.js';
 import { openTaskModal } from './task-modal.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
@@ -455,6 +456,8 @@ const utilityFromHash = () => {
 
 async function go(id) {
   if (state.route === id) { window.__closeDrawer?.(); return; }
+  // §7 A utility surface is anchored to a control on the page you are leaving.
+  closeUtility();
   state.route = id;
   if (location.hash.slice(1) !== id) location.hash = id;
   document.querySelectorAll('[data-route]').forEach((a) => {
@@ -485,7 +488,7 @@ async function loadRoute() {
     // with what still needs doing.
     head.innerHTML = `${greetingHtml()}
       <div class="page-actions">
-        <button class="today-more" id="today-more" aria-haspopup="menu"
+        <button class="util-btn" id="today-more" aria-haspopup="menu" aria-expanded="false"
           aria-label="More actions">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <circle cx="10" cy="4.5" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
@@ -1578,7 +1581,9 @@ function paintCalendar() {
  * rail stay put — only the thing that actually changed moves.
  */
 function applyCanvasEnter(scroll) {
-  const canvas = scroll.firstElementChild;
+  // The mode canvas, not the frame — animating the frame would drag the rail
+  // in from the side along with the month.
+  const canvas = scroll.querySelector('.cal-canvas')?.firstElementChild;
   if (!canvas || !cal.enter) { cal.enter = null; return; }
   const cls = { next: 'cal-canvas-next', prev: 'cal-canvas-prev', mode: 'cal-canvas-mode' }[cal.enter];
   if (cls) canvas.classList.add(cls);
@@ -1590,16 +1595,59 @@ const periodLabelSafe = () => {
   return el.querySelector('#cal-period')?.textContent ?? '';
 };
 
+/** --d-slow. The structural half of the rail transition. */
+const RAIL_MS = 260;
+
+/**
+ * Renders the rail and, when its open state changed, animates the frame.
+ *
+ * §9/§10 The canvas makes room; it does not teleport. Opening: content is put
+ * in place invisible, the column widens over one transition, the content fades
+ * in behind it. Closing: the content fades FIRST, then the column collapses,
+ * and only after that is the markup cleared — clearing it up front is what made
+ * the rail vanish and the grid snap.
+ *
+ * The node identity of #cal-body and #cal-rail-in is preserved throughout, so
+ * the transition has something continuous to run on. Rebuilding them here is
+ * what would silently turn this back into a jump.
+ */
 function renderCalendarRail() {
-  const rail = document.getElementById('rail');
-  if (!rail) return;
-  // The grid reclaims the width when the rail has nothing to show, rather than
-  // leaving a bordered empty column for symmetry.
-  document.body.classList.toggle('cal-rail-open', railIsOpen());
+  const open = railIsOpen();
+  // On the body, because the header reads it too: the mode selector tracks the
+  // canvas centre, and the canvas centre is a function of the rail.
+  document.body.classList.toggle('cal-rail-open', open);
+  const body = document.getElementById('cal-body');
+  const rail = document.getElementById('cal-rail-in');
+  if (!body || !rail) return;          // a utility workspace — no frame at all
+  const wasOpen = body.classList.contains('has-rail');
+
+  if (!open) {
+    if (!wasOpen) { body.classList.remove('rail-shown'); rail.innerHTML = ''; return; }
+    body.classList.remove('rail-shown');           // content fades…
+    body.classList.remove('has-rail');             // …while the column collapses
+    // Cleared only once the column has finished collapsing — otherwise the rail
+    // blinks out and the grid is left snapping into the gap.
+    afterTransition(body, 'grid-template-columns', RAIL_MS, () => {
+      if (!body.isConnected || body.classList.contains('has-rail')) return;
+      rail.innerHTML = '';
+    });
+    return;
+  }
+
   // Only the contextual band is swapped when the mode changes; the context
   // and attention cards keep their nodes, so the rail never flashes.
   const prevMode = rail.querySelector('[data-rail-ctx]')?.dataset.railCtx;
   rail.innerHTML = calendarRailHtml();
+  if (!wasOpen) {
+    body.classList.add('has-rail');
+    // The fade is deliberately a frame behind the structural move, so the eye
+    // follows the canvas making room rather than text appearing in mid-air.
+    if (reducedMotion()) body.classList.add('rail-shown');
+    else requestAnimationFrame(() => requestAnimationFrame(() =>
+      body.classList.add('rail-shown')));
+  } else {
+    body.classList.add('rail-shown');
+  }
   const ctx = rail.querySelector('[data-rail-ctx]');
   if (ctx && prevMode && prevMode !== cal.mode && !reducedMotion()) {
     ctx.animate([{ opacity: 0, translate: '0 6px' }, { opacity: 1, translate: '0 0' }],
@@ -1637,6 +1685,8 @@ function wireCalendarHeader() {
   document.querySelectorAll('[data-mode]').forEach((b) => {
     b.onclick = () => {
       if (cal.mode === b.dataset.mode) return;
+      // §7 A surface describing Month must not survive into Plan week.
+      closeUtility();
       cal.mode = b.dataset.mode;
       localStorage.setItem('los2_cal_mode', cal.mode);
       // The pill glides because only its --mode-i changes; the buttons are
@@ -1792,6 +1842,9 @@ function flashEvent(id) {
 }
 
 function calendarAddMenu(anchor, day = null) {
+  // §19 Add and the utility menu are both overflows of the same header. Two
+  // open menus is two answers to "what did I just click".
+  closeUtility();
   anchor.setAttribute('aria-expanded', 'true');
   openAddMenu(anchor, {
     event: () => openEvent(null, day ?? cal.selected ?? undefined),
@@ -1954,34 +2007,7 @@ const MODE_IDS = ['month', 'agenda', 'plan'];
  * screen is an admission that the interface needs a manual. This is here for
  * the first week and for the one indicator you cannot place.
  */
-function toggleLegend(btn) {
-  const open = document.querySelector('.legend');
-  if (open) { open.remove(); return; }
-  const host = document.createElement('div');
-  host.innerHTML = legendHtml();
-  const el = host.firstElementChild;
-  document.body.appendChild(el);
-
-  const b = btn.getBoundingClientRect();
-  el.style.left = `${Math.max(12, Math.min(b.left, window.innerWidth - el.offsetWidth - 12))}px`;
-  el.style.top = `${Math.min(b.bottom + 8, window.innerHeight - el.offsetHeight - 12)}px`;
-  if (!reducedMotion()) {
-    el.animate([{ opacity: 0, translate: '0 -6px' }, { opacity: 1, translate: '0 0' }],
-      { duration: 160, easing: 'cubic-bezier(.2,.7,.2,1)' });
-  }
-
-  const away = (e) => {
-    if (el.contains(e.target) || e.target === btn) return;
-    el.remove();
-    document.removeEventListener('click', away, true);
-    document.removeEventListener('keydown', esc, true);
-  };
-  const esc = (e) => { if (e.key === 'Escape') { el.remove(); btn.focus(); away({ target: document.body }); } };
-  setTimeout(() => {
-    document.addEventListener('click', away, true);
-    document.addEventListener('keydown', esc, true);
-  }, 0);
-}
+const toggleLegend = (btn) => openCalendarSurface(btn, 'key');
 
 /**
  * Opens the scheduling flow. Reached from + Add, from a clicked Plan slot, and
@@ -2070,44 +2096,7 @@ const hhmmOf = (t) => new Date(t).toLocaleTimeString(undefined,
  * concerned with plumbing showed the most of it. Connection state stays
  * visible in the rail context card; the controls appear when asked for.
  */
-function toggleSources(btn) {
-  const open = document.querySelector('.sources');
-  if (open) { open.remove(); return; }
-  const host = document.createElement('div');
-  host.innerHTML = sourcesPopoverHtml();
-  const el = host.firstElementChild;
-  document.body.appendChild(el);
-
-  const b = btn.getBoundingClientRect();
-  el.style.left = `${Math.max(12, Math.min(b.left - el.offsetWidth + b.width,
-    window.innerWidth - el.offsetWidth - 12))}px`;
-  el.style.top = `${Math.min(b.bottom + 8, window.innerHeight - el.offsetHeight - 12)}px`;
-  if (!reducedMotion()) {
-    el.animate([{ opacity: 0, translate: '0 -6px' }, { opacity: 1, translate: '0 0' }],
-      { duration: 160, easing: 'cubic-bezier(.2,.7,.2,1)' });
-  }
-
-  const close = () => {
-    el.remove();
-    document.removeEventListener('click', away, true);
-    document.removeEventListener('keydown', esc, true);
-  };
-  const away = (e) => { if (!el.contains(e.target) && e.target !== btn) close(); };
-  const esc = (e) => { if (e.key === 'Escape') { close(); btn.focus(); } };
-  setTimeout(() => {
-    document.addEventListener('click', away, true);
-    document.addEventListener('keydown', esc, true);
-  }, 0);
-
-  const connect = el.querySelector('#cal-connect');
-  connect?.addEventListener('click', () => connectGoogle(connect));
-  el.querySelector('#cal-sync')?.addEventListener('click', () => { close(); syncGoogle(); });
-  el.querySelector('#cal-disconnect')?.addEventListener('click', () => { close(); disconnectGoogle(); });
-  el.querySelectorAll('[data-calendar]').forEach((cb) => {
-    cb.onchange = () => setCalendarVisible(cb.dataset.calendar, cb.checked);
-  });
-  el.querySelector('button')?.focus();
-}
+const toggleSources = (btn) => openCalendarSurface(btn, 'sources');
 
 /* ══ Reminders ══════════════════════════════════════════════════════════ */
 
@@ -2301,48 +2290,50 @@ function renderCalendarHeader() {
   wireCalendarHeader();
 }
 
-/** The Calendar utility menu — plain labels, no unexplained icons. */
+/**
+ * The Calendar utility menu — the same component Today uses.
+ *
+ * Plain labels, no unexplained icons, and the same trigger, anchor, motion and
+ * close behaviour as every other overflow in the app.
+ */
 function openCalendarUtility(anchor) {
-  document.querySelector('.cal-util-menu')?.remove();
-  const menu = document.createElement('div');
-  menu.className = 'menu cal-util-menu';
-  menu.setAttribute('role', 'menu');
-  menu.innerHTML = [
-    ['reminders', 'Manage reminders'],
-    ['sources', 'Calendar sources'],
-    ['key', 'Calendar key'],
-  ].map(([k, label]) => `<button role="menuitem" data-cu="${k}">${label}</button>`).join('');
-  document.body.appendChild(menu);
-
-  const b = anchor.getBoundingClientRect();
-  menu.style.top = `${b.bottom + 6}px`;
-  menu.style.left = `${Math.min(b.left, window.innerWidth - menu.offsetWidth - 12)}px`;
-  if (!reducedMotion()) {
-    menu.animate([{ opacity: 0, translate: '0 -6px' }, { opacity: 1, translate: '0 0' }],
-      { duration: 150, easing: 'cubic-bezier(.2,.7,.2,1)' });
-  }
-
-  const close = () => {
-    menu.remove();
-    document.removeEventListener('click', away, true);
-    document.removeEventListener('keydown', esc, true);
-  };
-  const away = (e) => { if (!menu.contains(e.target) && e.target !== anchor) close(); };
-  const esc = (e) => { if (e.key === 'Escape') { close(); anchor.focus(); } };
-  setTimeout(() => {
-    document.addEventListener('click', away, true);
-    document.addEventListener('keydown', esc, true);
-  }, 0);
-
-  menu.querySelectorAll('[data-cu]').forEach((b2) => {
-    b2.onclick = () => {
-      close();
-      if (b2.dataset.cu === 'reminders') return openRemindersView();
-      if (b2.dataset.cu === 'sources') return toggleSources(anchor);
-      return toggleLegend(anchor);
-    };
+  openUtilityMenu(anchor, [
+    { id: 'reminders', label: 'Manage reminders' },
+    { id: 'sources', label: 'Calendar sources' },
+    { id: 'key', label: 'Calendar key' },
+  ], (id) => {
+    if (id === 'reminders') return openRemindersView();
+    return openCalendarSurface(anchor, id);
   });
-  menu.querySelector('button').focus();
+}
+
+/**
+ * Calendar sources and the Calendar key, in ONE shell.
+ *
+ * They used to be two floating panels of different widths that opened in
+ * different directions from different triggers. They answer questions of the
+ * same kind — "what am I looking at" and "where is it coming from" — so they
+ * are the same object with different contents.
+ */
+function openCalendarSurface(anchor, kind) {
+  openUtilitySurface(anchor, {
+    kind,
+    label: kind === 'sources' ? 'Calendar sources' : 'Calendar key',
+    html: kind === 'sources' ? sourcesPopoverHtml() : legendHtml(),
+    wire: (el) => (kind === 'sources' ? wireSources(el) : null),
+  });
+}
+
+/** The source controls, wired wherever the shared shell put them. */
+function wireSources(el) {
+  const connect = el.querySelector('#cal-connect');
+  connect?.addEventListener('click', () => connectGoogle(connect));
+  el.querySelector('#cal-sync')?.addEventListener('click', () => { closeUtility(); syncGoogle(); });
+  el.querySelector('#cal-disconnect')?.addEventListener('click',
+    () => { closeUtility(); disconnectGoogle(); });
+  el.querySelectorAll('[data-calendar]').forEach((cb) => {
+    cb.onchange = () => setCalendarVisible(cb.dataset.calendar, cb.checked);
+  });
 }
 
 function wireRemindersView() {
@@ -2478,34 +2469,8 @@ async function restoreTask(id) {
 
 /** Today's overflow: secondary actions that should not sit in the board. */
 function openTodayMenu(anchor) {
-  document.querySelector('.today-menu')?.remove();
-  const menu = document.createElement('div');
-  menu.className = 'menu today-menu';
-  menu.setAttribute('role', 'menu');
-  menu.innerHTML = `<button role="menuitem" data-tm="history">
-    ${icon('check', 16)}<span>View completed tasks</span>
-    ${state.historyTotal ? `<span class="tm-count">${state.historyTotal}</span>` : ''}</button>`;
-  document.body.appendChild(menu);
-
-  const b = anchor.getBoundingClientRect();
-  menu.style.top = `${b.bottom + 6}px`;
-  menu.style.left = `${Math.min(b.left, window.innerWidth - menu.offsetWidth - 12)}px`;
-  if (!reducedMotion()) {
-    menu.animate([{ opacity: 0, translate: '0 -6px' }, { opacity: 1, translate: '0 0' }],
-      { duration: 150, easing: 'cubic-bezier(.2,.7,.2,1)' });
-  }
-
-  const close = () => {
-    menu.remove();
-    document.removeEventListener('click', away, true);
-    document.removeEventListener('keydown', esc, true);
-  };
-  const away = (e) => { if (!menu.contains(e.target) && e.target !== anchor) close(); };
-  const esc = (e) => { if (e.key === 'Escape') { close(); anchor.focus(); } };
-  setTimeout(() => {
-    document.addEventListener('click', away, true);
-    document.addEventListener('keydown', esc, true);
-  }, 0);
-  menu.querySelector('[data-tm="history"]').onclick = () => { close(); go('history'); };
-  menu.querySelector('button').focus();
+  openUtilityMenu(anchor, [
+    { id: 'history', label: 'View completed tasks', icon: icon('check', 16),
+      count: state.historyTotal },
+  ], (id) => { if (id === 'history') go('history'); });
 }

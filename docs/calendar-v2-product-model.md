@@ -266,3 +266,57 @@ they display, so September is visible without August having been completed.
 Future occurrences are never written to the database. Materialising them would
 mean every edit had to chase down and rewrite an unbounded set, and a missed
 one becomes a reminder that fires on a date its own rule no longer agrees with.
+
+## Composition rule (locked in D4.7)
+
+**Alignment is judged against the composition the user sees, never against the
+box you just centred something inside.**
+
+Three phases in a row reported the Calendar header as perfectly centred, and it
+was — inside a header row that had itself collapsed to its content width and
+gone to sit on the left. The measurement was true and the answer was wrong,
+because the wrong thing was measured. A stale `align-items:start`, left behind
+when the header moved from grid to column flex, was the cause: in a column flex
+container that property governs the horizontal axis.
+
+So:
+
+- Centring is verified against the **primary canvas**, not the header row, not
+  the flex container, not the element's own parent.
+- The primary canvas is the grid in Month, the stream in Agenda, and the
+  time grid in Plan week — never the canvas plus its rail.
+- A measurement of zero means nothing until the frame it was taken in has been
+  measured too.
+
+### The Calendar frame
+
+One frame holds the header, the canvas and the rail, and **its edges do not
+move**. Opening the selected-day rail takes width from the canvas's right edge
+only. Nothing that belongs to the page — the title, the period controls, the
+utility control, Add, the layer chips — may move because a day was selected.
+
+The mode selector is the one exception, and deliberately: it is centred over the
+canvas, so it travels with the canvas on the same transition. Plan week is why —
+its planning rail is permanent, and a selector centred on the frame would sit
+permanently off-centre over the week grid.
+
+## Shared surface rule (locked in D4.7)
+
+**A surface's shell belongs to the app, not to the feature that opened it.**
+
+Calendar sources and the Calendar key answered questions of the same kind and
+looked like unrelated objects: 296px opening left against 300px opening right,
+one radius each, separate open/close code, and no knowledge of one another — so
+both could be open at once.
+
+- One trigger (`.util-btn`), one menu (`.util-menu`), one contextual surface
+  (`.util-surface`), used by every page.
+- One anchor rule: below the trigger, right edges aligned, viewport clamp only
+  as a fallback.
+- One surface open at a time. Switching kinds replaces the content inside the
+  existing shell; the shell keeps its position.
+- Escape closes, an outside click closes, focus returns to the trigger, and a
+  mode change or a navigation closes it — a popover that outlives what it
+  described is worse than none, because it now describes something else.
+
+Only the content differs.

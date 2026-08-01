@@ -459,7 +459,14 @@ test('mobile: the sidebar becomes a drawer and the rail stays reachable', () => 
   assert.match(mobile, /body\.drawer-open \.sidebar\{transform:none\}/);
   assert.match(mobile, /\.mobile-bar\{display:flex/, 'no mobile navigation bar');
   // The rail moves below the content — it must never simply disappear.
-  assert.ok(!/\.rail\{display:none/.test(html), 'the rail is hidden with no alternative');
+  // D4.7 hides the PAGE rail on Calendar only, because Calendar owns a rail
+  // inside its own frame there. Everywhere else the rail must still reflow
+  // below the content rather than simply vanish.
+  const hides = [...html.matchAll(/([^\n{]*)\.rail\{display:none/g)].map((m) => m[1]);
+  assert.deepEqual(hides, ['body:has(.cal-head) '],
+    'the rail is hidden with no alternative');
+  assert.match(html, /\.cal-rail\{overflow:visible;position:static/,
+    'the calendar rail does not reflow below the canvas on a narrow screen');
   const tablet = html.slice(html.indexOf('@media (max-width:1180px)'));
   assert.match(tablet, /\.rail\{position:static/, 'the rail does not reflow below content');
   assert.match(tablet, /grid-template-columns:repeat\(auto-fit/, 'the rail does not become a card row');

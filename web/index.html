@@ -916,7 +916,13 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
    Month, Agenda, Plan. Source-calendar colour appears only INSIDE an event's
    own representation — a small edge or dot — never across the shell. Purple
    stays selection, red stays conflict, green stays completion. */
-.cal-head{display:grid;grid-template-columns:1fr auto;gap:14px 20px;align-items:start}
+/* The header's own layout lives in the D4.5/D4.7 blocks below. This rule used
+   to set `display:grid;grid-template-columns:1fr auto;align-items:start`; D4.2
+   replaced the display but left align-items behind, and in the column flex
+   container that replaced it `align-items` governs the HORIZONTAL axis — so
+   every header row shrank to max-content and hugged the left of a full-width
+   header. That is the entire "header is off-centre" bug. Do not reintroduce a
+   default here: state alignment where the header layout is stated. */
 .cal-head-main{display:flex;flex-direction:column;gap:8px}
 .cal-period{display:flex;align-items:center;gap:6px}
 .cal-period-label{font-size:15px;font-weight:600;color:var(--text-2);min-width:150px}
@@ -1391,10 +1397,10 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cal-legend-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round}
 .cal-legend-btn:hover{background:var(--surface-2);color:var(--text-2)}
-.legend{position:fixed;z-index:300;width:300px;max-width:calc(100vw - 24px);
-  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:13px;
-  box-shadow:var(--e3);padding:14px 15px;display:flex;flex-direction:column;gap:13px}
-.legend[hidden]{display:none}
+/* Contents only. Position, width, border, shadow and padding belong to the
+   shared .util-surface shell — that is what makes Sources and Key the same
+   object. See the D4.7 block. */
+.legend{display:flex;flex-direction:column;gap:13px}
 .legend h4{margin:0;font-size:12.5px;font-weight:600;color:var(--text)}
 .lg-group{display:flex;flex-direction:column;gap:6px}
 .lg-lab{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
@@ -1543,10 +1549,8 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 .cal-hint{margin-top:10px;font-size:10.5px}
 
 /* ── §23 Sources popover ── */
-.sources{position:fixed;z-index:300;width:296px;max-width:calc(100vw - 24px);
-  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:13px;
-  box-shadow:var(--e3);padding:14px 15px;display:flex;flex-direction:column;gap:11px}
-.sources[hidden]{display:none}
+/* Contents only — see .legend above and the shared shell in the D4.7 block. */
+.sources{display:flex;flex-direction:column;gap:11px}
 .sources h4{margin:0;font-size:12.5px;font-weight:600;color:var(--text)}
 
 /* ── §9 Agenda uses the width it has ── */
@@ -1653,16 +1657,6 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 .set-build{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
   color:var(--muted);background:var(--surface-2);border-radius:6px;padding:3px 8px}
 
-/* §2 Reminders entry, same control family as the rest of the header. */
-.cal-remind{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px;
-  border-radius:11px;font-size:12.5px;font-weight:600;color:var(--muted);
-  background:var(--surface-2);
-  transition:color var(--t-hover),background var(--t-hover)}
-.cal-remind svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;
-  stroke-linecap:round;stroke-linejoin:round}
-.cal-remind:hover{color:var(--text-2)}
-.cal-remind[aria-pressed="true"]{background:var(--accent-soft);color:var(--text)}
-
 /* §3-§5 The workspace itself. */
 .rv{width:100%;max-width:var(--cal-max);margin-inline:auto;display:flex;
   flex-direction:column;gap:18px}
@@ -1722,23 +1716,11 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 
 /* ══ D4.6 ═══════════════════════════════════════════════════════════════ */
 
-/* §4 One restrained utility control, not a peer-sized Reminders button. */
-.cal-util{width:38px;height:38px;border-radius:11px;background:var(--surface-2);
-  color:var(--muted);display:grid;place-items:center;
-  transition:color var(--t-hover),background var(--t-hover)}
-.cal-util svg{width:18px;height:18px;fill:currentColor}
-.cal-util:hover{color:var(--text-2)}
-.cal-util-menu button,.today-menu button{display:flex;align-items:center;gap:10px;
-  width:100%;padding:9px 12px;border-radius:9px;font-size:13px;color:var(--text-2);
-  text-align:left;transition:background var(--t-hover),color var(--t-hover)}
-.cal-util-menu button:hover,.today-menu button:hover{background:var(--surface-3);color:var(--text)}
-.cal-util-menu,.today-menu{min-width:196px;padding:6px}
+/* §4 D4.6 gave Calendar its own 38px filled trigger and Today a 34px bare one,
+   with a menu class each. D4.7 replaced all four with .util-btn / .util-menu —
+   see the D4.7 block. Only the count badge is still local to the menu items. */
 .tm-count{margin-left:auto;font-size:11px;color:var(--muted);
   font-variant-numeric:tabular-nums}
-.today-more{width:34px;height:34px;border-radius:10px;color:var(--muted);
-  display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
-.today-more svg{width:18px;height:18px;fill:currentColor}
-.today-more:hover{background:var(--surface-2);color:var(--text-2)}
 
 /* §5 The Reminders workspace header — no period, no modes, no layers. */
 .rv-head-row{grid-template-columns:1fr auto}
@@ -1764,17 +1746,10 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 .rv-badge{background:rgba(255,196,77,.14)!important;color:var(--warn)!important;
   border-radius:5px;padding:1px 7px;font-weight:600}
 
-/* §12/§17 The grid reclaims the rail's width when the rail has nothing to say.
-   A rail kept for symmetry is an empty column with a border. */
-body:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr) 0;
-  transition:grid-template-columns var(--d-slow) var(--e-out)}
-body:has(.cal-head) .rail{opacity:0;pointer-events:none;overflow:hidden;
-  transition:opacity var(--d-base) var(--e-out)}
-body.cal-rail-open:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr) 320px}
-body.cal-rail-open:has(.cal-head) .rail{opacity:1;pointer-events:auto}
-@media (prefers-reduced-motion:reduce){
-  body:has(.cal-head) .main-wrap,body:has(.cal-head) .rail{transition:none}
-}
+/* D4.6 collapsed the PAGE rail column. D4.7 replaced that: see the frame block
+   below. Collapsing the page column changed .main-col's width, so the header
+   and the canvas — both centred inside it — slid sideways every time a day was
+   selected. The rail now lives inside the Calendar frame instead. */
 
 /* §15 Completed history rows. */
 .hist-list{display:flex;flex-direction:column;max-width:760px}
@@ -1783,6 +1758,116 @@ body.cal-rail-open:has(.cal-head) .rail{opacity:1;pointer-events:auto}
 .hist-row:hover .hist-restore,.hist-restore:focus-visible{opacity:1}
 .hist-restore:hover{color:var(--accent)}
 .hist-more{margin-top:16px}
+
+/* ══ D4.7 — HEADER CONSISTENCY, VISUAL CENTRING AND RAIL MOTION ═════════ */
+
+/* ── §2/§3 One header grid, stretched across the frame ──────────────────
+   `align-items` is stated HERE, next to the layout it belongs to. The bug it
+   replaces: a `align-items:start` left over from the D3 grid header survived
+   into D4.2's column flex, where it means "shrink horizontally". Every header
+   row sat at max-content (860px measured inside a 1520px header) and hugged the
+   left, so the mode selector was 330px left of the canvas centre while being
+   perfectly centred INSIDE the row — which is why measuring the row always
+   reported zero. Measure the composition, not the box you just centred. */
+.cal-head{align-items:stretch}
+.cal-head-row{width:100%}
+
+/* ── §8-§11 ONE FIXED COMPOSITION FRAME ─────────────────────────────────
+   The frame is the same width for the header and the body, and it does not
+   change when the rail opens. Previously the rail was a PAGE column, so opening
+   it narrowed .main-col — and since both the header and the canvas were centred
+   inside .main-col, both slid sideways. Nothing that belongs to the page (the
+   title, the period, the utility control, Add, the layer chips) may move
+   because a day was selected. */
+:root{--cal-rail-w:320px; --cal-rail-gap:24px; --cal-rail-col:0px}
+body.cal-rail-open{--cal-rail-col:calc(var(--cal-rail-w) + var(--cal-rail-gap))}
+
+/* On Calendar the page rail is unused: the calendar owns its own, inside the
+   frame, so the frame can stay still while only the canvas gives up width. */
+body:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr)}
+body:has(.cal-head) .rail{display:none}
+
+.cal-body{width:100%;max-width:var(--cal-max);margin-inline:auto;
+  display:grid;grid-template-columns:minmax(0,1fr) var(--cal-rail-col);
+  align-items:start;
+  transition:grid-template-columns var(--d-slow) var(--e-out)}
+.cal-canvas{min-width:0}
+/* The canvases fill the frame's first column; the frame owns the max-width now,
+   so a second cap here would fight it. */
+.cal-body .cal-month,.cal-body .cal-agenda,.cal-body .cal-plan{max-width:none;
+  margin-inline:0;width:100%}
+
+/* The rail is clipped, not squeezed. Its content keeps a fixed width so nothing
+   inside it re-wraps mid-transition — the reflow flicker §10 forbids. */
+.cal-rail{min-width:0;overflow:hidden;position:sticky;top:22px}
+.cal-rail-in{width:var(--cal-rail-w);margin-left:var(--cal-rail-gap);
+  display:flex;flex-direction:column;gap:14px;
+  opacity:0;transition:opacity var(--d-base) var(--e-out)}
+.cal-body.rail-shown .cal-rail-in{opacity:1}
+
+/* §12 The mode selector is centred over the PRIMARY CANVAS, not the frame.
+   Plan week always carries a planning rail, so centring on the frame would
+   leave it permanently off-centre over the week grid (§12 forbids exactly
+   that). The offset is derived from the rail column — not a viewport-specific
+   nudge — and it rides the same transition, so the selector glides with the
+   canvas instead of snapping to a new home. */
+.cal-head-mid{translate:calc(var(--cal-rail-col) / -2) 0;
+  transition:translate var(--d-slow) var(--e-out)}
+
+@media (prefers-reduced-motion:reduce){
+  .cal-body,.cal-head-mid,.cal-rail-in{transition:none}
+}
+
+/* §20 Below the point where a 320px rail would leave an unusable grid, the rail
+   stops taking width and stacks under the canvas. No lateral animation on a
+   layout that has no lateral room. */
+@media (max-width:1180px){
+  body.cal-rail-open{--cal-rail-col:0px}
+  .cal-body{grid-template-columns:minmax(0,1fr);transition:none}
+  .cal-rail{overflow:visible;position:static;grid-column:1}
+  .cal-rail-in{width:auto;margin-left:0;margin-top:20px}
+  .cal-head-mid{translate:none}
+}
+
+/* ── §4 ONE utility trigger, shared by Today and Calendar ───────────────
+   Two near-identical controls in two sizes with two different backgrounds is
+   how "is this the same button?" starts. One class, one geometry, one state
+   set — used by both pages. */
+.util-btn{width:34px;height:34px;border-radius:10px;color:var(--muted);
+  background:transparent;display:grid;place-items:center;
+  transition:background var(--t-hover),color var(--t-hover),transform var(--d-instant) var(--e-out)}
+.util-btn svg{width:18px;height:18px;fill:currentColor}
+.util-btn:hover{background:var(--surface-2);color:var(--text-2)}
+.util-btn:active{transform:scale(.94)}
+.util-btn[aria-expanded="true"]{background:var(--surface-2);color:var(--text)}
+.util-btn:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+
+/* §4/§5 One menu, one anchor language: below the trigger, right edges aligned,
+   because the trigger sits at the upper-right of the page on both surfaces. */
+/* animation:none because .menu carries `rise`, and the shared entrance already
+   animates every utility surface. Two stacked entrances left the menu resting
+   8px below where the Sources/Key surface opened from the same button. */
+.util-menu{min-width:212px;padding:6px;animation:none}
+.util-menu button{display:flex;align-items:center;gap:10px;width:100%;
+  padding:9px 12px;border-radius:9px;font-size:13px;color:var(--text-2);
+  text-align:left;transition:background var(--t-hover),color var(--t-hover)}
+.util-menu button:hover{background:var(--surface-3);color:var(--text)}
+
+/* ── §6 ONE contextual surface for Sources and Key ──────────────────────
+   Same shell, same anchor, same width, same shadow, same motion. Only the
+   content differs, and switching between them replaces the content INSIDE the
+   shell rather than closing one box and opening a different-looking one
+   somewhere else. */
+/* 12px, not the 13px the two old panels used: every popover in the app shares
+   .menu's radius, and a surface that is one pixel rounder than the menu it was
+   opened from is a difference nobody can name but everybody can see. */
+.util-surface{position:fixed;z-index:300;width:308px;max-width:calc(100vw - 24px);
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:12px;
+  box-shadow:var(--e3);padding:14px 15px;overflow:hidden}
+.util-surface h4{margin:0;font-size:12.5px;font-weight:600;color:var(--text)}
+.us-body{display:flex;flex-direction:column;gap:13px}
+/* The surfaces keep their own internal rhythm (.legend, .sources); the SHELL —
+   position, width, border, shadow, padding, motion — is shared. */
 
 /* ── Ambient stars ──────────────────────────────────────────────────
    Decorative only: behind everything, never interactive, never in the

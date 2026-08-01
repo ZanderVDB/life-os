@@ -36,9 +36,15 @@ test('clarity: the rule is written down where it will be read', () => {
 
 test('clarity: a legend exists and is a popover, not a permanent panel', () => {
   assert.match(calCode, /export function legendHtml/, 'no legend');
-  assert.match(html, /\.legend\{position:fixed/, 'the legend is not a popover');
-  assert.match(html, /\.legend\[hidden\]\{display:none\}/, 'the legend cannot hide');
-  assert.match(appCode, /function toggleLegend/, 'the legend cannot be opened');
+  // D4.7 moved position/width/border/shadow onto the shared .util-surface
+  // shell, so the Key and Calendar sources stop being two differently shaped
+  // boxes. The legend is still a popover — it just no longer owns the glass.
+  assert.match(html, /\.util-surface\{position:fixed/, 'the shared surface is not a popover');
+  assert.match(html, /\.legend\{display:flex/, 'the legend has no contents styling');
+  // And it is created and removed rather than [hidden]-toggled, so it cannot
+  // be left in the DOM describing a calendar you have navigated away from.
+  assert.match(appCode, /toggleLegend = \(btn\) => openCalendarSurface\(btn, 'key'\)/,
+    'the legend cannot be opened');
   // It must explain every repeated mark.
   for (const meaning of ['calendar it came from', 'task deadline', 'reminder',
     'planned time for', 'overlap', 'Busy', 'Heavily booked']) {
@@ -49,7 +55,12 @@ test('clarity: a legend exists and is a popover, not a permanent panel', () => {
 /* ── §2 No orphaned floating UI ──────────────────────────────────────── */
 
 test('layout: hidden-toggled elements actually hide', () => {
-  for (const cls of ['hov', 'ev-adv', 'legend']) {
+  // 'legend' left this list in D4.7: it is created and removed with its shared
+  // shell now rather than toggled with [hidden], so there is no hidden state
+  // for a display: rule to beat. The bug this guards against — an author
+  // `display:` outranking the UA's [hidden]{display:none} — still applies to
+  // everything that IS toggled that way.
+  for (const cls of ['hov', 'ev-adv']) {
     if (!new RegExp(`\\.${cls}\\{[^}]*display:`).test(html)) continue;
     assert.match(html, new RegExp(`\\.${cls}\\[hidden\\]\\{display:none\\}`),
       `.${cls} sets display but has no [hidden] rule — it can never hide`);
@@ -135,7 +146,11 @@ test('motion: month navigation is directional and mode change is not', () => {
   assert.match(appCode, /function applyCanvasEnter/, 'the direction is never applied');
   // Applied to the canvas, not the scroll region, so header and rail stay put.
   const fn = appCode.slice(appCode.indexOf('function applyCanvasEnter'));
-  assert.match(fn, /scroll\.firstElementChild/, 'the whole scroll region is animated');
+  // D4.7 wrapped the canvas and the rail in one frame, so firstElementChild is
+  // now the frame — animating it would drag the rail in from the side along
+  // with the month.
+  assert.match(fn, /scroll\.querySelector\('\.cal-canvas'\)\?\.firstElementChild/,
+    'the whole frame is animated, rail included');
   assert.match(html, /@media \(prefers-reduced-motion:reduce\)\{\s*\.cal-canvas-next/,
     'the canvas animation ignores reduced motion');
 });

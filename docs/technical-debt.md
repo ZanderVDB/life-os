@@ -313,3 +313,21 @@ single-instance deployment and **breaks on horizontal scale** — a callback
 landing on a different instance than the one that issued the state would be
 rejected as expired. Needs shared storage (Redis or a short-lived table) before
 running more than one API instance.
+
+## Month loading: no caching, prefetch or skeletons (D4.5 → D4.7)
+
+Changing month clears the canvas and refetches the whole range. There is no
+in-memory cache of an already-loaded month, no prefetch of the adjacent ones and
+no skeleton — so navigation flashes empty and then fills.
+
+Deferred deliberately three phases running (D4.5 §20, D4.6 §20, D4.7 §22),
+because it is a data-layer change and every one of those phases was about visual
+structure. It is the last known Calendar shortfall and should be the first thing
+done if Calendar is reopened.
+
+What it needs: keep the last N ranges keyed by from/to, render from cache
+immediately while revalidating, prefetch previous/next on idle, and show a grid
+skeleton only when there is genuinely nothing to show. The range endpoint is
+already shaped for this — `/calendar/range?from=&to=` is pure and cacheable —
+but the response contains private event titles, so it must stay in memory and
+never reach the service worker cache.

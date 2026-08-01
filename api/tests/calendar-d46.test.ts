@@ -179,11 +179,18 @@ test('rail: Month has none until a day is selected', () => {
 });
 
 test('rail: the grid reclaims the width when the rail closes', () => {
-  assert.match(html, /body:has\(\.cal-head\) \.main-wrap\{grid-template-columns:minmax\(0,1fr\) 0/,
-    'the rail column persists when empty');
-  assert.match(html, /body\.cal-rail-open:has\(\.cal-head\) \.main-wrap\{grid-template-columns:minmax\(0,1fr\) 320px\}/,
+  // D4.6 collapsed the PAGE rail column to do this. D4.7 replaced that: the
+  // page column also carried the header and the canvas, both centred inside
+  // it, so collapsing it slid the whole composition sideways on every
+  // selection. The rail now lives inside the Calendar frame, and only the
+  // canvas gives up width — from its right edge, so no day column moves.
+  assert.match(html, /body:has\(\.cal-head\) \.main-wrap\{grid-template-columns:minmax\(0,1fr\)\}/,
+    'the page still reserves a rail column on Calendar');
+  assert.match(html, /\.cal-body\{[^}]*grid-template-columns:minmax\(0,1fr\) var\(--cal-rail-col\)/,
+    'the frame does not give the rail its width');
+  assert.match(html, /body\.cal-rail-open\{--cal-rail-col:calc\(var\(--cal-rail-w\) \+ var\(--cal-rail-gap\)\)\}/,
     'the rail has no open width');
-  assert.match(appCode, /classList\.toggle\('cal-rail-open', railIsOpen\(\)\)/,
+  assert.match(appCode, /classList\.toggle\('cal-rail-open', open\)/,
     'nothing toggles the rail open state');
 });
 

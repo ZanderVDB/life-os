@@ -124,9 +124,13 @@ test('rail: the mode band crossfades rather than the rail flashing', () => {
 
 test('rail: source management is a popover, not the whole Agenda rail', () => {
   assert.match(calCode, /export function sourcesPopoverHtml/, 'no sources popover');
-  assert.match(appCode, /function toggleSources/, 'the popover cannot be opened');
-  assert.match(html, /\.sources\{position:fixed/, 'sources is not a popover');
-  assert.match(html, /\.sources\[hidden\]\{display:none\}/, 'the popover cannot hide');
+  // D4.7: same popover, shared shell. Sources and the Calendar key answer
+  // questions of the same kind, so they are one object with two contents —
+  // they used to be a 296px box opening left and a 300px box opening right.
+  assert.match(appCode, /toggleSources = \(btn\) => openCalendarSurface\(btn, 'sources'\)/,
+    'the popover cannot be opened');
+  assert.match(html, /\.util-surface\{position:fixed/, 'the shared surface is not a popover');
+  assert.match(html, /\.sources\{display:flex/, 'sources has no contents styling');
   // Agenda's rail band is now a summary, not plumbing.
   const agenda = body(calCode, 'function agendaRailHtml()');
   assert.ok(!/cal-connect|cal-disconnect|data-calendar/.test(agenda),

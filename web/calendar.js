@@ -223,19 +223,20 @@ export function calendarHeaderHtml() {
         </div>
       </div>
 
+      <!-- §4 Add first, then the overflow. The three-dot control sits at the
+           extreme upper-right of the page on Today, so it sits there here too —
+           same class, same geometry, same states. Wedged between the mode
+           selector and Add it read as a third kind of thing. -->
       <div class="cal-head-side">
-        <!-- Reminder management is not a peer of Month/Agenda/Plan, so it does
-           not get a peer-sized button. It lives behind one restrained utility
-           control with plain text labels. -->
-      <button class="cal-util" id="cal-util" aria-haspopup="menu"
-        aria-label="Calendar options">
-        <svg viewBox="0 0 20 20" aria-hidden="true">
-          <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
-          <circle cx="15.5" cy="10" r="1.5"/></svg>
-      </button>
-      <button class="cal-add" id="cal-add" aria-haspopup="menu" aria-expanded="false">
+        <button class="cal-add" id="cal-add" aria-haspopup="menu" aria-expanded="false">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>
           <span>Add</span>
+        </button>
+        <button class="util-btn" id="cal-util" aria-haspopup="menu" aria-expanded="false"
+          aria-label="Calendar options">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
+            <circle cx="15.5" cy="10" r="1.5"/></svg>
         </button>
       </div>
     </div>
@@ -260,7 +261,7 @@ export function calendarHeaderHtml() {
  * that somewhere — one compact popover, not a permanent sidebar.
  */
 export function legendHtml() {
-  return `<div class="legend" role="dialog" aria-label="Calendar key">
+  return `<div class="legend">
     <h4>What you are looking at</h4>
     <div class="lg-group"><span class="lg-lab">On a day</span>
       <div class="lg-row"><i class="lg-src"></i>
@@ -962,7 +963,7 @@ export function sourcesPopoverHtml() {
   const cals = (d?.calendars ?? []).filter((c) => !c.isSynthetic);
 
   if (!conn) {
-    return `<div class="sources" role="dialog" aria-label="Calendar sources">
+    return `<div class="sources">
       <h4>Calendar sources</h4>
       <p class="cs-connect-copy">Connect Google Calendar to see your real events
         in Month, Agenda and Plan week.</p>
@@ -976,7 +977,7 @@ export function sourcesPopoverHtml() {
     </div>`;
   }
 
-  return `<div class="sources" role="dialog" aria-label="Calendar sources">
+  return `<div class="sources">
     <h4>Calendar sources</h4>
     <div class="cs-account">
       <span class="cs-acct-dot ${conn.status === 'error' ? 'is-error' : 'is-ok'}"></span>
@@ -1124,7 +1125,25 @@ function planRailHtml() {
 }
 
 /* ── Body ─────────────────────────────────────────────────────────────── */
+/**
+ * The Calendar body: ONE frame holding the canvas and the rail.
+ *
+ * The rail used to be the page's rail column, which meant opening it narrowed
+ * the whole content column — and the header and the canvas, both centred inside
+ * that column, slid sideways every time a day was selected. Owning the rail
+ * inside the frame means the frame's edges never move: only the canvas gives up
+ * width, from its right edge, so every day column keeps its position.
+ */
 export function calendarBodyHtml() {
+  return `<div class="cal-body ${railIsOpen() ? 'has-rail rail-shown' : ''}" id="cal-body">
+    <div class="cal-canvas" id="cal-canvas">${calendarCanvasHtml()}</div>
+    <aside class="cal-rail" id="cal-rail" aria-label="Context">
+      <div class="cal-rail-in" id="cal-rail-in">${calendarRailHtml()}</div>
+    </aside>
+  </div>`;
+}
+
+function calendarCanvasHtml() {
   if (cal.loading) return '<div class="state"><b>Loading your calendar…</b></div>';
   if (cal.error) {
     return `<div class="state"><b>Could not load the calendar</b>${esc(cal.error)}

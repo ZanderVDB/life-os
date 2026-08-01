@@ -42,6 +42,34 @@ export function settle(anim, duration, done) {
 }
 
 /**
+ * The same guarantee for a CSS TRANSITION rather than a WAAPI animation.
+ *
+ * `transitionend` is no more reliable than `onfinish`: it does not fire if the
+ * transition is interrupted, if the property never actually changed, or if the
+ * tab is hidden. Anything that cleans up after a transition — clearing a
+ * collapsed panel so its buttons leave the tab order, for instance — needs the
+ * timeout as the guarantee and the event only as the fast path.
+ *
+ * @param {Element} el the transitioning element
+ * @param {string} prop the property to wait for, e.g. 'grid-template-columns'
+ * @param {number} duration the transition duration in ms
+ * @param {() => void} done
+ */
+export function afterTransition(el, prop, duration, done) {
+  let fired = false;
+  const once = () => {
+    if (fired) return;
+    fired = true;
+    el.removeEventListener('transitionend', onEnd);
+    done();
+  };
+  const onEnd = (e) => { if (e.target === el && e.propertyName === prop) once(); };
+  el.addEventListener('transitionend', onEnd);
+  setTimeout(once, duration + 80);
+  return once;
+}
+
+/**
  * Runs `mutate`, then animates every tracked element from where it was to
  * where it now is.
  *
