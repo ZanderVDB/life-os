@@ -232,21 +232,17 @@ test('nav: Completed and Settings are not primary destinations', () => {
   assert.match(app, /ALL_ROUTE_IDS\.includes\(id\)/, 'secondary routes are not reachable by URL');
 });
 
-test('account menu: keyboard, dismissal, and a guarded sign-out', () => {
-  assert.match(app, /aria-haspopup="menu"/, 'the account block is not a menu trigger');
-  assert.match(app, /function openAccountMenu/);
-  // Arrow keys, Home/End and Escape.
-  for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape']) {
-    assert.ok(app.includes(`'${key}'`), `the account menu ignores ${key}`);
+test('account: the identity opens Settings directly, with no popover', () => {
+  // D4.5 removed the popover. It held Settings, Completed, a build string and
+  // Sign out — four unrelated things, none of them account management, all a
+  // second click away. The identity block is now a direct link.
+  assert.match(app, /id="account-btn" data-route="settings"/,
+    'the identity block is not a direct link to Settings');
+  for (const gone of ['openAccountMenu', 'account-menu', 'data-am=']) {
+    assert.ok(!app.includes(gone), `the account popover survives as ${gone}`);
   }
-  assert.match(app, /document\.addEventListener\('click', onOutsideAccount\)/,
-    'the menu does not close on an outside click');
-  // Sign out is the one irreversible item; it is last and confirmed.
-  const menu = app.slice(app.indexOf('function openAccountMenu'), app.indexOf('function onOutsideAccount'));
-  assert.ok(menu.indexOf("data-am=\"settings\"") < menu.indexOf("data-am=\"signout\""),
-    'sign out is not last in the menu');
-  assert.match(menu, /if \(confirm\('Sign out/, 'sign out is not confirmed');
-  assert.ok(!/data-route="settings"/.test(app), 'a second, competing Settings entry exists');
+  // Sign out moved into Settings, where account actions belong.
+  assert.match(settings, /id="sign-out"/, 'Sign out has no home');
 });
 
 test('history is reachable, and never from the sidebar', () => {
@@ -256,8 +252,10 @@ test('history is reachable, and never from the sidebar', () => {
   assert.ok(!/function todayHeaderActions/.test(app),
     'the Completed control is back in the Today header');
   assert.match(app, /'history'/, 'the Completed route was removed entirely');
-  assert.match(app, /data-am="history"[\s\S]{0,80}Completed/,
-    'Completed has no entry in the account menu');
+  // D4.5 moved Completed out of the account popover and onto the end of the
+  // Today board, where content history belongs.
+  assert.match(app, /today-history/, 'Completed has no destination');
+  assert.match(app, /go\('history'\)/, 'the Completed link does not navigate');
   assert.match(app, /data-route="today"[\s\S]{0,120}Back to Today/, 'History cannot get back');
   // Buckets still exclude completed work.
   assert.match(app, /t\.status !== 'done'/, 'buckets no longer exclude completed tasks');

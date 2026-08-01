@@ -52,7 +52,9 @@ export function settingsHtml(state) {
       ${row('One workspace', 'Life OS keeps everything in a single workspace. '
         + 'Areas divide your life inside it, so nothing is split in half.')}
       ${row('Sign out', 'Ends the session on this device.',
-        '<button class="btn btn-danger" id="sign-out">Sign out</button>')}`,
+        '<button class="btn btn-danger" id="sign-out">Sign out</button>')}
+      ${row('Version', 'Useful when reporting a problem.',
+        `<code class="set-build">${esc(window.LIFE_OS_BUILD ?? 'unknown')}</code>`)}`,
 
     appearance: () => `
       ${row('Theme', 'Life OS is designed dark.',

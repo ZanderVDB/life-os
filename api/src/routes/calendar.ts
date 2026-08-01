@@ -20,6 +20,7 @@ import {
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { isStagingCleanupAllowed } from '../lib/import-writer.js';
+import { expand, describe as describeRule, nextAfter } from '../lib/recurrence.js';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -144,19 +145,39 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       byEvent.get(a.eventId)!.push(a);
     }
 
-    const rems = await db.select().from(reminders).where(and(
-      eq(reminders.workspaceId, workspaceId),
-      gte(reminders.dueDate, q.data.from),
-      lte(reminders.dueDate, q.data.to),
-    )).orderBy(asc(reminders.dueDate));
-
-    // Recurrence travels with the reminder so the UI can say "every month on
-    // the 25th" rather than showing a bare date.
-    const rules = rems.length
-      ? await db.select().from(reminderRecurrenceRules)
-        .where(eq(reminderRecurrenceRules.workspaceId, workspaceId))
-      : [];
+    /*
+     * Reminders are fetched WITHOUT a date filter, then expanded.
+     *
+     * Filtering by due date first would hide exactly the reminders this needs:
+     * a monthly reminder anchored in August must still produce an occurrence
+     * in December, and its stored row is nowhere near December.
+     */
+    const allRems = await db.select().from(reminders)
+      .where(eq(reminders.workspaceId, workspaceId));
+    const rules = await db.select().from(reminderRecurrenceRules)
+      .where(eq(reminderRecurrenceRules.workspaceId, workspaceId));
     const ruleFor = new Map(rules.map((r) => [r.reminderId, r]));
+
+    // One row per occurrence in range. The id stays the canonical reminder's,
+    // so completing any occurrence reaches the right record; `occurrenceDate`
+    // is what the view places.
+    const rems = allRems.flatMap((r) => {
+      if (!r.dueDate) return [];
+      // A paused reminder keeps its rule but produces no future occurrences.
+      if (r.status === 'paused') return [];
+      const rule = ruleFor.get(r.id) ?? null;
+      return expand(r.dueDate, rule, q.data.from, q.data.to).map((o) => ({
+        ...r,
+        dueDate: o.date,
+        occurrenceDate: o.date,
+        isVirtual: o.isVirtual,
+        // Only the stored occurrence can carry a completion; a virtual one is
+        // by definition still ahead of you.
+        status: o.isVirtual ? 'open' : r.status,
+        recurrence: rule,
+        recurrenceText: describeRule(rule),
+      }));
+    }).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
     const blocks = await db.select({
       id: taskScheduleBlocks.id,
@@ -216,7 +237,7 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
         isReadOnly: calById.get(e.calendarId)?.isReadOnly ?? true,
         attendees: byEvent.get(e.id) ?? [],
       })),
-      reminders: rems.map((r) => ({ ...r, recurrence: ruleFor.get(r.id) ?? null })),
+      reminders: rems,
       blocks,
       deadlines,
       habitDays,
@@ -367,7 +388,7 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       .where(eq(reminderRecurrenceRules.reminderId, id));
 
     if (rule && existing.dueDate) {
-      const next = nextOccurrence(existing.dueDate, rule);
+      const next = nextAfter(existing.dueDate, rule);
       // Past the end of the series? Then it really is finished.
       const ended = (rule.until && next > rule.until) || !next;
       const [row] = await db.update(reminders).set(
@@ -438,6 +459,86 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       .returning();
     if (!row) throw notFound('Reminder not found.');
     return { reminder: row };
+  });
+
+  /**
+   * All reminders, for the Reminders overview.
+   *
+   * Deliberately separate from the range query: the overview is about the
+   * RULES ("monthly on the 28th"), not about which dates happen to fall inside
+   * a window. Filtering that by date range is what made reminders feel like
+   * they only existed on the days they appeared.
+   */
+  app.get('/api/v1/workspaces/:workspaceId/reminders', pre, async (req) => {
+    const { workspaceId } = req.params as { workspaceId: string };
+    const rows = await db.select().from(reminders)
+      .where(eq(reminders.workspaceId, workspaceId))
+      .orderBy(asc(reminders.dueDate));
+    const rules = await db.select().from(reminderRecurrenceRules)
+      .where(eq(reminderRecurrenceRules.workspaceId, workspaceId));
+    const ruleFor = new Map(rules.map((r) => [r.reminderId, r]));
+    const today = new Date().toISOString().slice(0, 10);
+
+    return {
+      reminders: rows.map((r) => {
+        const rule = ruleFor.get(r.id) ?? null;
+        // "Next" is the stored date when it is still ahead, otherwise the next
+        // one the rule produces — an overdue reminder should still tell you
+        // when it comes round again.
+        const next = r.status === 'done' || !r.dueDate ? null
+          : r.dueDate >= today ? r.dueDate
+            : rule ? nextAfter(r.dueDate, rule) : r.dueDate;
+        return {
+          ...r,
+          recurrence: rule,
+          recurrenceText: describeRule(rule),
+          nextOccurrence: next,
+          isOverdue: r.status === 'open' && !!r.dueDate && r.dueDate < today,
+        };
+      }),
+    };
+  });
+
+  /** Pause and resume: a rule that keeps its history but stops firing. */
+  app.post('/api/v1/workspaces/:workspaceId/reminders/:id/pause', pre, async (req) => {
+    const { workspaceId, id } = req.params as { workspaceId: string; id: string };
+    const [row] = await db.update(reminders)
+      .set({ status: 'paused', updatedAt: new Date() })
+      .where(and(eq(reminders.id, id), eq(reminders.workspaceId, workspaceId)))
+      .returning();
+    if (!row) throw notFound('Reminder not found.');
+    return { reminder: row };
+  });
+
+  app.post('/api/v1/workspaces/:workspaceId/reminders/:id/resume', pre, async (req) => {
+    const { workspaceId, id } = req.params as { workspaceId: string; id: string };
+    const [row] = await db.update(reminders)
+      .set({ status: 'open', updatedAt: new Date() })
+      .where(and(eq(reminders.id, id), eq(reminders.workspaceId, workspaceId)))
+      .returning();
+    if (!row) throw notFound('Reminder not found.');
+    return { reminder: row };
+  });
+
+  /**
+   * End a series without deleting its history.
+   *
+   * Distinct from Delete, which removes the reminder entirely, and from
+   * Complete, which advances to the next occurrence. Three different intents
+   * that a single "done" button would blur together.
+   */
+  app.post('/api/v1/workspaces/:workspaceId/reminders/:id/end-series', pre, async (req) => {
+    const { workspaceId, id } = req.params as { workspaceId: string; id: string };
+    const [row] = await db.select().from(reminders).where(and(
+      eq(reminders.id, id), eq(reminders.workspaceId, workspaceId),
+    ));
+    if (!row) throw notFound('Reminder not found.');
+    await db.delete(reminderRecurrenceRules)
+      .where(eq(reminderRecurrenceRules.reminderId, id));
+    const [updated] = await db.update(reminders)
+      .set({ status: 'done', completedAt: new Date(), updatedAt: new Date() })
+      .where(eq(reminders.id, id)).returning();
+    return { reminder: { ...updated, recurrence: null } };
   });
 
   /* ── Task schedule blocks — Plan mode ──────────────────────────────────

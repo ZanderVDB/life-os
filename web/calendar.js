@@ -45,6 +45,11 @@ const cal = {
   data: null,
   loading: false,
   error: null,
+  // A sub-view of Calendar rather than a fourth mode: Month/Agenda/Plan answer
+  // "how am I viewing time", and a reminder list is not a view of time.
+  view: 'calendar',
+  reminderFilter: 'upcoming',
+  reminders: null,
 };
 
 /* ── Date helpers ─────────────────────────────────────────────────────── */
@@ -185,7 +190,7 @@ export function calendarHeaderHtml() {
         </div>
       </div>
 
-      <div class="cal-head-side">
+      <div class="cal-head-mid">
         <div class="cal-modes" role="tablist" aria-label="Calendar mode"
           style="--mode-i:${active};--mode-n:${MODES.length}">
           <span class="cal-mode-pill" aria-hidden="true"></span>
@@ -193,7 +198,17 @@ export function calendarHeaderHtml() {
             aria-selected="${cal.mode === m.id}"
             tabindex="${cal.mode === m.id ? 0 : -1}">${m.label}</button>`).join('')}
         </div>
-        <button class="cal-add" id="cal-add" aria-haspopup="menu" aria-expanded="false">
+      </div>
+
+      <div class="cal-head-side">
+        <button class="cal-remind" id="cal-reminders"
+        aria-pressed="${cal.view === 'reminders'}">
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M10 3.5a4.5 4.5 0 0 0-4.5 4.5c0 4-1.5 5-1.5 5h12s-1.5-1-1.5-5A4.5 4.5 0 0 0 10 3.5Z"/>
+          <path d="M8.6 15.5a1.6 1.6 0 0 0 2.8 0"/></svg>
+        <span>Reminders</span>
+      </button>
+      <button class="cal-add" id="cal-add" aria-haspopup="menu" aria-expanded="false">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>
           <span>Add</span>
         </button>
@@ -757,30 +772,44 @@ function railAttentionHtml() {
 }
 
 /** Month with nothing selected: what the month holds, briefly. */
+/**
+ * Month with nothing selected.
+ *
+ * It used to list totals — Events 58, All-day 3, Busy days 4. A count is not a
+ * decision, and nobody opens a calendar wondering how many events they have.
+ * What is worth surfacing is the handful of dates that are unusual: birthdays
+ * you would regret missing, and days already heavily booked.
+ */
 function monthOverviewHtml() {
   const d = cal.data;
   if (!d) return '';
   const days = monthGrid(cal.anchor)
     .filter((x) => x.getMonth() === cal.anchor.getMonth()).map(iso);
+  const todayIso = iso(new Date());
   const inMonth = (e) => days.includes(e.isAllDay ? e.startDate : iso(new Date(e.startsAt)));
   const events = (d.events ?? []).filter((e) => (e.isAllDay ? e.startDate : e.startsAt) && inMonth(e));
-  const birthdays = events.filter((e) => e.eventType === 'birthday');
-  const allDay = events.filter((e) => e.isAllDay && e.eventType !== 'birthday');
-  const busy = days.filter((day) => ['busy', 'overloaded'].includes(workload(day)));
+  const birthdays = events.filter((e) => e.eventType === 'birthday' && e.startDate >= todayIso);
+  const heavy = days.filter((day) => day >= todayIso && workload(day) === 'overloaded');
+
+  if (!birthdays.length && !heavy.length) {
+    return `<div class="rail-card">
+      <h3>This month</h3>
+      <p class="rail-quiet">Pick a day to see what is on it.</p>
+    </div>`;
+  }
 
   return `<div class="rail-card">
-    <h3>This month</h3>
-    <div class="rl-list">
-      <div class="rl-row"><span class="rl-t">Events</span>
-        <span class="rl-s">${events.length}</span></div>
-      ${allDay.length ? `<div class="rl-row"><span class="rl-t">All-day</span>
-        <span class="rl-s">${allDay.length}</span></div>` : ''}
-      ${busy.length ? `<div class="rl-row"><span class="rl-t">Busy days</span>
-        <span class="rl-s">${busy.length}</span></div>` : ''}
-    </div>
-    ${birthdays.length ? `<div class="cs-sec"><span class="cs-lab">Birthdays</span>
-      ${birthdays.map((b) => `<div class="cs-row"><i style="background:var(--p-medium)"></i>
-        <span>${esc(prettyShort(b.startDate))}</span><b>${esc(b.title)}</b></div>`).join('')}
+    <h3>Worth knowing</h3>
+    ${birthdays.length ? `<div class="cs-sec"><span class="cs-lab">Birthdays ahead</span>
+      ${birthdays.slice(0, 4).map((b) => `<button class="cs-row" data-day="${b.startDate}">
+        <i style="background:var(--p-medium)"></i>
+        <span>${esc(prettyShort(b.startDate))}</span><b>${esc(b.title)}</b></button>`).join('')}
+    </div>` : ''}
+    ${heavy.length ? `<div class="cs-sec"><span class="cs-lab">Heavily booked</span>
+      ${heavy.slice(0, 3).map((day) => `<button class="cs-row" data-day="${day}">
+        <i style="background:var(--danger)"></i>
+        <span>${esc(prettyShort(day))}</span>
+        <b>${esc(parseIso(day).toLocaleDateString(undefined, { weekday: 'long' }))}</b></button>`).join('')}
     </div>` : ''}
     <p class="rail-quiet cal-hint">Pick a day to see what is on it.</p>
   </div>`;
@@ -850,26 +879,45 @@ const loadWord = (l) => ({
  * to a popover - it was dominating the rail on the one mode where the user is
  * least interested in plumbing.
  */
+/**
+ * Agenda's mode context.
+ *
+ * It used to list totals — 58 events, 10 reminders, 0 deadlines, 90 hours free.
+ * None of those is a decision. A count answers "how many", and the only useful
+ * question a rail can answer is "what should I do about it".
+ *
+ * So this renders nothing at all unless something needs attention, and the
+ * shared attention card below already covers conflicts and overdue reminders.
+ */
 function agendaRailHtml() {
   const d = cal.data;
   if (!d) return '';
   const today = new Date();
-  const horizon = Array.from({ length: 61 }, (_, i) => iso(addDays(today, i)));
-  const count = (pick) => horizon.reduce((n, day) => n + pick(itemsForDay(day)).length, 0);
+  const week = Array.from({ length: 7 }, (_, i) => iso(addDays(today, i)));
+
+  // Reminders landing this week, because that is a week you can prepare for.
+  const dueThisWeek = week.reduce((n, day) => n + itemsForDay(day).reminders
+    .filter((r) => r.status !== 'done').length, 0);
+  // Tasks with a deadline in view and no time set aside for them.
+  const unplanned = (d.deadlines ?? []).filter((t) =>
+    !(d.blocks ?? []).some((b) => b.taskId === t.id));
+
+  const insights = [
+    dueThisWeek ? { text: `${dueThisWeek} reminder${dueThisWeek > 1 ? 's' : ''} due this week`,
+      go: 'reminders' } : null,
+    unplanned.length ? { text: `${unplanned.length} task${unplanned.length > 1 ? 's' : ''} due with no time set aside`,
+      go: 'plan' } : null,
+  ].filter(Boolean);
+
+  if (!insights.length) return '';
 
   return `<div class="rail-card">
-    <h3>Coming up</h3>
+    <h3>Worth a look</h3>
     <div class="rl-list">
-      <div class="rl-row"><span class="rl-t">Events</span>
-        <span class="rl-s">${count((x) => x.events)}</span></div>
-      <div class="rl-row"><span class="rl-t">Reminders</span>
-        <span class="rl-s">${count((x) => x.reminders)}</span></div>
-      <div class="rl-row"><span class="rl-t">Deadlines</span>
-        <span class="rl-s">${count((x) => x.deadlines)}</span></div>
-      <div class="rl-row"><span class="rl-t">Planned work</span>
-        <span class="rl-s">${count((x) => x.blocks)}</span></div>
+      ${insights.map((i) => `<button class="rl-row" data-insight="${i.go}">
+        <span class="rl-t">${esc(i.text)}</span>
+        <span class="rl-s">›</span></button>`).join('')}
     </div>
-    <p class="rail-quiet cal-hint">Next 60 days. Use the filters above to narrow it.</p>
   </div>`;
 }
 
@@ -997,8 +1045,22 @@ function planRailHtml() {
   const scheduled = new Set(d.blocks.map((b) => b.taskId));
   const queue = (d.unscheduled ?? []).filter((t) => !scheduled.has(t.id));
   const dueSoon = (d.deadlines ?? []).filter((t) => !scheduled.has(t.id));
-  const freeMins = week.reduce((n, day) =>
-    n + freeWindows(day).reduce((m, [a, b]) => m + (b - a), 0), 0);
+  /*
+   * The largest usable window this week, named rather than summed.
+   * "90 hours free" is arithmetic; "Tuesday has a 3-hour window" is a plan.
+   */
+  const windows = week.flatMap((day) => freeWindows(day)
+    .map(([a, b]) => ({ day, mins: b - a, from: a })))
+    .filter((w) => w.mins >= 60 && w.day >= iso(new Date()))
+    .sort((x, y) => y.mins - x.mins);
+  const top = windows[0];
+  const bestWindow = top ? {
+    day: top.day,
+    label: `${parseIso(top.day).toLocaleDateString(undefined, { weekday: 'long' })} has `
+      + `${Math.floor(top.mins / 60)}h free from `
+      + `${String(Math.floor(top.from / 60)).padStart(2, '0')}:${String(top.from % 60).padStart(2, '0')}`,
+  } : null;
+  const noEstimate = queue.filter((t) => !t.estimateMinutes);
 
   return `<div class="rail-card">
       <h3>Planning queue</h3>
@@ -1015,12 +1077,14 @@ function planRailHtml() {
     </div>
     <div class="rail-card"><h3>This week</h3>
       <div class="rl-list">
-        <div class="rl-row"><span class="rl-t">Free time in planning hours</span>
-          <span class="rl-s">${Math.round(freeMins / 60)}h</span></div>
-        <div class="rl-row"><span class="rl-t">Planned blocks</span>
-          <span class="rl-s">${d.blocks.length}</span></div>
-        <div class="rl-row"><span class="rl-t">Planning hours</span>
-          <span class="rl-s">${planHours().start}:00–${planHours().end}:00</span></div>
+        ${bestWindow ? `<button class="rl-row" data-day="${bestWindow.day}">
+          <span class="rl-t">${esc(bestWindow.label)}</span>
+          <span class="rl-s">›</span></button>` : ''}
+        ${noEstimate.length ? `<div class="rl-row">
+          <span class="rl-t">${noEstimate.length} task${noEstimate.length > 1 ? 's' : ''} with no duration</span>
+          <span class="rl-s">hard to plan</span></div>` : ''}
+        ${!bestWindow && !noEstimate.length ? `<div class="rl-row">
+          <span class="rl-t">Nothing needs attention this week</span></div>` : ''}
       </div>
     </div>`;
 }

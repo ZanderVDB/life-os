@@ -45,8 +45,11 @@ test('recurrence: the API accepts it — this is the bug that shipped', () => {
     'ReminderBody does not accept recurrence — it will be silently discarded');
   assert.match(calRoute, /db\.insert\(reminderRecurrenceRules\)/, 'the rule is never stored');
   // And it must come back out again.
-  assert.match(calRoute, /recurrence: ruleFor\.get\(r\.id\) \?\? null/,
-    'the rule is stored but never returned');
+  // D4.5 changed the range query from "attach the rule" to "expand the rule",
+  // so the rule now travels on every generated occurrence.
+  assert.match(calRoute, /recurrence: rule,/, 'the rule is stored but never returned');
+  assert.match(calRoute, /recurrenceText: describeRule\(rule\)/,
+    'the rule is returned without plain wording');
 });
 
 test('recurrence: a real reminder is not flagged as demonstration data', () => {
@@ -99,7 +102,9 @@ test('recurrence: dates are calendar-local, never UTC instants', () => {
 
 test('recurrence: completing a recurring reminder advances it, not closes it', () => {
   const fn = calRoute.slice(calRoute.indexOf("reminders/:id/complete"));
-  assert.match(fn.slice(0, 1600), /nextOccurrence\(existing\.dueDate, rule\)/,
+  // Renamed to nextAfter in D4.5 when the shared recurrence engine replaced
+  // the route-local implementation.
+  assert.match(fn.slice(0, 1600), /nextAfter\(existing\.dueDate, rule\)/,
     'completion does not advance a recurring reminder');
   assert.match(fn.slice(0, 1600), /status: 'open', completedAt: null/,
     'a recurring reminder is closed permanently on completion');
@@ -193,7 +198,9 @@ test('plan: conflicts ignore reminders entirely', () => {
 /* ── §5 Detail and edit ──────────────────────────────────────────────── */
 
 test('detail: a reminder gets a Life OS surface with real actions', () => {
-  const fn = body(appCode, 'function openReminderDetail(id)');
+  // Gained a second parameter in D4.5 so the Reminders workspace can pass its
+  // own list rather than the calendar range's.
+  const fn = body(appCode, 'function openReminderDetail(id, from = null)');
   assert.match(fn, /actions:/, 'the reminder detail offers no actions');
   assert.match(fn, /Mark done|Mark not done/, 'completion is not available from detail');
   assert.match(fn, /label: 'Edit'/, 'editing is not available from detail');
@@ -203,9 +210,11 @@ test('detail: a reminder gets a Life OS surface with real actions', () => {
   // And never the event editor. Checked at the call site rather than by
   // proximity — the two modals sit on adjacent import lines, which a loose
   // distance match reads as a violation.
-  const editFn = body(appCode, 'function editReminder(id)');
+  // Gained a second parameter in D4.5, like openReminderDetail, so the
+  // Reminders workspace can pass its own list.
+  const editFn = body(appCode, 'function editReminder(id, from = null)');
   assert.ok(!/openEventModal/.test(editFn), 'the Event editor is used to edit a reminder');
-  const detailFn = body(appCode, 'function openReminderDetail(id)');
+  const detailFn = body(appCode, 'function openReminderDetail(id, from = null)');
   assert.ok(!/openEventModal/.test(detailFn), 'reminder detail opens the Event editor');
 });
 

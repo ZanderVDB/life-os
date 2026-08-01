@@ -126,7 +126,10 @@ test('rail: source management is a popover, not the whole Agenda rail', () => {
   const agenda = body(calCode, 'function agendaRailHtml()');
   assert.ok(!/cal-connect|cal-disconnect|data-calendar/.test(agenda),
     'source controls are still embedded in the Agenda rail');
-  assert.match(agenda, /Coming up/, 'Agenda has no upcoming summary');
+  // D4.5 replaced the "Coming up" totals with actionable insights, and made
+  // the card render nothing at all when there is nothing worth saying.
+  assert.match(agenda, /if \(!insights\.length\) return ''/,
+    'the Agenda rail renders even with nothing to say');
 });
 
 test('rail: attention renders nothing when nothing is wrong', () => {

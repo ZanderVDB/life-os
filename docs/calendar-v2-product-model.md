@@ -221,3 +221,48 @@ times a week, every mark in it is either instantly legible or it is friction.
 
 Colour is never the only carrier of meaning. Purple means selected or
 interactive, everywhere, and nothing else.
+
+
+## Discoverability rule (locked in D4.5)
+
+> **No feature is complete unless the user has an obvious place to find it, understand it, review it and manage it.**
+
+Contextual display is not enough. Showing a reminder on the date it falls on
+tells you about one occurrence; it never tells you what reminders you own,
+which of them repeat, or how to change them.
+
+The user must never have to wonder what records exist, where they are stored,
+which are active, how to edit them, how to pause or remove them, or what
+happens next.
+
+**Settings is for configuration** - preferences, permissions, integrations. It
+is not a home for a product system. A list of your reminders is not a setting.
+
+### Applied in D4.5
+
+| System | Contextual surface | Home |
+|---|---|---|
+| Reminders | Month cells, Agenda rows, Plan strip, selected-day rail | **Calendar -> Reminders** workspace |
+| Completed tasks | - | End of the Today board |
+| Account, sign out, version | - | Settings -> Account |
+
+## Rail usefulness rule (locked in D4.5)
+
+> **The rail is optional. It exists only when it provides actionable or contextual value.**
+
+A count is not a decision. "58 events", "0 deadlines" and "90 hours free" were
+removed because nobody opens a calendar wondering how many events they have.
+
+Every rail item must have source data, an explainable calculation, and
+somewhere to click. "Tuesday has 3h free from 09:00" is a plan; "90 hours free"
+is arithmetic.
+
+## Recurrence visibility (D4.5)
+
+A reminder stores ONE canonical due date - the occurrence being asked about
+right now. Views expand the rule into virtual occurrences for whatever range
+they display, so September is visible without August having been completed.
+
+Future occurrences are never written to the database. Materialising them would
+mean every edit had to chase down and rewrite an unbounded set, and a missed
+one becomes a reminder that fires on a date its own rule no longer agrees with.

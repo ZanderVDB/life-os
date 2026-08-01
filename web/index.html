@@ -1329,6 +1329,10 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cal-head,.cal-month,.cal-agenda,.cal-plan{width:100%;max-width:var(--cal-max);
   margin-inline:auto}
 :root{--cal-max:1180px}
+/* Calendar's rail holds a date, a short context card and an attention card —
+   far less than Today's habit rail, so it does not need Today's width. The
+   canvas is where the work is. */
+body:has(.cal-head) .main-wrap{grid-template-columns:minmax(0,1fr) 300px}
 @media (min-width:1600px){:root{--cal-max:1340px}}
 @media (min-width:2100px){:root{--cal-max:1520px}}
 
@@ -1616,6 +1620,108 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 .pl-rem>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   background:var(--surface);padding:0 3px;border-radius:3px}
 .pl-rem:hover>span{color:var(--text)}
+
+/* ══ D4.5 ═══════════════════════════════════════════════════════════════ */
+
+/* §19 Three-zone header: the mode selector is centred on the CANVAS, not
+   merely placed after the date controls. Equal side columns are what make the
+   centre column actually centred. */
+/* minmax(0,1fr), not 1fr: a bare `1fr` refuses to shrink below its content, so
+   the wider side column steals from the middle and the mode selector ends up
+   off-centre — measured 40px left before this. */
+.cal-head-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  align-items:center;gap:16px}
+.cal-head-main{min-width:0}
+.cal-head-main h1{white-space:nowrap}
+.cal-head-main{justify-self:start}
+.cal-head-mid{justify-self:center}
+.cal-head-side{justify-self:end}
+.cal-head-sub{display:flex;align-items:center;justify-content:space-between}
+
+/* §13 The identity row is a link now, not a menu trigger. */
+.who-go{margin-left:auto;display:grid;place-items:center;width:18px;height:18px;
+  color:var(--muted);opacity:0;transform:translateX(-3px);
+  transition:opacity var(--t-hover),transform var(--t-hover)}
+.who-go svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.who:hover .who-go,.who:focus-visible .who-go{opacity:1;transform:translateX(0)}
+.who-chev{display:none}
+
+/* §14 Completed history, at the end of the board where content belongs. */
+.today-history{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;
+  border-radius:10px;font-size:12.5px;font-weight:500;color:var(--muted);
+  background:var(--surface);align-self:flex-start;
+  transition:background var(--t-hover),color var(--t-hover)}
+.today-history:hover{background:var(--surface-2);color:var(--text-2)}
+.set-build{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+  color:var(--muted);background:var(--surface-2);border-radius:6px;padding:3px 8px}
+
+/* §2 Reminders entry, same control family as the rest of the header. */
+.cal-remind{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px;
+  border-radius:11px;font-size:12.5px;font-weight:600;color:var(--muted);
+  background:var(--surface-2);
+  transition:color var(--t-hover),background var(--t-hover)}
+.cal-remind svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round}
+.cal-remind:hover{color:var(--text-2)}
+.cal-remind[aria-pressed="true"]{background:var(--accent-soft);color:var(--text)}
+
+/* §3-§5 The workspace itself. */
+.rv{width:100%;max-width:var(--cal-max);margin-inline:auto;display:flex;
+  flex-direction:column;gap:18px}
+.rv-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.rv-filters{display:flex;gap:5px;flex-wrap:wrap}
+.rv-filter{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;
+  border-radius:9px;font-size:12.5px;font-weight:500;color:var(--muted);
+  background:var(--surface-2);transition:color var(--t-hover),background var(--t-hover)}
+.rv-filter:hover{color:var(--text-2)}
+.rv-filter.is-on{background:var(--accent-soft);color:var(--text);font-weight:600}
+.rv-count{font-size:10.5px;font-weight:700;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.rv-filter.is-on .rv-count{color:var(--accent)}
+
+.rv-list{display:flex;flex-direction:column;gap:7px}
+.rv-card{display:flex;align-items:center;gap:13px;padding:13px 16px;border-radius:12px;
+  background:var(--surface);border-left:2.5px solid transparent;
+  transition:background var(--t-hover),border-color var(--t-hover)}
+.rv-card:hover{background:var(--surface-2)}
+.rv-card.is-overdue{border-left-color:var(--warn)}
+.rv-card.is-paused{opacity:.6}
+.rv-card.is-done .rv-title{color:var(--muted);text-decoration:line-through}
+.rv-check{width:19px;height:19px;border-radius:6px;border:1.7px solid var(--muted);
+  flex-shrink:0;position:relative;
+  transition:background var(--t-hover),border-color var(--t-hover)}
+.rv-check:hover{border-color:var(--ok)}
+.rv-card.is-done .rv-check{background:var(--ok);border-color:var(--ok)}
+.rv-card.is-done .rv-check::after{content:"";position:absolute;left:6px;top:2px;
+  width:5px;height:10px;border:solid #08221c;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.rv-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;text-align:left}
+.rv-title{font-size:13.5px;color:var(--text);line-height:1.35}
+.rv-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rv-meta>span{font-size:11px;color:var(--muted)}
+/* The RULE leads. The date it next lands on is a consequence of it. */
+.rv-rule{color:var(--text-2)!important;font-weight:600}
+.rv-next{font-variant-numeric:tabular-nums}
+.rv-area{background:var(--surface-2);border-radius:5px;padding:1px 7px}
+.rv-status{margin-left:auto}
+.rv-card.is-overdue .rv-status{color:var(--warn)!important;font-weight:600}
+.rv-actions{display:flex;gap:5px;flex-shrink:0;opacity:0;
+  transition:opacity var(--t-hover)}
+.rv-card:hover .rv-actions,.rv-card:focus-within .rv-actions{opacity:1}
+.rv-act{height:28px;padding:0 11px;border-radius:8px;font-size:11.5px;font-weight:500;
+  color:var(--muted);background:var(--surface-2);transition:color var(--t-hover)}
+.rv-act:hover{color:var(--text)}
+.rv-empty{display:flex;flex-direction:column;gap:6px;padding:56px 0;align-items:center;
+  text-align:center}
+.rv-empty-t{font-size:15px;font-weight:600;color:var(--text-2)}
+.rv-empty-s{font-size:12.5px;color:var(--muted);max-width:340px;line-height:1.55}
+
+@media (max-width:900px){
+  .cal-head-row{grid-template-columns:1fr;gap:12px}
+  .cal-head-main,.cal-head-mid,.cal-head-side{justify-self:stretch}
+  .rv-actions{opacity:1}
+  .rv-status{margin-left:0}
+}
 
 /* ── Ambient stars ──────────────────────────────────────────────────
    Decorative only: behind everything, never interactive, never in the

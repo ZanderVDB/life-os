@@ -19,6 +19,7 @@ import { openEventModal, openAddMenu } from './event-modal.js';
 import { initPlanDrag } from './plan-drag.js';
 import { openReminderModal } from './reminder-modal.js';
 import { openScheduleTaskModal } from './schedule-task-modal.js';
+import { remindersViewHtml } from './reminders-view.js';
 import { openDetailSheet } from './detail-sheet.js';
 import { initHoverPreview, closeHoverPreview } from './hover-preview.js';
 import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHtml,
@@ -297,14 +298,19 @@ function renderShell() {
         </nav>
 
         <div class="side-foot">
-          <button class="who" id="account-btn" aria-haspopup="menu" aria-expanded="false"
-            aria-controls="account-menu">
+          <!-- One click to Settings. The popover it replaced held four
+               unrelated things - Settings, Completed, a build string and Sign
+               out - none of which is account management, and all of which were
+               a second click away from anywhere. -->
+          <button class="who" id="account-btn" data-route="settings">
             <span class="avatar">${esc(initial)}</span>
             <span class="who-text">
               <span class="who-name">${esc(state.me.user.displayName || state.me.user.email)}</span>
               <span class="who-sub">${esc(state.me.workspace.name)} workspace</span>
             </span>
-            <span class="who-chev" aria-hidden="true">⌃</span>
+            <span class="who-go" aria-hidden="true">
+              <svg viewBox="0 0 20 20"><path d="m8 5 5 5-5 5"/></svg>
+            </span>
           </button>
         </div>
       </aside>
@@ -366,13 +372,8 @@ function wireShell() {
   });
   window.__closeDrawer = () => setDrawer(false);
 
-  const accountBtn = document.getElementById('account-btn');
-  accountBtn?.addEventListener('click', (e) => { e.stopPropagation(); openAccountMenu(); });
-  accountBtn?.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault(); openAccountMenu();
-    }
-  });
+  // One click, straight to Settings. No intermediate menu.
+  document.getElementById('account-btn')?.addEventListener('click', () => go('settings'));
 
   const palette = () => toast('The command palette arrives with search in a later phase.');
   document.getElementById('cmdk')?.addEventListener('click', palette);
@@ -387,82 +388,6 @@ function wireShell() {
   });
   // The rail reflows between a column and a grid; the pill must follow the nav.
   window.addEventListener('resize', () => positionPill(true));
-}
-
-/* ── Account menu ────────────────────────────────────────────────────────
- * Settings is account-level, not a content section, so it is reached from the
- * person — not from a seventh item in the primary list.
- *
- * Sign out sits at the bottom behind a divider and is never the first thing
- * focus lands on: it is the one irreversible action in the menu.
- */
-function openAccountMenu() {
-  if (document.getElementById('account-menu')) return closeAccountMenu();
-  const btn = document.getElementById('account-btn');
-  const r = btn.getBoundingClientRect();
-
-  const m = document.createElement('div');
-  m.className = 'menu account-menu';
-  m.id = 'account-menu';
-  m.setAttribute('role', 'menu');
-  m.innerHTML = `
-    <div class="am-head">
-      <div class="am-name">${esc(state.me.user.displayName || 'Life OS')}</div>
-      <div class="am-mail">${esc(state.me.user.email)}</div>
-      <div class="am-ws">${esc(state.me.workspace.name)} workspace</div>
-    </div>
-    <button role="menuitem" data-am="settings">${icon('settings', 17)}<span>Settings</span></button>
-    <button role="menuitem" data-am="history">${icon('check', 17)}<span>Completed</span></button>
-    <div class="am-sep"></div>
-    <div class="am-meta" id="am-update">Version ${esc(window.LIFE_OS_BUILD || 'unknown')}</div>
-    <button role="menuitem" data-am="signout" class="am-danger">Sign out</button>`;
-  document.body.appendChild(m);
-
-  m.style.left = `${Math.max(8, r.left)}px`;
-  m.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
-  btn.setAttribute('aria-expanded', 'true');
-
-  const items = [...m.querySelectorAll('[role="menuitem"]')];
-  items[0]?.focus();
-
-  m.addEventListener('keydown', (e) => {
-    const i = items.indexOf(document.activeElement);
-    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
-    else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
-    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
-    else if (e.key === 'Escape') { e.preventDefault(); closeAccountMenu(); btn.focus(); }
-    else if (e.key === 'Tab') closeAccountMenu();
-  });
-
-  m.querySelectorAll('[data-am]').forEach((el) => {
-    el.onclick = () => {
-      const what = el.dataset.am;
-      closeAccountMenu();
-      if (what === 'signout') {
-        // Confirmed, because it is the only destructive item here.
-        if (confirm('Sign out of Life OS on this device?')) window.__signOut?.();
-        return;
-      }
-      go(what);
-    };
-  });
-
-  setTimeout(() => document.addEventListener('click', onOutsideAccount), 0);
-  window.__refreshUpdateLine?.();
-}
-
-function onOutsideAccount(e) {
-  const m = document.getElementById('account-menu');
-  if (!m) return;
-  if (m.contains(e.target) || document.getElementById('account-btn')?.contains(e.target)) return;
-  closeAccountMenu();
-}
-
-function closeAccountMenu() {
-  document.getElementById('account-menu')?.remove();
-  document.getElementById('account-btn')?.setAttribute('aria-expanded', 'false');
-  document.removeEventListener('click', onOutsideAccount);
 }
 
 /**
@@ -515,7 +440,7 @@ async function go(id) {
     else a.removeAttribute('aria-current');
   });
   positionPill();
-  closeAccountMenu();
+  /* account popover removed */
   window.__closeDrawer?.();
   await loadRoute();
 }
@@ -539,6 +464,7 @@ async function loadRoute() {
       await loadTasks();
       scroll.innerHTML = todayHtml();
       wireToday();
+      scroll.querySelector('.today-history')?.addEventListener('click', () => go('history'));
       renderRail();
     } catch (e) {
       scroll.innerHTML = errorHtml(e.message);
@@ -614,7 +540,12 @@ function todayHtml() {
           aria-pressed="${state.areaFilter === a.id}">${esc(a.name)}</button>`).join('')}
       </div>
     </div>
-    <div class="buckets">${BUCKETS.map(bucketHtml).join('')}</div>`;
+    <div class="buckets">${BUCKETS.map(bucketHtml).join('')}</div>
+    <!-- Completed work is content, not account management, so it sits at the
+         end of the board rather than behind the person's name. Quiet, because
+         finished work should not compete with what still needs doing. -->
+    ${state.historyTotal ? `<button class="today-history" data-route="history">
+      ${icon('check', 15)}<span>${state.historyTotal} completed</span></button>` : ''}`;
 }
 
 function bucketHtml(b) {
@@ -1554,9 +1485,11 @@ async function loadCalendar() {
   }
   cal.loading = false;
   if (state.route !== 'calendar') return;
-  scroll.innerHTML = calendarBodyHtml();
+  scroll.innerHTML = cal.view === 'reminders'
+    ? remindersViewHtml(cal.reminders ?? [], cal.reminderFilter, areaName)
+    : calendarBodyHtml();
   applyCanvasEnter(scroll);
-  wireCalendar();
+  if (cal.view === 'reminders') wireRemindersView(); else wireCalendar();
   renderCalendarRail();
 
   // Returning from Google: the callback stored the connection and the calendar
@@ -1592,8 +1525,15 @@ function paintCalendar() {
   const scroll = document.getElementById('main-scroll');
   const period = document.getElementById('cal-period');
   if (period) period.textContent = periodLabelSafe();
-  scroll.innerHTML = calendarBodyHtml();
-  wireCalendar();
+  // Respect the sub-view. Painting only the calendar body here is what made
+  // the Reminders button toggle its own state and change nothing else.
+  if (cal.view === 'reminders') {
+    scroll.innerHTML = remindersViewHtml(cal.reminders ?? [], cal.reminderFilter, areaName);
+    wireRemindersView();
+  } else {
+    scroll.innerHTML = calendarBodyHtml();
+    wireCalendar();
+  }
   renderCalendarRail();
 }
 
@@ -1640,6 +1580,16 @@ function renderCalendarRail() {
   const srcBtn = rail.querySelector('#cal-sources');
   srcBtn?.addEventListener('click', () => toggleSources(srcBtn));
   rail.querySelector('#cal-sync-retry')?.addEventListener('click', () => syncGoogle());
+  // Every insight is clickable — an observation you cannot act on is a stat.
+  rail.querySelectorAll('[data-insight]').forEach((b) => {
+    b.onclick = () => {
+      if (b.dataset.insight === 'reminders') return openRemindersView();
+      cal.mode = 'plan';
+      cal.view = 'calendar';
+      localStorage.setItem('los2_cal_mode', 'plan');
+      loadCalendar();
+    };
+  });
   rail.querySelectorAll('[data-schedule]').forEach((b) => {
     b.onclick = (e) => { e.stopPropagation(); scheduleFromQueue(b.dataset.schedule); };
   });
@@ -1662,6 +1612,8 @@ function wireCalendarHeader() {
         x.tabIndex = on ? 0 : -1;
       });
       cal.enter = 'mode';
+      // Choosing a time view means leaving the reminder list.
+      cal.view = 'calendar';
       loadCalendar();
     };
     // Arrow keys move between modes, as a tablist should.
@@ -1691,6 +1643,10 @@ function wireCalendarHeader() {
       loadCalendar();
     };
   });
+
+  const remBtn = document.getElementById('cal-reminders');
+  remBtn?.addEventListener('click', () =>
+    (cal.view === 'reminders' ? closeRemindersView() : openRemindersView()));
 
   const legendBtn = document.getElementById('cal-legend');
   legendBtn?.addEventListener('click', () => toggleLegend(legendBtn));
@@ -2124,8 +2080,8 @@ function toggleSources(btn) {
  * Never the Event editor: a reminder has no duration, no attendees and no
  * calendar, and pouring it into an event form would imply all three.
  */
-function openReminderDetail(id) {
-  const r = (cal.data?.reminders ?? []).find((x) => x.id === id);
+function openReminderDetail(id, from = null) {
+  const r = (from ?? cal.data?.reminders ?? []).find((x) => x.id === id);
   if (!r) return;
   const words = recurrenceWords(r.recurrence);
   const done = r.status === 'done';
@@ -2150,8 +2106,8 @@ function openReminderDetail(id) {
   });
 }
 
-function editReminder(id) {
-  const r = (cal.data?.reminders ?? []).find((x) => x.id === id);
+function editReminder(id, from = null) {
+  const r = (from ?? cal.data?.reminders ?? []).find((x) => x.id === id);
   if (!r) return;
   openReminderModal({
     reminder: r,
@@ -2247,4 +2203,92 @@ function collapseReminder(id, done) {
   let pending = rows.length;
   const finish = () => { if (--pending <= 0) done(); };
   for (const row of rows) collapseOut(row, finish);
+}
+
+/* ══ Reminders workspace ════════════════════════════════════════════════ */
+
+/** Loads the RULES, not a date window — the overview is about what you own. */
+async function loadReminders() {
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/reminders`);
+    cal.reminders = r.reminders ?? [];
+  } catch (e) {
+    cal.reminders = [];
+    toast(e.message, true);
+  }
+}
+
+async function openRemindersView() {
+  cal.view = 'reminders';
+  cal.enter = 'mode';
+  document.getElementById('cal-reminders')?.setAttribute('aria-pressed', 'true');
+  await loadReminders();
+  if (state.route !== 'calendar') return;
+  paintCalendar();
+}
+
+function closeRemindersView() {
+  cal.view = 'calendar';
+  cal.enter = 'mode';
+  document.getElementById('cal-reminders')?.setAttribute('aria-pressed', 'false');
+  paintCalendar();
+}
+
+function wireRemindersView() {
+  document.querySelectorAll('[data-rv-filter]').forEach((b) => {
+    b.onclick = () => {
+      cal.reminderFilter = b.dataset.rvFilter;
+      paintCalendar();
+    };
+  });
+  document.getElementById('rv-add')?.addEventListener('click', () => addReminder(null));
+  document.querySelectorAll('[data-rv-open]').forEach((b) => {
+    b.onclick = () => openReminderDetail(b.dataset.rvOpen, cal.reminders);
+  });
+  document.querySelectorAll('[data-rv-edit]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); editReminder(b.dataset.rvEdit, cal.reminders); };
+  });
+  document.querySelectorAll('[data-rv-toggle]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); toggleReminderInView(b.dataset.rvToggle); };
+  });
+  document.querySelectorAll('[data-rv-pause]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); pauseReminder(b.dataset.rvPause); };
+  });
+}
+
+/** Completion from the overview, where the row shows a rule not a date. */
+async function toggleReminderInView(id) {
+  const r = cal.reminders?.find((x) => x.id === id);
+  if (!r || r._busy) return;
+  const before = { ...r };
+  const wasDone = r.status === 'done';
+  r._busy = true;
+  try {
+    const res = await api(
+      `/api/v1/workspaces/${ws()}/reminders/${id}/${wasDone ? 'reopen' : 'complete'}`,
+      { method: 'POST' });
+    Object.assign(r, res.reminder);
+    await loadReminders();
+    paintCalendar();
+    saved(res.advancedTo ? `Done — next on ${prettyDay(res.advancedTo)}`
+      : wasDone ? 'Reopened' : 'Done');
+  } catch (e) {
+    Object.assign(r, before);
+    paintCalendar();
+    toast(e.message, true);
+  } finally { r._busy = false; }
+}
+
+/** Pause keeps the rule and its history but stops it appearing on the canvas. */
+async function pauseReminder(id) {
+  const r = cal.reminders?.find((x) => x.id === id);
+  if (!r) return;
+  const paused = r.status === 'paused';
+  try {
+    await api(`/api/v1/workspaces/${ws()}/reminders/${id}/${paused ? 'resume' : 'pause'}`,
+      { method: 'POST' });
+    await loadReminders();
+    paintCalendar();
+    saved(paused ? 'Resumed' : 'Paused');
+  } catch (e) { toast(e.message, true); }
 }
