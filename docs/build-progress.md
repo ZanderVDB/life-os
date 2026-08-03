@@ -1087,3 +1087,44 @@ Discovery only. **No Projects UI, no schema, no migration.**
   inferred-but-overridable next action, and no right rail.
 
 440 tests passing. Calendar unchanged, Google read-only, Legacy untouched.
+
+## Phase E2 — Projects (2026-08-03)
+
+Projects is a real section: schema, API, overview, detail, creation. No Legacy
+migration, no Boards, no Library, no AI, no Google write.
+
+**The design decision that shaped everything:** lifecycle and focus are two
+fields, not one. `status` says where the work is (planning/active/on_hold/
+completed); `focus` says how loudly it should ask (now/upcoming/someday). One
+field cannot express "genuinely active, deliberately quiet", and Legacy is the
+cautionary tale — it had a single `status` and then recomputed it from recency,
+so the user's answer was overwritten by how recently they had opened the thing.
+
+Focus governs **defaults only**: a task created in a Now project starts in Today,
+anywhere else in the backlog. It never moves an existing task, never changes a
+bucket, never clears a date. That line is what stops Projects becoming a second,
+competing task-bucket system, and it is asserted by test.
+
+Archive is an overlay (`archived_at` + `pre_archive_status`), not a fifth status,
+so a project archived while On hold comes back On hold.
+
+**Motion was built first, not last.** `applyGroups()` reconciles the list in
+place — finds the row by id, patches its contents, and `appendChild`s it into its
+new group, which moves the node rather than copying it. Measured in a browser: a
+project changing status keeps the same DOM node, travels 148px into its new
+group, updates its label, no duplicates. A single `innerHTML =` after a mutation
+would have silently turned every transition into a jump, which is exactly how
+C4's FLIP became invisible; there is a test against it.
+
+Two things caught while building: browser `confirm()` was used for the
+area-change and completion decisions and has been replaced with a real choice
+surface that can show the counts the decision turns on; and `.page-head` had to
+become a block for Projects, the same flex-item sizing trap that cost D4.7 a
+phase on Calendar.
+
+Not built, deliberately: drag reordering (Move to top ships instead), a
+"stalled" health signal (`updated_at` moves when notes change, so it would be
+unreliable), and every Boards/Library/AI placeholder.
+
+525 tests passing. Calendar unchanged, Google read-only, Legacy untouched, every
+existing task still projectless.

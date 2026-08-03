@@ -374,3 +374,31 @@ The moment Projects links to Library material, the app will be writing
 
 Cheap to fix in the E2 migration (rename to `item_links`, or add a sibling and
 leave the calendar one alone). Expensive after Projects ships against it.
+
+## Projects — known gaps (E2)
+
+**Drag reordering is not built.** `projects.position` exists and "Move to top"
+uses it, but drag needs pointer + touch handling, a live gap, one write on drop
+and a rollback to the exact prior position. Shipping a half-reliable version
+because the column exists is how a list stops being trusted.
+
+**Task completion inside Project detail reloads the task list.** The task row
+and its completion animation are reused from Today, but the "same node moves
+into the Completed subsection" choreography is not built. Visible as a small
+repaint rather than a movement.
+
+**No "stalled" health signal.** Specified, deliberately not built: `updated_at`
+moves when notes or metadata change, so the signal would call a project stalled
+while you were reading it. Needs a real activity timestamp (last task
+completed / added) before it can be honest.
+
+**`calendar_item_links` is still misnamed.** Decision recorded in
+[projects-v2-future-architecture.md](projects-v2-future-architecture.md): rename
+to `item_links` in the same migration as the first non-calendar link, not
+speculatively now. E2 writes no links, so the rename would be churn in frozen
+Calendar code for no gain.
+
+**The overview refetches on every mutation.** `refreshProjects()` re-reads the
+whole filter after each change. Correct and simple at ~12 projects; it is the
+same class of problem as the Calendar's month caching and should be solved the
+same way if either becomes noticeable.

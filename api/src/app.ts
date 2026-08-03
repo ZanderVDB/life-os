@@ -11,6 +11,7 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerMeRoutes } from './routes/me.js';
 import { registerAreaRoutes } from './routes/areas.js';
 import { registerTaskRoutes } from './routes/tasks.js';
+import { registerProjectRoutes } from './routes/projects.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerPreferenceRoutes } from './routes/preferences.js';
 import { registerHabitRoutes } from './routes/habits.js';
@@ -62,6 +63,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerMeRoutes(app, db, guards);
   registerAreaRoutes(app, db, guards);
   registerTaskRoutes(app, db, guards);
+  registerProjectRoutes(app, db, guards);
   registerImportRoutes(app, db, guards, env);
   registerPreferenceRoutes(app, db, guards);
   registerHabitRoutes(app, db, guards);

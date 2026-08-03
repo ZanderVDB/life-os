@@ -235,3 +235,18 @@ graph TD
   Tasks; the Project is context, not a container.
 - The one genuine coupling: **Area**. A Project owns an Area and its Tasks
   inherit it. Any change to the Area model after E2 has to consider Projects.
+
+## Projects — as built (Phase E2)
+
+- Projects depends on **Areas** and **Tasks**, both of which existed. No change
+  was required to either beyond `TaskCreate` accepting an optional `projectId`.
+- Projects does **not** depend on Calendar. Nothing in Calendar changed.
+- Today is unchanged: Project tasks are ordinary tasks in ordinary buckets.
+- **Focus influences defaults only.** A new task in a Now project starts in
+  Today; anywhere else it starts in the backlog. No existing task is ever moved
+  by a project.
+- Boards, Library and AI depend on Projects. None of them is built, and none has
+  a placeholder in the E2 interface. See
+  [projects-v2-future-architecture.md](projects-v2-future-architecture.md).
+- The one coupling to watch: **Area**. A project owns an area and its tasks
+  inherit it, so any future change to the Area model has to consider Projects.

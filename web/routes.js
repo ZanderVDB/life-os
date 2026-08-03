@@ -17,7 +17,7 @@
 export const ROUTES = [
   { id: 'today', label: 'Today', icon: 'today' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
-  { id: 'projects', label: 'Projects', icon: 'projects', placeholder: true },
+  { id: 'projects', label: 'Projects', icon: 'projects' },
   { id: 'diary', label: 'Diary', icon: 'diary', placeholder: true },
   { id: 'library', label: 'Library', icon: 'library', placeholder: true },
   { id: 'brain', label: 'Brain', icon: 'brain', placeholder: true },

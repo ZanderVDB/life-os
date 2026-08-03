@@ -13,6 +13,12 @@ import { initServiceWorker } from './pwa.js';
 import { flip, pulse, collapseOut, reducedMotion, afterTransition } from './motion.js';
 import { openUtilityMenu, openUtilitySurface, closeUtility,
   utilityTriggerHtml } from './utility-menu.js';
+import {
+  projectsHeaderHtml, projectsBodyHtml, applyGroups, projectsEmptyHtml,
+  projectDetailHeaderHtml, projectDetailBodyHtml, progressText,
+  PROJECT_FILTERS, STATUS_LABEL, FOCUS_LABEL,
+} from './projects.js';
+import { openProjectModal, openChoiceDialog } from './project-modal.js';
 import { openTaskModal } from './task-modal.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
@@ -46,6 +52,22 @@ const state = {
   tasks: [], history: [], historyTotal: 0,
   route: 'today', areaFilter: null, menu: null, settingsTab: 'account',
   habits: [], habitsLoaded: false, habitsError: null,
+};
+
+/**
+ * Projects state.
+ *
+ * `resume` is what makes Back honest: leaving the detail page has to restore
+ * the filter, the scroll position and the row you came from, or the list you
+ * return to is not the list you left.
+ */
+const pj = {
+  filter: 'working',
+  data: null,        // the last successful overview payload
+  detail: null,      // { project, tasks } when the detail page is open
+  openId: null,
+  resume: null,      // { filter, scrollTop, rowId }
+  saveTimer: null,
 };
 
 const root = document.getElementById('root');
@@ -399,6 +421,13 @@ function wireShell() {
       if (u === 'reminders') openRemindersView(false);
       else closeRemindersView(false);
     }
+    if (r === 'projects') {
+      const id = projectFromHash();
+      if (id !== pj.openId) {
+        if (id) { pj.openId = id; renderProjectDetail(document.getElementById('main-scroll')); }
+        else closeProjectDetail(false);
+      }
+    }
   });
   // The rail reflows between a column and a grid; the pill must follow the nav.
   window.addEventListener('resize', () => { positionPill(true); measureScrollbar(); });
@@ -479,6 +508,13 @@ const utilityFromHash = () => {
   return sub === 'reminders' ? 'reminders' : 'none';
 };
 
+/** `#projects/<id>` opens that project directly — refresh included. */
+const projectFromHash = () => {
+  const path = (location.hash || '').slice(1).split('?')[0];
+  const [route, sub] = path.split('/');
+  return route === 'projects' && sub ? sub : null;
+};
+
 async function go(id) {
   if (state.route === id) { window.__closeDrawer?.(); return; }
   // §7 A utility surface is anchored to a control on the page you are leaving.
@@ -530,6 +566,11 @@ async function loadRoute() {
       scroll.innerHTML = errorHtml(e.message);
       scroll.querySelector('#retry')?.addEventListener('click', () => loadRoute());
     }
+    return;
+  }
+
+  if (state.route === 'projects') {
+    await loadProjects();
     return;
   }
 
@@ -2010,6 +2051,547 @@ function addReminder(day, existing = null) {
       paintCalendar();
       saved('Reminder added');
     },
+  });
+}
+
+/* ══ PROJECTS ═══════════════════════════════════════════════════════════
+ *
+ * The whole controller is arranged around one constraint: a project that
+ * changes status or focus MOVES between groups, and the same DOM node has to
+ * survive that move or there is nothing to animate. So nothing here re-renders
+ * the list from a string after a mutation — `applyGroups` reconciles in place
+ * and `flip` animates the result. Rebuilding the list would silently turn every
+ * transition into a jump, which is exactly how C4's FLIP became invisible.
+ */
+
+/** Loads and paints the overview. Keeps what is on screen while it refreshes. */
+async function loadProjects() {
+  const head = document.getElementById('page-head');
+  const scroll = document.getElementById('main-scroll');
+  if (!head || !scroll) return;
+  // A refresh on #projects/<id> opens that project, not the list.
+  const fromUrl = projectFromHash();
+  if (fromUrl && !pj.openId) {
+    pj.openId = fromUrl;
+    await renderProjectDetail(scroll);
+    return;
+  }
+  pj.detail = null;
+  pj.openId = null;
+
+  head.innerHTML = projectsHeaderHtml(pj.filter, pj.data?.available ?? {});
+  wireProjectsHeader();
+  // A stable frame with row skeletons, never an empty page that then fills.
+  if (!pj.data) {
+    scroll.innerHTML = `${projectsBodyHtml()}`;
+    document.getElementById('pj-list').innerHTML =
+      '<div class="pj-skel"></div><div class="pj-skel"></div><div class="pj-skel"></div>';
+  } else if (!document.getElementById('pj-list')) {
+    scroll.innerHTML = projectsBodyHtml();
+  }
+
+  try {
+    const data = await api(`/api/v1/workspaces/${ws()}/projects?filter=${pj.filter}`);
+    if (state.route !== 'projects' || pj.openId) return;
+    pj.data = data;
+    head.innerHTML = projectsHeaderHtml(pj.filter, data.available ?? {});
+    wireProjectsHeader();
+    paintProjects();
+  } catch (e) {
+    // An error must never look like "you have no projects".
+    scroll.innerHTML = errorHtml(e.message);
+    scroll.querySelector('#retry')?.addEventListener('click', () => loadProjects());
+  }
+}
+
+/**
+ * Paints the groups into the existing list, animating whatever moved.
+ *
+ * `flip` measures every row before the change and animates the deltas after,
+ * so a project leaving Now for On hold travels there instead of disappearing
+ * from one place and appearing in another.
+ */
+function paintProjects() {
+  const scroll = document.getElementById('main-scroll');
+  let list = document.getElementById('pj-list');
+  if (!list) { scroll.innerHTML = projectsBodyHtml(); list = document.getElementById('pj-list'); }
+  const groups = pj.data?.groups ?? [];
+  const total = groups.reduce((n, g) => n + g.projects.length, 0);
+
+  if (!total) {
+    list.innerHTML = projectsEmptyHtml(pj.filter, pj.data?.available ?? {});
+    wireProjectRows();
+    return;
+  }
+  list.querySelector('.pj-empty')?.remove();
+  list.querySelector('.pj-skel')?.closest('#pj-list') && (list.querySelectorAll('.pj-skel').forEach((s) => s.remove()));
+
+  flip(list.querySelectorAll('.pj-row'), () => {
+    applyGroups(list, groups, areaName);
+  });
+  wireProjectRows();
+}
+
+function wireProjectsHeader() {
+  document.getElementById('pj-new')?.addEventListener('click', () => newProject());
+  document.querySelectorAll('[data-pj-filter]').forEach((b) => {
+    b.onclick = () => setProjectFilter(b.dataset.pjFilter);
+  });
+  document.getElementById('pjd-back')?.addEventListener('click', () => closeProjectDetail());
+  document.getElementById('pjd-menu')?.addEventListener('click', (e) =>
+    openProjectMenu(e.currentTarget, pj.detail?.project));
+}
+
+/**
+ * A filter change is a CROSSFADE, not a reflow.
+ *
+ * The rows behind a different filter are different rows. Animating them as if
+ * they had moved would be a lie about what happened.
+ */
+async function setProjectFilter(filter) {
+  if (filter === pj.filter) return;
+  pj.filter = filter;
+  document.querySelectorAll('[data-pj-filter]').forEach((b) => {
+    const on = b.dataset.pjFilter === filter;
+    b.classList.toggle('is-on', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  const list = document.getElementById('pj-list');
+  if (list && !reducedMotion()) {
+    list.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: 'ease-in' });
+  }
+  try {
+    const data = await api(`/api/v1/workspaces/${ws()}/projects?filter=${filter}`);
+    if (pj.filter !== filter) return;   // the user moved on while this was in flight
+    pj.data = data;
+    const head = document.getElementById('page-head');
+    if (head) { head.innerHTML = projectsHeaderHtml(filter, data.available ?? {}); wireProjectsHeader(); }
+    // Rebuild rather than reconcile: these are not the same rows.
+    const el = document.getElementById('pj-list');
+    if (el) el.innerHTML = '';
+    paintProjects();
+    if (el && !reducedMotion()) {
+      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
+    }
+  } catch (e) { toast(e.message, true); }
+}
+
+function wireProjectRows() {
+  document.querySelectorAll('[data-pj-open]').forEach((b) => {
+    b.onclick = () => openProjectDetail(b.dataset.pjOpen);
+  });
+  document.querySelectorAll('[data-pj-menu]').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const id = b.dataset.pjMenu;
+      const project = (pj.data?.groups ?? []).flatMap((g) => g.projects).find((p) => p.id === id);
+      openProjectMenu(b, project);
+    };
+  });
+  // Keyboard: a row is focusable, and Enter opens it.
+  document.querySelectorAll('.pj-row').forEach((row) => {
+    row.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      openProjectDetail(row.dataset.id);
+    };
+  });
+  document.getElementById('pj-empty-new')?.addEventListener('click', () => newProject());
+}
+
+/** The row and header overflow. One shared component, same as everywhere. */
+function openProjectMenu(anchor, project) {
+  if (!project) return;
+  const archived = !!project.archivedAt;
+  const items = archived
+    ? [{ id: 'restore', label: 'Restore' }, { id: 'delete', label: 'Delete project' }]
+    : [
+      { id: 'edit', label: 'Edit project' },
+      ...(project.status === 'completed' ? [] : [{ id: 'complete', label: 'Mark complete' }]),
+      { id: 'top', label: 'Move to top' },
+      { id: 'archive', label: 'Archive' },
+      { id: 'delete', label: 'Delete project' },
+    ];
+  openUtilityMenu(anchor, items, (id) => {
+    if (id === 'edit') return editProject(project);
+    if (id === 'complete') return completeProject(project);
+    if (id === 'archive') return archiveProject(project);
+    if (id === 'restore') return restoreProject(project);
+    if (id === 'top') return moveProjectToTop(project);
+    if (id === 'delete') return deleteProject(project);
+    return undefined;
+  });
+}
+
+/* ── Mutations ───────────────────────────────────────────────────────── */
+
+/** Every project write goes through here, so the failure story is one story. */
+async function projectWrite(path, opts, { after = 'overview' } = {}) {
+  const r = await api(`/api/v1/workspaces/${ws()}/projects${path}`, opts);
+  if (after === 'overview') await refreshProjects();
+  return r;
+}
+
+/** Re-reads the overview and animates whatever changed. Never repaints blind. */
+async function refreshProjects() {
+  if (state.route !== 'projects' || pj.openId) return;
+  const data = await api(`/api/v1/workspaces/${ws()}/projects?filter=${pj.filter}`);
+  pj.data = data;
+  const head = document.getElementById('page-head');
+  if (head) { head.innerHTML = projectsHeaderHtml(pj.filter, data.available ?? {}); wireProjectsHeader(); }
+  paintProjects();
+}
+
+function newProject() {
+  openProjectModal({
+    areas: state.me?.areas ?? [],
+    onSave: async (body) => {
+      const r = await api(`/api/v1/workspaces/${ws()}/projects`, { method: 'POST', body });
+      await refreshProjects();
+      // A restrained highlight, so the eye finds where it landed.
+      requestAnimationFrame(() => {
+        const row = document.querySelector(`.pj-row[data-id="${r.project.id}"]`);
+        if (row) { row.classList.add('is-new'); setTimeout(() => row.classList.remove('is-new'), 1400); }
+      });
+      saved('Project created');
+    },
+  });
+}
+
+function editProject(project) {
+  openProjectModal({
+    project,
+    areas: state.me?.areas ?? [],
+    onSave: async (body) => {
+      // The area is changed through its own endpoint, which asks about tasks.
+      const { areaId, focus, ...rest } = body;
+      await api(`/api/v1/workspaces/${ws()}/projects/${project.id}`, {
+        method: 'PATCH', body: { ...rest, focus, expectedUpdatedAt: project.updatedAt },
+      });
+      if (areaId && areaId !== project.areaId) await changeProjectArea(project, areaId);
+      if (pj.openId === project.id) await reloadProjectDetail(); else await refreshProjects();
+      saved('Saved');
+    },
+    onDelete: async () => { await deleteProject(project, true); },
+  });
+}
+
+/**
+ * Changing a project's area inspects its tasks first and asks.
+ *
+ * Tasks that merely inherited the old area move with it; a task filed somewhere
+ * else on purpose keeps its classification unless the user says otherwise. An
+ * explicit choice is how they find things later.
+ */
+async function changeProjectArea(project, areaId) {
+  const preview = await api(
+    `/api/v1/workspaces/${ws()}/projects/${project.id}/area-preview?areaId=${areaId}`);
+  let taskChoice = 'move_inherited';
+  if (preview.total > 0) {
+    const parts = [`${preview.total} task${preview.total === 1 ? '' : 's'} in this project.`];
+    if (preview.differentlyClassified) {
+      parts.push(`${preview.differentlyClassified} ${preview.differentlyClassified === 1
+        ? 'is' : 'are'} filed in another area on purpose and will not move either way.`);
+    }
+    const choice = await openChoiceDialog({
+      title: 'Move its tasks too?',
+      body: parts.join(' '),
+      choices: [
+        { id: 'move_inherited',
+          label: 'Move the inherited ones',
+          detail: `${preview.inherited} task${preview.inherited === 1 ? '' : 's'} took `
+            + 'the area from this project.' },
+        { id: 'keep_all', label: 'Leave every task where it is' },
+      ],
+    });
+    if (!choice) return;   // dismissed — change nothing at all
+    taskChoice = choice;
+  }
+  const r = await api(`/api/v1/workspaces/${ws()}/projects/${project.id}/area`, {
+    method: 'POST', body: { areaId, taskChoice },
+  });
+  if (r.tasksMoved) saved(`${r.tasksMoved} task${r.tasksMoved === 1 ? '' : 's'} moved`);
+}
+
+/** Completion asks about open work rather than fabricating it as finished. */
+async function completeProject(project) {
+  try {
+    await projectWrite(`/${project.id}/complete`, { method: 'POST', body: {} });
+    saved('Project completed');
+  } catch (e) {
+    let detail = null;
+    try { detail = JSON.parse(e.message); } catch { /* a real error */ }
+    if (detail?.reason !== 'open_tasks') { toast(e.message, true); return; }
+    const n = detail.openTasks;
+    const choice = await openChoiceDialog({
+      title: `${n} task${n === 1 ? ' is' : 's are'} still open`,
+      body: 'Completing the project does not finish them. Nothing is ever marked done '
+        + 'that was not done.',
+      choices: [
+        { id: 'leave', label: 'Leave them open',
+          detail: 'They keep their dates and stay wherever they already are.' },
+        { id: 'cancel', label: 'Cancel them',
+          detail: 'You decided not to do them. They are kept, marked cancelled.' },
+      ],
+    });
+    if (!choice) return;   // dismissed — the project stays as it was
+    try {
+      const r = await projectWrite(`/${project.id}/complete`, {
+        method: 'POST', body: { openTasks: choice },
+      });
+      saved(r.tasksCancelled
+        ? `Completed · ${r.tasksCancelled} cancelled`
+        : `Completed · ${r.tasksLeftOpen} left open`);
+    } catch (e2) { toast(e2.message, true); }
+  }
+}
+
+/** Archive keeps the lifecycle state, and Undo is offered immediately. */
+async function archiveProject(project) {
+  try {
+    await projectWrite(`/${project.id}/archive`, { method: 'POST', body: {} });
+    saved('Archived');
+    undoBar('Project archived', async () => {
+      await projectWrite(`/${project.id}/restore`, { method: 'POST', body: {} });
+      saved('Restored');
+    });
+  } catch (e) { toast(e.message, true); }
+}
+
+async function restoreProject(project) {
+  try {
+    await projectWrite(`/${project.id}/restore`, { method: 'POST', body: {} });
+    requestAnimationFrame(() => {
+      const row = document.querySelector(`.pj-row[data-id="${project.id}"]`);
+      if (row) { row.classList.add('is-new'); setTimeout(() => row.classList.remove('is-new'), 1400); }
+    });
+    saved('Restored');
+  } catch (e) { toast(e.message, true); }
+}
+
+async function moveProjectToTop(project) {
+  try { await projectWrite(`/${project.id}/move-to-top`, { method: 'POST', body: {} }); }
+  catch (e) { toast(e.message, true); }
+}
+
+async function deleteProject(project, silent = false) {
+  if (!silent) {
+    const choice = await openChoiceDialog({
+      title: 'Delete this project?',
+      body: 'Its tasks are kept — they simply stop belonging to it.',
+      choices: [
+        { id: 'delete', label: 'Delete the project', tone: 'danger' },
+        { id: 'keep', label: 'Keep it', tone: 'quiet' },
+      ],
+    });
+    if (choice !== 'delete') return;
+  }
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/projects/${project.id}`, { method: 'DELETE' });
+    if (pj.openId === project.id) { pj.openId = null; await loadProjects(); }
+    else await refreshProjects();
+    saved(r.tasksKept ? `Deleted · ${r.tasksKept} task${r.tasksKept === 1 ? '' : 's'} kept` : 'Deleted');
+  } catch (e) { toast(e.message, true); }
+}
+
+/** A short-lived undo surface. Nothing destructive happens without one. */
+function undoBar(message, onUndo) {
+  document.querySelector('.undo-bar')?.remove();
+  const bar = document.createElement('div');
+  bar.className = 'undo-bar';
+  bar.innerHTML = `<span>${esc(message)}</span><button class="btn btn-sm">Undo</button>`;
+  document.body.appendChild(bar);
+  if (!reducedMotion()) {
+    bar.animate([{ opacity: 0, translate: '0 8px' }, { opacity: 1, translate: '0 0' }],
+      { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  }
+  const close = () => bar.remove();
+  bar.querySelector('button').onclick = async () => { close(); await onUndo(); };
+  setTimeout(close, 8000);
+}
+
+/* ── Detail ──────────────────────────────────────────────────────────── */
+
+/**
+ * Opens the detail page and remembers exactly where the user was.
+ *
+ * Losing the list position on Back is the most irritating thing a detail page
+ * can do, so the filter, the scroll offset and the row are all captured first.
+ */
+async function openProjectDetail(id) {
+  const scroll = document.getElementById('main-scroll');
+  pj.resume = {
+    filter: pj.filter,
+    scrollTop: window.scrollY,
+    rowId: id,
+  };
+  pj.openId = id;
+  history.pushState(null, '', `#projects/${id}`);
+  await renderProjectDetail(scroll);
+}
+
+async function renderProjectDetail(scroll) {
+  const head = document.getElementById('page-head');
+  if (!scroll) return;
+  if (!reducedMotion()) {
+    scroll.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'ease-in' });
+  }
+  try {
+    const data = await api(`/api/v1/workspaces/${ws()}/projects/${pj.openId}`);
+    if (pj.openId !== data.project.id) return;
+    pj.detail = data;
+    head.innerHTML = projectDetailHeaderHtml(data.project, areaName);
+    scroll.innerHTML = projectDetailBodyHtml(data.project, data.tasks, taskHtml);
+    wireProjectsHeader();
+    wireProjectDetail();
+    if (!reducedMotion()) {
+      scroll.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
+    }
+    document.getElementById('pjd-back')?.focus();
+  } catch (e) {
+    scroll.innerHTML = errorHtml(e.message);
+    scroll.querySelector('#retry')?.addEventListener('click', () => renderProjectDetail(scroll));
+  }
+}
+
+const reloadProjectDetail = () => renderProjectDetail(document.getElementById('main-scroll'));
+
+/** Back restores the list the user left, not a fresh one. */
+async function closeProjectDetail(push = true) {
+  const back = pj.resume;
+  pj.openId = null;
+  pj.detail = null;
+  if (back) pj.filter = back.filter;
+  if (push) history.pushState(null, '', '#projects');
+  await loadProjects();
+  if (back) {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: back.scrollTop, behavior: 'instant' });
+      const row = document.querySelector(`.pj-row[data-id="${back.rowId}"]`);
+      row?.focus({ preventScroll: true });
+    });
+  }
+}
+
+function wireProjectDetail() {
+  const p = pj.detail?.project;
+  if (!p) return;
+
+  document.getElementById('pjd-status')?.addEventListener('change', async (e) => {
+    const status = e.target.value;
+    try {
+      await api(`/api/v1/workspaces/${ws()}/projects/${p.id}`, {
+        method: 'PATCH', body: { status, expectedUpdatedAt: p.updatedAt },
+      });
+      await reloadProjectDetail();
+      saved(`Status: ${STATUS_LABEL[status]}`);
+    } catch (err) { toast(err.message, true); await reloadProjectDetail(); }
+  });
+
+  document.getElementById('pjd-focus')?.addEventListener('change', async (e) => {
+    const focus = e.target.value;
+    try {
+      await api(`/api/v1/workspaces/${ws()}/projects/${p.id}`, {
+        method: 'PATCH', body: { focus, expectedUpdatedAt: p.updatedAt },
+      });
+      await reloadProjectDetail();
+      saved(`Focus: ${FOCUS_LABEL[focus]}`);
+    } catch (err) { toast(err.message, true); await reloadProjectDetail(); }
+  });
+
+  document.getElementById('pjd-add-task')?.addEventListener('click', () => addProjectTask(p));
+  document.getElementById('pjd-next-add')?.addEventListener('click', () => addProjectTask(p));
+
+  document.getElementById('pjd-next-clear')?.addEventListener('click', async () => {
+    try {
+      await api(`/api/v1/workspaces/${ws()}/projects/${p.id}/next-action`, {
+        method: 'POST', body: { taskId: null },
+      });
+      await reloadProjectDetail();
+    } catch (err) { toast(err.message, true); }
+  });
+
+  wireProjectNotes(p);
+  // Project tasks are ordinary tasks, wired by the ordinary board wiring.
+  wireBoard();
+}
+
+/**
+ * A task created here belongs to the project and inherits its area.
+ *
+ * The same task EDITOR as Today — `openTaskModal` is one component — with its
+ * own controller, because Today's controller rebuilds board buckets that do not
+ * exist on this page. Same modal, same API, same task identity; different
+ * surroundings.
+ */
+function addProjectTask(project) {
+  openTaskModal({
+    task: null,
+    areas: state.me?.areas ?? [],
+    onSave: async (body) => {
+      await api(`/api/v1/workspaces/${ws()}/tasks`, {
+        method: 'POST',
+        body: {
+          ...body,
+          projectId: project.id,
+          // Inherit the project's area unless the editor was given one.
+          areaId: body.areaId ?? project.areaId ?? null,
+          // Focus decides whether project context pushes work forward. Anything
+          // that is not Now starts in the backlog rather than on Today.
+          bucket: body.bucket ?? (project.focus === 'now' ? 'today' : 'future'),
+        },
+      });
+      await reloadProjectDetail();
+      saved('Task created');
+    },
+  });
+}
+
+/**
+ * Notes.
+ *
+ * Explicit save state, no AI rewrite, and the user's text is never discarded:
+ * a failed save leaves the content in the editor and offers a retry, because
+ * the editor is the only copy.
+ */
+function wireProjectNotes(project) {
+  const ta = document.getElementById('pjd-notes');
+  const badge = document.getElementById('pjd-save');
+  if (!ta || !badge) return;
+  let lastSaved = ta.value;
+
+  const setState = (s, text) => { badge.dataset.state = s; badge.textContent = text; };
+
+  const save = async () => {
+    const value = ta.value;
+    if (value === lastSaved) { setState('idle', ''); return; }
+    setState('saving', 'Saving…');
+    try {
+      await api(`/api/v1/workspaces/${ws()}/projects/${project.id}`, {
+        method: 'PATCH', body: { notes: value },
+      });
+      lastSaved = value;
+      setState('saved', 'Saved');
+      setTimeout(() => { if (badge.dataset.state === 'saved') setState('idle', ''); }, 2000);
+    } catch (e) {
+      // Never a false "Saved", and never a wipe.
+      setState('error', 'Not saved — retry');
+      badge.onclick = () => save();
+    }
+  };
+
+  ta.addEventListener('input', () => {
+    setState('dirty', 'Unsaved');
+    clearTimeout(pj.saveTimer);
+    pj.saveTimer = setTimeout(save, 1200);
+  });
+  ta.addEventListener('blur', () => { clearTimeout(pj.saveTimer); save(); });
+
+  // Leaving with unsaved text warns rather than losing it.
+  window.addEventListener('beforeunload', (e) => {
+    if (badge.dataset.state === 'dirty' || badge.dataset.state === 'error') {
+      e.preventDefault(); e.returnValue = '';
+    }
   });
 }
 

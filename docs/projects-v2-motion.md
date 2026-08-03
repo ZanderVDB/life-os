@@ -115,3 +115,52 @@ Nothing becomes unusable and nothing silently skips a step.
 - Staggered list entry on first paint. It delays the whole list to decorate it.
 - Page-level slide transitions between overview and detail.
 - Any motion that runs on data arriving rather than on something the user did.
+
+---
+
+## As built (Phase E2)
+
+The architecture is the deliverable, and it is the part that could not be added
+later. `applyGroups()` reconciles the rendered list against new data: it finds
+the existing row by id anywhere in the list, patches its contents in place, and
+`appendChild`s it into its new group — which **moves** the node rather than
+copying it. `paintProjects()` wraps that in `flip()`.
+
+The result, measured in a browser: a project moved from Now to On hold keeps the
+same DOM node (`before.b === after.b`), travels 148px into its new group, has its
+status label updated, and there are no duplicate rows. That is what makes the
+transition animatable at all.
+
+What was avoided, explicitly: `container.innerHTML = …` after a mutation. It is
+one line, it looks harmless, and it silently turns every transition in this
+document into a jump. It is asserted against.
+
+### Implemented
+
+| Interaction | Motion |
+|---|---|
+| Create | modal closes **after** the write succeeds · row enters at its final group position · restrained landing highlight applied on the next frame |
+| Status / focus change | same node, FLIP into the new group, surrounding rows reflow once |
+| Archive | row collapses · undo bar rises · no full-list repaint |
+| Restore | row enters at its restored position with the same landing highlight |
+| Filter change | crossfade, and the list is rebuilt — these are different rows, and pretending they moved would be a lie |
+| Needs attention | the group exists only when non-empty; resolving the last issue removes it |
+| Overview → detail | canvas crossfade; shell and sidebar stay put; focus moves to Back |
+| Detail → overview | filter, scroll position and row focus all restored |
+| Notes | save state fades between Unsaved · Saving… · Saved · Not saved — retry |
+
+Durations are the locked tokens only; a test enumerates every `duration:` in the
+Projects code and fails on anything else. No springs, no overshoot, no stagger,
+no confetti on completion — completion is information.
+
+### Not implemented
+
+**Drag reordering.** `position` exists and "Move to top" uses it, but drag was
+not shipped: it needs pointer and touch handling, a live gap, one write on drop
+and a rollback that returns the row to its exact prior position. Shipping an
+unreliable version because the column exists is how a list becomes untrustworthy.
+
+**Task completion inside Project detail reuses Today's task row**, so it inherits
+that animation — but the "move into the Completed subsection with the same node"
+choreography is not built; the detail page reloads its task list. Recorded in
+technical-debt.md.

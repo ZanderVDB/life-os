@@ -156,16 +156,16 @@ test('e1: the audit is pure — no database, no writes, no migration', () => {
 
 /* ── The v2 foundation has not quietly grown Projects ────────────────── */
 
-test('foundation: project_id is still an unused placeholder', () => {
-  assert.match(schema, /projectId: uuid\('project_id'\)/, 'the placeholder column is gone');
-  assert.match(schema, /byProject: index\('tasks_project_idx'\)\.on\(t\.workspaceId, t\.projectId\)/,
-    'the project index is gone, so a Projects query would seq-scan');
-  // No projects table yet — E2 adds it, deliberately, after approval.
-  assert.ok(!/pgTable\('projects'/.test(schema), 'a projects table appeared without a product model');
-  // Nothing populates it.
+test('foundation: the Legacy import still assigns no project', () => {
+  // E1 asserted that project_id was an unused placeholder. E2 made it a real
+  // foreign key and added the projects table — deliberately, after approval.
+  // What must NOT change is the import: Legacy has no task-to-project
+  // relationship at all, so inventing one during migration would be fabrication.
+  assert.match(schema, /projectId: uuid\('project_id'\)/, 'the column is gone');
+  assert.match(schema, /pgTable\('projects'/, 'the projects table is gone');
   assert.match(importWriter, /projectId: null/, 'the importer invents a Project relationship');
   assert.match(legacyImport, /project_id stays null/,
-    'the reason project_id is null is no longer recorded');
+    'the reason the importer sets no project is no longer recorded');
 });
 
 test('foundation: legacy task.project is an Area, and that is written down', () => {

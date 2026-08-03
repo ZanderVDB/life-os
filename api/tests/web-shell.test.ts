@@ -93,9 +93,20 @@ test('nav: every section keeps a destination, unfinished ones are marked', () =>
   for (const id of expected) {
     assert.ok(new RegExp(`id:\\s*'${id}'`).test(routes), `${id} is missing from navigation`);
   }
-  for (const id of ['calendar', 'projects', 'diary', 'library', 'brain']) {
-    const entry = routes.slice(routes.indexOf(`id: '${id}'`));
-    assert.match(entry.slice(0, 140), /placeholder:\s*true/, `${id} is not marked as a placeholder`);
+  // This used to loop over every unbuilt section with a 140-character window,
+  // which reached into the NEXT route entry and matched its `placeholder`. It
+  // kept passing for Calendar long after Calendar stopped being one. Assert the
+  // two populations separately, against one line each.
+  const entryOf = (id: string) => {
+    const at = routes.indexOf(`id: '${id}'`);
+    const end = routes.indexOf('\n', at);
+    return routes.slice(at, end === -1 ? at + 160 : end);
+  };
+  for (const id of ['today', 'calendar', 'projects']) {
+    assert.ok(!/placeholder:\s*true/.test(entryOf(id)), `${id} is built but still a placeholder`);
+  }
+  for (const id of ['diary', 'library', 'brain']) {
+    assert.match(entryOf(id), /placeholder:\s*true/, `${id} is not marked as a placeholder`);
     assert.ok(routes.includes(`${id}: {`), `${id} has no placeholder copy`);
   }
 });
@@ -462,8 +473,11 @@ test('mobile: the sidebar becomes a drawer and the rail stays reachable', () => 
   // D4.7 hides the PAGE rail on Calendar only, because Calendar owns a rail
   // inside its own frame there. Everywhere else the rail must still reflow
   // below the content rather than simply vanish.
+  // Calendar owns a rail inside its own frame; Projects deliberately has none
+  // (see the product model). Everywhere else the rail must still reflow below
+  // the content rather than simply vanish.
   const hides = [...html.matchAll(/([^\n{]*)\.rail\{display:none/g)].map((m) => m[1]);
-  assert.deepEqual(hides, ['body:has(.cal-head) '],
+  assert.deepEqual(hides, ['body:has(.cal-head) ', 'body:has(.pj-head) '],
     'the rail is hidden with no alternative');
   assert.match(html, /\.cal-rail\{overflow:visible;position:static/,
     'the calendar rail does not reflow below the canvas on a narrow screen');

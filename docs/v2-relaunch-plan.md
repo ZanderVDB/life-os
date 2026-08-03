@@ -209,3 +209,18 @@ E1 built no Projects UI and migrated no data. It produced
 [projects-v2-migration-plan.md](projects-v2-migration-plan.md),
 [projects-v2-motion.md](projects-v2-motion.md), and one read-only audit
 endpoint. E2 does not start until the product model is approved.
+
+### Phase E — Projects
+
+| Step | Scope | State |
+|---|---|---|
+| E1 | Legacy audit, product model, data + migration architecture | done |
+| E2 | Schema, API, overview, detail, creation, motion | done — awaiting visual approval |
+| E3 | Legacy Projects migration | awaiting approval |
+
+E2 shipped Projects as a working section. It did **not** migrate Legacy
+Projects, build Boards or Library, add any AI, or request Google write access.
+
+E3 is the ~12-project Legacy migration, per
+[projects-v2-migration-plan.md](projects-v2-migration-plan.md), and does not
+start until E2 is approved visually and functionally.

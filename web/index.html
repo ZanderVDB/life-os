@@ -1938,6 +1938,178 @@ body:has(.cal-head) .page-head{display:block}
 /* The surfaces keep their own internal rhythm (.legend, .sources); the SHELL —
    position, width, border, shadow, padding, motion — is shared. */
 
+/* ══ PROJECTS (Phase E2) ════════════════════════════════════════════════
+   A LIST at every width, never a card grid. A grid has to become a list on a
+   phone, which means designing the same screen twice and letting the two
+   disagree. A list is the same object everywhere; only its density changes. */
+
+/* Same frame as Calendar, so switching sections does not move the page.
+   .page-head must be a BLOCK here: as a flex container it sizes its child to
+   its content, and the header then sits at 555px inside a 1221px frame —
+   exactly the bug D4.7 spent a phase finding on Calendar. */
+body:has(.pj-head) .page-head{display:block}
+.pj-head,.pj-list{width:auto;max-width:var(--cal-max);
+  margin-left:var(--cal-inset, auto);margin-right:0}
+body:has(.pj-head){
+  --cal-win:calc(100vw - var(--sbw));
+  --cal-wrap-offset:max(0px, calc((var(--cal-win) - var(--sidebar-w) - var(--content-max)) / 2));
+  --cal-col-left:calc(var(--sidebar-w) + var(--cal-wrap-offset) + 44px);
+  --cal-inset:max(0px, calc((var(--cal-win) - var(--cal-max)) / 2 - var(--cal-col-left)));
+}
+body:has(.pj-head) .main-wrap{grid-template-columns:minmax(0,1fr) 0}
+/* §17: no rail. Everything the rail would summarise belongs in the list,
+   where it can be acted on. */
+body:has(.pj-head) .rail{display:none}
+
+.pj-head{display:flex;flex-direction:column;gap:14px}
+.pj-head-row{display:flex;align-items:flex-end;justify-content:space-between;gap:20px}
+.pj-head-side{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.pj-filters{display:flex;gap:5px;flex-wrap:wrap}
+.pj-filter{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;
+  border-radius:9px;font-size:12.5px;font-weight:500;color:var(--muted);
+  background:var(--surface-2);transition:color var(--t-hover),background var(--t-hover)}
+.pj-filter:hover{color:var(--text-2)}
+.pj-filter.is-on{background:var(--accent-soft);color:var(--text);font-weight:600}
+.pj-fcount{font-size:10.5px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.pj-filter.is-on .pj-fcount{color:var(--accent)}
+
+.pj-list{display:flex;flex-direction:column;gap:26px}
+.pj-group{display:flex;flex-direction:column;gap:8px}
+.pj-group-h{font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--label);margin:0 0 2px;padding-left:2px}
+.pj-group-rows{display:flex;flex-direction:column;gap:7px}
+
+/* The row. Priority of information top to bottom: what it is, what to do next,
+   what it is for. Metadata never outranks the next action. */
+.pj-row{display:flex;align-items:flex-start;gap:20px;padding:15px 18px;border-radius:12px;
+  background:var(--surface);border-left:2.5px solid transparent;
+  transition:background var(--t-hover),border-color var(--t-hover)}
+.pj-row:hover{background:var(--surface-2)}
+.pj-row:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+.pj-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.pj-title-row{display:flex;align-items:center;gap:9px;min-width:0}
+.pj-title{font-size:14.5px;font-weight:600;color:var(--text);text-align:left;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pj-title:hover{color:var(--accent)}
+.pj-outcome{font-size:12.5px;color:var(--muted);margin:0;line-height:1.45;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pj-next{display:flex;align-items:baseline;gap:8px;min-width:0;margin-top:2px}
+.pj-next-lbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);flex-shrink:0}
+.pj-next-t{font-size:13px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.pj-next-none{font-size:12.5px;color:var(--warn)}
+
+.pj-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.pj-progress{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pj-marks{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+/* Every mark is a WORD. No unexplained dots or colours anywhere in Projects. */
+.pj-area,.pj-state,.pj-focus,.pj-target{font-size:10.5px;border-radius:5px;padding:2px 7px;
+  background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.pj-state{color:var(--text-2)}
+.pj-focus{background:var(--accent-soft);color:var(--accent)}
+.pj-health{font-size:10.5px;font-weight:600;border-radius:5px;padding:2px 7px;
+  background:rgba(255,196,77,.14);color:var(--warn);white-space:nowrap}
+.pj-more{width:30px;height:30px}
+.pj-row .pj-more{opacity:0;transition:opacity var(--t-hover)}
+.pj-row:hover .pj-more,.pj-row:focus-within .pj-more{opacity:1}
+
+/* A new or restored row is briefly marked so the eye can find where it landed.
+   A highlight, not a celebration. */
+@keyframes pj-land{from{background:var(--accent-soft)}to{background:var(--surface)}}
+.pj-row.is-new{animation:pj-land 1300ms var(--e-out)}
+.pj-row.is-entering{animation:rise var(--d-slow) var(--e-out) backwards}
+
+.pj-skel{height:78px;border-radius:12px;background:linear-gradient(90deg,
+  var(--surface) 0%,var(--surface-2) 50%,var(--surface) 100%);
+  background-size:320px 100%;animation:shimmer 1.4s linear infinite;margin-bottom:7px}
+
+.pj-empty{display:flex;flex-direction:column;gap:9px;padding:64px 0;align-items:center;
+  text-align:center}
+.pj-empty-inline{padding:28px 0}
+.pj-empty-t{font-size:15px;font-weight:600;color:var(--text-2)}
+.pj-empty-s{font-size:12.5px;color:var(--muted);max-width:430px;line-height:1.6}
+
+/* ── Detail: one column, no rail, no empty promises ── */
+.pjd-head{gap:10px}
+.pjd-left{display:flex;align-items:center;gap:14px;min-width:0}
+.pjd-left h1{margin:0}
+.pjd-outcome{font-size:14px;color:var(--text-2);margin:0;line-height:1.5;max-width:70ch}
+.pjd-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.pjd-sel select{height:28px;border-radius:8px;background:var(--surface-2);color:var(--text-2);
+  font-size:11.5px;padding:0 8px;border:none}
+.pjd-health{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.pjd-health-why{font-size:12px;color:var(--muted)}
+
+.pjd-body{display:flex;flex-direction:column;gap:30px;width:auto;
+  max-width:var(--cal-max);margin-left:var(--cal-inset, auto);margin-right:0}
+.pjd-sec{display:flex;flex-direction:column;gap:11px}
+.pjd-sec-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pjd-sec-h{font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--label);margin:0}
+.pjd-next{display:flex;align-items:center;gap:11px;padding:15px 18px;border-radius:12px;
+  background:var(--surface);flex-wrap:wrap}
+.pjd-next-t{font-size:14.5px;color:var(--text);font-weight:500}
+.pjd-next-tag{font-size:10.5px;color:var(--accent);background:var(--accent-soft);
+  border-radius:5px;padding:2px 7px}
+.pjd-tasks{display:flex;flex-direction:column;gap:7px}
+.pjd-done{margin-top:12px}
+.pjd-done summary{font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px}
+.pjd-done summary:hover{color:var(--text-2)}
+.pjd-notes{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:14px 16px;font-size:13.5px;line-height:1.65;color:var(--text);
+  resize:vertical;min-height:160px}
+.pjd-notes:focus{outline:none;border-color:var(--border-strong)}
+/* The save state is a WORD, never a silent colour, and never a false "Saved". */
+.pjd-save{font-size:11.5px;color:var(--muted);transition:color var(--t-hover)}
+.pjd-save[data-state="saved"]{color:var(--ok)}
+.pjd-save[data-state="error"]{color:var(--danger);cursor:pointer;text-decoration:underline}
+.pjd-save[data-state="dirty"]{color:var(--warn)}
+
+.pm-outcome{min-height:56px}
+
+/* A decision with consequences, asked properly — never a browser confirm(),
+   which cannot show the counts the decision turns on or say what each choice
+   will do. */
+.modal-choice{max-width:440px}
+.ch-title{font-size:18px;font-weight:700;letter-spacing:-.3px;margin:0;color:var(--text)}
+.ch-body{font-size:13px;color:var(--text-2);line-height:1.6;padding-top:0}
+.ch-choices{display:flex;flex-direction:column;gap:8px;padding:16px 20px 20px}
+.ch-choice{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;
+  padding:13px 15px;border-radius:11px;background:var(--surface-2);
+  transition:background var(--t-hover)}
+.ch-choice:hover{background:var(--surface-3)}
+.ch-choice:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+.ch-choice-l{font-size:13.5px;font-weight:600;color:var(--text)}
+.ch-choice-d{font-size:12px;color:var(--muted);line-height:1.45}
+.ch-choice.is-danger .ch-choice-l{color:var(--danger)}
+.ch-choice.is-quiet{background:transparent}
+.ch-choice.is-quiet:hover{background:var(--surface-2)}
+
+/* Undo. Nothing destructive happens without one. */
+.undo-bar{position:fixed;left:50%;translate:-50% 0;bottom:calc(var(--composer-h) + 28px);
+  z-index:400;display:flex;align-items:center;gap:14px;padding:11px 14px 11px 18px;
+  border-radius:12px;background:var(--surface-3);box-shadow:var(--e3);
+  font-size:13px;color:var(--text-2)}
+
+@media (max-width:1180px){
+  body:has(.pj-head) .main-wrap{grid-template-columns:minmax(0,1fr)}
+}
+/* Tablet and below: two lines, and every action reachable by touch. */
+@media (max-width:900px){
+  .pj-head-row{flex-direction:column;align-items:stretch;gap:12px}
+  .pj-row{flex-direction:column;gap:10px;padding:14px 15px}
+  .pj-side{align-items:flex-start;width:100%;flex-direction:row;justify-content:space-between;
+    flex-wrap:wrap;gap:8px}
+  .pj-outcome{white-space:normal}
+  /* No hover-only affordances on touch. */
+  .pj-row .pj-more{opacity:1}
+  .pj-more{width:38px;height:38px}
+  .pj-filter{height:38px;padding:0 14px}
+  .pjd-meta{gap:7px}
+  .pjd-sel select{height:38px}
+}
+
 /* ── Ambient stars ──────────────────────────────────────────────────
    Decorative only: behind everything, never interactive, never in the
    layout. Fixed so it does not repaint on scroll. */

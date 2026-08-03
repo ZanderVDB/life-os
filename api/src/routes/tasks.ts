@@ -10,7 +10,7 @@ import type { AppInstance, Guards } from '../types.js';
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
-import { tasks, taskSteps, taskActivity, areas, BUCKETS, PRIORITIES } from '../db/schema.js';
+import { tasks, taskSteps, taskActivity, areas, projects, BUCKETS, PRIORITIES } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
 
 /** Sparse spacing so a single move rewrites one row, not the whole bucket. */
@@ -38,6 +38,10 @@ const TaskCreate = z.object({
   bucket: z.enum(BUCKETS).default('today'),
   priority: z.enum(PRIORITIES).default('medium'),
   areaId: z.string().uuid().nullish(),
+  // A task belongs to zero or one Project. Set when a task is created inside a
+  // project, so the relationship is one atomic write rather than a create
+  // followed by an assign that can fail and leave the task loose.
+  projectId: z.string().uuid().nullish(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.').nullish(),
   scheduledAt: z.string().datetime({ offset: true }).nullish(),
   estimatedMinutes: z.number().int().positive().max(10080).nullish(),
@@ -129,11 +133,17 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
         .where(and(eq(areas.id, body.areaId), eq(areas.workspaceId, wsId), isNull(areas.deletedAt))).limit(1))[0];
       if (!a) throw badRequest('That Area does not exist in this workspace.');
     }
+    if (body.projectId) {
+      const p = (await db.select().from(projects)
+        .where(and(eq(projects.id, body.projectId), eq(projects.workspaceId, wsId))).limit(1))[0];
+      if (!p) throw badRequest('That project does not exist in this workspace.');
+    }
     const row = await db.transaction(async (tx) => {
       const position = await endPosition(tx, wsId, body.bucket);
       const created = (await tx.insert(tasks).values({
         workspaceId: wsId, title: body.title, notes: body.notes ?? null,
         bucket: body.bucket, priority: body.priority, areaId: body.areaId ?? null,
+        projectId: body.projectId ?? null,
         dueDate: body.dueDate ?? null,
         scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
         estimatedMinutes: body.estimatedMinutes ?? null,

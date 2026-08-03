@@ -610,3 +610,44 @@ Full design in [calendar-google-sync.md](calendar-google-sync.md): staged
 scopes (readonly first, write only when editing is requested), per-calendar
 sync tokens, controlled full resync on 410 GONE, idempotent upserts, and
 etag/sequence conflict detection.
+
+## Project routes (Phase E2)
+
+`src/routes/projects.ts`. REST for the resource, RPC verbs for actions that have
+consequences — the same shape as Tasks, for the same reason: an action with a
+decision attached should not be a PATCH.
+
+| Route | Notes |
+|---|---|
+| `GET /projects?filter=` | Returns groups already assembled. Grouping is decided server-side so "which group is this in" has one answer. One query for all tasks, grouped in memory — not N+1. |
+| `POST /projects` | Requires title, outcome, area, focus. Status is derived from whether a first task was given, never asked. |
+| `GET /projects/:id` | Project (shaped) + its tasks. |
+| `PATCH /projects/:id` | Title, outcome, description, notes, target, status, focus. **Refuses `status: completed`** — completion has to ask about open work. |
+| `POST /projects/:id/complete` | 409 with a count when work is open and no decision was sent. |
+| `POST /projects/:id/archive` · `/restore` | Idempotent, so a double click cannot overwrite the remembered status. |
+| `POST /projects/:id/next-action` | Validates open + same project + same workspace. |
+| `POST /projects/:id/tasks` | 409 `area_mismatch` with both choices when the task's area differs. |
+| `DELETE /projects/:id/tasks/:taskId` | Relationship only. Clears a next-action pointer that named it. |
+| `GET /projects/:id/area-preview` | What would move, before it moves. |
+| `POST /projects/:id/area` | Moves only the tasks that *inherited* the old area. |
+| `POST /projects/:id/move-to-top` | The non-drag ordering path. |
+| `DELETE /projects/:id` | Clears `project_id` on its tasks first and reports the count. |
+
+### Cross-cutting decisions
+
+**Optimistic concurrency** — `updated_at` is the version. Mutations accept
+`expectedUpdatedAt` and 409 on disagreement. Single-user multi-tab safety, not
+collaborative editing.
+
+**Consequential answers are structured** — `area_mismatch` and `open_tasks` come
+back as a 409 whose message is JSON carrying the counts and the available
+choices, so the client can render a real decision surface rather than guessing
+what to ask.
+
+**Derived, never stored** — progress, next action and health are computed per
+request. The explicit next-action override is the one stored user choice, and it
+is re-validated on every read rather than trusted.
+
+`tasks.project_id` was added to `TaskCreate` so a task created inside a project
+is one atomic write, rather than a create followed by an assign that can fail
+and leave the task loose.

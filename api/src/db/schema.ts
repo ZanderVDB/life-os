@@ -101,8 +101,10 @@ export const tasks = pgTable('tasks', {
   id: uuid('id').primaryKey().defaultRandom(),
   workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   areaId: uuid('area_id').references(() => areas.id, { onDelete: 'set null' }),
-  // Placeholder for the future Project relationship. Projects are NOT built.
-  projectId: uuid('project_id'),
+  // E2: a real relationship. `on delete set null` — deleting a Project must
+  // never delete work; the task keeps its area, bucket, dates and steps and
+  // simply stops belonging to a project.
+  projectId: uuid('project_id').references((): any => projects.id, { onDelete: 'set null' }),
   title: text('title').notNull(),
   notes: text('notes'),
   status: text('status').notNull().default('open'),
@@ -135,9 +137,79 @@ export const tasks = pgTable('tasks', {
     .where(sql`${t.status} = 'done'`),
   byArea: index('tasks_area_idx').on(t.workspaceId, t.areaId),
   byProject: index('tasks_project_idx').on(t.workspaceId, t.projectId),
+  // Every Project query asks for open tasks in order. Partial, because most
+  // tasks belong to no project.
+  byProjectOpen: index('tasks_project_open_idx').on(t.projectId, t.status, t.position)
+    .where(sql`${t.projectId} is not null`),
   legacyMap: uniqueIndex('tasks_legacy_idx').on(t.workspaceId, t.legacyId)
     .where(sql`${t.legacyId} is not null`),
 }));
+
+/* ── projects ────────────────────────────────────────────────────────────
+ * A finite outcome that needs more than one action, and enough context that
+ * you would lose the thread without somewhere to keep it.
+ *
+ * TWO INDEPENDENT DIMENSIONS, and keeping them independent is the whole point:
+ *
+ *   status — where the work IS       (planning / active / on_hold / completed)
+ *   focus  — how loudly it should ASK (now / upcoming / someday)
+ *
+ * Legacy collapsed these into one field and then recomputed it from recency,
+ * so the user's chosen state was overwritten by how recently they had opened
+ * it. A project can be genuinely Active and deliberately quiet; a project can
+ * be Planning and the next thing you intend to start.
+ *
+ * ARCHIVE IS NOT A STATUS. It is an overlay: `archived_at` plus the status to
+ * return to. A completed project and an abandoned project must not read the
+ * same, and restore must not guess. */
+export const projects = pgTable('projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  areaId: uuid('area_id').references(() => areas.id, { onDelete: 'set null' }),
+  title: text('title').notNull(),
+  /* Nullable at the database level ONLY so the Legacy migration can land rows
+   * it cannot invent an outcome for. The API requires it on every new project:
+   * it is the field that makes a Project a Project. */
+  outcome: text('outcome'),
+  description: text('description'),
+  notes: text('notes'),
+  status: text('status').notNull().default('planning'),
+  focus: text('focus').notNull().default('upcoming'),
+  targetDate: date('target_date'),
+  /* Explicit next action. Cleared automatically when it stops being valid —
+   * see nextActionFor(). */
+  nextTaskId: uuid('next_task_id').references((): any => tasks.id, { onDelete: 'set null' }),
+  position: integer('position').notNull().default(0),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  preArchiveStatus: text('pre_archive_status'),
+  legacyId: text('legacy_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  statusCheck: check('projects_status_check',
+    sql`${t.status} in ('planning','active','on_hold','completed')`),
+  focusCheck: check('projects_focus_check',
+    sql`${t.focus} in ('now','upcoming','someday')`),
+  preArchiveCheck: check('projects_pre_archive_status_check',
+    sql`${t.preArchiveStatus} is null or ${t.preArchiveStatus} in ('planning','active','on_hold','completed')`),
+  // An archived project must remember where to go back to.
+  archivePairCheck: check('projects_archive_pair_check',
+    sql`(${t.archivedAt} is null and ${t.preArchiveStatus} is null)
+        or (${t.archivedAt} is not null and ${t.preArchiveStatus} is not null)`),
+  byStatus: index('projects_ws_status_idx').on(t.workspaceId, t.status, t.position),
+  byFocus: index('projects_ws_focus_idx').on(t.workspaceId, t.focus, t.position),
+  live: index('projects_live_idx').on(t.workspaceId, t.position)
+    .where(sql`${t.archivedAt} is null`),
+  byArea: index('projects_area_idx').on(t.workspaceId, t.areaId),
+  legacyMap: uniqueIndex('projects_legacy_idx').on(t.workspaceId, t.legacyId)
+    .where(sql`${t.legacyId} is not null`),
+}));
+
+export const PROJECT_STATUSES = ['planning', 'active', 'on_hold', 'completed'] as const;
+export const PROJECT_FOCUSES = ['now', 'upcoming', 'someday'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+export type ProjectFocus = (typeof PROJECT_FOCUSES)[number];
 
 /* ── task_steps ──────────────────────────────────────────────────────────
  * Subtasks. Unlike the legacy model these are individually addressable and
@@ -237,8 +309,14 @@ export const areasRelations = relations(areas, ({ one, many }) => ({
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
   workspace: one(workspaces, { fields: [tasks.workspaceId], references: [workspaces.id] }),
   area: one(areas, { fields: [tasks.areaId], references: [areas.id] }),
+  project: one(projects, { fields: [tasks.projectId], references: [projects.id] }),
   steps: many(taskSteps),
   activity: many(taskActivity),
+}));
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  workspace: one(workspaces, { fields: [projects.workspaceId], references: [workspaces.id] }),
+  area: one(areas, { fields: [projects.areaId], references: [areas.id] }),
+  tasks: many(tasks),
 }));
 export const taskStepsRelations = relations(taskSteps, ({ one }) => ({
   task: one(tasks, { fields: [taskSteps.taskId], references: [tasks.id] }),

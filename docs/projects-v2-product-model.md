@@ -1,7 +1,12 @@
 # Projects — v2 product model
 
-Status: **proposal, awaiting approval.** Phase E1 is discovery. Nothing here is
-built. The v2 Projects route is still a placeholder.
+Status: **built in Phase E2** and deployed to v2 staging. The definition,
+lifecycle, progress model, next-action rule and discoverability model below are
+implemented. Boards, Library and AI are not — see
+[projects-v2-future-architecture.md](projects-v2-future-architecture.md).
+
+One thing changed between the E1 proposal and what was built, and it is the most
+important addition: **lifecycle and focus are two separate fields.** See below.
 
 ---
 
@@ -431,3 +436,64 @@ chosen* in the model above.
    confirmed by Legacy's own recency-status behaviour.
 4. **Same task identity everywhere** — from Notion's one-record-many-views, and
    the reason Projects will not own a task table.
+
+---
+
+## Focus — added in E2, and why it matters
+
+The E1 model had one `status` field. Building the overview showed why that is
+not enough: **"where the work is" and "how loudly it should ask" are different
+questions, and a single field forces them to share an answer.**
+
+A project can be genuinely Active and deliberately quiet — real work, in
+progress, that you do not want competing for today's attention. With one field
+you have to lie about one of those to express the other, and Legacy's own model
+is the proof: it had `status`, then quietly recomputed it from recency, so the
+user's answer was overwritten by how recently they had opened the thing.
+
+So:
+
+| | Question | Values |
+|---|---|---|
+| `status` | Where is this work? | planning · active · on_hold · completed |
+| `focus` | How loudly should it ask? | now · upcoming · someday |
+
+Independent, and nothing derives one from the other. The full matrix and the
+one contradictory pair are in
+[projects-v2-data-model.md](projects-v2-data-model.md).
+
+### What focus actually does
+
+**Defaults only.** A task created in a Now project starts in Today; anywhere
+else it starts in the backlog. That is the entire mechanism.
+
+Focus never moves an existing task, never changes a bucket, never clears a date
+and never touches a schedule. A task that is due appears because it is due —
+whatever its project says. This is the line that stops Projects becoming a
+second, competing task-bucket system, and it is asserted by test.
+
+## Archive, precisely
+
+Archive is an **overlay**, not a fifth status: `archived_at` plus
+`pre_archive_status`. A project archived while On hold comes back On hold. This
+is why Completed and Archived can stay distinct — a project you finished and a
+project you abandoned should never read the same, and restore should never have
+to guess.
+
+## Health, as built
+
+Two signals only, both evidence:
+
+- **No next action** — Active with nothing open. *Planning with nothing open is
+  normal and is never flagged.*
+- **Past its target date** — the date has passed **and** work is still open.
+  Past its date with everything done is a project waiting to be completed, not
+  an overdue one.
+
+**Stalled was specified and deliberately not built.** `updated_at` moves when
+notes or metadata change, so a recency signal would call a project stalled while
+you were reading it and unstalled because you fixed a typo. A signal that
+unreliable trains people to ignore signals.
+
+A project with a health signal is lifted into Needs attention and **removed from
+its normal group**, so it appears exactly once.

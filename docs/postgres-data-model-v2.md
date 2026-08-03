@@ -670,3 +670,24 @@ calendar links. Either is cheap now and expensive after Projects ships.
 `project_milestones`, `project_activity`, `project_members`,
 `project_attachments` — each is a real table with real UI, and none has data or
 a decided design. Adding them now ships empty sections.
+
+## Projects — APPLIED (Phase E2, migration `0003_projects.sql`)
+
+The E1 proposal above is superseded by what was built. Two differences worth
+naming:
+
+1. **`focus` was added** (`now | upcoming | someday`), independent of `status`.
+   One field could not express "genuinely active, deliberately quiet".
+2. **Archive became an overlay** — `archived_at` + `pre_archive_status`, with a
+   CHECK that they are both null or both set — rather than a fifth status.
+
+Full column list, constraints, indexes and the status×focus matrix:
+[projects-v2-data-model.md](projects-v2-data-model.md).
+
+`tasks.project_id` is now a real foreign key with **`on delete set null`** —
+deleting a project never deletes work — plus a partial index
+`tasks_project_open_idx (project_id, status, position)`. Every existing task
+remains `project_id = null`; E2 assigns nothing.
+
+No `progress` column: progress is derived on read. No `is_blocked`: health is
+derived from evidence.

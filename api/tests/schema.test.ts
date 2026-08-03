@@ -132,15 +132,24 @@ test('deleting an Area NEVER deletes its tasks (set null, not cascade)', async (
   assert.equal(remaining[0].areaId, null, 'and simply lose its Area');
 });
 
-test('project_id is nullable and accepted for future Projects', async () => {
+test('project_id is nullable, and now a real relationship', async () => {
+  // Until E2 this was an unconstrained placeholder that accepted any uuid. It
+  // is a foreign key now, so an id pointing at nothing is refused rather than
+  // stored as a dangling reference.
   const { db } = await freshDb();
   const p = await ensureUserAndWorkspace(db, identity());
-  const [none] = await db.insert(tasks).values({ workspaceId: p.workspaceId, title: 'No project' }).returning();
-  assert.equal(none.projectId, null);
-  const fakeProject = '11111111-2222-3333-4444-555555555555';
-  const [withProj] = await db.insert(tasks)
-    .values({ workspaceId: p.workspaceId, title: 'Future project task', projectId: fakeProject }).returning();
-  assert.equal(withProj.projectId, fakeProject, 'placeholder accepts a uuid with no FK yet');
+  const [none] = await db.insert(tasks)
+    .values({ workspaceId: p.workspaceId, title: 'No project' }).returning();
+  assert.equal(none.projectId, null, 'a task without a project is still fine');
+  await assert.rejects(
+    () => db.insert(tasks).values({
+      workspaceId: p.workspaceId,
+      title: 'Dangling',
+      projectId: '11111111-2222-3333-4444-555555555555',
+    }),
+    /foreign key|violates/i,
+    'project_id still accepts an id that points at no project',
+  );
 });
 
 test('task CHECK constraints reject invalid enums', async () => {
