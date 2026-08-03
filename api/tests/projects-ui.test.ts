@@ -70,11 +70,21 @@ test('motion: paint is wrapped in FLIP', () => {
 test('motion: a filter change crossfades rather than pretending rows moved', () => {
   // Different rows. Animating them as if they had travelled is a lie about
   // what happened.
-  const fn = body(appCode, 'async function setProjectFilter(filter)');
+  const fn = body(appCode, 'function setProjectFilter(filter)');
   assert.match(fn, /animate\(\[\{ opacity: 1 \}, \{ opacity: 0 \}\]/, 'no fade out');
-  assert.match(fn, /el\.innerHTML = ''/, 'the crossfade reuses rows from a different filter');
-  assert.match(fn, /if \(pj\.filter !== filter\) return;/,
-    'a slow response can repaint a filter the user has already left');
+  assert.match(fn, /list\.innerHTML = ''/, 'the crossfade reuses rows from a different filter');
+
+  // E2.1 — the three causes of the flash, each pinned.
+  // 1. The fade must HOLD. Without fill:'forwards' it reverts on finish and the
+  //    old rows reappear at full opacity, which is what was happening.
+  assert.match(fn, /fill: 'forwards'/, 'the fade-out reverts and shows the old filter again');
+  // 2. Nothing may be awaited: the correct rows must already be in hand.
+  assert.ok(!/\bawait\b/.test(fn), 'the filter switch waits on the network before rendering');
+  // 3. The header is never re-rendered, so the active pill is never re-created.
+  assert.ok(!/head\.innerHTML/.test(fn),
+    're-rendering the header destroys the filter pills, so the indicator lags the click');
+  assert.match(appCode, /const groups = pj\.data\?\.views\?\.\[pj\.filter\]/,
+    'the rows for a filter are not derived from data already held');
 });
 
 test('motion: only the locked tokens, and no springs', () => {
@@ -90,7 +100,7 @@ test('motion: only the locked tokens, and no springs', () => {
 
 test('motion: reduced motion is honoured everywhere something moves', () => {
   const animated: [string, string][] = [
-    ['async function setProjectFilter(filter)', 'setProjectFilter'],
+    ['function setProjectFilter(filter)', 'setProjectFilter'],
     ['function undoBar(message, onUndo)', 'undoBar'],
     ['async function renderProjectDetail(scroll)', 'renderProjectDetail'],
   ];
@@ -143,17 +153,26 @@ test('overview: every mark is a word, never an unexplained dot', () => {
   const row = body(pjCode, 'export function projectRowHtml(p, areaName)');
   assert.match(row, /STATUS_LABEL\[p\.status\]/, 'status is shown without a label');
   assert.match(row, /FOCUS_LABEL\[p\.focus\]/, 'focus is shown without a label');
-  assert.match(row, /title="\$\{esc\(health\.why\)\}"/, 'a health mark appears without saying why');
+  // E2.1: the reason is rendered as TEXT beside the label, not hidden in a
+  // title attribute. It used to appear twice — a badge by the title and an
+  // amber line saying the same thing — which read as two problems.
+  assert.match(row, /pj-attention-w">\$\{esc\(health\.why\)\}/,
+    'a health mark appears without saying why');
+  assert.match(row, /pj-attention-act/, 'an attention row offers no action');
+  assert.equal((row.match(/health\.label/g) ?? []).length, 1,
+    'the same warning is rendered twice in one row');
   assert.ok(!/pj-dot|<i class="dot/.test(row), 'an unexplained dot is rendered');
 });
 
 test('overview: the next action outranks the metadata', () => {
   const row = body(pjCode, 'export function projectRowHtml(p, areaName)');
-  // Title, then next action, then the marks.
+  // Title, then the actionable line, then the outcome, then state in the foot.
   assert.ok(row.indexOf('pj-title') < row.indexOf('pj-next'), 'the title is not first');
-  assert.ok(row.indexOf('pj-next') < row.indexOf('pj-marks'),
-    'metadata is rendered above the next action');
-  assert.match(row, /No next action — add one/, 'a project with nothing to do says nothing');
+  assert.ok(row.indexOf('pj-next') < row.indexOf('pj-outcome'),
+    'the outcome outranks the next action — the next action is why you are reading the row');
+  assert.ok(row.indexOf('pj-outcome') < row.indexOf('pj-foot'),
+    'state metadata is rendered above the outcome');
+  assert.match(row, /No next action/, 'a project with nothing to do says nothing');
 });
 
 test('overview: empty states say what is missing and what to do', () => {

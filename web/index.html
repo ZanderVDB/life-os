@@ -1979,38 +1979,65 @@ body:has(.pj-head) .rail{display:none}
   color:var(--label);margin:0 0 2px;padding-left:2px}
 .pj-group-rows{display:flex;flex-direction:column;gap:7px}
 
-/* The row. Priority of information top to bottom: what it is, what to do next,
-   what it is for. Metadata never outranks the next action. */
-.pj-row{display:flex;align-items:flex-start;gap:20px;padding:15px 18px;border-radius:12px;
-  background:var(--surface);border-left:2.5px solid transparent;
+/* ── The row (E2.1) ─────────────────────────────────────────────────────
+   The overview read as a stack of near-identical dark rectangles. The fix is
+   HIERARCHY, not colour: one clearly dominant title, a next action that reads
+   as the actionable line, a quieter outcome, and state pushed to a footer at a
+   smaller size. No hover lift, no tilt, no shadow bloom — the row is a row. */
+.pj-row{display:flex;align-items:flex-start;gap:14px;padding:16px 18px 14px;
+  border-radius:12px;background:var(--surface);
+  border-left:2.5px solid transparent;
   transition:background var(--t-hover),border-color var(--t-hover)}
 .pj-row:hover{background:var(--surface-2)}
 .pj-row:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+.pj-row.is-attention{border-left-color:var(--warn)}
 .pj-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
-.pj-title-row{display:flex;align-items:center;gap:9px;min-width:0}
-.pj-title{font-size:14.5px;font-weight:600;color:var(--text);text-align:left;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+.pj-title-row{margin:0;display:flex;align-items:center;gap:9px;min-width:0}
+/* The one clearly dominant element in the row. */
+.pj-title{font-size:16px;font-weight:650;letter-spacing:-.15px;color:var(--text);
+  text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  transition:color var(--t-hover)}
 .pj-title:hover{color:var(--accent)}
+
+/* The actionable line — brighter than the outcome, because it is what the row
+   is for. */
+.pj-next{margin:0;display:flex;align-items:baseline;gap:8px;min-width:0}
+.pj-next-lbl{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);flex-shrink:0}
+.pj-next-t{font-size:13.5px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.pj-next-none{font-size:12.5px;color:var(--muted)}
+
+/* ONE attention line: label, reason, action. Never a badge and a sentence
+   saying the same thing in the same row. */
+.pj-attention{margin:0;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;min-width:0}
+.pj-attention-l{font-size:11px;font-weight:700;color:var(--warn);
+  background:rgba(255,196,77,.14);border-radius:5px;padding:2px 7px;white-space:nowrap}
+.pj-attention-w{font-size:12.5px;color:var(--text-2);min-width:0}
+.pj-attention-act{font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap}
+.pj-attention-act:hover{text-decoration:underline}
+
 .pj-outcome{font-size:12.5px;color:var(--muted);margin:0;line-height:1.45;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pj-next{display:flex;align-items:baseline;gap:8px;min-width:0;margin-top:2px}
-.pj-next-lbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--muted);flex-shrink:0}
-.pj-next-t{font-size:13px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap}
-.pj-next-none{font-size:12.5px;color:var(--warn)}
 
-.pj-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
-.pj-progress{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
-.pj-marks{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-/* Every mark is a WORD. No unexplained dots or colours anywhere in Projects. */
+/* State, at the bottom and at a smaller size, so it never competes. Progress
+   leads it — the number was previously at the far edge and easy to miss. */
+.pj-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:3px}
+.pj-progress{font-size:11.5px;color:var(--text-2);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+/* A supporting bar, not the message. The words carry the meaning. */
+.pj-bar{width:52px;height:3px;border-radius:2px;background:var(--surface-3);
+  overflow:hidden;flex-shrink:0}
+.pj-bar i{display:block;height:100%;background:var(--accent);border-radius:2px}
 .pj-area,.pj-state,.pj-focus,.pj-target{font-size:10.5px;border-radius:5px;padding:2px 7px;
   background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.pj-row:hover .pj-area,.pj-row:hover .pj-state,
+.pj-row:hover .pj-focus,.pj-row:hover .pj-target{background:var(--surface-3)}
 .pj-state{color:var(--text-2)}
 .pj-focus{background:var(--accent-soft);color:var(--accent)}
-.pj-health{font-size:10.5px;font-weight:600;border-radius:5px;padding:2px 7px;
-  background:rgba(255,196,77,.14);color:var(--warn);white-space:nowrap}
-.pj-more{width:30px;height:30px}
+.pj-target.is-late{color:var(--warn)}
+.pj-more{width:30px;height:30px;flex-shrink:0;margin-top:2px}
 .pj-row .pj-more{opacity:0;transition:opacity var(--t-hover)}
 .pj-row:hover .pj-more,.pj-row:focus-within .pj-more{opacity:1}
 
@@ -2030,41 +2057,100 @@ body:has(.pj-head) .rail{display:none}
 .pj-empty-t{font-size:15px;font-weight:600;color:var(--text-2)}
 .pj-empty-s{font-size:12.5px;color:var(--muted);max-width:430px;line-height:1.6}
 
-/* ── Detail: one column, no rail, no empty promises ── */
-.pjd-head{gap:10px}
+/* ── Detail (E2.1) ──────────────────────────────────────────────────────
+   The structure was right and the composition was not: three sections floating
+   in a lot of space with no relationship to each other. The fix is a tighter
+   header block, a section rhythm that repeats, and a next action that is
+   compact rather than a large empty rectangle. */
+.pjd-head{gap:9px}
 .pjd-left{display:flex;align-items:center;gap:14px;min-width:0}
 .pjd-left h1{margin:0}
-.pjd-outcome{font-size:14px;color:var(--text-2);margin:0;line-height:1.5;max-width:70ch}
-.pjd-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.pjd-outcome{font-size:14.5px;color:var(--text-2);margin:0;line-height:1.5;max-width:68ch}
+/* The controls read as one band rather than scattered chips. */
+.pjd-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;
+  border-radius:11px;background:var(--surface)}
+.pjd-meta .pj-area{background:var(--surface-2)}
 .pjd-sel select{height:28px;border-radius:8px;background:var(--surface-2);color:var(--text-2);
-  font-size:11.5px;padding:0 8px;border:none}
-.pjd-health{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-.pjd-health-why{font-size:12px;color:var(--muted)}
+  font-size:11.5px;padding:0 8px;border:none;cursor:pointer}
+.pjd-sel select:hover{color:var(--text)}
+.pjd-meta .pj-progress{margin-left:auto;font-size:12px}
+.pjd-health{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.pjd-health-why{font-size:12.5px;color:var(--text-2)}
 
-.pjd-body{display:flex;flex-direction:column;gap:30px;width:auto;
+/* One rhythm for every section, so the page reads as one workspace. */
+.pjd-body{display:flex;flex-direction:column;gap:26px;width:auto;
   max-width:var(--cal-max);margin-left:var(--cal-inset, auto);margin-right:0}
-.pjd-sec{display:flex;flex-direction:column;gap:11px}
-.pjd-sec-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pjd-sec{display:flex;flex-direction:column;gap:9px}
+.pjd-sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.pjd-sec-actions{display:flex;align-items:center;gap:7px}
 .pjd-sec-h{font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;
-  color:var(--label);margin:0}
-.pjd-next{display:flex;align-items:center;gap:11px;padding:15px 18px;border-radius:12px;
-  background:var(--surface);flex-wrap:wrap}
-.pjd-next-t{font-size:14.5px;color:var(--text);font-weight:500}
-.pjd-next-tag{font-size:10.5px;color:var(--accent);background:var(--accent-soft);
-  border-radius:5px;padding:2px 7px}
-.pjd-tasks{display:flex;flex-direction:column;gap:7px}
-.pjd-done{margin-top:12px}
-.pjd-done summary{font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px}
+  color:var(--label);margin:0;display:flex;align-items:baseline;gap:9px}
+.pjd-count{font-size:10.5px;font-weight:600;letter-spacing:0;text-transform:none;
+  color:var(--muted)}
+/* Says WHY this is the next action, without a permanent lecture. */
+.pjd-next-why{font-size:11px;color:var(--muted)}
+
+/* Compact, not a giant empty block. */
+.pjd-next{display:flex;align-items:center;gap:10px;padding:4px 6px 4px 4px;
+  border-radius:12px;background:var(--surface)}
+.pjd-next.is-empty{padding:14px 16px;gap:12px;flex-wrap:wrap}
+.pjd-next-open{flex:1;min-width:0;display:flex;align-items:center;gap:12px;
+  padding:11px 12px;border-radius:10px;text-align:left;
+  transition:background var(--t-hover)}
+.pjd-next-open:hover{background:var(--surface-2)}
+.pjd-next-t{font-size:14.5px;color:var(--text);font-weight:500;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pjd-next-meta{margin-left:auto;display:flex;align-items:center;gap:7px;flex-shrink:0}
+.pjd-next-due{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pjd-next-pri{font-size:10px;text-transform:capitalize;border-radius:5px;padding:2px 7px;
+  background:var(--surface-2);color:var(--muted)}
+.pjd-next-pri.pri-urgent{color:var(--p-urgent-ink);background:var(--p-urgent-bg)}
+.pjd-next-pri.pri-high{color:var(--p-high-ink);background:var(--p-high-bg)}
+.pjd-next-sec .btn-sm{flex-shrink:0;margin-right:6px}
+
+.pjd-tasks{display:flex;flex-direction:column;gap:7px;min-height:8px}
+.pjd-tasks.is-empty{min-height:0}
+.pjd-done{margin-top:10px}
+.pjd-done summary{font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;
+  list-style:none}
+.pjd-done summary::-webkit-details-marker{display:none}
+.pjd-done summary::before{content:"▸ ";color:var(--muted)}
+.pjd-done[open] summary::before{content:"▾ "}
 .pjd-done summary:hover{color:var(--text-2)}
+.pjd-tasks-done{margin-top:6px;opacity:.72}
+
+/* Grows with what is in it rather than reserving a large empty block. */
 .pjd-notes{width:100%;background:var(--surface);border:1px solid var(--border);
   border-radius:12px;padding:14px 16px;font-size:13.5px;line-height:1.65;color:var(--text);
-  resize:vertical;min-height:160px}
+  resize:vertical;min-height:120px;field-sizing:content;max-height:60vh}
 .pjd-notes:focus{outline:none;border-color:var(--border-strong)}
 /* The save state is a WORD, never a silent colour, and never a false "Saved". */
 .pjd-save{font-size:11.5px;color:var(--muted);transition:color var(--t-hover)}
 .pjd-save[data-state="saved"]{color:var(--ok)}
 .pjd-save[data-state="error"]{color:var(--danger);cursor:pointer;text-decoration:underline}
 .pjd-save[data-state="dirty"]{color:var(--warn)}
+
+/* ── Pick an existing task ── */
+.modal-picker{max-width:520px;display:flex;flex-direction:column;max-height:76vh}
+.tp-search{padding:0 20px 12px}
+.tp-list{overflow-y:auto;padding:0 14px 16px;display:flex;flex-direction:column;gap:5px}
+.tp-row{display:flex;flex-direction:column;gap:4px;align-items:flex-start;text-align:left;
+  padding:11px 13px;border-radius:10px;transition:background var(--t-hover)}
+.tp-row:hover{background:var(--surface-2)}
+.tp-row:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+.tp-title{font-size:13.5px;color:var(--text)}
+.tp-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tp-bucket,.tp-due{font-size:10.5px;color:var(--muted);background:var(--surface-2);
+  border-radius:5px;padding:2px 7px;text-transform:capitalize}
+.tp-none{font-size:12.5px;color:var(--muted);padding:20px 6px;text-align:center}
+
+/* The project a task belongs to, named. Replaces the "arrives with Projects"
+   placeholder that sat in every task editor. */
+.m-project{display:flex;align-items:center;gap:10px;font-size:11.5px;
+  padding:10px 0 2px;border-top:1px solid var(--hairline);margin-top:4px}
+.m-project-lbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted)}
+.m-project-name{color:var(--text-2)}
 
 .pm-outcome{min-height:56px}
 

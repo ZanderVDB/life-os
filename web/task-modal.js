@@ -51,7 +51,7 @@ const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:n
  *                        onToggle, steps: {add,rename,toggle,remove} }
  */
 export function openTaskModal(ctx) {
-  const { task: t, areas, prefillTitle = '' } = ctx;
+  const { task: t, areas, prefillTitle = '', project = null } = ctx;
   const opener = document.activeElement;
   document.querySelector('.modal-scrim')?.remove();
 
@@ -118,9 +118,14 @@ export function openTaskModal(ctx) {
       <label class="m-field m-notes-field"><span>Notes</span>
         <textarea id="m-notes" class="m-input m-notes" placeholder="Anything worth remembering">${esc(t?.notes ?? '')}</textarea></label>
 
-      <!-- Projects do not exist yet. The field is named rather than silently
-           missing, so its absence reads as "not yet" instead of "forgotten". -->
-      <div class="m-soon"><span>Project</span><span class="m-soon-tag">Arrives with Projects</span></div>
+      <!-- Shown only when the task actually belongs to a project. Naming the
+           field with a "coming soon" tag made every task editor carry a
+           permanent reminder of something unfinished; a task with no project
+           simply has no project line. -->
+      ${project ? `<div class="m-project">
+        <span class="m-project-lbl">Project</span>
+        <span class="m-project-name">${esc(project.title)}</span>
+      </div>` : ''}
     </div>
 
     <div class="m-foot">

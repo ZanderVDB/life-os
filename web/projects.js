@@ -88,46 +88,63 @@ export const projectsBodyHtml = () => '<div class="pj-list" id="pj-list"></div>'
 /**
  * One row.
  *
- * Priority of information, top to bottom: what it is, what to do next, what it
- * is for. Metadata never outranks the next action — the next action is the
- * reason you are reading the row.
+ * Hierarchy, deliberately: title, then the next action, then the outcome, then
+ * state. The next action outranks the outcome because it is the reason you are
+ * reading the row — the outcome tells you what this is, the next action tells
+ * you what to do about it.
+ *
+ * The health signal is stated ONCE. It used to appear twice — as a badge beside
+ * the title and again as the amber "No next action" line — which is the same
+ * warning taking up two places and reading as two problems.
  */
 export function projectRowHtml(p, areaName) {
   const health = p.health?.[0] ?? null;
   const area = p.areaId ? areaName(p.areaId) : null;
   const next = p.nextAction;
+  const g = p.progress ?? { total: 0, done: 0 };
+  const bar = p.status !== 'completed' && g.total > 0;
 
-  return `<article class="pj-row" data-id="${p.id}" tabindex="0"
+  return `<article class="pj-row ${health ? 'is-attention' : ''}" data-id="${p.id}" tabindex="0"
       aria-label="${esc(p.title)}">
     <div class="pj-main">
-      <div class="pj-title-row">
+      <h3 class="pj-title-row">
         <button class="pj-title" data-pj-open="${p.id}">${esc(p.title)}</button>
-        ${health ? `<span class="pj-health" title="${esc(health.why)}">${esc(health.label)}</span>` : ''}
-      </div>
+      </h3>
+
+      ${health
+    // One line, one reason, one action. Never a badge AND a sentence.
+    ? `<p class="pj-attention">
+         <span class="pj-attention-l">${esc(health.label)}</span>
+         <span class="pj-attention-w">${esc(health.why)}</span>
+         <button class="pj-attention-act" data-pj-open="${p.id}">${
+  health.id === 'no_next_action' ? 'Add a task' : 'Review project'}</button>
+       </p>`
+    : next
+      ? `<p class="pj-next"><span class="pj-next-lbl">Next</span>
+           <span class="pj-next-t">${esc(next.title)}</span></p>`
+      : '<p class="pj-next"><span class="pj-next-none">No next action</span></p>'}
+
       ${p.outcome ? `<p class="pj-outcome">${esc(p.outcome)}</p>` : ''}
-      <div class="pj-next">
-        ${next
-    ? `<span class="pj-next-lbl">Next</span><span class="pj-next-t">${esc(next.title)}</span>`
-    : '<span class="pj-next-none">No next action — add one</span>'}
-      </div>
-    </div>
-    <div class="pj-side">
-      <span class="pj-progress">${esc(progressText(p))}</span>
-      <div class="pj-marks">
+
+      <div class="pj-foot">
+        <span class="pj-progress">${esc(progressText(p))}</span>
+        ${bar ? `<span class="pj-bar" aria-hidden="true">
+          <i style="width:${Math.round((g.done / g.total) * 100)}%"></i></span>` : ''}
         ${area ? `<span class="pj-area">${esc(area)}</span>` : ''}
         <span class="pj-state">${esc(STATUS_LABEL[p.status] ?? p.status)}</span>
         ${p.status !== 'completed'
     ? `<span class="pj-focus">${esc(FOCUS_LABEL[p.focus] ?? p.focus)}</span>` : ''}
         ${p.targetDate && p.status !== 'completed'
-    ? `<span class="pj-target">by ${esc(fmtDate(p.targetDate))}</span>` : ''}
+    ? `<span class="pj-target ${health?.id === 'overdue' ? 'is-late' : ''}">by ${esc(fmtDate(p.targetDate))}</span>` : ''}
       </div>
-      <button class="util-btn pj-more" data-pj-menu="${p.id}" aria-haspopup="menu"
-        aria-expanded="false" aria-label="Actions for ${esc(p.title)}">
-        <svg viewBox="0 0 20 20" aria-hidden="true">
-          <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
-          <circle cx="15.5" cy="10" r="1.5"/></svg>
-      </button>
     </div>
+
+    <button class="util-btn pj-more" data-pj-menu="${p.id}" aria-haspopup="menu"
+      aria-expanded="false" aria-label="Actions for ${esc(p.title)}">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
+        <circle cx="15.5" cy="10" r="1.5"/></svg>
+    </button>
   </article>`;
 }
 
@@ -276,6 +293,12 @@ export function projectDetailHeaderHtml(p, areaName) {
  *
  * No empty Boards, Resources, Timeline, Calendar or History sections. A section
  * that exists to promise a feature is a section the app cannot honour.
+ *
+ * The open task list is a `.drop` container on purpose: that is what the
+ * existing pointer-drag system binds to, so project tasks reorder through the
+ * same proven code path as the Today board rather than a second one. Without
+ * it the reused task row still SHOWED its drag grip and did nothing — which is
+ * exactly what the review reported.
  */
 export function projectDetailBodyHtml(p, tasks, taskHtml) {
   const open = tasks.filter((t) => t.status === 'open');
@@ -284,13 +307,22 @@ export function projectDetailBodyHtml(p, tasks, taskHtml) {
 
   return `<div class="pjd-body">
     <section class="pjd-sec pjd-next-sec">
-      <h2 class="pjd-sec-h">Next action</h2>
-      <div class="pjd-next" id="pjd-next">
+      <div class="pjd-sec-head">
+        <h2 class="pjd-sec-h">Next action</h2>
+        ${next ? `<span class="pjd-next-why">${next.explicit
+    ? 'Chosen explicitly' : 'From due date and priority'}</span>` : ''}
+      </div>
+      <div class="pjd-next ${next ? '' : 'is-empty'}" id="pjd-next">
         ${next
-    ? `<span class="pjd-next-t">${esc(next.title)}</span>
-           ${next.explicit ? '<span class="pjd-next-tag">chosen</span>' : ''}
-           <button class="btn btn-ghost btn-sm" id="pjd-next-clear">
-             ${next.explicit ? 'Use the automatic one' : 'Choose a different one'}</button>`
+    ? `<button class="pjd-next-open" data-pjd-open-task="${next.id}">
+             <span class="pjd-next-t">${esc(next.title)}</span>
+             <span class="pjd-next-meta">
+               ${next.dueDate ? `<span class="pjd-next-due">${esc(fmtDate(next.dueDate))}</span>` : ''}
+               <span class="pjd-next-pri pri-${esc(next.priority)}">${esc(next.priority)}</span>
+             </span>
+           </button>
+           <button class="btn btn-ghost btn-sm" id="pjd-next-clear">${next.explicit
+    ? 'Use the automatic one' : 'Choose'}</button>`
     : `<span class="pj-next-none">No next action — add one</span>
            <button class="btn btn-sm" id="pjd-next-add">Add a task</button>`}
       </div>
@@ -298,10 +330,14 @@ export function projectDetailBodyHtml(p, tasks, taskHtml) {
 
     <section class="pjd-sec">
       <div class="pjd-sec-head">
-        <h2 class="pjd-sec-h">Tasks</h2>
-        <button class="btn btn-sm" id="pjd-add-task">Add task</button>
+        <h2 class="pjd-sec-h">Tasks${open.length ? `<span class="pjd-count">${open.length} open</span>` : ''}</h2>
+        <div class="pjd-sec-actions">
+          <button class="btn btn-ghost btn-sm" id="pjd-add-existing">Add existing</button>
+          <button class="btn btn-sm" id="pjd-add-task">Add task</button>
+        </div>
       </div>
-      <div class="pjd-tasks" id="pjd-tasks">
+      <div class="pjd-tasks drop${open.length ? '' : ' is-empty'}" id="pjd-tasks"
+        data-bucket="project">
         ${open.length
     ? open.map((t) => taskHtml(t)).join('')
     : '<div class="pj-empty pj-empty-inline"><span class="pj-empty-t">Nothing planned yet</span>'
@@ -309,7 +345,7 @@ export function projectDetailBodyHtml(p, tasks, taskHtml) {
       </div>
       ${closed.length ? `<details class="pjd-done">
         <summary>${closed.length} finished</summary>
-        <div class="pjd-tasks">${closed.map((t) => taskHtml(t)).join('')}</div>
+        <div class="pjd-tasks pjd-tasks-done">${closed.map((t) => taskHtml(t)).join('')}</div>
       </details>` : ''}
     </section>
 
@@ -318,7 +354,7 @@ export function projectDetailBodyHtml(p, tasks, taskHtml) {
         <h2 class="pjd-sec-h">Notes</h2>
         <span class="pjd-save" id="pjd-save" data-state="idle"></span>
       </div>
-      <textarea class="pjd-notes" id="pjd-notes" rows="8"
+      <textarea class="pjd-notes" id="pjd-notes" rows="6"
         placeholder="Context you would need after three weeks away.">${esc(p.notes ?? '')}</textarea>
     </section>
   </div>`;

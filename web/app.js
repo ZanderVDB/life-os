@@ -10,7 +10,7 @@
  */
 import { ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
 import { initServiceWorker } from './pwa.js';
-import { flip, pulse, collapseOut, reducedMotion, afterTransition } from './motion.js';
+import { flip, pulse, collapseOut, reducedMotion, afterTransition, settle } from './motion.js';
 import { openUtilityMenu, openUtilitySurface, closeUtility,
   utilityTriggerHtml } from './utility-menu.js';
 import {
@@ -18,7 +18,7 @@ import {
   projectDetailHeaderHtml, projectDetailBodyHtml, progressText,
   PROJECT_FILTERS, STATUS_LABEL, FOCUS_LABEL,
 } from './projects.js';
-import { openProjectModal, openChoiceDialog } from './project-modal.js';
+import { openProjectModal, openChoiceDialog, openTaskPicker } from './project-modal.js';
 import { openTaskModal } from './task-modal.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
@@ -63,7 +63,7 @@ const state = {
  */
 const pj = {
   filter: 'working',
-  data: null,        // the last successful overview payload
+  data: null,        // the last successful overview payload — carries EVERY view
   detail: null,      // { project, tasks } when the detail page is open
   openId: null,
   resume: null,      // { filter, scrollTop, rowId }
@@ -339,7 +339,12 @@ async function boot() {
   });
   initDrag({
     getScrollRoot: () => document.getElementById('main-scroll'),
-    onDrop: (id, bucket, anchor) => moveTask(id, bucket, anchor, { settled: true }),
+    // One drag system, two destinations. The project list marks itself
+    // `data-bucket="project"`, so a drop there reorders inside the project
+    // instead of moving the task between Today buckets.
+    onDrop: (id, bucket, anchor) => (bucket === 'project'
+      ? reorderProjectTask(id, anchor)
+      : moveTask(id, bucket, anchor, { settled: true })),
   });
   initServiceWorker();
 }
@@ -2163,7 +2168,7 @@ async function loadProjects() {
   }
 
   try {
-    const data = await api(`/api/v1/workspaces/${ws()}/projects?filter=${pj.filter}`);
+    const data = await api(`/api/v1/workspaces/${ws()}/projects`);
     if (state.route !== 'projects' || pj.openId) return;
     pj.data = data;
     head.innerHTML = projectsHeaderHtml(pj.filter, data.available ?? {});
@@ -2187,7 +2192,7 @@ function paintProjects() {
   const scroll = document.getElementById('main-scroll');
   let list = document.getElementById('pj-list');
   if (!list) { scroll.innerHTML = projectsBodyHtml(); list = document.getElementById('pj-list'); }
-  const groups = pj.data?.groups ?? [];
+  const groups = pj.data?.views?.[pj.filter] ?? pj.data?.groups ?? [];
   const total = groups.reduce((n, g) => n + g.projects.length, 0);
 
   if (!total) {
@@ -2215,37 +2220,55 @@ function wireProjectsHeader() {
 }
 
 /**
- * A filter change is a CROSSFADE, not a reflow.
+ * A filter change is instant, then a crossfade.
  *
- * The rows behind a different filter are different rows. Animating them as if
- * they had moved would be a lie about what happened.
+ * THE BUG THIS REPLACES had three causes stacked on top of each other:
+ *
+ *  1. The fade-out was `animate([{opacity:1},{opacity:0}])` with the default
+ *     `fill: 'none'`, so when it finished the list SNAPPED BACK to full
+ *     opacity — showing the old filter's rows again, at full strength.
+ *  2. Nothing correct could be rendered until a network round trip returned,
+ *     so the old list then sat there visible for the whole request.
+ *  3. The response re-rendered the page header, which destroyed and rebuilt
+ *     the filter pills, so the active indicator appeared to lag behind the
+ *     click that caused it.
+ *
+ * All three are gone. Every filter's rows arrive in one payload, so the correct
+ * set is derived synchronously; the pill is updated in place and never
+ * re-created; and the crossfade holds its end state.
  */
-async function setProjectFilter(filter) {
+function setProjectFilter(filter) {
   if (filter === pj.filter) return;
   pj.filter = filter;
+
+  // The indicator responds to the click, not to the network.
   document.querySelectorAll('[data-pj-filter]').forEach((b) => {
     const on = b.dataset.pjFilter === filter;
     b.classList.toggle('is-on', on);
     b.setAttribute('aria-selected', String(on));
   });
+
   const list = document.getElementById('pj-list');
-  if (list && !reducedMotion()) {
-    list.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: 'ease-in' });
-  }
-  try {
-    const data = await api(`/api/v1/workspaces/${ws()}/projects?filter=${filter}`);
-    if (pj.filter !== filter) return;   // the user moved on while this was in flight
-    pj.data = data;
-    const head = document.getElementById('page-head');
-    if (head) { head.innerHTML = projectsHeaderHtml(filter, data.available ?? {}); wireProjectsHeader(); }
-    // Rebuild rather than reconcile: these are not the same rows.
-    const el = document.getElementById('pj-list');
-    if (el) el.innerHTML = '';
+  if (!list) return;
+
+  const paint = () => {
+    // Different rows behind a different filter, so this is a replacement, not
+    // a reflow. Pretending they moved would be a lie about what happened.
+    list.innerHTML = '';
     paintProjects();
-    if (el && !reducedMotion()) {
-      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
-    }
-  } catch (e) { toast(e.message, true); }
+  };
+
+  if (reducedMotion()) { paint(); return; }
+  // `fill: 'forwards'` — without it the fade reverts and the OLD content
+  // reappears at full opacity, which is exactly what was happening.
+  const out = list.animate([{ opacity: 1 }, { opacity: 0 }],
+    { duration: 140, easing: 'ease-in', fill: 'forwards' });
+  settle(out, 140, () => {
+    paint();
+    out.cancel();
+    list.animate([{ opacity: 0 }, { opacity: 1 }],
+      { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  });
 }
 
 function wireProjectRows() {
@@ -2307,11 +2330,28 @@ async function projectWrite(path, opts, { after = 'overview' } = {}) {
 /** Re-reads the overview and animates whatever changed. Never repaints blind. */
 async function refreshProjects() {
   if (state.route !== 'projects' || pj.openId) return;
-  const data = await api(`/api/v1/workspaces/${ws()}/projects?filter=${pj.filter}`);
+  const data = await api(`/api/v1/workspaces/${ws()}/projects`);
+  if (state.route !== 'projects' || pj.openId) return;
   pj.data = data;
-  const head = document.getElementById('page-head');
-  if (head) { head.innerHTML = projectsHeaderHtml(pj.filter, data.available ?? {}); wireProjectsHeader(); }
+  // The header is PATCHED, never re-rendered. Rebuilding it destroys the filter
+  // pills and re-creates them, which makes the active indicator flicker on
+  // every mutation.
+  patchFilterCounts(data.available ?? {});
   paintProjects();
+}
+
+/** Updates the filter counts in place, leaving the controls themselves alone. */
+function patchFilterCounts(available) {
+  document.querySelectorAll('[data-pj-filter]').forEach((b) => {
+    const id = b.dataset.pjFilter;
+    if (id === 'working') return;
+    const n = available[id];
+    const badge = b.querySelector('.pj-fcount');
+    if (n) {
+      if (badge) badge.textContent = String(n);
+      else b.insertAdjacentHTML('beforeend', `<span class="pj-fcount">${n}</span>`);
+    } else if (badge) badge.remove();
+  });
 }
 
 function newProject() {
@@ -2573,6 +2613,18 @@ function wireProjectDetail() {
 
   document.getElementById('pjd-add-task')?.addEventListener('click', () => addProjectTask(p));
   document.getElementById('pjd-next-add')?.addEventListener('click', () => addProjectTask(p));
+  document.getElementById('pjd-add-existing')?.addEventListener('click', () => addExistingTask(p));
+  document.querySelectorAll('[data-pjd-open-task]').forEach((b) => {
+    b.onclick = () => openProjectTask(b.dataset.pjdOpenTask);
+  });
+  // The task row's own overflow, replaced with the project's set of actions.
+  document.querySelectorAll('#pjd-tasks .task [data-act="menu"], .pjd-tasks-done .task [data-act="menu"]')
+    .forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        openProjectTaskMenu(b, b.closest('.task').dataset.id, p);
+      };
+    });
 
   document.getElementById('pjd-next-clear')?.addEventListener('click', async () => {
     try {
@@ -2600,6 +2652,9 @@ function addProjectTask(project) {
   openTaskModal({
     task: null,
     areas: state.me?.areas ?? [],
+    // Named, so the modal says where the task will land rather than showing an
+    // unfinished "Project — arrives with Projects" placeholder.
+    project: { title: project.title },
     onSave: async (body) => {
       await api(`/api/v1/workspaces/${ws()}/tasks`, {
         method: 'POST',
@@ -2617,6 +2672,246 @@ function addProjectTask(project) {
       saved('Task created');
     },
   });
+}
+
+/* ── Task order inside a project ─────────────────────────────────────── */
+
+/** Guards against two reorder writes racing. One interaction, one write. */
+let reorderPending = false;
+
+/**
+ * Persists a drop, and puts the row back exactly where it was if it fails.
+ *
+ * The drag system has already moved the node, so the optimistic state is
+ * whatever is on screen. On failure the server's list is authoritative and the
+ * task returns to its real position — a reorder that silently did not save is
+ * worse than one that visibly refused.
+ */
+async function reorderProjectTask(taskId, anchor) {
+  const project = pj.detail?.project;
+  if (!project) return;
+  if (reorderPending) return;
+  reorderPending = true;
+  const body = anchor?.beforeTaskId ? { beforeTaskId: anchor.beforeTaskId } : { to: 'bottom' };
+  try {
+    const r = await api(
+      `/api/v1/workspaces/${ws()}/projects/${project.id}/tasks/${taskId}/reorder`,
+      { method: 'POST', body });
+    // Settle on the server's answer rather than trusting the optimistic guess.
+    pj.detail.tasks = r.tasks;
+    pj.detail.project = r.project;
+    patchProjectTaskOrder();
+  } catch (e) {
+    toast(e.message, true);
+    await reloadProjectDetail();
+  } finally { reorderPending = false; }
+}
+
+/**
+ * Re-orders the rendered rows to match the data, moving nodes rather than
+ * rebuilding them, so the settle animates instead of snapping.
+ */
+function patchProjectTaskOrder() {
+  const host = document.getElementById('pjd-tasks');
+  if (!host || !pj.detail) return;
+  const open = pj.detail.tasks.filter((t) => t.status === 'open');
+  flip(host.querySelectorAll('.task'), () => {
+    for (const t of open) {
+      const row = host.querySelector(`.task[data-id="${t.id}"]`);
+      if (row) host.appendChild(row);   // appendChild MOVES an existing node
+    }
+  });
+  updateProjectDerived();
+}
+
+/**
+ * Refreshes the numbers AFTER the rows have settled.
+ *
+ * Progress and the next action are updated separately from the list on purpose:
+ * two things changing mid-movement reads as a glitch.
+ */
+function updateProjectDerived() {
+  const p = pj.detail?.project;
+  if (!p) return;
+  const prog = document.getElementById('pjd-progress');
+  if (prog) prog.textContent = progressText(p);
+  const count = document.querySelector('.pjd-count');
+  if (count) count.textContent = `${p.progress.open} open`;
+}
+
+/** Move up / down / top / bottom — the path that is not a drag. */
+async function moveProjectTask(taskId, where) {
+  const project = pj.detail?.project;
+  if (!project || reorderPending) return;
+  const open = (pj.detail.tasks ?? []).filter((t) => t.status === 'open');
+  const at = open.findIndex((t) => t.id === taskId);
+  if (at === -1) return;
+  let body = null;
+  if (where === 'top') body = { to: 'top' };
+  else if (where === 'bottom') body = { to: 'bottom' };
+  else if (where === 'up' && at > 0) body = { beforeTaskId: open[at - 1].id };
+  else if (where === 'down' && at < open.length - 1) body = { afterTaskId: open[at + 1].id };
+  if (!body) return;   // already at the end it was asked to move towards
+
+  reorderPending = true;
+  try {
+    const r = await api(
+      `/api/v1/workspaces/${ws()}/projects/${project.id}/tasks/${taskId}/reorder`,
+      { method: 'POST', body });
+    pj.detail.tasks = r.tasks;
+    pj.detail.project = r.project;
+    patchProjectTaskOrder();
+    // Announced, because a keyboard user has no drag to watch.
+    const now = r.tasks.filter((t) => t.status === 'open').findIndex((t) => t.id === taskId);
+    saved(`Moved to ${now + 1} of ${r.tasks.filter((t) => t.status === 'open').length}`);
+  } catch (e) {
+    toast(e.message, true);
+    await reloadProjectDetail();
+  } finally { reorderPending = false; }
+}
+
+/**
+ * A project task's actions.
+ *
+ * Ordering lives here as well as on the drag handle, because drag cannot be the
+ * only way to reorder — it is unavailable to a keyboard and awkward on touch.
+ */
+function openProjectTaskMenu(anchor, taskId, project) {
+  const open = (pj.detail?.tasks ?? []).filter((t) => t.status === 'open');
+  const at = open.findIndex((t) => t.id === taskId);
+  const isOpen = at !== -1;
+  const isNext = project.nextAction?.id === taskId;
+
+  openUtilityMenu(anchor, [
+    { id: 'open', label: 'Open task' },
+    ...(isOpen && !isNext ? [{ id: 'next', label: 'Make next action' }] : []),
+    ...(isNext ? [{ id: 'unnext', label: 'Stop choosing it explicitly' }] : []),
+    ...(isOpen && at > 0 ? [{ id: 'up', label: 'Move up' }] : []),
+    ...(isOpen && at < open.length - 1 ? [{ id: 'down', label: 'Move down' }] : []),
+    ...(isOpen && at > 0 ? [{ id: 'top', label: 'Move to top' }] : []),
+    ...(isOpen && at < open.length - 1 ? [{ id: 'bottom', label: 'Move to bottom' }] : []),
+    { id: 'remove', label: 'Remove from project' },
+  ], (id) => {
+    if (id === 'open') return openProjectTask(taskId);
+    if (id === 'next') return setProjectNextAction(taskId);
+    if (id === 'unnext') return setProjectNextAction(null);
+    if (id === 'remove') return removeTaskFromProject(taskId);
+    return moveProjectTask(taskId, id);
+  });
+}
+
+async function setProjectNextAction(taskId) {
+  const project = pj.detail?.project;
+  if (!project) return;
+  try {
+    await api(`/api/v1/workspaces/${ws()}/projects/${project.id}/next-action`,
+      { method: 'POST', body: { taskId } });
+    await reloadProjectDetail();
+    saved(taskId ? 'Next action set' : 'Back to automatic');
+  } catch (e) { toast(e.message, true); }
+}
+
+/** Opens a project task in the shared editor, with its project named. */
+function openProjectTask(taskId) {
+  const task = (pj.detail?.tasks ?? []).find((t) => t.id === taskId);
+  const project = pj.detail?.project;
+  if (!task) return;
+  openTaskModal({
+    task,
+    areas: state.me?.areas ?? [],
+    project: project ? { title: project.title } : null,
+    onSave: async (body) => {
+      await api(`/api/v1/workspaces/${ws()}/tasks/${task.id}`, { method: 'PATCH', body });
+      await reloadProjectDetail();
+      saved();
+    },
+    onToggle: async () => {
+      await api(`/api/v1/workspaces/${ws()}/tasks/${task.id}`,
+        { method: 'PATCH', body: { status: task.status === 'done' ? 'open' : 'done' } });
+      await reloadProjectDetail();
+    },
+  });
+}
+
+/**
+ * Removes a task from its project. It is not a delete, and the label says so.
+ *
+ * Everything about the task survives — area, bucket, due date, schedule, steps,
+ * priority. Only the relationship goes.
+ */
+async function removeTaskFromProject(taskId) {
+  const project = pj.detail?.project;
+  if (!project) return;
+  const row = document.querySelector(`#pjd-tasks .task[data-id="${taskId}"]`);
+  try {
+    await api(`/api/v1/workspaces/${ws()}/projects/${project.id}/tasks/${taskId}`,
+      { method: 'DELETE' });
+    if (row && !reducedMotion()) collapseOut(row, () => {});
+    await reloadProjectDetail();
+    saved('Removed from project');
+    undoBar('Task removed from project', async () => {
+      await api(`/api/v1/workspaces/${ws()}/projects/${project.id}/tasks`,
+        { method: 'POST', body: { taskId, areaChoice: 'keep' } });
+      await reloadProjectDetail();
+      saved('Put back');
+    });
+  } catch (e) { toast(e.message, true); await reloadProjectDetail(); }
+}
+
+/**
+ * Adds a task that already exists.
+ *
+ * Only tasks belonging to NO project are offered. Moving a task out of another
+ * project is a different decision with a different consequence, and it is not
+ * something a search list should do quietly — so it is not offered here at all
+ * rather than offered and then confirmed away.
+ */
+async function addExistingTask(project) {
+  let candidates = [];
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/tasks?status=open&limit=200`);
+    candidates = (r.tasks ?? []).filter((t) => !t.projectId);
+  } catch (e) { toast(e.message, true); return; }
+
+  if (!candidates.length) {
+    toast('Every open task already belongs to a project.');
+    return;
+  }
+  const chosen = await openTaskPicker({
+    title: 'Add an existing task',
+    tasks: candidates,
+    areaName,
+  });
+  if (!chosen) return;
+  try {
+    await api(`/api/v1/workspaces/${ws()}/projects/${project.id}/tasks`,
+      { method: 'POST', body: { taskId: chosen } });
+    await reloadProjectDetail();
+    saved('Task added');
+  } catch (e) {
+    let detail = null;
+    try { detail = JSON.parse(e.message); } catch { /* a real error */ }
+    if (detail?.reason !== 'area_mismatch') { toast(e.message, true); return; }
+    // The same area contract as everywhere else: never reclassify silently.
+    const task = candidates.find((t) => t.id === chosen);
+    const choice = await openChoiceDialog({
+      title: 'That task is in a different area',
+      body: `"${task?.title ?? 'The task'}" is filed under `
+        + `${areaName(detail.taskAreaId)}, and this project is `
+        + `${areaName(detail.projectAreaId)}.`,
+      choices: [
+        { id: 'keep', label: `Keep it in ${areaName(detail.taskAreaId)}` },
+        { id: 'move', label: `Move it to ${areaName(detail.projectAreaId)}` },
+      ],
+    });
+    if (!choice) return;
+    try {
+      await api(`/api/v1/workspaces/${ws()}/projects/${project.id}/tasks`,
+        { method: 'POST', body: { taskId: chosen, areaChoice: choice } });
+      await reloadProjectDetail();
+      saved('Task added');
+    } catch (e2) { toast(e2.message, true); }
+  }
 }
 
 /**

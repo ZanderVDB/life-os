@@ -423,3 +423,21 @@ imported project can never collide.
 Both endpoints refuse when `NODE_ENV` is production. A real task filed into a
 sample project survives cleanup and simply loses the assignment, because the
 foreign key is `on delete set null`.
+
+## Projects E2.1 — remaining gaps
+
+**Task completion inside Project detail still reloads the list.** The task row
+and its completion animation are reused from Today, and reordering now moves the
+same node, but completion still calls `reloadProjectDetail()` rather than moving
+the node into the Completed section. Not claimed as same-node animation.
+
+**Overview reconciliation is partial.** A mutation applies to the server, then
+`refreshProjects()` re-reads and reconciles through `applyGroups`, so rows keep
+their identity and the header is patched rather than re-rendered — but it is
+still a full re-read rather than a local patch plus background verification.
+Correct and flicker-free at a dozen projects; the same class of debt as the
+Calendar's month caching.
+
+**Drag has no auto-scroll inside the project list** beyond what the shared drag
+system provides for the page, and no long-list virtualisation. Fine at this
+size.

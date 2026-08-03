@@ -141,8 +141,15 @@ test('modal: the mobile bottom sheet is a sheet, not a squeezed dialog', () => {
   assert.match(html, /border-radius:20px 20px 0 0/, 'the sheet is not bottom-anchored in shape');
 });
 
-test('modal: Project is named as pending rather than silently absent', () => {
-  assert.ok(taskModal.includes('Arrives with Projects'), 'Project field is missing entirely');
+test('modal: Project is named when there is one, and absent when there is not', () => {
+  // C4 showed a permanent "Project — Arrives with Projects" line, so its
+  // absence read as "not yet" instead of "forgotten". Projects exist now, so
+  // that placeholder is just an unfinished-looking field in every task editor.
+  assert.ok(!taskModal.includes('Arrives with Projects'),
+    'the coming-soon placeholder outlived the feature it was waiting for');
+  assert.match(taskModal, /\$\{project \? `<div class="m-project">/,
+    'a task in a project does not say which project');
+  assert.match(taskModal, /project = null \} = ctx/, 'the modal cannot be told its project');
 });
 
 /* ── Task card ───────────────────────────────────────────────────────── */

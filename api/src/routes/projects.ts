@@ -213,9 +213,40 @@ export function registerProjectRoutes(
     return row;
   }
 
+  /**
+   * A project's tasks, in the project's own order.
+   *
+   * `project_position`, not `position` — `position` orders a task inside its
+   * Today bucket, and reusing it would mean reordering here silently reshuffled
+   * the Today board. `created_at` breaks ties, so tasks that have never been
+   * ordered (all zero) still come back stably rather than arbitrarily.
+   */
   const tasksOf = (ws: string, id: string) => db.select().from(tasks)
     .where(and(eq(tasks.workspaceId, ws), eq(tasks.projectId, id)))
-    .orderBy(asc(tasks.position));
+    .orderBy(asc(tasks.projectPosition), asc(tasks.createdAt));
+
+  /**
+   * Gives a project's tasks sparse, distinct order values.
+   *
+   * Everything starts at 0, so the first reorder needs real numbers to insert
+   * between. Done once per project, in one statement per task, preserving the
+   * order they were already being displayed in.
+   */
+  async function ensureOrdered(tx: any, ws: string, projectId: string) {
+    const rows = await tx.select({ id: tasks.id, pos: tasks.projectPosition })
+      .from(tasks)
+      .where(and(eq(tasks.workspaceId, ws), eq(tasks.projectId, projectId)))
+      .orderBy(asc(tasks.projectPosition), asc(tasks.createdAt));
+    const distinct = new Set(rows.map((r: any) => r.pos));
+    if (rows.length === distinct.size && !distinct.has(0)) return rows;
+    let n = 0;
+    for (const r of rows) {
+      n += GAP;
+      await tx.update(tasks).set({ projectPosition: n }).where(eq(tasks.id, r.id));
+      r.pos = n;
+    }
+    return rows;
+  }
 
   /**
    * Optimistic concurrency, single-user multi-tab flavour.
@@ -248,11 +279,18 @@ export function registerProjectRoutes(
   /* ── List ──────────────────────────────────────────────────────────── */
 
   /**
-   * GET …/projects?filter=working|planning|someday|on_hold|completed|archived
+   * GET …/projects
    *
-   * One request returns everything the overview needs, already shaped. The
-   * grouping is decided here rather than in the browser so that "which group
-   * is this project in" has exactly one answer.
+   * Returns EVERY filter's view in one payload, not just the requested one.
+   *
+   * That is the fix for the filter flash. Switching filters used to await a
+   * round trip before it could render anything correct, so the sequence the
+   * user saw was: fade the old list, snap it back to full opacity when the
+   * fade finished, wait for the network, then replace. Six views over a dozen
+   * projects costs nothing to build and lets the browser switch synchronously.
+   *
+   * The grouping still happens HERE, so "which group is this project in" keeps
+   * exactly one answer rather than being reimplemented in the client.
    */
   app.get(`${base}/projects`, pre, async (req) => {
     const q = z.object({
@@ -261,7 +299,6 @@ export function registerProjectRoutes(
     }).safeParse(req.query);
     if (!q.success) throw badRequest('Unknown filter.');
     const ws = wsId(req);
-    const filter = q.data.filter;
 
     const all = await db.select().from(projects)
       .where(eq(projects.workspaceId, ws))
@@ -284,49 +321,51 @@ export function registerProjectRoutes(
 
     const today = todayIso();
     const shaped = all.map((p) => shape(p, byProject.get(p.id) ?? [], today));
-
     const live = shaped.filter((p) => !p.archivedAt);
-    const pick = (fn: (p: typeof shaped[number]) => boolean) => shaped.filter(fn);
+    const nonEmpty = (groups: any[]) => groups.filter((g) => g.projects.length > 0);
 
-    if (filter === 'archived') {
-      return { filter, groups: [{ id: 'archived', label: 'Archived', projects: pick((p) => !!p.archivedAt) }] };
-    }
-    if (filter === 'completed') {
-      const done = live.filter((p) => p.status === 'completed');
-      return { filter, groups: [{ id: 'completed', label: 'Completed', projects: done }] };
-    }
-    if (filter === 'on_hold') {
-      return { filter, groups: [{ id: 'on_hold', label: 'On hold', projects: live.filter((p) => p.status === 'on_hold') }] };
-    }
-    if (filter === 'planning') {
-      return { filter, groups: [{ id: 'planning', label: 'Planning', projects: live.filter((p) => p.status === 'planning') }] };
-    }
-    if (filter === 'someday') {
-      return { filter, groups: [{ id: 'someday', label: 'Someday', projects: live.filter((p) => p.focus === 'someday' && p.status !== 'completed') }] };
-    }
-
-    /* Working — the default. A project appears exactly ONCE: anything with a
-     * health signal is lifted into Needs attention and removed from its normal
-     * group, because seeing the same project twice makes the list untrustworthy
-     * and the count meaningless. */
+    /* Working — the default.
+     *
+     * STATUS decides the lifecycle group; focus only decides how loudly a
+     * project asks. An on-hold project focused Now stays on hold: the focus is
+     * stored exactly as chosen and surfacing is suppressed, but showing it
+     * under "Now" would contradict the status the user just set. Checking
+     * focus first is what put it there before.
+     *
+     * A project appears exactly ONCE. Anything with a health signal is lifted
+     * into Needs attention and removed from its normal group, because seeing
+     * the same project twice makes the list untrustworthy. */
     const working = live.filter((p) => p.status !== 'completed' && p.focus !== 'someday');
     const attention = working.filter((p) => p.health.length > 0);
     const attentionIds = new Set(attention.map((p) => p.id));
     const rest = working.filter((p) => !attentionIds.has(p.id));
+    const onHold = rest.filter((p) => p.status === 'on_hold');
+    const notHeld = rest.filter((p) => p.status !== 'on_hold');
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000);
     const recentlyCompleted = live.filter((p) => p.status === 'completed'
       && p.completedAt && new Date(p.completedAt) >= thirtyDaysAgo);
 
-    return {
-      filter,
-      groups: [
+    const views = {
+      working: nonEmpty([
         { id: 'attention', label: 'Needs attention', projects: attention },
-        { id: 'now', label: 'Now', projects: rest.filter((p) => p.focus === 'now') },
-        { id: 'upcoming', label: 'Upcoming', projects: rest.filter((p) => p.focus === 'upcoming') },
-        { id: 'on_hold', label: 'On hold', projects: rest.filter((p) => p.status === 'on_hold' && p.focus !== 'now' && p.focus !== 'upcoming') },
+        { id: 'now', label: 'Now', projects: notHeld.filter((p) => p.focus === 'now') },
+        { id: 'upcoming', label: 'Upcoming', projects: notHeld.filter((p) => p.focus === 'upcoming') },
+        { id: 'on_hold', label: 'On hold', projects: onHold },
         { id: 'recent', label: 'Recently completed', projects: recentlyCompleted },
-      ].filter((g) => g.projects.length > 0),
+      ]),
+      planning: nonEmpty([{ id: 'planning', label: 'Planning', projects: live.filter((p) => p.status === 'planning') }]),
+      someday: nonEmpty([{ id: 'someday', label: 'Someday', projects: live.filter((p) => p.focus === 'someday' && p.status !== 'completed') }]),
+      on_hold: nonEmpty([{ id: 'on_hold', label: 'On hold', projects: live.filter((p) => p.status === 'on_hold') }]),
+      completed: nonEmpty([{ id: 'completed', label: 'Completed', projects: live.filter((p) => p.status === 'completed') }]),
+      archived: nonEmpty([{ id: 'archived', label: 'Archived', projects: shaped.filter((p) => !!p.archivedAt) }]),
+    };
+
+    return {
+      filter: q.data.filter,
+      views,
+      // The requested filter, so an older client keeps working unchanged.
+      groups: views[q.data.filter],
       // Counts that support a decision — "is there anything behind this
       // filter?" — rather than counts for their own sake.
       available: {
@@ -398,6 +437,7 @@ export function registerProjectRoutes(
           projectId: project!.id,
           areaId: body.areaId,
           title: body.firstTask.title,
+          projectPosition: GAP,
           // Focus decides whether project context surfaces work; a task the
           // user just typed into a Now project belongs in view. Anything else
           // starts in the backlog rather than jumping onto Today.
@@ -547,6 +587,74 @@ export function registerProjectRoutes(
     // The next action cannot point outside the project.
     if (project.nextTaskId === taskId) await touch(ws, id, { nextTaskId: null });
     return { task: updated, project: shape(await load(ws, id), await tasksOf(ws, id)) };
+  });
+
+  /* ── Task order inside a project ───────────────────────────────────── */
+
+  /**
+   * POST …/projects/:id/tasks/:taskId/reorder
+   * Body: { beforeTaskId } | { afterTaskId } | { to: 'top' | 'bottom' }
+   *
+   * ONE write. The client sends where the task landed, not a whole array — an
+   * array would let a stale client overwrite an order it never saw, and would
+   * rewrite every row for a one-row move.
+   *
+   * Scoped to the project in both directions: the task must be in it, and so
+   * must the neighbour. Ordering across projects is not a thing that can be
+   * expressed here.
+   */
+  app.post(`${base}/projects/:id/tasks/:taskId/reorder`, pre, async (req) => {
+    const { id, taskId } = z.object({ id: uuid, taskId: uuid }).parse(req.params);
+    const body = z.object({
+      beforeTaskId: uuid.nullish(),
+      afterTaskId: uuid.nullish(),
+      to: z.enum(['top', 'bottom']).nullish(),
+    }).strict().safeParse(req.body ?? {});
+    if (!body.success) throw badRequest('Send { beforeTaskId } , { afterTaskId } or { to }.');
+    const ws = wsId(req);
+    await load(ws, id);
+
+    const moved = await db.transaction(async (tx) => {
+      const rows = await ensureOrdered(tx, ws, id);
+      const me = rows.find((r: any) => r.id === taskId);
+      if (!me) throw notFound('That task is not in this project.');
+
+      const siblings = rows.filter((r: any) => r.id !== taskId);
+      const first = siblings[0]?.pos ?? GAP;
+      const last = siblings[siblings.length - 1]?.pos ?? GAP;
+
+      let next: number;
+      if (body.data.to === 'top') {
+        next = first - GAP;
+      } else if (body.data.to === 'bottom') {
+        next = last + GAP;
+      } else {
+        const anchorId = body.data.beforeTaskId ?? body.data.afterTaskId;
+        const at = siblings.findIndex((r: any) => r.id === anchorId);
+        // A neighbour that is not in this project cannot be an anchor — that is
+        // how a cross-project reorder would sneak in.
+        if (at === -1) throw badRequest('That task is not in this project.');
+        const anchor = siblings[at]!.pos;
+        if (body.data.beforeTaskId) {
+          const above = siblings[at - 1]?.pos ?? anchor - 2 * GAP;
+          next = Math.round((above + anchor) / 2);
+        } else {
+          const below = siblings[at + 1]?.pos ?? anchor + 2 * GAP;
+          next = Math.round((anchor + below) / 2);
+        }
+      }
+
+      const [row] = await tx.update(tasks)
+        .set({ projectPosition: next, updatedAt: new Date() })
+        .where(and(eq(tasks.workspaceId, ws), eq(tasks.id, taskId), eq(tasks.projectId, id)))
+        .returning();
+      return row;
+    });
+
+    const list = await tasksOf(ws, id);
+    // The whole ordered list comes back, so the client can settle on the
+    // server's answer rather than trusting its own optimistic guess.
+    return { task: moved, tasks: list, project: shape(await load(ws, id), list) };
   });
 
   /* ── Area change ───────────────────────────────────────────────────── */

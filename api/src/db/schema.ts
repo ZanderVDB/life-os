@@ -114,6 +114,10 @@ export const tasks = pgTable('tasks', {
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
   estimatedMinutes: integer('estimated_minutes'),
   position: integer('position').notNull().default(0),
+  /* Order INSIDE a project — a separate ordering from `position`, which orders
+   * the task within its Today bucket. One column for both would mean dragging
+   * a task in a project silently reshuffled the Today board. */
+  projectPosition: integer('project_position').notNull().default(0),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   // Import provenance. `legacyScheduledTimeRaw` preserves an unparseable
@@ -140,6 +144,9 @@ export const tasks = pgTable('tasks', {
   // Every Project query asks for open tasks in order. Partial, because most
   // tasks belong to no project.
   byProjectOpen: index('tasks_project_open_idx').on(t.projectId, t.status, t.position)
+    .where(sql`${t.projectId} is not null`),
+  byProjectOrder: index('tasks_project_order_idx')
+    .on(t.projectId, t.status, t.projectPosition)
     .where(sql`${t.projectId} is not null`),
   legacyMap: uniqueIndex('tasks_legacy_idx').on(t.workspaceId, t.legacyId)
     .where(sql`${t.legacyId} is not null`),

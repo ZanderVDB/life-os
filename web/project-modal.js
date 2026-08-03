@@ -118,6 +118,98 @@ export function openChoiceDialog({ title, body = '', choices }) {
 }
 
 /**
+ * Pick an existing task to add to a project.
+ *
+ * A search list, because "which of my open tasks" is a question with a
+ * potentially long answer and no useful default. Each row shows the area and
+ * the bucket, since those are what make two similarly-named tasks
+ * distinguishable.
+ *
+ * @returns {Promise<string|null>} the chosen task id
+ */
+export function openTaskPicker({ title, tasks, areaName }) {
+  return new Promise((resolve) => {
+    const opener = document.activeElement;
+    const scrim = document.createElement('div');
+    scrim.className = 'modal-scrim';
+    const dlg = document.createElement('div');
+    dlg.className = 'modal modal-picker';
+    dlg.setAttribute('role', 'dialog');
+    dlg.setAttribute('aria-modal', 'true');
+    dlg.setAttribute('aria-label', title);
+
+    const row = (t) => `<button class="tp-row" data-task="${t.id}">
+      <span class="tp-title">${esc(t.title)}</span>
+      <span class="tp-meta">
+        ${t.areaId ? `<span class="pj-area">${esc(areaName(t.areaId))}</span>` : ''}
+        <span class="tp-bucket">${esc(t.bucket)}</span>
+        ${t.dueDate ? `<span class="tp-due">${esc(t.dueDate)}</span>` : ''}
+      </span></button>`;
+
+    dlg.innerHTML = `
+      <div class="m-head"><h2 class="ch-title">${esc(title)}</h2>
+        <button class="m-close" id="tp-close" aria-label="Close">&times;</button></div>
+      <div class="tp-search">
+        <input id="tp-q" class="m-input" placeholder="Search open tasks…"
+          autocomplete="off" aria-label="Search tasks">
+      </div>
+      <div class="tp-list" id="tp-list">${tasks.map(row).join('')}</div>`;
+
+    document.body.append(scrim, dlg);
+    document.body.classList.add('modal-open');
+    if (!reducedMotion()) {
+      scrim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
+      dlg.animate(RISE_IN, { duration: 220, easing: 'cubic-bezier(.2,.7,.2,1)' });
+    }
+
+    const list = dlg.querySelector('#tp-list');
+    const q = dlg.querySelector('#tp-q');
+    const wire = () => dlg.querySelectorAll('[data-task]').forEach((b) => {
+      b.onclick = () => finish(b.dataset.task);
+    });
+    wire();
+    q.oninput = () => {
+      const needle = q.value.trim().toLowerCase();
+      const shown = needle
+        ? tasks.filter((t) => t.title.toLowerCase().includes(needle))
+        : tasks;
+      list.innerHTML = shown.length ? shown.map(row).join('')
+        : `<p class="tp-none">Nothing open matches “${esc(q.value.trim())}”.</p>`;
+      wire();
+    };
+    q.focus();
+
+    let done = false;
+    function finish(value) {
+      if (done) return;
+      done = true;
+      document.removeEventListener('keydown', onKey, true);
+      document.body.classList.remove('modal-open');
+      const remove = () => { scrim.remove(); dlg.remove(); };
+      if (reducedMotion()) remove();
+      else {
+        scrim.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: 'ease-in' });
+        settle(dlg.animate(RISE_OUT, { duration: 160, easing: 'cubic-bezier(.4,0,.9,.4)' }), 160, remove);
+      }
+      if (opener?.isConnected) opener.focus();
+      resolve(value);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); return finish(null); }
+      if (e.key !== 'Tab') return;
+      const items = [...dlg.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const [first, last] = [items[0], items[items.length - 1]];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', onKey, true);
+    scrim.onclick = () => finish(null);
+    dlg.querySelector('#tp-close').onclick = () => finish(null);
+  });
+}
+
+/**
  * @param {object} ctx { project, areas, onSave, onDelete }
  */
 export function openProjectModal(ctx) {
