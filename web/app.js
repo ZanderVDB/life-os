@@ -52,7 +52,12 @@ const state = {
   me: null, prefs: {}, token: null,
   tasks: [], history: [], historyTotal: 0,
   route: 'today', areaFilter: null, menu: null, settingsTab: 'account',
+  todayResume: null,   // scroll, filter and focused card, for the way back
   habits: [], habitsLoaded: false, habitsError: null,
+  // id -> { id, title, status, focus, nextTaskId }, sent with the task list so
+  // Today can name a task's project without a second request or a copy of it
+  // on every task row.
+  projectsById: {},
 };
 
 /**
@@ -64,6 +69,7 @@ const state = {
  */
 const pj = {
   filter: 'working',
+  cameFromToday: false,   // Back should return to the board, not the overview
   data: null,        // the last successful overview payload — carries EVERY view
   detail: null,      // { project, tasks } when the detail page is open
   openId: null,
@@ -359,8 +365,9 @@ function applyPreferences() {
 async function loadTasks() {
   // Active only. History is fetched separately and paged — after the legacy
   // import it is far longer than any bucket will ever be.
-  const { tasks } = await api(`/api/v1/workspaces/${ws()}/tasks?includeCompleted=false`);
-  state.tasks = tasks;
+  const r = await api(`/api/v1/workspaces/${ws()}/tasks?includeCompleted=false`);
+  state.tasks = r.tasks;
+  state.projectsById = r.projects ?? {};
 }
 async function loadHistory(reset = false) {
   if (reset) { state.history = []; state.historyTotal = 0; }
@@ -637,6 +644,7 @@ async function loadRoute() {
       await loadTasks();
       scroll.innerHTML = todayHtml();
       wireToday();
+      restoreTodayState();
       document.getElementById('today-more')?.addEventListener('click', (e) =>
         openTodayMenu(e.currentTarget));
       renderRail();
@@ -756,6 +764,19 @@ function taskHtml(t) {
     bits.push(`<span class="tm-steps ${done === steps.length ? 'is-all' : ''}">${done}/${steps.length} steps</span>`);
   }
 
+  /* Project context.
+   *
+   * A NAME and a link, not a colour: colour alone cannot say which project,
+   * and a task that belongs to one should be able to take you there. The
+   * next-action marker is a word for the same reason. */
+  const project = t.projectId ? state.projectsById[t.projectId] : null;
+  if (project) {
+    const isNext = project.nextTaskId === t.id;
+    bits.push(`<button class="tm-project" data-open-project="${project.id}"
+      title="Open ${esc(project.title)}">${esc(project.title)}</button>`);
+    if (isNext) bits.push('<span class="tm-next">Next action</span>');
+  }
+
   return `<article class="task pri-${t.priority}" data-id="${t.id}" tabindex="0"
       aria-label="${esc(t.title)}">
     <button class="t-tick" data-act="toggle" aria-label="Mark done"></button>
@@ -777,8 +798,46 @@ const fmtDate = (iso) => new Date(`${iso}T12:00:00`)
 const fmtTime = (iso) => new Date(iso)
   .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
+/**
+ * Today -> Project, and back to the board you left.
+ *
+ * The board is a scroll position, an area filter and a focused card. Coming
+ * back to a reset version of it is the same complaint as losing your place in
+ * a list, so all three are captured on the way out.
+ */
+function openProjectFromToday(projectId, fromTaskId) {
+  state.todayResume = {
+    scrollTop: window.scrollY,
+    areaFilter: state.areaFilter,
+    taskId: fromTaskId ?? null,
+  };
+  pj.cameFromToday = true;
+  go('projects');
+  pj.openId = projectId;
+  history.replaceState(null, '', `#projects/${projectId}`);
+  renderProjectDetail(document.getElementById('main-scroll'));
+}
+
+function restoreTodayState() {
+  const back = state.todayResume;
+  if (!back) return;
+  state.todayResume = null;
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: back.scrollTop, behavior: 'instant' });
+    if (back.taskId) {
+      document.querySelector(`.task[data-id="${back.taskId}"]`)?.focus({ preventScroll: true });
+    }
+  });
+}
+
 function wireToday() {
   document.getElementById('add').onclick = () => openTask(null);
+  document.querySelectorAll('[data-open-project]').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      openProjectFromToday(b.dataset.openProject, b.closest('.task')?.dataset.id);
+    };
+  });
   document.querySelectorAll('[data-area]').forEach((el) => {
     el.onclick = () => setAreaFilter(el.dataset.area || null);
   });
@@ -806,6 +865,7 @@ function setAreaFilter(id) {
 function rebuildBucket(bucketId) {
   const drop = document.querySelector(`.drop[data-bucket="${bucketId}"]`);
   if (!drop) return;
+  // Project links are re-wired by wireToday()/wireBoard() after any rebuild.
   const list = inBucket(bucketId);
   drop.classList.toggle('is-empty', list.length === 0);
   drop.innerHTML = list.length
@@ -2608,6 +2668,13 @@ function assertOneRowPerTask(host) {
 
 /** Back restores the list the user left, not a fresh one. */
 async function closeProjectDetail(push = true) {
+  // Arrived from Today? Go back there, to the board that was left.
+  if (pj.cameFromToday) {
+    pj.cameFromToday = false;
+    pj.openId = null;
+    pj.detail = null;
+    return go('today');
+  }
   const back = pj.resume;
   pj.openId = null;
   pj.detail = null;
@@ -2652,6 +2719,17 @@ function wireProjectDetail() {
   document.getElementById('pjd-add-task')?.addEventListener('click', () => addProjectTask(p));
   document.getElementById('pjd-next-add')?.addEventListener('click', () => addProjectTask(p));
   document.getElementById('pjd-add-existing')?.addEventListener('click', () => addExistingTask(p));
+  // Completion is handled HERE rather than by the Today board wiring, which
+  // rebuilds buckets that do not exist on this page.
+  document.querySelectorAll('#pjd-tasks .task [data-act="toggle"]').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      completeProjectTask(b.closest('.task').dataset.id);
+    };
+  });
+  document.querySelectorAll('#pjd-tasks .task [data-act="open"]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); openProjectTask(b.closest('.task').dataset.id); };
+  });
   document.querySelectorAll('[data-pjd-open-task]').forEach((b) => {
     b.onclick = () => openProjectTask(b.dataset.pjdOpenTask);
   });
@@ -2955,6 +3033,84 @@ function openProjectTask(taskId) {
       await reloadProjectDetail();
     },
   });
+}
+
+/**
+ * Completes a project task, moving the SAME NODE into the Completed section.
+ *
+ * This was the standing known limitation: completion reloaded the whole detail
+ * body, so the row vanished and reappeared somewhere else and the notes field
+ * was recreated underneath whatever the user had typed.
+ *
+ * The order matters and is the same order Today uses. The row acknowledges the
+ * click first, then it moves, and only then do the numbers change — two things
+ * changing during the movement reads as a glitch.
+ */
+async function completeProjectTask(taskId) {
+  const project = pj.detail?.project;
+  const task = (pj.detail?.tasks ?? []).find((t) => t.id === taskId);
+  if (!project || !task || task._busy) return;
+  const wasDone = task.status === 'done';
+  const row = document.querySelector(`#pjd-tasks .task[data-id="${taskId}"], .pjd-tasks-done .task[data-id="${taskId}"]`);
+  task._busy = true;
+
+  // Stage 1: the card acknowledges immediately — the same class Today uses.
+  if (row && !wasDone) row.classList.add('is-completing');
+
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/tasks/${taskId}`, {
+      method: 'PATCH', body: { status: wasDone ? 'open' : 'done' },
+    });
+    Object.assign(task, r.task);
+    // Stage 2: the same node moves into (or out of) the Completed section.
+    moveTaskNodeToSection(row, !wasDone);
+    // Stage 3: the numbers, after the movement.
+    const fresh = await api(`/api/v1/workspaces/${ws()}/projects/${project.id}`);
+    if (pj.openId !== project.id) return;
+    pj.detail.project = fresh.project;
+    pj.detail.tasks = fresh.tasks;
+    updateProjectDerived();
+    patchNextActionSlot();
+  } catch (e) {
+    row?.classList.remove('is-completing');
+    toast(e.message, true);
+  } finally { task._busy = false; }
+}
+
+/**
+ * Moves one task row between the open list and the Completed section.
+ *
+ * Creates the Completed section if it is not there yet, and removes it when it
+ * empties — the same "only when it has something to say" rule the rest of the
+ * app follows. The node itself is never re-created.
+ */
+function moveTaskNodeToSection(row, toDone) {
+  if (!row) return;
+  const openHost = document.getElementById('pjd-tasks');
+  const section = openHost?.closest('.pjd-sec');
+  if (!openHost || !section) return;
+
+  let done = section.querySelector('.pjd-done');
+  if (toDone && !done) {
+    done = document.createElement('details');
+    done.className = 'pjd-done';
+    done.innerHTML = '<summary>0 finished</summary><div class="pjd-tasks pjd-tasks-done"></div>';
+    section.appendChild(done);
+  }
+  const target = toDone ? done?.querySelector('.pjd-tasks-done') : openHost;
+  if (!target) return;
+
+  flip([...openHost.querySelectorAll('.task'), ...(done?.querySelectorAll('.task') ?? [])], () => {
+    row.classList.remove('is-completing');
+    row.classList.toggle('done', toDone);
+    target.appendChild(row);            // MOVES the node — never a new one
+    openHost.classList.toggle('is-empty', !openHost.querySelector('.task'));
+    const n = done?.querySelectorAll('.task').length ?? 0;
+    const summary = done?.querySelector('summary');
+    if (summary) summary.textContent = `${n} finished`;
+    if (done && n === 0) done.remove();
+  });
+  assertOneRowPerTask(openHost);
 }
 
 /**

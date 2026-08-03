@@ -112,9 +112,9 @@ export function nextActionFor(project: ProjectRow, list: TaskRow[]) {
         && t.projectId === project.id
         && t.workspaceId === project.workspaceId)
     : undefined;
-  if (explicit) return { task: explicit, explicit: true, staleOverride: false };
+  if (explicit) return { task: explicit, explicit: true, reason: 'chosen' as const, staleOverride: false };
 
-  const inferred = [...openTasks].sort((a, b) => {
+  const sorted = [...openTasks].sort((a, b) => {
     // Due first — a date is a commitment, and priority is an opinion.
     const ad = a.dueDate ?? '9999-12-31';
     const bd = b.dueDate ?? '9999-12-31';
@@ -122,11 +122,23 @@ export function nextActionFor(project: ProjectRow, list: TaskRow[]) {
     const ap = PRIORITY_RANK[a.priority] ?? 9;
     const bp = PRIORITY_RANK[b.priority] ?? 9;
     if (ap !== bp) return ap - bp;
-    return a.position - b.position;
-  })[0];
+    // Only here does manual order decide. Reported, so the interface can say
+    // which rule actually applied rather than always claiming the first one.
+    return a.projectPosition - b.projectPosition;
+  });
+  const inferred = sorted[0];
+  let reason: 'due' | 'priority' | 'order' | null = null;
+  if (inferred) {
+    const rival = sorted[1];
+    if (!rival) reason = 'order';
+    else if ((inferred.dueDate ?? '9999-12-31') !== (rival.dueDate ?? '9999-12-31')) reason = 'due';
+    else if ((PRIORITY_RANK[inferred.priority] ?? 9) !== (PRIORITY_RANK[rival.priority] ?? 9)) reason = 'priority';
+    else reason = 'order';
+  }
   return {
     task: inferred ?? null,
     explicit: false,
+    reason,
     // The override pointed at something that is no longer eligible.
     staleOverride: !!project.nextTaskId,
   };
@@ -185,10 +197,18 @@ function shape(project: ProjectRow, list: TaskRow[], today = todayIso()) {
   return {
     ...project,
     progress: progressFor(list),
+    // The same facts the task row carries. A next action that reported less
+    // than the list did made the same Task look like a lesser object.
     nextAction: next.task
       ? {
-        id: next.task.id, title: next.task.title, dueDate: next.task.dueDate,
-        priority: next.task.priority, explicit: next.explicit,
+        id: next.task.id,
+        title: next.task.title,
+        dueDate: next.task.dueDate,
+        priority: next.task.priority,
+        bucket: next.task.bucket,
+        scheduledAt: next.task.scheduledAt,
+        explicit: next.explicit,
+        reason: next.reason,
       }
       : null,
     nextActionOverrideStale: next.staleOverride && !next.explicit,

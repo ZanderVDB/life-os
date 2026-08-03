@@ -7,7 +7,7 @@
  * task management is impossible on a phone in the legacy app.
  */
 import type { AppInstance, Guards } from '../types.js';
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import { tasks, taskSteps, taskActivity, areas, projects, BUCKETS, PRIORITIES } from '../db/schema.js';
@@ -121,7 +121,29 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
       const list = byTask.get(s.taskId) ?? [];
       list.push(s); byTask.set(s.taskId, list);
     }
-    return { tasks: rows.map((t) => ({ ...t, steps: byTask.get(t.id) ?? [] })), total };
+    /* The projects these tasks belong to, so Today can name them.
+     *
+     * A compact map rather than an embedded copy on each task: the task row is
+     * still one Task record, and duplicating project fields onto it is how a
+     * second source of truth starts. It is also one query for the whole board
+     * rather than one per task.
+     *
+     * `nextTaskId` rides along so Today can mark a task that is its project's
+     * next action without asking again per row. */
+    const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean))] as string[];
+    const projectRows = projectIds.length
+      ? await db.select({
+        id: projects.id, title: projects.title, status: projects.status,
+        focus: projects.focus, nextTaskId: projects.nextTaskId,
+      }).from(projects)
+        .where(and(eq(projects.workspaceId, wsId), inArray(projects.id, projectIds)))
+      : [];
+
+    return {
+      tasks: rows.map((t) => ({ ...t, steps: byTask.get(t.id) ?? [] })),
+      total,
+      projects: Object.fromEntries(projectRows.map((p) => [p.id, p])),
+    };
   });
 
   // ── create ──────────────────────────────────────────────────────────

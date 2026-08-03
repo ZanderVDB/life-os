@@ -497,3 +497,58 @@ unreliable trains people to ignore signals.
 
 A project with a health signal is lifted into Needs attention and **removed from
 its normal group**, so it appears exactly once.
+
+---
+
+## Tasks versus Steps (locked in E2.3)
+
+> **A Project Task is one Task record shown in several places. Next action is
+> prominence applied to that Task, not a different kind of Task.**
+
+The same record appears on Today, in Project detail, in the Next action slot and
+in Plan week, and every one of them shows the same id, title, steps, notes,
+priority, due date, bucket, area, project, schedule and completion state.
+Nothing copies task fields anywhere.
+
+| | Project Task | Task Step |
+|---|---|---|
+| A meaningful action toward the outcome | yes | no — a checklist item inside one task |
+| Can be scheduled, prioritised, surfaced | yes | no |
+| Can belong to a project | yes | never independently |
+| Appears on Today / Calendar | yes | no — inherits its parent's context |
+| Can be the next action | yes | no |
+
+*Launch WebAnchor website* has Project Tasks — purchase the domain, finalise the
+homepage, configure analytics. "Purchase the domain" has Steps — compare
+registrars, confirm billing, buy it.
+
+**Progress counts Tasks, never Steps.** One task with ten completed steps is
+still one open task, and the project is no further along until the task itself
+is done. Letting steps count would let a project reach 90% without finishing
+anything.
+
+## Next action, as built
+
+It reports **which rule chose it**, because a rule the user cannot predict is a
+rule they will not trust:
+
+- *Chosen explicitly* — a user override, valid until the task is done, removed,
+  cancelled, deleted or reassigned.
+- *From its due date* · *From its priority* · *From the order below* — which of
+  the three inference steps actually decided.
+
+The slot shows what the task row shows — due date, priority, bucket, schedule,
+step progress — because a next action that says less than the list does makes
+the same Task look like a lesser object. Opening it opens the shared task
+editor, not a reduced one.
+
+## Project context on Today
+
+A task that belongs to a project shows the **project name as a link** and, where
+it applies, a **Next action** marker. Both are words; neither is a colour, since
+colour cannot say *which* project. Opening the name goes to the project and
+coming back restores the board's scroll position, area filter and focused card.
+
+Visual clustering of a project's tasks under a header on Today is deliberately
+**not** built — see technical-debt.md for the drag consequences that decision
+turns on.

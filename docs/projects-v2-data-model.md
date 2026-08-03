@@ -171,3 +171,22 @@ whether the row changed since this tab last saw it.
 
 Archive and restore are **idempotent**, so a double click cannot overwrite the
 remembered pre-archive status.
+
+## E2.3 — what the task list carries
+
+`GET …/tasks` returns an extra `projects` map: `{ id: { id, title, status,
+focus, nextTaskId } }`, covering only the projects the returned tasks actually
+belong to.
+
+A **map, not embedded fields**. Copying `projectTitle` onto every task row would
+make the task record a second place project data lives, and the two would
+disagree the first time a project was renamed. `nextTaskId` rides along so Today
+can mark a project's next action without a query per row.
+
+`nextAction` on a project now reports `reason`: `chosen | due | priority |
+order` — which of the four rules actually decided — plus `bucket` and
+`scheduledAt`, so the slot can show what the task row shows.
+
+`tasks.project_position` remains isolated from `tasks.position`. Verified:
+completing and reopening a task disturbs neither ordering, and re-adding a
+removed task does not reshuffle the tasks that never moved.

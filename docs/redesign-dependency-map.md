@@ -250,3 +250,14 @@ graph TD
   [projects-v2-future-architecture.md](projects-v2-future-architecture.md).
 - The one coupling to watch: **Area**. A project owns an area and its tasks
   inherit it, so any future change to the Area model has to consider Projects.
+
+## E2.3 — Today now depends on Projects (one way)
+
+Today reads a project's **name** and **next-action pointer** to label a task. It
+does not read project status, focus or progress, and Projects does not read
+anything from Today. If Projects were removed the task rows would simply lose a
+label.
+
+The one thing to watch: **Today project clustering** would make Today's drop
+zone group-aware, which is a Today architecture change. It is deferred, and the
+reason is in technical-debt.md.

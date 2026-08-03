@@ -289,8 +289,14 @@ export function projectDetailHeaderHtml(p, areaName) {
 }
 
 /** Why this is the next action. Two modes, said in three words. */
+const WHY = {
+  chosen: 'Chosen explicitly',
+  due: 'From its due date',
+  priority: 'From its priority',
+  order: 'From the order below',
+};
 export const nextActionWhy = (p) => (p.nextAction
-  ? (p.nextAction.explicit ? 'Chosen explicitly' : 'From due date and priority')
+  ? (WHY[p.nextAction.reason] ?? 'From due date and priority')
   : '');
 
 /**
@@ -311,10 +317,21 @@ export function nextActionSlotHtml(p) {
       <button type="button" class="btn btn-sm" id="pjd-next-add">Add a task</button>
       <button type="button" class="btn btn-ghost btn-sm" id="pjd-next-choose">Choose</button>`;
   }
+  // The same facts the row in the list below shows. A next action that told
+  // you less than the task list did was the same Task pretending to be a
+  // lesser thing.
+  // Steps ride on the task record in the list, so the slot reads them from
+  // there rather than carrying its own copy.
+  const steps = next.steps ?? [];
+  const doneSteps = steps.filter((x) => x.completed).length;
   return `<button type="button" class="pjd-next-open" data-pjd-open-task="${next.id}">
       <span class="pjd-next-t">${esc(next.title)}</span>
       <span class="pjd-next-meta">
         ${next.dueDate ? `<span class="pjd-next-due">${esc(fmtDate(next.dueDate))}</span>` : ''}
+        ${next.scheduledAt ? '<span class="pjd-next-sched">Scheduled</span>' : ''}
+        ${steps.length ? `<span class="pjd-next-steps">${doneSteps} of ${steps.length} steps</span>` : ''}
+        ${next.bucket && next.bucket !== 'future'
+    ? `<span class="pjd-next-bucket">${esc(next.bucket)}</span>` : ''}
         <span class="pjd-next-pri pri-${esc(next.priority)}">${esc(next.priority)}</span>
       </span>
     </button>

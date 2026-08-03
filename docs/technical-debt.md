@@ -464,3 +464,23 @@ next-action and reorder writes leave exactly two task records.
 Remaining: the drag still cannot survive a rebuild *usefully* — it abandons the
 gesture rather than re-deriving the drop target against the new list. Correct
 and safe; just not clever.
+
+## Today project grouping — badge first, clusters deferred (E2.3)
+
+E2.3 shipped the smaller first version the brief allowed: every Today task that
+belongs to a project shows the **project name as a link** plus a **Next action**
+marker, rather than tasks being visually clustered under a project header.
+
+The reason is drag. A cluster header is a non-task node inside a `.drop` zone,
+and the drag placeholder is inserted *relative to task siblings* — so a header
+can end up on the wrong side of the insertion point. Worse, grouping reorders
+tasks visually by project while `position` still orders them for real, so
+"drop between these two" stops meaning what it looks like.
+
+Doing it properly needs the drop zone to understand groups: insertion indices
+derived from the grouped order, and a stored order that agrees with the visual
+one. That is a Today architecture change, not a Projects one, and it belongs in
+a Today phase rather than being forced in here.
+
+The badge covers the actual need — knowing which project a task belongs to and
+getting there in one click — at none of that risk.

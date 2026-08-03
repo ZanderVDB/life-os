@@ -1128,3 +1128,34 @@ unreliable), and every Boards/Library/AI placeholder.
 
 525 tests passing. Calendar unchanged, Google read-only, Legacy untouched, every
 existing task still projectless.
+
+## Phase E2.3 — task identity and Today integration (2026-08-03)
+
+Finished the relationship between Projects, Project Tasks, Next actions and
+Today. The rule that drove it: **one Task record shown in several places**;
+next action is prominence, not a different kind of task.
+
+Closed the standing known limitation. Completing a task in Project detail used
+to reload the whole detail body — so the row vanished and reappeared, and the
+notes field was recreated underneath whatever the user had typed. It now moves
+the SAME node into the Completed section, verified in a browser: same node
+through complete and reopen, unsaved notes text intact, empty Completed section
+removed, no duplicates, scroll unchanged.
+
+Today now names a task's project as a link with a Next action marker, and
+returning restores scroll, area filter and focused card. The task list endpoint
+carries a compact project map rather than copying project fields onto every
+task — the row is still one Task record.
+
+Next action reports which rule chose it (chosen / due date / priority / order)
+and shows what the task row shows, since a next action saying less than the list
+made the same Task look like a lesser object.
+
+Today project CLUSTERS were deliberately not built. A cluster header is a
+non-task node inside the drop zone, and the drag placeholder is inserted
+relative to task siblings, so a header can land on the wrong side of the
+insertion point — and grouping reorders tasks visually while position still
+orders them for real. The badge covers the actual need at none of that risk.
+Recorded in technical-debt.md.
+
+581 tests passing.

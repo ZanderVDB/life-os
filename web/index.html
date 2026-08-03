@@ -2194,6 +2194,20 @@ body:has(.pj-head) .rail{display:none}
 
 /* The project a task belongs to, named. Replaces the "arrives with Projects"
    placeholder that sat in every task editor. */
+/* ── Project context on a Today card (E2.3) ─────────────────────────────
+   A NAME and a link, never a colour: colour cannot say WHICH project, and a
+   task that belongs to one should be able to take you there. It sits in the
+   existing meta line, so adding it does not move the title. */
+.tm-project{font-size:11px;color:var(--accent);max-width:220px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;transition:color var(--t-hover)}
+.tm-project:hover{color:var(--text);text-decoration:underline}
+.tm-next{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--accent);background:var(--accent-soft);border-radius:5px;padding:1px 6px}
+
+/* Next action carries what the task row carries. */
+.pjd-next-sched,.pjd-next-steps,.pjd-next-bucket{font-size:10.5px;color:var(--muted);
+  background:var(--surface-2);border-radius:5px;padding:2px 7px;text-transform:capitalize}
+
 .m-project{display:flex;align-items:center;gap:10px;font-size:11.5px;
   padding:10px 0 2px;border-top:1px solid var(--hairline);margin-top:4px}
 .m-project-lbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;

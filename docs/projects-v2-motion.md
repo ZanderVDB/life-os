@@ -164,3 +164,18 @@ unreliable version because the column exists is how a list becomes untrustworthy
 that animation — but the "move into the Completed subsection with the same node"
 choreography is not built; the detail page reloads its task list. Recorded in
 technical-debt.md.
+
+## E2.3 — completion, verified
+
+Task completion in Project detail moves the **same node** into the Completed
+section rather than reloading the list. Order: the row acknowledges the click
+(`is-completing`, the class Today already uses), then it moves inside a FLIP,
+and only then do the open count, progress and next action update — two things
+changing during the movement reads as a glitch.
+
+Measured in a browser across complete → reopen: same node throughout, unsaved
+notes text intact, the Completed section created on demand and removed when it
+empties, no duplicate rows, scroll unchanged.
+
+Project context on Today is added inside the existing meta line, so a task
+gaining a project label never moves its own title.
