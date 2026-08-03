@@ -1199,36 +1199,75 @@ function openTask(id, prefillTitle = '') {
         saved('Deleted');
       } catch (e) { toast(e.message, true); }
     },
-    steps: {
-      add: async (title) => {
-        const r = await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps`,
-          { method: 'POST', body: { title } });
-        t.steps = [...(t.steps ?? []), r.step ?? { id: r.id, title, completed: false }];
-        ctl.close(true); patchCard(t.id); openTask(t.id);
-      },
-      toggle: async (sid, completed) => {
-        const s = t.steps.find((x) => x.id === sid);
-        if (s) s.completed = completed;
-        ctl.close(true); patchCard(t.id); openTask(t.id);
-        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps/${sid}`,
-          { method: 'PATCH', body: { completed } });
-        saved();
-      },
-      rename: async (sid, title) => {
-        const s = t.steps.find((x) => x.id === sid);
-        if (s) s.title = title;
-        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps/${sid}`,
-          { method: 'PATCH', body: { title } });
-        saved();
-      },
-      remove: async (sid) => {
-        t.steps = t.steps.filter((x) => x.id !== sid);
-        ctl.close(true); patchCard(t.id); openTask(t.id);
-        await api(`/api/v1/workspaces/${ws()}/tasks/${t.id}/steps/${sid}`, { method: 'DELETE' });
-        saved();
-      },
-    },
+    steps: t ? taskStepsCtx(t, () => patchCard(t.id)) : null,
   });
+}
+
+/**
+ * Step handlers for a task editor, built once for every context that can open
+ * one.
+ *
+ * They used to be written inline in `openTask`, and ONLY there. Both Projects
+ * call sites passed no `steps` at all, so `ctx.steps.add(...)` threw
+ * "Cannot read properties of undefined" into an unhandled rejection — the step
+ * silently never appeared and nothing was logged where a user would see it.
+ * Steps were completely dead in Projects. A factory means the next caller
+ * cannot forget.
+ *
+ * `onChanged` repaints whatever surface the editor was opened from — a Today
+ * card, a project row — so the `2/4 steps` chip stays true. The editor repaints
+ * its own list; it no longer closes and reopens itself to show one new row.
+ */
+function taskStepsCtx(task, onChanged = () => {}) {
+  const url = (sid) => `/api/v1/workspaces/${ws()}/tasks/${task.id}/steps`
+    + (sid ? `/${sid}` : '');
+  return {
+    add: async (title) => {
+      const r = await api(url(), { method: 'POST', body: { title } });
+      task.steps = [...(task.steps ?? []), r.step];
+      onChanged();
+      saved('Step added');
+    },
+    toggle: async (sid, completed) => {
+      const s = (task.steps ?? []).find((x) => x.id === sid);
+      const before = s?.completed;
+      if (s) s.completed = completed;
+      onChanged();
+      try {
+        await api(url(sid), { method: 'PATCH', body: { completed } });
+      } catch (e) {
+        if (s) s.completed = before;          // put it back, visibly
+        onChanged();
+        throw e;
+      }
+    },
+    rename: async (sid, title) => {
+      const s = (task.steps ?? []).find((x) => x.id === sid);
+      const before = s?.title;
+      if (s) s.title = title;
+      try {
+        await api(url(sid), { method: 'PATCH', body: { title } });
+        saved();
+      } catch (e) {
+        if (s) s.title = before;
+        onChanged();
+        throw e;
+      }
+    },
+    remove: async (sid) => {
+      const before = task.steps ?? [];
+      task.steps = before.filter((x) => x.id !== sid);
+      onChanged();
+      try {
+        await api(url(sid), { method: 'DELETE' });
+        saved('Step removed');
+      } catch (e) {
+        task.steps = before;
+        onChanged();
+        throw e;
+      }
+    },
+  };
 }
 
 /* ── Right rail ──────────────────────────────────────────────────────────
@@ -2058,9 +2097,21 @@ async function toggleHabitOn(habitId, day) {
   h._busy = true;
 
   const before = { todayCount: h.todayCount, completedToday: h.completedToday };
-  h.completedToday = !wasDone;
-  h.todayCount = wasDone ? 0 : h.targetCount;
-  renderCalendarRail();
+  /*
+   * Predict what the SERVER will do, not what a single-count habit would do.
+   *
+   * This used to set the count straight to the target, so ticking "Water: 3
+   * glasses" at 0/3 showed 3/3 and done — then the response came back saying
+   * 1/3 and the row snapped backwards. That was the second of the two jumps.
+   *
+   * `check` increments by one; `uncheck` removes the day's entry entirely.
+   * Done means reaching the target, which for a 3-glass habit takes three
+   * presses and should look like it does.
+   */
+  const target = Math.max(1, h.targetCount ?? 1);
+  h.todayCount = wasDone ? 0 : Math.min(target, (h.todayCount ?? 0) + 1);
+  h.completedToday = !wasDone && h.todayCount >= target;
+  patchCalHabitRow(habitId);
 
   try {
     const verb = wasDone ? 'uncheck' : 'check';
@@ -2068,13 +2119,48 @@ async function toggleHabitOn(habitId, day) {
       { method: 'POST', body: { date: day } });
     h.todayCount = r.completedCount;
     h.completedToday = r.completed;
+    patchCalHabitRow(habitId);
     patchHabitCell(day);
-    renderCalendarRail();
   } catch (e) {
     Object.assign(h, before);
-    renderCalendarRail();
+    patchCalHabitRow(habitId);
     toast(e.message, true);
   } finally { h._busy = false; }
+}
+
+/**
+ * Updates ONE habit row, in place.
+ *
+ * This used to call `renderCalendarRail()`, twice per tick — once optimistically
+ * and once on the response — and that rebuilds `rail.innerHTML` wholesale.
+ *
+ * Two things followed, and both were visible. The rail visibly restaged itself
+ * on every tick. And ticking three habits quickly only registered one or two:
+ * the second click landed on a node that a re-render had already replaced, or
+ * in the gap between the `innerHTML` swap and the loop that reassigns the
+ * handlers — where the button exists but does nothing.
+ *
+ * Nothing is destroyed here, so a click always lands on a live, wired node and
+ * rows can be ticked as fast as they can be pressed.
+ */
+function patchCalHabitRow(habitId) {
+  const dh = cal.dayHabits;
+  const h = (dh?.habits ?? []).find((x) => x.id === habitId);
+  const row = document.querySelector(`.cs-habit-row[data-habit="${habitId}"]`);
+  if (!h || !row) return;
+
+  row.classList.toggle('is-done', !!h.completedToday);
+  row.setAttribute('aria-pressed', h.completedToday ? 'true' : 'false');
+  row.setAttribute('aria-label', `${h.name}${h.completedToday ? ', done' : ', not done'}`);
+  const n = row.querySelector('.cs-habit-n');
+  if (n) n.textContent = `${h.todayCount}/${h.targetCount}`;
+
+  // The card's own n/m, recounted from the same list the rows are drawn from.
+  const count = document.querySelector('.cs-habits .cs-habit-count');
+  if (count) {
+    const due = (dh.habits ?? []).filter((x) => x.dueToday);
+    count.textContent = `${due.filter((x) => x.completedToday).length}/${due.length}`;
+  }
 }
 
 /**
@@ -3182,7 +3268,43 @@ function openProjectTask(taskId) {
     // edits are carried into the completion and the Completed section updates
     // in place rather than on the next visit.
     onToggle: (dirty) => completeProjectTask(task.id, dirty),
+    // Steps work here. They did not before: this call site passed no `steps`
+    // at all, so every add, tick and rename threw into a swallowed rejection.
+    steps: taskStepsCtx(task, () => patchProjectTaskRow(task.id)),
   });
+}
+
+/**
+ * Repaints one project task row from the record behind it.
+ *
+ * The row markup is `taskHtml`, the same function Today uses, so the `2/4
+ * steps` chip updates here exactly as it does there. Only this row is touched —
+ * re-rendering the list would drop the drag references and the Completed
+ * section along with it.
+ */
+function patchProjectTaskRow(taskId) {
+  const task = (pj.detail?.tasks ?? []).find((t) => t.id === taskId);
+  const row = document.querySelector(
+    `#pjd-tasks .task[data-id="${taskId}"], .pjd-tasks-done .task[data-id="${taskId}"]`,
+  );
+  if (!task || !row) return;
+  row.outerHTML = taskHtml(task);
+  // The replacement is a new node, so it needs the project's wiring — not the
+  // board's. See wireProjectTaskRows.
+  const project = pj.detail?.project;
+  if (project) wireProjectTaskRows(project);
+
+  // The slot's step counts come from the server. Recompute them locally for
+  // the one task that just changed, so the slot and the row agree before the
+  // next read rather than after it.
+  const next = project?.nextAction;
+  if (next?.id === taskId) {
+    const steps = task.steps ?? [];
+    next.steps = steps.length
+      ? { total: steps.length, done: steps.filter((s) => s.completed).length }
+      : null;
+  }
+  patchNextActionSlot();
 }
 
 /**

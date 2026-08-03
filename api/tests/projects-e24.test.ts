@@ -410,3 +410,100 @@ test('sample: only tasks with a real reason are on Today', () => {
   assert.ok(!/bucket: 'today'/.test(review),
     'the "nothing surfaces" demonstration project is back on Today');
 });
+
+/* ── E2.4a  Steps were dead in Projects, and lossy in Today ──────────────
+ *
+ * Reported as "steps don't work at all". Two separate faults:
+ *
+ *   1. Both Projects call sites passed no `ctx.steps`, so every add, tick and
+ *      rename threw "Cannot read properties of undefined" into an unhandled
+ *      rejection. Nothing appeared, nothing was logged where a user could see
+ *      it, and the block looked functional.
+ *   2. On Today the only way to commit a step was pressing Enter. Nothing said
+ *      so, and typing one then clicking Save discarded it silently.
+ */
+
+test('steps: every editor that renders the block supplies handlers for it', () => {
+  // One factory, so a new caller cannot forget the way Projects did.
+  assert.match(appCode, /function taskStepsCtx\(task, onChanged/,
+    'the step handlers are inline again, per call site');
+
+  const today = body(appCode, 'function openTask(id, prefillTitle = \'\')');
+  assert.match(today, /steps: t \? taskStepsCtx\(t,/, 'Today lost its step handlers');
+
+  const project = body(appCode, 'function openProjectTask(taskId)');
+  assert.match(project, /steps: taskStepsCtx\(task,/,
+    'Projects still opens the editor with no step handlers — the original bug');
+});
+
+test('steps: a missing handler fails loudly rather than doing nothing', () => {
+  assert.match(modalCode, /throw new Error\('openTaskModal: a task editor with steps needs ctx\.steps\.'\)/,
+    'a wiring mistake is silent again, which is what hid this for three phases');
+});
+
+test('steps: Enter, the Add button and losing focus all commit', () => {
+  assert.match(modalCode, /id="m-step-add"/, 'there is no visible way to add a step');
+  const fn = body(modalCode, 'const commitStep = async () =>');
+  assert.match(fn, /newStep\.value = ''/);
+  assert.match(fn, /newStep\.value = v;/, 'a failed add throws the typed text away');
+  // All three entry points reach the same commit.
+  assert.match(modalCode, /dlg\.querySelector\('#m-step-add'\)\.onclick = \(\) => commitStep\(\)/);
+  assert.match(modalCode, /newStep\.addEventListener\('blur', \(\) => commitStep\(\)\)/);
+});
+
+test('steps: saving or completing flushes a half-typed step', () => {
+  // Blur ordering differs between mouse, keyboard and touch, so saving must not
+  // depend on the field having been blurred first.
+  assert.match(modalCode, /let flushStep = async \(\) => \{\};/);
+  const save = body(modalCode, "dlg.querySelector('#m-save').onclick = async () =>");
+  assert.match(save, /await flushStep\(\);/, 'Save can still discard a typed step');
+  const toggle = body(modalCode, "dlg.querySelector('#m-toggle').onclick = async () =>");
+  assert.match(toggle, /await flushStep\(\);/, 'completing can still discard a typed step');
+});
+
+test('steps: closing on top of a typed step asks first', () => {
+  assert.match(modalCode, /\|\| !!dlg\.querySelector\('#m-step-new'\)\?\.value\.trim\(\)/,
+    'a half-typed step is not counted as unsaved work');
+});
+
+test('steps: the editor repaints its own list instead of reopening itself', () => {
+  assert.match(modalCode, /const paintSteps = \(\) =>/, 'there is no in-place repaint');
+  // The old approach closed and reopened the whole modal for one new row.
+  assert.ok(!/ctl\.close\(true\); patchCard\(t\.id\); openTask\(t\.id\)/.test(appCode),
+    'the editor closes and reopens itself again on every step change');
+});
+
+/* ── E2.4a  Habit ticking ────────────────────────────────────────────── */
+
+test('habits: a tick patches one row and never rebuilds the rail', () => {
+  const fn = body(appCode, 'async function toggleHabitOn(habitId, day)');
+  // renderCalendarRail replaces rail.innerHTML wholesale. It ran twice per
+  // tick, so a second click could land on a replaced or not-yet-wired node —
+  // which is why ticking three habits quickly only registered one or two.
+  assert.ok(!/renderCalendarRail\(\)/.test(fn),
+    'the rail is rebuilt on every tick again, which drops rapid clicks');
+  assert.match(fn, /patchCalHabitRow\(habitId\)/, 'the row is not patched');
+  assert.match(appCode, /function patchCalHabitRow\(habitId\)/);
+});
+
+test('habits: the optimistic count predicts what the endpoint actually does', () => {
+  const fn = body(appCode, 'async function toggleHabitOn(habitId, day)');
+  // `check` increments by one. Jumping to the target showed 3/3 on a 3-glass
+  // habit and then snapped back to 1/3 — the second of the two visible jumps.
+  assert.match(fn, /Math\.min\(target, \(h\.todayCount \?\? 0\) \+ 1\)/,
+    'the optimistic count jumps to the target again');
+  assert.match(fn, /h\.completedToday = !wasDone && h\.todayCount >= target/,
+    'a partial count is being shown as done');
+  assert.ok(!/h\.todayCount = wasDone \? 0 : h\.targetCount;/.test(fn));
+});
+
+test('habits: the tick is the same checkmark the rest of the app draws', () => {
+  // It was two crossing CSS gradients, which met off-centre and read as a
+  // leaning crucifix rather than a tick.
+  assert.match(calCode, /m4\.5 10\.5 3\.5 3\.5 7\.5-8/,
+    'the habit tick does not use the shared checkmark glyph');
+  const css = readFileSync(join(here, '..', '..', 'web', 'index.html'), 'utf8');
+  const rule = css.slice(css.indexOf('.cs-habit-tick{'), css.indexOf('.cs-habit-n{'));
+  assert.ok(!/linear-gradient/.test(rule), 'the gradient cross is back');
+  assert.match(rule, /color:transparent/, 'the glyph is not hidden until done');
+});

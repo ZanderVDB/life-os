@@ -112,6 +112,7 @@ export function openTaskModal(ctx) {
         <div class="m-steps" id="m-steps">${steps.map(stepRow).join('')}</div>
         <div class="m-step-add">
           <input id="m-step-new" class="m-input" placeholder="Add a step…">
+          <button type="button" class="btn btn-sm" id="m-step-add">Add</button>
         </div>
       </div>` : ''}
 
@@ -154,7 +155,14 @@ export function openTaskModal(ctx) {
     notes: dlg.querySelector('#m-notes').value || null,
   });
   const initial = JSON.stringify(read());
-  const isDirty = () => JSON.stringify(read()) !== initial;
+  /**
+   * Whether there is anything to lose.
+   *
+   * Includes a half-typed step: it is text the user entered into a visible
+   * field, so closing on top of it must ask, not shrug.
+   */
+  const isDirty = () => JSON.stringify(read()) !== initial
+    || !!dlg.querySelector('#m-step-new')?.value.trim();
 
   /* ── Close, with focus returned to whatever opened it ─────────────── */
   let closed = false;
@@ -220,7 +228,19 @@ export function openTaskModal(ctx) {
   const state = dlg.querySelector('#m-save-state');
   const saying = (msg) => { state.textContent = msg; };
 
+  /**
+   * Commits a half-typed step, if there is one.
+   *
+   * Assigned by the steps block below; a no-op for a task that has none yet.
+   * Saving must not depend on the new-step field having been blurred first —
+   * blur ordering differs between a mouse click, a keyboard Enter and a tap,
+   * and "your step survives only if you clicked in the right order" is not a
+   * rule anyone should have to know.
+   */
+  let flushStep = async () => {};
+
   dlg.querySelector('#m-save').onclick = async () => {
+    await flushStep();
     const body = read();
     if (!body.title) { title.focus(); saying('A title is needed'); return; }
     saying('Saving…');
@@ -252,6 +272,7 @@ export function openTaskModal(ctx) {
       busy = true;
       saying('Saving…');
       try {
+        await flushStep();               // a typed step is kept, like a note
         await ctx.onToggle(isDirty() ? read() : null);
         close(true);
       } catch (e) {
@@ -272,32 +293,96 @@ export function openTaskModal(ctx) {
       close(true);
     };
 
+    /* ── Steps ──────────────────────────────────────────────────────────
+     *
+     * A caller that renders the steps block must supply handlers for it. This
+     * was not enforced, and both Projects call sites passed nothing — so every
+     * step action threw "Cannot read properties of undefined" into an
+     * unhandled rejection. Steps looked present and were entirely dead.
+     *
+     * Failing loudly here is the point: a missing handler is a wiring mistake,
+     * and a silent no-op is the one outcome that hides it. */
+    const stepsBox = dlg.querySelector('#m-steps');
     const newStep = dlg.querySelector('#m-step-new');
-    newStep.addEventListener('keydown', async (e) => {
-      if (e.key !== 'Enter') return;
-      const v = newStep.value.trim();
-      if (!v) return;
-      newStep.value = '';
-      await ctx.steps.add(v);
-    });
+    if (!ctx.steps) {
+      throw new Error('openTaskModal: a task editor with steps needs ctx.steps.');
+    }
 
-    dlg.querySelector('#m-steps').addEventListener('click', async (e) => {
+    /** Repaints the list and its count from the record the handlers mutate. */
+    const paintSteps = () => {
+      const list = ctx.task?.steps ?? [];
+      stepsBox.innerHTML = list.map(stepRow).join('');
+      const head = dlg.querySelector('.m-steps-head');
+      let count = head.querySelector('.m-steps-count');
+      if (!list.length) { count?.remove(); return; }
+      if (!count) {
+        count = document.createElement('span');
+        count.className = 'm-steps-count';
+        head.appendChild(count);
+      }
+      count.textContent = `${list.filter((x) => x.completed).length}/${list.length}`;
+    };
+
+    /**
+     * Commits whatever is in the new-step box.
+     *
+     * Called from Enter, from the Add button, AND when the box loses focus —
+     * because the only way to add a step used to be pressing Enter, nothing
+     * said so, and typing a step then clicking Save threw the text away
+     * without a word. Text a user typed into a visible field is not a draft to
+     * be discarded on the way out.
+     */
+    let adding = false;
+    const commitStep = async () => {
+      const v = newStep.value.trim();
+      if (!v || adding) return;
+      adding = true;
+      newStep.value = '';
+      try {
+        await ctx.steps.add(v);
+        paintSteps();
+      } catch (e) {
+        newStep.value = v;                 // give it back rather than lose it
+        saying(e.message);
+      } finally { adding = false; }
+    };
+
+    flushStep = commitStep;
+
+    newStep.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();                  // never submit the form instead
+      commitStep();
+    });
+    dlg.querySelector('#m-step-add').onclick = () => commitStep();
+    // Leaving the field commits too. `close()` reads the box first, below.
+    newStep.addEventListener('blur', () => commitStep());
+
+    stepsBox.addEventListener('click', async (e) => {
       const row = e.target.closest('[data-step]');
       if (!row) return;
       const id = row.dataset.step;
-      if (e.target.closest('[data-step-del]')) return ctx.steps.remove(id);
-      if (e.target.closest('.ms-tick')) return ctx.steps.toggle(id, !row.classList.contains('is-done'));
+      try {
+        if (e.target.closest('[data-step-del]')) await ctx.steps.remove(id);
+        else if (e.target.closest('.ms-tick')) {
+          await ctx.steps.toggle(id, !row.classList.contains('is-done'));
+        } else return;
+        paintSteps();
+      } catch (err) { saying(err.message); paintSteps(); }
     });
-    dlg.querySelector('#m-steps').addEventListener('keydown', (e) => {
+    stepsBox.addEventListener('keydown', (e) => {
       const input = e.target.closest('[data-step-name]');
       if (input && e.key === 'Enter') { e.preventDefault(); input.blur(); }
     });
-    dlg.querySelector('#m-steps').addEventListener('blur', (e) => {
+    stepsBox.addEventListener('blur', async (e) => {
       const input = e.target.closest?.('[data-step-name]');
       if (!input) return;
       const v = input.value.trim();
-      if (v && v !== input.dataset.original) ctx.steps.rename(input.closest('[data-step]').dataset.step, v);
-      else input.value = input.dataset.original;
+      if (!v || v === input.dataset.original) { input.value = input.dataset.original; return; }
+      try {
+        await ctx.steps.rename(input.closest('[data-step]').dataset.step, v);
+        input.dataset.original = v;
+      } catch (err) { input.value = input.dataset.original; saying(err.message); }
     }, true);
   }
 

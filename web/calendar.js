@@ -971,7 +971,10 @@ function habitCardHtml(day) {
       data-habit="${h.id}" data-habit-day="${day}"
       aria-pressed="${h.completedToday ? 'true' : 'false'}"
       aria-label="${esc(h.name)}${h.completedToday ? ', done' : ', not done'}">
-      <i class="cs-habit-tick" aria-hidden="true"></i>
+      <span class="cs-habit-tick" aria-hidden="true">
+        <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+          stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg></span>
       <b>${esc(h.name)}</b>
       ${h.targetCount > 1 ? `<span class="cs-habit-n">${h.todayCount}/${h.targetCount}</span>` : ''}
     </button>`).join('')}

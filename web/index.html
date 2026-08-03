@@ -601,7 +601,11 @@ body.modal-open{overflow:hidden}
 .ms-del{width:26px;height:26px;border-radius:7px;color:var(--muted);font-size:16px;
   display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
 .ms-del:hover{background:rgba(255,100,110,.12);color:var(--danger)}
-.m-step-add .m-input{font-size:13px}
+/* The Add button is not decoration. Enter was the only way to commit a step,
+   nothing said so, and typing one then clicking Save discarded it silently. */
+.m-step-add{display:flex;gap:8px;align-items:center}
+.m-step-add .m-input{font-size:13px;flex:1;min-width:0}
+#m-step-add{flex-shrink:0}
 
 .m-soon{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted);
   padding-top:2px}
@@ -1220,14 +1224,16 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cs-habit-row b{font-size:11.5px;font-weight:500;color:var(--text-2);
   overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .cs-habit-row.is-done b{color:var(--muted)}
-.cs-habit-tick{width:13px;height:13px;border-radius:4px;flex-shrink:0;
+/* Same construction as the step tick in the task editor: a real checkmark
+   glyph, revealed by giving it a colour. It was two crossing CSS gradients,
+   which met off-centre and read as a leaning crucifix rather than a tick. */
+.cs-habit-tick{width:16px;height:16px;border-radius:5px;flex-shrink:0;
   border:1.5px solid var(--border-strong);
-  transition:background var(--t-fast),border-color var(--t-fast)}
+  display:grid;place-items:center;color:transparent;
+  transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast)}
+.cs-habit-row:hover .cs-habit-tick{border-color:var(--ok)}
 .cs-habit-row.is-done .cs-habit-tick{background:var(--ok);border-color:var(--ok);
-  /* The tick itself, drawn rather than shipped as an icon for one state. */
-  background-image:linear-gradient(45deg,transparent 44%,var(--surface) 44%,
-    var(--surface) 56%,transparent 56%),
-    linear-gradient(-45deg,transparent 62%,var(--surface) 62%,var(--surface) 72%,transparent 72%)}
+  color:#08221c}
 .cs-habit-n{margin-left:auto;font-size:10px;color:var(--muted);
   font-variant-numeric:tabular-nums}
 
