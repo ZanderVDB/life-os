@@ -441,3 +441,26 @@ Calendar's month caching.
 **Drag has no auto-scroll inside the project list** beyond what the shared drag
 system provides for the page, and no long-list virtualisation. Fine at this
 size.
+
+## Projects E2.2 — the duplicated task row, recorded
+
+Worth keeping because the mechanism is not obvious and the same shape can
+recur anywhere a drag coexists with a re-render.
+
+The drag parks the dragged card on `document.body` and leaves a placeholder in
+the list. Anything that replaces the list's `innerHTML` mid-drag therefore
+destroys the placeholder while the card floats free — and the rebuilt list
+renders a fresh row for the same task. Two nodes, one id.
+
+The half-fix is to detect a detached placeholder at drop time. That is not
+enough: the very next `pointermove` re-inserts the placeholder into the NEW
+list, so by the drop it is connected again and the dragged card lands beside
+its own twin. The complete fix is `strayTwin()` — at drop, any OTHER live node
+claiming the same task id is removed, whichever way the placeholder resolved.
+
+Duplication was **DOM only**. Verified against the database: six interleaved
+next-action and reorder writes leave exactly two task records.
+
+Remaining: the drag still cannot survive a rebuild *usefully* — it abandons the
+gesture rather than re-deriving the drop target against the new list. Correct
+and safe; just not clever.

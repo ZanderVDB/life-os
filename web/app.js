@@ -16,6 +16,7 @@ import { openUtilityMenu, openUtilitySurface, closeUtility,
 import {
   projectsHeaderHtml, projectsBodyHtml, applyGroups, projectsEmptyHtml,
   projectDetailHeaderHtml, projectDetailBodyHtml, progressText,
+  nextActionSlotHtml, nextActionWhy,
   PROJECT_FILTERS, STATUS_LABEL, FOCUS_LABEL,
 } from './projects.js';
 import { openProjectModal, openChoiceDialog, openTaskPicker } from './project-modal.js';
@@ -2556,6 +2557,7 @@ async function renderProjectDetail(scroll) {
     scroll.innerHTML = projectDetailBodyHtml(data.project, data.tasks, taskHtml);
     wireProjectsHeader();
     wireProjectDetail();
+    assertOneRowPerTask(document.getElementById('pjd-tasks'));
     if (!reducedMotion()) {
       scroll.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
     }
@@ -2566,7 +2568,43 @@ async function renderProjectDetail(scroll) {
   }
 }
 
-const reloadProjectDetail = () => renderProjectDetail(document.getElementById('main-scroll'));
+/**
+ * A full detail re-render. Refuses while a drag is in flight.
+ *
+ * The dragged card lives on `document.body` and the list holds its placeholder,
+ * so replacing the body mid-gesture strands the card and lets the fresh list
+ * render a second node for the same task. drag.js now recovers from that on its
+ * own, but not causing it is better than recovering from it.
+ */
+function reloadProjectDetail() {
+  if (isDragging()) return Promise.resolve();
+  return renderProjectDetail(document.getElementById('main-scroll'));
+}
+
+/**
+ * The invariant: exactly one row per task id in the open list.
+ *
+ * Checked after every reconciliation. Anything that produces a second node for
+ * the same task is a correctness bug, not a cosmetic one — it makes the count
+ * wrong, the drag anchors ambiguous and the user unsure whether their data was
+ * duplicated.
+ */
+function assertOneRowPerTask(host) {
+  if (!host) return true;
+  const seen = new Set();
+  let ok = true;
+  host.querySelectorAll('.task').forEach((row) => {
+    const { id } = row.dataset;
+    if (seen.has(id)) {
+      ok = false;
+      // Repair rather than merely complain: the later node is the stray one.
+      row.remove();
+      console.warn('[projects] duplicate task row removed', id);
+    }
+    seen.add(id);
+  });
+  return ok;
+}
 
 /** Back restores the list the user left, not a fresh one. */
 async function closeProjectDetail(push = true) {
@@ -2626,14 +2664,7 @@ function wireProjectDetail() {
       };
     });
 
-  document.getElementById('pjd-next-clear')?.addEventListener('click', async () => {
-    try {
-      await api(`/api/v1/workspaces/${ws()}/projects/${p.id}/next-action`, {
-        method: 'POST', body: { taskId: null },
-      });
-      await reloadProjectDetail();
-    } catch (err) { toast(err.message, true); }
-  });
+  document.getElementById('pjd-next-choose')?.addEventListener('click', () => chooseNextAction(p));
 
   wireProjectNotes(p);
   // Project tasks are ordinary tasks, wired by the ordinary board wiring.
@@ -2714,13 +2745,18 @@ async function reorderProjectTask(taskId, anchor) {
 function patchProjectTaskOrder() {
   const host = document.getElementById('pjd-tasks');
   if (!host || !pj.detail) return;
-  const open = pj.detail.tasks.filter((t) => t.status === 'open');
+  // Dedupe the DATA before rendering it, so a stale response that repeats a
+  // task cannot produce two rows in the first place.
+  const seen = new Set();
+  const open = pj.detail.tasks.filter((t) => t.status === 'open'
+    && !seen.has(t.id) && seen.add(t.id));
   flip(host.querySelectorAll('.task'), () => {
     for (const t of open) {
       const row = host.querySelector(`.task[data-id="${t.id}"]`);
       if (row) host.appendChild(row);   // appendChild MOVES an existing node
     }
   });
+  assertOneRowPerTask(host);
   updateProjectDerived();
 }
 
@@ -2800,15 +2836,103 @@ function openProjectTaskMenu(anchor, taskId, project) {
   });
 }
 
+/**
+ * Choose which task is next.
+ *
+ * THE DEFECT THIS REPLACES: the button labelled "Choose" was the CLEAR button
+ * wearing a second label. It POSTed `taskId: null` — a no-op when the action was
+ * already inferred — and then called reloadProjectDetail(), which replaces the
+ * whole detail body. That rebuild is what made it look like a page reload, and
+ * it is what allowed a duplicated task row: the drag system parks the dragged
+ * card on document.body, so replacing the list destroyed the placeholder while
+ * the card floated free, and the fresh list then rendered a second node for the
+ * same task.
+ *
+ * Now it opens a real picker and patches ONE slot.
+ */
+async function chooseNextAction(project) {
+  if (nextActionSaving) return;
+  const open = (pj.detail?.tasks ?? []).filter((t) => t.status === 'open');
+  if (!open.length) { addProjectTask(project); return; }
+
+  const currentId = project.nextAction?.explicit ? project.nextAction.id : null;
+  const chosen = await openTaskPicker({
+    title: 'Next action',
+    hint: 'Pick one to keep it as the next action until it is done, removed or '
+      + 'cleared. Automatic follows due date, then priority, then the order below.',
+    tasks: open,
+    areaName,
+    currentId,
+    autoOption: {
+      label: 'Automatic',
+      detail: 'Due date, then priority, then order',
+    },
+  });
+  if (chosen === null) return;                       // cancelled — change nothing
+  await setProjectNextAction(chosen === '__auto' ? null : chosen);
+}
+
+/** Guards a second submission while one next-action write is in flight. */
+let nextActionSaving = false;
+
+/**
+ * One write, and only the slot is touched.
+ *
+ * The task list is deliberately NOT re-rendered: it is the thing a drag holds
+ * references into, and rebuilding it while anything is mid-gesture is what
+ * produced the ghost row.
+ */
 async function setProjectNextAction(taskId) {
   const project = pj.detail?.project;
-  if (!project) return;
+  if (!project || nextActionSaving) return;
+  nextActionSaving = true;
+  const slot = document.getElementById('pjd-next');
+  const before = slot?.innerHTML;
   try {
-    await api(`/api/v1/workspaces/${ws()}/projects/${project.id}/next-action`,
+    const r = await api(`/api/v1/workspaces/${ws()}/projects/${project.id}/next-action`,
       { method: 'POST', body: { taskId } });
-    await reloadProjectDetail();
+    pj.detail.project = r.project;
+    patchNextActionSlot();
     saved(taskId ? 'Next action set' : 'Back to automatic');
-  } catch (e) { toast(e.message, true); }
+  } catch (e) {
+    // Nothing was committed, so nothing is changed on screen either.
+    if (slot && before != null) slot.innerHTML = before;
+    wireNextActionSlot();
+    toast(e.message, true);
+  } finally { nextActionSaving = false; }
+}
+
+/** Crossfades the slot in place. No height jump, no list rebuild. */
+function patchNextActionSlot() {
+  const p = pj.detail?.project;
+  const slot = document.getElementById('pjd-next');
+  if (!p || !slot) return;
+  const why = document.getElementById('pjd-next-why');
+  const apply = () => {
+    slot.innerHTML = nextActionSlotHtml(p);
+    slot.classList.toggle('is-empty', !p.nextAction);
+    if (why) why.textContent = nextActionWhy(p);
+    wireNextActionSlot();
+  };
+  if (reducedMotion()) { apply(); return; }
+  const out = slot.animate([{ opacity: 1 }, { opacity: 0 }],
+    { duration: 140, easing: 'ease-in', fill: 'forwards' });
+  settle(out, 140, () => {
+    apply();
+    out.cancel();
+    slot.animate([{ opacity: 0 }, { opacity: 1 }],
+      { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  });
+}
+
+function wireNextActionSlot() {
+  const p = pj.detail?.project;
+  if (!p) return;
+  document.getElementById('pjd-next-choose')?.addEventListener('click', () => chooseNextAction(p));
+  document.getElementById('pjd-next-add')?.addEventListener('click', () => addProjectTask(p));
+  document.querySelectorAll('#pjd-next [data-pjd-open-task]').forEach((b) => {
+    b.onclick = () => openProjectTask(b.dataset.pjdOpenTask);
+  });
 }
 
 /** Opens a project task in the shared editor, with its project named. */

@@ -303,8 +303,11 @@ test('create: four required fields, and status is not one of them', () => {
   // Status is decided by whether there is work — asking would make the user
   // choose between two words the form cannot explain.
   assert.ok(!/pm-status/.test(modalCode), 'creation asks for a lifecycle status');
+  // Scoped to the creation FORM. The file also holds the task picker, which
+  // legitimately shows a task's own priority — a different thing entirely.
+  const form = modalCode.slice(modalCode.indexOf('export function openProjectModal'));
   for (const absent of ['milestone', 'phase', 'priority', 'startDate', 'people', 'board']) {
-    assert.ok(!new RegExp(absent, 'i').test(modalCode), `creation exposes ${absent}`);
+    assert.ok(!new RegExp(absent, 'i').test(form), `creation exposes ${absent}`);
   }
 });
 

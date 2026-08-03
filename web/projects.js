@@ -288,6 +288,39 @@ export function projectDetailHeaderHtml(p, areaName) {
   </div>`;
 }
 
+/** Why this is the next action. Two modes, said in three words. */
+export const nextActionWhy = (p) => (p.nextAction
+  ? (p.nextAction.explicit ? 'Chosen explicitly' : 'From due date and priority')
+  : '');
+
+/**
+ * The next-action slot, rendered on its own.
+ *
+ * Separate from the body so a next-action change can patch THIS and nothing
+ * else. Rebuilding the whole detail page to update one line is what let a
+ * drag and a re-render overlap and leave a duplicated task row on screen.
+ *
+ * Note that this renders its own presentation node for the task — it never
+ * reuses or moves the row from the task list, so a task can appear here and in
+ * the list below without two nodes ever claiming the same identity in the list.
+ */
+export function nextActionSlotHtml(p) {
+  const next = p.nextAction;
+  if (!next) {
+    return `<span class="pj-next-none">No next action — add one</span>
+      <button type="button" class="btn btn-sm" id="pjd-next-add">Add a task</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="pjd-next-choose">Choose</button>`;
+  }
+  return `<button type="button" class="pjd-next-open" data-pjd-open-task="${next.id}">
+      <span class="pjd-next-t">${esc(next.title)}</span>
+      <span class="pjd-next-meta">
+        ${next.dueDate ? `<span class="pjd-next-due">${esc(fmtDate(next.dueDate))}</span>` : ''}
+        <span class="pjd-next-pri pri-${esc(next.priority)}">${esc(next.priority)}</span>
+      </span>
+    </button>
+    <button type="button" class="btn btn-ghost btn-sm" id="pjd-next-choose">Choose</button>`;
+}
+
 /**
  * The body: next action, tasks, notes. Nothing else.
  *
@@ -309,23 +342,9 @@ export function projectDetailBodyHtml(p, tasks, taskHtml) {
     <section class="pjd-sec pjd-next-sec">
       <div class="pjd-sec-head">
         <h2 class="pjd-sec-h">Next action</h2>
-        ${next ? `<span class="pjd-next-why">${next.explicit
-    ? 'Chosen explicitly' : 'From due date and priority'}</span>` : ''}
+        <span class="pjd-next-why" id="pjd-next-why">${nextActionWhy(p)}</span>
       </div>
-      <div class="pjd-next ${next ? '' : 'is-empty'}" id="pjd-next">
-        ${next
-    ? `<button class="pjd-next-open" data-pjd-open-task="${next.id}">
-             <span class="pjd-next-t">${esc(next.title)}</span>
-             <span class="pjd-next-meta">
-               ${next.dueDate ? `<span class="pjd-next-due">${esc(fmtDate(next.dueDate))}</span>` : ''}
-               <span class="pjd-next-pri pri-${esc(next.priority)}">${esc(next.priority)}</span>
-             </span>
-           </button>
-           <button class="btn btn-ghost btn-sm" id="pjd-next-clear">${next.explicit
-    ? 'Use the automatic one' : 'Choose'}</button>`
-    : `<span class="pj-next-none">No next action — add one</span>
-           <button class="btn btn-sm" id="pjd-next-add">Add a task</button>`}
-      </div>
+      <div class="pjd-next ${next ? '' : 'is-empty'}" id="pjd-next">${nextActionSlotHtml(p)}</div>
     </section>
 
     <section class="pjd-sec">

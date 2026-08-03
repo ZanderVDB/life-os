@@ -302,9 +302,60 @@ function tick() {
 
 /* ── Drop ──────────────────────────────────────────────────────────────── */
 
+/**
+ * Did the list get rebuilt underneath us?
+ *
+ * The dragged card lives on `document.body` while a drag is in flight, so
+ * anything that replaces the list's innerHTML destroys the PLACEHOLDER but
+ * leaves the card floating — and the rebuilt list renders a fresh row for the
+ * same task. Two nodes, one id. `replaceWith` on a detached placeholder is a
+ * silent no-op, so the ghost then survives the drop as well.
+ *
+ * Rather than trusting callers never to do that, the drag detects it and cleans
+ * up after itself.
+ */
+const orphaned = (s) => !s.ph.isConnected;
+
+/**
+ * Any OTHER live node claiming this task's id.
+ *
+ * A rebuild mid-drag creates exactly this: the dragged card is on
+ * `document.body`, so the fresh list renders a second row for the same task.
+ * Checking `orphaned` alone is not enough — the very next `pointermove` moves
+ * the placeholder into the NEW list, so by drop time it is connected again and
+ * the dragged card lands beside its own twin.
+ *
+ * Whichever way the drop resolves, exactly one node may survive.
+ */
+function strayTwin(s) {
+  return [...document.querySelectorAll(`.drop .task[data-id="${s.id}"]`)]
+    .find((n) => n !== s.card) ?? null;
+}
+
+/**
+ * Gets rid of the floating card without leaving a duplicate behind.
+ *
+ * If the rebuilt list already contains a row for this task, the dragged node is
+ * simply removed — the fresh row is the real one. If it does not, the card is
+ * put back so the task cannot vanish.
+ */
+function reclaimOrphan(s) {
+  restoreCard(s);
+  const live = document.querySelector(`.drop .task[data-id="${s.id}"]`);
+  if (live && live !== s.card) s.card.remove();
+  else document.querySelector('.drop')?.appendChild(s.card);
+  s.ph.remove();
+  document.body.classList.remove('is-dragging-task');
+  session = null;
+}
+
 function finish(hooks) {
   const s = session;
   cancelAnimationFrame(s.raf);
+
+  // The list was replaced mid-drag. Drop the gesture rather than writing an
+  // order derived from a placeholder that is no longer in the document.
+  if (orphaned(s)) { reclaimOrphan(s); return; }
 
   const zone = s.ph.closest('.drop');
   const bucket = zone?.dataset.bucket ?? s.fromBucket;
@@ -316,8 +367,12 @@ function finish(hooks) {
   const target = s.ph.getBoundingClientRect();
   const cur = s.card.getBoundingClientRect();
 
+  // The dragged card is the one the user has been positioning, so it wins and
+  // any twin the rebuild left behind goes.
+  const twin = strayTwin(s);
   restoreCard(s);
   s.ph.replaceWith(s.card);
+  twin?.remove();
 
   if (!reducedMotion()) {
     const dx = cur.left - target.left;
@@ -354,8 +409,11 @@ function restoreCard(s) {
 function abort() {
   const s = session;
   cancelAnimationFrame(s.raf);
+  if (orphaned(s)) { reclaimOrphan(s); return; }
+  const twin = strayTwin(s);
   restoreCard(s);
   s.ph.replaceWith(s.card);
+  twin?.remove();
   document.body.classList.remove('is-dragging-task');
   document.querySelectorAll('.drop').forEach((d) => {
     d.classList.toggle('is-empty', !d.querySelector('.task'));

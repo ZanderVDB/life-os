@@ -127,7 +127,8 @@ export function openChoiceDialog({ title, body = '', choices }) {
  *
  * @returns {Promise<string|null>} the chosen task id
  */
-export function openTaskPicker({ title, tasks, areaName }) {
+export function openTaskPicker({ title, tasks, areaName, hint = '', currentId = null,
+  autoOption = null }) {
   return new Promise((resolve) => {
     const opener = document.activeElement;
     const scrim = document.createElement('div');
@@ -138,17 +139,28 @@ export function openTaskPicker({ title, tasks, areaName }) {
     dlg.setAttribute('aria-modal', 'true');
     dlg.setAttribute('aria-label', title);
 
-    const row = (t) => `<button class="tp-row" data-task="${t.id}">
+    const row = (t) => `<button type="button" class="tp-row ${t.id === currentId ? 'is-current' : ''}"
+      data-task="${t.id}">
       <span class="tp-title">${esc(t.title)}</span>
       <span class="tp-meta">
         ${t.areaId ? `<span class="pj-area">${esc(areaName(t.areaId))}</span>` : ''}
-        <span class="tp-bucket">${esc(t.bucket)}</span>
+        ${t.bucket ? `<span class="tp-bucket">${esc(t.bucket)}</span>` : ''}
         ${t.dueDate ? `<span class="tp-due">${esc(t.dueDate)}</span>` : ''}
+        ${t.priority ? `<span class="pjd-next-pri pri-${esc(t.priority)}">${esc(t.priority)}</span>` : ''}
+        ${t.id === currentId ? '<span class="tp-current">current</span>' : ''}
       </span></button>`;
 
     dlg.innerHTML = `
       <div class="m-head"><h2 class="ch-title">${esc(title)}</h2>
         <button class="m-close" id="tp-close" aria-label="Close">&times;</button></div>
+      ${hint ? `<p class="tp-hint">${esc(hint)}</p>` : ''}
+      ${autoOption ? `<div class="tp-auto">
+        <button type="button" class="tp-row tp-row-auto ${currentId ? '' : 'is-current'}"
+          data-task="__auto">
+          <span class="tp-title">${esc(autoOption.label)}</span>
+          <span class="tp-meta"><span class="tp-auto-why">${esc(autoOption.detail)}</span>
+          ${currentId ? '' : '<span class="tp-current">current</span>'}</span>
+        </button></div>` : ''}
       <div class="tp-search">
         <input id="tp-q" class="m-input" placeholder="Search open tasks…"
           autocomplete="off" aria-label="Search tasks">
