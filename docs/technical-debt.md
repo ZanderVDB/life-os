@@ -402,3 +402,24 @@ Calendar code for no gain.
 whole filter after each change. Correct and simple at ~12 projects; it is the
 same class of problem as the Calendar's month caching and should be solved the
 same way if either becomes noticeable.
+
+## Sample Projects data — TEMPORARY, remove after the E2 review
+
+Added so Projects can be reviewed with something in it. It is deliberately
+confined to **one module and one route block** so removing it is one commit:
+
+- `api/src/lib/sample-projects.ts`
+- the "Sample data — TEMPORARY" block in `api/src/routes/projects.ts`
+- `window.__sample` in `web/app.js`
+- `api/tests/projects-sample.test.ts`
+
+Safety, following the D4.3 lesson (real reminders were nearly deleted because
+synthetic rows shared a flag with real ones): every sample row carries
+`legacy_id` beginning `sample:e2:`, and cleanup matches **only** that prefix —
+never a title, a date, or "created recently", each of which can also describe a
+real record. Legacy ids are `uid()` strings and cannot contain a colon, so an
+imported project can never collide.
+
+Both endpoints refuse when `NODE_ENV` is production. A real task filed into a
+sample project survives cleanup and simply loses the assignment, because the
+foreign key is `on delete set null`.

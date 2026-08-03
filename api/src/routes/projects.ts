@@ -27,7 +27,11 @@ import {
   projects, tasks, areas, PROJECT_STATUSES, PROJECT_FOCUSES,
   type ProjectStatus,
 } from '../db/schema.js';
-import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+// TEMPORARY — sample data for E2 review. Delete with src/lib/sample-projects.ts.
+import {
+  seedSampleProjects, removeSampleProjects, sampleFootprint, isSampleAllowed,
+} from '../lib/sample-projects.js';
 
 /** Sparse spacing, so one move rewrites one row rather than a whole group. */
 const GAP = 1000;
@@ -194,7 +198,9 @@ function shape(project: ProjectRow, list: TaskRow[], today = todayIso()) {
   };
 }
 
-export function registerProjectRoutes(app: AppInstance, db: Db, guards: Guards) {
+export function registerProjectRoutes(
+  app: AppInstance, db: Db, guards: Guards, env: { NODE_ENV: string },
+) {
   const pre = { preHandler: [guards.authenticate, guards.resolveWorkspace] };
   const base = '/api/v1/workspaces/:workspaceId';
   const wsId = (req: any) => req.workspaceId as string;
@@ -712,6 +718,41 @@ export function registerProjectRoutes(app: AppInstance, db: Db, guards: Guards) 
     const min = minRow[0]?.min ?? 0;
     const [row] = await touch(ws, id, { position: Number(min) - GAP });
     return { project: shape(row!, await tasksOf(ws, id)) };
+  });
+
+  /* ── Sample data — TEMPORARY, staging only ─────────────────────────────
+   * Delete this block and src/lib/sample-projects.ts once E2 is reviewed. */
+
+  /** What the sample set is, without creating or removing anything. */
+  app.get(`${base}/projects/sample`, pre, async (req) => {
+    const ws = wsId(req);
+    return { ...(await sampleFootprint(db, ws)), allowed: isSampleAllowed(env.NODE_ENV) };
+  });
+
+  app.post(`${base}/projects/sample`, pre, async (req) => {
+    if (!isSampleAllowed(env.NODE_ENV)) {
+      throw forbidden('Sample data is not available in production.');
+    }
+    const ws = wsId(req);
+    const rows = await db.select().from(areas)
+      .where(and(eq(areas.workspaceId, ws), isNull(areas.deletedAt)));
+    const byName = new Map(rows.map((a) => [a.name, a.id]));
+    const result = await seedSampleProjects(db, ws, byName);
+    return { ...result, removeWith: 'POST …/projects/sample/remove' };
+  });
+
+  /**
+   * Removes the sample set and nothing else — matched only by the
+   * `sample:e2:` marker, never by title, date or "created recently".
+   */
+  app.post(`${base}/projects/sample/remove`, pre, async (req) => {
+    if (!isSampleAllowed(env.NODE_ENV)) {
+      throw forbidden('Sample data is not available in production.');
+    }
+    const ws = wsId(req);
+    const before = await sampleFootprint(db, ws);
+    const removed = await removeSampleProjects(db, ws);
+    return { removed, expected: { projects: before.projects, tasks: before.tasks } };
   });
 
   /* ── Delete ────────────────────────────────────────────────────────── */

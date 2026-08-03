@@ -142,6 +142,31 @@ async function api(path, opts = {}) {
 }
 const ws = () => state.me.workspace.id;
 
+/**
+ * Sample data for reviewing Projects — TEMPORARY.
+ *
+ * A console hook rather than a control in the interface: test data does not
+ * belong in the product, and a button that seeds fake projects is a button that
+ * eventually gets pressed by accident. The real guard is server-side — both
+ * endpoints refuse outright when NODE_ENV is production — so this cannot do
+ * anything on a deployment where it should not.
+ *
+ * Delete with api/src/lib/sample-projects.ts once E2 is reviewed.
+ */
+window.__sample = {
+  add: async () => {
+    const r = await api(`/api/v1/workspaces/${ws()}/projects/sample`, { method: 'POST' });
+    if (state.route === 'projects') { pj.data = null; await loadProjects(); }
+    return r;
+  },
+  remove: async () => {
+    const r = await api(`/api/v1/workspaces/${ws()}/projects/sample/remove`, { method: 'POST' });
+    if (state.route === 'projects') { pj.data = null; await loadProjects(); }
+    return r;
+  },
+  check: () => api(`/api/v1/workspaces/${ws()}/projects/sample`),
+};
+
 /* ── Toast ───────────────────────────────────────────────────────────── */
 let toastTimer;
 function toast(msg, isError = false) {

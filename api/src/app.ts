@@ -63,7 +63,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerMeRoutes(app, db, guards);
   registerAreaRoutes(app, db, guards);
   registerTaskRoutes(app, db, guards);
-  registerProjectRoutes(app, db, guards);
+  registerProjectRoutes(app, db, guards, env);
   registerImportRoutes(app, db, guards, env);
   registerPreferenceRoutes(app, db, guards);
   registerHabitRoutes(app, db, guards);
