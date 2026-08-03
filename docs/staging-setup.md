@@ -211,3 +211,28 @@ automatically — **no variable to add**. It is visible in Settings → App →
 Version, so you can always tell what a browser is actually running.
 
 `GET /healthz` remains the health-check path for the web service.
+
+## E2.4 deploy — 2026-08-03
+
+Both services deployed to `v2-staging`. One thing worth writing down:
+
+**`railway up --detach` reported success, the build succeeded, and the
+healthcheck passed — while the old container kept serving.** The symptom was a
+new route returning 404 on a service whose build logs said everything was fine.
+The runtime logs gave it away: `pid` and `hostname` were unchanged from an hour
+earlier, so nothing had restarted.
+
+`railway redeploy --service <name> --yes` promoted the built image, and the route
+answered within thirty seconds.
+
+**So: after any `railway up`, verify a route that only exists in the new build
+before believing the deploy.** A healthcheck on `/health` passes identically on
+both versions and proves nothing about which one is running. The check used here:
+
+```
+curl -o /dev/null -w '%{http_code}' \
+  "$API/api/v1/workspaces/00000000-0000-0000-0000-000000000000/habits/history?from=2026-08-01&to=2026-08-07"
+```
+
+`401` means the route exists and the auth guard fired — the new build is live.
+`404` means Fastify has no such route — the old build is still serving.
