@@ -1216,3 +1216,48 @@ without a legend. The test that enforced the removal was rewritten to enforce th
 new rule rather than deleted.
 
 611 tests passing.
+
+### E2.4a — steps were dead, and habit ticking dropped clicks
+
+Three reported problems, four root causes.
+
+**Steps did nothing in Projects.** Both Projects call sites opened the shared
+editor without `ctx.steps`, so `ctx.steps.add(...)` threw "Cannot read
+properties of undefined" straight into an unhandled rejection. The block
+rendered, looked complete, and was entirely inert — and because the rejection
+was never surfaced, nothing anywhere said so.
+
+The handlers now come from one `taskStepsCtx(task, onChanged)` factory used by
+every context that can open a task, and the modal **throws** if it renders a
+steps block without them. A silent no-op is the single outcome that hides a
+wiring mistake, which is how this survived being written, reviewed and shipped.
+
+**Steps were lossy on Today.** The only way to commit one was pressing Enter.
+Nothing said so, so typing a step and clicking Save discarded it silently — the
+same class of defect as the notes loss fixed earlier in E2.4, and in the same
+file. There is now an Add button, and Enter, the button, blur, Save and the
+completion tick all commit. A failed add puts the text back. Closing on top of a
+half-typed step asks first.
+
+Saving does not rely on blur having fired: blur ordering differs between a mouse
+click, a keyboard Enter and a tap, and "your step survives only if you clicked in
+the right order" is not a rule anyone should have to learn.
+
+**Ticking habits quickly dropped clicks.** `toggleHabitOn` called
+`renderCalendarRail()` — which replaces `rail.innerHTML` wholesale — twice per
+tick. A second click could land on a node a re-render had already replaced, or
+in the window between the swap and the loop that reassigns handlers, where the
+button exists but does nothing. Three quick ticks registered one or two. It now
+patches a single row; verified with three clicks fired with zero delay, all
+three landing in the DOM, the card count, the month cell and the database.
+
+**And the count jumped.** The optimistic update set the count straight to the
+target, so ticking a 3-glass habit showed 3/3 and done, then snapped back to 1/3
+when the response arrived. It now predicts what `check` actually does — increment
+by one — and the optimistic and settled frames are identical at every step.
+
+**The tick mark was a crucifix.** Two crossing CSS gradients, meeting off-centre.
+Replaced with the checkmark glyph the task editor's step ticks already use;
+verified as the same path data, 11×8, wider than tall.
+
+620 tests passing.
