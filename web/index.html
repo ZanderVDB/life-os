@@ -990,7 +990,12 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
 .cm-chip{font-size:9.5px;font-weight:700;border-radius:4px;padding:0 4px;
   font-variant-numeric:tabular-nums}
 .cm-plan{background:rgba(78,143,196,.16);color:var(--p-low-ink)}
-.cm-habit{background:rgba(0,217,163,.14);color:var(--ok)}
+/* Habits in a Month cell: a ratio, and quiet unless it is complete.
+   A partial day is information, not a warning — nothing here goes red, because
+   a missed habit is not an error and the month should not read as a scorecard. */
+.cm-habit{background:rgba(0,217,163,.10);color:var(--ok);opacity:.75}
+.cm-habit.is-all{background:rgba(0,217,163,.20);opacity:1}
+.cm-habit.is-none{background:var(--surface-3);color:var(--muted)}
 /* Workload: a restrained left edge, never a heatmap. */
 .cm-cell::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:2px;
   border-radius:2px;background:transparent;transition:background var(--t-hover)}
@@ -1202,8 +1207,29 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cs-alert span{font-size:11px;color:var(--text-2);line-height:1.45}
 .cs-alert b{font-weight:600;color:var(--text)}
 .cs-row.is-done b{color:var(--muted);text-decoration:line-through}
-.cs-habit{font-size:11px;color:var(--muted);padding:8px 0 2px;
-  border-top:1px solid var(--hairline);margin-top:4px}
+/* ── Habits on the selected day ──
+   Rows, not a summary line: the point is that each one can be corrected. */
+.cs-habits{margin-top:4px;padding-top:8px;border-top:1px solid var(--hairline)}
+.cs-habit-count{font-weight:700;color:var(--ok);font-variant-numeric:tabular-nums}
+.cs-habit-note{font-size:11px;color:var(--muted);margin:2px 0 0;line-height:1.45}
+.cs-habit-note.is-err{color:var(--danger)}
+.cs-habit-row{display:flex;align-items:center;gap:8px;width:100%;padding:5px 6px;
+  margin-left:-6px;border:0;background:none;border-radius:7px;cursor:pointer;
+  text-align:left;transition:background var(--t-fast)}
+.cs-habit-row:hover{background:var(--surface-3)}
+.cs-habit-row b{font-size:11.5px;font-weight:500;color:var(--text-2);
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.cs-habit-row.is-done b{color:var(--muted)}
+.cs-habit-tick{width:13px;height:13px;border-radius:4px;flex-shrink:0;
+  border:1.5px solid var(--border-strong);
+  transition:background var(--t-fast),border-color var(--t-fast)}
+.cs-habit-row.is-done .cs-habit-tick{background:var(--ok);border-color:var(--ok);
+  /* The tick itself, drawn rather than shipped as an icon for one state. */
+  background-image:linear-gradient(45deg,transparent 44%,var(--surface) 44%,
+    var(--surface) 56%,transparent 56%),
+    linear-gradient(-45deg,transparent 62%,var(--surface) 62%,var(--surface) 72%,transparent 72%)}
+.cs-habit-n{margin-left:auto;font-size:10px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
 
 /* ── Calendar sources / connection ── */
 .cs-connect-copy{font-size:12.5px;color:var(--text-2);line-height:1.55;margin:0 0 10px}

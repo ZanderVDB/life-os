@@ -190,3 +190,101 @@ order` — which of the four rules actually decided — plus `bucket` and
 `tasks.project_position` remains isolated from `tasks.position`. Verified:
 completing and reopening a task disturbs neither ordering, and re-adding a
 removed task does not reshuffle the tasks that never moved.
+
+---
+
+## E2.4 — one Task, one shape, one surfacing rule
+
+### Tasks and Steps, and why neither absorbs the other
+
+A **Task** is the unit of work. A **Step** is a checklist item inside one Task.
+Steps are not sub-tasks: they have no bucket, no due date, no area, no project,
+and they never appear on Today on their own.
+
+Both stay, in the same shape, in every context a Task appears:
+
+| Surface | Shows |
+|---|---|
+| Today board | title, project name, next-action marker, `2/4 steps` |
+| Project detail list | the same row, from the same `taskHtml` |
+| Next action slot | title, due, `2 of 4 steps`, bucket, priority |
+
+E2.4 fixed a real inconsistency here: `GET …/projects/:id` returned its tasks
+**without** `steps`, so the identical task showed `2/4 steps` on Today and
+nothing at all inside its own project. `tasksWithSteps()` now attaches them, and
+the next action reports `steps: { total, done }` — counts, not a second copy of
+the step list, because two copies in one response is how a slot and a row start
+disagreeing.
+
+**Project progress counts Tasks only.** Ten completed steps on one task move
+progress by nothing until that task is done. Steps measure a task; tasks measure
+a project. Asserted by test with a deliberately lopsided 10-steps-on-one-task
+case.
+
+### The Today surfacing rule
+
+**Belonging to a project does not put a task on Today.** A task appears on Today
+for exactly one of these reasons:
+
+1. its **bucket** is `today` — the user put it there;
+2. it has a **due date** of today or earlier;
+3. it has a **scheduled block** today;
+4. it is the **explicitly chosen next action** of a project whose focus is `now`;
+5. an explicit user action moved it.
+
+Project focus influences one thing: the default bucket for a **newly created**
+task — `week` in a Now project, `future` otherwise. It was `today`, and that was
+the defect: adding five tasks to an active project put five rows on Today, so
+Today stopped being a decision about today and became a mirror of every active
+project.
+
+**Rule 4 is the only automatic move, and it takes a deliberate act.** Choosing a
+next action by name on a Now project moves that task to the bottom of Today and
+reports `surfaced: true` so the interface can say so. Bottom, not top — a project
+does not get to reorder the user's day. An **inferred** next action moves
+nothing: inference changes whenever a due date moves, and Today must not
+reshuffle itself behind the user's back.
+
+### The next-action marker on Today
+
+`GET …/tasks` returns `projects[id].nextActionId` — the **resolved** next
+action, computed with the same `nextActionFor()` the project page uses.
+
+It used to send `nextTaskId`, the stored override. Most projects have no
+override, so that field is null and Today marked nothing at all; the badge only
+ever appeared where someone had hand-picked a task. One rule, one answer, in
+both places.
+
+### Completion carries unsaved edits
+
+`POST …/tasks/:id/complete` and `/uncomplete` accept an optional body of edits,
+applied **in the same transaction** as the completion.
+
+The defect: the shared task editor's tick called `onToggle()`, which sent only
+the status, then `close(true)` — a force close that skipped the dirty check. Type
+a note, tick the box, and the note was discarded with no warning. This was in the
+shared editor, so it lost notes on Today as well as in Projects.
+
+One transaction, not "PATCH then POST": two writes can half-succeed, leaving a
+task that looks saved but is not done, and if they race the completion's
+`updatedAt` can land before the edit's.
+
+The body is `.strict()`. `status` is not accepted (the verb decided it) and
+`bucket` is not accepted (a task being completed is leaving the board) — both
+produce a 400 rather than a silent drop.
+
+### Project rows are wired by the project
+
+`wireProjectDetail()` used to end with `wireBoard()`, which runs `wireCard` over
+**every** `.task` on the page and reassigns `onclick` — silently replacing the
+project handlers set moments earlier with Today's. The tick then called Today's
+`toggleTask`, which looks the task up in `state.tasks`, the Today board's list.
+If the task was not on Today it returned immediately and **nothing happened**;
+if it was, it rebuilt a bucket that does not exist on this page.
+
+That is why completing a project task appeared to do nothing until you left and
+came back. `wireProjectTaskRows()` now owns those rows, including the ones in the
+Completed section — otherwise a task could be finished and never reopened.
+
+Same records, same editor, same row markup; a different controller, because the
+surrounding page is different.

@@ -36,6 +36,7 @@ import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHt
   railIsOpen,
   recurrenceWords,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
+import { habitSummaryHtml } from './calendar.js';
 import { settingsHtml } from './settings.js';
 
 const CFG = window.LIFE_OS_CONFIG;
@@ -54,7 +55,7 @@ const state = {
   route: 'today', areaFilter: null, menu: null, settingsTab: 'account',
   todayResume: null,   // scroll, filter and focused card, for the way back
   habits: [], habitsLoaded: false, habitsError: null,
-  // id -> { id, title, status, focus, nextTaskId }, sent with the task list so
+  // id -> { id, title, status, focus, nextActionId }, sent with the task list so
   // Today can name a task's project without a second request or a copy of it
   // on every task row.
   projectsById: {},
@@ -771,7 +772,9 @@ function taskHtml(t) {
    * next-action marker is a word for the same reason. */
   const project = t.projectId ? state.projectsById[t.projectId] : null;
   if (project) {
-    const isNext = project.nextTaskId === t.id;
+    // The RESOLVED next action, so the badge appears on inferred next actions
+    // too — not only on ones somebody picked by hand.
+    const isNext = project.nextActionId === t.id;
     bits.push(`<button class="tm-project" data-open-project="${project.id}"
       title="Open ${esc(project.title)}">${esc(project.title)}</button>`);
     if (isNext) bits.push('<span class="tm-next">Next action</span>');
@@ -942,10 +945,12 @@ function patchCard(id) {
  * for every remaining card, which is precisely why the gap used to snap shut
  * instead of closing. Only the completed card's node is removed.
  */
-async function toggleTask(id) {
+async function toggleTask(id, dirty = null) {
   const t = findTask(id);
   if (!t) return;
   const wasDone = t.status === 'done';
+  // Anything the user had typed but not saved rides along with the completion.
+  if (dirty) Object.assign(t, dirty);
   const card = document.querySelector(`.task[data-id="${id}"]`);
   const bucket = t.bucket;
   const index = card ? [...card.parentNode.children].indexOf(card) : -1;
@@ -973,8 +978,10 @@ async function toggleTask(id) {
   }
 
   try {
-    await api(`/api/v1/workspaces/${ws()}/tasks/${id}/${wasDone ? 'uncomplete' : 'complete'}`,
-      { method: 'POST' });
+    const r = await api(
+      `/api/v1/workspaces/${ws()}/tasks/${id}/${wasDone ? 'uncomplete' : 'complete'}`,
+      { method: 'POST', body: dirty ?? {} });
+    Object.assign(t, r.task);
     state.historyTotal += wasDone ? -1 : 1;
     saved(wasDone ? 'Moved back to active' : 'Done');
   } catch (e) {
@@ -1172,7 +1179,8 @@ function openTask(id, prefillTitle = '') {
         saved('Task created');
       }
     },
-    onToggle: () => toggleTask(t.id),
+    // One write carrying both the edits and the completion. See the modal.
+    onToggle: (dirty) => toggleTask(t.id, dirty),
     onArchive: async () => {
       const bucket = t.bucket;
       state.tasks = state.tasks.filter((x) => x.id !== t.id);
@@ -1998,6 +2006,103 @@ function renderCalendarRail() {
   rail.querySelectorAll('[data-schedule]').forEach((b) => {
     b.onclick = (e) => { e.stopPropagation(); scheduleFromQueue(b.dataset.schedule); };
   });
+  rail.querySelectorAll('[data-habit]').forEach((b) => {
+    b.onclick = () => toggleHabitOn(b.dataset.habit, b.dataset.habitDay);
+  });
+}
+
+/* ── Habits on a chosen day ───────────────────────────────────────────── */
+
+/**
+ * Loads the selected day's habits.
+ *
+ * `date` is passed straight through as the string the grid drew. It is never
+ * turned into a Date and back — that round trip is exactly how a tick lands on
+ * the previous day for anyone west of UTC.
+ *
+ * The response is discarded if the selection moved on while it was in flight,
+ * so a slow request cannot paint the 3rd's habits into the 4th's card.
+ */
+async function loadDayHabits(day) {
+  if (!day || !cal.layers.habits) { cal.dayHabits = null; return; }
+  // Today's list is already loaded for the Today page; everything else needs
+  // asking for. Both go through the same endpoint so the shape cannot diverge.
+  cal.dayHabits = { date: day, loading: true };
+  renderCalendarRail();
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/habits?date=${day}`);
+    if (cal.selected !== day) return;
+    cal.dayHabits = { date: day, habits: r.habits ?? [] };
+  } catch (e) {
+    if (cal.selected !== day) return;
+    cal.dayHabits = { date: day, error: e.message };
+  }
+  renderCalendarRail();
+}
+
+/**
+ * Ticks or unticks a habit on ANY day, not just today.
+ *
+ * The endpoints already accepted a date; nothing here needed inventing. What
+ * was missing was a way to reach them for a past day, which is why a wrong
+ * square could be seen and not corrected.
+ *
+ * Optimistic, then reconciled: the row flips immediately, the month cell's
+ * `n/m` is patched from the server's answer, and a failure puts both back.
+ */
+async function toggleHabitOn(habitId, day) {
+  const dh = cal.dayHabits;
+  const h = dh?.date === day ? (dh.habits ?? []).find((x) => x.id === habitId) : null;
+  if (!h || h._busy) return;
+  const wasDone = h.completedToday;
+  h._busy = true;
+
+  const before = { todayCount: h.todayCount, completedToday: h.completedToday };
+  h.completedToday = !wasDone;
+  h.todayCount = wasDone ? 0 : h.targetCount;
+  renderCalendarRail();
+
+  try {
+    const verb = wasDone ? 'uncheck' : 'check';
+    const r = await api(`/api/v1/workspaces/${ws()}/habits/${habitId}/${verb}`,
+      { method: 'POST', body: { date: day } });
+    h.todayCount = r.completedCount;
+    h.completedToday = r.completed;
+    patchHabitCell(day);
+    renderCalendarRail();
+  } catch (e) {
+    Object.assign(h, before);
+    renderCalendarRail();
+    toast(e.message, true);
+  } finally { h._busy = false; }
+}
+
+/**
+ * Re-counts one day's `n/m` chip from the habit list already in memory.
+ *
+ * A local recount rather than a calendar reload: reloading the range to change
+ * two characters would rebuild the whole month, and the month is what the user
+ * is currently looking at.
+ */
+function patchHabitCell(day) {
+  const dh = cal.dayHabits;
+  if (!dh || dh.date !== day || !cal.data) return;
+  const due = (dh.habits ?? []).filter((x) => x.dueToday);
+  const done = due.filter((x) => x.completedToday).length;
+
+  cal.data.habitDays = cal.data.habitDays ?? [];
+  const row = cal.data.habitDays.find((x) => x.date === day);
+  if (row) { row.due = due.length; row.done = done; }
+  else if (due.length) cal.data.habitDays.push({ date: day, due: due.length, done });
+
+  const cell = document.querySelector(`.cm-cell[data-day="${day}"] .cm-foot`);
+  if (!cell) return;
+  cell.querySelector('.cm-habit')?.remove();
+  cell.insertAdjacentHTML('beforeend', habitSummaryHtml(
+    { due: due.length, done }, day, iso(new Date()),
+  ));
+  const chip = cell.querySelector('.cm-habit');
+  if (chip) pulse(chip);
 }
 
 function wireCalendarHeader() {
@@ -2099,7 +2204,11 @@ function selectDay(day) {
   prev?.classList.remove('is-selected');
   const next = document.querySelector(`.cm-cell[data-day="${day}"]`);
   if (cal.selected && next) { next.classList.add('is-selected'); pulse(next); }
+  if (!cal.selected) cal.dayHabits = null;
   renderCalendarRail();
+  // Month only. Agenda answers "what is coming" and Plan places work into
+  // hours; neither question is about a rhythm you keep.
+  if (cal.selected && cal.mode === 'month') loadDayHabits(cal.selected);
 }
 
 /**
@@ -2719,17 +2828,6 @@ function wireProjectDetail() {
   document.getElementById('pjd-add-task')?.addEventListener('click', () => addProjectTask(p));
   document.getElementById('pjd-next-add')?.addEventListener('click', () => addProjectTask(p));
   document.getElementById('pjd-add-existing')?.addEventListener('click', () => addExistingTask(p));
-  // Completion is handled HERE rather than by the Today board wiring, which
-  // rebuilds buckets that do not exist on this page.
-  document.querySelectorAll('#pjd-tasks .task [data-act="toggle"]').forEach((b) => {
-    b.onclick = (e) => {
-      e.stopPropagation();
-      completeProjectTask(b.closest('.task').dataset.id);
-    };
-  });
-  document.querySelectorAll('#pjd-tasks .task [data-act="open"]').forEach((b) => {
-    b.onclick = (e) => { e.stopPropagation(); openProjectTask(b.closest('.task').dataset.id); };
-  });
   document.querySelectorAll('[data-pjd-open-task]').forEach((b) => {
     b.onclick = () => openProjectTask(b.dataset.pjdOpenTask);
   });
@@ -2745,8 +2843,45 @@ function wireProjectDetail() {
   document.getElementById('pjd-next-choose')?.addEventListener('click', () => chooseNextAction(p));
 
   wireProjectNotes(p);
-  // Project tasks are ordinary tasks, wired by the ordinary board wiring.
-  wireBoard();
+  wireProjectTaskRows(p);
+}
+
+/**
+ * Wires the project's task rows.
+ *
+ * NOT `wireBoard()`. That was the bug behind "completing a task does not update
+ * Finished until you leave and come back": wireBoard runs `wireCard` over EVERY
+ * `.task` on the page and reassigns `onclick`, so it silently overwrote the
+ * project handlers that had been set moments earlier. The tick then called
+ * Today's `toggleTask`, which looks the task up in `state.tasks` — the Today
+ * board's list. If the task was not on Today it returned immediately and
+ * nothing happened at all; if it was, it rebuilt a bucket that does not exist
+ * on this page.
+ *
+ * Same rows, same task records, same editor — a different controller, because
+ * the surrounding page is different.
+ */
+function wireProjectTaskRows(project) {
+  document.querySelectorAll('#pjd-tasks .task, .pjd-tasks-done .task').forEach((row) => {
+    const id = row.dataset.id;
+    row.querySelectorAll('[data-act]').forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const act = b.dataset.act;
+        if (act === 'toggle') return completeProjectTask(id);
+        if (act === 'open') return openProjectTask(id);
+        if (act === 'menu') return openProjectTaskMenu(b, id, project);
+        // back/fwd are Today's bucket controls. They are hidden here — the
+        // project's own ordering lives in the task menu.
+        return undefined;
+      };
+    });
+    row.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      openProjectTask(id);
+    };
+  });
 }
 
 /**
@@ -2772,9 +2907,15 @@ function addProjectTask(project) {
           projectId: project.id,
           // Inherit the project's area unless the editor was given one.
           areaId: body.areaId ?? project.areaId ?? null,
-          // Focus decides whether project context pushes work forward. Anything
-          // that is not Now starts in the backlog rather than on Today.
-          bucket: body.bucket ?? (project.focus === 'now' ? 'today' : 'future'),
+          // Focus nudges the default, it does not command it. A Now project's
+          // tasks start in This week, NOT on Today.
+          //
+          // They used to start on Today, and the result was the thing this
+          // phase exists to fix: adding five tasks to a Now project put five
+          // more rows on Today, so Today stopped being a decision about today
+          // and became a mirror of every active project. Belonging to a busy
+          // project is not the same as being due now.
+          bucket: body.bucket ?? (project.focus === 'now' ? 'week' : 'future'),
         },
       });
       await reloadProjectDetail();
@@ -2970,8 +3111,18 @@ async function setProjectNextAction(taskId) {
     const r = await api(`/api/v1/workspaces/${ws()}/projects/${project.id}/next-action`,
       { method: 'POST', body: { taskId } });
     pj.detail.project = r.project;
+    // The bucket is not drawn in this list, so there is nothing to re-render —
+    // only the local record to keep truthful.
+    if (r.surfaced) {
+      const t = pj.detail.tasks.find((x) => x.id === taskId);
+      if (t) t.bucket = 'today';
+    }
     patchNextActionSlot();
-    saved(taskId ? 'Next action set' : 'Back to automatic');
+    saved(
+      !taskId ? 'Back to automatic'
+        : r.surfaced ? 'Next action set — and put on Today'
+          : 'Next action set',
+    );
   } catch (e) {
     // Nothing was committed, so nothing is changed on screen either.
     if (slot && before != null) slot.innerHTML = before;
@@ -3027,11 +3178,10 @@ function openProjectTask(taskId) {
       await reloadProjectDetail();
       saved();
     },
-    onToggle: async () => {
-      await api(`/api/v1/workspaces/${ws()}/tasks/${task.id}`,
-        { method: 'PATCH', body: { status: task.status === 'done' ? 'open' : 'done' } });
-      await reloadProjectDetail();
-    },
+    // The tick goes through the same path as the row's own tick, so unsaved
+    // edits are carried into the completion and the Completed section updates
+    // in place rather than on the next visit.
+    onToggle: (dirty) => completeProjectTask(task.id, dirty),
   });
 }
 
@@ -3046,7 +3196,7 @@ function openProjectTask(taskId) {
  * click first, then it moves, and only then do the numbers change — two things
  * changing during the movement reads as a glitch.
  */
-async function completeProjectTask(taskId) {
+async function completeProjectTask(taskId, dirty = null) {
   const project = pj.detail?.project;
   const task = (pj.detail?.tasks ?? []).find((t) => t.id === taskId);
   if (!project || !task || task._busy) return;
@@ -3058,9 +3208,11 @@ async function completeProjectTask(taskId) {
   if (row && !wasDone) row.classList.add('is-completing');
 
   try {
-    const r = await api(`/api/v1/workspaces/${ws()}/tasks/${taskId}`, {
-      method: 'PATCH', body: { status: wasDone ? 'open' : 'done' },
-    });
+    // The same single write Today uses: unsaved edits travel with the
+    // completion, inside one transaction.
+    const r = await api(
+      `/api/v1/workspaces/${ws()}/tasks/${taskId}/${wasDone ? 'uncomplete' : 'complete'}`,
+      { method: 'POST', body: dirty ?? {} });
     Object.assign(task, r.task);
     // Stage 2: the same node moves into (or out of) the Completed section.
     moveTaskNodeToSection(row, !wasDone);

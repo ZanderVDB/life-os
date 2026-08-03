@@ -233,11 +233,36 @@ export function openTaskModal(ctx) {
   };
 
   if (t) {
+    /**
+     * Complete.
+     *
+     * THE BUG THIS FIXES, and it was in the shared editor, so it lost notes on
+     * Today as well as in Projects: this used to call `onToggle()` — which
+     * sends only the status — and then `close(true)`, a FORCE close that skips
+     * the dirty check. Type a note, tick the box, and the note was silently
+     * discarded with no warning that anything had been thrown away.
+     *
+     * The dirty fields now travel WITH the completion, as one write. Not "save
+     * then complete": two writes can half-succeed, and the second can arrive
+     * before the first.
+     */
+    let busy = false;
     dlg.querySelector('#m-toggle').onclick = async () => {
-      await ctx.onToggle();
-      close(true);
+      if (busy) return;             // one completion per click
+      busy = true;
+      saying('Saving…');
+      try {
+        await ctx.onToggle(isDirty() ? read() : null);
+        close(true);
+      } catch (e) {
+        // The editor stays open with everything the user typed still in it.
+        busy = false;
+        saying(e.message);
+      }
     };
     dlg.querySelector('#m-archive').onclick = async () => {
+      // Archiving keeps the record, so unsaved edits must not be lost either.
+      if (isDirty()) await ctx.onSave(read());
       await ctx.onArchive();
       close(true);
     };

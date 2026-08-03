@@ -12,6 +12,10 @@ import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import { tasks, taskSteps, taskActivity, areas, projects, BUCKETS, PRIORITIES } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
+// The next action is resolved with the SAME function the Projects page uses.
+// Two implementations of "which task is next" would disagree, and the badge on
+// Today would point at a different task than the project itself does.
+import { nextActionFor } from './projects.js';
 
 /** Sparse spacing so a single move rewrites one row, not the whole bucket. */
 const GAP = 1000;
@@ -128,21 +132,35 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
      * second source of truth starts. It is also one query for the whole board
      * rather than one per task.
      *
-     * `nextTaskId` rides along so Today can mark a task that is its project's
-     * next action without asking again per row. */
+     * `nextActionId` is the RESOLVED next action, not the stored override.
+     *
+     * It used to be `nextTaskId`, and that was wrong in the common case: most
+     * projects have no override, so `nextTaskId` is null and Today marked
+     * nothing at all — the badge only ever appeared on projects where someone
+     * had picked a task by hand. Resolving it here means Today marks the same
+     * task the project page calls the next action, whether it was chosen or
+     * inferred. One rule, one answer, in both places.
+     *
+     * Resolution needs each project's FULL task list, not just the rows on this
+     * board — the next action is frequently a task that is not on Today. That
+     * is one extra query for the whole board, not one per row. */
     const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean))] as string[];
     const projectRows = projectIds.length
-      ? await db.select({
-        id: projects.id, title: projects.title, status: projects.status,
-        focus: projects.focus, nextTaskId: projects.nextTaskId,
-      }).from(projects)
+      ? await db.select().from(projects)
         .where(and(eq(projects.workspaceId, wsId), inArray(projects.id, projectIds)))
+      : [];
+    const siblings = projectIds.length
+      ? await db.select().from(tasks)
+        .where(and(eq(tasks.workspaceId, wsId), inArray(tasks.projectId, projectIds)))
       : [];
 
     return {
       tasks: rows.map((t) => ({ ...t, steps: byTask.get(t.id) ?? [] })),
       total,
-      projects: Object.fromEntries(projectRows.map((p) => [p.id, p])),
+      projects: Object.fromEntries(projectRows.map((p) => [p.id, {
+        id: p.id, title: p.title, status: p.status, focus: p.focus,
+        nextActionId: nextActionFor(p, siblings.filter((t) => t.projectId === p.id)).task?.id ?? null,
+      }])),
     };
   });
 
@@ -227,17 +245,56 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
   });
 
   // ── complete / uncomplete ───────────────────────────────────────────
+  //
+  // The body is optional and carries any edits the user had made but not yet
+  // saved when they ticked the box — typically a note typed seconds earlier.
+  //
+  // Applied in the SAME transaction as the completion, deliberately. The
+  // obvious alternative, "PATCH the edits then POST the completion", is two
+  // writes: the first can succeed and the second fail, leaving a task that
+  // looks saved but is not done, and if they race, the completion's own
+  // `updatedAt` can land before the edit's. One transaction, or the edit is
+  // not really attached to the completion at all.
   for (const [verb, done] of [['complete', true], ['uncomplete', false]] as const) {
     app.post(`${base}/tasks/:taskId/${verb}`, pre, async (req) => {
       const wsId = req.workspaceId!;
       const { taskId } = req.params as { taskId: string };
+      // `.strict()`, so an unexpected field is a 400 rather than a silent drop.
+      // `status` is not accepted because the verb already decided it, and
+      // `bucket` is not accepted because a task being completed is leaving the
+      // board — a caller that thinks it is also moving the task should be told
+      // it is not.
+      const edits = TaskUpdate.omit({ status: true, bucket: true }).strict()
+        .parse(req.body ?? {});
+
       const row = await db.transaction(async (tx) => {
-        const r = (await tx.update(tasks).set({
+        const patch: Record<string, unknown> = {
           status: done ? 'done' : 'open',
           completedAt: done ? new Date() : null,
           updatedAt: new Date(),
-        }).where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, wsId))).returning())[0];
+        };
+        if (edits.title !== undefined) patch['title'] = edits.title;
+        if (edits.notes !== undefined) patch['notes'] = edits.notes ?? null;
+        if (edits.priority !== undefined) patch['priority'] = edits.priority;
+        if (edits.areaId !== undefined) patch['areaId'] = edits.areaId ?? null;
+        if (edits.dueDate !== undefined) patch['dueDate'] = edits.dueDate ?? null;
+        if (edits.scheduledAt !== undefined) {
+          patch['scheduledAt'] = edits.scheduledAt ? new Date(edits.scheduledAt) : null;
+        }
+        if (edits.estimatedMinutes !== undefined) {
+          patch['estimatedMinutes'] = edits.estimatedMinutes ?? null;
+        }
+        // `bucket` is intentionally NOT accepted here. A task being completed
+        // is leaving the board; moving it between buckets on the way out would
+        // rewrite a position for a row nothing is going to show.
+
+        const r = (await tx.update(tasks).set(patch)
+          .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, wsId))).returning())[0];
         if (!r) throw notFound('Task not found.');
+        const fields = Object.keys(edits);
+        if (fields.length) {
+          await logActivity(tx, wsId, taskId, req.principal!.userId, 'edited', { fields });
+        }
         await logActivity(tx, wsId, taskId, req.principal!.userId, done ? 'completed' : 'reopened');
         return r;
       });

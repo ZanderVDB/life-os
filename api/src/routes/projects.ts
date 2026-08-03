@@ -24,7 +24,7 @@ import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
-  projects, tasks, areas, PROJECT_STATUSES, PROJECT_FOCUSES,
+  projects, tasks, taskSteps, areas, PROJECT_STATUSES, PROJECT_FOCUSES,
   type ProjectStatus,
 } from '../db/schema.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
@@ -209,6 +209,21 @@ function shape(project: ProjectRow, list: TaskRow[], today = todayIso()) {
         scheduledAt: next.task.scheduledAt,
         explicit: next.explicit,
         reason: next.reason,
+        /* Step progress, when the caller passed tasks that carry steps.
+         *
+         * The next action is the one task a project is asking you to do, and
+         * "4 steps, 2 done" is the most useful thing that can be said about it
+         * — it is the difference between not started and nearly finished. The
+         * row below it already showed this; the slot above it did not.
+         *
+         * `steps` is absent on the internal callers that only need ordering, so
+         * this reports null rather than a confident 0/0. */
+        steps: 'steps' in next.task && Array.isArray((next.task as any).steps)
+          ? {
+            total: (next.task as any).steps.length,
+            done: (next.task as any).steps.filter((s: any) => s.completed).length,
+          }
+          : null,
       }
       : null,
     nextActionOverrideStale: next.staleOverride && !next.explicit,
@@ -244,6 +259,47 @@ export function registerProjectRoutes(
   const tasksOf = (ws: string, id: string) => db.select().from(tasks)
     .where(and(eq(tasks.workspaceId, ws), eq(tasks.projectId, id)))
     .orderBy(asc(tasks.projectPosition), asc(tasks.createdAt));
+
+  /**
+   * The same tasks, WITH their steps.
+   *
+   * A project task and a Today task are one record, and the row that draws them
+   * is one function — so if the project endpoint omits `steps`, the identical
+   * task shows "2/4 steps" on Today and nothing at all inside its own project.
+   * That is not a rendering difference, it is the same row telling two stories.
+   *
+   * `tasksOf` stays as it is for the internal callers that only need ordering
+   * and status; this is the shape that goes out to the client.
+   */
+  async function tasksWithSteps(ws: string, id: string) {
+    const rows = await tasksOf(ws, id);
+    if (!rows.length) return rows.map((t) => ({ ...t, steps: [] as any[] }));
+    const steps = await db.select().from(taskSteps)
+      .where(and(
+        eq(taskSteps.workspaceId, ws),
+        inArray(taskSteps.taskId, rows.map((t) => t.id)),
+      ))
+      .orderBy(asc(taskSteps.position), asc(taskSteps.createdAt));
+    const byTask = new Map<string, typeof steps>();
+    for (const s of steps) {
+      const list = byTask.get(s.taskId) ?? [];
+      list.push(s); byTask.set(s.taskId, list);
+    }
+    return rows.map((t) => ({ ...t, steps: byTask.get(t.id) ?? [] }));
+  }
+
+  /**
+   * The next free slot at the bottom of the Today bucket.
+   *
+   * A task brought to Today lands underneath what is already there. Inserting
+   * it at the top would let a project reorder the user's day.
+   */
+  async function endOfToday(ws: string): Promise<number> {
+    const [r] = await db.select({ max: sql<number>`coalesce(max(${tasks.position}), 0)` })
+      .from(tasks)
+      .where(and(eq(tasks.workspaceId, ws), eq(tasks.bucket, 'today'), isNull(tasks.archivedAt)));
+    return (r?.max ?? 0) + 1000;
+  }
 
   /**
    * Gives a project's tasks sparse, distinct order values.
@@ -404,7 +460,7 @@ export function registerProjectRoutes(
     const ws = wsId(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
     const project = await load(ws, id);
-    const list = await tasksOf(ws, id);
+    const list = await tasksWithSteps(ws, id);
     return { project: shape(project, list), tasks: list };
   });
 
@@ -468,7 +524,7 @@ export function registerProjectRoutes(
       return project!;
     });
 
-    const list = await tasksOf(ws, created.id);
+    const list = await tasksWithSteps(ws, created.id);
     reply.code(201);
     return { project: shape(created, list), tasks: list };
   });
@@ -521,7 +577,8 @@ export function registerProjectRoutes(
     const body = z.object({ taskId: uuid.nullable() }).strict().safeParse(req.body);
     if (!body.success) throw badRequest('Send { "taskId": "<uuid>" } or { "taskId": null }.');
     const ws = wsId(req);
-    await load(ws, id);
+    const project = await load(ws, id);
+    let surfaced = false;
 
     if (body.data.taskId) {
       const [task] = await db.select().from(tasks)
@@ -529,10 +586,26 @@ export function registerProjectRoutes(
       if (!task) throw notFound('That task does not exist.');
       if (task.projectId !== id) throw badRequest('That task is not in this project.');
       if (task.status !== 'open') throw badRequest('The next action has to be an open task.');
+
+      // The ONE case where a project may put a task on Today, and it takes a
+      // deliberate act to trigger: someone chose this task, by name, as the
+      // single next thing, on a project they have marked Now.
+      //
+      // Membership does not do this. Focus alone does not do this. Inference
+      // does not do this — an inferred next action changes whenever a due date
+      // moves, and Today must not reshuffle itself behind the user's back.
+      if (project.focus === 'now' && task.bucket !== 'today') {
+        await db.update(tasks)
+          .set({ bucket: 'today', position: await endOfToday(ws), updatedAt: new Date() })
+          .where(and(eq(tasks.workspaceId, ws), eq(tasks.id, task.id)));
+        surfaced = true;
+      }
     }
     const [row] = await touch(ws, id, { nextTaskId: body.data.taskId });
     const list = await tasksOf(ws, id);
-    return { project: shape(row!, list) };
+    // `surfaced` is reported so the interface can say what it did. A task that
+    // silently appears somewhere else is indistinguishable from a bug.
+    return { project: shape(row!, list), surfaced };
   });
 
   /* ── Task assignment ───────────────────────────────────────────────── */
@@ -671,7 +744,7 @@ export function registerProjectRoutes(
       return row;
     });
 
-    const list = await tasksOf(ws, id);
+    const list = await tasksWithSteps(ws, id);
     // The whole ordered list comes back, so the client can settle on the
     // server's answer rather than trusting its own optimistic guess.
     return { task: moved, tasks: list, project: shape(await load(ws, id), list) };

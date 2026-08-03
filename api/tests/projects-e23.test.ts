@@ -289,7 +289,11 @@ test('ui: Today shows the project by name, as a link, never as colour alone', ()
   const fn = body(appCode, 'function taskHtml(t)');
   assert.match(fn, /state\.projectsById\[t\.projectId\]/, 'the card cannot name its project');
   assert.match(fn, /data-open-project="\$\{project\.id\}"/, 'the project name is not a link');
-  assert.match(fn, /project\.nextTaskId === t\.id/, 'the next action is unmarked on Today');
+  // The RESOLVED next action, not the stored override. `nextTaskId` is null on
+  // every project nobody has hand-picked a task for, so keying off it meant the
+  // badge almost never appeared.
+  assert.match(fn, /project\.nextActionId === t\.id/, 'the next action is unmarked on Today');
+  assert.ok(!/nextTaskId/.test(fn), 'Today is back on the raw override');
   assert.match(fn, /Next action</, 'the marker is not a word');
   assert.match(css, /\.tm-project\{/, 'the project chip has no styling');
   // The chip sits in the existing meta line, so adding it cannot move the title.
@@ -311,7 +315,7 @@ test('ui: opening a project from Today remembers the board', () => {
 
 test('ui: completing in project detail moves the same node, no rebuild', () => {
   // The standing known limitation from E2.1/E2.2.
-  const fn = body(appCode, 'async function completeProjectTask(taskId)');
+  const fn = body(appCode, 'async function completeProjectTask(taskId, dirty = null)');
   assert.ok(!/reloadProjectDetail/.test(fn), 'completion still rebuilds the detail page');
   assert.match(fn, /row\.classList\.add\('is-completing'\)/, "Today's completion class is not reused");
   assert.match(fn, /moveTaskNodeToSection\(row, !wasDone\)/, 'the node is not moved');

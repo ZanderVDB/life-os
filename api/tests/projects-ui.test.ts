@@ -281,8 +281,11 @@ test('detail: tasks are the same records, editor and rows as everywhere else', (
   assert.match(add, /openTaskModal\(\{/, 'a second task editor was built');
   assert.match(add, /projectId: project\.id/, 'a task added here does not belong to the project');
   assert.match(add, /areaId: body\.areaId \?\? project\.areaId/, 'the area is not inherited');
-  assert.match(add, /project\.focus === 'now' \? 'today' : 'future'/,
-    'a task in a quiet project is forced onto Today');
+  // `week`, NOT `today`. Focus nudges the default; it does not put every task
+  // in an active project onto Today. See the surfacing rule in
+  // projects-v2-data-model.md.
+  assert.match(add, /project\.focus === 'now' \? 'week' : 'future'/,
+    'a Now project dumps its tasks onto Today again');
 });
 
 test('detail: notes are plain, with no AI and no browser call to a model', () => {

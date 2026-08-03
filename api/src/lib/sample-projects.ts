@@ -40,6 +40,8 @@ type SampleTask = {
   bucket?: 'today' | 'week' | 'month' | 'future';
   priority?: 'urgent' | 'high' | 'medium' | 'low' | 'someday';
   dueDate?: string;
+  /** Set as the project's explicit next action. */
+  next?: true;
 };
 type SampleProject = {
   key: string;
@@ -83,7 +85,8 @@ const SAMPLE: SampleProject[] = [
     targetDate: day(-9),
     tasks: [
       { title: 'Collect the invoices', status: 'done' },
-      { title: 'Reconcile against the bank', bucket: 'today', priority: 'urgent', dueDate: day(-2) },
+      // On Today because it is OVERDUE — a date, not project membership.
+      { title: 'Reconcile against the bank', bucket: 'today', priority: 'urgent', dueDate: day(-2), next: true },
       { title: 'File the return', bucket: 'week', priority: 'high' },
     ],
   },
@@ -97,7 +100,8 @@ const SAMPLE: SampleProject[] = [
     tasks: [
       { title: 'Confirm who is actually coming', status: 'done' },
       { title: 'Book the accommodation', status: 'done' },
-      { title: 'Pay the deposit', bucket: 'today', priority: 'high', dueDate: day(3) },
+      // On Today because it is the CHOSEN next action of a Now project.
+      { title: 'Pay the deposit', bucket: 'today', priority: 'high', dueDate: day(3), next: true },
       { title: 'Work out the travel split', bucket: 'week' },
       { title: 'Book the tickets', bucket: 'month', priority: 'medium' },
       { title: 'Look at a second venue', status: 'cancelled' },
@@ -109,9 +113,12 @@ const SAMPLE: SampleProject[] = [
     outcome: 'The Projects section is approved and Legacy projects are migrated',
     status: 'active', focus: 'now', area: 'Work',
     tasks: [
-      { title: 'Walk through the overview', bucket: 'today', priority: 'high' },
-      { title: 'Check the motion on a status change', bucket: 'today' },
-      { title: 'Decide on the log-into-notes question', bucket: 'week', priority: 'medium' },
+      // The demonstration that matters: an ACTIVE, NOW project with three open
+      // tasks and NOTHING on Today. No due dates, no chosen next action, so
+      // membership alone surfaces none of them.
+      { title: 'Walk through the overview', bucket: 'week', priority: 'high' },
+      { title: 'Check the motion on a status change', bucket: 'week' },
+      { title: 'Decide on the log-into-notes question', bucket: 'month', priority: 'medium' },
     ],
   },
   {
@@ -235,14 +242,18 @@ export async function seedSampleProjects(
     }).returning();
     projectsCreated++;
 
+    let nextTaskId: string | null = null;
     for (const t of s.tasks ?? []) {
       taskPosition += GAP;
-      await db.insert(tasks).values({
+      const [row] = await db.insert(tasks).values({
         workspaceId,
         projectId: project!.id,
         areaId,
         title: t.title,
         status: t.status ?? 'open',
+        // `future`, not `today`. The seed must obey the surfacing rule it is
+        // meant to demonstrate, or the first thing a reviewer sees is a Today
+        // page full of tasks that had no business being there.
         bucket: t.bucket ?? 'future',
         priority: t.priority ?? 'medium',
         dueDate: t.dueDate ?? null,
@@ -250,8 +261,13 @@ export async function seedSampleProjects(
         completedAt: t.status === 'done' ? new Date() : null,
         // The same marker, so cleanup can find them without guessing.
         legacyId: `${SAMPLE_PREFIX}${s.key}:${tasksCreated}`,
-      });
+      }).returning();
+      if (t.next) nextTaskId = row!.id;
       tasksCreated++;
+    }
+    if (nextTaskId) {
+      await db.update(projects).set({ nextTaskId })
+        .where(eq(projects.id, project!.id));
     }
   }
   return { projectsCreated, tasksCreated, alreadyPresent };

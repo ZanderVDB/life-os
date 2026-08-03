@@ -229,7 +229,7 @@ test('move: drag, keyboard and the Move menu share one commit path', () => {
 /* ── Task completion ─────────────────────────────────────────────────── */
 
 test('completion: acknowledges immediately, then collapses', () => {
-  const fn = body(appCode, 'async function toggleTask(id)');
+  const fn = body(appCode, 'async function toggleTask(id, dirty = null)');
   assert.match(fn, /classList\.add\('is-completing'\)/, 'no immediate acknowledgement');
   assert.match(fn, /collapseOut\(card, removeNode\)/, 'the card does not collapse out');
   assert.match(html, /\.task\.is-completing \.t-tick\{background:var\(--ok\)/,
@@ -241,7 +241,7 @@ test('completion: acknowledges immediately, then collapses', () => {
 test('completion: removes one node and never rebuilds the bucket', () => {
   // Rebuilding destroys identity for every REMAINING card, which is why the
   // gap used to snap shut instead of closing.
-  const fn = body(appCode, 'async function toggleTask(id)');
+  const fn = body(appCode, 'async function toggleTask(id, dirty = null)');
   const rmAt = fn.indexOf('const removeNode');
   const removeFn = fn.slice(rmAt, fn.indexOf('if (card && !wasDone)', rmAt));
   assert.match(removeFn, /card\?\.remove\(\)/, 'the card node is not removed directly');
@@ -258,7 +258,7 @@ test('completion: a hidden tab cannot strand the card', () => {
 });
 
 test('completion: failure puts the card back where it was', () => {
-  const fn = body(appCode, 'async function toggleTask(id)');
+  const fn = body(appCode, 'async function toggleTask(id, dirty = null)');
   assert.match(fn, /state\.tasks\.push\(t\)/, 'the task is not restored to state');
   assert.match(fn, /parent\.insertBefore\(card, parent\.children\[index\]/,
     'the card is not restored to its original index');

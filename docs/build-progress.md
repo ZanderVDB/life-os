@@ -1159,3 +1159,60 @@ orders them for real. The badge covers the actual need at none of that risk.
 Recorded in technical-debt.md.
 
 581 tests passing.
+
+## Phase E2.4 — task consistency, Today surfacing, save integrity, habit history
+
+Four defects, two of them data integrity, all reproduced and fixed against a
+real API in a real browser rather than by reading source.
+
+**Notes were being discarded on completion, on Today as well as in Projects.**
+The shared editor's tick called `onToggle()` — status only, form never read —
+then `close(true)`, a force close that skipped the dirty check. The edits now
+travel with the completion in one transaction. Verified: typed a note, pressed
+the tick without saving, note present on the server with `status: done`.
+
+**Completing a project task appeared to do nothing until you left and came
+back.** `wireProjectDetail()` ended with `wireBoard()`, which reassigns `onclick`
+on every `.task` on the page — silently overwriting the project handlers with
+Today's. Today's `toggleTask` looks the task up in `state.tasks`; for a task not
+on Today it returned immediately. `wireProjectTaskRows()` now owns those rows.
+Verified: same node object moves into Completed and back, one row per id, empty
+section removed, notes intact through both directions.
+
+**Today was mirroring active projects.** New tasks in a Now project defaulted to
+the `today` bucket, so a five-task project put five rows on Today. The default is
+now `week`. Membership surfaces nothing; only a bucket, a date, a schedule, or an
+explicitly chosen next action on a Now project does — and that last one is
+reported so the interface can say it happened. Verified: Today went from a full
+board to exactly two project tasks, one overdue and one chosen, with an active
+three-task Now project contributing none.
+
+**The Next action badge almost never appeared.** Today keyed off `nextTaskId`,
+the stored override, which is null unless someone hand-picked a task. It now
+receives the resolved `nextActionId`, computed with the same function the project
+page uses. Verified with the override cleared: `explicit: false`, `reason: due`,
+same id in both places, badge on screen.
+
+**Steps were missing from Project detail.** `GET …/projects/:id` returned tasks
+without them, so the same task read `2/4 steps` on Today and nothing in its own
+project. Fixed, and the next-action slot now reports `2 of 4 steps`. Project
+progress still counts tasks only — asserted with ten completed steps on one open
+task moving progress by nothing.
+
+**Calendar habit history.** Month cells show `3/5`, and the selected day lists
+every habit due that day, tickable. Historical correction was the point: the
+endpoints already took a date, but nothing could reach them for a past day.
+`habit-history.ts` computes due-and-done once for both Calendar and the habits
+endpoint — Calendar's old version counted any entry as done against a flat habit
+total, so a Monday habit counted against every Sunday. An existing entry always
+counts, so a habit created today can still be ticked for last week. Verified in
+browser: ticking 2026-07-30 moved that cell 0/3 → 1/3 and nothing else; a habit
+created today, ticked 12 days back, moved that day alone.
+
+This restored a habit mark to the Month cell, which **D4.2 had deliberately
+removed**. That removal was right about the old mark — an unlabelled arc repeated
+in every square. `3/5` is a number with a denominator and says what it means
+without a legend. The test that enforced the removal was rewritten to enforce the
+new rule rather than deleted.
+
+611 tests passing.

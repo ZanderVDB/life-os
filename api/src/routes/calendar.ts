@@ -19,6 +19,7 @@ import {
   reminderRecurrenceRules,
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
+import { habitHistory } from '../lib/habit-history.js';
 import { isStagingCleanupAllowed } from '../lib/import-writer.js';
 import { expand, describe as describeRule, nextAfter } from '../lib/recurrence.js';
 
@@ -208,22 +209,30 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       eq(tasks.status, 'open'),
     ));
 
-    // Habit completion COUNTS only — Calendar summarises rhythm, it does not
-    // turn habits into events or repeat them as daily agenda noise.
-    const habitDays = await db.select({
-      entryDate: habitEntries.entryDate,
-      done: sql<number>`count(*)::int`,
-    }).from(habitEntries).where(and(
-      eq(habitEntries.workspaceId, workspaceId),
-      gte(habitEntries.entryDate, q.data.from),
-      lte(habitEntries.entryDate, q.data.to),
-    )).groupBy(habitEntries.entryDate);
-
-    const [{ total: habitTotal } = { total: 0 }] = await db.select({
-      total: sql<number>`count(*)::int`,
-    }).from(habits).where(and(
+    /* Habit completion COUNTS only — Calendar summarises rhythm, it does not
+     * turn habits into events or repeat them as daily agenda noise.
+     *
+     * `due` AND `done` per day, from the shared helper. It used to be a plain
+     * `count(*)` of entry rows against a flat total of unarchived habits, and
+     * both halves were wrong: a Monday-only habit counted against every day of
+     * the week, and a habit with a target of 3 read as done after one tick. The
+     * grid was showing "2/5" on days where two of two were finished.
+     *
+     * Days with nothing due are dropped, so the grid can distinguish "nothing
+     * was asked of you" from "you did none of it". */
+    const habitRows = await db.select().from(habits).where(and(
       eq(habits.workspaceId, workspaceId), isNull(habits.archivedAt),
     ));
+    const habitEntryRows = habitRows.length
+      ? await db.select().from(habitEntries).where(and(
+        eq(habitEntries.workspaceId, workspaceId),
+        gte(habitEntries.entryDate, q.data.from),
+        lte(habitEntries.entryDate, q.data.to),
+      ))
+      : [];
+    const habitDays = habitHistory(habitRows, habitEntryRows, q.data.from, q.data.to)
+      .filter((d) => d.due > 0);
+    const habitTotal = habitRows.length;
 
     const links = await db.select().from(calendarItemLinks)
       .where(eq(calendarItemLinks.workspaceId, workspaceId));

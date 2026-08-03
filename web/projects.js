@@ -320,16 +320,16 @@ export function nextActionSlotHtml(p) {
   // The same facts the row in the list below shows. A next action that told
   // you less than the task list did was the same Task pretending to be a
   // lesser thing.
-  // Steps ride on the task record in the list, so the slot reads them from
-  // there rather than carrying its own copy.
-  const steps = next.steps ?? [];
-  const doneSteps = steps.filter((x) => x.completed).length;
+  // Counts, computed by the API from the same Task record the row below uses.
+  // Not a second copy of the step list: two copies of the same steps in one
+  // response is how the slot and the row start disagreeing.
+  const steps = next.steps ?? null;
   return `<button type="button" class="pjd-next-open" data-pjd-open-task="${next.id}">
       <span class="pjd-next-t">${esc(next.title)}</span>
       <span class="pjd-next-meta">
         ${next.dueDate ? `<span class="pjd-next-due">${esc(fmtDate(next.dueDate))}</span>` : ''}
         ${next.scheduledAt ? '<span class="pjd-next-sched">Scheduled</span>' : ''}
-        ${steps.length ? `<span class="pjd-next-steps">${doneSteps} of ${steps.length} steps</span>` : ''}
+        ${steps?.total ? `<span class="pjd-next-steps">${steps.done} of ${steps.total} steps</span>` : ''}
         ${next.bucket && next.bucket !== 'future'
     ? `<span class="pjd-next-bucket">${esc(next.bucket)}</span>` : ''}
         <span class="pjd-next-pri pri-${esc(next.priority)}">${esc(next.priority)}</span>

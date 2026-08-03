@@ -21,6 +21,15 @@ const crypto = readFileSync(join('src', 'lib', 'token-crypto.ts'), 'utf8');
 const calendar = read('calendar.js');
 const app = read('app.js');
 const html = read('index.html');
+
+/** The source of one declaration, so a rule can be asserted where it lives. */
+function body(src: string, decl: string): string {
+  const at = src.indexOf(decl);
+  assert.ok(at > -1, `${decl} not found`);
+  const rest = src.slice(at + decl.length);
+  const end = rest.search(/\n(?:async )?(?:export )?(?:function |const \w+ = )/);
+  return end === -1 ? rest : rest.slice(0, end);
+}
 const reminderModal = read('reminder-modal.js');
 const pickers = read('pickers.js');
 const hover = read('hover-preview.js');
@@ -279,13 +288,40 @@ test('ui: no browser prompt, confirm or alert for normal creation', () => {
   });
 });
 
-test('ui: habits are absent from the Month cell entirely', () => {
-  // D4.1 demoted the green count to a faint arc. D4.2 removed even that: it
-  // was the most repeated mark in Month and nobody could say what it meant,
-  // which fails the clarity rule. Habits now live in the selected-day rail.
-  assert.ok(!calendar.includes('cm-habit-dot'), 'the habit arc is back in the cell');
-  assert.ok(!/cm-chip cm-habit/.test(calendar), 'the green habit count is back');
-  assert.match(calendar, /cs-habit/, 'habit detail vanished instead of moving to the rail');
+test('ui: the Month cell habit mark is a RATIO, never a list or a dot', () => {
+  // History: D4.1 demoted a green count to a faint arc, and D4.2 removed even
+  // that — an unlabelled mark repeated in every cell that nobody could read.
+  //
+  // E2.4 restores it as `3/5`, which is the thing the arc was not: a number
+  // with a denominator, so it says what it means without a legend. The arc
+  // must not come back, and the cell must never list habit names — five names
+  // repeated across thirty-one squares is the noise D4.2 was right about.
+  assert.ok(!calendar.includes('cm-habit-dot'), 'the unreadable habit arc is back');
+  assert.match(calendar, /habitSummaryHtml/, 'the Month cell habit summary is gone');
+  assert.match(calendar, /\$\{habit\.done\}\/\$\{habit\.due\}/,
+    'the Month cell mark is not a done/due ratio');
+  // `due`, not the total number of habits: a Monday-only habit is not owed on
+  // a Thursday, and counting it there invents a miss.
+  assert.ok(!/habitTotal/.test(calendar), 'the cell is counting all habits, not the ones due');
+});
+
+test('ui: an empty or future day gets NO habit mark', () => {
+  const fn = body(calendar, 'function habitSummaryHtml(habit, day, todayIso)');
+  // "0/0" for a day that asked nothing, and "0/5" printed across every day of
+  // the rest of the month, are both worse than a blank square.
+  assert.match(fn, /!habit\.due \|\| day > todayIso/,
+    'days with nothing due, or days still to come, are being marked');
+});
+
+test('ui: the selected day lists habits and every one can be ticked', () => {
+  const fn = body(calendar, 'function habitCardHtml(day)');
+  assert.match(fn, /data-habit="\$\{h\.id\}"/, 'habit rows are not identified');
+  assert.match(fn, /data-habit-day="\$\{day\}"/,
+    'the row does not carry the day, so a tick cannot land on a past date');
+  assert.match(fn, /aria-pressed/, 'the tick state is not exposed to assistive tech');
+  // Only what was actually due that day appears — otherwise the card shows
+  // habits that were never owed and the count disagrees with the cell.
+  assert.match(fn, /filter\(\(h\) => h\.dueToday\)/, 'the card is not filtered to what was due');
 });
 
 test('ui: the selected day is a tint and a border, not a heavy fill', () => {

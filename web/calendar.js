@@ -64,6 +64,15 @@ const cal = {
   // Snapshot taken on entering a utility, restored on leaving, so returning
   // lands on exactly the month you left rather than flashing through Month.
   resume: null,
+  /*
+   * The selected day's habits, loaded on demand.
+   *
+   *   { date, habits: [...] } | { date, loading: true } | { date, error }
+   *
+   * Keyed by date rather than held as a bare list, so a slow response for the
+   * 3rd cannot paint itself into a card that is now showing the 4th.
+   */
+  dayHabits: null,
 };
 
 /* ── Date helpers ─────────────────────────────────────────────────────── */
@@ -119,8 +128,10 @@ function itemsForDay(dayIso) {
     deadlines: cal.layers.tasks ? d.deadlines.filter((t) => t.dueDate === dayIso) : [],
     blocks: cal.layers.tasks
       ? d.blocks.filter((b) => iso(new Date(b.startsAt)) === dayIso) : [],
+    // { date, due, done } — `due` is what was asked of you that day, not the
+    // total number of habits you have.
     habit: cal.layers.habits
-      ? (d.habitDays.find((h) => h.entryDate === dayIso) ?? null) : null,
+      ? (d.habitDays?.find((h) => h.date === dayIso) ?? null) : null,
   };
 }
 
@@ -328,7 +339,7 @@ function monthHtml() {
  */
 function monthCellHtml(d, month, todayIso) {
   const day = iso(d);
-  const { events, reminders, deadlines, blocks } = itemsForDay(day);
+  const { events, reminders, deadlines, blocks, habit } = itemsForDay(day);
   const outside = d.getMonth() !== month;
   const load = workload(day);
   const hasConflict = conflictsOn(day).length > 0;
@@ -379,8 +390,30 @@ function monthCellHtml(d, month, todayIso) {
     <div class="cm-foot">
       ${blocks.length ? `<span class="cm-chip cm-plan"
         aria-label="${blocks.length} planned work block${blocks.length > 1 ? 's' : ''}">${blocks.length}</span>` : ''}
+      ${habitSummaryHtml(habit, day, todayIso)}
     </div>
   </div>`;
+}
+
+/**
+ * `3/5 habits` in a Month cell.
+ *
+ * A SUMMARY, never a list. Habits repeat daily by definition, so listing them
+ * per cell would fill every square in the month with the same five names and
+ * bury the things that actually differ between days.
+ *
+ * Nothing is drawn when nothing was due — an empty square is the honest answer
+ * for a day that asked nothing of you, and "0/0 habits" is not.
+ *
+ * Future days are also blank. A day that has not happened has not been missed,
+ * and drawing "0/5" across the rest of the month turns a history into a wall of
+ * failure for days nobody could have completed yet.
+ */
+function habitSummaryHtml(habit, day, todayIso) {
+  if (!habit || !habit.due || day > todayIso) return '';
+  const all = habit.done >= habit.due;
+  return `<span class="cm-chip cm-habit ${all ? 'is-all' : ''} ${habit.done ? '' : 'is-none'}"
+    aria-label="${habit.done} of ${habit.due} habits done">${habit.done}/${habit.due}</span>`;
 }
 
 /**
@@ -886,10 +919,62 @@ function selectedRailHtml() {
       ${deadlines.map((t) => `<div class="cs-row pri-${t.priority}"><i class="cs-due"></i>
         <span>${esc(t.priority)}</span><b>${esc(t.title)}</b></div>`).join('')}</div>` : ''}
 
-    ${habit?.done ? `<div class="cs-habit">
-      ${habit.done} of ${cal.data?.habitTotal ?? habit.done} habits done</div>` : ''}
+    ${habitCardHtml(day)}
 
     <button class="btn btn-primary cs-add" data-cal-add-day="${day}">Add to this day</button>
+  </div>`;
+}
+
+/**
+ * The selected day's habits, tickable.
+ *
+ * This is the point of the whole section: Life OS could tell you that you did
+ * 3 of 5 habits on a day two weeks ago, and offered no way to correct it. A
+ * history you cannot fix is a history you stop trusting, and then stop reading.
+ *
+ * Only in Month. Agenda answers "what is coming", and habits are not coming —
+ * they are a rhythm. Plan is about placing work into hours. Putting the same
+ * card in all three would be filling space rather than answering a question.
+ */
+function habitCardHtml(day) {
+  if (!cal.layers.habits) return '';
+  const dh = cal.dayHabits;
+  const future = day > iso(new Date());
+
+  if (future) {
+    // Nothing to tick and nothing to correct. Saying so beats an empty card.
+    return `<div class="cs-sec cs-habits">
+      <span class="cs-lab">Habits</span>
+      <p class="cs-habit-note">Not yet — this day has not happened.</p>
+    </div>`;
+  }
+  if (!dh || dh.date !== day) return '';
+  if (dh.loading) {
+    return `<div class="cs-sec cs-habits"><span class="cs-lab">Habits</span>
+      <p class="cs-habit-note">Loading…</p></div>`;
+  }
+  if (dh.error) {
+    return `<div class="cs-sec cs-habits"><span class="cs-lab">Habits</span>
+      <p class="cs-habit-note is-err">${esc(dh.error)}</p></div>`;
+  }
+
+  const due = (dh.habits ?? []).filter((h) => h.dueToday);
+  if (!due.length) {
+    return `<div class="cs-sec cs-habits"><span class="cs-lab">Habits</span>
+      <p class="cs-habit-note">Nothing was due.</p></div>`;
+  }
+  const done = due.filter((h) => h.completedToday).length;
+
+  return `<div class="cs-sec cs-habits">
+    <span class="cs-lab">Habits <b class="cs-habit-count">${done}/${due.length}</b></span>
+    ${due.map((h) => `<button class="cs-habit-row ${h.completedToday ? 'is-done' : ''}"
+      data-habit="${h.id}" data-habit-day="${day}"
+      aria-pressed="${h.completedToday ? 'true' : 'false'}"
+      aria-label="${esc(h.name)}${h.completedToday ? ', done' : ', not done'}">
+      <i class="cs-habit-tick" aria-hidden="true"></i>
+      <b>${esc(h.name)}</b>
+      ${h.targetCount > 1 ? `<span class="cs-habit-n">${h.todayCount}/${h.targetCount}</span>` : ''}
+    </button>`).join('')}
   </div>`;
 }
 
@@ -1153,7 +1238,8 @@ function calendarCanvasHtml() {
 export const freeWindowsFor = (day) => freeWindows(day);
 export const planHours = () => ({ start: PLAN_START, end: PLAN_END });
 
-export { cal, currentRange, itemsForDay, workload, conflictsOn, monthGrid, weekOf, iso, parseIso };
+export { cal, currentRange, itemsForDay, workload, conflictsOn, monthGrid, weekOf, iso, parseIso,
+  habitCardHtml, habitSummaryHtml };
 
 /**
  * Agenda regroup — moving an item between date groups without a rebuild.

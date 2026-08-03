@@ -15,6 +15,8 @@ import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import { habits, habitEntries, areas, FREQUENCY_TYPES } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
+// One implementation of "due and done on a day", shared with Calendar.
+import { habitHistory } from '../lib/habit-history.js';
 
 const GAP = 1000;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -126,6 +128,51 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
         };
       }),
     };
+  });
+
+  /**
+   * GET …/habits/history?from=YYYY-MM-DD&to=YYYY-MM-DD
+   *
+   * One row per day in the range: how many habits were due, and how many were
+   * done. This is what the Calendar month grid needs — a whole month in one
+   * request instead of thirty-one calls to `GET /habits?date=`.
+   *
+   * **The dates are plain strings and are never turned into instants.** The
+   * client sends the LOCAL day it is drawing; `entry_date` is a `date` column,
+   * not a timestamp. Parsing "2026-08-03" as a Date in a UTC+2 process, or
+   * anywhere west of Greenwich, is how a tick lands on the wrong square — and
+   * it does it silently, only near midnight, only for some users.
+   *
+   * The one place a Date is unavoidable is the weekday for `specific_days`, and
+   * it is built at NOON so no timezone offset can push it into the day either
+   * side.
+   */
+  app.get(`${base}/habits/history`, pre, async (req) => {
+    const wsId = req.workspaceId!;
+    const q = z.object({
+      from: z.string().regex(ISO_DATE),
+      to: z.string().regex(ISO_DATE),
+    }).parse(req.query ?? {});
+    if (q.to < q.from) throw badRequest('`to` cannot be before `from`.');
+    // ISO dates sort correctly as text, so this comparison needs no parsing.
+    const span = (Date.parse(`${q.to}T00:00:00Z`) - Date.parse(`${q.from}T00:00:00Z`)) / 86_400_000;
+    if (span > 366) throw badRequest('That range is longer than a year.');
+
+    // Archived habits are excluded: they were not being tracked, so counting
+    // them as due would invent misses that never happened.
+    const rows = await db.select().from(habits)
+      .where(and(eq(habits.workspaceId, wsId), isNull(habits.archivedAt)))
+      .orderBy(asc(habits.position), asc(habits.createdAt));
+
+    const entries = rows.length
+      ? await db.select().from(habitEntries).where(and(
+        eq(habitEntries.workspaceId, wsId),
+        gte(habitEntries.entryDate, q.from),
+        lte(habitEntries.entryDate, q.to),
+      ))
+      : [];
+
+    return { from: q.from, to: q.to, days: habitHistory(rows, entries, q.from, q.to) };
   });
 
   app.post(`${base}/habits`, pre, async (req, reply) => {
