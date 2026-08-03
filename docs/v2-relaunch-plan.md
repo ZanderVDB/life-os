@@ -172,3 +172,40 @@ and every deferred legacy system.
 
 The user's real Google Calendar is not connected before D5, and D5 does not
 start until the Month/Agenda/Plan experience is approved.
+
+### Phase D — final state (2026-08-03)
+
+| Step | Scope | State |
+|---|---|---|
+| D1-D2 | Product model, PostgreSQL foundation | done |
+| D3-D4 | Month / Agenda / Plan UI, approval | done |
+| D4.1 | Refinement, read-only Google connection | done |
+| D4.2-D4.3 | Consolidation, clarity, staging source safety | done |
+| D4.4-D4.5 | Reminder consistency, recurrence, workspace | done |
+| D4.6-D4.7 | State model, shared surfaces, composition | done |
+
+**Calendar is frozen.** It is the working read-only foundation and is not
+expanded further without a new explicit request.
+
+Outstanding and explicitly not complete — month caching, adjacent-month
+prefetch and cache-miss skeletons. Recorded in
+[technical-debt.md](technical-debt.md). It is not implemented during Phase E
+unless a regression blocks normal use.
+
+Google Calendar remains **read-only**. No write scope is requested by any
+later phase without its own approval.
+
+## Phase E — Projects
+
+| Step | Scope | State |
+|---|---|---|
+| E1 | Legacy audit, product model, data + migration architecture | done |
+| E2 | Projects schema, API, overview and detail | awaiting approval |
+| E3 | Legacy Projects migration | blocked on E2 |
+
+E1 built no Projects UI and migrated no data. It produced
+[projects-v2-product-model.md](projects-v2-product-model.md),
+[projects-v2-data-audit.md](projects-v2-data-audit.md),
+[projects-v2-migration-plan.md](projects-v2-migration-plan.md),
+[projects-v2-motion.md](projects-v2-motion.md), and one read-only audit
+endpoint. E2 does not start until the product model is approved.

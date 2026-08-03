@@ -219,3 +219,19 @@ graph TD
   architecture only (`calendar_item_links`); Projects and Library are not
   built, and no control implies they are live.
 - Today's compact week strip (D9) depends on Calendar being approved first.
+
+## Projects dependencies (Phase E)
+
+- Projects (E2) depends on **nothing new** — `tasks.project_id` and its index
+  already exist, and the polymorphic link table already names `project` as a
+  target type. The schema addition is a `projects` table plus one FK.
+- Projects does **not** depend on Calendar. It reads `task_blocks` to say what a
+  scheduled block is for, which is already project-agnostic.
+- Projects does **not** depend on Library. The link model reaches Library when
+  it exists; no Projects UI references it before then.
+- Legacy Projects migration (E3) depends on E2's schema, and on nothing in the
+  Tasks or Habits imports — the collections do not overlap.
+- Today and Plan week are **unchanged** by Projects. Project Tasks are ordinary
+  Tasks; the Project is context, not a container.
+- The one genuine coupling: **Area**. A Project owns an Area and its Tasks
+  inherit it. Any change to the Area model after E2 has to consider Projects.

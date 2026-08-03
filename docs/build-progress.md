@@ -1048,3 +1048,42 @@ real Google Calendar is NOT connected.
   no existing table is altered, so imported Task and Habit data cannot move.
 - 19 new schema tests against real Postgres (PGlite). 220 pass, 0 fail.
 - Still to do: D3 (Calendar UI on synthetic data) and D4 (approval).
+
+## Phase D4.6-D4.7 — Calendar frozen (2026-08-03)
+
+State model split from utilities, reminder filters cut to Active/Paused,
+contextual rail, and then the composition work: one Calendar frame centred on
+the window, one shared utility trigger/menu/surface across Today and Calendar,
+animated rail, and live refresh.
+
+The header centring bug is worth recording because three phases reported it
+fixed. A stale `align-items:start`, left behind when D4.2 changed the header
+from grid to column flex, made every header row shrink to max-content — the
+selector was perfectly centred *inside a row that had gone to sit on the left*.
+Measuring the row always returned zero. Measured at 2560: row 860px inside a
+1520px header, selector 330px off. The rule now recorded: **alignment is judged
+against the composition the user sees, never against the box you just centred
+something inside.**
+
+426 tests passing. Calendar frozen; month caching still outstanding.
+
+## Phase E1 — Projects audit (2026-08-03)
+
+Discovery only. **No Projects UI, no schema, no migration.**
+
+- Legacy Projects are the `builds` collection: title, description, freeform
+  notes, a dated log, a 7-step `stage`, and a `status` that Legacy **recomputes
+  from recency** unless pinned. No tasks, areas, dates, files, people or
+  calendar links exist on a Legacy Project.
+- `tasks.project_id` in v2 is null for every row — and correctly so. Legacy's
+  `task.project` field held a *workProject id*, which is an **Area**, not a
+  Project. There was never a task→project relationship to carry over.
+- Shipped one read-only endpoint,
+  `POST …/import/legacy/projects/audit`, which reports structure — statuses,
+  stages, content presence and length, duplicates, excluded-profile counts —
+  and never returns description, notes or log text.
+- Proposed the product model: Projects as finite outcomes with a four-state
+  lifecycle, derived progress with counts rather than bare percentages, an
+  inferred-but-overridable next action, and no right rail.
+
+440 tests passing. Calendar unchanged, Google read-only, Legacy untouched.

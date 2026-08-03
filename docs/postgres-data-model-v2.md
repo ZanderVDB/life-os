@@ -618,3 +618,55 @@ The rules that extend the existing model:
 - OAuth tokens are stored as encrypted-store references, never values.
 - The `(calendar_id, provider_event_id)` unique index is partial so sync
   upserts stay idempotent while local-only events remain possible.
+
+## Projects (Phase E1 — proposed, not applied)
+
+Nothing below is migrated yet. Recorded so E2 starts from a reviewed shape.
+
+### `projects`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid pk | |
+| `workspace_id` | uuid not null | → `workspaces`, cascade |
+| `area_id` | uuid | → `areas`, `on delete set null`. Exactly one. |
+| `title` | text not null | |
+| `outcome` | text | One line: what is true when this is done. |
+| `description` | text | |
+| `notes` | text | |
+| `status` | text not null default `'planning'` | check in (`planning`,`active`,`on_hold`,`completed`) |
+| `target_date` | date | |
+| `next_task_id` | uuid | → `tasks`, `on delete set null`. Explicit override only. |
+| `position` | integer not null default 0 | Manual order within a status group. |
+| `completed_at`, `archived_at` | timestamptz | Facts, not flags. Archive is orthogonal to status. |
+| `legacy_id` | text | Import provenance; unique per workspace. |
+| `created_at`, `updated_at` | timestamptz not null | |
+
+Indexes: `(workspace_id, status, position)` for the overview;
+`(workspace_id, archived_at)`; unique `(workspace_id, legacy_id)` where
+`legacy_id is not null`.
+
+**No `progress` column.** Progress is derived from Tasks on read. A stored
+percentage is a second source of truth that drifts the moment a task changes.
+
+### `tasks.project_id`
+
+Already exists as a nullable uuid with index `(workspace_id, project_id)`.
+E2 adds the foreign key to `projects(id)` with **`on delete set null`** — deleting
+a Project must never delete work.
+
+### Link model
+
+`calendar_item_links` is already polymorphic and already names `project` and
+`library` as target types. Its **name is now wrong for its job**: Projects and
+Library relationships are not calendar concerns.
+
+Recommendation for E2: rename to `item_links` in the same migration that adds
+`projects`, or add `item_links` alongside and leave the calendar table to
+calendar links. Either is cheap now and expensive after Projects ships.
+
+### Not proposed
+
+`project_milestones`, `project_activity`, `project_members`,
+`project_attachments` — each is a real table with real UI, and none has data or
+a decided design. Adding them now ships empty sections.

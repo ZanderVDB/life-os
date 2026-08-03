@@ -343,3 +343,34 @@ Today pass — the rail should be contextual per route, the same principle D4.6
 applied to Calendar (a rail kept for symmetry is an empty column with a border).
 Deliberately not a one-off `if (route === 'history')`; that is how the Calendar
 rail ended up with five special cases before D4.6 removed them.
+
+## Calendar frozen — outstanding items (recorded 2026-08-03)
+
+Calendar is the working read-only foundation as of D4.7 and is not expanded
+further without an explicit request. Three items remain **incomplete** and are
+not to be reported otherwise:
+
+1. **Month caching** — switching month clears the canvas and refetches.
+   See "Month loading" above for the full note.
+2. **Adjacent-month prefetch** — previous/next are never fetched on idle, so
+   every navigation is a cold request.
+3. **Cache-miss skeletons** — there is no skeleton state, so a cold month shows
+   an empty grid rather than a shape that is obviously loading.
+
+D4.7 added live refresh (45s range re-read, 5-minute incremental Google pull,
+refresh on tab focus). That is a *different* problem — keeping the current view
+current — and it does not address any of the three above. The refresh path is
+change-detected and repaints only on a real difference, so it does not make the
+caching gap worse.
+
+Not to be implemented during Phase E unless a regression blocks normal use.
+
+## Projects: `calendar_item_links` is misnamed (E1)
+
+The polymorphic link table already carries `targetType: task | project |
+library | diary`, which is exactly right, but it lives under a calendar name.
+The moment Projects links to Library material, the app will be writing
+"calendar item links" that have nothing to do with the calendar.
+
+Cheap to fix in the E2 migration (rename to `item_links`, or add a sibling and
+leave the calendar one alone). Expensive after Projects ships against it.

@@ -11,6 +11,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { migrationRuns } from '../db/schema.js';
 import { buildImportPlan, summarisePlan } from '../lib/legacy-import.js';
+import { auditLegacyProjects, summariseProjectAudit } from '../lib/projects-audit.js';
 import {
   executeImport, sourceFingerprint, checkApprovedCounts, CONFIRM_PHRASE,
   CLEANUP_CONFIRM, IMPORT_STEP, cleanupCandidates, deleteSyntheticTasks,
@@ -48,6 +49,24 @@ export function registerImportRoutes(app: AppInstance, db: Db, guards: Guards, e
       confirmPhrase: CONFIRM_PHRASE(plan.tasks.total),
       wouldWrite: false,
     };
+  });
+
+  /**
+   * POST …/import/legacy/projects/audit
+   *
+   * Phase E1 discovery: what is actually in the ~12 Legacy Projects. Reports
+   * structure — statuses, stages, whether there is a description, how long the
+   * notes are — never the notes themselves. Titles are returned because the
+   * user needs them to decide what migrates.
+   *
+   * There is deliberately no execute beside this one. Projects do not migrate
+   * in E1, and an audit that can also write is an audit nobody runs twice.
+   */
+  app.post(`${base}/import/legacy/projects/audit`, pre, async (req) => {
+    const body = z.object({ export: z.record(z.any()) }).safeParse(req.body);
+    if (!body.success) throw badRequest('Send { "export": <the parsed export JSON> }.');
+    const audit = auditLegacyProjects(body.data.export);
+    return { audit, summary: summariseProjectAudit(audit), wouldWrite: false };
   });
 
   /**
