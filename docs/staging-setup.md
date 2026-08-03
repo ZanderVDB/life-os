@@ -236,3 +236,24 @@ curl -o /dev/null -w '%{http_code}' \
 
 `401` means the route exists and the auth guard fired — the new build is live.
 `404` means Fastify has no such route — the old build is still serving.
+
+**Pick a marker that cannot match the old build.** Checking the web service for
+`m-step-add` — a new button's id — reported success against a stale deploy,
+because the OLD file already contained `.m-step-add`, the wrapper div's class.
+The probe was a substring of something that had been there all along.
+
+Prefer a new identifier that appears nowhere else (`flushStep`, `taskStepsCtx`),
+and sanity-check the file size against the local copy:
+
+```
+curl -s "$WEB/task-modal.js" | wc -c        # deployed
+wc -c < web/task-modal.js                   # local
+```
+
+14633 against 18297 is the whole answer, and it cannot be faked by a coincidental
+substring.
+
+**A build can still be running when `railway up --detach` has already returned.**
+`railway redeploy` answers "cannot be redeployed... currently building" in that
+window, which is the clearest available signal that the deploy is still in
+flight rather than finished and unpromoted.
