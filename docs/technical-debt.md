@@ -424,12 +424,42 @@ Both endpoints refuse when `NODE_ENV` is production. A real task filed into a
 sample project survives cleanup and simply loses the assignment, because the
 foreign key is `on delete set null`.
 
+**E2.4 — the seed now demonstrates the surfacing rule rather than breaking it.**
+It used to put four tasks in the `today` bucket, including two from one project
+with no due date and no next-action claim, which is precisely the "Today mirrors
+the project" behaviour E2.4 exists to prevent. A seed that contradicts the rule
+it is meant to illustrate teaches the reviewer the wrong thing.
+
+Now: `Reconcile against the bank` is on Today because it is **overdue**, `Pay the
+deposit` because it is the **chosen next action** of a Now project, and the
+active Now project `Life OS Projects review` keeps all three of its open tasks
+**off** Today — that project is the demonstration. A test asserts that every
+`bucket: 'today'` line in the seed carries either a `dueDate` or `next: true`.
+
+## E2.4 — the verification harness
+
+`api/tests/live-server.ts` boots the real Fastify app on port 8080 against
+PGlite, seeds the sample projects and a habit history, and enables the dev-auth
+bypass the web client already supports for localhost. It is how E2.4's defects
+were reproduced and the fixes demonstrated in a browser rather than inferred
+from source.
+
+It is **not a test** and is never run by `npm test`. It is also not shipped: it
+lives in `tests/`, it is excluded from the build, and it uses PGlite, so it
+cannot reach a real database. Keep it — the alternative is verifying UI claims
+by reading code, which is how the `wireBoard()` overwrite survived three phases.
+
 ## Projects E2.1 — remaining gaps
 
-**Task completion inside Project detail still reloads the list.** The task row
-and its completion animation are reused from Today, and reordering now moves the
-same node, but completion still calls `reloadProjectDetail()` rather than moving
-the node into the Completed section. Not claimed as same-node animation.
+**~~Task completion inside Project detail still reloads the list.~~ CLOSED in
+E2.3, and properly finished in E2.4.** E2.3 replaced the reload with a same-node
+move into the Completed section. E2.4 found the remaining half: the handlers
+doing the moving were being overwritten moments after they were set, because
+`wireProjectDetail()` ended with `wireBoard()` — which reassigns `onclick` on
+every `.task` on the page. The tick reached Today's `toggleTask`, which looks the
+task up in `state.tasks` and returns silently for a task that is not on Today.
+Verified in a browser: same node object through complete and reopen, one row per
+id, unsaved notes intact.
 
 **Overview reconciliation is partial.** A mutation applies to the server, then
 `refreshProjects()` re-reads and reconciles through `applyGroups`, so rows keep
