@@ -328,6 +328,42 @@ test('a11y: touch targets and no hover-only actions on small screens', () => {
   assert.match(mobile, /\.pj-more\{width:38px;height:38px\}/, 'the touch target is too small');
 });
 
+/* ── Auth freshness ──────────────────────────────────────────────────── */
+
+test('auth: the token is fetched per request, not from a background timer', () => {
+  // The bug this replaces: a 45-minute setInterval refreshing a 60-minute
+  // token. Browsers throttle background timers and Chrome freezes them in a
+  // hidden tab, so leaving the tab in the background let the token expire and
+  // the next action failed with "Invalid or expired sign-in token."
+  assert.match(appCode, /async function authToken\(force = false\)/,
+    'there is no on-demand token');
+  assert.match(appCode, /authUser\.getIdToken\(force\)/,
+    'the token is not fetched from Firebase per request');
+  assert.ok(!/setInterval\([\s\S]{0,200}getIdToken/.test(appCode),
+    'a background refresh timer is back — it does not fire in a hidden tab');
+});
+
+test('auth: a 401 is retried once with a forced refresh', () => {
+  const fn = body(appCode, 'async function api(path, opts = {})');
+  assert.match(fn, /if \(res\.status === 401 && \(authUser \|\| devToken\)\)/,
+    'an expired token is not retried, so the user has to reload');
+  assert.match(fn, /const fresh = await authToken\(true\)/, 'the retry reuses the dead token');
+  // Exactly one retry. A fresh token that is also rejected means the session is
+  // gone, and looping would only delay saying so.
+  assert.equal((fn.match(/authToken\(true\)/g) ?? []).length, 1, 'the retry can loop');
+  assert.match(fn, /Your sign-in has expired\. Reload the page to sign in again\./,
+    'a dead session reports a raw API error instead of what to do about it');
+});
+
+test('auth: an ID token is never written to disk', () => {
+  // It was stored and never read back — a Firebase ID token sitting in
+  // plaintext localStorage, outliving the tab that fetched it.
+  assert.ok(!/setItem\('los2_token'/.test(appCode),
+    'the ID token is written to localStorage');
+  // Sign-out still clears anything an older build left behind.
+  assert.match(appCode, /removeItem\('los2_token'\)/, 'an old stored token is never cleared');
+});
+
 /* ── Safety ──────────────────────────────────────────────────────────── */
 
 test('safety: Projects is a real route now, and nothing else changed', () => {

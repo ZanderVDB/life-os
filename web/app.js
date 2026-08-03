@@ -75,9 +75,36 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /* ── API ─────────────────────────────────────────────────────────────── */
+
+/**
+ * The signed-in Firebase user, kept so a token can be fetched ON DEMAND.
+ *
+ * The previous approach refreshed on a 45-minute `setInterval`. A Firebase ID
+ * token lives 60 minutes, so that looks safe and is not: browsers throttle
+ * background timers and Chrome freezes them outright in a hidden tab. Leave the
+ * tab in the background — or shut the laptop — and the refresh never fires, the
+ * token expires, and the next thing the user does fails with "Invalid or
+ * expired sign-in token."
+ *
+ * `getIdToken()` already solves this: it returns the cached token and refreshes
+ * only when it is expired or close to it. Asking it before each request costs
+ * nothing and cannot drift.
+ */
+let authUser = null;
+let devToken = null;
+
+async function authToken(force = false) {
+  if (devToken) return devToken;
+  if (!authUser) return state.token;
+  try {
+    state.token = await authUser.getIdToken(force);
+  } catch { /* keep whatever we had; the request will report the real failure */ }
+  return state.token;
+}
+
 async function api(path, opts = {}) {
   const hasBody = opts.body !== undefined;
-  const res = await fetch(`${CFG.apiBaseUrl}${path}`, {
+  const send = (token) => fetch(`${CFG.apiBaseUrl}${path}`, {
     ...opts,
     // Never let a service worker or the HTTP cache answer an API call. Task
     // data is private and must always come from the server.
@@ -86,14 +113,29 @@ async function api(path, opts = {}) {
       // Only declare a JSON body when there is one — Fastify rejects an empty
       // body that claims to be JSON, which silently broke every action route.
       ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
-      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(opts.headers || {}),
     },
     body: hasBody ? JSON.stringify(opts.body) : undefined,
   });
+
+  let res = await send(await authToken());
+  // One forced refresh and one retry. A token that expired while the tab was in
+  // the background is not something the user did wrong, and it must not be
+  // something they have to fix by reloading. Exactly one retry: if a fresh
+  // token is also rejected the session is genuinely gone, and retrying again
+  // would only delay saying so.
+  if (res.status === 401 && (authUser || devToken)) {
+    const fresh = await authToken(true);
+    if (fresh) res = await send(fresh);
+  }
+
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error('Your sign-in has expired. Reload the page to sign in again.');
+    }
     throw new Error(data?.error?.message || data?.message || `Request failed (${res.status})`);
   }
   return data;
@@ -169,6 +211,7 @@ function devBypass() {
 async function initAuth() {
   const dev = devBypass();
   if (dev) {
+    devToken = dev;
     state.token = dev;
     window.__signOut = () => { localStorage.removeItem('los2_dev_token'); location.reload(); };
     return run(boot);
@@ -184,16 +227,20 @@ async function initAuth() {
   const a = auth.getAuth(initializeApp(CFG.firebase));
 
   auth.onAuthStateChanged(a, async (user) => {
-    if (!user) return renderSignIn(() => auth.signInWithPopup(a, new auth.GoogleAuthProvider()));
+    if (!user) {
+      authUser = null;
+      return renderSignIn(() => auth.signInWithPopup(a, new auth.GoogleAuthProvider()));
+    }
+    // Held so api() can ask for a token per request. No interval: a background
+    // timer is exactly what stopped firing and let the token expire.
+    authUser = user;
     state.token = await user.getIdToken();
-    setInterval(async () => {
-      state.token = await user.getIdToken(true);
-      localStorage.setItem('los2_token', state.token);
-    }, 45 * 60 * 1000);
-    localStorage.setItem('los2_token', state.token);
+    // The token is NOT written to localStorage. Nothing ever read it back, and
+    // an ID token on disk outlives the tab that fetched it.
     window.__signOut = () => {
-      // A token must never outlive the session in storage.
-      localStorage.removeItem('los2_token'); localStorage.removeItem('los2_ws');
+      localStorage.removeItem('los2_token');   // clear any left by an older build
+      localStorage.removeItem('los2_ws');
+      authUser = null;
       return auth.signOut(a);
     };
     await run(boot);
