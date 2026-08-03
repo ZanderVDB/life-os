@@ -140,16 +140,45 @@ test('frame: nothing page-level is allowed to depend on the rail', () => {
   }
 });
 
-test('frame: the mode selector tracks the canvas, not the frame', () => {
-  // §12 Plan week ALWAYS carries a planning rail. Centring on the frame would
-  // leave the selector permanently off-centre over the week grid.
-  assert.match(css, /\.cal-head-mid\{translate:calc\(var\(--cal-rail-col\) \/ -2\) 0;/,
-    'the selector does not follow the canvas centre when the rail is open');
+test('frame: the header does not move when the rail opens', () => {
+  // The first attempt translated the selector by half the rail so it stayed
+  // centred over the GRID. That meant selecting a day slid it 172px, and Plan
+  // week's permanent rail left its header sitting off to one side of Month and
+  // Agenda's. The rail is content; content does not move the page's controls.
+  assert.match(css, /\.cal-head-mid\{translate:none\}/,
+    'the selector still shifts sideways when the rail opens');
+  assert.ok(!/\.cal-head-mid\{translate:calc/.test(css), 'the rail offset survives');
   assert.match(css, /body\.cal-rail-open\{--cal-rail-col:calc\(var\(--cal-rail-w\) \+ var\(--cal-rail-gap\)\)\}/,
     'the rail column is not one shared value');
-  // One source of truth: the same custom property drives the body grid.
   assert.match(css, /\.cal-body\{[^}]*grid-template-columns:minmax\(0,1fr\) var\(--cal-rail-col\)/,
-    'the frame and the header compute the rail width separately');
+    'the rail width is not driven by that value');
+});
+
+test('header: the sliding pill matches the button under it', () => {
+  // The pill is a third of the track and moves in exact thirds, but the buttons
+  // were content-width — 72 / 74 / 87px — so the highlight never lined up with
+  // its own label. Measured 7.5px off on Agenda and 9.4px too narrow for
+  // "Plan week".
+  assert.match(css, /\.cal-modes\{display:grid;grid-template-columns:repeat\(var\(--mode-n\),1fr\)\}/,
+    'the mode buttons are not equal width, so the pill cannot line up');
+  assert.match(css, /\.cal-mode-pill\{[^}]*width:calc\(\(100% - 6px\) \/ var\(--mode-n\)\)/,
+    'the pill is not one track column wide');
+  assert.match(css, /\.cal-mode-pill\{[^}]*transform:translateX\(calc\(var\(--mode-i\) \* 100%\)\)/,
+    'the pill does not travel in whole columns');
+  // NOT flex:1 — a zero basis makes the columns equal but lets them fall below
+  // their own labels, and "Plan week" then overflowed its padding and sat
+  // 5.4px right of centre. `1fr` keeps an auto minimum.
+  assert.ok(!/\.cal-modes button\{flex:1/.test(css), 'a zero flex basis can clip the widest label');
+});
+
+test('header: the period label is centred between its arrows', () => {
+  // The 168px min-width stops the control twitching as the label changes
+  // length, but the text was left-aligned inside it: 7px from the left arrow
+  // and 70.6px from the right.
+  assert.match(css, /\.cal-period-label\{text-align:center\}/,
+    'the date sits against the left arrow');
+  assert.match(css, /\.cal-period-label\{[^}]*min-width:168px/,
+    'the label has no stable width, so the arrows move as the period changes');
 });
 
 /* ── §9/§10 Rail motion ──────────────────────────────────────────────── */
@@ -157,8 +186,9 @@ test('frame: the mode selector tracks the canvas, not the frame', () => {
 test('motion: a real layout transition, not margin arithmetic', () => {
   assert.match(css, /\.cal-body\{[^}]*transition:grid-template-columns var\(--d-slow\) var\(--e-out\)/,
     'the frame does not animate its columns');
-  assert.match(css, /\.cal-head-mid\{[^}]*transition:translate var\(--d-slow\) var\(--e-out\)\}/,
-    'the selector snaps to its new position instead of travelling with the canvas');
+  // The selector used to transition too, tracking the canvas centre. It does
+  // not move at all now — see 'the header does not move when the rail opens'.
+  assert.match(css, /\.cal-head-mid\{translate:none\}/, 'the selector moves with the rail');
   // --d-slow is 260ms: inside the 260-320ms structural band, and an existing
   // token rather than a new number.
   assert.match(css, /--d-slow:260ms/, 'the structural duration is not the shared token');
@@ -365,6 +395,69 @@ test('surface: no surface outlives what it described', () => {
   assert.match(go, /closeUtility\(\)/, 'navigating away leaves the surface open');
   const add = body(appCode, 'function calendarAddMenu(anchor, day = null)');
   assert.match(add, /closeUtility\(\)/, 'Add and the utility menu can be open together');
+});
+
+/* ── Live updates ────────────────────────────────────────────────────── */
+
+test('live: the calendar re-reads itself while you are watching it', () => {
+  // A view that is only correct at the moment you opened it is not a calendar:
+  // Google events land from other devices, and once this app writes events it
+  // must see its own writes from a second tab.
+  assert.match(appCode, /const CAL_POLL_MS = 45_000/, 'the range is never re-read');
+  assert.match(appCode, /const CAL_SYNC_MS = 5 \* 60_000/, 'Google is never re-polled');
+  const start = body(appCode, 'function startCalendarLive()');
+  assert.match(start, /document\.visibilityState === 'visible'/,
+    'a hidden tab still polls');
+  assert.match(start, /visibilitychange/, 'returning to the tab does not refresh');
+  // Two cadences on purpose: the range is local and cheap, a Google sync costs
+  // an API round trip against a quota.
+  assert.ok(start.indexOf('CAL_POLL_MS') < start.indexOf('CAL_SYNC_MS'),
+    'the range and the Google pull share one cadence');
+});
+
+test('live: a refresh is invisible unless something actually changed', () => {
+  // Repainting on a timer makes the page flicker every minute and throws away
+  // scroll position — worse than being a minute stale.
+  const fn = body(appCode, 'async function refreshCalendar()');
+  assert.match(fn, /const changed = calendarSignature\(range\) !== calendarSignature\(cal\.data\)/,
+    'the refresh does not compare before repainting');
+  assert.match(fn, /if \(!changed\) \{ renderCalendarRail\(\); return; \}/,
+    'an unchanged refresh still repaints the canvas');
+  assert.match(fn, /const top = scroller\?\.scrollTop \?\? 0/, 'a refresh loses scroll position');
+  assert.ok(!/cal\.loading = true/.test(fn), 'a background refresh shows a loading state');
+  // And it must not paint a range the user has already navigated away from.
+  assert.match(fn, /now\.from !== r\.from \|\| now\.to !== r\.to/,
+    'a slow response can overwrite a period you have since left');
+});
+
+test('live: the signature ignores what changes on every sync', () => {
+  // Hashing the raw payload would report a change every time, because
+  // connection.lastSyncedAt moves whenever a sync runs.
+  const fn = body(appCode, 'function calendarSignature(d)');
+  assert.ok(!/lastSyncedAt/.test(fn), 'the fingerprint changes on every sync');
+  assert.ok(!/connection/.test(fn), 'connection state is treated as canvas content');
+  for (const list of ['events', 'reminders', 'deadlines', 'blocks', 'habitDays']) {
+    assert.ok(fn.includes(`d.${list}`), `${list} changes would go unnoticed`);
+  }
+});
+
+test('live: polling stops when the calendar is not on screen', () => {
+  const route = body(appCode, 'async function loadRoute()');
+  assert.match(route, /stopCalendarLive\(\)/, 'the calendar keeps polling from other routes');
+  assert.match(appCode, /startCalendarLive\(\);/, 'polling never starts');
+  const stop = body(appCode, 'function stopCalendarLive()');
+  assert.match(stop, /typeof t === 'function' \? t\(\) : clearInterval\(t\)/,
+    'the listeners are never detached, so they accumulate on every visit');
+});
+
+test('live: a quiet sync stays quiet', () => {
+  // The manual "Sync now" earns a toast. A background one has no user waiting
+  // on it, and a toast every five minutes is noise.
+  const fn = body(appCode, 'async function syncCalendarQuietly()');
+  assert.ok(!/saved\(|toast\(/.test(fn), 'the background sync reports itself');
+  assert.match(fn, /Date\.now\(\) - calLastSync < CAL_SYNC_MS/,
+    'nothing stops the background sync running more often than intended');
+  assert.match(fn, /if \(!cal\.data\?\.connection/, 'it syncs with no account connected');
 });
 
 /* ── §14 The Reminders workspace keeps its own header ────────────────── */

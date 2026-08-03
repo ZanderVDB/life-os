@@ -307,10 +307,30 @@ move**. Opening the selected-day rail takes width from the canvas's right edge
 only. Nothing that belongs to the page — the title, the period controls, the
 utility control, Add, the layer chips — may move because a day was selected.
 
-The mode selector is the one exception, and deliberately: it is centred over the
-canvas, so it travels with the canvas on the same transition. Plan week is why —
-its planning rail is permanent, and a selector centred on the frame would sit
-permanently off-centre over the week grid.
+**No exceptions, including the mode selector.** It was briefly centred over the
+canvas rather than the frame, so it travelled with the rail — which meant
+selecting a day slid it 172px, and Plan week's permanent rail left its header
+sitting visibly off to one side of Month's and Agenda's. The rail is content.
+Content does not move the page's controls.
+
+## Live data (locked in D4.7)
+
+The Calendar is a window onto data that changes without us — Google events land
+from other devices, and once this app writes events it must see its own writes
+from a second tab. A view that is only correct at the moment you opened it is
+not a calendar.
+
+The range is re-read every 45s while the tab is watched; Google is asked what
+changed every 5 minutes, because that costs a round trip against a quota and the
+sync is incremental. Returning to the tab refreshes immediately. Leaving the
+Calendar stops both.
+
+**A refresh must be invisible unless something actually changed.** Repainting on
+a timer flickers the page every minute and throws away scroll position, which is
+worse than being a minute stale. So a refresh fingerprints what the canvas draws
+and repaints only on a real difference — and the fingerprint deliberately
+excludes `lastSyncedAt`, which moves on every sync and would otherwise report a
+change every time.
 
 ## Shared surface rule (locked in D4.7)
 

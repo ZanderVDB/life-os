@@ -497,6 +497,9 @@ async function go(id) {
 
 /* ── Routes — only the main column changes ───────────────────────────── */
 async function loadRoute() {
+  // Polling a calendar nobody is looking at is a request that can only cost
+  // something. loadCalendar() starts it again on the way back in.
+  stopCalendarLive();
   const head = document.getElementById('page-head');
   const scroll = document.getElementById('main-scroll');
   if (!head || !scroll) return;
@@ -1542,6 +1545,7 @@ async function loadCalendar() {
   }
   cal.loading = false;
   if (state.route !== 'calendar') return;
+  startCalendarLive();
   scroll.innerHTML = cal.utility === 'reminders'
     ? remindersViewHtml(cal.reminders ?? [], cal.reminderFilter, areaName)
     : calendarBodyHtml();
@@ -1562,6 +1566,123 @@ async function loadCalendar() {
     history.replaceState(null, '', '#calendar');
     toast(connectErrorMessage(back.get('reason')), true);
   }
+}
+
+/* ── Keeping the calendar current ───────────────────────────────────────
+ * The Calendar is a window onto data that changes without us: Google events
+ * land from other devices, and once this app can create events it will need to
+ * see its own writes from a second tab. A view that is only correct at the
+ * moment you opened it is not a calendar.
+ *
+ * Two cadences, deliberately different. The range is cheap and local, so it is
+ * re-read often. A Google sync costs an API round trip against a quota, so it
+ * runs rarely — and it is incremental, so "rarely" is enough.
+ *
+ * The hard requirement is that none of this is VISIBLE when nothing changed.
+ * A refresh that repaints on a timer makes the page flicker every minute and
+ * throws away scroll position, which is worse than being a minute stale. So a
+ * refresh compares the new data against the old and repaints only on a real
+ * difference. */
+const CAL_POLL_MS = 45_000;         // re-read the range while the tab is watched
+const CAL_SYNC_MS = 5 * 60_000;     // ask Google what changed
+const CAL_STALE_MS = 20_000;        // "you have been away" threshold
+let calTimers = [];
+let calLastSync = 0;
+
+/**
+ * A cheap fingerprint of everything the canvas draws.
+ *
+ * Deliberately NOT the whole response: `connection.lastSyncedAt` moves on every
+ * sync, so hashing the raw payload would report a change every time and repaint
+ * for nothing.
+ */
+function calendarSignature(d) {
+  if (!d) return '';
+  const part = (list, keys) => (list ?? [])
+    .map((x) => keys.map((k) => x[k] ?? '').join('')).join('');
+  return [
+    part(d.events, ['id', 'title', 'startsAt', 'endsAt', 'startDate', 'endDate',
+      'isAllDay', 'calendarId', 'updatedAt']),
+    part(d.reminders, ['id', 'title', 'dueDate', 'dueTime', 'status', 'occurrenceDate']),
+    part(d.deadlines, ['id', 'title', 'dueDate', 'status']),
+    part(d.blocks, ['id', 'taskId', 'startsAt', 'endsAt']),
+    part(d.habitDays, ['habitId', 'entryDate', 'status']),
+    part(d.calendars, ['id', 'isVisible', 'color']),
+  ].join('');
+}
+
+/**
+ * Re-reads the current range and repaints only if something actually moved.
+ *
+ * Never shows a loading state: this is a background correction, not a
+ * navigation. If the network is down it stays quiet — the data on screen is
+ * still the best available answer, and a toast every 45 seconds would be a
+ * worse experience than being stale.
+ */
+async function refreshCalendar() {
+  if (state.route !== 'calendar' || cal.utility !== 'none' || !cal.data) return;
+  const r = currentRange();
+  try {
+    const [range, open, integration] = await Promise.all([
+      api(`/api/v1/workspaces/${ws()}/calendar/range?from=${r.from}&to=${r.to}`),
+      api(`/api/v1/workspaces/${ws()}/tasks?status=open&limit=50`).catch(() => ({ tasks: [] })),
+      api(`/api/v1/workspaces/${ws()}/integrations/google-calendar`)
+        .catch(() => ({ configured: false, connection: null })),
+    ]);
+    // The range may have moved under us while the request was in flight.
+    const now = currentRange();
+    if (state.route !== 'calendar' || now.from !== r.from || now.to !== r.to) return;
+
+    range.connection = integration.connection;
+    range.googleConfigured = integration.configured;
+    const scheduled = new Set(range.blocks.map((b) => b.taskId));
+    range.unscheduled = (open.tasks ?? []).filter((t) => !scheduled.has(t.id) && !t.dueDate);
+
+    const changed = calendarSignature(range) !== calendarSignature(cal.data);
+    cal.data = range;
+    if (!changed) { renderCalendarRail(); return; }
+    const scroller = document.getElementById('main-scroll');
+    const top = scroller?.scrollTop ?? 0;
+    paintCalendar();
+    if (scroller) scroller.scrollTop = top;
+  } catch { /* stay quiet and try again on the next tick */ }
+}
+
+/** An incremental Google pull, without the toast a manual sync earns. */
+async function syncCalendarQuietly() {
+  if (!cal.data?.connection || cal.data.connection.status === 'syncing') return;
+  if (Date.now() - calLastSync < CAL_SYNC_MS) return;
+  calLastSync = Date.now();
+  try {
+    await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar/sync`, { method: 'POST' });
+    await refreshCalendar();
+  } catch { /* the next tick will try again */ }
+}
+
+function startCalendarLive() {
+  stopCalendarLive();
+  const tick = () => { if (document.visibilityState === 'visible') refreshCalendar(); };
+  const sync = () => { if (document.visibilityState === 'visible') syncCalendarQuietly(); };
+  calTimers.push(setInterval(tick, CAL_POLL_MS), setInterval(sync, CAL_SYNC_MS));
+
+  // Coming back to the tab is the moment a stale calendar is most obvious, and
+  // the moment a poll is most likely to have been throttled away.
+  let leftAt = 0;
+  const onVisible = () => {
+    if (document.visibilityState !== 'visible') { leftAt = Date.now(); return; }
+    if (Date.now() - leftAt > CAL_STALE_MS) { refreshCalendar(); syncCalendarQuietly(); }
+  };
+  document.addEventListener('visibilitychange', onVisible);
+  window.addEventListener('focus', onVisible);
+  calTimers.push(() => {
+    document.removeEventListener('visibilitychange', onVisible);
+    window.removeEventListener('focus', onVisible);
+  });
+}
+
+function stopCalendarLive() {
+  calTimers.forEach((t) => (typeof t === 'function' ? t() : clearInterval(t)));
+  calTimers = [];
 }
 
 /** Google failures explained in product terms, not error codes. */

@@ -1471,7 +1471,10 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
   .cal-head-row{flex-direction:column;align-items:stretch;gap:12px}
   .cal-head-side{justify-content:space-between}
   .cal-modes{flex:1}
-  .cal-modes button{flex:1;padding:0 8px}
+  /* `flex:1` on the buttons was dead once the track became a grid, and a dead
+     declaration next to a live one is how the next person mis-reads this. The
+     grid's own 1fr columns already make them equal. */
+  .cal-modes button{padding:0 8px}
   .cal-period-label{min-width:0;flex:1}
   .legend{left:12px!important;right:12px;width:auto}
 }
@@ -1853,14 +1856,32 @@ body:has(.cal-head) .page-head{display:block}
   opacity:0;transition:opacity var(--d-base) var(--e-out)}
 .cal-body.rail-shown .cal-rail-in{opacity:1}
 
-/* §12 The mode selector is centred over the PRIMARY CANVAS, not the frame.
-   Plan week always carries a planning rail, so centring on the frame would
-   leave it permanently off-centre over the week grid (§12 forbids exactly
-   that). The offset is derived from the rail column — not a viewport-specific
-   nudge — and it rides the same transition, so the selector glides with the
-   canvas instead of snapping to a new home. */
-.cal-head-mid{translate:calc(var(--cal-rail-col) / -2) 0;
-  transition:translate var(--d-slow) var(--e-out)}
+/* The mode selector does NOT follow the canvas centre.
+   It used to translate by half the rail so it stayed centred over the grid,
+   which meant selecting a day slid it 172px and Plan week's permanent rail
+   left the whole header sitting off to one side of Month and Agenda. The
+   header belongs to the page: the rail is content, and content does not move
+   the page's controls. It stays on the frame centre in every mode. */
+.cal-head-mid{translate:none}
+
+/* One track, three equal buttons.
+   The sliding pill is a third of the track and moves in exact thirds, but the
+   buttons were content-width — 72 / 74 / 87px — so the highlight never lined
+   up with the label inside it. Measured 7.5px off on Agenda, and 9.4px too
+   narrow for "Plan week".
+
+   Grid, not `flex:1`: a flex basis of zero makes the columns equal but lets
+   them fall below their own labels, and "Plan week" then overflowed its
+   padding and sat 5.4px right of its own button — the same bug one level
+   down. `1fr` keeps an auto minimum, so every column is as wide as the widest
+   label and the pill's arithmetic is simply true. */
+.cal-modes{display:grid;grid-template-columns:repeat(var(--mode-n),1fr)}
+.cal-modes button{padding:0 12px}
+
+/* Centred between its arrows. The 168px min-width keeps the control from
+   twitching as the label changes length, but the text was left-aligned inside
+   it — 7px from the left arrow and 70px from the right. */
+.cal-period-label{text-align:center}
 
 @media (prefers-reduced-motion:reduce){
   .cal-body,.cal-head-mid,.cal-rail-in{transition:none}
