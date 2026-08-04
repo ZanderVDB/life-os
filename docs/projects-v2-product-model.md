@@ -552,3 +552,27 @@ coming back restores the board's scroll position, area filter and focused card.
 Visual clustering of a project's tasks under a header on Today is deliberately
 **not** built — see technical-debt.md for the drag consequences that decision
 turns on.
+
+---
+
+## E2.5 — Tasks and Steps inside a Project
+
+The Task and Step model is written up in full in `tasks-v2-product-model.md`.
+What matters for Projects:
+
+- **A Project task row is the same row as a Today task row** — `taskHtml`, one
+  function — and it gets the same inline Steps component. There is no
+  project-specific Steps implementation.
+- **Steps never move Project progress.** Progress counts Tasks: done over
+  (open + done), cancelled excluded. Ten completed steps on one open task move
+  it by nothing. Asserted by test.
+- **Every step complete does not complete the Task**, so a project's progress
+  does not advance until the user ticks the parent themselves.
+- **The next-action slot reports `x/y steps`** as counts computed from the
+  task's own steps — not a second copy of the step list. Opening the next action
+  reaches the same Task and the same Steps.
+- **Project order and Today order are independent.** `project_position` and
+  `position` are separate columns; reordering in one context leaves the other
+  untouched, in both directions.
+
+Boards remain planned and unbuilt — see `projects-v2-boards.md`.

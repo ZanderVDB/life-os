@@ -21,6 +21,9 @@ import {
 } from './projects.js';
 import { openProjectModal, openChoiceDialog, openTaskPicker } from './project-modal.js';
 import { openTaskModal } from './task-modal.js';
+import {
+  stepsChipHtml, stepsPanelHtml, wireSteps, repaintSteps, readyToFinish, stepCounts,
+} from './steps.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
 import { initDrag, isDragging } from './drag.js';
@@ -383,7 +386,51 @@ const inBucket = (b) => state.tasks
     && (!state.areaFilter || t.areaId === state.areaFilter))
   .sort((x, y) => x.position - y.position);
 const areaName = (id) => state.me.areas.find((a) => a.id === id)?.name || '';
-const findTask = (id) => state.tasks.find((t) => t.id === id);
+/**
+ * A task by id, wherever it is currently mounted.
+ *
+ * THE COMPLETED-HISTORY BUG LIVED HERE. This used to be
+ * `state.tasks.find(...)` — the ACTIVE board only. A completed task is removed
+ * from `state.tasks` the moment it is ticked and lives in `state.history`, so
+ * clicking one in Completed passed a perfectly valid id to `openTask`, got
+ * `undefined` back, and the shared editor's `task ? edit : create` fallback
+ * quietly turned "not found" into "new task" — a blank Create Task form.
+ *
+ * Not a missing id, not a mode flag, not an event-target mismatch: a lookup
+ * scoped to a collection that by construction could never hold the answer.
+ *
+ * Searching every mounted collection also gives §16 its single source: a step
+ * ticked on Today and the same step read from Project detail resolve to the
+ * SAME object, so there is nothing to keep in sync.
+ */
+const findTask = (id) => state.tasks.find((t) => t.id === id)
+  ?? (pj.detail?.tasks ?? []).find((t) => t.id === id)
+  ?? state.history.find((t) => t.id === id)
+  ?? null;
+
+/**
+ * Redraws every place this task is currently on screen.
+ *
+ * One record, several mounts. `except` skips the node that already repainted
+ * itself, so an inline step tick does not rebuild the row underneath the
+ * pointer that triggered it.
+ */
+function syncTaskEverywhere(id, except = null) {
+  const t = findTask(id);
+  if (!t) return;
+  document.querySelectorAll(`.task[data-id="${id}"]`).forEach((el) => {
+    if (el === except) return;
+    if (el.closest('#pjd-tasks, .pjd-tasks-done')) patchProjectTaskRow(id);
+    else patchCard(id);
+  });
+  // The next-action slot shows this task's step counts when it is the one.
+  const next = pj.detail?.project?.nextAction;
+  if (next?.id === id) {
+    const { total, done } = stepCounts(t);
+    next.steps = total ? { total, done } : null;
+    patchNextActionSlot();
+  }
+}
 
 /* ══ SHELL — rendered once, never redrawn ═══════════════════════════════ */
 function renderShell() {
@@ -761,9 +808,8 @@ function taskHtml(t) {
   else if (t.legacyScheduledTimeRaw) {
     bits.push(`<span class="tm-legacy" title="Time from the old app, kept as written">${esc(t.legacyScheduledTimeRaw)}</span>`);
   }
-  if (steps.length) {
-    bits.push(`<span class="tm-steps ${done === steps.length ? 'is-all' : ''}">${done}/${steps.length} steps</span>`);
-  }
+  // The chip is a control now, not a label. See steps.js.
+  if (steps.length) bits.push(stepsChipHtml(t, expandedSteps.has(t.id)));
 
   /* Project context.
    *
@@ -780,21 +826,40 @@ function taskHtml(t) {
     if (isNext) bits.push('<span class="tm-next">Next action</span>');
   }
 
-  return `<article class="task pri-${t.priority}" data-id="${t.id}" tabindex="0"
-      aria-label="${esc(t.title)}">
-    <button class="t-tick" data-act="toggle" aria-label="Mark done"></button>
-    <div class="t-main">
-      <button class="t-title" data-act="open" title="${esc(t.title)}">${esc(t.title)}</button>
-      ${bits.length ? `<div class="t-meta">${bits.join('<span class="tm-sep">·</span>')}</div>` : ''}
+  /* The steps panel is INSIDE the article, never a sibling.
+   *
+   * A sibling row sits in the drop zone, and everything in a drop zone is a
+   * task as far as the drag code is concerned — it would become an insertion
+   * target and could be reordered away from its parent. Nesting is what makes
+   * that structurally impossible rather than merely discouraged. */
+  return `<article class="task pri-${t.priority} ${readyToFinish(t) ? 'is-ready' : ''}"
+      data-id="${t.id}" tabindex="0" aria-label="${esc(t.title)}">
+    <div class="t-row">
+      <button class="t-tick" data-act="toggle" aria-label="Mark done"></button>
+      <div class="t-main">
+        <button class="t-title" data-act="open" title="${esc(t.title)}">${esc(t.title)}</button>
+        ${bits.length ? `<div class="t-meta">${bits.join('<span class="tm-sep">·</span>')}</div>` : ''}
+      </div>
+      <div class="t-actions">
+        <button class="t-btn" data-act="back" aria-label="Move to previous bucket" title="Move earlier (Alt ←)">${icon('chevL', 16)}</button>
+        <button class="t-btn" data-act="fwd" aria-label="Move to next bucket" title="Move later (Alt →)">${icon('chevR', 16)}</button>
+        <button class="t-btn" data-act="menu" aria-label="More actions" title="More (M)">${icon('dots', 16)}</button>
+        <span class="t-grip" aria-hidden="true" title="Drag to move">${icon('grip', 16)}</span>
+      </div>
     </div>
-    <div class="t-actions">
-      <button class="t-btn" data-act="back" aria-label="Move to previous bucket" title="Move earlier (Alt ←)">${icon('chevL', 16)}</button>
-      <button class="t-btn" data-act="fwd" aria-label="Move to next bucket" title="Move later (Alt →)">${icon('chevR', 16)}</button>
-      <button class="t-btn" data-act="menu" aria-label="More actions" title="More (M)">${icon('dots', 16)}</button>
-      <span class="t-grip" aria-hidden="true" title="Drag to move">${icon('grip', 16)}</span>
-    </div>
+    ${stepsPanelHtml(t, expandedSteps.has(t.id))}
   </article>`;
 }
+
+/**
+ * Which tasks currently have their steps showing, by id.
+ *
+ * Deliberately NOT a property on the task record: it is view state, it must not
+ * be sent to the server, and it must survive the record being replaced by a
+ * fresh copy from a response. Keyed by id so a row re-rendered anywhere — Today
+ * or Project detail — comes back open if it was open.
+ */
+const expandedSteps = new Set();
 
 const fmtDate = (iso) => new Date(`${iso}T12:00:00`)
   .toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
@@ -892,6 +957,8 @@ function wireBoard() {
 function wireCard(el) {
   const id = el.dataset.id;
   el.querySelectorAll('[data-act]').forEach((b) => {
+    // `steps` is wired by the component itself, which owns the panel it toggles.
+    if (b.dataset.act === 'steps') return;
     b.onclick = (e) => {
       e.stopPropagation();
       const act = b.dataset.act;
@@ -902,7 +969,11 @@ function wireCard(el) {
       if (act === 'fwd') return shiftBucket(id, 1);
     };
   });
+  wireCardSteps(el, id);
   el.onkeydown = (e) => {
+    // Typing inside a step must not reach the card's shortcuts, or a space in a
+    // step name would complete the parent task.
+    if (e.target.closest('.t-steps')) return;
     if (e.key === 'Enter') { e.preventDefault(); openTask(id); }
     else if (e.key === ' ') { e.preventDefault(); toggleTask(id); }
     else if (e.key.toLowerCase() === 'm') { e.preventDefault(); openTaskMenu(id, el); }
@@ -911,7 +982,31 @@ function wireCard(el) {
     else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); shiftBucket(id, -1); }
     else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); shiftBucket(id, 1); }
   };
+}
 
+/**
+ * Attaches the shared Steps component to one Today card.
+ *
+ * The step handlers are the SAME `taskStepsCtx` the editor uses, so a step
+ * ticked here and a step ticked in the editor take one code path into one
+ * record. `onChanged` keeps the expansion set honest and refreshes anything
+ * else on screen showing this task.
+ */
+function wireCardSteps(el, id) {
+  const t = findTask(id);
+  if (!t || !el.querySelector('.t-steps')) return;
+  const chip = el.querySelector('[data-act="steps"]');
+  chip?.addEventListener('click', () => {
+    // The component flips the panel; this records it so a re-render restores it.
+    if (expandedSteps.has(id)) expandedSteps.delete(id); else expandedSteps.add(id);
+  }, true);
+  // The ctx repaints nothing: `wireSteps` already repaints the panel it owns,
+  // and doing both would rebuild the row under the pointer that triggered it.
+  wireSteps(el, t, taskStepsCtx(t), {
+    // `chipChanged` is true when the first step was added or the last removed,
+    // which is the only case the panel cannot repaint on its own.
+    onChanged: (chipChanged) => (chipChanged ? patchCard(id) : syncTaskEverywhere(id, el)),
+  });
 }
 
 /* ══ Mutations — optimistic, targeted, never a rebuild ═══════════════════
@@ -1081,6 +1176,17 @@ function nudge(id, dir) {
   moveTask(id, t.bucket, dir < 0 ? { beforeTaskId: target.id } : { afterTaskId: target.id });
 }
 
+/** Reveals a task's step panel and puts the cursor in the add field. */
+function expandSteps(id) {
+  const el = document.querySelector(`.task[data-id="${id}"]`);
+  const panel = el?.querySelector('.t-steps');
+  if (!panel) return;
+  expandedSteps.add(id);
+  panel.hidden = false;
+  el.querySelector('[data-act="steps"]')?.setAttribute('aria-expanded', 'true');
+  panel.querySelector('[data-step-new]')?.focus();
+}
+
 function shiftBucket(id, dir) {
   const t = findTask(id);
   const i = BUCKETS.findIndex((b) => b.id === t.bucket);
@@ -1118,9 +1224,12 @@ function openTaskMenu(id, anchorEl) {
     ${BUCKETS.map((b) => `<button role="menuitem" data-b="${b.id}" ${b.id === t.bucket ? 'disabled' : ''}>
       <span>${b.label}</span>${b.id === t.bucket ? '<kbd>current</kbd>' : ''}</button>`).join('')}
     <div class="menu-label">Order</div>
-    <button role="menuitem" data-o="top"><span>Move to top</span><kbd>Alt ↑</kbd></button>
-    <button role="menuitem" data-o="bottom"><span>Move to bottom</span><kbd>Alt ↓</kbd></button>
+    <button role="menuitem" data-n="-1"><span>Move up</span><kbd>Alt ↑</kbd></button>
+    <button role="menuitem" data-n="1"><span>Move down</span><kbd>Alt ↓</kbd></button>
+    <button role="menuitem" data-o="top"><span>Move to top</span></button>
+    <button role="menuitem" data-o="bottom"><span>Move to bottom</span></button>
     <div class="am-sep"></div>
+    <button role="menuitem" data-x="steps"><span>Add step</span></button>
     <button role="menuitem" data-x="open"><span>Open task</span><kbd>↵</kbd></button>`;
   document.body.appendChild(m);
   m.style.left = `${Math.max(8, Math.min(r.left - 140, innerWidth - m.offsetWidth - 12))}px`;
@@ -1130,7 +1239,12 @@ function openTaskMenu(id, anchorEl) {
     b.onclick = () => {
       closeMenu();
       if (b.dataset.x === 'open') return openTask(id);
+      // The way in for a task with no steps yet: there is no chip to click,
+      // because a chip on every task would be noise on the ones that have none.
+      if (b.dataset.x === 'steps') return expandSteps(id);
       if (b.dataset.b) return moveTask(id, b.dataset.b);
+      // Ordering must not be drag-only: keyboard and touch users reorder here.
+      if (b.dataset.n) return nudge(id, Number(b.dataset.n));
       const list = inBucket(t.bucket).filter((x) => x.id !== id);
       if (!list.length) return;
       moveTask(id, t.bucket, b.dataset.o === 'top'
@@ -1146,6 +1260,14 @@ function closeMenu() { state.menu?.remove(); state.menu = null; }
 /* ── Task modal ──────────────────────────────────────────────────────── */
 function openTask(id, prefillTitle = '') {
   const t = id ? findTask(id) : null;
+  /*
+   * An id that resolves to nothing is a BUG, not a request for a new task.
+   *
+   * The create path is reached by calling `openTask()` with no id at all.
+   * Falling into it because a lookup missed is how Completed history came to
+   * open a blank Create Task form for a task that existed the whole time.
+   */
+  if (id && !t) return openMissingTask(id);
   const ctl = openTaskModal({
     task: t,
     areas: state.me.areas,
@@ -1199,8 +1321,29 @@ function openTask(id, prefillTitle = '') {
         saved('Deleted');
       } catch (e) { toast(e.message, true); }
     },
-    steps: t ? taskStepsCtx(t, () => patchCard(t.id)) : null,
+    steps: t ? taskStepsCtx(t, () => syncTaskEverywhere(t.id)) : null,
+    onRestore: t ? () => restoreTask(t.id) : null,
   });
+}
+
+/**
+ * Fetches a task the client does not have in memory, then opens it.
+ *
+ * The safety net for the case above: rather than guessing, ask the server for
+ * the record by id. Reached when a task is opened from a surface whose list
+ * has not been loaded — and it fails out loud rather than showing a blank form
+ * that looks like a feature.
+ */
+async function openMissingTask(id) {
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/tasks/${id}`);
+    if (!r.task) throw new Error('That task no longer exists.');
+    // Parked in history so `findTask` can resolve it from here on.
+    if (!state.history.some((x) => x.id === id)) state.history.unshift(r.task);
+    openTask(id);
+  } catch (e) {
+    toast(e.message, true);
+  }
 }
 
 /**
@@ -2951,6 +3094,7 @@ function wireProjectTaskRows(project) {
   document.querySelectorAll('#pjd-tasks .task, .pjd-tasks-done .task').forEach((row) => {
     const id = row.dataset.id;
     row.querySelectorAll('[data-act]').forEach((b) => {
+      if (b.dataset.act === 'steps') return;   // the component owns this one
       b.onclick = (e) => {
         e.stopPropagation();
         const act = b.dataset.act;
@@ -2963,10 +3107,27 @@ function wireProjectTaskRows(project) {
       };
     });
     row.onkeydown = (e) => {
+      if (e.target.closest('.t-steps')) return;   // typing in a step, not the row
       if (e.key !== 'Enter') return;
       e.preventDefault();
       openProjectTask(id);
     };
+
+    /* The SAME steps component Today uses, with the same handlers.
+     *
+     * Not a project-specific implementation: the row is `taskHtml` in both
+     * places and the record is one record, so a step ticked here and a step
+     * ticked on Today are the same write against the same object. */
+    const t = (pj.detail?.tasks ?? []).find((x) => x.id === id);
+    if (t && row.querySelector('.t-steps')) {
+      row.querySelector('[data-act="steps"]')?.addEventListener('click', () => {
+        if (expandedSteps.has(id)) expandedSteps.delete(id); else expandedSteps.add(id);
+      }, true);
+      wireSteps(row, t, taskStepsCtx(t), {
+        onChanged: (chipChanged) => (chipChanged
+          ? patchProjectTaskRow(id) : syncTaskEverywhere(id, row)),
+      });
+    }
   });
 }
 
@@ -3125,6 +3286,8 @@ function openProjectTaskMenu(anchor, taskId, project) {
 
   openUtilityMenu(anchor, [
     { id: 'open', label: 'Open task' },
+    // The same way in as Today: a task with no steps has no chip to click.
+    ...(isOpen ? [{ id: 'steps', label: 'Add step' }] : []),
     ...(isOpen && !isNext ? [{ id: 'next', label: 'Make next action' }] : []),
     ...(isNext ? [{ id: 'unnext', label: 'Stop choosing it explicitly' }] : []),
     ...(isOpen && at > 0 ? [{ id: 'up', label: 'Move up' }] : []),
@@ -3134,6 +3297,7 @@ function openProjectTaskMenu(anchor, taskId, project) {
     { id: 'remove', label: 'Remove from project' },
   ], (id) => {
     if (id === 'open') return openProjectTask(taskId);
+    if (id === 'steps') return expandSteps(taskId);
     if (id === 'next') return setProjectNextAction(taskId);
     if (id === 'unnext') return setProjectNextAction(null);
     if (id === 'remove') return removeTaskFromProject(taskId);
@@ -4094,22 +4258,56 @@ function wireHistory() {
   });
 }
 
-/** Puts a completed task back on the board. */
+/**
+ * Puts a completed task back on the board.
+ *
+ * The SAME record, uncompleted. Not a copy, not a re-creation: `/uncomplete`
+ * clears `status` and `completedAt` and touches nothing else, so title, notes,
+ * steps and their individual completed states, area, project, priority, dates
+ * and the bucket it was in all survive untouched. Restoring a task you
+ * finished with two of four steps ticked gives you back exactly that.
+ *
+ * It lands in whatever bucket it already had — the bucket was never cleared on
+ * completion, so the original is still there and still valid.
+ */
 async function restoreTask(id) {
-  const t = state.history.find((x) => x.id === id);
+  const t = findTask(id);
   if (!t) return;
   const row = document.querySelector(`[data-hist="${id}"]`);
   try {
-    await api(`/api/v1/workspaces/${ws()}/tasks/${id}/uncomplete`, { method: 'POST' });
+    const r = await api(`/api/v1/workspaces/${ws()}/tasks/${id}/uncomplete`, { method: 'POST' });
+    // The server's record wins, but the steps ride along locally: /uncomplete
+    // returns the task row, and the step list is not part of it.
+    const restored = { ...r.task, steps: t.steps ?? [] };
+
     state.history = state.history.filter((x) => x.id !== id);
     state.historyTotal = Math.max(0, state.historyTotal - 1);
-    if (row) collapseOut(row, () => {
-      document.getElementById('main-scroll').innerHTML = historyHtml();
-      wireHistory();
-    });
-    saved('Back on your board');
+    if (!state.tasks.some((x) => x.id === id)) state.tasks.push(restored);
+
+    // Project detail, if this task belongs to a project that is open.
+    const inProject = (pj.detail?.tasks ?? []).find((x) => x.id === id);
+    if (inProject) Object.assign(inProject, restored);
+
+    if (row) {
+      collapseOut(row, () => {
+        document.getElementById('main-scroll').innerHTML = historyHtml();
+        wireHistory();
+      });
+    }
+    // Wherever it now belongs, it appears there immediately and says so.
+    if (state.route === 'today') {
+      rebuildBucket(restored.bucket);
+      wireBoard();
+      const card = document.querySelector(`.task[data-id="${id}"]`);
+      if (card) pulse(card);
+    }
+    if (inProject) await reloadProjectDetail();
+    saved(`Back in ${bucketLabel(restored.bucket)}`);
   } catch (e) { toast(e.message, true); }
 }
+
+/** The bucket's own name, so the toast can say where the task went. */
+const bucketLabel = (id) => BUCKETS.find((b) => b.id === id)?.label ?? 'your board';
 
 /** Today's overflow: secondary actions that should not sit in the board. */
 function openTodayMenu(anchor) {

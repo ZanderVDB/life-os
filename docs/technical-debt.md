@@ -514,3 +514,32 @@ a Today phase rather than being forced in here.
 
 The badge covers the actual need — knowing which project a task belongs to and
 getting there in one click — at none of that risk.
+
+## E2.5 — known limitations
+
+**The next-action slot shows counts, not an expandable step list.** §5 allowed
+either; counts were chosen because the slot sits above the task list and an
+expandable panel there would push the list off the first screen for a task whose
+steps are already one scroll away. Opening the next action reaches the same Task
+and the same Steps. If the slot ever needs the panel, it reuses `wireSteps` —
+the component takes a row element and a task, and the slot can supply both.
+
+**Steps have no order of their own.** They render in creation order and cannot
+be reordered. `task_steps` has a `position` column and the API accepts it, so
+this is UI work, not a schema change. Nobody has asked for it, and a drag inside
+a drag is worth deferring until someone does.
+
+**Step names are `<input>` elements, so `innerText` does not include them.** Not
+a defect — it matches how the task editor has always rendered them — but it is
+worth knowing when writing a test that reads a row's text.
+
+**The Browser pane would not composite during E2.5 verification**, so every
+functional check was made through the DOM, computed styles and the API rather
+than from a screenshot. Structure, layout values, ARIA state and persistence
+were all verified directly; the visual judgement of the inline step styling is
+the one thing left for the user.
+
+**`state.history` is a partial list.** It holds whatever pages have been loaded.
+`findTask` resolves from it, so a completed task from an unloaded page falls
+through to `openMissingTask`, which fetches by id. That path is correct but does
+one extra request; loading history is the common case and it is already there.

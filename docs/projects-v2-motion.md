@@ -179,3 +179,35 @@ empties, no duplicate rows, scroll unchanged.
 
 Project context on Today is added inside the existing meta line, so a task
 gaining a project label never moves its own title.
+
+---
+
+## E2.5 — steps, restoration and dragging an expanded task
+
+**Expanding steps** is a disclosure, not a transition between screens. The panel
+is `hidden` when collapsed rather than absent, so opening it builds no DOM and
+the caret rotation is the whole animation. Nothing slides; a list appearing
+under its own heading needs no help being understood.
+
+**A step tick** repaints only its own row and the summary chip. The board is
+never rebuilt, the card is never replaced, and the panel keeps its node — which
+is what lets expansion survive a mutation.
+
+**Ready to finish** appears in place, as a line of text. No celebration: the
+task is still open and still needs a decision, so the state reports a fact and
+asks for nothing.
+
+**Dragging an expanded task** collapses its steps before the card is measured.
+The card, its placeholder and every sibling are then the same shape, so the
+insertion gap is honest — measured at 226px expanded, 71px during the drag, with
+the placeholder matching at 71px. Expansion is restored on drop, because a
+reorder must not quietly close something the user opened.
+
+**Restoring a completed task** collapses its history row, puts the task back in
+its own bucket, and gives it one brief `pulse` — the same acknowledgement a
+completed card gets, in reverse. The toast names the destination rather than
+leaving the user to find it. No page reload, and Project detail updates in
+place.
+
+All of the above respects `prefers-reduced-motion` through the existing `motion.js`
+helpers; nothing here introduces a new animation primitive.

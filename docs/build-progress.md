@@ -1261,3 +1261,69 @@ Replaced with the checkmark glyph the task editor's step ticks already use;
 verified as the same path data, 11×8, wider than tall.
 
 620 tests passing.
+
+## Phase E2.5 — inline Steps, completed-task restoration and Today ordering
+
+A corrective phase. Every defect was reproduced in a browser against a real API
+before any code changed.
+
+**Steps were reachable only through the editor.** The card showed `2/4 steps` as
+an inert label with no way to act on it. There is now one shared component,
+`web/steps.js`, used by both the Today board and Project detail: the chip is a
+button, it expands the steps beneath the task, and tick, untick, add, rename and
+delete all work inline. Expanding does not open the editor. A task with no steps
+gains its first through *Add step* in the task menu, because a chip on every
+card would be noise on the majority that have none.
+
+The panel renders **inside** the task's `<article>`. A sibling row would sit in
+the drop zone, where the drag code treats everything as a task, and could be
+dragged away from its parent. `drag.js` additionally refuses to start a drag
+from inside `.t-steps`.
+
+**Completing every step no longer implies completing the task.** The parent
+stays visible, project progress does not move, and a restrained line reads "All
+steps complete — ready to finish". Only the parent's own checkbox completes it,
+and unticking any step clears the state at once. The converse holds too: a task
+may be completed with steps unfinished, and those states are preserved in
+history.
+
+**Clicking a completed task opened a blank Create Task form.** Root cause:
+`findTask` was `state.tasks.find(...)` — the active board only. A completed task
+is removed from `state.tasks` on completion and lives in `state.history`, so a
+valid id resolved to `undefined` and the editor's `task ? edit : create`
+fallback turned "not found" into "new task". Not a missing id, not a mode flag,
+not an event-target mismatch: a lookup scoped to a collection that by
+construction could never hold the answer.
+
+Fixed twice over, because either alone leaves the trap armed: `findTask` now
+searches every mounted collection, and `openTask` treats an unresolvable id as a
+bug rather than a request for a new task — fetching the record by id and failing
+out loud if that fails too.
+
+**The editor has three states now**, and the difference is visible: New task,
+Edit task, Completed task. A completed one carries `Completed 4 August 2026` and
+a Restore action alongside the full record.
+
+**Restore is the same record, uncompleted.** Verified: same id, notes intact,
+all four step states intact including the unfinished one, bucket, priority,
+area and project preserved, exactly one row with that title afterwards.
+
+**Today ordering** was verified with real pointer drags: one placeholder during
+the drag, the task landing once, no duplicates. Dragging an expanded task
+collapses its steps before measuring — 226px expanded, 71px during the drag,
+placeholder matching at 71px — and restores expansion on drop. `Move up`,
+`Move down`, `Move to top` and `Move to bottom` are in both task menus, so drag
+is not the only way to reorder.
+
+**Order isolation** confirmed in both directions: a Today drag left project order
+untouched, and a project reorder left the Today bucket order identical in both
+the server list and the DOM.
+
+**Failure safety** was exercised by intercepting the writes. A failed add hands
+the typed text back and names the error; a failed tick rolls the row back and
+the server is unchanged. That last one caught a real bug of my own: the error
+was appended to the panel and then wiped by the repaint that followed, so the
+rollback was correct and completely invisible. Repaint first, then report.
+
+651 tests passing. Boards remain planned and unbuilt; the mobile redesign
+remains deferred.

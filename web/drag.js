@@ -52,6 +52,16 @@ function onPointerDown(e, hooks) {
   if (!card || session) return;
   // Never hijack a control, a link, or a text selection inside the card.
   if (e.target.closest('button,a,input,textarea,select,[contenteditable]')) return;
+  /*
+   * And never start a drag from inside the steps panel.
+   *
+   * A step is not a task. Pressing on the empty space beside a step name and
+   * moving would otherwise lift the whole parent card out from under the
+   * pointer, which reads as the step being dragged — the one interpretation
+   * that must never be available. The row above the panel still drags, and so
+   * does the grip.
+   */
+  if (e.target.closest('.t-steps')) return;
 
   const start = { x: e.clientX, y: e.clientY };
   const isTouch = e.pointerType === 'touch';
@@ -102,6 +112,23 @@ function onPointerDown(e, hooks) {
 /* ── Lift ──────────────────────────────────────────────────────────────── */
 
 function begin(card, e, hooks) {
+  /*
+   * Collapse the step panel BEFORE measuring.
+   *
+   * A task with four steps expanded is three times the height of its
+   * neighbours, so dragging it would open a placeholder gap nothing else could
+   * fill and make the insertion point read as wrong. Collapsing first means the
+   * card, the placeholder and every sibling are the same shape, which is what
+   * makes the gap honest.
+   *
+   * The steps are HIDDEN, never detached: the panel is inside the article, so
+   * it travels with its parent and no step row can be left behind or become an
+   * insertion target of its own. Expansion is restored on drop.
+   */
+  const panel = card.querySelector('.t-steps');
+  const wasExpanded = panel && !panel.hidden;
+  if (wasExpanded) panel.hidden = true;
+
   const rect = card.getBoundingClientRect();
   const from = card.closest('.drop');
 
@@ -125,6 +152,7 @@ function begin(card, e, hooks) {
     scrollRoot: hooks.getScrollRoot?.() ?? document.scrollingElement,
     lastY: e.clientY,
     lastX: e.clientX,
+    wasExpanded,
   };
 
   card.parentNode.insertBefore(ph, card);
@@ -403,6 +431,12 @@ function restoreCard(s) {
   c.classList.remove('is-dragging');
   for (const p of ['width', 'height', 'position', 'left', 'top', 'zIndex',
     'pointerEvents', 'margin', 'transform']) c.style[p] = '';
+  // The steps come back exactly as they were. A drag is a reorder, and a
+  // reorder must not quietly close something the user opened.
+  if (s.wasExpanded) {
+    const panel = c.querySelector('.t-steps');
+    if (panel) panel.hidden = false;
+  }
 }
 
 /** Pointer cancelled (a system gesture, a context menu): put everything back. */

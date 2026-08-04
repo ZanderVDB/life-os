@@ -288,3 +288,29 @@ Completed section — otherwise a task could be finished and never reopened.
 
 Same records, same editor, same row markup; a different controller, because the
 surrounding page is different.
+
+---
+
+## E2.5 — what the client resolves, and from where
+
+No schema change. `task_steps` already carried everything needed; what changed
+is that the client stopped losing track of which Task a given id refers to.
+
+`findTask(id)` resolves across the active board, the open project's task list
+and completed history. Before E2.5 it searched the board alone, which is why a
+completed task — removed from the board on completion — could not be opened.
+
+`GET …/tasks/:id` is the fallback when a task is opened from a surface whose
+list has not been loaded. It returns the task **with its steps**; `/uncomplete`
+returns the task row only, so the client keeps the steps it already had rather
+than dropping them on restore.
+
+### Two positions, one Task
+
+| Column | Orders within | Written by |
+|---|---|---|
+| `tasks.position` | the Today bucket | `POST …/tasks/:id/move` |
+| `tasks.project_position` | the Project | `POST …/projects/:id/tasks/:taskId/reorder` |
+
+Neither endpoint touches the other column. This is what allows one Task to sit
+third on Today and first in its Project without becoming two records.

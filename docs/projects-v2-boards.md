@@ -107,3 +107,36 @@ Nothing structural, which is the point. Two things make Boards cheap later:
 
 No Board tables were added. A placeholder table with no reader is a migration
 that has to be undone.
+
+---
+
+## Still planned, still deferred — confirmed at E2.5
+
+Boards were **not** built in E2.5, and no empty Board UI is exposed. Confirming
+the shape again so the deferral stays a decision rather than a drift:
+
+A Project may hold multiple named **Boards**. A Board is a bounded, expandable
+canvas carrying:
+
+- Task references (references, not copies — the Task stays the one record);
+- images, videos and links;
+- Library items;
+- notes;
+- groups and headings;
+- links to other Boards, with backlinks;
+- return to the prior zoom and position when you come back;
+- **Fit content**;
+- a list-view alternative, so a Board is never the only way to read it.
+
+**Projects organise resources. Library owns them.** A Board points at a Library
+item; it does not become a second place that item lives. This is the same rule
+that keeps a Task one record across Today and Project detail, applied to
+durable resources.
+
+### Why it waits
+
+E2.5 existed because the Task and Step layer underneath was not yet sound —
+Steps were reachable only through the editor, completed tasks opened a blank
+Create form, and Today ordering needed finishing. A canvas that references
+Tasks would have been built on that. Boards land on a settled foundation or not
+at all.

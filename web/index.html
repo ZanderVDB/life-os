@@ -322,11 +322,15 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
    Title and metadata read as ONE unit: the meta line sits directly beneath
    the title, dot-separated, and is omitted entirely when there is nothing to
    say. Actions form a single vertically-centred group on the right. */
-.task{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;
-  align-items:center;gap:11px;background:#282431;border-radius:12px;
+/* The card is a COLUMN: the task row, then its steps beneath it.
+   The three-column grid moved to `.t-row`, so an expanded step panel sits
+   under the whole row rather than becoming a fourth grid cell. */
+.task{position:relative;display:block;background:#282431;border-radius:12px;
   padding:10px 10px 10px 16px;overflow:hidden;
   box-shadow:0 1px 3px rgba(0,0,0,.16);
   transition:background var(--t-hover),box-shadow var(--t-hover),transform var(--t-hover)}
+.t-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;gap:11px}
 .task:hover{background:#312D3D;box-shadow:var(--e2)}
 .task.dragging{opacity:.45}
 .task::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
@@ -360,6 +364,59 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .tm-due{color:var(--text-2)}
 .tm-legacy{font-style:italic;opacity:.85}
 .tm-steps.is-all{color:var(--ok)}
+
+/* ── Inline steps ──
+   A checklist inside a task, not a list of tasks. Everything here is quieter
+   and smaller than the parent row, because a step is subordinate to it. */
+.tm-steps{display:inline-flex;align-items:center;gap:3px;border:0;background:none;
+  padding:0;font:inherit;color:inherit;cursor:pointer;border-radius:5px}
+.tm-steps:hover{color:var(--text-2)}
+.tm-steps-caret{width:0;height:0;border-left:3.5px solid transparent;
+  border-right:3.5px solid transparent;border-top:4px solid currentColor;
+  opacity:.7;transition:rotate var(--t-fast)}
+.tm-steps[aria-expanded="true"] .tm-steps-caret{rotate:180deg}
+
+.t-steps{margin:8px 0 2px 31px;display:flex;flex-direction:column;gap:1px}
+.t-steps[hidden]{display:none}
+.ts-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.ts-row{display:flex;align-items:center;gap:8px;padding:3px 6px 3px 2px;
+  border-radius:7px;transition:background var(--t-hover)}
+.ts-row:hover{background:rgba(255,255,255,.035)}
+.ts-tick{width:15px;height:15px;flex-shrink:0;border-radius:5px;
+  border:1.5px solid var(--border-strong);display:grid;place-items:center;
+  color:transparent;background:none;cursor:pointer;
+  transition:background var(--t-hover),border-color var(--t-hover),color var(--t-hover)}
+.ts-tick:hover{border-color:var(--ok)}
+.ts-row.is-done .ts-tick{background:var(--ok);border-color:var(--ok);color:#08221c}
+.ts-name{flex:1;min-width:0;background:none;border:none;font-size:12.5px;
+  color:var(--text-2);padding:2px 4px;border-radius:5px;font-family:inherit}
+.ts-name:focus{outline:none;background:var(--surface-2);color:var(--text)}
+.ts-row.is-done .ts-name{color:var(--muted);text-decoration:line-through}
+.ts-del{width:22px;height:22px;flex-shrink:0;border:0;background:none;border-radius:6px;
+  color:transparent;font-size:15px;line-height:1;cursor:pointer;
+  display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
+/* Hidden until the row is hovered or focused: deleting is the rarest thing you
+   do to a step, and a permanent × on every row reads as clutter. */
+.ts-row:hover .ts-del,.ts-del:focus-visible{color:var(--muted)}
+.ts-del:hover{background:rgba(255,100,110,.12);color:var(--danger)}
+
+.ts-add{display:flex;gap:6px;align-items:center;margin-top:4px;padding-left:2px}
+.ts-new{flex:1;min-width:0;background:var(--surface);border:1px solid transparent;
+  border-radius:7px;padding:4px 8px;font-size:12.5px;color:var(--text);
+  font-family:inherit}
+.ts-new::placeholder{color:var(--muted)}
+.ts-new:focus{outline:none;border-color:var(--accent);background:var(--surface-2)}
+.ts-add-btn{flex-shrink:0;border:0;background:var(--surface-2);color:var(--text-2);
+  border-radius:7px;padding:4px 10px;font-size:11.5px;font-weight:600;cursor:pointer;
+  transition:background var(--t-hover),color var(--t-hover)}
+.ts-add-btn:hover{background:var(--accent-soft);color:var(--text)}
+
+/* Ready to finish. A note, not a trophy: the task is still open and still needs
+   a decision, so this states a fact and does not ask for anything. */
+.ts-ready{margin:6px 0 0;font-size:11px;color:var(--ok);font-weight:600;
+  letter-spacing:.01em}
+.ts-error{margin:6px 0 0;font-size:11px;color:var(--danger)}
+.task.is-ready .t-tick{border-color:var(--ok)}
 
 /* One aligned action group. Every control is the same size, centred on the
    card's vertical axis — nothing floats at the top edge. */
@@ -603,6 +660,15 @@ body.modal-open{overflow:hidden}
 .ms-del:hover{background:rgba(255,100,110,.12);color:var(--danger)}
 /* The Add button is not decoration. Enter was the only way to commit a step,
    nothing said so, and typing one then clicking Save discarded it silently. */
+/* A completed task, opened from history. It is not an ordinary edit and must
+   not look like one — the bar says what happened and offers the one verb that
+   makes sense next. */
+.m-done-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:9px 18px;background:rgba(0,217,163,.07);
+  border-bottom:1px solid var(--hairline)}
+.m-done-when{font-size:11.5px;color:var(--ok);font-weight:600}
+.modal.is-completed .m-title{color:var(--muted)}
+
 .m-step-add{display:flex;gap:8px;align-items:center}
 .m-step-add .m-input{font-size:13px;flex:1;min-width:0}
 #m-step-add{flex-shrink:0}

@@ -62,7 +62,14 @@ export function openTaskModal(ctx) {
   dlg.className = 'modal';
   dlg.setAttribute('role', 'dialog');
   dlg.setAttribute('aria-modal', 'true');
-  dlg.setAttribute('aria-label', t ? 'Edit task' : 'New task');
+  /* Three states, and the difference matters.
+   *
+   * A completed task is NOT a new task, and it is not an ordinary open one
+   * either. Conflating "task not found" with "create a task" is precisely what
+   * made Completed history open a blank form. */
+  const isDone = t?.status === 'done';
+  dlg.setAttribute('aria-label', !t ? 'New task' : isDone ? 'Completed task' : 'Edit task');
+  if (isDone) dlg.classList.add('is-completed');
 
   const steps = t?.steps ?? [];
   const doneSteps = steps.filter((s) => s.completed).length;
@@ -79,6 +86,13 @@ export function openTaskModal(ctx) {
         aria-label="Task title">${esc(t?.title ?? prefillTitle)}</textarea>
       <button class="m-close" id="m-close" aria-label="Close">&times;</button>
     </div>
+
+    ${isDone ? `<div class="m-done-bar">
+      <span class="m-done-when">Completed${t.completedAt
+    ? ` ${esc(new Date(t.completedAt).toLocaleDateString(undefined,
+      { day: 'numeric', month: 'long', year: 'numeric' }))}` : ''}</span>
+      <button class="btn btn-sm" id="m-restore" type="button">Restore</button>
+    </div>` : ''}
 
     <div class="m-body">
       <div class="m-grid">
@@ -266,6 +280,16 @@ export function openTaskModal(ctx) {
      * then complete": two writes can half-succeed, and the second can arrive
      * before the first.
      */
+    // Restore is the completed task's own verb. Same record, same id — it is
+    // the inverse of completion, not a new task and not a copy.
+    dlg.querySelector('#m-restore')?.addEventListener('click', async () => {
+      saying('Restoring…');
+      try {
+        await ctx.onRestore();
+        close(true);
+      } catch (e) { saying(e.message); }
+    });
+
     let busy = false;
     dlg.querySelector('#m-toggle').onclick = async () => {
       if (busy) return;             // one completion per click

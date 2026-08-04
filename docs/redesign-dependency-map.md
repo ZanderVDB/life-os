@@ -261,3 +261,25 @@ label.
 The one thing to watch: **Today project clustering** would make Today's drop
 zone group-aware, which is a Today architecture change. It is deferred, and the
 reason is in technical-debt.md.
+
+## E2.5 — what now depends on what
+
+`web/steps.js` is a **shared leaf**: it depends on nothing in the app and is
+consumed by the Today board and Project detail through one handler factory,
+`taskStepsCtx`, in `app.js`. A third surface that shows tasks gets steps by
+calling `wireSteps` — not by writing step code.
+
+```
+steps.js ──┬── Today board rows      (wireCardSteps)
+           └── Project detail rows   (wireProjectTaskRows)
+                    ↑ both use taskStepsCtx(task) — one write path
+```
+
+`findTask` is now the single resolver for a task id across the board, the open
+project and completed history. Anything that opens, patches or completes a task
+goes through it. **Adding a new collection of tasks means adding it there**, or
+that collection's tasks will be unresolvable — which is exactly how the
+completed-history defect happened.
+
+Boards, when built, will reference Tasks through the same resolver rather than
+holding copies.

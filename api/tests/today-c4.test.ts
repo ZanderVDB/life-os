@@ -168,8 +168,13 @@ test('card: all five priority levels exist and are distinct', () => {
     'urgent is not visually separated');
 });
 
-test('card: actions are vertically centred with the card', () => {
-  assert.match(html, /\.task\{[^}]*align-items:center/, 'card contents are not centred');
+test('card: actions are vertically centred with the task row', () => {
+  // E2.5 made `.task` a COLUMN — the task row, then its steps beneath it — so
+  // the three-column grid and its centring moved to `.t-row`. Centring on
+  // `.task` would now centre the steps panel against the row instead.
+  assert.match(html, /\.t-row\{[^}]*align-items:center/, 'row contents are not centred');
+  assert.match(html, /\.t-row\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto/,
+    'the task row lost its three-column grid');
 });
 
 test('card: the move controls do not depend on hover', () => {
