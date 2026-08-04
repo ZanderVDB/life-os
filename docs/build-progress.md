@@ -1327,3 +1327,69 @@ rollback was correct and completely invisible. Repaint first, then report.
 
 651 tests passing. Boards remain planned and unbuilt; the mobile redesign
 remains deferred.
+
+## Phase E2.6 — ordered Steps and controlled parent completion
+
+E2.5 shipped inline Steps as a flat checklist. That was the wrong product: Steps
+are a sequence, and Today should guide you through it. Both defects were
+reproduced in a browser before any code changed.
+
+**Reproduced first.** Step 3 could be ticked while 1 and 2 were open. The parent
+could be completed straight from Today with three of four steps unfinished — no
+prompt, no block, task gone from the board. The exact paths: `.t-tick` →
+`wireCard` → `toggleTask`, which never inspected steps; and `.ts-tick` →
+`wireSteps` → `ctx.toggle`, which accepted any step in any order.
+
+**The sequence is data, not a guess.** `task_steps.position` already existed as a
+stored incrementing column, assigned `max + 1` on create and used for every read,
+so E2.6 reads it rather than inventing an order from creation time.
+
+**Today now guides.** Current is the first incomplete step and the only one
+freely actionable; Next is a preview with no checkbox at all; the rest collapse
+to `N more steps`. Pressing a locked step or that count opens the full task — it
+never silently does nothing. Verified walking a four-step task end to end: each
+completion promoted the next step, the parent stayed blocked throughout, and
+ready-to-finish appeared only at 4/4.
+
+**The editor overrides.** Every step is freely tickable there, and completing one
+ahead of the current step says so once. Verified: ticked step 3 in the editor
+while step 1 was current, returned to Today, and step 1 was still Current with
+step 3 keeping its override and step 2 *not* promoted.
+
+**The parent checkbox is unavailable while steps remain** — disabled, with
+"Complete the remaining 2 steps first" in `aria-label` and `title`, and a small
+progress ring showing `1/3`. Not clickable-then-an-error. The rule is also
+enforced inside `toggleTask` and `completeProjectTask`, because `Space` on a
+focused card reaches the mutation directly and a rule that lives only on a
+control has a hole in it.
+
+**Completing a parent early is a decision.** The editor shows a real choice —
+"2 steps are still unfinished" with *Complete task and mark all steps complete*
+or *Go back*. Verified: the confirmation appeared, the task stayed open until
+approval, and afterwards every step was complete with text and order intact, one
+record, moved once.
+
+**Undo is bounded.** Only the step immediately before the current one can be
+undone inline; undoing it makes it current again. Verified: with Alpha✓ Beta✓
+Gamma current, only Beta was undoable and Alpha's tick was disabled pointing at
+the editor. That is what stops Today producing "step 1 incomplete, step 2
+complete, step 3 current".
+
+**Adding a step to a ready task** appends it, makes it Current, clears
+ready-to-finish and returns the parent to a progress ring. Verified in that
+order.
+
+**One defect of my own, caught by the browser.** A block replacement deleted
+`readyHtml` while rewriting the render, so completing the *final* step threw
+`ReferenceError` inside the repaint — the write succeeded, the DOM silently
+stopped updating, and the step appeared not to advance. Restored, plus a check
+that every helper the module calls is actually declared in it.
+
+**And one regression caught by an existing test.** I gave `.modal`
+`position:relative` so the confirmation could be absolutely positioned inside it
+— which silently overrode `position:fixed` and threw the dialog 310px off
+centre. That exact regression had been guarded since C4. The overlay is now
+`position:fixed` and needs no containing block.
+
+679 tests passing. Boards remain planned and unbuilt; the mobile redesign
+remains deferred.

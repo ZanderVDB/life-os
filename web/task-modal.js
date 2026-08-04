@@ -294,9 +294,33 @@ export function openTaskModal(ctx) {
     dlg.querySelector('#m-toggle').onclick = async () => {
       if (busy) return;             // one completion per click
       busy = true;
-      saying('Saving…');
       try {
         await flushStep();               // a typed step is kept, like a note
+
+        /* THE OVERRIDE.
+         *
+         * Today refuses to complete a task with unfinished steps; this is the
+         * surface where that can be overridden, and overriding has to be a
+         * decision rather than a side effect. So: say how many are unfinished,
+         * say what will happen to them, and let the user back out.
+         *
+         * There is deliberately no "complete the task but leave the steps
+         * open" option. A finished task with unfinished steps is a record that
+         * contradicts itself, and every later screen would have to decide what
+         * it meant. */
+        const open = (ctx.task?.steps ?? []).filter((x) => !x.completed);
+        if (!isDone && open.length) {
+          busy = false;
+          const go = await confirmOverride(dlg, open.length);
+          if (!go) return;
+          busy = true;
+          saying('Completing steps…');
+          // Every remaining step, then the parent. Text and order are
+          // untouched — they are marked complete, never discarded.
+          for (const st of open) await ctx.steps.toggle(st.id, true);
+        }
+
+        saying('Saving…');
         await ctx.onToggle(isDirty() ? read() : null);
         close(true);
       } catch (e) {
@@ -389,7 +413,17 @@ export function openTaskModal(ctx) {
       try {
         if (e.target.closest('[data-step-del]')) await ctx.steps.remove(id);
         else if (e.target.closest('.ms-tick')) {
-          await ctx.steps.toggle(id, !row.classList.contains('is-done'));
+          const turningOn = !row.classList.contains('is-done');
+          /* Out-of-order is ALLOWED here — this is the override surface — but
+           * it should not be a surprise. Said once, before the write, so the
+           * user knows Today will still start them from the earliest open
+           * step rather than jumping to wherever they just ticked. */
+          const ahead = turningOn && (ctx.task?.steps ?? [])
+            .some((x) => !x.completed && (x.position ?? 0) < (findStep(ctx.task, id)?.position ?? 0));
+          await ctx.steps.toggle(id, turningOn);
+          if (ahead) {
+            saying('Completed out of order — Today still guides from the earliest unfinished step.');
+          }
         } else return;
         paintSteps();
       } catch (err) { saying(err.message); paintSteps(); }
@@ -422,5 +456,41 @@ const stepRow = (s) => `<div class="m-step ${s.completed ? 'is-done' : ''}" data
     aria-label="Step name">
   <button class="ms-del" data-step-del aria-label="Delete step">&times;</button>
 </div>`;
+
+/**
+ * "2 steps are still unfinished." — a choice, not a browser confirm().
+ *
+ * Rendered inside the editor rather than over it, so the task you are deciding
+ * about stays visible behind the question. Escape and Go back both mean no;
+ * there is no way to answer it by accident.
+ */
+/** One step of a task, by id. */
+const findStep = (task, id) => (task?.steps ?? []).find((s) => s.id === id) ?? null;
+
+function confirmOverride(dlg, count) {
+  return new Promise((resolve) => {
+    const box = document.createElement('div');
+    box.className = 'm-confirm';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.setAttribute('aria-label', 'Complete task with unfinished steps');
+    box.innerHTML = `<div class="m-confirm-card">
+      <h3>Complete task?</h3>
+      <p>${count} step${count === 1 ? ' is' : 's are'} still unfinished.</p>
+      <div class="m-confirm-acts">
+        <button type="button" class="btn" data-c="no">Go back</button>
+        <button type="button" class="btn btn-primary" data-c="yes">
+          Complete task and mark all steps complete</button>
+      </div>
+    </div>`;
+    const done = (v) => { box.remove(); document.removeEventListener('keydown', esc, true); resolve(v); };
+    const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
+    box.querySelector('[data-c="no"]').onclick = () => done(false);
+    box.querySelector('[data-c="yes"]').onclick = () => done(true);
+    document.addEventListener('keydown', esc, true);
+    dlg.appendChild(box);
+    box.querySelector('[data-c="yes"]').focus();
+  });
+}
 
 export { stepRow };

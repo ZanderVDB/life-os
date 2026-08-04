@@ -524,10 +524,18 @@ steps are already one scroll away. Opening the next action reaches the same Task
 and the same Steps. If the slot ever needs the panel, it reuses `wireSteps` —
 the component takes a row element and a task, and the slot can supply both.
 
-**Steps have no order of their own.** They render in creation order and cannot
-be reordered. `task_steps` has a `position` column and the API accepts it, so
-this is UI work, not a schema change. Nobody has asked for it, and a drag inside
-a drag is worth deferring until someone does.
+**Step REORDERING is still the remaining limitation — but the order itself is
+real.** E2.6 corrected a mis-statement here: `task_steps.position` is not
+"creation order" by accident, it is a stored incrementing column assigned
+`max + 1` on create and used for every read. The sequence Today guides you
+through is that column, and it is authoritative.
+
+What is missing is a way to *change* it. Steps can only be appended, so a step
+added late cannot be moved earlier. Deferred deliberately: reordering belongs in
+the full editor (never inline on Today, where a drag inside a drag would fight
+the board's own), it needs its own one-write reorder endpoint shape, and nobody
+has yet needed it. Documented rather than pretended away — the order is
+designed, the ability to rearrange it is not built.
 
 **Step names are `<input>` elements, so `innerText` does not include them.** Not
 a defect — it matches how the task editor has always rendered them — but it is
@@ -543,3 +551,27 @@ the one thing left for the user.
 `findTask` resolves from it, so a completed task from an unloaded page falls
 through to `openMissingTask`, which fetches by id. That path is correct but does
 one extra request; loading history is the common case and it is already there.
+
+## E2.6 — known limitations
+
+**No inline Step reordering, and none planned for Today.** See above. A step
+added in the wrong place has to be deleted and re-added, or its text edited.
+
+**"N more steps" is a count, not a list.** Pressing it opens the full editor
+rather than expanding in place. That keeps the card short and keeps exactly one
+step actionable, which is the point of the sequence — but it does mean a
+five-step task cannot be read end to end without opening it.
+
+**The next-action slot has no completion control at all.** That is how §10's
+"do not allow parent completion from the compact slot while Steps remain" is
+held: rather than a control that is sometimes available, there is none. Opening
+the task is the way to complete it. Simple, and possibly too blunt if the slot
+later wants to finish a step-free task.
+
+**Undo is limited to one step back.** Correcting a mistake three steps ago means
+opening the editor. Deliberate — see the ordered-step model — but it is a real
+extra click for a real mistake.
+
+**The Browser pane would not composite for a screenshot during E2.6 either.**
+Every functional claim was verified through the DOM, computed styles and the
+API. The visual judgement of the Current/Next hierarchy is the user's.

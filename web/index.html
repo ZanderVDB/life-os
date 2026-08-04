@@ -379,6 +379,45 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .t-steps{margin:8px 0 2px 31px;display:flex;flex-direction:column;gap:1px}
 .t-steps[hidden]{display:none}
 .ts-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+
+/* ── Sequence hierarchy ──
+   Three levels, and only the middle one is loud: what you did (quiet), what to
+   do now (clear), what comes after (a preview). Nothing here is bright — a
+   step list in four colours reads as an alert, not as guidance. */
+.ts-group{display:flex;flex-direction:column;gap:2px;margin-top:7px}
+.ts-label{font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);padding-left:2px}
+.ts-group-current .ts-label{color:var(--accent)}
+
+/* Completed: readable, checked, and no longer asking for attention. */
+.ts-done-list .ts-name{color:var(--muted)}
+.ts-done-list .ts-row{opacity:.72}
+.ts-done-list .ts-row:hover{opacity:1}
+
+/* Current: the only step with any weight to it. */
+.ts-current{background:var(--surface);border-radius:8px;padding:5px 6px 5px 4px}
+.ts-current .ts-name{color:var(--text);font-size:13px;font-weight:500}
+.ts-current .ts-tick{border-color:var(--accent);width:16px;height:16px}
+.ts-current .ts-tick:hover{border-color:var(--ok);background:rgba(0,217,163,.10)}
+
+/* Next: a preview. Legible, not actionable, and it says so in words. */
+.ts-next .ts-name-locked{background:none;border:0;padding:2px 4px;text-align:left;
+  font:inherit;font-size:12.5px;color:var(--text-2);cursor:pointer;border-radius:5px;
+  flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ts-next .ts-name-locked:hover{color:var(--text);background:var(--surface)}
+/* An outline ring, not a filled grey box: a disabled-looking control reads as
+   broken, and this step is not broken — it is simply not yet. */
+.ts-tick.is-locked{width:15px;height:15px;flex-shrink:0;border-radius:5px;
+  border:1.5px dashed var(--border);background:none}
+
+.ts-more{align-self:flex-start;margin-top:6px;border:0;background:none;padding:2px 4px;
+  font-size:11px;color:var(--muted);cursor:pointer;border-radius:5px;
+  text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--border-strong)}
+.ts-more:hover{color:var(--text-2)}
+
+/* A step that cannot be unticked here still looks finished, not disabled. */
+.ts-tick[disabled]{cursor:default}
+.ts-done-list .ts-tick[disabled]:hover{border-color:var(--ok)}
 .ts-row{display:flex;align-items:center;gap:8px;padding:3px 6px 3px 2px;
   border-radius:7px;transition:background var(--t-hover)}
 .ts-row:hover{background:rgba(255,255,255,.035)}
@@ -416,7 +455,19 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .ts-ready{margin:6px 0 0;font-size:11px;color:var(--ok);font-weight:600;
   letter-spacing:.01em}
 .ts-error{margin:6px 0 0;font-size:11px;color:var(--danger)}
-.task.is-ready .t-tick{border-color:var(--ok)}
+.task.is-ready .t-tick,.t-tick.is-ready{border-color:var(--ok)}
+
+/* The parent control while steps remain: a progress ring showing how far in
+   you are, not a checkbox that looks pressable and is not. The count is the
+   accessible answer; the ring is the glanceable one. */
+.t-tick.is-blocked{border-color:transparent;cursor:default;position:relative;
+  background:conic-gradient(var(--ok) calc(var(--step-frac) * 360deg),
+    var(--surface-3) 0);
+  display:grid;place-items:center}
+.t-tick.is-blocked::after{content:'';position:absolute;inset:2.5px;border-radius:50%;
+  background:#282431}
+.t-tick-count{position:relative;z-index:1;font-size:7.5px;font-weight:700;
+  color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 
 /* One aligned action group. Every control is the same size, centred on the
    card's vertical axis — nothing floats at the top edge. */
@@ -663,6 +714,23 @@ body.modal-open{overflow:hidden}
 /* A completed task, opened from history. It is not an ordinary edit and must
    not look like one — the bar says what happened and offers the one verb that
    makes sense next. */
+/* The override confirmation. Inside the editor, not over it, so the task you
+   are deciding about stays visible behind the question. */
+/* FIXED, not absolute-inside-the-modal. `.modal` is `position:fixed` centred by
+   a transform, and giving it `position:relative` to contain this silently
+   overrode that and threw the dialog 310px off centre — a regression caught
+   once already and guarded by test. A fixed overlay needs no containing block,
+   and the editor still shows through behind it. */
+.m-confirm{position:fixed;inset:0;z-index:210;display:grid;place-items:center;
+  background:rgba(12,10,18,.72);padding:20px}
+.m-confirm-card{background:var(--surface-2);border:1px solid var(--border-strong);
+  border-radius:14px;box-shadow:var(--e3);padding:20px 22px;max-width:340px;
+  display:flex;flex-direction:column;gap:8px}
+.m-confirm-card h3{margin:0;font-size:15px;font-weight:650;color:var(--text)}
+.m-confirm-card p{margin:0;font-size:12.5px;color:var(--text-2);line-height:1.5}
+.m-confirm-acts{display:flex;flex-direction:column;gap:7px;margin-top:6px}
+.m-confirm-acts .btn{width:100%;justify-content:center;text-align:center}
+
 .m-done-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:9px 18px;background:rgba(0,217,163,.07);
   border-bottom:1px solid var(--hairline)}

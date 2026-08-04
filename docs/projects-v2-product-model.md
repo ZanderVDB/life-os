@@ -576,3 +576,18 @@ What matters for Projects:
   untouched, in both directions.
 
 Boards remain planned and unbuilt — see `projects-v2-boards.md`.
+
+## E2.6 — the sequence applies inside Projects too
+
+A Project task row is the same row as a Today task row, so it obeys the same
+guided sequence: one current step, a `Next` preview, later steps behind a count,
+and a parent checkbox that is unavailable while any step remains. The full task
+editor is the override surface in both places.
+
+The **next-action slot** stays compact: `x/y steps` and the task's own facts.
+Opening it reaches the same task and the same steps. The parent cannot be
+completed from the slot while steps remain — the slot has no completion control
+at all, which is the simplest way to hold that rule.
+
+Project progress still counts **parent Tasks only**. A task with every step
+complete but the parent still open counts as 0 of 1, because that is what it is.

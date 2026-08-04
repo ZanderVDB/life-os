@@ -41,6 +41,77 @@ export function readyToFinish(task) {
   return total > 0 && done === total;
 }
 
+/* ── The sequence ────────────────────────────────────────────────────────
+ *
+ * Steps are ORDERED. `task_steps.position` is a real, incrementing column —
+ * assigned `max + 1` on create and used for every read — so the order is
+ * stored, not inferred from creation time. Everything below reads it and
+ * nothing writes it.
+ *
+ * Today guides you through the sequence: one step is actionable, the next is
+ * a preview, and the rest wait. The full editor is where that guidance can be
+ * deliberately overridden — see `task-modal.js`.
+ */
+
+/** Steps in their stored order. A copy, so callers cannot sort the record. */
+export function orderedSteps(task) {
+  return [...(task?.steps ?? [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+}
+
+/**
+ * The step to do now: the FIRST incomplete step by stored order.
+ *
+ * Completed steps after it stay completed — someone ticked them deliberately
+ * in the editor, and Today has no business undoing that. It simply carries on
+ * guiding from the earliest thing that is still open.
+ */
+export function currentStep(task) {
+  return orderedSteps(task).find((s) => !s.completed) ?? null;
+}
+
+/** The preview: the first incomplete step AFTER the current one. */
+export function nextStep(task) {
+  const list = orderedSteps(task).filter((s) => !s.completed);
+  return list[1] ?? null;
+}
+
+/** Everything still waiting behind the preview. */
+export function laterSteps(task) {
+  return orderedSteps(task).filter((s) => !s.completed).slice(2);
+}
+
+/**
+ * The one completed step Today may safely undo: the one immediately before
+ * the current step.
+ *
+ * "Most recently completed" in a guided sequence means the step you just
+ * finished, and undoing it simply makes it current again — the sequence stays
+ * possible. Undoing an EARLIER one would leave a gap behind the current step,
+ * which is the impossible state §6 forbids Today from producing.
+ *
+ * With every step complete there is no current step, so the last one is the
+ * one you just finished.
+ */
+export function undoableStep(task) {
+  const list = orderedSteps(task);
+  const currentAt = list.findIndex((s) => !s.completed);
+  const before = currentAt === -1 ? list[list.length - 1] : list[currentAt - 1];
+  return before?.completed ? before : null;
+}
+
+/**
+ * Why the parent's checkbox is unavailable, or null when it is available.
+ *
+ * A sentence, not a flag: it goes straight into `aria-label` and the title, so
+ * the reason is available to a screen reader and on hover without a tooltip
+ * being the only way to find out.
+ */
+export function parentBlockedReason(task) {
+  const remaining = orderedSteps(task).filter((s) => !s.completed).length;
+  if (!remaining) return null;
+  return `Complete the remaining ${remaining} step${remaining === 1 ? '' : 's'} first`;
+}
+
 /**
  * The summary chip that lives in the task's meta line.
  *
@@ -79,10 +150,35 @@ export function stepsPanelHtml(task, expanded) {
  * would be the only route — which is the complaint this phase started from.
  */
 export function stepsPanelInnerHtml(task) {
-  const steps = task.steps ?? [];
-  return `<ul class="ts-list" role="list">
-      ${steps.map(stepRowHtml).join('')}
-    </ul>
+  const done = orderedSteps(task).filter((s) => s.completed);
+  const current = currentStep(task);
+  const next = nextStep(task);
+  const later = laterSteps(task);
+  const undoable = undoableStep(task);
+
+  return `${done.length ? `<ul class="ts-list ts-done-list" role="list">
+      ${done.map((s) => stepRowHtml(s, {
+    state: 'done',
+    // Only the step you just finished can be undone from here. Undoing an
+    // earlier one would leave a gap behind the current step.
+    undoable: s.id === undoable?.id,
+  })).join('')}
+    </ul>` : ''}
+
+    ${current ? `<div class="ts-group ts-group-current">
+      <span class="ts-label">Current</span>
+      <ul class="ts-list" role="list">${stepRowHtml(current, { state: 'current' })}</ul>
+    </div>` : ''}
+
+    ${next ? `<div class="ts-group ts-group-next">
+      <span class="ts-label">Next</span>
+      <ul class="ts-list" role="list">${stepRowHtml(next, { state: 'next' })}</ul>
+    </div>` : ''}
+
+    ${later.length ? `<button type="button" class="ts-more" data-step-later
+      aria-label="${later.length} more step${later.length === 1 ? '' : 's'} — open the task to see them all"
+      >${later.length} more step${later.length === 1 ? '' : 's'}</button>` : ''}
+
     <div class="ts-add">
       <input class="ts-new" data-step-new placeholder="Add a step…"
         aria-label="Add a step to ${esc(task.title)}">
@@ -95,22 +191,54 @@ export function stepsPanelInnerHtml(task) {
  * "All steps complete — ready to finish."
  *
  * Restrained on purpose: it is a note, not a celebration and not a prompt. The
- * task is still open, still on the board, and still needs a decision.
+ * task is still open, still on the board, and still needs a decision — the
+ * only thing that changed is that the parent's checkbox is now available.
  */
-const readyHtml = () => `<p class="ts-ready" role="status">All steps complete — ready to finish</p>`;
+const readyHtml = () => '<p class="ts-ready" role="status">All steps complete — ready to finish</p>';
 
-function stepRowHtml(s) {
-  return `<li class="ts-row ${s.completed ? 'is-done' : ''}" data-step="${s.id}">
-    <button class="ts-tick" data-step-toggle type="button"
-      aria-pressed="${s.completed ? 'true' : 'false'}"
-      aria-label="${s.completed ? 'Mark not done' : 'Mark done'}: ${esc(s.title)}">
-      <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-        stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg></button>
-    <input class="ts-name" value="${esc(s.title)}" data-step-name
-      data-original="${esc(s.title)}" aria-label="Step name">
-    <button class="ts-del" data-step-del type="button"
-      aria-label="Delete step: ${esc(s.title)}">${'×'}</button>
+/**
+ * One step row, in one of four states.
+ *
+ *   done     finished; quieter, and tickable back only if it is the last one
+ *   current  the thing to do now; the only freely actionable row on Today
+ *   next     a preview; readable, not tickable, opens the editor if pressed
+ *   plain    the editor's flat list, where every step is equally actionable
+ *
+ * A locked row is a BUTTON with a real sentence behind it, never a grey box
+ * with a padlock. "Not now" has to be legible without decoding an icon, and
+ * pressing it has to do something — it opens the full task, where the sequence
+ * can be overridden deliberately.
+ */
+function stepRowHtml(s, { state = 'plain', undoable = false } = {}) {
+  const locked = state === 'next';
+  const tickable = state === 'current' || state === 'plain' || (state === 'done' && undoable);
+
+  const tick = locked
+    ? `<span class="ts-tick is-locked" aria-hidden="true"></span>`
+    : `<button class="ts-tick" data-step-toggle type="button" ${tickable ? '' : 'disabled'}
+        aria-pressed="${s.completed ? 'true' : 'false'}"
+        aria-label="${s.completed
+    ? (undoable ? `Undo: ${esc(s.title)}` : `Completed: ${esc(s.title)}`)
+    : `Mark done: ${esc(s.title)}`}"
+        ${!tickable && s.completed
+    ? 'title="Open the task to change an earlier step"' : ''}>
+        <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+          stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg></button>`;
+
+  // A locked step's NAME is a button too, so a keyboard reaches the override.
+  const name = locked
+    ? `<button type="button" class="ts-name ts-name-locked" data-step-open
+        aria-label="${esc(s.title)} — not yet; open the task to do it out of order"
+        >${esc(s.title)}</button>`
+    : `<input class="ts-name" value="${esc(s.title)}" data-step-name
+        data-original="${esc(s.title)}" aria-label="Step name">`;
+
+  return `<li class="ts-row ts-${state} ${s.completed ? 'is-done' : ''}" data-step="${s.id}">
+    ${tick}
+    ${name}
+    ${state === 'plain' || state === 'current' ? `<button class="ts-del" data-step-del type="button"
+      aria-label="Delete step: ${esc(s.title)}">${'×'}</button>` : ''}
   </li>`;
 }
 
@@ -124,6 +252,10 @@ export function repaintSteps(rowEl, task) {
   const panel = rowEl.querySelector('.t-steps');
   if (!panel) return false;
   const expanded = !panel.hidden;
+  // Whether the parent's checkbox was blocked BEFORE this repaint. Finishing
+  // the last step, or adding one to a ready task, changes it — and the tick
+  // lives in the task row, which this function does not own.
+  const wasBlocked = !!rowEl.querySelector('.t-tick')?.disabled;
   // The panel NODE is kept and only its contents replaced, so expansion state,
   // scroll position and the listeners bound to it all survive a step change.
   panel.innerHTML = stepsPanelInnerHtml(task);
@@ -139,6 +271,10 @@ export function repaintSteps(rowEl, task) {
       `${done} of ${total} steps${expanded ? ', collapse' : ', expand'}`);
   }
   rowEl.classList.toggle('is-ready', readyToFinish(task));
+
+  /* Whether the parent tick's availability is now wrong. Same reasoning as the
+   * chip below: this function owns the panel, not the row around it. */
+  if (wasBlocked !== !!parentBlockedReason(task)) return true;
 
   /* Whether the chip's PRESENCE is now wrong.
    *
@@ -159,7 +295,7 @@ export function repaintSteps(rowEl, task) {
  * Every handler repaints from the record AFTER the shared context has updated
  * it, so the row never renders a guess of its own.
  */
-export function wireSteps(rowEl, task, ctx, { onChanged } = {}) {
+export function wireSteps(rowEl, task, ctx, { onChanged, onOpenTask } = {}) {
   const after = () => onChanged?.(repaintSteps(rowEl, task));
   const panel = rowEl.querySelector('.t-steps');
   const chip = rowEl.querySelector('[data-act="steps"]');
@@ -197,6 +333,12 @@ export function wireSteps(rowEl, task, ctx, { onChanged } = {}) {
 
   panel.addEventListener('click', async (e) => {
     if (e.target.closest('[data-step-add]')) { e.stopPropagation(); return commit(); }
+    // "N more steps" and a locked step's name both lead to the same place: the
+    // full task, which is the override surface. Neither silently does nothing.
+    if (e.target.closest('[data-step-later], [data-step-open]')) {
+      e.stopPropagation();
+      return onOpenTask?.();
+    }
     const li = e.target.closest('[data-step]');
     if (!li) return;
     e.stopPropagation();

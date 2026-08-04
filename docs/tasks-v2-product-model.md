@@ -1,4 +1,4 @@
-# Tasks and Steps — product model (Phase E2.5)
+# Tasks and Steps — product model (Phases E2.5–E2.6)
 
 The Task is the unit of work in Life OS. Everything else is context around it:
 an Area says what part of your life it belongs to, a Project says what it adds
@@ -39,6 +39,88 @@ start a drag from inside `.t-steps`.
 
 ---
 
+## Steps are an ordered sequence (E2.6)
+
+E2.5 gave Tasks inline Steps and rendered them as a flat checklist. That was
+wrong: **Steps are a sequence**, and Today's job is to guide you through it.
+
+`task_steps.position` is a real, stored, incrementing column — assigned
+`max + 1` on create and used for every read. The order is data, never inferred
+from creation time.
+
+| | |
+|---|---|
+| **Current** | the first incomplete step, by stored order |
+| **Next** | the first incomplete step after the current one |
+| **Later** | everything still incomplete behind that |
+| **Ready to finish** | no current step — every step is done |
+
+A completed step **after** the current one stays completed. Someone ticked it
+deliberately in the editor, and Today has no business undoing that; it simply
+carries on guiding from the earliest thing still open.
+
+### Today guides. The editor overrides.
+
+This is the whole design, and every rule follows from it.
+
+**On Today** (and in Project detail — the same row, the same rules):
+
+- only the **Current** step can be completed;
+- **Next** is a preview: readable, labelled `Next`, with no checkbox at all —
+  not a disabled one that looks pressable;
+- later steps collapse to `N more steps`;
+- pressing a locked step or that count **opens the full task**. It never
+  silently does nothing;
+- the parent's checkbox is **unavailable** while any step remains.
+
+**In the full editor**, every step is freely tickable, in any order. Completing
+one ahead of the current step is allowed and says so once:
+
+> Completed out of order — Today still guides from the earliest unfinished step.
+
+### Undoing a completed step inline
+
+Only the step **immediately before the current one** can be undone from Today.
+That is "the one you just finished", and undoing it simply makes it current
+again — the sequence stays possible.
+
+Undoing an earlier one would leave a gap behind the current step: step 1
+incomplete, step 2 complete, step 3 current. Today must never produce that. Any
+other completed step renders a disabled tick whose title points at the editor,
+where the sequence can be rearranged deliberately.
+
+### The parent checkbox while steps remain
+
+Not clickable-then-an-error. The control is **disabled**, and it carries the
+reason in `aria-label` and `title`:
+
+> Complete the remaining 2 steps first
+
+Visually it becomes a small progress ring with `1/3` inside it, so the state is
+legible without hovering and without relying on colour. The rule is also
+enforced in `toggleTask` and `completeProjectTask` themselves — `Space` on a
+focused card reaches the mutation directly, and a rule that only lives on a
+control is a rule with a hole in it.
+
+A task with **no** steps completes normally. Nothing here applies to it.
+
+### Completing a parent early
+
+The editor is the only place this can happen, and it is a decision, not a side
+effect:
+
+> **Complete task?**
+> 2 steps are still unfinished.
+> — Complete task and mark all steps complete
+> — Go back
+
+If confirmed: every remaining step is marked complete **first**, then the
+parent. Step text and order are untouched — marked complete, never discarded.
+
+There is deliberately **no** "complete the task but leave the steps open"
+option. A finished task holding unfinished steps is a record that contradicts
+itself, and every later screen would have to invent a meaning for it.
+
 ## Completing every Step does not complete the Task
 
 The last step turning green means the work is **ready to be finished**, not that
@@ -67,21 +149,27 @@ deliberate act, and the unfinished states are preserved exactly in history.
 ## Inline Steps
 
 A task with steps shows `2/4 steps` in its meta line. The chip is a **button**
-that expands the list beneath the task:
+that expands the sequence beneath the task:
 
 ```
 ○ Prepare client proposal                         2/4 steps ▾
    ✓ Confirm scope
    ✓ Calculate pricing
+
+   CURRENT
    ○ Write proposal
-   ○ Send to client
+
+   NEXT
+     Send to client
+
    [ Add a step…            ] [Add]
 ```
 
-Inline you can tick, untick, add, rename and delete. Expanding does **not** open
-the editor — they are different intentions, and the chip is the only control
-that means "show me the steps". The full editor remains available separately and
-shows the same steps through the same handlers.
+Inline you can complete the **current** step, undo the one before it, add a step
+and rename one. Expanding does **not** open the editor — they are different
+intentions, and the chip is the only control that means "show me the steps". The
+full editor remains available separately, shows the same steps through the same
+handlers, and is where the sequence can be overridden.
 
 **One component**, `web/steps.js`, used by the Today board and by Project detail.
 Not two implementations that look alike: the row is `taskHtml` in both places and

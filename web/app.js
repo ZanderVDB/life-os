@@ -23,6 +23,7 @@ import { openProjectModal, openChoiceDialog, openTaskPicker } from './project-mo
 import { openTaskModal } from './task-modal.js';
 import {
   stepsChipHtml, stepsPanelHtml, wireSteps, repaintSteps, readyToFinish, stepCounts,
+  currentStep, parentBlockedReason, orderedSteps,
 } from './steps.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
@@ -835,7 +836,7 @@ function taskHtml(t) {
   return `<article class="task pri-${t.priority} ${readyToFinish(t) ? 'is-ready' : ''}"
       data-id="${t.id}" tabindex="0" aria-label="${esc(t.title)}">
     <div class="t-row">
-      <button class="t-tick" data-act="toggle" aria-label="Mark done"></button>
+      ${parentTickHtml(t)}
       <div class="t-main">
         <button class="t-title" data-act="open" title="${esc(t.title)}">${esc(t.title)}</button>
         ${bits.length ? `<div class="t-meta">${bits.join('<span class="tm-sep">·</span>')}</div>` : ''}
@@ -849,6 +850,31 @@ function taskHtml(t) {
     </div>
     ${stepsPanelHtml(t, expandedSteps.has(t.id))}
   </article>`;
+}
+
+/**
+ * The parent task's completion control.
+ *
+ * With unfinished steps it is DISABLED and says why. Not "clickable, then an
+ * error": letting someone press a control and only then telling them it was
+ * never going to work is the pattern this replaces. The reason lives in
+ * `aria-label` and `title`, so it is available to a screen reader and on hover
+ * rather than only in a colour.
+ *
+ * The count of remaining steps rides along in the class, so the ring can show
+ * progress without the markup carrying a second copy of the numbers.
+ */
+function parentTickHtml(t) {
+  const blocked = parentBlockedReason(t);
+  if (!blocked) {
+    return `<button class="t-tick ${readyToFinish(t) ? 'is-ready' : ''}" data-act="toggle"
+      aria-label="${readyToFinish(t) ? 'All steps complete — mark done' : 'Mark done'}"></button>`;
+  }
+  const { total, done } = stepCounts(t);
+  return `<button class="t-tick is-blocked" data-act="toggle" disabled
+    aria-label="${esc(blocked)}" title="${esc(blocked)}"
+    style="--step-frac:${total ? done / total : 0}">
+    <span class="t-tick-count" aria-hidden="true">${done}/${total}</span></button>`;
 }
 
 /**
@@ -1003,9 +1029,12 @@ function wireCardSteps(el, id) {
   // The ctx repaints nothing: `wireSteps` already repaints the panel it owns,
   // and doing both would rebuild the row under the pointer that triggered it.
   wireSteps(el, t, taskStepsCtx(t), {
-    // `chipChanged` is true when the first step was added or the last removed,
-    // which is the only case the panel cannot repaint on its own.
-    onChanged: (chipChanged) => (chipChanged ? patchCard(id) : syncTaskEverywhere(id, el)),
+    // `frameChanged` is true when something outside the panel is now wrong —
+    // the chip appearing or vanishing, or the parent tick unblocking.
+    onChanged: (frameChanged) => (frameChanged ? patchCard(id) : syncTaskEverywhere(id, el)),
+    // A locked step is not a dead end: it opens the task, where the sequence
+    // can be overridden on purpose.
+    onOpenTask: () => openTask(id),
   });
 }
 
@@ -1044,6 +1073,21 @@ async function toggleTask(id, dirty = null) {
   const t = findTask(id);
   if (!t) return;
   const wasDone = t.status === 'done';
+  /*
+   * The sequence rule, enforced at the mutation and not only at the control.
+   *
+   * The checkbox is already disabled, but `Space` on a focused card reaches
+   * here too, and so would anything else that learns to call this. Guarding the
+   * write means the rule holds regardless of which affordance found it — and
+   * it says why rather than failing quietly.
+   *
+   * Only on the way IN. Reopening a completed task is always allowed; its
+   * steps are whatever they were.
+   */
+  if (!wasDone) {
+    const blocked = parentBlockedReason(t);
+    if (blocked) return toast(`${blocked}. Open the task to finish it anyway.`, true);
+  }
   // Anything the user had typed but not saved rides along with the completion.
   if (dirty) Object.assign(t, dirty);
   const card = document.querySelector(`.task[data-id="${id}"]`);
@@ -3124,8 +3168,9 @@ function wireProjectTaskRows(project) {
         if (expandedSteps.has(id)) expandedSteps.delete(id); else expandedSteps.add(id);
       }, true);
       wireSteps(row, t, taskStepsCtx(t), {
-        onChanged: (chipChanged) => (chipChanged
+        onChanged: (frameChanged) => (frameChanged
           ? patchProjectTaskRow(id) : syncTaskEverywhere(id, row)),
+        onOpenTask: () => openProjectTask(id),
       });
     }
   });
@@ -3487,6 +3532,12 @@ async function completeProjectTask(taskId, dirty = null) {
   const task = (pj.detail?.tasks ?? []).find((t) => t.id === taskId);
   if (!project || !task || task._busy) return;
   const wasDone = task.status === 'done';
+  // The same rule in Project detail: the row is the same row, so it obeys the
+  // same sequence. The override lives in the editor, in both places.
+  if (!wasDone) {
+    const blocked = parentBlockedReason(task);
+    if (blocked) return toast(`${blocked}. Open the task to finish it anyway.`, true);
+  }
   const row = document.querySelector(`#pjd-tasks .task[data-id="${taskId}"], .pjd-tasks-done .task[data-id="${taskId}"]`);
   task._busy = true;
 

@@ -136,7 +136,7 @@ test('ui: the summary is a control, and expanding does not open the editor', () 
   assert.match(chip, /aria-expanded/, 'expansion state is not exposed');
   assert.match(chip, /aria-controls="steps-\$\{task\.id\}"/);
   // The chip toggles the panel and nothing else.
-  const wire = body(stepsCode, 'export function wireSteps(rowEl, task, ctx, { onChanged } = {})');
+  const wire = body(stepsCode, 'export function wireSteps(rowEl, task, ctx, { onChanged, onOpenTask } = {})');
   assert.ok(!/openTask|openProjectTask/.test(wire),
     'expanding a task opens its editor, which is a different intention');
 });
@@ -163,7 +163,7 @@ test('ui: a task with no steps still has a way to gain its first one', () => {
 });
 
 test('ui: a failed step action hands the text back and says so', () => {
-  const wire = body(stepsCode, 'export function wireSteps(rowEl, task, ctx, { onChanged } = {})');
+  const wire = body(stepsCode, 'export function wireSteps(rowEl, task, ctx, { onChanged, onOpenTask } = {})');
   assert.match(wire, /if \(box\) box\.value = v;/, 'a failed add discards what was typed');
   assert.match(stepsCode, /function fail\(rowEl, message\)/, 'errors are swallowed');
   assert.match(stepsCode, /role', 'alert'/, 'the error is not announced');

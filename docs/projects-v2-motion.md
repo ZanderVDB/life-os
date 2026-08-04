@@ -211,3 +211,37 @@ place.
 
 All of the above respects `prefers-reduced-motion` through the existing `motion.js`
 helpers; nothing here introduces a new animation primitive.
+
+---
+
+## E2.6 — advancing the sequence
+
+**Completing the current step** is the phase's main movement, and it is
+deliberately small: the checkbox responds at once, the row settles into its
+completed styling and drops into the quieter completed group, the next step
+rises into `Current`, and the one behind it appears as `Next`. The card's height
+changes with it. Nothing else on the board moves.
+
+The panel node is reused, so this is a repaint rather than a rebuild — the
+expansion state, the scroll position and the listeners all survive. Only when
+the parent's checkbox changes availability (the last step completing, or a new
+step arriving on a ready task) is the surrounding row re-rendered, because the
+control lives outside the panel.
+
+**The final step** completes like any other; the difference is what follows.
+"All steps complete — ready to finish" appears, and the parent's progress ring
+becomes a real checkbox. The task does not move, does not complete itself, and
+does not celebrate.
+
+**Adding a step to a ready task** reverses that in place: the ready line goes,
+the checkbox returns to a ring, and the new step becomes `Current` at the end of
+the list.
+
+**The override confirmation** is a fixed overlay above the editor rather than a
+separate screen, so the task you are deciding about stays visible behind it.
+After approval the remaining steps complete, then the parent, then the task
+moves once.
+
+No springs, no bounce, nothing celebratory. Everything routes through the
+existing `motion.js` helpers, so `prefers-reduced-motion` is respected without
+this phase adding a primitive of its own.
