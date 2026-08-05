@@ -312,7 +312,10 @@ test('the ruled-line cycle equals the line-height, and scrolls with the text', (
   assert.match(html, /\.bk-editor\{[^}]*line-height:30px/);
   assert.match(html, /background-attachment:local/);
   // Every block is a whole number of rules, or text floats between the lines.
-  assert.match(html, /\.bk-editor p,\.bk-editor h2,\.bk-editor h3,\.bk-editor li[^{]*\{[^}]*line-height:30px/);
+  // F2.1 moved this from a list of selectors to `.bk-editor > *`, which also
+  // zeroes the browser defaults — see library-f21.test.ts for the full model.
+  assert.match(html, /\.bk-editor > \*\{[^}]*line-height:30px/);
+  assert.match(html, /\.bk-editor p,\.bk-editor li,\.bk-editor blockquote p\{[^}]*line-height:30px/);
 });
 
 test('the six section colours are all present', () => {

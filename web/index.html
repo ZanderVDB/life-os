@@ -2757,7 +2757,12 @@ body:has(.lib-page) .rail{display:none}
   background:var(--accent-c,var(--a-peach));opacity:.35}
 .bk-page-right::before{left:auto;right:46px}
 
-.bk-page-hdr{flex:0 0 auto;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+/* The page title band. An explicit height, so the body grid begins at a stated
+   place rather than wherever a font happened to leave it. The editor's rules
+   are drawn relative to the editor, so this band cannot shift them — but it
+   can shift where the first ruled line SITS on the page, and that should be a
+   decision. 60px = two rows of the body grid. */
+.bk-page-hdr{flex:0 0 auto;height:60px;margin:0;display:flex;align-items:center;gap:6px}
 .bk-page-more,.bk-tab-more{flex:0 0 auto;background:none;border:0;cursor:pointer;
   border-radius:7px;width:24px;height:24px;display:grid;place-items:center;
   color:var(--paper-ink-2);opacity:0;
@@ -2788,7 +2793,12 @@ body:has(.lib-page) .rail{display:none}
    line-height exactly, and `local` scrolls the rules with the text. It lives
    on the scrolling text element, never on the page: on the page the lines
    drift the moment a heading sits above them. */
-.bk-editor{flex:1;min-height:0;overflow-y:auto;outline:0;
+/* The ruled area is a whole number of rows, so the page ends ON a rule rather
+   than part-way through one, and scrolling moves in whole lines.
+   `round()` does the floor in CSS — no JS measuring the layout, no resize
+   observer, and it degrades to the plain flex height where it is unsupported. */
+.bk-editor{flex:1;min-height:0;height:round(down,100%,30px);
+  overflow-y:auto;outline:0;
   color:var(--paper-ink);font-size:15px;line-height:30px;
   background-image:repeating-linear-gradient(to bottom,
     transparent 0,transparent 29px,var(--paper-line) 29px,var(--paper-line) 30px);
@@ -2796,18 +2806,52 @@ body:has(.lib-page) .rail{display:none}
   -webkit-overflow-scrolling:touch}
 .bk-editor::-webkit-scrollbar{width:6px}
 .bk-editor::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}
-/* EVERY block is a whole number of 30px rules. This is the only way headings,
-   lists and quotes stay ON the lines instead of floating between them. */
-.bk-editor p,.bk-editor h2,.bk-editor h3,.bk-editor li,.bk-editor blockquote p{
-  margin:0;line-height:30px}
-.bk-editor h2{font-family:'Playfair Display',Georgia,serif;font-size:21px;font-weight:500;
-  margin-top:30px}
-.bk-editor h2:first-child{margin-top:0}
-.bk-editor h3{font-family:'Playfair Display',Georgia,serif;font-size:17px;font-weight:500;
-  margin-top:30px}
-.bk-editor h3:first-child{margin-top:0}
-.bk-editor ul,.bk-editor ol{margin:0;padding-left:22px}
-.bk-editor blockquote{margin:0;padding-left:15px;
+
+/* ── THE BLOCK GRID (F2.1) ─────────────────────────────────────────────
+   ONE formula, applied to every block. Not a set of per-element nudges.
+
+       height = (lead + lines) x 30px
+
+   `lines` is however many ruled lines the text wraps onto — it follows from
+   line-height being 30px everywhere, so it needs no declaration.
+   `lead` is the number of rows a block claims for its own typography:
+
+       paragraph 0   list 0   quote 0   heading 1   subheading 1
+
+   Two rules make that work, and both matter:
+
+   1. LEAD IS PADDING, NEVER MARGIN. A margin belongs to no element. The
+      caret cannot be placed in it, so a 30px margin above a heading drew a
+      ruled line nobody could click into — which is exactly the defect this
+      section fixes. Padding belongs to the block, so clicking it puts the
+      caret in the heading, where it should be.
+
+   2. A LEAD ROW IS UNRULED. `::before` paints paper over the lead, so the
+      space a heading owns has no rule in it. A writable blank line always
+      has a rule; typography-owned space never does. That is the whole
+      visual grammar, and it is why the lead cannot be mistaken for a line
+      you should be able to type on.
+
+   Browser defaults are zeroed rather than overridden, so nothing can collapse
+   or leak in from the user agent stylesheet. */
+.bk-editor > *{margin:0;padding:0;line-height:30px}
+.bk-editor p,.bk-editor li,.bk-editor blockquote p{margin:0;line-height:30px}
+
+/* lead: 1 — see the formula above. */
+.bk-editor h2,.bk-editor h3{
+  position:relative;margin:0;padding:30px 0 0;font-weight:500;
+  font-family:'Playfair Display',Georgia,serif;color:var(--paper-ink)}
+.bk-editor h2{font-size:23px}
+.bk-editor h3{font-size:18px}
+.bk-editor h2::before,.bk-editor h3::before{
+  content:'';position:absolute;left:0;right:0;top:0;height:30px;
+  background:var(--paper);pointer-events:none}
+
+/* lead: 0 — a list is exactly its items, a quote exactly its paragraphs. */
+.bk-editor ul,.bk-editor ol{margin:0;padding:0 0 0 24px}
+.bk-editor li{margin:0;padding:0}
+.bk-editor li::marker{color:var(--paper-ink-2)}
+.bk-editor blockquote{margin:0;padding:0 0 0 15px;
   border-left:2px solid var(--accent-c,var(--a-peach));color:var(--paper-ink-2);
   font-style:italic}
 .bk-editor a{color:var(--accent-c,var(--a-peach));text-decoration:underline;

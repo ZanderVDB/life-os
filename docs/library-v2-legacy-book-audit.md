@@ -186,6 +186,13 @@ every block is pinned to a whole number of 30px rules — otherwise text floats
 between the lines the moment a heading appears, which is the same drift recorded
 in §3 for a different reason.
 
+F2.1 finished that thought. A heading claims one extra row for its own
+typography, and **that row carries no rule**: `h2::before` paints paper over it.
+A ruled row means writable space; an unruled one means space a block owns. The
+first attempt used a top margin instead, which drew a rule nobody could put the
+caret into — a textarea could never have produced that defect, which is why the
+audit had no reason to warn about it. See `library-v2-client.md`.
+
 **Two deliberate departures**, both recorded in `library-v2-client.md`: page body
 text is Inter rather than Kalam, and the paper is dark rather than white.
 

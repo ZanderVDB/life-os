@@ -1,4 +1,4 @@
-# Library — the client (Phase F2)
+# Library — the client (Phases F2 and F2.1)
 
 F1 built the schema and the API. F2 built the thing you actually use: the shelf,
 the Book, the editor and everything that keeps what you type.
@@ -160,6 +160,119 @@ shape. `ul`/`ol` are never unwrapped; their `li` children are their own content.
 
 ---
 
+## The block grid (F2.1)
+
+F2 pinned every block to `line-height: 30px` and gave headings `margin-top: 30px`
+so they would not sit flush against the paragraph above.
+
+That margin was the defect. **A margin belongs to no element.** It drew a ruled
+line — the editor's background paints one every 30px regardless of what is
+there — and the caret could never be placed in it, because there was nothing to
+place it in. It looked like a line you should be able to write on and it was
+not. Measured before the fix: a 30px gap between one block's bottom and the
+next block's top, belonging to neither.
+
+### The formula
+
+    height = (lead + lines) x 30px
+
+`lines` is however many ruled lines the text wraps onto. It needs no
+declaration — it follows from `line-height: 30px` applying everywhere.
+
+`lead` is the number of rows a block claims for its own typography:
+
+| Block | lead | rows for one line |
+|---|---|---|
+| Body paragraph | 0 | 1 |
+| Empty paragraph | 0 | 1 |
+| Heading | 1 | 2 |
+| Subheading | 1 | 2 |
+| Quote | 0 | its paragraphs, exactly |
+| List | 0 | its items, exactly |
+
+Two rules make it work, and both matter:
+
+1. **Lead is padding, never margin.** Padding is inside the block, so clicking
+   it puts the caret in the heading — which is where it belongs, and which is
+   the interaction half of the fix.
+2. **A lead row is unruled.** `h2::before` / `h3::before` paint `var(--paper)`
+   over exactly the lead, with `pointer-events: none`. A writable blank line
+   always has a rule; typography-owned space never does. That is the entire
+   visual grammar, and it is why the lead cannot be mistaken for an empty line.
+
+Nothing else was needed — no negative margins, no transforms, no first-block
+special case, no viewport-specific corrections. Browser defaults are zeroed on
+`.bk-editor > *` rather than overridden per element, so nothing can collapse or
+leak in from the user agent stylesheet.
+
+The ruled area itself is `height: round(down, 100%, 30px)`, so the page ends on
+a rule and an internal scroll moves whole lines. The page-title band is a
+declared 60px, so the body grid begins at a stated place.
+
+### What it looks like
+
+The row map of the regression page, derived from the measured layout — every
+unruled row is owned by a heading, and every ruled row has text on it:
+
+    row  0 ──────  p           A body paragraph, to begin
+    row  1 ──────  p           (wrapped)
+    row  2         h2          A Heading          <- lead, unruled
+    row  3 ──────  h2          A Heading
+    row  4 ──────  p           Body again
+    row  5         h3          A Subheading       <- lead, unruled
+    row  6 ──────  h3          A Subheading
+    row  7 ──────  p           Body again
+    row  8-11 ───  ol          numbered, one item wrapped
+    row 12-13 ───  ul          bulleted
+    row 14-16 ───  blockquote  wrapped quotation
+    row 17 ──────  p           A final body paragraph
+
+There is no ruled row without content. That was the whole complaint.
+
+## Enter, Backspace and the caret
+
+`library-blocks.js` holds the rules. Every one goes through `execCommand` — not
+because it is a good API, it is deprecated, but because it is the only one that
+edits a contenteditable while keeping the browser's undo stack. Hand-written DOM
+surgery produces the right shape and then breaks Ctrl+Z, which is a worse bug
+than the one it fixes.
+
+| Keystroke | What happens |
+|---|---|
+| Enter at the END of a heading | a body paragraph on the next row |
+| Enter at the START of a heading | a real empty paragraph above; caret stays in the heading |
+| Enter in the MIDDLE of a heading | heading keeps the text before the caret, the rest becomes body |
+| Enter on an EMPTY list item | leaves the list, as body |
+| Enter on an EMPTY quote paragraph | leaves the quote, as body |
+| Enter in a quote with text | a new paragraph inside the quote |
+| Backspace at the START of a heading | becomes a body paragraph |
+
+Backspace **converts rather than merges**, deliberately: converting is
+recoverable with one more keystroke, merging two blocks is not.
+
+Nothing fakes a paragraph to correct a visual offset. The document contains only
+real content — verified by reading the JSON back after every one of these.
+
+### Two things the toolbar was getting wrong
+
+**`queryCommandValue('formatBlock')` reports a paragraph inside a blockquote as
+`p`**, so Quote never showed as the active style. The toolbar now reads the
+caret's block from the DOM.
+
+**`formatBlock` cannot leave a quote.** Applied to a paragraph inside a
+blockquote it restyles the paragraph and leaves it where it is, so "Quote to
+Body" appeared to do nothing. `applyBlockStyle` outdents first.
+
+### Style names
+
+The interface says **Body, Heading, Subheading, Quote**. The option values are
+`body`/`heading`/`subheading`/`quote`, mapped to `p`/`h2`/`h3`/`blockquote` in
+one table in `library-blocks.js`. `h2` is the document's business and appears
+nowhere a person can see. The active style is announced through the select's
+`aria-label`, and headings, lists and quotes stay real elements — never styled
+paragraphs imitating them.
+
+
 ## Routing
 
 ```
@@ -187,10 +300,10 @@ stripe, a `3px`/`-3px` mirrored coloured edge, `20px 20px 4px 4px` tabs, and the
 ruled gradient whose 30px cycle equals the line-height with
 `background-attachment: local`.
 
-**Every block in the editor is a whole number of 30px rules.** Headings, lists
-and quotes all sit at `line-height: 30px` with 30px top margins. Without that
-they float between the rules the moment a heading appears — which is the exact
-drift the audit records Legacy hitting.
+**Every block in the editor is a whole number of 30px rules.** F2 did this with
+`line-height: 30px` plus a 30px top margin on headings; F2.1 replaced the margin
+with padding and an unruled lead row, because a margin belongs to no element and
+the caret could not be placed in it. See [The block grid](#the-block-grid-f21).
 
 **The blank facing an odd final page is a rendering decision, not a row.** It
 carries the `Add pages` action. Pressing it when the count is odd adds **one**
@@ -307,6 +420,11 @@ inferred from source.
 | Responsive | 1440 / 1280 / 1024 / 768 / 390 / 375 — no horizontal overflow at any width |
 | Composer | 70px clearance at the bottom of the scroll on a 390px screen |
 | Reduced motion | no animation class applied; the spread swaps instantly |
+| Block grid (F2.1) | every block a whole number of rows, zero gaps, at 1280 / 768 / 390 |
+| Heading lead row (F2.1) | 30px of padding inside the heading, unruled, caret lands in the heading |
+| Enter / Backspace (F2.1) | all seven rules, plus undo restoring the block type |
+| Block conversion (F2.1) | Body to Heading to Body and Body to Quote to Body, no phantom nodes |
+| Internal scroll (F2.1) | editor exactly 15 rows, scroll lands on whole rows, nothing clipped |
 | New Book | cover shows the title and subtitle; arrives with 1 section, 2 pages |
 | Section colour | rose applied to the tab and the page edge together |
 | Archive page | count 6 to 5, Undo restores it |

@@ -24,6 +24,9 @@ import {
   queueSave, flush, statusOf, entryOf, trackPage, STATUS_LABEL, onSaveStatus,
 } from './library-save.js';
 import { reducedMotion } from './motion.js';
+import {
+  handleEnter, handleBackspace, applyBlockStyle, currentStyleId, BLOCK_STYLES,
+} from './library-blocks.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -179,10 +182,7 @@ export function toolbarHtml() {
       title="${label}${key ? ` (${key})` : ''}" aria-pressed="false">${glyph}</button>`;
   return `<div class="bk-toolbar" role="toolbar" aria-label="Formatting">
     <select class="bk-tb-style" data-cmd="style" aria-label="Text style">
-      <option value="p">Body</option>
-      <option value="h2">Heading</option>
-      <option value="h3">Subheading</option>
-      <option value="blockquote">Quote</option>
+      ${BLOCK_STYLES.map((st) => `<option value="${st.id}">${st.label}</option>`).join('')}
     </select>
     <span class="bk-tb-sep" aria-hidden="true"></span>
     ${b('bold', 'Bold', '<b>B</b>', 'Ctrl B')}
@@ -232,6 +232,25 @@ export function mountSpread(root, { onNavigate, onDirty }) {
     });
 
     el.addEventListener('keydown', (e) => {
+      /* Enter and Backspace decide what the DOCUMENT becomes, so they are
+       * handled before the browser gets them. Everything the rules do not
+       * claim falls through to the browser untouched. */
+      if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        if (handleEnter(el)) {
+          e.preventDefault();
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          updateToolbarState();
+        }
+        return;
+      }
+      if (e.key === 'Backspace') {
+        if (handleBackspace(el)) {
+          e.preventDefault();
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          updateToolbarState();
+        }
+        return;
+      }
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
       const k = e.key.toLowerCase();
@@ -327,8 +346,12 @@ export function wireToolbar(root) {
   const style = root.querySelector('.bk-tb-style');
   style?.addEventListener('mousedown', (e) => e.stopPropagation());
   style?.addEventListener('change', () => {
-    const v = style.value;
-    exec('formatBlock', v === 'p' ? '<p>' : `<${v}>`);
+    const ed = document.activeElement?.closest?.('.bk-editor')
+      ?? document.querySelector('.bk-editor');
+    if (!ed) return;
+    applyBlockStyle(ed, style.value);
+    updateToolbarState();
+    ed.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
 
@@ -381,10 +404,15 @@ function updateToolbarState() {
     }
   }
   const style = bar.querySelector('.bk-tb-style');
-  if (style) {
-    let block = 'p';
-    try { block = (document.queryCommandValue('formatBlock') || 'p').toLowerCase(); } catch { /* ignore */ }
-    style.value = ['h2', 'h3', 'blockquote'].includes(block) ? block : 'p';
+  const ed = document.activeElement?.closest?.('.bk-editor');
+  if (style && ed) {
+    /* Read from the DOM, not from queryCommandValue: that returns the tag the
+     * browser THINKS applies and reports a paragraph inside a blockquote as
+     * "p", so Quote never showed as the active style. */
+    const id = currentStyleId(ed);
+    style.value = id;
+    style.setAttribute('aria-label', `Text style: ${
+      BLOCK_STYLES.find((s2) => s2.id === id)?.label ?? 'Body'}`);
   }
 }
 
