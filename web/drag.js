@@ -141,6 +141,9 @@ function begin(card, e, hooks) {
   session = {
     card,
     id: card.dataset.id,
+    // Which half of the bucket this card belongs to. Fixed at lift, because it
+    // is a property of the TASK, not of wherever the pointer currently is.
+    kind: sectionOf(card),
     ph,
     fromBucket: from?.dataset.bucket ?? null,
     // Where the pointer sits inside the card, so it does not jump on lift.
@@ -194,16 +197,55 @@ function drag(e) {
  * Area filter honest: a hidden task is not in the list, so it can never be
  * chosen as an insertion anchor.
  */
+/**
+ * Which subsection a card sits in: 'project' when it belongs to one, else
+ * 'standalone'.
+ *
+ * Read from the card's own markup rather than by walking the DOM to the nearest
+ * heading — the heading is a sibling, so "the section above me" changes as the
+ * placeholder moves, and a rule that shifts mid-drag is not a rule.
+ */
+function sectionOf(card) {
+  return card.dataset.project ? 'project' : 'standalone';
+}
+
 function updateInsertion(x, y) {
   const zone = zoneAt(x, y);
   if (!zone) return;
 
-  const cards = [...zone.querySelectorAll('.task')].filter((c) => c !== session.card);
+  /* Only cards in the SAME subsection are candidates.
+   *
+   * Today splits each bucket into standalone work and project work. Dropping a
+   * standalone task among the project rows would claim it had joined a project,
+   * and dropping a project task among the standalone ones would claim it had
+   * left — neither of which a drag is allowed to decide. Project membership is
+   * changed in the task editor, deliberately, and never as a side effect of
+   * where a card was released.
+   *
+   * Filtering the CANDIDATES rather than rejecting the drop is what produces
+   * the boundary: the placeholder simply stops at the edge of the section, so
+   * the gap shows the user where the task can actually go instead of appearing
+   * somewhere it will not stay.
+   */
+  const kind = session.kind;
+  const cards = [...zone.querySelectorAll('.task')]
+    .filter((c) => c !== session.card && sectionOf(c) === kind);
+
   // The first card whose midpoint the pointer is above.
   const before = cards.find((c) => {
     const r = c.getBoundingClientRect();
     return y < r.top + r.height / 2;
   }) ?? null;
+
+  /* Past the last card of this section, the placeholder goes after it — not at
+   * the end of the whole zone, which would put it inside the other section. */
+  if (!before && cards.length) {
+    const last = cards[cards.length - 1];
+    if (last.nextElementSibling !== session.ph) {
+      flipSiblings(() => last.after(session.ph));
+    }
+    return;
+  }
 
   const parentChanged = session.ph.parentNode !== zone;
   const nextSibling = session.ph.nextElementSibling;

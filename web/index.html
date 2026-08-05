@@ -658,6 +658,30 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .toast{position:fixed;bottom:calc(var(--composer-h) + 30px);left:50%;transform:translateX(-50%);
   background:var(--surface-2);border-radius:12px;padding:11px 18px;font-size:13px;box-shadow:var(--e3);
   z-index:300;animation:rise var(--d-base) var(--e-out) backwards;max-width:calc(100vw - 32px)}
+/* A toast carrying a verb. One action, never two — a message with a menu in it
+   is a dialog wearing the wrong clothes. */
+.toast.has-action{display:flex;align-items:center;gap:14px;padding-right:8px}
+.toast-action{border:0;background:var(--accent-soft);color:var(--text);
+  border-radius:8px;padding:6px 13px;font-size:12.5px;font-weight:650;cursor:pointer;
+  flex-shrink:0;transition:background var(--t-hover)}
+.toast-action:hover{background:var(--accent)}
+.toast-action:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── Today subsection headings ──
+   A label between two runs of cards, not a container around either. Quiet
+   enough to read as structure rather than as a thing in its own right. */
+.sub-head{font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);padding:2px 2px 0;margin-top:4px}
+.sub-head:first-child{margin-top:0}
+/* The gap above PROJECTS is what actually separates the two groups; the label
+   names the separation rather than creating it. */
+.sub-head[data-sub="projects"]{margin-top:14px}
+.drop.is-empty .sub-head{display:none}
+
+/* A project whose metadata could not be loaded. Stated, not hidden — the task
+   is still project work and must not be mistaken for standalone. */
+.tm-project.is-missing{color:var(--muted);font-style:italic;cursor:default;
+  background:none;border:0;padding:0;font-size:inherit}
 .toast.err{color:var(--danger)}
 
 /* ── Update prompt (PWA) ────────────────────────────────────────────── */

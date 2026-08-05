@@ -25,6 +25,9 @@ import {
   stepsChipHtml, stepsPanelHtml, wireSteps, repaintSteps, readyToFinish, stepCounts,
   currentStep, parentBlockedReason, orderedSteps,
 } from './steps.js';
+import {
+  partition, isStandalone, arrangeStandalone, insertionIndex, orderChanged, localDate,
+} from './arrange.js';
 import { openHabitModal } from './habit-modal.js';
 import { initStars } from './stars.js';
 import { initDrag, isDragging } from './drag.js';
@@ -181,15 +184,33 @@ window.__sample = {
 
 /* ── Toast ───────────────────────────────────────────────────────────── */
 let toastTimer;
-function toast(msg, isError = false) {
+/**
+ * @param {string} msg
+ * @param {boolean} isError
+ * @param {{label: string, onAction: Function}} [action]
+ *   An optional single verb — Undo, in practice. Given longer to live than a
+ *   plain toast, because a message you are meant to ACT on must not vanish
+ *   while you are still reading it.
+ */
+function toast(msg, isError = false, action = null) {
   document.querySelector('.toast')?.remove();
   const el = document.createElement('div');
-  el.className = 'toast' + (isError ? ' err' : '');
+  el.className = 'toast' + (isError ? ' err' : '') + (action ? ' has-action' : '');
   el.setAttribute('role', isError ? 'alert' : 'status');
-  el.textContent = msg;
+  const text = document.createElement('span');
+  text.textContent = msg;
+  el.appendChild(text);
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'toast-action';
+    b.type = 'button';
+    b.textContent = action.label;
+    b.onclick = () => { el.remove(); clearTimeout(toastTimer); action.onAction(); };
+    el.appendChild(b);
+  }
   document.body.appendChild(el);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.remove(), 3600);
+  toastTimer = setTimeout(() => el.remove(), action ? 9000 : 3600);
 }
 const run = async (fn) => { try { await fn(); } catch (e) { toast(e.message, true); } };
 
@@ -206,6 +227,9 @@ const ICON = {
   menu: '<path d="M3.5 6h13M3.5 10h13M3.5 14h13"/>',
   sparkle: '<path d="M10 3.5 11.4 8 16 9.4 11.4 10.8 10 15.4 8.6 10.8 4 9.4 8.6 8 10 3.5Z"/>',
   check: '<path d="m4.5 10.5 3.5 3.5 7.5-8"/>',
+  // Three lines, shortest last — the conventional "sort" mark, at the same
+  // stroke weight as every other icon in the set.
+  sort: '<path d="M4 6h12M4 10h8M4 14h4"/>',
   chevL: '<path d="m12 5-5 5 5 5"/>',
   chevR: '<path d="m8 5 5 5-5 5"/>',
   // Horizontal, matching utilityTriggerHtml. The app had both orientations —
@@ -382,10 +406,22 @@ async function loadHistory(reset = false) {
   state.historyTotal = r.total;
 }
 
-const inBucket = (b) => state.tasks
-  .filter((t) => t.bucket === b && t.status !== 'done'
-    && (!state.areaFilter || t.areaId === state.areaFilter))
-  .sort((x, y) => x.position - y.position);
+/**
+ * One bucket's visible tasks, in the order they are drawn.
+ *
+ * Sorted by `position` — the user's own Today order — and then PARTITIONED so
+ * standalone work comes before project work. The partition is a display
+ * grouping, not a second sort: within each group, `position` still decides, so
+ * a drag that changes `position` still lands where the user dropped it.
+ */
+const inBucket = (b) => {
+  const list = state.tasks
+    .filter((t) => t.bucket === b && t.status !== 'done'
+      && (!state.areaFilter || t.areaId === state.areaFilter))
+    .sort((x, y) => x.position - y.position);
+  const { standalone, project } = partition(list, state.projectsById);
+  return [...standalone, ...project];
+};
 const areaName = (id) => state.me.areas.find((a) => a.id === id)?.name || '';
 /**
  * A task by id, wherever it is currently mounted.
@@ -697,6 +733,9 @@ async function loadRoute() {
       document.getElementById('today-more')?.addEventListener('click', (e) =>
         openTodayMenu(e.currentTarget));
       renderRail();
+      // After the board exists and expansion has been restored — §9 requires
+      // the arrangement not to disturb which tasks are open.
+      maybeArrangeToday();
     } catch (e) {
       scroll.innerHTML = errorHtml(e.message);
       scroll.querySelector('#retry')?.addEventListener('click', () => loadRoute());
@@ -786,9 +825,44 @@ function bucketHtml(b) {
     <div class="bucket-head"><h2>${b.label}</h2>
       <span class="bucket-count" data-count="${b.id}">${list.length}</span></div>
     <div class="drop${list.length ? '' : ' is-empty'}" data-bucket="${b.id}">
-      ${list.length ? list.map((t) => taskHtml(t)).join('') : emptyHtml(b)}
+      ${list.length ? bucketInnerHtml(list) : emptyHtml(b)}
     </div></section>`;
 }
+
+/**
+ * A bucket's contents: standalone work, then project work, with headings only
+ * where they earn their place.
+ *
+ * THE TASKS STAY DIRECT CHILDREN OF THE DROP ZONE. The headings are siblings
+ * between them, not wrappers around them.
+ *
+ * That is not a style choice. `drag.js` finds candidates with
+ * `zone.querySelectorAll('.task')` — which matches at any depth — and then
+ * calls `zone.insertBefore(placeholder, candidate)`, which requires the
+ * candidate to be a DIRECT child. Nesting the rows inside two subsection
+ * divs would throw `NotFoundError` on the first drag into the second section.
+ * Sibling headings keep the drop zone flat and the drag code untouched.
+ *
+ * Which heading appears is adaptive, because a divider that separates one
+ * thing from nothing is just noise:
+ *
+ *   both kinds present  ->  TASKS and PROJECTS
+ *   standalone only     ->  neither; the bucket is already the container
+ *   project only        ->  PROJECTS alone, which still says what this is
+ */
+function bucketInnerHtml(list) {
+  const { standalone, project } = partition(list, state.projectsById);
+  const bothKinds = standalone.length > 0 && project.length > 0;
+  const out = [];
+  if (bothKinds) out.push(subHeadHtml('tasks', 'Tasks'));
+  out.push(...standalone.map((t) => taskHtml(t)));
+  if (project.length) out.push(subHeadHtml('projects', 'Projects'));
+  out.push(...project.map((t) => taskHtml(t)));
+  return out.join('');
+}
+
+const subHeadHtml = (id, label) =>
+  `<div class="sub-head" data-sub="${id}" role="presentation">${label}</div>`;
 
 const emptyHtml = (b) => `<div class="empty">${
   b.id === 'today' ? 'Nothing planned for today' : 'Empty'}</div>`;
@@ -833,6 +907,14 @@ function taskHtml(t) {
     bits.push(`<button class="tm-project" data-open-project="${project.id}"
       title="Open ${esc(project.title)}">${esc(project.title)}</button>`);
     if (isNext) bits.push('<span class="tm-next">Next action</span>');
+  } else if (t.projectId) {
+    /* It HAS a project; we just could not load it.
+     *
+     * Saying so is the honest answer. Rendering nothing would make this look
+     * like a standalone task, and then the daily arranger — which is not
+     * allowed near project work — would happily reorder it. A failed request
+     * must not silently change what a task is. */
+    bits.push('<span class="tm-project is-missing" title="This task belongs to a project that could not be loaded">Project unavailable</span>');
   }
 
   /* The steps panel is INSIDE the article, never a sibling.
@@ -841,8 +923,13 @@ function taskHtml(t) {
    * task as far as the drag code is concerned — it would become an insertion
    * target and could be reordered away from its parent. Nesting is what makes
    * that structurally impossible rather than merely discouraged. */
+  /* `data-project` is what tells the drag code which subsection this row
+   * belongs to. Read from the record, present whenever the task has a project
+   * at all — including one whose metadata failed to load, which is still
+   * project work and must not drift into the standalone half. */
   return `<article class="task pri-${t.priority} ${readyToFinish(t) ? 'is-ready' : ''}"
-      data-id="${t.id}" tabindex="0" aria-label="${esc(t.title)}">
+      data-id="${t.id}" ${t.projectId ? `data-project="${t.projectId}"` : ''}
+      tabindex="0" aria-label="${esc(t.title)}">
     <div class="t-row">
       ${parentTickHtml(t)}
       <div class="t-main">
@@ -986,7 +1073,7 @@ function rebuildBucket(bucketId) {
   const list = inBucket(bucketId);
   drop.classList.toggle('is-empty', list.length === 0);
   drop.innerHTML = list.length
-    ? list.map((t) => taskHtml(t)).join('')
+    ? bucketInnerHtml(list)
     : emptyHtml(BUCKETS.find((b) => b.id === bucketId));
   const badge = document.querySelector(`[data-count="${bucketId}"]`);
   if (badge && badge.textContent !== String(list.length)) {
@@ -1367,8 +1454,10 @@ function openTask(id, prefillTitle = '') {
         }
       } else {
         const r = await api(`/api/v1/workspaces/${ws()}/tasks`, { method: 'POST', body });
-        state.tasks.push({ ...r.task, steps: [] });
-        flip(document.querySelectorAll('.task'), () => rebuildBucket(body.bucket));
+        const created = { ...r.task, steps: [] };
+        state.tasks.push(created);
+        await placeNewTask(created);
+        flip(document.querySelectorAll('.task'), () => rebuildBucket(created.bucket));
         wireBoard(); renderRail();
         saved('Task created');
       }
@@ -4391,7 +4480,181 @@ const bucketLabel = (id) => BUCKETS.find((b) => b.id === id)?.label ?? 'your boa
 /** Today's overflow: secondary actions that should not sit in the board. */
 function openTodayMenu(anchor) {
   openUtilityMenu(anchor, [
+    // In the overflow, not the toolbar. It is a way to re-run a rule that
+    // normally runs itself — useful, and not something to look at all day.
+    { id: 'arrange', label: 'Arrange today', icon: icon('sort', 16) },
     { id: 'history', label: 'View completed tasks', icon: icon('check', 16),
       count: state.historyTotal },
-  ], (id) => { if (id === 'history') go('history'); });
+  ], (id) => {
+    if (id === 'history') return go('history');
+    if (id === 'arrange') return arrangeToday({ manual: true });
+    return undefined;
+  });
+}
+
+/* ══ Today's daily arrangement ═══════════════════════════════════════════
+ *
+ * Once per local calendar day, on first open, standalone tasks are put into a
+ * recommended order. Project tasks are never touched — see arrange.js.
+ */
+
+/**
+ * Slots a newly created standalone task into a sensible place.
+ *
+ * The task arrives at the END of its bucket, because that is where the API puts
+ * it. If Today has already been arranged for the day, dropping an urgent
+ * scheduled task at the bottom contradicts the order the user was just given —
+ * but re-sorting the bucket would throw away every manual move they have made
+ * since. §14's answer: find where it belongs and insert it ONCE. One task
+ * moves. Everything else stays exactly where the user left it.
+ *
+ * Project tasks are skipped entirely. They are not the arranger's business,
+ * and a new project task simply lands at the end of the project group.
+ */
+async function placeNewTask(task) {
+  if (!isStandalone(task)) return;
+  const { standalone } = partition(inBucket(task.bucket), state.projectsById);
+  const others = standalone.filter((t) => t.id !== task.id);
+  if (!others.length) return;
+
+  const at = insertionIndex(others, task);
+  if (at >= others.length) return;                 // the end is already correct
+
+  // Midpoint between its new neighbours, so ONE row is written.
+  const before = others[at - 1]?.position ?? (others[at].position - GAP_STEP * 2);
+  const after = others[at].position;
+  task.position = Math.round((before + after) / 2);
+  try {
+    await api(`/api/v1/workspaces/${ws()}/tasks/reorder`,
+      { method: 'POST', body: { positions: [{ id: task.id, position: task.position }] } });
+  } catch {
+    // It stays at the end. A new task in the wrong place is a small annoyance;
+    // a failed write that silently rewrote the board is not.
+  }
+}
+
+/** Matches the API's sparse spacing, so midpoints never collide. */
+const GAP_STEP = 1000;
+
+/** The order before the last arrangement, per bucket, so Undo is real. */
+let arrangeUndo = null;
+
+/**
+ * Runs the arrangement at most once per local day, across tabs and devices.
+ *
+ * The guard is a server-side conditional UPDATE, not a localStorage flag: two
+ * tabs open at 08:00 both ask, Postgres serialises them, and exactly one gets
+ * `claimed: true`. localStorage would let each tab decide for itself, and two
+ * devices would each arrange the same morning.
+ */
+async function maybeArrangeToday() {
+  const today = localDate();
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/today/arrange-claim`,
+      { method: 'POST', body: { localDate: today } });
+    if (!r.claimed) return;              // already done today, or another tab won
+    await arrangeToday({ manual: false, claimedDate: today });
+  } catch {
+    // A failed claim means no arrangement, which is the safe direction: the
+    // board simply stays in the order the user left it.
+  }
+}
+
+/**
+ * Puts each bucket's standalone tasks into the recommended order.
+ *
+ * Partitioned first, sorted second — never sorted whole and re-split, which
+ * would move project rows relative to each other even though none of them
+ * ended up in the standalone list.
+ */
+async function arrangeToday({ manual = false, claimedDate = null } = {}) {
+  const now = new Date();
+  const before = new Map();
+  const writes = [];
+
+  for (const b of BUCKETS) {
+    const list = inBucket(b.id);
+    const { standalone } = partition(list, state.projectsById);
+    if (standalone.length < 2) continue;
+
+    const sorted = arrangeStandalone(standalone, now);
+    if (!orderChanged(standalone, sorted)) continue;
+
+    // Exact positions, so Undo restores values rather than guessing an order.
+    before.set(b.id, standalone.map((t) => ({ id: t.id, position: t.position })));
+    // Renumber only within the positions these tasks already occupied, so
+    // project rows in the same bucket keep the slots they had.
+    const slots = standalone.map((t) => t.position).sort((x, y) => x - y);
+    sorted.forEach((t, i) => { t.position = slots[i]; });
+    writes.push(...sorted.map((t) => ({ id: t.id, position: t.position, bucket: b.id })));
+  }
+
+  if (!writes.length) {
+    if (manual) toast('Today is already in the recommended order.');
+    return;
+  }
+
+  // Move the SAME nodes, one coordinated FLIP, before anything is persisted —
+  // the user sees the result immediately and the write catches up.
+  flip(document.querySelectorAll('.task'), () => {
+    for (const b of before.keys()) rebuildBucket(b);
+    wireBoard();
+  });
+
+  try {
+    await api(`/api/v1/workspaces/${ws()}/tasks/reorder`, {
+      method: 'POST',
+      body: { positions: writes.map(({ id, position }) => ({ id, position })) },
+    });
+    arrangeUndo = { before, at: Date.now(), localDate: claimedDate ?? localDate() };
+    toast('Today was arranged by time and priority.', false, {
+      label: 'Undo', onAction: undoArrange,
+    });
+  } catch (e) {
+    // Put every position back and redraw: showing an order the server rejected
+    // is worse than showing none, because the next reload contradicts it.
+    for (const [bucketId, rows] of before) {
+      for (const { id, position } of rows) {
+        const t = findTask(id);
+        if (t) t.position = position;
+      }
+      rebuildBucket(bucketId);
+    }
+    wireBoard();
+    arrangeUndo = null;
+    toast(`Could not arrange Today: ${e.message}`, true);
+  }
+}
+
+/** Restores the exact positions every affected bucket had before. */
+async function undoArrange() {
+  const undo = arrangeUndo;
+  if (!undo) return;
+  arrangeUndo = null;
+
+  const writes = [];
+  for (const [bucketId, rows] of undo.before) {
+    for (const { id, position } of rows) {
+      const t = findTask(id);
+      if (t) { t.position = position; writes.push({ id, position }); }
+    }
+    void bucketId;
+  }
+
+  flip(document.querySelectorAll('.task'), () => {
+    for (const bucketId of undo.before.keys()) rebuildBucket(bucketId);
+    wireBoard();
+  });
+
+  try {
+    await api(`/api/v1/workspaces/${ws()}/tasks/reorder`,
+      { method: 'POST', body: { positions: writes } });
+    // The day is given back: an arrangement the user rejected should not also
+    // cost them tomorrow's offer.
+    await api(`/api/v1/workspaces/${ws()}/today/arrange-release`,
+      { method: 'POST', body: { localDate: undo.localDate } }).catch(() => {});
+    saved('Order restored');
+  } catch (e) {
+    toast(`Could not undo: ${e.message}`, true);
+  }
 }

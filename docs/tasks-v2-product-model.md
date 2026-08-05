@@ -371,3 +371,20 @@ normal way to finish, or the user is left wondering whether they are allowed to.
 `5/5 steps · Ready to finish`, with an active checkbox. Without the words, a
 finishable task looked identical to an unfinishable one and the only way to find
 out was to expand it.
+
+---
+
+## E2.8 — standalone versus project work on Today
+
+A **standalone** task is one whose `project_id` is null. That is the whole
+definition. Not "its project is on hold", not "its project failed to load", not
+"it is not the next action" — the field.
+
+Only standalone tasks take part in Today's once-a-day arrangement. Project tasks
+keep whatever order they have, because that order can encode a dependency or a
+plan someone made deliberately, and a daily re-shuffle would quietly destroy it.
+
+The full rules — separation, the comparator, the daily claim, Undo — are in
+`today-v2-product-model.md`. What matters here is the boundary: a Task's
+membership of a Project is what decides whether Today may reorder it, and that
+membership is only ever changed in the task editor.

@@ -283,3 +283,24 @@ completed-history defect happened.
 
 Boards, when built, will reference Tasks through the same resolver rather than
 holding copies.
+
+## E2.8 — Today's arrangement
+
+`web/arrange.js` is a **pure leaf**: no DOM, no network, no imports. It exports
+the partition, the comparator and the local-date helper, which is why the tests
+import and run it rather than pattern-matching its source.
+
+```
+arrange.js ──┬── bucket rendering   (partition -> adaptive subsections)
+             ├── daily arrangement  (arrangeStandalone -> tasks/reorder)
+             ├── new-task placement (insertionIndex -> one row written)
+             └── the claim          (localDate -> today/arrange-claim)
+```
+
+`drag.js` gained one dependency on the rendering: `data-project` on a card
+decides which subsection it may be dropped in. If a future surface renders task
+cards without that attribute, its project rows become draggable into the
+standalone run.
+
+The daily claim is the first use of `workspace_memberships` for per-user state.
+Anything else needing "once per day per person" belongs on the same row.

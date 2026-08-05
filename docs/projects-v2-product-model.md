@@ -591,3 +591,23 @@ at all, which is the simplest way to hold that rule.
 
 Project progress still counts **parent Tasks only**. A task with every step
 complete but the parent still open counts as 0 of 1, because that is what it is.
+
+## E2.8 — project tasks on Today are never rearranged
+
+Today groups project tasks into their own subsection and leaves their order
+alone. The daily arranger partitions the list first and sorts only the
+standalone half — not the whole list followed by a re-split, which would still
+move project rows relative to each other.
+
+Position slots are reused rather than renumbered from scratch, so a project task
+sharing a bucket with standalone work keeps the exact `position` it had.
+
+Per-project group headings on Today were considered and **not** built. Each
+would need its own drag partition to stop a task appearing to move between
+projects, and one partition plus N cannot be reasoned about as completely as
+two. Each project row keeps its compact linked project name, which is what
+identifies it anyway. See `today-v2-product-model.md`.
+
+Project task eligibility for Today is unchanged from E2.4: next action, explicit
+bucket, due date, schedule, or deliberate placement. The new subsection is a
+presentation change, not a wider rule.

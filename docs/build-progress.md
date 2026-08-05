@@ -1440,3 +1440,71 @@ including all-complete. Verified it catches the real thing: deleting `readyHtml`
 again makes it fail with `ReferenceError: readyHtml is not defined`.
 
 681 tests passing.
+
+## Phase E2.8 — Today task separation and daily arrangement
+
+Two features, and one design decision that shaped both.
+
+**Separation.** Each bucket now draws standalone work and project work as two
+runs of cards under adaptive headings — both when both exist, `PROJECTS` alone
+when there is no standalone work, and neither when there is no project work,
+because a divider that separates one thing from nothing is noise.
+
+The cards stay **direct children of the drop zone**. That is structural, not
+stylistic: `drag.js` finds candidates with `querySelectorAll('.task')` (any
+depth) and then calls `zone.insertBefore(placeholder, candidate)`, which
+requires a direct child. Wrapping each subsection would have thrown
+`NotFoundError` on the first drag into the second section. Sibling headings keep
+the drop zone flat and the drag code untouched.
+
+**Per-project grouping was offered and declined**, using the fallback §3
+explicitly provides. Grouping needs a drag partition per project so a task
+cannot appear to move between them; two partitions can be reasoned about and
+tested completely, one-plus-N cannot. Each project row keeps its linked project
+name, which is what identifies it anyway.
+
+**Drag is confined to its own kind.** Filtering the candidates rather than
+rejecting the drop means the placeholder stops at the boundary, so the gap shows
+where the task can actually go. Verified by dragging a standalone card well past
+the project rows: the placeholder stayed above the first project row and the
+task landed at the end of the standalone run.
+
+**The daily arrangement** runs once per local calendar day on first open, over
+standalone tasks only. The comparator: scheduled time, then due date/time, then
+overdue (oldest first), then priority, then the previous manual position as a
+stable tie-break. A due date is deliberately **not** treated as a scheduled
+start.
+
+Verified in a browser with a deliberately wrong starting order — the result was
+`Scheduled 14:00 Low`, `Scheduled 16:00 Urgent`, `Due today Medium`, `Overdue`,
+`Undated High`. 14:00 before 16:00 despite Low against Urgent, which is the rule
+working.
+
+**Project rows kept positions 5000 and 9000 throughout.** The list is partitioned
+first and only the standalone half sorted, reusing the exact slots those tasks
+already held — not sorted whole and re-split, which would still move project rows
+relative to one another.
+
+**Once per day is guarded server-side**, by one conditional UPDATE on
+`workspace_memberships.last_today_arranged_on`. The `WHERE` clause is the entire
+mechanism: two tabs both ask, Postgres serialises them, one gets a row back. A
+test fires six concurrent claims and asserts exactly one winner. The date comes
+from the client because "local calendar day" means the user's day, and it is
+computed with local getters — `toISOString()` would give the UTC date, which in
+Johannesburg is yesterday until 02:00.
+
+**Manual order survives.** Verified: shuffled by hand, reloaded, and the board
+came back exactly as left with no re-sort. Releasing the day and re-opening
+applied the arrangement again, which is the next-day behaviour.
+
+**Undo is real.** The exact prior positions are recorded and written back;
+verified restoring an order character for character, with project rows unmoved.
+It also releases the day, so an arrangement the user rejected does not cost them
+tomorrow's offer.
+
+`POST …/tasks/reorder` applies many positions in one transaction — all or none.
+A half-applied reorder would leave an order nobody chose and nothing would ever
+correct.
+
+718 tests passing. The Growth/Skills model is recorded in
+`brain-v2-future-model.md` with no code and no placeholder UI.

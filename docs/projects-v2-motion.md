@@ -262,3 +262,23 @@ checkbox share a centre line, so nothing jumps sideways.
 The re-render happens exactly once, driven by `repaintSteps` reporting that the
 parent's availability changed. Every other step completion repaints only the
 panel.
+
+---
+
+## E2.8 — the daily arrangement
+
+One coordinated movement, not a sequence of hops. The existing standalone nodes
+are measured, moved into the recommended order, and FLIPped together; project
+rows are not in the set and do not move at all. The toast arrives after the
+movement settles, because a message about something you have not finished
+watching is a message you have not read.
+
+Subsection headings appear and disappear as a bucket gains or loses its first or
+last task of a kind. They are siblings inside the drop zone, so this is a
+rebuild of that bucket rather than of the board.
+
+Undo runs the same movement backwards through the same nodes, from recorded
+positions — no reload, and project rows stay fixed.
+
+`prefers-reduced-motion` is handled by the existing `flip` helper: positions
+update immediately, the toast still appears, nothing animates.

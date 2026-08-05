@@ -61,6 +61,14 @@ export const workspaceMemberships = pgTable('workspace_memberships', {
   workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   role: text('role').notNull().default('owner'),
+  /* The local calendar date Today was last automatically arranged for.
+   *
+   * A `date`, not a timestamp: the rule is "once per local calendar day" and
+   * the local day belongs to the client. Storing an instant would mean
+   * re-deriving a date from it in a timezone the server does not reliably
+   * know. Claiming it is a conditional UPDATE, which is what makes two tabs
+   * safe — see the arrange-claim route. */
+  lastTodayArrangedOn: date('last_today_arranged_on'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   uniqueMember: uniqueIndex('workspace_memberships_unique').on(t.workspaceId, t.userId),

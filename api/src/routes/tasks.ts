@@ -7,10 +7,13 @@
  * task management is impossible on a phone in the legacy app.
  */
 import type { AppInstance, Guards } from '../types.js';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
-import { tasks, taskSteps, taskActivity, areas, projects, BUCKETS, PRIORITIES } from '../db/schema.js';
+import {
+  tasks, taskSteps, taskActivity, areas, projects, workspaceMemberships,
+  BUCKETS, PRIORITIES,
+} from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
 // The next action is resolved with the SAME function the Projects page uses.
 // Two implementations of "which task is next" would disagree, and the badge on
@@ -19,6 +22,8 @@ import { nextActionFor } from './projects.js';
 
 /** Sparse spacing so a single move rewrites one row, not the whole bucket. */
 const GAP = 1000;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Query-string boolean.
@@ -242,6 +247,121 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
       return row;
     });
     return { task: updated };
+  });
+
+  /**
+   * POST …/tasks/reorder  { positions: [{ id, position }] }
+   *
+   * Many positions, ONE transaction.
+   *
+   * The daily arrangement rewrites a whole bucket at once, and doing that as N
+   * separate `/move` calls would leave the board half-sorted whenever the
+   * network dropped in the middle — an order nobody chose and nothing would
+   * ever correct. All of them or none.
+   *
+   * Position ONLY. Not bucket, not project, not due date. This endpoint exists
+   * to reorder rows the user can already see; letting it move a task between
+   * buckets would make a display concern into a data migration.
+   */
+  app.post(`${base}/tasks/reorder`, pre, async (req) => {
+    const wsId = req.workspaceId!;
+    const { positions } = z.object({
+      positions: z.array(z.object({
+        id: z.string().uuid(),
+        position: z.number().int(),
+      }).strict()).min(1).max(500),
+    }).strict().parse(req.body ?? {});
+
+    const ids = positions.map((p) => p.id);
+    if (new Set(ids).size !== ids.length) throw badRequest('Duplicate task in the reorder.');
+
+    const updated = await db.transaction(async (tx) => {
+      // Every id must be a live task in THIS workspace before anything moves.
+      // Checking inside the transaction is what makes a bad id a clean 404
+      // rather than a partial reorder.
+      const found = await tx.select({ id: tasks.id }).from(tasks)
+        .where(and(eq(tasks.workspaceId, wsId), inArray(tasks.id, ids)));
+      if (found.length !== ids.length) throw notFound('Some of those tasks no longer exist.');
+
+      for (const p of positions) {
+        await tx.update(tasks).set({ position: p.position, updatedAt: new Date() })
+          .where(and(eq(tasks.id, p.id), eq(tasks.workspaceId, wsId)));
+      }
+      return positions.length;
+    });
+    return { updated };
+  });
+
+  /* ── Today's once-a-day arrangement ─────────────────────────────────────
+   *
+   * POST …/today/arrange-claim  { localDate: 'YYYY-MM-DD' }
+   *   -> { claimed: boolean, lastArrangedOn: string | null }
+   *
+   * Claims the right to arrange Today for one local calendar day, ONCE.
+   *
+   * The whole guard is the WHERE clause: the update only matches when the
+   * stored date differs from the one being claimed, so Postgres serialises two
+   * tabs and exactly one of them gets a row back. The loser is told `claimed:
+   * false` and does nothing. No advisory locks, no leader election, no
+   * assuming a single tab — one conditional UPDATE.
+   *
+   * The date comes from the CLIENT, deliberately. "Once per local calendar
+   * day" means the user's local day; the server does not know the user's
+   * timezone and inventing one from the request would be worse than trusting
+   * the browser that is about to render the result. The value is validated as
+   * a real ISO date and is only ever compared, never used for arithmetic.
+   */
+  app.post(`${base}/today/arrange-claim`, pre, async (req) => {
+    const wsId = req.workspaceId!;
+    const userId = req.principal!.userId;
+    const { localDate } = z.object({
+      localDate: z.string().regex(ISO_DATE, 'localDate must be YYYY-MM-DD'),
+    }).strict().parse(req.body ?? {});
+
+    const [row] = await db.select({ on: workspaceMemberships.lastTodayArrangedOn })
+      .from(workspaceMemberships)
+      .where(and(eq(workspaceMemberships.workspaceId, wsId),
+        eq(workspaceMemberships.userId, userId)))
+      .limit(1);
+    const previous = row?.on ?? null;
+
+    const claimed = await db.update(workspaceMemberships)
+      .set({ lastTodayArrangedOn: localDate })
+      .where(and(
+        eq(workspaceMemberships.workspaceId, wsId),
+        eq(workspaceMemberships.userId, userId),
+        // The guard. Absent or different means this caller wins; equal matches
+        // nothing, so a second tab on the same day gets an empty array.
+        or(isNull(workspaceMemberships.lastTodayArrangedOn),
+          ne(workspaceMemberships.lastTodayArrangedOn, localDate)),
+      ))
+      .returning({ id: workspaceMemberships.id });
+
+    return { claimed: claimed.length > 0, lastArrangedOn: previous };
+  });
+
+  /**
+   * POST …/today/arrange-release  { localDate }
+   *
+   * Gives the day back. Used when an arrangement fails before it writes
+   * anything, and by Undo — after undoing, the day has effectively not been
+   * arranged, so the next open may offer it again rather than the user having
+   * to wait until tomorrow for a rule they just rejected.
+   */
+  app.post(`${base}/today/arrange-release`, pre, async (req) => {
+    const wsId = req.workspaceId!;
+    const userId = req.principal!.userId;
+    const { localDate } = z.object({
+      localDate: z.string().regex(ISO_DATE),
+    }).strict().parse(req.body ?? {});
+    await db.update(workspaceMemberships)
+      .set({ lastTodayArrangedOn: null })
+      .where(and(
+        eq(workspaceMemberships.workspaceId, wsId),
+        eq(workspaceMemberships.userId, userId),
+        eq(workspaceMemberships.lastTodayArrangedOn, localDate),
+      ));
+    return { released: true };
   });
 
   // ── complete / uncomplete ───────────────────────────────────────────

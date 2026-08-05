@@ -40,6 +40,7 @@ const SHELL = [
   './stars.js',
   './task-modal.js',
   './steps.js',
+  './arrange.js',
   './habit-modal.js',
   './manifest.webmanifest',
   './icons/app-icon.svg',

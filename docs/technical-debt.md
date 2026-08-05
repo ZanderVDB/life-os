@@ -603,3 +603,34 @@ module scope. `task-modal.js` and `app.js` cannot be imported in Node without a
 DOM, so the same class of bug could still hide there. A jsdom harness would close
 that; it has not been added because it is a test-infrastructure change and this
 was a corrective phase.
+
+## E2.8 — known limitations
+
+**No per-project grouping on Today.** Declined deliberately (see
+`today-v2-product-model.md`). If it is wanted later, it needs a drag partition
+per project — the mechanism already exists in `sectionOf`, but every partition
+has to stay correct as tasks are added, completed and reassigned, and that is a
+phase of its own rather than a rendering change.
+
+**The daily claim is per workspace membership, and the timezone is the
+browser's.** There is no stored user timezone yet. A user who travels will get
+their arrangement on their *device's* local day, which is almost certainly what
+they want — but if a workspace timezone becomes configurable, the client should
+send that instead of `localDate()`.
+
+**A tab left open across midnight does not arrange until it is re-opened.**
+Deliberate: §5 requires that midnight alone must not move visible tasks while
+someone is using the page. The next navigation to Today picks it up.
+
+**`Arrange today` states the rule in a toast rather than previewing it.** §12
+allows either ("preview or clearly state the rule"). A preview would need a
+diff surface, which is more UI than a corrective action deserves.
+
+**New-task insertion writes one row via midpoint positioning.** If a bucket is
+reordered enough times without a renumber, midpoints could eventually collide.
+The sparse GAP of 1000 makes that many hundreds of insertions away, and the
+daily arrangement renumbers cleanly, but there is no compaction pass.
+
+**No screenshot again — the Browser pane still would not composite.** Everything
+was verified through the DOM, computed values, real pointer events and the API.
+The visual judgement of the subsection headings is the user's.
