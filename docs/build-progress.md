@@ -1508,3 +1508,52 @@ correct.
 
 718 tests passing. The Growth/Skills model is recorded in
 `brain-v2-future-model.md` with no code and no placeholder UI.
+
+## Phase F1 — Library foundation and Legacy book extraction
+
+Delivered: the audit, the schema, the link-model decision, the API, the document
+model and the sample tooling. **The Library web UI and the Book component are
+not built** — see below and technical-debt.md.
+
+**The audit came first, from source.** The identity of the Legacy book is almost
+entirely CSS: the A4 210/297 ratio, the 420/297 spread, a 6px gutter, page
+padding of 28/32/18/58, a margin stripe at `left:46px`, a coloured `inset 3px`
+outer edge mirrored on the right page, and a ruled-line gradient whose repeat
+cycle equals the line-height with `background-attachment: local`. All of it
+carries across.
+
+The JavaScript cannot, for six specific reasons — chief among them that
+`nbSwapBook` does `book.innerHTML = html` on every render, destroying the
+contenteditable along with its selection and undo history, and that autosave is
+`setTimeout(() => svAll(), 1200)`, which writes the entire application state with
+no ordering, no failure path and no status. That is the defect class E2.4 spent a
+phase removing from Tasks.
+
+**One link model.** `calendar_item_links` → `item_links`. The shape was already
+polymorphic and its own comment already named `library` as a future target; only
+the name said Calendar, and a name that lies about scope is how a second link
+table gets created beside it. Every use was traced first — one select, one
+insert, two test files — and the API response field stays `links`, so Calendar
+behaviour is unchanged.
+
+**The page grammar is the phase's most consequential decision.** A page is a
+validated structured document, never HTML. That kills the Legacy defect at the
+root, makes sanitisation unnecessary (there is no HTML to sanitise), and leaves
+room for images, Library references, Task references and AI proposals as *nodes*
+rather than invented syntax.
+
+**Safety rules with teeth:** a book cannot be created through the generic item
+route; the last section of a book and the last page of a section refuse to
+archive; there is no DELETE route at all; page saves take `expectedUpdatedAt`
+and 409 on a stale write.
+
+**Sample cleanup cannot reach real content.** Sections and pages carry no
+marker; they go by FK cascade from an item matching the exact `sample:f1:`
+prefix. Verified by a test that creates real content deliberately named "Life OS
+Field Notes" and confirms it survives cleanup.
+
+One bug found by running it rather than reading it: `coalesce(max(x), -${GAP})`
+interpolates GAP as an untyped bind parameter and Postgres cannot resolve
+`- $1` — *operator is not unique: - unknown*. The arithmetic moved to JS.
+
+755 tests passing. No Legacy data was read or migrated; Legacy was not modified.

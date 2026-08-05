@@ -304,3 +304,31 @@ standalone run.
 
 The daily claim is the first use of `workspace_memberships` for per-user state.
 Anything else needing "once per day per person" belongs on the same row.
+
+## F1 — Library
+
+```
+item_links  ←── the ONE relationship model. Calendar writes it today;
+                Library, Diary, Brain and Boards will.
+
+library_items ──┬── library_books ── book_sections ── book_pages
+                └── document | image | video | link | file
+
+book-doc.ts  ←── the page grammar. Pure, no DOM, no database.
+                 Adding images / Library refs / Task refs / AI proposals means
+                 adding a case here, not inventing a format.
+```
+
+**The Book engine is a leaf that Diary will reuse.** Diary is not Library and
+will not have `library_items` rows; it shares rendering and editing only. That
+separation has to be maintained deliberately, because the easy mistake is to
+make Diary "a Library type" and then discover that every Library filter, search
+and archive rule now has to special-case it.
+
+**Boards depend on `item_links` and on Library existing.** A board card
+referencing a Library item is an edge, never a copy.
+
+**Uploads are the next Library infrastructure.** `storage_key`, `mime_type`,
+`size_bytes` and `thumbnail_key` exist on `library_items`; nothing fills them.
+Until they do, the Add menu deliberately omits the upload actions rather than
+disabling them.

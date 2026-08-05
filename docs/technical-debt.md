@@ -634,3 +634,48 @@ daily arrangement renumbers cleanly, but there is no compaction pass.
 **No screenshot again — the Browser pane still would not composite.** Everything
 was verified through the DOM, computed values, real pointer events and the API.
 The visual judgement of the subsection headings is the user's.
+
+## F1 — what is built and what is not
+
+**Built:** the Legacy book audit, the Library schema and migration, the
+`item_links` rename, the full Library API (items, books, sections, pages,
+search, archive/restore), the page document model and validator, and the
+staging sample tooling. 37 Library tests, 755 overall.
+
+**NOT built in F1 — the client.** The Library overview, the Book component, the
+page editor, autosave wiring, the Add menu and the `__sampleLibrary` console
+hooks do not exist yet. The API they will call is complete and tested; the phase
+ran out of room before the UI.
+
+That means several F1 sections are specified and documented but not implemented:
+
+| Section | Status |
+|---|---|
+| §10 Library overview | not built |
+| §11 item cards | not built |
+| §12 Add menu | not built (rules recorded) |
+| §13–14 cover and spread | not built (geometry captured in the audit) |
+| §15 editor | model built and tested; the editor itself is not |
+| §16 autosave | server contract built (`expectedUpdatedAt`, 409); client not |
+| §17–18 sections and page creation | API built; navigation UI not |
+| §19 search | API built and tested; UI not |
+| §20 motion | rules recorded; nothing to animate yet |
+| §22 responsive | rules recorded; nothing to lay out yet |
+| §23 accessibility | requirements recorded; nothing rendered yet |
+
+Nothing half-built was shipped and no route exists without an endpoint behind
+it — the specific failure the brief warns about ("no fake buttons") cannot occur,
+because there is no Library UI at all.
+
+**Uploads are not built.** The columns exist; the storage integration does not.
+The Add menu, when built, shows only New Book, New Document and Save Link.
+
+**No screenshots.** There is no Library UI to photograph, and the Browser pane
+has not been compositing for several phases in any case.
+
+**`content_text` search is `LIKE`, not full text.** Honest at this scale and
+upgradeable to a `tsvector` without changing the API.
+
+**Permanent deletion is unexposed on purpose.** It cannot be designed before
+`item_links` has real Library edges and uploads have real bytes — the questions
+it has to answer are listed in library-v2-product-model.md.
