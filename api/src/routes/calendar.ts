@@ -15,7 +15,7 @@ import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
   calendars, calendarEvents, calendarEventAttendees, reminders,
-  taskScheduleBlocks, calendarItemLinks, tasks, habitEntries, habits,
+  taskScheduleBlocks, itemLinks, tasks, habitEntries, habits,
   reminderRecurrenceRules,
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
@@ -234,8 +234,8 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       .filter((d) => d.due > 0);
     const habitTotal = habitRows.length;
 
-    const links = await db.select().from(calendarItemLinks)
-      .where(eq(calendarItemLinks.workspaceId, workspaceId));
+    const links = await db.select().from(itemLinks)
+      .where(eq(itemLinks.workspaceId, workspaceId));
 
     return {
       calendars: cals,
@@ -735,7 +735,7 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
     }
     // A preparation link: task -> event. Life OS-only, never sent to Google.
     if (openTasks[2] && clientCall) {
-      await db.insert(calendarItemLinks).values({
+      await db.insert(itemLinks).values({
         workspaceId, kind: 'preparation',
         sourceType: 'event', sourceId: clientCall.id,
         targetType: 'task', targetId: openTasks[2].id,

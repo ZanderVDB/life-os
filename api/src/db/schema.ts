@@ -759,14 +759,23 @@ export const taskScheduleBlocks = pgTable('task_schedule_blocks', {
   byTask: index('task_blocks_task_idx').on(t.taskId),
 }));
 
-/* ── calendar_item_links ─────────────────────────────────────────────────
- * Life OS-ONLY relationships. A polymorphic edge, so Projects and Library can
- * arrive without a migration.
+/* ── item_links ──────────────────────────────────────────────────────────
+ * Life OS-ONLY relationships. ONE polymorphic edge for the whole application.
+ *
+ * Renamed from `calendar_item_links` in F1. The shape was already general —
+ * source_type/source_id, target_type/target_id — and the original comment
+ * already named `library` as a future target. Only the NAME said Calendar, and
+ * a name that lies about scope is exactly how a second link table gets created
+ * beside it. There is one relationship model, and this is it.
+ *
+ * Current and planned edges:
+ *   source: event | reminder | task | habit | library | book_page
+ *   target: task | project | library | diary | brain | board
  *
  * These are never written into Google event fields. If a link is ever mirrored
  * to Google it goes into a PRIVATE extended property, and the user is told
  * plainly that other Google Calendar users will not see it. */
-export const calendarItemLinks = pgTable('calendar_item_links', {
+export const itemLinks = pgTable('item_links', {
   id: uuid('id').primaryKey().defaultRandom(),
   workspaceId: uuid('workspace_id').notNull()
     .references(() => workspaces.id, { onDelete: 'cascade' }),
@@ -778,11 +787,118 @@ export const calendarItemLinks = pgTable('calendar_item_links', {
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
-  byWorkspace: index('cal_links_ws_idx').on(t.workspaceId),
-  bySource: index('cal_links_source_idx').on(t.workspaceId, t.sourceType, t.sourceId),
-  byTarget: index('cal_links_target_idx').on(t.workspaceId, t.targetType, t.targetId),
-  uniqueEdge: uniqueIndex('cal_links_unique_idx')
+  byWorkspace: index('item_links_ws_idx').on(t.workspaceId),
+  bySource: index('item_links_source_idx').on(t.workspaceId, t.sourceType, t.sourceId),
+  byTarget: index('item_links_target_idx').on(t.workspaceId, t.targetType, t.targetId),
+  uniqueEdge: uniqueIndex('item_links_unique_idx')
     .on(t.sourceType, t.sourceId, t.targetType, t.targetId, t.kind),
+}));
+
+/* ── Library ─────────────────────────────────────────────────────────────
+ *
+ * The durable home for information. One row per resource in `library_items`,
+ * whatever kind it is; Books get a second row carrying what only a book has.
+ *
+ * The TYPE is stored, never inferred from a MIME string. "This is a Book" is a
+ * product decision — a Document and a File can share `text/plain` while being
+ * entirely different things to the person who saved them. */
+export const LIBRARY_TYPES = ['book', 'document', 'image', 'video', 'link', 'file'] as const;
+export const SECTION_ACCENTS = ['peach', 'sage', 'lavender', 'gold', 'blue', 'rose'] as const;
+
+export const libraryItems = pgTable('library_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  description: text('description'),
+  status: text('status').notNull().default('active'),
+  sourceUrl: text('source_url'),
+  storageKey: text('storage_key'),
+  mimeType: text('mime_type'),
+  sizeBytes: integer('size_bytes'),
+  thumbnailKey: text('thumbnail_key'),
+  /* Type-specific facts that do not deserve a column: image dimensions, video
+   * duration, a link's resolved domain. Never used for filtering or sorting —
+   * the moment something is queried, it earns a column. */
+  metadata: jsonb('metadata'),
+  legacyId: text('legacy_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+}, (t) => ({
+  byWorkspace: index('library_items_ws_idx').on(t.workspaceId, t.type, t.updatedAt),
+  live: index('library_items_live_idx').on(t.workspaceId, t.updatedAt)
+    .where(sql`${t.archivedAt} is null`),
+  legacy: uniqueIndex('library_items_legacy_idx').on(t.workspaceId, t.legacyId)
+    .where(sql`${t.legacyId} is not null`),
+  typeCheck: check('library_items_type_check',
+    sql`${t.type} in ('book','document','image','video','link','file')`),
+  statusCheck: check('library_items_status_check',
+    sql`${t.status} in ('active','archived')`),
+}));
+
+export const libraryBooks = pgTable('library_books', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  /* CASCADE: deleting the library item IS deleting the book. There is no state
+   * in which a book should outlive the item that represents it. */
+  libraryItemId: uuid('library_item_id').notNull().unique()
+    .references(() => libraryItems.id, { onDelete: 'cascade' }),
+  subtitle: text('subtitle'),
+  authorLabel: text('author_label'),
+  coverStyle: text('cover_style').notNull().default('classic'),
+  pageStyle: text('page_style').notNull().default('ruled'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  coverCheck: check('library_books_cover_check', sql`${t.coverStyle} in ('classic','plain')`),
+  pageCheck: check('library_books_page_check', sql`${t.pageStyle} in ('ruled','plain')`),
+}));
+
+export const bookSections = pgTable('book_sections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  bookId: uuid('book_id').notNull()
+    .references(() => libraryBooks.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  /* A token, never a hex value. The palette follows the theme; a stored #hex
+   * cannot. These are the six Legacy section colours. */
+  accent: text('accent').notNull().default('peach'),
+  position: integer('position').notNull().default(0),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byBook: index('book_sections_book_idx').on(t.bookId, t.position),
+  accentCheck: check('book_sections_accent_check',
+    sql`${t.accent} in ('peach','sage','lavender','gold','blue','rose')`),
+}));
+
+export const bookPages = pgTable('book_pages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  sectionId: uuid('section_id').notNull()
+    .references(() => bookSections.id, { onDelete: 'cascade' }),
+  title: text('title'),
+  /* A structured document, NOT HTML. Storing generated HTML means storing
+   * whatever the browser's editor happened to produce — which is how Legacy
+   * ended up with font-colour wrappers that made text invisible on a dark
+   * theme, worked around with !important. */
+  content: jsonb('content').notNull().default({ type: 'doc', content: [] }),
+  /* The plain text of `content`, maintained on write, so search is one indexed
+   * query rather than parsing every document in the workspace. */
+  contentText: text('content_text').notNull().default(''),
+  position: integer('position').notNull().default(0),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  bySection: index('book_pages_section_idx').on(t.sectionId, t.position),
+  byWorkspace: index('book_pages_ws_idx').on(t.workspaceId),
 }));
 
 /* ── relations ───────────────────────────────────────────────────────── */

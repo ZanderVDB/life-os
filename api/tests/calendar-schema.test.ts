@@ -16,7 +16,7 @@ import { ensureUserAndWorkspace } from '../src/lib/bootstrap.js';
 import {
   calendarConnections, calendars, calendarSyncStates, calendarEvents,
   calendarEventAttendees, calendarEventReminders, calendarEventAttachments,
-  reminders, reminderRecurrenceRules, taskScheduleBlocks, calendarItemLinks,
+  reminders, reminderRecurrenceRules, taskScheduleBlocks, itemLinks,
   tasks,
 } from '../src/db/schema.js';
 
@@ -40,7 +40,7 @@ test('calendar: all eleven tables exist and are workspace-scoped', async () => {
   // Selecting from each proves the migration created it.
   for (const t of [calendarConnections, calendars, calendarSyncStates, calendarEvents,
     calendarEventAttendees, calendarEventReminders, calendarEventAttachments,
-    reminders, reminderRecurrenceRules, taskScheduleBlocks, calendarItemLinks]) {
+    reminders, reminderRecurrenceRules, taskScheduleBlocks, itemLinks]) {
     assert.equal((await db.select().from(t)).length, 0);
   }
 });
@@ -300,15 +300,15 @@ test('links: Life OS relationships are their own records, deduped per edge', asy
     sourceType: 'event', sourceId: ev.id,
     targetType: 'task', targetId: t.id,
   };
-  await db.insert(calendarItemLinks).values(edge);
+  await db.insert(itemLinks).values(edge);
   await assert.rejects(
-    () => db.insert(calendarItemLinks).values(edge),
+    () => db.insert(itemLinks).values(edge),
     /duplicate key|unique/i,
     'the same relationship can be recorded twice',
   );
   // The same pair may hold a DIFFERENT kind of relationship.
-  await db.insert(calendarItemLinks).values({ ...edge, kind: 'follow_up' });
-  assert.equal((await db.select().from(calendarItemLinks)).length, 2);
+  await db.insert(itemLinks).values({ ...edge, kind: 'follow_up' });
+  assert.equal((await db.select().from(itemLinks)).length, 2);
 });
 
 test('attendees, event reminders and attachments cascade with the event', async () => {

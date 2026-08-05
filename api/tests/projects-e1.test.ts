@@ -176,16 +176,21 @@ test('foundation: legacy task.project is an Area, and that is written down', () 
 });
 
 test('foundation: the polymorphic link table can carry Projects without a migration', () => {
-  const links = schema.slice(schema.indexOf("pgTable('calendar_item_links'"));
+  // Renamed `calendar_item_links` -> `item_links` in F1. The shape was already
+  // general; only the name said Calendar, which is how a second link table
+  // eventually gets created beside it. One relationship model, one name.
+  const links = schema.slice(schema.indexOf("pgTable('item_links'"));
+  assert.ok(!schema.includes("pgTable('calendar_item_links'"),
+    'the Calendar-scoped link table name is back');
   assert.match(links.slice(0, 1400), /targetType: text\('target_type'\)\.notNull\(\)/,
     'there is no polymorphic target');
-  assert.match(links.slice(0, 1400), /task \| project \| library \| diary/,
+  assert.match(schema, /target: task \| project \| library \| diary/,
     'Projects and Library are not anticipated by the link model');
 });
 
 test('foundation: workspace isolation holds for anything Projects will inherit', () => {
   // Every table Projects will touch is scoped to a workspace and cascades.
-  for (const table of ['tasks', 'areas', 'calendar_item_links']) {
+  for (const table of ['tasks', 'areas', 'item_links']) {
     const at = schema.indexOf(`pgTable('${table}'`);
     assert.ok(at > -1, `${table} is missing`);
     const body = schema.slice(at, at + 1400);
