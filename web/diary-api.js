@@ -113,8 +113,16 @@ export const dia = {
   entry: null,
   /** An archived entry holding this date, offered for restore. */
   archivedEntry: null,
-  /** What the user has typed but not yet had a row created for. */
-  draft: null,
+  /**
+   * The guided prompts and the check-in for the open day.
+   *
+   * Held beside `entry` rather than read out of it, because it changes on every
+   * chip tap and the right page must repaint from it without waiting for a
+   * write to come back.
+   */
+  reflection: {},
+  /** `{ current, wroteToday }`, or null until it has loaded. */
+  streak: null,
 
   mode: 'entry',        // 'entry' | 'history'
   contextOpen: false,   // the optional daily context panel
@@ -154,6 +162,14 @@ export async function loadDay(date) {
   dia.date = date;
   dia.entry = r.entry;
   dia.archivedEntry = r.archivedEntry ?? null;
+  dia.reflection = r.entry?.reflection ?? {};
+  return r;
+}
+
+/** The current run of written days. A fact for the right page, never a target. */
+export async function loadStreak(today = localToday()) {
+  const r = await call(`/diary/streak?today=${today}`);
+  dia.streak = r;
   return r;
 }
 

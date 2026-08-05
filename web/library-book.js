@@ -43,7 +43,13 @@ export const ACCENTS = ['peach', 'sage', 'lavender', 'gold', 'blue', 'rose'];
 export function coverHtml() {
   const { item, book } = lib.book;
   const year = new Date(item.createdAt).getFullYear();
+  /* The arrow slots are present but invisible, and the frame carries the OPEN
+   * book's proportions. Together they make the closed cover exactly one page
+   * of the open book — same height, half the width — instead of a differently
+   * shaped card that happens to say the same title. */
   return `<div class="bk-stage bk-stage-cover">
+    <span class="bk-arrow bk-arrow-ghost" aria-hidden="true"></span>
+    <div class="bk-cover-frame">
     <div class="bk-book bk-cover-book" id="bk-book">
       <div class="bk-page bk-cover-page">
         <div class="bk-cover">
@@ -57,6 +63,8 @@ export function coverHtml() {
         </div>
       </div>
     </div>
+    </div>
+    <span class="bk-arrow bk-arrow-ghost" aria-hidden="true"></span>
   </div>`;
 }
 

@@ -711,7 +711,19 @@ const projectFromHash = () => {
 };
 
 async function go(id) {
-  if (state.route === id) { window.__closeDrawer?.(); return; }
+  if (state.route === id) {
+    /* Clicking the section you are already in returns you to its TOP LEVEL.
+     *
+     * Inside an open Book, "Library" in the sidebar has to mean the shelf. It
+     * used to mean nothing at all — the guard above returned early, so the one
+     * control that looks like a way out was the one control that did not work.
+     * Only fires when the hash is deeper than the section root, so clicking
+     * the section you are already at the top of is still a no-op. */
+    const path = location.hash.slice(1).split('?')[0].split('/').filter(Boolean);
+    if (path.length > 1) await goToSectionRoot(id);
+    window.__closeDrawer?.();
+    return;
+  }
   // Leaving Library or Diary while something is being written to must not lose
   // the words. The write is awaited BEFORE the route changes, not alongside it.
   if (state.route === 'library') await libraryWillLeave();
@@ -728,6 +740,26 @@ async function go(id) {
   /* account popover removed */
   window.__closeDrawer?.();
   await loadRoute();
+}
+
+/**
+ * Back to a section's top level, flushing anything unsaved on the way.
+ *
+ * Only the two sections that HAVE a deeper level need an entry here. Anything
+ * else falls through to a plain route reload, which is already correct.
+ */
+async function goToSectionRoot(id) {
+  if (id === 'library') {
+    await libraryWillLeave();
+    location.hash = '#library';
+    return renderLibrary();
+  }
+  if (id === 'diary') {
+    await diaryWillLeave();
+    location.hash = '#diary';
+    return renderDiary();
+  }
+  return loadRoute();
 }
 
 /* ── Routes — only the main column changes ───────────────────────────── */

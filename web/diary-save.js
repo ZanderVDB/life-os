@@ -25,8 +25,10 @@ import { saveDay, dia, localZone } from './diary-api.js';
 
 const co = createSaveCoordinator({
   write: async (date, { content, fields, expectedUpdatedAt }) => {
-    const body = { ...(fields ?? {}) };
+    const { reflection, ...rest } = fields ?? {};
+    const body = { ...rest };
     if (content !== undefined) body.document = content;
+    if (reflection !== undefined) body.reflection = reflection;
     if (expectedUpdatedAt) body.expectedUpdatedAt = expectedUpdatedAt;
     // Recorded on every write; the server only stores it when creating.
     if (!dia.entry) body.timezone = localZone();
@@ -36,7 +38,11 @@ const co = createSaveCoordinator({
     if (!r.entry) return null;        // nothing worth creating — still Saved
     /* The row may have just come into existence. Handing it back to the state
      * here is what lets the header stop saying "no entry yet" without the
-     * editor being re-rendered underneath the caret. */
+     * editor being re-rendered underneath the caret.
+     *
+     * `reflection` is deliberately NOT copied back from the response: the local
+     * copy is ahead of it whenever a chip was tapped while the write was in
+     * flight, and overwriting it here would make the tap appear to undo itself. */
     dia.entry = r.entry;
     onCreated?.(r.entry, r.created);
     return { updatedAt: r.entry.updatedAt, content: r.entry.document };

@@ -262,7 +262,10 @@ test('the cover is unchanged', () => {
 });
 
 test('the mobile width fix is unchanged', () => {
-  assert.match(html, /\.bk-book\.bk-spread\{aspect-ratio:210\/297/);
+  /* `:not(.dia-book)` since D2: the Diary reuses `.bk-spread` for its own
+   * two pages, and STACKS them on a phone rather than paginating. Without
+   * the exclusion this rule hid the diary's entire right page. */
+  assert.match(html, /\.bk-book\.bk-spread:not\(\.dia-book\)\{aspect-ratio:210\/297/);
   assert.match(html, /#bk-prev\{left:2px\}/);
   assert.match(html, /#bk-next\{right:2px\}/);
 });

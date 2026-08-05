@@ -2900,8 +2900,15 @@ body:has(.lib-page) .rail{display:none}
 .bk-tab-add{background:none;border:1px dashed var(--border-strong);color:var(--muted);
   font-size:15px;padding:6px 13px 5px}
 
-/* Cover — audit §5. */
-.bk-stage-cover .bk-book{max-width:560px}
+/* Cover — audit §5.
+   The closed cover is ONE PAGE of the open book: the frame takes the spread's
+   own proportions and max-width, and the cover fills its height. That makes
+   the two states the same object at the same size instead of a card and a
+   book that happen to share a title. */
+.bk-arrow-ghost{visibility:hidden;pointer-events:none;flex:0 0 auto}
+.bk-cover-frame{flex:1;min-width:0;max-width:1320px;aspect-ratio:420/297;
+  display:flex;align-items:center;justify-content:center}
+.bk-stage-cover .bk-book{max-width:none;width:auto;height:100%;aspect-ratio:210/297}
 .bk-cover-page{padding:0;box-shadow:var(--paper-shadow),inset 3px 0 0 0 var(--a-peach)}
 .bk-cover-page::before{left:22px;opacity:.22}
 .bk-cover{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -3000,58 +3007,87 @@ body:has(.lib-page) .rail{display:none}
 .bk-book.enter-prev{animation:bkEnterRight .26s cubic-bezier(.4,0,.2,1)}
 
 /* ═══════════════════════════════════════════════════════════════════════
-   DIARY (Phase D1)
-   One generous journal page, not a Book spread. Diary borrows the ruled
-   paper and the F2.1 block grid — the parts of the Book that exist to make
-   WRITING read well — and none of its furniture: no cover, no two-page
-   spread, no section tabs, no page turn, no coloured page edge.
+   DIARY (Phase D2)
+   A two-page spread, in the same book language as Library.
+
+   The `.bk-*` geometry is reused wholesale — the 420/297 spread, the 6px
+   gutter, A4 pages, the audited padding, the margin stripe, the mirrored
+   coloured edge, the ruled paper and the 30px block grid. That geometry is
+   not Library's property: it is the house style for a page you write on, and
+   two surfaces that both hold writing should not invent two of them.
+
+   What is Diary's own is what the two pages CONTAIN. Left is reflective
+   writing; right is a quick check-in. Two kinds of thinking, one object.
    ═══════════════════════════════════════════════════════════════════════ */
 body:has(.dia-page) .main-wrap{grid-template-columns:minmax(0,1fr) 0}
 body:has(.dia-page) .rail{display:none}
 
 .dia{display:flex;flex-direction:column;gap:14px;align-items:center;width:100%}
+.dia-book{--accent-c:var(--a-lavender)}
 
-/* Date navigation — two labelled pairs, because Day and Entry are different. */
-.dia-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  width:100%;max-width:760px}
-.dia-nav-group{display:flex;align-items:center;gap:2px;background:var(--surface);
+/* Top controls: previous day, Today, next day, a month jump, History.
+   D1 had a second chevron pair labelled "Entry" — it meant "the previous day
+   I actually wrote on", which is a real thing to want and not a thing anyone
+   reads off a chevron. That behaviour lives in History now, where the month
+   grid shows exactly where those days are. */
+.dia-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dia-daynav{display:flex;align-items:center;gap:2px;background:var(--surface);
   border:1px solid var(--border);border-radius:10px;padding:3px}
-.dia-nav-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--muted);padding:0 6px}
 .dia-step{width:30px;height:30px;border-radius:7px;border:0;background:none;cursor:pointer;
-  color:var(--text-2);display:grid;place-items:center;font-size:15px;font-family:inherit;
+  color:var(--text-2);display:grid;place-items:center;font-family:inherit;
   transition:background var(--t-hover),color var(--t-hover)}
 .dia-step:hover{background:var(--surface-2);color:var(--text)}
 .dia-step:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.dia-pick{margin-left:auto;display:flex;align-items:center}
-.dia-pick input{background:var(--surface);border:1px solid var(--border);border-radius:10px;
-  color:var(--text-2);font-family:inherit;font-size:12.5px;padding:8px 10px;
-  color-scheme:dark;cursor:pointer}
-.dia-pick input:focus{outline:0;border-color:var(--accent)}
+.dia-today{border:0;background:none;cursor:pointer;font-family:inherit;font-size:12px;
+  font-weight:600;color:var(--text-2);padding:0 12px;height:30px;border-radius:7px;
+  transition:background var(--t-hover),color var(--t-hover)}
+.dia-today:hover{background:var(--surface-2);color:var(--text)}
+.dia-today.is-here{background:var(--accent-soft);color:#fff}
+.dia-today:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
-/* The sheet. Paper depth and a soft boundary — no big rounded dashboard card. */
-.dia-sheet{width:100%;max-width:760px;background:var(--paper);border-radius:16px;
-  padding:34px 40px 20px;box-shadow:var(--paper-shadow);
-  display:flex;flex-direction:column;min-height:min(72vh,640px);
-  border-top:3px solid var(--accent)}
-.dia-sheet-head{flex:0 0 auto;padding-bottom:16px;margin-bottom:6px;
+/* The date jump — the app's own month grid, never <input type="date">. */
+.dia-jump{width:270px}
+.dia-jump-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin-bottom:10px}
+.dia-jump-title{font-family:'Playfair Display',Georgia,serif;font-size:15px;color:var(--text)}
+.dia-jump-grid{display:flex;flex-direction:column;gap:2px}
+.dia-jump-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}
+.dia-jump-week span{text-align:center;font-size:9.5px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted);padding-bottom:3px}
+.dia-jump-cell{position:relative;aspect-ratio:1;border:0;border-radius:8px;background:none;
+  cursor:pointer;color:var(--text-2);font-family:inherit;font-size:12px;
+  display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
+.dia-jump-cell:hover{background:var(--surface-3);color:var(--text)}
+.dia-jump-cell:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.dia-jump-cell.is-outside{opacity:.4}
+.dia-jump-cell.has-entry{font-weight:700;color:var(--text)}
+.dia-jump-cell.is-today{box-shadow:inset 0 0 0 1px var(--border-strong)}
+.dia-jump-cell.is-open{background:var(--accent-soft);color:#fff}
+.dia-jump-cell .dia-dot{position:absolute;bottom:3px;left:50%;transform:translateX(-50%)}
+
+/* Both pages scroll their own content: a spread is a fixed frame, and a long
+   day must not stretch it. */
+.dia-left,.dia-right{display:flex;flex-direction:column;min-height:0}
+.dia-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.dia-scroll::-webkit-scrollbar{width:6px}
+.dia-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}
+
+.dia-sheet-head{flex:0 0 auto;padding-bottom:12px;margin-bottom:6px;
   border-bottom:1px solid rgba(255,255,255,.06)}
-.dia-day{margin:0;font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;
+.dia-day{margin:0;font-size:10.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;
   color:var(--paper-ink-2)}
-.dia-date{margin:6px 0 0;font-family:'Playfair Display',Georgia,serif;font-weight:500;
-  font-size:30px;line-height:1.15;color:var(--paper-ink)}
-.dia-title{width:100%;margin-top:10px;background:none;border:0;outline:0;font-family:inherit;
-  font-size:15px;color:var(--paper-ink);padding:4px 0;
+.dia-date{margin:5px 0 0;font-family:'Playfair Display',Georgia,serif;font-weight:500;
+  font-size:26px;line-height:1.15;color:var(--paper-ink)}
+.dia-title{width:100%;margin-top:8px;background:none;border:0;outline:0;font-family:inherit;
+  font-size:14px;color:var(--paper-ink);padding:3px 0;
   border-bottom:1px solid transparent;transition:border-color var(--t-hover)}
 .dia-title::placeholder{color:var(--paper-ink-2);opacity:.55}
-.dia-title:focus{border-bottom-color:var(--accent)}
-
-.dia-body{flex:1;min-height:0;display:flex;margin-top:12px}
+.dia-title:focus{border-bottom-color:var(--accent-c)}
 
 /* RULED PAPER and the F2.1 BLOCK GRID, carried over exactly.
    height = (lead + lines) x 30px. Lead is padding, and a lead row is unruled. */
-.dia-editor{flex:1;min-height:300px;outline:0;
-  color:var(--paper-ink);font-size:15.5px;line-height:30px;
+.dia-editor{outline:0;min-height:180px;position:relative;
+  color:var(--paper-ink);font-size:15px;line-height:30px;
   background-image:repeating-linear-gradient(to bottom,
     transparent 0,transparent 29px,var(--paper-line) 29px,var(--paper-line) 30px);
   background-attachment:local}
@@ -3066,78 +3102,121 @@ body:has(.dia-page) .rail{display:none}
 .dia-editor ul,.dia-editor ol{margin:0;padding:0 0 0 24px}
 .dia-editor li{margin:0;padding:0}
 .dia-editor li::marker{color:var(--paper-ink-2)}
-.dia-editor blockquote{margin:0;padding:0 0 0 15px;border-left:2px solid var(--accent);
+.dia-editor blockquote{margin:0;padding:0 0 0 15px;border-left:2px solid var(--accent-c);
   color:var(--paper-ink-2);font-style:italic}
-.dia-editor a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.dia-editor a{color:var(--accent-c);text-decoration:underline;text-underline-offset:2px}
 .dia-editor .bk-unknown{border:1px dashed var(--border-strong);border-radius:8px;
   padding:0 12px;line-height:30px;color:var(--paper-ink-2);font-size:12.5px;
   background:rgba(255,255,255,.03);user-select:none}
-/* A contenteditable is never :empty — it holds <p><br></p> — so the prompt is
-   driven by the same text test the server uses to decide if a day is real. */
+/* A contenteditable is never :empty — it holds <p><br></p>. */
 .dia-editor.is-empty::before{content:attr(data-placeholder);color:var(--paper-ink-2);
   opacity:.45;pointer-events:none;position:absolute;line-height:30px}
-.dia-body{position:relative}
 .dia-editor.is-found{animation:diaFound 1.4s ease-out}
 @keyframes diaFound{0%,60%{background-color:rgba(138,93,255,.10)}100%{background-color:transparent}}
 
-/* Toolbar — the same restrained set as the Book, in Diary's chrome. */
-.dia-toolbar{display:flex;align-items:center;gap:3px;flex-wrap:wrap;margin-top:14px;
-  padding:5px 6px;border-radius:10px;background:rgba(255,255,255,.03);
+.dia-toolbar{flex:0 0 auto;display:flex;align-items:center;gap:3px;flex-wrap:wrap;
+  margin:0 0 10px;padding:4px 5px;border-radius:9px;background:rgba(255,255,255,.03);
   border:1px solid rgba(255,255,255,.05)}
-.dia-tb{width:30px;height:30px;border-radius:8px;border:0;background:none;cursor:pointer;
-  color:var(--paper-ink-2);font-size:13px;display:grid;place-items:center;font-family:inherit;
+.dia-tb{width:27px;height:27px;border-radius:7px;border:0;background:none;cursor:pointer;
+  color:var(--paper-ink-2);font-size:12.5px;display:grid;place-items:center;font-family:inherit;
   transition:background var(--t-hover),color var(--t-hover)}
 .dia-tb:hover{background:rgba(255,255,255,.07);color:var(--paper-ink)}
 .dia-tb.on{background:var(--accent-soft);color:#fff}
 .dia-tb:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
-.dia-tb-sep{width:1px;height:18px;background:rgba(255,255,255,.09);margin:0 4px}
-.dia-tb-style{background:rgba(255,255,255,.06);border:0;border-radius:8px;color:var(--paper-ink);
-  font-size:12px;font-family:inherit;padding:6px 8px;cursor:pointer;outline:0}
+.dia-tb-sep{width:1px;height:16px;background:rgba(255,255,255,.09);margin:0 3px}
+.dia-tb-style{background:rgba(255,255,255,.06);border:0;border-radius:7px;color:var(--paper-ink);
+  font-size:11.5px;font-family:inherit;padding:5px 7px;cursor:pointer;outline:0}
 
-/* Optional context — collapsed, never a form you must complete. */
-.dia-context{margin-top:18px;border-top:1px solid rgba(255,255,255,.06);padding-top:12px}
-.dia-context-toggle{display:flex;align-items:center;gap:8px;background:none;border:0;
-  cursor:pointer;color:var(--paper-ink-2);font-family:inherit;font-size:12.5px;
-  padding:6px 0;transition:color var(--t-hover)}
-.dia-context-toggle:hover{color:var(--paper-ink)}
-.dia-context-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.dia-context-n{font-size:10px;font-weight:700;background:var(--accent-soft);color:#fff;
-  border-radius:6px;padding:1px 6px}
-.dia-chev{font-size:10px;opacity:.7}
-.dia-context-body{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
-  padding:10px 0 4px}
-.dia-field{display:flex;flex-direction:column;gap:5px;min-width:0}
-.dia-field-wide{grid-column:1/-1}
-.dia-field label{font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+/* The guided prompts, BELOW the free writing. A page that opens with five
+   questions is a questionnaire; these are for the days when the blank page is
+   too big, and out of the way on the days it is not. */
+.dia-prompts{margin-top:26px;padding-top:16px;border-top:1px dashed rgba(255,255,255,.09)}
+.dia-prompts-head{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+.dia-prompts-h{margin:0;font-size:11px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--paper-ink-2)}
+.dia-prompts-n{margin-left:auto;font-size:10.5px;color:var(--paper-ink-2);opacity:.75;
+  font-variant-numeric:tabular-nums}
+.dia-prompt{display:block;margin-bottom:12px}
+.dia-prompt-q{display:block;font-size:12.5px;color:var(--paper-ink-2);margin-bottom:3px;
+  transition:color var(--t-hover)}
+.dia-prompt.is-filled .dia-prompt-q{color:var(--accent-c)}
+.dia-prompt-a{width:100%;background:none;border:0;border-bottom:1px solid rgba(255,255,255,.09);
+  outline:0;resize:none;overflow:hidden;font-family:inherit;font-size:14px;line-height:1.6;
+  color:var(--paper-ink);padding:2px 0 5px;transition:border-color var(--t-hover)}
+.dia-prompt-a:focus{border-bottom-color:var(--accent-c)}
+
+/* ── The right page: the check-in ─────────────────────────────────────── */
+.dia-checkin{display:flex;flex-direction:column;gap:16px}
+.dia-ci-head{border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:12px}
+.dia-ci-title{margin:0;font-family:'Playfair Display',Georgia,serif;font-weight:500;
+  font-size:22px;color:var(--paper-ink)}
+.dia-ci-sub{margin:4px 0 0;font-size:12px;color:var(--paper-ink-2)}
+.dia-ci-row{display:flex;flex-direction:column;gap:7px}
+.dia-ci-label{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
   color:var(--paper-ink-2)}
-.dia-field input,.dia-field select,.dia-field textarea{background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.07);border-radius:9px;color:var(--paper-ink);
-  font-family:inherit;font-size:13px;padding:8px 10px;outline:0;resize:vertical}
-.dia-field input:focus,.dia-field select:focus,.dia-field textarea:focus{border-color:var(--accent)}
-.dia-field input::placeholder,.dia-field textarea::placeholder{color:var(--paper-ink-2);opacity:.5}
+.dia-chips{display:flex;flex-wrap:wrap;gap:6px}
 
-.dia-foot{display:flex;align-items:center;gap:12px;margin-top:16px;padding-top:12px;
-  border-top:1px solid rgba(255,255,255,.06);font-size:11.5px;color:var(--paper-ink-2)}
+/* Chips, not a <select>. A browser dropdown in the middle of a journal reads
+   as a form and makes the whole spread feel like one. Every chip carries a
+   WORD — nothing depends on reading a glyph or telling two colours apart. */
+.dia-chip{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.035);
+  border-radius:99px;padding:7px 14px;font-family:inherit;font-size:12.5px;
+  color:var(--paper-ink-2);cursor:pointer;
+  transition:background var(--t-hover),color var(--t-hover),
+    border-color var(--t-hover),transform var(--d-instant) var(--e-out)}
+.dia-chip:hover{background:rgba(255,255,255,.075);color:var(--paper-ink)}
+.dia-chip:active{transform:scale(.96)}
+.dia-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dia-chip.on{background:var(--accent-c);border-color:var(--accent-c);color:#1A1624;
+  font-weight:600}
+.dia-chips-sm .dia-chip,.dia-chip-sm{padding:5px 11px;font-size:11.5px}
+
+/* The finer words, revealed by the broad one. Two levels, never twenty. */
+.dia-detail{padding:11px 12px;border-radius:11px;background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.06);animation:diaOpen var(--d-fast) var(--e-out)}
+.dia-detail-lead{margin:0 0 8px;font-size:11.5px;color:var(--paper-ink-2)}
+@keyframes diaOpen{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+.dia-notes{display:flex;flex-direction:column;gap:10px;padding-top:4px}
+.dia-note{display:flex;flex-direction:column;gap:4px}
+.dia-note-l{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--paper-ink-2)}
+.dia-note-i{background:none;border:0;border-bottom:1px solid rgba(255,255,255,.09);outline:0;
+  font-family:inherit;font-size:13.5px;color:var(--paper-ink);padding:3px 0 6px;
+  transition:border-color var(--t-hover)}
+.dia-note-i::placeholder{color:var(--paper-ink-2);opacity:.45}
+.dia-note-i:focus{border-bottom-color:var(--accent-c)}
+
+/* The streak: a fact, never a scoreboard. A diary that punishes the weeks you
+   could not write is a diary you stop opening during the weeks that matter. */
+.dia-streak{margin:6px 0 0;display:flex;align-items:baseline;gap:7px;font-size:12px;
+  color:var(--paper-ink-2);padding-top:12px;border-top:1px solid rgba(255,255,255,.06)}
+.dia-streak-n{font-family:'Playfair Display',Georgia,serif;font-size:22px;
+  color:var(--accent-c);line-height:1}
+.dia-streak-idle{min-height:38px;border-top:1px solid rgba(255,255,255,.06);margin-top:6px}
+
+.dia-right-quiet{background:var(--paper-2)}
+.dia-book-skel .bk-page{opacity:.45}
+
+.dia-foot{display:flex;align-items:center;gap:12px;font-size:11.5px;color:var(--muted)}
 .dia-hint{flex:1;min-width:0}
-/* Fixed width, so the status changing while you type never moves the layout. */
 .dia-save{min-width:96px;text-align:right;font-variant-numeric:tabular-nums}
 .dia-save[data-state="saved"]{color:var(--ok)}
-.dia-save[data-state="saving"]{color:var(--paper-ink-2)}
+.dia-save[data-state="saving"]{color:var(--text-2)}
 .dia-save[data-state="unsaved"]{color:var(--warn)}
 .dia-save[data-state="failed"],.dia-save[data-state="conflict"]{color:var(--danger)}
-.dia-archive{background:none;border:0;color:var(--paper-ink-2);font-family:inherit;
-  font-size:11.5px;cursor:pointer;padding:4px 8px;border-radius:7px;
+.dia-archive{background:none;border:0;color:var(--muted);font-family:inherit;font-size:11.5px;
+  cursor:pointer;padding:4px 8px;border-radius:7px;
   transition:background var(--t-hover),color var(--t-hover)}
-.dia-archive:hover{background:rgba(255,255,255,.06);color:var(--danger)}
+.dia-archive:hover{background:var(--surface-2);color:var(--danger)}
 
-.dia-sheet-archived{min-height:auto}
-.dia-arch-badge{margin:10px 0 0;display:inline-block;font-size:10.5px;font-weight:700;
-  letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+.dia-arch-badge{margin:9px 0 0;display:inline-block;font-size:10px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--paper-ink-2);
   background:rgba(255,255,255,.06);border-radius:6px;padding:3px 9px}
-.dia-arch-body{padding:22px 0 8px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.dia-arch-body{padding:20px 0 8px;display:flex;flex-direction:column;gap:10px;
+  align-items:flex-start}
 .dia-arch-lead{margin:0;font-size:15px;color:var(--paper-ink)}
-.dia-arch-note{margin:0;font-size:13px;color:var(--paper-ink-2);line-height:1.6;max-width:44ch}
-.dia-sheet-skel{gap:0}
+.dia-arch-note{margin:0;font-size:13px;color:var(--paper-ink-2);line-height:1.6}
 
 /* ── History ──────────────────────────────────────────────────────────── */
 .dia-history{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;
@@ -3168,8 +3247,6 @@ body:has(.dia-page) .rail{display:none}
 .dia-day-cell:hover{background:var(--surface-2);color:var(--text)}
 .dia-day-cell:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .dia-day-cell.is-outside{color:var(--muted);opacity:.45}
-/* Presence is carried three ways — a dot, a bolder weight and the accessible
-   name — so nothing depends on distinguishing a colour. */
 .dia-day-cell.has-entry .dia-day-n{font-weight:700;color:var(--text)}
 .dia-dot{width:4px;height:4px;border-radius:50%;background:var(--accent);display:block}
 .dia-day-cell.is-today{box-shadow:inset 0 0 0 1px var(--border-strong)}
@@ -3207,16 +3284,16 @@ body:has(.dia-page) .rail{display:none}
   display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .dia-empty{max-width:460px;margin:30px auto}
 
-/* Motion — the sheet moves directionally, the frame never does. No page curl:
-   Diary is chronological, not a physical book. */
+/* Motion — the spread shifts directionally, the frame never moves. No page
+   curl: Diary is chronological, not an object you hold. */
 @keyframes diaLeaveNext{to{transform:translateX(-3%);opacity:0}}
 @keyframes diaLeavePrev{to{transform:translateX(3%);opacity:0}}
 @keyframes diaEnterNext{from{transform:translateX(3%);opacity:0}}
 @keyframes diaEnterPrev{from{transform:translateX(-3%);opacity:0}}
-.dia-sheet.leave-next{animation:diaLeaveNext var(--d-base) var(--e-inout) forwards}
-.dia-sheet.leave-prev{animation:diaLeavePrev var(--d-base) var(--e-inout) forwards}
-.dia-sheet.enter-next{animation:diaEnterNext var(--d-base) var(--e-out)}
-.dia-sheet.enter-prev{animation:diaEnterPrev var(--d-base) var(--e-out)}
+.dia-book.leave-next{animation:diaLeaveNext var(--d-base) var(--e-inout) forwards}
+.dia-book.leave-prev{animation:diaLeavePrev var(--d-base) var(--e-inout) forwards}
+.dia-book.enter-next{animation:diaEnterNext var(--d-base) var(--e-out)}
+.dia-book.enter-prev{animation:diaEnterPrev var(--d-base) var(--e-out)}
 
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
   clip:rect(0 0 0 0);white-space:nowrap;border:0}
@@ -3225,24 +3302,34 @@ body:has(.dia-page) .rail{display:none}
   .dia-history{grid-template-columns:minmax(0,1fr)}
 }
 @media (max-width:820px){
-  .dia-sheet{padding:24px 22px 16px;border-radius:14px;min-height:auto}
-  .dia-date{font-size:25px}
-  .dia-nav{max-width:none}
-  .dia-pick{margin-left:0;width:100%}
-  .dia-pick input{width:100%}
-  /* A finger needs the whole day, not a 38px square inside it. */
+  /* One page at a time, the same treatment the Book gets: a 420:297 spread on
+     a phone is two unreadable columns. The check-in becomes a section beneath
+     the writing rather than a page beside it. */
+  .dia-book.bk-spread{aspect-ratio:auto;grid-template-columns:minmax(0,1fr);
+    max-width:560px;height:auto}
+  .dia-left,.dia-right{min-height:0}
+  .dia-scroll{overflow:visible}
+  .dia-right{border-top:1px dashed rgba(255,255,255,.10)}
+  .dia-date{font-size:22px}
+  .dia-step,.dia-today{height:44px}
+  .dia-step{width:44px}
   .dia-day-cell{min-height:44px}
-  .dia-step{width:44px;height:44px}
-  .dia-toolbar{position:sticky;top:0;z-index:2;background:var(--paper);
-    border-color:rgba(255,255,255,.08);margin-left:-4px;margin-right:-4px;padding:6px 4px}
+  .dia-jump-cell{min-height:38px}
+  .dia-toolbar{position:sticky;top:0;z-index:2;background:var(--paper)}
+}
+@media (max-width:820px){
+  /* Diary stacks rather than paginating, so the stage arrows have nothing to
+     turn to and would only steal width from the writing. Day navigation is in
+     the header, where it is labelled. */
+  .dia-stage > .bk-arrow{display:none}
+  .dia-stage{gap:0}
 }
 @media (max-width:480px){
-  .dia-sheet{padding:20px 16px 14px}
-  .dia-date{font-size:22px}
-  .dia-editor{font-size:15px}
-  .dia-context-body{grid-template-columns:minmax(0,1fr)}
-  .dia-nav-group{flex:1;justify-content:center}
+  .dia-date{font-size:20px}
+  .dia-daynav{flex:1;justify-content:center}
+  .dia-jump{width:min(270px,calc(100vw - 60px))}
 }
+
 
 /* ── Library responsive (§27) ─────────────────────────────────────────── */
 @media (max-width:1180px){
@@ -3259,10 +3346,15 @@ body:has(.dia-page) .rail{display:none}
 @media (max-width:820px){
   /* One page at a time. A 420:297 spread on a phone is two unreadable columns,
      so the spread becomes a single page and the arrows step page by page. */
-  .bk-book.bk-spread{aspect-ratio:210/297;grid-template-columns:minmax(0,1fr);max-width:520px}
-  .bk-book.bk-spread .bk-page-right{display:none}
-  .bk-book.bk-spread.show-right .bk-page-left{display:none}
-  .bk-book.bk-spread.show-right .bk-page-right{display:flex}
+  /* The Book reads one page at a time below 820px. Scoped away from Diary,
+     which STACKS its two pages instead of paginating them — the check-in is
+     not a page you turn to, it is the rest of the same day. Without the
+     :not(), this rule hid the diary's entire right page on a phone. */
+  .bk-book.bk-spread:not(.dia-book){aspect-ratio:210/297;
+    grid-template-columns:minmax(0,1fr);max-width:520px}
+  .bk-book.bk-spread:not(.dia-book) .bk-page-right{display:none}
+  .bk-book.bk-spread.show-right:not(.dia-book) .bk-page-left{display:none}
+  .bk-book.bk-spread.show-right:not(.dia-book) .bk-page-right{display:flex}
   .lib-bar-right{margin-left:0;width:100%}
   .lib-search{flex:1}
   .lib-search input{width:100%}

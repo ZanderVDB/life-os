@@ -464,7 +464,10 @@ test('touch targets stay at 44px where a finger has to reach them', () => {
 test('nothing in Library scrolls the page sideways', () => {
   // The tabs are the one thing allowed to scroll, and they scroll themselves.
   assert.match(html, /\.bk-tabs\{[^}]*flex-wrap:nowrap;overflow-x:auto/);
-  assert.match(html, /\.bk-book\.bk-spread\{aspect-ratio:210\/297/);
+  /* `:not(.dia-book)` since D2: the Diary reuses `.bk-spread` for its own
+   * two pages, and STACKS them on a phone rather than paginating. Without
+   * the exclusion this rule hid the diary's entire right page. */
+  assert.match(html, /\.bk-book\.bk-spread:not\(\.dia-book\)\{aspect-ratio:210\/297/);
 });
 
 test('the editor is reachable and announced', () => {

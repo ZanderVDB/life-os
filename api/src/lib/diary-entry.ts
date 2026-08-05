@@ -15,6 +15,7 @@
  */
 import type { Doc } from './book-doc.js';
 import { docToText } from './book-doc.js';
+import { reflectionHasContent, type Reflection } from './diary-reflection.js';
 
 /** The fields a person can fill in, beside the document itself. */
 export type EntryFields = {
@@ -24,6 +25,8 @@ export type EntryFields = {
   weatherNote?: string | null;
   locationNote?: string | null;
   daySummary?: string | null;
+  /** The guided prompts and the quick check-in — D2. */
+  reflection?: Reflection | null;
 };
 
 /** Text with nothing in it but whitespace — including the zero-width kinds. */
@@ -65,6 +68,10 @@ export function isMeaningfulEntry(
   if (!blank(fields.weatherNote)) return true;
   if (!blank(fields.locationNote)) return true;
   if (!blank(fields.daySummary)) return true;
+  /* A day recorded only as "felt: rough, grateful for: the walk" is a day
+   * somebody wrote. The check-in is a way of writing, not decoration on top of
+   * writing, so it counts on its own. */
+  if (reflectionHasContent(fields.reflection)) return true;
   return false;
 }
 

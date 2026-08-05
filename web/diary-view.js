@@ -15,14 +15,15 @@
  */
 
 import {
-  dia, initDiaryApi, localToday, localZone, isValidDate, addDays, addMonths,
-  loadDay, loadMonth, loadRecent, adjacentEntry, searchDiary,
-  archiveEntry, restoreEntry, formatLong, relativeDay,
+  dia, initDiaryApi, localToday, isValidDate, addDays, addMonths,
+  loadDay, loadMonth, loadRecent, loadStreak, searchDiary,
+  archiveEntry, restoreEntry, formatLong,
   sampleCheck, sampleAdd, sampleRemove,
 } from './diary-api.js';
 import {
-  headerHtml, entryHtml, loadingHtml, errorHtml, esc,
+  headerHtml, spreadHtml, jumpHtml, loadingHtml, errorHtml, esc,
 } from './diary-entry.js';
+import { autosize, checkinHtml, FEELINGS } from './diary-checkin.js';
 import { historyHtml } from './diary-history.js';
 import { docToHtml, htmlToDoc, docToText } from './editor-doc.js';
 import {
@@ -93,7 +94,14 @@ async function renderEntry(head, scroll, { animate = null } = {}) {
 
   scroll.innerHTML = loadingHtml();
   try {
-    await loadDay(dia.date);
+    /* The day, the streak and the month are fetched together: the streak sits
+     * on the right page and the month fills the date-jump grid, and loading
+     * them after the paint would make both pop in a beat late. */
+    await Promise.all([
+      loadDay(dia.date),
+      loadStreak().catch(() => null),
+      loadMonth(dia.month ?? dia.date).catch(() => null),
+    ]);
   } catch (e) {
     scroll.innerHTML = errorHtml(e.message);
     scroll.querySelector('#dia-retry')?.addEventListener('click', () => void renderDiary());
@@ -114,21 +122,75 @@ async function renderEntry(head, scroll, { animate = null } = {}) {
  */
 function paintSheet(scroll = document.getElementById('main-scroll'), animate = null) {
   stopSaveWatch?.();
-  scroll.innerHTML = `<div class="dia">${entryHtml()}</div>`;
+  scroll.innerHTML = `<div class="dia">${spreadHtml()}</div>`;
   wireSheet(scroll);
   if (animate && !reducedMotion()) {
-    const sheet = scroll.querySelector('.dia-sheet');
-    sheet?.classList.add(animate === 'next' ? 'enter-next' : 'enter-prev');
+    const book = scroll.querySelector('.dia-book');
+    book?.classList.add(animate === 'next' ? 'enter-next' : 'enter-prev');
   }
   // Registered while the entry is still exactly what the server holds.
   trackDate(dia.date, dia.entry);
+}
+
+/**
+ * Redraws ONLY the right page.
+ *
+ * A chip tap changes the check-in and must not touch the left page — the caret
+ * may be sitting in the editor, and rebuilding a contenteditable destroys the
+ * selection and the undo history. Same rule as the Book, applied across the
+ * gutter instead of across a save.
+ */
+function paintCheckin() {
+  const right = document.querySelector('.dia-right .dia-scroll');
+  if (!right) return;
+  const top = right.scrollTop;
+  right.innerHTML = checkinHtml(dia.entry, dia.reflection, dia.streak);
+  right.scrollTop = top;
+  wireCheckin(document.getElementById('main-scroll'));
 }
 
 let stopSaveWatch = null;
 
 function wireHead(head) {
   head.querySelector('#dia-history')?.addEventListener('click', () => void goHistory());
-  head.querySelector('#dia-today')?.addEventListener('click', () => void goToDate(localToday()));
+  head.querySelectorAll('[data-go]').forEach((b) => {
+    b.addEventListener('click', () => void navigate(b.dataset.go));
+  });
+  head.querySelector('#dia-jump')?.addEventListener('click', (e) => openJump(e.currentTarget));
+}
+
+/**
+ * The date jump: a month grid in the app's own surface.
+ *
+ * Not `<input type="date">`. The native control cannot be styled, opens an
+ * operating-system panel in the middle of a journal, and looks like a form
+ * field — which is the impression this phase exists to remove. The grid also
+ * shows which days already hold writing, which a date input never could.
+ */
+function openJump(anchor) {
+  let month = dia.month ?? dia.date;
+  const render = (el) => {
+    el.querySelector('.us-body').innerHTML = jumpHtml(month);
+    el.querySelectorAll('[data-jump-month]').forEach((b) => {
+      b.addEventListener('click', () => void ctx.run(async () => {
+        month = addMonths(month, Number(b.dataset.jumpMonth));
+        await loadMonth(month);
+        render(el);
+      }));
+    });
+    el.querySelectorAll('[data-jump-to]').forEach((b) => {
+      b.addEventListener('click', () => {
+        ctx.closeSurface();
+        void goToDate(b.dataset.jumpTo);
+      });
+    });
+  };
+  ctx.openSurface(anchor, {
+    kind: 'diary-jump',
+    label: 'Jump to a date',
+    html: jumpHtml(month),
+    wire: render,
+  });
 }
 
 function wireSheet(scroll) {
@@ -188,30 +250,19 @@ function wireSheet(scroll) {
     queueSave(dia.date, undefined, { title: e.target.value });
   });
 
-  scroll.querySelectorAll('[data-field]').forEach((el) => {
-    const evt = el.tagName === 'SELECT' ? 'change' : 'input';
-    el.addEventListener(evt, () => {
-      // An empty control means "not recorded", which is null, not "".
-      queueSave(dia.date, undefined, { [el.dataset.field]: el.value.trim() || null });
+  // The guided prompts, beneath the writing on the left page.
+  scroll.querySelectorAll('[data-prompt]').forEach((el) => {
+    autosize(el);
+    el.addEventListener('input', () => {
+      autosize(el);
+      setPrompt(el.dataset.prompt, el.value);
     });
   });
 
-  scroll.querySelector('#dia-context-toggle')?.addEventListener('click', (e) => {
-    dia.contextOpen = !dia.contextOpen;
-    const body = scroll.querySelector('#dia-context-body');
-    const wrap = e.currentTarget.closest('.dia-context');
-    body.hidden = !dia.contextOpen;
-    wrap.classList.toggle('is-open', dia.contextOpen);
-    e.currentTarget.setAttribute('aria-expanded', String(dia.contextOpen));
-    e.currentTarget.querySelector('span').textContent =
-      dia.contextOpen ? 'Day context' : 'Add context';
-  });
+  wireCheckin(scroll);
 
   scroll.querySelectorAll('[data-go]').forEach((b) => {
     b.addEventListener('click', () => void navigate(b.dataset.go));
-  });
-  scroll.querySelector('#dia-date')?.addEventListener('change', (e) => {
-    if (isValidDate(e.target.value)) void goToDate(e.target.value);
   });
 
   scroll.querySelector('#dia-archive')?.addEventListener('click', () => void archiveToday());
@@ -219,6 +270,108 @@ function wireSheet(scroll) {
 
   wireToolbar(scroll);
   stopSaveWatch = wireSaveStatus(scroll);
+}
+
+/* -- The right page ------------------------------------------------------ */
+
+/**
+ * Wires the check-in.
+ *
+ * Rebound after every right-page repaint, because tapping a broad feeling adds
+ * a whole row of finer ones and there is nothing to bind until it exists.
+ */
+function wireCheckin(scroll) {
+  scroll.querySelectorAll('.dia-chips[data-group]').forEach((group) => {
+    const name = group.dataset.group;
+    group.querySelectorAll('[data-choice]').forEach((chip) => {
+      chip.addEventListener('click', () => onChip(name, chip.dataset.choice));
+    });
+    /* Arrow keys move within the group, which is what makes a radiogroup a
+     * single tab stop rather than five. */
+    group.addEventListener('keydown', (e) => {
+      const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      const chips = [...group.querySelectorAll('[data-choice]')];
+      const at = chips.indexOf(document.activeElement);
+      const next = chips[(at + step + chips.length) % chips.length];
+      next?.focus();
+      if (group.getAttribute('role') === 'radiogroup') next?.click();
+    });
+  });
+
+  scroll.querySelectorAll('[data-note]').forEach((el) => {
+    el.addEventListener('input', () => setCheckin(el.dataset.note, el.value.trim() || undefined));
+  });
+}
+
+/**
+ * A chip was tapped.
+ *
+ * Tapping the chosen one again clears it. Every one of these is optional, and a
+ * control you cannot un-choose has trapped you into an answer you did not mean.
+ */
+function onChip(group, id) {
+  if (group === 'energy') {
+    const next = dia.entry?.energy === id ? null : id;
+    // Energy keeps its own column: history and search already read it.
+    if (dia.entry) dia.entry.energy = next;
+    else dia.entry = { energy: next };
+    queueSave(dia.date, undefined, { energy: next });
+    paintCheckin();
+    return;
+  }
+
+  const c = { ...(dia.reflection.checkin ?? {}) };
+  if (group === 'feeling') {
+    if (c.feeling === id) { delete c.feeling; delete c.feelingDetail; }
+    else {
+      c.feeling = id;
+      /* The finer words belong to the broad one. Changing the broad answer
+       * keeps whatever detail still exists beneath it and drops the rest. */
+      const allowed = new Set(FEELINGS.find((f) => f.id === id)?.detail ?? []);
+      const kept = (c.feelingDetail ?? []).filter((d) => allowed.has(d));
+      if (kept.length) c.feelingDetail = kept; else delete c.feelingDetail;
+    }
+  } else if (group === 'feelingDetail') {
+    const set = new Set(c.feelingDetail ?? []);
+    if (set.has(id)) set.delete(id); else set.add(id);
+    if (set.size) c.feelingDetail = [...set]; else delete c.feelingDetail;
+  } else if (group === 'social') {
+    if (c.social === id) delete c.social; else c.social = id;
+  }
+  writeReflection({ ...dia.reflection, checkin: c });
+  paintCheckin();
+}
+
+/** A one-line note on the right page. */
+function setCheckin(key, value) {
+  const c = { ...(dia.reflection.checkin ?? {}) };
+  if (value === undefined) delete c[key]; else c[key] = value;
+  writeReflection({ ...dia.reflection, checkin: c });
+}
+
+/** A guided prompt on the left page. */
+function setPrompt(id, value) {
+  const prompts = { ...(dia.reflection.prompts ?? {}) };
+  const t = value.trim();
+  if (t) prompts[id] = t; else delete prompts[id];
+  writeReflection({ ...dia.reflection, prompts });
+}
+
+/**
+ * Stores a reflection locally and queues the write.
+ *
+ * The local copy is updated FIRST and is authoritative until the server
+ * answers, so the right page repaints from it immediately. Waiting for the
+ * round trip would make every chip tap take a beat to appear.
+ */
+function writeReflection(next) {
+  const clean = { ...next };
+  if (clean.checkin && !Object.keys(clean.checkin).length) delete clean.checkin;
+  if (clean.prompts && !Object.keys(clean.prompts).length) delete clean.prompts;
+  dia.reflection = clean;
+  queueSave(dia.date, undefined, { reflection: clean });
 }
 
 /**
@@ -341,21 +494,9 @@ function wireSaveStatus(scroll) {
 /* ── Navigation (§13) ────────────────────────────────────────────────── */
 
 async function navigate(what) {
+  if (what === 'today') return goToDate(localToday());
   if (what === 'prev-day') return goToDate(addDays(dia.date, -1), 'prev');
   if (what === 'next-day') return goToDate(addDays(dia.date, 1), 'next');
-
-  // Entry steps have to ASK — the client cannot know where the gaps are.
-  const direction = what === 'prev-entry' ? 'prev' : 'next';
-  await ctx.run(async () => {
-    const r = await adjacentEntry(dia.date, direction);
-    if (!r.date) {
-      ctx.toast(direction === 'prev'
-        ? 'Nothing written before this day yet.'
-        : 'Nothing written after this day yet.');
-      return;
-    }
-    await goToDate(r.date, direction === 'prev' ? 'prev' : 'next');
-  });
 }
 
 /**

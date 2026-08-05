@@ -935,6 +935,15 @@ export const diaryEntries = pgTable('diary_entries', {
   locationNote: text('location_note'),
   /** A short overview, separate from the entry, for history and search. */
   daySummary: text('day_summary'),
+  /**
+   * The guided prompts and the quick check-in, as one validated object.
+   *
+   * One column rather than eleven: both are sets that will change as the
+   * product learns what people actually answer, and a migration per question
+   * is a tax on finding that out. `mood` and `energy` stay as columns because
+   * history and search already read them.
+   */
+  reflection: jsonb('reflection').notNull().default({}),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

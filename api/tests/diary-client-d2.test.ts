@@ -25,13 +25,19 @@ const viewJs = read('diary-view.js');
 const saveJs = read('diary-save.js');
 const entryJs = read('diary-entry.js');
 const historyJs = read('diary-history.js');
+const checkinJs = read('diary-checkin.js');
 const editorSaveJs = read('editor-save.js');
 
 const code = (src: string) => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/(^|[^:])\/\/[^\r\n]*/g, '$1');
 
+/* Comment-stripped. Several of these rules are also DESCRIBED in comments:
+ * "No native select" and "not an input type=date" both read as the very
+ * things they promise not to do. Same trap web-shell.test.ts documents. */
 const viewCode = code(viewJs);
+const checkinCode = code(checkinJs);
+const entryCode = code(entryJs);
 const apiCode = code(apiJs);
 const saveCode = code(saveJs);
 
@@ -148,27 +154,38 @@ test('Diary imports the shared editor, never Library', () => {
   assert.match(saveJs, /from '\.\/editor-save\.js'/);
 });
 
-test('Diary does not reuse the Book furniture', () => {
-  const all = viewJs + entryJs + historyJs;
-  for (const bookThing of ['coverHtml', 'spreadHtml', 'bk-spread', 'bk-tab',
-    'bk-page-right', 'page-turn', 'sectionIdx', 'spreadIdx']) {
+test('Diary reuses the Book GEOMETRY and none of its furniture', () => {
+  /* D1 forbade all of it, on the reasoning that a diary is a sequence rather
+   * than an object you hold. D2 reversed half of that: the page geometry is not
+   * Library's property, it is the house style for a page you write on, and two
+   * surfaces that both hold writing should not invent two of them. */
+  assert.match(entryJs, /class="bk-book bk-spread dia-book"/);
+  assert.match(entryJs, /class="bk-page bk-page-left dia-left"/);
+  assert.match(entryJs, /class="bk-page bk-page-right dia-right"/);
+
+  // The furniture is still Library's alone: no cover, no section tabs, no
+  // shelf, no spread paging. Diary's two pages are today, not pages of a book.
+  const all = viewJs + entryJs + historyJs + checkinJs;
+  for (const bookThing of ['coverHtml', 'bk-cover', 'bk-tab', 'sectionIdx',
+    'spreadIdx', 'spreadCount', 'library-api']) {
     assert.ok(!all.includes(bookThing), `Diary reuses the Book's ${bookThing}`);
   }
 });
 
-test('Diary has its own CSS namespace and its own sheet', () => {
-  assert.match(html, /\.dia-sheet\{/);
+test('Diary has its own CSS namespace on top of the shared geometry', () => {
+  assert.match(html, /\.dia-book\{/);
+  assert.match(html, /\.dia-left,\.dia-right\{/);
+  assert.match(html, /\.dia-checkin\{/);
   assert.match(html, /body:has\(\.dia-page\) \.rail\{display:none\}/);
   assert.match(html, /body:has\(\.dia-page\) \.main-wrap\{grid-template-columns:minmax\(0,1fr\) 0\}/);
   /* No page proportion and no curl. The calendar's day cells are square
    * (`aspect-ratio: 1`), which is a button, not a page — so this asks about the
    * SHEET rather than about the whole Diary stylesheet. */
-  const diaCss = html.slice(html.indexOf('DIARY (Phase D1)'), html.indexOf('Library responsive'));
-  const sheet = diaCss.slice(diaCss.indexOf('.dia-sheet{'), diaCss.indexOf('.dia-sheet-head'));
-  assert.doesNotMatch(sheet, /aspect-ratio/, 'the diary sheet has a page aspect ratio');
+  const diaCss = html.slice(html.indexOf('DIARY (Phase D2)'), html.indexOf('Library responsive'));
+  // No page curl. Diary is chronological; the spread is a frame, not an object
+  // you hold, and it shifts 3% rather than turning.
   assert.doesNotMatch(diaCss, /rotateY|perspective/, 'a page curl was added');
-  assert.doesNotMatch(diaCss, /bk-spread|grid-template-columns:repeat\(2/,
-    'the diary borrowed the two-page spread');
+  assert.match(diaCss, /@keyframes diaLeaveNext\{to\{transform:translateX\(-3%\)/);
 });
 
 test('the ruled paper and the F2.1 block grid carry over intact', () => {
@@ -265,27 +282,111 @@ test('the formatted date is never written into the title', () => {
   assert.match(entryJs, /placeholder="Add a title \(optional\)"/);
 });
 
-test('day and entry navigation are labelled and distinct', () => {
-  // Two adjacent unlabelled chevron pairs would be a guess every time.
+test('the top controls are four things that each say what they do', () => {
+  /* D1 had a second chevron pair labelled "Entry", meaning "the previous day I
+   * actually wrote on". A real thing to want, and not a thing anyone reads off
+   * a chevron — it lives in History now, where the month grid shows exactly
+   * where those days are. */
   assert.match(entryJs, /aria-label="Previous day"/);
   assert.match(entryJs, /aria-label="Next day"/);
-  assert.match(entryJs, /aria-label="Previous entry"/);
-  assert.match(entryJs, /aria-label="Next entry"/);
-  assert.match(entryJs, /class="dia-nav-label">Day</);
-  assert.match(entryJs, /class="dia-nav-label">Entry</);
-  // Entry steps have to ASK the server where the gaps are.
-  assert.match(viewCode, /adjacentEntry\(dia\.date, direction\)/);
+  assert.match(entryJs, /data-go="today"/);
+  assert.match(entryJs, /id="dia-jump"/);
+  assert.match(entryJs, /id="dia-history"/);
+  assert.doesNotMatch(entryJs, /Previous entry|Next entry|prev-entry|next-entry/);
+  assert.doesNotMatch(viewCode, /adjacentEntry/);
 });
 
-test('context is optional, labelled, and never a row of faces', () => {
-  assert.match(entryJs, /Add context/);
-  assert.match(entryJs, /Not recorded/);
-  for (const label of ['Mood', 'Energy', 'Weather', 'Where', 'Day summary']) {
-    assert.ok(entryJs.includes(`>${label}<`), `the ${label} field has no text label`);
+test('the date jump is the app\'s own grid, never a native date input', () => {
+  // The native control cannot be styled, opens an operating-system panel in
+  // the middle of a journal, and looks like a form field.
+  assert.doesNotMatch(entryCode, /type="date"/);
+  assert.doesNotMatch(viewCode, /type="date"/);
+  assert.match(entryJs, /export function jumpHtml/);
+  assert.match(entryJs, /data-jump-to=/);
+  assert.match(viewCode, /kind: 'diary-jump'/);
+});
+
+test('the check-in uses the app\'s own controls, never a native select', () => {
+  /* A browser dropdown in the middle of a journal reads as a form and makes
+   * the whole spread feel like one — which is the impression D2 exists to
+   * remove. The only <select> on the page is the block-style control in the
+   * editor toolbar, which is chrome, not content. */
+  const selects = checkinCode.match(/<select/g) ?? [];
+  assert.equal(selects.length, 0, 'the check-in uses a native select');
+  assert.match(checkinCode, /class="dia-chip/);
+  assert.match(checkinCode, /role="radiogroup"/);
+});
+
+test('every check-in option carries a word', async () => {
+  // Nothing depends on reading a glyph or telling two colours apart.
+  const checkin = await import('../../web/diary-checkin.js' as string);
+  for (const f of checkin.FEELINGS) assert.ok(f.label && f.label.length > 1, f.id);
+  for (const s of checkin.SOCIAL) assert.ok(s.label && s.label.length > 1, s.id);
+  for (const e of checkin.ENERGIES) assert.ok(e.label && e.label.length > 1, e.id);
+  for (const n of checkin.NOTES) assert.ok(n.label && n.hint, n.id);
+  assert.doesNotMatch(checkinCode, /[\u{1F300}-\u{1FAFF}]/u, 'an emoji stands in for a label');
+});
+
+test('a feeling opens into finer words, and the broad answer is complete on its own', async () => {
+  const checkin = await import('../../web/diary-checkin.js' as string);
+  // Two levels, never twenty.
+  for (const f of checkin.FEELINGS) {
+    assert.ok(f.detail.length >= 3 && f.detail.length <= 6,
+      `${f.id} offers ${f.detail.length} finer words`);
   }
-  // Values are words, and the option list comes from one table.
-  assert.match(apiJs, /\{ id: 'very_low', label: 'Very low' \}/);
-  assert.doesNotMatch(entryJs, /😀|🙂|😐|🙁|😢/, 'emoji stand in for a label');
+  // Choosing a broad feeling is never blocked on choosing a detail.
+  assert.doesNotMatch(viewCode, /required|must choose/i);
+});
+
+test('a chosen chip can be un-chosen', () => {
+  // A control you cannot un-choose has trapped you into an answer you did not
+  // mean. Every one of these is optional.
+  const fn = viewCode.slice(viewCode.indexOf('function onChip'));
+  assert.match(fn.slice(0, 1400), /c\.feeling === id.*delete c\.feeling/s);
+  assert.match(fn.slice(0, 1400), /c\.social === id.*delete c\.social/s);
+  assert.match(fn.slice(0, 600), /dia\.entry\?\.energy === id \? null : id/);
+});
+
+test('the streak is a fact, not a scoreboard', () => {
+  // A diary that punishes the weeks you could not write is a diary you stop
+  // opening during the weeks that matter.
+  assert.match(checkinCode, /Today is a good day to start\./);
+  assert.doesNotMatch(checkinCode, /don't break|keep it up|streak lost|missed/i);
+});
+
+test('the guided prompts sit BELOW the free writing', () => {
+  // A page that opens with five questions is a questionnaire.
+  const spread = entryJs.slice(entryJs.indexOf('export function spreadHtml'));
+  assert.ok(spread.indexOf('dia-editor') < spread.indexOf('promptsHtml'),
+    'the prompts come before the open writing');
+  const checkin = checkinJs.slice(checkinJs.indexOf('export function promptsHtml'));
+  assert.match(checkin, /If you want a place to start/);
+});
+
+test('the right page repaints without touching the left', () => {
+  /* A chip tap must not rebuild the editor: the caret may be in it, and
+   * replacing a contenteditable destroys the selection and the undo history. */
+  const fn = viewCode.slice(viewCode.indexOf('function paintCheckin'));
+  assert.match(fn.slice(0, 500), /\.dia-right \.dia-scroll/);
+  assert.doesNotMatch(fn.slice(0, 500), /paintSheet|spreadHtml/);
+});
+
+test('the reflection is stored as one object, not as a column per question', () => {
+  const schema = readFileSync(join('src', 'db', 'schema.ts'), 'utf8');
+  assert.match(schema, /reflection: jsonb\('reflection'\)/);
+  // …and the prompts and check-in are validated at the boundary, like a doc.
+  const refl = readFileSync(join('src', 'lib', 'diary-reflection.ts'), 'utf8');
+  assert.match(refl, /export function validateReflection/);
+  assert.match(refl, /export function reflectionToText/);
+});
+
+test('what is typed into a prompt or a note is searchable', () => {
+  // Half of what a person writes in D2 goes into the prompts and the check-in.
+  // A search that could not see it would be lying about having looked.
+  const route = readFileSync(join('src', 'routes', 'diary.ts'), 'utf8');
+  assert.match(route, /function searchText\(doc: any, refl/);
+  assert.match(route, /reflectionToText\(refl\)/);
+  assert.match(route, /if \(doc !== undefined \|\| refl !== undefined\)/);
 });
 
 test('presence in the calendar is never carried by colour alone', () => {
@@ -312,10 +413,10 @@ test('sample data is a console hook, and the server is the real guard', () => {
 
 /* ══ Motion ════════════════════════════════════════════════════════════ */
 
-test('the date change moves the sheet, not the frame, and never curls', () => {
+test('the date change moves the spread, not the frame, and never curls', () => {
   assert.match(html, /@keyframes diaLeaveNext\{to\{transform:translateX\(-3%\)/);
   assert.match(html, /@keyframes diaEnterNext\{from\{transform:translateX\(3%\)/);
-  assert.match(html, /\.dia-sheet\.leave-next\{animation:diaLeaveNext var\(--d-base\)/);
+  assert.match(html, /\.dia-book\.leave-next\{animation:diaLeaveNext var\(--d-base\)/);
   // 3%, not the Book's 14%: a diary day is replaced in the same frame, and a
   // large translation reads as the layout breaking rather than as time passing.
   assert.doesNotMatch(html, /diaLeave[^}]*translateX\(-?1[0-9]%\)/);
@@ -329,6 +430,35 @@ test('an animation that never finishes cannot strand the page', () => {
 });
 
 /* ══ Regression ════════════════════════════════════════════════════════ */
+
+test('clicking a section you are already in returns you to its top level', () => {
+  /* Inside an open Book, "Library" in the sidebar has to mean the shelf. It
+   * used to mean nothing at all — the same-route guard returned early, so the
+   * one control that looks like a way out was the one that did not work. */
+  assert.match(code(app), /async function goToSectionRoot\(id\)/);
+  assert.match(code(app), /if \(id === 'library'\)[\s\S]{0,160}location\.hash = '#library'/);
+  assert.match(code(app), /if \(id === 'diary'\)[\s\S]{0,160}location\.hash = '#diary'/);
+  // Only when the hash is deeper than the section root.
+  assert.match(code(app), /if \(path\.length > 1\) await goToSectionRoot\(id\)/);
+  // And the flush still happens first, so nothing typed is lost on the way out.
+  assert.match(code(app), /goToSectionRoot[\s\S]{0,300}await libraryWillLeave\(\)/);
+});
+
+test('the closed cover is one page of the open book', () => {
+  // Measured in a browser: cover height 569 == open book height 569.
+  assert.match(html, /\.bk-cover-frame\{[^}]*aspect-ratio:420\/297/);
+  assert.match(html, /\.bk-stage-cover \.bk-book\{[^}]*height:100%/);
+  assert.match(html, /\.bk-stage-cover \.bk-book\{[^}]*aspect-ratio:210\/297/);
+  // The arrow slots are reserved so both states get the same inner width.
+  assert.match(html, /\.bk-arrow-ghost\{visibility:hidden/);
+  assert.match(read('library-book.js'), /bk-arrow bk-arrow-ghost/);
+});
+
+test('the Book\'s one-page-at-a-time rule never claims the Diary', () => {
+  // Without the :not(), it hid the diary's entire right page on a phone.
+  assert.match(html, /\.bk-book\.bk-spread:not\(\.dia-book\) \.bk-page-right\{display:none\}/);
+  assert.match(html, /\.bk-book\.bk-spread:not\(\.dia-book\)\{aspect-ratio:210\/297/);
+});
 
 test('Library and the Book editor are unchanged by the extraction', () => {
   // The geometry, the grid and the Library route all still stand.

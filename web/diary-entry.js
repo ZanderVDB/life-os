@@ -1,35 +1,61 @@
 /**
- * One day, and everything on it.
+ * One day, as a two-page spread.
  *
- * Deliberately NOT a Book page. No cover, no spread, no section tabs, no page
- * turn, no coloured page edge. Diary shares the editor and the document
- * grammar with Library and shares none of its furniture, because a book is an
- * object you hold and a diary is a sequence you move through.
+ * D1 rendered a single centred sheet on the reasoning that a diary is a
+ * sequence rather than an object you hold. That was right in the abstract and
+ * wrong on screen: it read as a document with fields attached, and it did not
+ * look like part of Life OS.
  *
- * What Diary does keep from the Book is the ruled paper and the F2.1 block
- * grid — a 30px cycle with headings claiming one unruled lead row. That is not
- * decoration carried over out of habit: it is the only part of the Book that
- * exists to make WRITING read well, and it does the same work here.
+ * The spread earns its place here for a different reason than in Library.
+ * Library's two pages are two facing pages of one text. Diary's two pages are
+ * two KINDS OF THINKING:
+ *
+ *   left   reflective writing — the day in your own words, then guided prompts
+ *   right  a quick check-in — how it actually felt, in a few taps
+ *
+ * Writing is slow and open; a check-in is fast and closed. On one surface the
+ * check-in felt like a form to finish before the writing counted.
+ *
+ * ── What is reused ───────────────────────────────────────────────────────
+ *
+ * The `.bk-*` geometry, verbatim: the 420/297 spread, the 6px gutter, A4 pages,
+ * the audited padding, the margin stripe, the mirrored coloured edge, the ruled
+ * paper and the 30px block grid. That geometry is not Library's property — it
+ * is the house style for a page you write on, and two surfaces that both hold
+ * writing should not invent two of them.
+ *
+ * What is NOT reused: the cover, section tabs, page-turn-by-spread, the shelf.
+ * Diary's pages are not pages of one book; they are today.
  */
 
 import { docToHtml } from './editor-doc.js';
 import { BLOCK_STYLES } from './editor-blocks.js';
 import {
-  dia, MOODS, ENERGIES, formatLong, dayName, relativeDay, localToday, addDays,
+  dia, formatLong, dayName, relativeDay, localToday, monthName, monthGrid, formatShort,
 } from './diary-api.js';
 import { STATUS_LABEL } from './diary-save.js';
+import { checkinHtml, promptsHtml } from './diary-checkin.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/* ── Header ──────────────────────────────────────────────────────────── */
+const ICON = {
+  cal: '<rect x="3" y="4.5" width="14" height="13" rx="2.5"/><path d="M3 8.5h14M7 3v3M13 3v3"/>',
+  left: '<path d="m12 4-6 6 6 6"/>',
+  right: '<path d="m8 4 6 6-6 6"/>',
+};
+const icon = (name, size = 15) => `<svg viewBox="0 0 20 20" width="${size}" height="${size}"
+  fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+  stroke-linejoin="round" aria-hidden="true">${ICON[name]}</svg>`;
 
-/**
- * The page head.
+/* ── Header ──────────────────────────────────────────────────────────────
  *
- * `dia-page` is the marker the shell watches to hide the right rail — the same
- * mechanism Calendar, Projects and Library use. Diary uses its width for
- * writing.
+ * Four controls, and every one of them says what it does.
+ *
+ * D1 had two labelled chevron pairs — Day and Entry. "Entry" meant "jump to the
+ * previous day I actually wrote on", which is a real thing to want and not a
+ * thing anyone reads off a chevron. That behaviour moved into History, where a
+ * month grid already shows exactly where those days are.
  */
 export function headerHtml() {
   const today = localToday();
@@ -37,104 +63,118 @@ export function headerHtml() {
   return `<p class="eyebrow dia-page">Life OS</p>
     <h1>Diary</h1>
     <p class="sub">${esc(relativeDay(dia.date, today))}</p>
-    <div class="page-actions">
-      <button class="btn btn-ghost btn-sm" id="dia-history"
-        aria-label="Diary history and search">${icon('cal')}<span>History</span></button>
-      ${isToday ? '' : `<button class="btn btn-ghost btn-sm" id="dia-today">Today</button>`}
+    <div class="page-actions dia-actions">
+      <div class="dia-daynav" role="group" aria-label="Move between days">
+        <button type="button" class="dia-step" data-go="prev-day"
+          aria-label="Previous day" title="Previous day">${icon('left', 17)}</button>
+        <button type="button" class="dia-today${isToday ? ' is-here' : ''}"
+          data-go="today" ${isToday ? 'aria-current="date"' : ''}
+          aria-label="${isToday ? 'You are on today' : 'Go to today'}">Today</button>
+        <button type="button" class="dia-step" data-go="next-day"
+          aria-label="Next day" title="Next day">${icon('right', 17)}</button>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="dia-jump"
+        aria-haspopup="dialog" aria-expanded="false">${icon('cal')}<span>${
+  esc(monthName(dia.date))}</span></button>
+      <button type="button" class="btn btn-ghost btn-sm" id="dia-history">History</button>
     </div>`;
 }
 
-const icon = (name) => {
-  const paths = {
-    cal: '<rect x="3" y="4.5" width="14" height="13" rx="2.5"/><path d="M3 8.5h14M7 3v3M13 3v3"/>',
-    left: 'm12 4-6 6 6 6',
-    right: 'm8 4 6 6-6 6',
-    search: '<circle cx="9" cy="9" r="5"/><path d="m13 13 3.5 3.5"/>',
-  };
-  const d = paths[name];
-  const body = d.startsWith('<') ? d : `<path d="${d}"/>`;
-  return `<svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor"
-    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-    >${body}</svg>`;
-};
-
-/* ── Date navigation (§13) ───────────────────────────────────────────── */
-
 /**
- * Two pairs of arrows, and they are NOT the same thing.
+ * The date jump.
  *
- * Day steps by calendar date, including days with nothing on them. Entry jumps
- * to the nearest date that actually holds writing. Both are labelled, because
- * two adjacent unlabelled chevron pairs would be a guess every time.
+ * A month grid in the app's own surface, not `<input type="date">`. The native
+ * control cannot be styled, opens an operating-system panel in the middle of a
+ * journal, and looks like a form field — which is exactly the impression this
+ * phase is removing. The grid also shows which days already have writing, which
+ * a date input never could.
  */
-export function navHtml() {
-  return `<nav class="dia-nav" aria-label="Move between days">
-    <div class="dia-nav-group">
-      <button type="button" class="dia-step" data-go="prev-day"
-        aria-label="Previous day" title="Previous day">${icon('left')}</button>
-      <span class="dia-nav-label">Day</span>
-      <button type="button" class="dia-step" data-go="next-day"
-        aria-label="Next day" title="Next day">${icon('right')}</button>
+export function jumpHtml(month = dia.date) {
+  const today = localToday();
+  const have = new Set(dia.days.map((d) => d.date));
+  const cells = monthGrid(month);
+  const week = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return `<div class="dia-jump" data-month="${esc(month)}">
+    <div class="dia-jump-head">
+      <button type="button" class="dia-step" data-jump-month="-1"
+        aria-label="Previous month">${icon('left', 15)}</button>
+      <span class="dia-jump-title" aria-live="polite">${esc(monthName(month))}</span>
+      <button type="button" class="dia-step" data-jump-month="1"
+        aria-label="Next month">${icon('right', 15)}</button>
     </div>
-    <div class="dia-nav-group">
-      <button type="button" class="dia-step" data-go="prev-entry"
-        aria-label="Previous entry" title="Jump to the previous day you wrote on"
-        >${icon('left')}</button>
-      <span class="dia-nav-label">Entry</span>
-      <button type="button" class="dia-step" data-go="next-entry"
-        aria-label="Next entry" title="Jump to the next day you wrote on"
-        >${icon('right')}</button>
+    <div class="dia-jump-grid" role="grid">
+      <div class="dia-jump-row dia-jump-week" role="row">
+        ${week.map((d) => `<span role="columnheader">${d}</span>`).join('')}
+      </div>
+      ${chunk(cells, 7).map((row) => `<div class="dia-jump-row" role="row">
+        ${row.map((c) => {
+    const has = have.has(c.date);
+    const label = [formatShort(c.date), has ? 'has an entry' : 'no entry',
+      c.date === today ? 'today' : ''].filter(Boolean).join(', ');
+    return `<button type="button" role="gridcell" data-jump-to="${c.date}"
+          class="dia-jump-cell${c.inMonth ? '' : ' is-outside'}${has ? ' has-entry' : ''}${
+  c.date === today ? ' is-today' : ''}${c.date === dia.date ? ' is-open' : ''}"
+          aria-label="${esc(label)}">${c.day}${
+  has ? '<i class="dia-dot" aria-hidden="true"></i>' : ''}</button>`;
+  }).join('')}
+      </div>`).join('')}
     </div>
-    <label class="dia-pick">
-      <span class="sr-only">Jump to a date</span>
-      <input type="date" id="dia-date" value="${esc(dia.date)}" aria-label="Jump to a date">
-    </label>
-  </nav>`;
+  </div>`;
 }
 
-/* ── The entry surface ───────────────────────────────────────────────── */
+function chunk(arr, n) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
 
-export function entryHtml() {
+/* ── The spread ──────────────────────────────────────────────────────── */
+
+export function spreadHtml() {
+  if (dia.archivedEntry) return archivedHtml(dia.archivedEntry);
   const e = dia.entry;
-  const archived = dia.archivedEntry;
 
-  if (archived) return archivedHtml(archived);
+  return `<div class="bk-stage dia-stage">
+    <button type="button" class="bk-arrow" data-go="prev-day"
+      aria-label="Previous day">${icon('left', 20)}</button>
 
-  return `${navHtml()}
-  <article class="dia-sheet" aria-labelledby="dia-date-h">
-    <header class="dia-sheet-head">
-      <p class="dia-day">${esc(dayName(dia.date))}</p>
-      <h2 class="dia-date" id="dia-date-h">${esc(formatLong(dia.date))}</h2>
-      <input class="dia-title" id="dia-title" value="${esc(e?.title ?? '')}"
-        placeholder="Add a title (optional)" aria-label="Entry title" maxlength="300">
-    </header>
+    <div class="bk-book bk-spread dia-book" data-accent="lavender">
+      <div class="bk-page bk-page-left dia-left" data-accent="lavender">
+        <header class="dia-sheet-head">
+          <p class="dia-day">${esc(dayName(dia.date))}</p>
+          <h2 class="dia-date" id="dia-date-h">${esc(formatLong(dia.date))}</h2>
+          <input class="dia-title" id="dia-title" value="${esc(e?.title ?? '')}"
+            placeholder="Add a title (optional)" aria-label="Entry title" maxlength="300">
+        </header>
+        ${toolbarHtml()}
+        <div class="dia-scroll">
+          <div class="dia-editor" id="dia-editor" contenteditable="true" spellcheck="true"
+            role="textbox" aria-multiline="true"
+            aria-label="Diary entry for ${esc(formatLong(dia.date))}"
+            data-placeholder="Write about your day…">${docToHtml(e?.document)}</div>
+          ${promptsHtml(dia.reflection)}
+        </div>
+      </div>
 
-    ${toolbarHtml()}
-
-    <div class="dia-body">
-      <div class="dia-editor" id="dia-editor" contenteditable="true" spellcheck="true"
-        role="textbox" aria-multiline="true"
-        aria-label="Diary entry for ${esc(formatLong(dia.date))}"
-        data-placeholder="Write about your day…">${docToHtml(e?.document)}</div>
+      <div class="bk-page bk-page-right dia-right" data-accent="lavender">
+        <div class="dia-scroll">
+          ${checkinHtml(e, dia.reflection, dia.streak)}
+        </div>
+      </div>
     </div>
 
-    ${contextHtml(e)}
-
-    <footer class="dia-foot">
-      <span class="dia-hint">${e ? '' : 'Nothing is saved until you write something.'}</span>
-      <span class="dia-save" id="dia-save" role="status">${STATUS_LABEL.saved}</span>
-      ${e ? `<button type="button" class="dia-archive" id="dia-archive"
-        aria-label="Archive this entry">Archive</button>` : ''}
-    </footer>
-  </article>`;
+    <button type="button" class="bk-arrow" data-go="next-day"
+      aria-label="Next day">${icon('right', 20)}</button>
+  </div>
+  <div class="bk-foot dia-foot">
+    <span class="dia-hint">${e ? '' : 'Nothing is saved until you write something.'}</span>
+    <span class="dia-save" id="dia-save" role="status">${STATUS_LABEL.saved}</span>
+    ${e ? `<button type="button" class="dia-archive" id="dia-archive"
+      aria-label="Archive this entry">Archive</button>` : ''}
+  </div>`;
 }
 
-/**
- * The same restrained set as the Book, in Diary's own chrome.
- *
- * Style names are Body / Heading / Subheading / Quote — the shared
- * `BLOCK_STYLES` table, so a DOM tag is never shown to anyone.
- */
+/** The same restrained set as the Book, in Diary's chrome. */
 export function toolbarHtml() {
   const b = (cmd, label, glyph, key) =>
     `<button type="button" class="dia-tb" data-cmd="${cmd}" aria-label="${label}"
@@ -159,89 +199,45 @@ export function toolbarHtml() {
 }
 
 /**
- * The optional daily context (§17).
- *
- * Collapsed by default and never required. No row of faces: a diary that asks
- * you to classify your feeling before it will let you write has changed what it
- * is for. Every option has a text label, so nothing depends on reading an icon.
- */
-function contextHtml(e) {
-  const filled = [e?.mood, e?.energy, e?.weatherNote, e?.locationNote, e?.daySummary]
-    .filter(Boolean).length;
-  const open = dia.contextOpen || filled > 0;
-  return `<section class="dia-context ${open ? 'is-open' : ''}">
-    <button type="button" class="dia-context-toggle" id="dia-context-toggle"
-      aria-expanded="${open}" aria-controls="dia-context-body">
-      <span>${open ? 'Day context' : 'Add context'}</span>
-      ${filled ? `<span class="dia-context-n">${filled}</span>` : ''}
-      <span class="dia-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
-    </button>
-    <div class="dia-context-body" id="dia-context-body" ${open ? '' : 'hidden'}>
-      <div class="dia-field">
-        <label for="dia-mood">Mood</label>
-        <select id="dia-mood" data-field="mood">
-          <option value="">Not recorded</option>
-          ${MOODS.map((m) => `<option value="${m.id}"${
-  e?.mood === m.id ? ' selected' : ''}>${m.label}</option>`).join('')}
-        </select>
-      </div>
-      <div class="dia-field">
-        <label for="dia-energy">Energy</label>
-        <select id="dia-energy" data-field="energy">
-          <option value="">Not recorded</option>
-          ${ENERGIES.map((m) => `<option value="${m.id}"${
-  e?.energy === m.id ? ' selected' : ''}>${m.label}</option>`).join('')}
-        </select>
-      </div>
-      <div class="dia-field">
-        <label for="dia-weather">Weather</label>
-        <input id="dia-weather" data-field="weatherNote" maxlength="300"
-          value="${esc(e?.weatherNote ?? '')}" placeholder="Optional">
-      </div>
-      <div class="dia-field">
-        <label for="dia-location">Where</label>
-        <input id="dia-location" data-field="locationNote" maxlength="300"
-          value="${esc(e?.locationNote ?? '')}" placeholder="Optional">
-      </div>
-      <div class="dia-field dia-field-wide">
-        <label for="dia-summary">Day summary</label>
-        <textarea id="dia-summary" data-field="daySummary" rows="2" maxlength="2000"
-          placeholder="A sentence or two, for looking back later">${esc(e?.daySummary ?? '')}</textarea>
-      </div>
-    </div>
-  </section>`;
-}
-
-/**
  * A date whose entry was archived.
  *
- * The day is not offered as blank paper: writing here would be refused by the
- * server anyway, and quietly showing an empty editor would look like the
- * writing was gone.
+ * Shown as a closed spread rather than as blank paper: writing here would be
+ * refused by the server anyway, and an empty editor would look like the writing
+ * was gone.
  */
 function archivedHtml(entry) {
-  return `${navHtml()}
-  <article class="dia-sheet dia-sheet-archived">
-    <header class="dia-sheet-head">
-      <p class="dia-day">${esc(dayName(dia.date))}</p>
-      <h2 class="dia-date">${esc(formatLong(dia.date))}</h2>
-      <p class="dia-arch-badge">Archived</p>
-    </header>
-    <div class="dia-arch-body">
-      <p class="dia-arch-lead">${entry.title
+  return `<div class="bk-stage dia-stage">
+    <button type="button" class="bk-arrow" data-go="prev-day"
+      aria-label="Previous day">${icon('left', 20)}</button>
+    <div class="bk-book bk-spread dia-book dia-book-archived" data-accent="lavender">
+      <div class="bk-page bk-page-left dia-left" data-accent="lavender">
+        <header class="dia-sheet-head">
+          <p class="dia-day">${esc(dayName(dia.date))}</p>
+          <h2 class="dia-date">${esc(formatLong(dia.date))}</h2>
+          <p class="dia-arch-badge">Archived</p>
+        </header>
+        <div class="dia-arch-body">
+          <p class="dia-arch-lead">${entry.title
     ? `“${esc(entry.title)}” is archived.` : 'This day is archived.'}</p>
-      <p class="dia-arch-note">Nothing was deleted. Restore it to read it and keep
-        writing on this date.</p>
-      <button type="button" class="btn btn-primary" id="dia-restore">Restore this entry</button>
+          <p class="dia-arch-note">Nothing was deleted. Restore it to read it and
+            keep writing on this date.</p>
+          <button type="button" class="btn btn-primary" id="dia-restore">Restore this entry</button>
+        </div>
+      </div>
+      <div class="bk-page bk-page-right dia-right dia-right-quiet" data-accent="lavender"></div>
     </div>
-  </article>`;
+    <button type="button" class="bk-arrow" data-go="next-day"
+      aria-label="Next day">${icon('right', 20)}</button>
+  </div>`;
 }
 
 /* ── Loading and error, without a blank page ─────────────────────────── */
 
-export const loadingHtml = () => `<div class="dia-sheet dia-sheet-skel">
-  <div class="skeleton" style="height:52px"></div>
-  <div class="skeleton" style="height:220px;margin-top:14px"></div>
+export const loadingHtml = () => `<div class="bk-stage dia-stage">
+  <div class="bk-book bk-spread dia-book dia-book-skel" data-accent="lavender">
+    <div class="bk-page bk-page-left" data-accent="lavender"></div>
+    <div class="bk-page bk-page-right" data-accent="lavender"></div>
+  </div>
 </div>`;
 
 export const errorHtml = (msg) => `<div class="state">

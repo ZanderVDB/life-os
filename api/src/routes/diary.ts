@@ -33,6 +33,9 @@ import {
   isMeaningfulEntry, isValidCivilDate, ISO_DATE, addDays, monthBounds,
 } from '../lib/diary-entry.js';
 import {
+  validateReflection, reflectionToText, type Reflection,
+} from '../lib/diary-reflection.js';
+import {
   seedSampleDiary, removeSampleDiary, sampleDiaryFootprint, isDiarySampleAllowed,
 } from '../lib/sample-diary.js';
 
@@ -107,6 +110,7 @@ export function registerDiaryRoutes(
     const { date } = z.object({ date: civilDate }).parse(req.params);
     const body = z.object({
       document: z.any().optional(),
+      reflection: z.any().optional(),
       timezone: z.string().max(64).nullish(),
       /* The version this write is based on. A mismatch is a 409 and the caller
        * re-reads — it never silently overwrites. */
@@ -122,6 +126,8 @@ export function registerDiaryRoutes(
     }
 
     const doc = body.document === undefined ? undefined : validateDoc(body.document);
+    const refl = body.reflection === undefined
+      ? undefined : validateReflection(body.reflection);
     const fields = {
       title: clean(body.title),
       mood: body.mood ?? undefined,
@@ -141,6 +147,7 @@ export function registerDiaryRoutes(
         weatherNote: fields.weatherNote,
         locationNote: fields.locationNote,
         daySummary: fields.daySummary,
+        reflection: refl ?? null,
       });
       if (!meaningful) return { date, entry: null, created: false };
 
@@ -150,7 +157,8 @@ export function registerDiaryRoutes(
         timezone: body.timezone ?? null,
         title: fields.title ?? null,
         document: doc ?? { type: 'doc', content: [] },
-        documentText: doc ? docToText(doc) : '',
+        documentText: searchText(doc, refl),
+        reflection: refl ?? {},
         mood: fields.mood ?? null,
         energy: fields.energy ?? null,
         weatherNote: fields.weatherNote ?? null,
@@ -169,7 +177,17 @@ export function registerDiaryRoutes(
     }
 
     const patch: Record<string, unknown> = { updatedAt: new Date() };
-    if (doc !== undefined) { patch.document = doc; patch.documentText = docToText(doc); }
+    if (refl !== undefined) patch.reflection = refl;
+    /* The search text is rebuilt whenever EITHER half changes, because it is
+     * the union of both. Rebuilding it only when the document changed would
+     * make an answer typed into "What felt difficult?" invisible to search
+     * until the next time the prose happened to be edited. */
+    if (doc !== undefined || refl !== undefined) {
+      const nextDoc = doc ?? (existing.document as any);
+      const nextRefl = refl ?? (existing.reflection as Reflection);
+      patch.document = nextDoc;
+      patch.documentText = searchText(nextDoc, nextRefl);
+    }
     if (body.title !== undefined) patch.title = fields.title;
     if (body.mood !== undefined) patch.mood = body.mood ?? null;
     if (body.energy !== undefined) patch.energy = body.energy ?? null;
@@ -299,6 +317,39 @@ export function registerDiaryRoutes(
     return { date: row?.date ?? null, title: row?.title ?? null };
   });
 
+  /**
+   * The current run of consecutive written days, ending today or yesterday.
+   *
+   * A fact, not a scoreboard. It counts back from today (or from yesterday, so
+   * a streak is not "broken" at one minute past midnight before you have had
+   * the day) and stops at the first gap. Nothing is stored: a stored streak is
+   * a number that can be wrong, and this one is cheap to derive.
+   */
+  app.get(`${base}/diary/streak`, pre, async (req) => {
+    const ws = wsId(req);
+    const { today } = z.object({ today: civilDate }).parse(req.query ?? {});
+
+    // 400 days is a year and a bit — enough to answer honestly, bounded enough
+    // that the query cannot grow with the diary.
+    const rows = await db.select({ date: diaryEntries.entryDate })
+      .from(diaryEntries)
+      .where(and(
+        eq(diaryEntries.workspaceId, ws),
+        isNull(diaryEntries.archivedAt),
+        lte(diaryEntries.entryDate, today),
+        gte(diaryEntries.entryDate, addDays(today, -400)),
+      ))
+      .orderBy(desc(diaryEntries.entryDate));
+
+    const have = new Set(rows.map((r) => r.date));
+    const wroteToday = have.has(today);
+    let cursor = wroteToday ? today : addDays(today, -1);
+    let current = 0;
+    while (have.has(cursor)) { current += 1; cursor = addDays(cursor, -1); }
+
+    return { current, wroteToday, daysInWindow: rows.length };
+  });
+
   /* ── Search ────────────────────────────────────────────────────────── */
 
   app.get(`${base}/diary/search`, pre, async (req) => {
@@ -356,6 +407,18 @@ export function registerDiaryRoutes(
     }
     return removeSampleDiary(db, wsId(req));
   });
+}
+
+/**
+ * Everything on a day that a search should be able to find.
+ *
+ * The prose AND the answers. Half of what a person writes in D2 goes into the
+ * prompts and the check-in, and a search that could not see it would be lying
+ * about having looked.
+ */
+function searchText(doc: any, refl: Reflection | null | undefined): string {
+  return [doc ? docToText(doc) : '', reflectionToText(refl)]
+    .filter(Boolean).join(' ').trim();
 }
 
 /** A window around the first match, so the result reads without being opened. */
