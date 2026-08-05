@@ -137,8 +137,13 @@ test('today: current is actionable, next is a preview, later is a count', () => 
   const row = body(stepsCode, "function stepRowHtml(s, { state = 'plain', undoable = false } = {})");
   // A `next` step has NO toggle at all — not a disabled one that looks pressable.
   assert.match(row, /const locked = state === 'next'/);
-  assert.match(row, /locked\s*\n?\s*\? `<span class="ts-tick is-locked"/,
+  assert.match(row, /locked\s*\n?\s*\? stepTickHtml\('locked'\)/,
     'the next step still renders a checkbox');
+  // `locked` is a <span>, produced by the one shared control.
+  const tick = body(stepsCode,
+    "export function stepTickHtml(state, { label = '', disabled = false, action = '', title = '' } = {})");
+  assert.match(tick, /if \(state === 'locked'\)/);
+  assert.match(tick, /<span class="step-tick is-locked"/, 'a locked step is a button again');
 });
 
 test('today: a locked step is a labelled button, never a bare padlock', () => {
@@ -184,11 +189,16 @@ test('parent: the reason is a sentence, carried where it can be read', () => {
   assert.match(fn, /if \(!remaining\) return null/);
 
   const tick = body(appCode, 'function parentTickHtml(t)');
-  assert.match(tick, /disabled/, 'the blocked control is still pressable');
-  assert.match(tick, /aria-label="\$\{esc\(blocked\)\}" title="\$\{esc\(blocked\)\}"/,
-    'the reason is not available to a screen reader or on hover');
-  // Not hover-only, and not colour-only: the count is rendered as text.
-  assert.match(tick, /t-tick-count/);
+  /* `aria-disabled`, NOT `disabled`. A truly disabled button does nothing when
+   * pressed, and doing nothing is its own small failure — the user gets no
+   * answer. This one is pressable, reports its state, and opens the steps. */
+  assert.match(tick, /aria-disabled="true"/, 'the blocked control reports nothing');
+  assert.match(tick, /aria-label="\$\{done\} of \$\{total\} steps complete\. \$\{esc\(blocked\)\}\."/,
+    'the label does not carry both the progress and the reason');
+  assert.match(tick, /title="\$\{esc\(blocked\)\}"/, 'no hover explanation');
+  // The count is NOT drawn inside the 22px ring — 7.5px digits were unreadable,
+  // and the `1/3 steps` chip in the meta line carries it legibly.
+  assert.ok(!/t-tick-count/.test(tick), 'the unreadable in-ring count is back');
 });
 
 test('parent: the rule is enforced at the write, not only at the control', () => {
@@ -196,7 +206,8 @@ test('parent: the rule is enforced at the write, not only at the control', () =>
   // button entirely.
   const today = body(appCode, 'async function toggleTask(id, dirty = null)');
   assert.match(today, /const blocked = parentBlockedReason\(t\)/);
-  assert.match(today, /if \(blocked\) return toast\(/, 'Today can still complete past its steps');
+  assert.match(today, /if \(blocked\) \{/, 'Today can still complete past its steps');
+  assert.match(today, /expandSteps\(id\);/, 'pressing the blocked control explains nothing');
   assert.match(today, /if \(!wasDone\)/, 'reopening a completed task is being blocked too');
 
   const project = body(appCode, 'async function completeProjectTask(taskId, dirty = null)');
@@ -213,7 +224,12 @@ test('parent: a task with NO steps completes normally', async () => {
 
 test('parent: the tick re-renders when the sequence unblocks it', () => {
   const fn = body(stepsCode, 'export function repaintSteps(rowEl, task)');
-  assert.match(fn, /const wasBlocked = !!rowEl\.querySelector\('\.t-tick'\)\?\.disabled/);
+  /* Read from the CLASS. `.disabled` is always false now that the blocked
+   * control is pressable, so a detector reading it never fires — which left a
+   * stale "Complete the remaining 1 step first" ring beside a panel reading
+   * "All steps complete". Found in a browser, not by reading. */
+  assert.match(fn, /classList\.contains\('is-blocked'\)/,
+    'the detector reads .disabled, which no longer changes');
   assert.match(fn, /if \(wasBlocked !== !!parentBlockedReason\(task\)\) return true/,
     'finishing the last step leaves the parent control stale');
 });
@@ -250,7 +266,7 @@ test('override: completing a parent with open steps asks first', () => {
 });
 
 test('override: the confirmation offers no leave-steps-open escape hatch', () => {
-  const fn = body(modalCode, 'function confirmOverride(dlg, count)');
+  const fn = modalCode.slice(modalCode.indexOf('function confirmOverride(dlg, count)'));
   assert.match(fn, /Complete task and mark all steps complete/);
   assert.match(fn, /Go back/);
   // A completed task with unfinished steps is a self-contradicting record.
@@ -315,7 +331,7 @@ test('visual: three levels, and only the current step carries weight', () => {
   assert.match(css, /\.ts-done-list \.ts-row\{opacity:\.72\}/, 'completed steps are not quieter');
   assert.match(css, /\.ts-group-current \.ts-label\{color:var\(--accent\)\}/);
   // A dashed outline, not a filled grey box that reads as broken.
-  assert.match(css, /\.ts-tick\.is-locked\{[^}]*dashed/);
+  assert.match(css, /\.step-tick\.is-locked\{[^}]*dashed/);
   assert.ok(!/\.ts-next[^{]*\{[^}]*background:var\(--danger\)/.test(css));
 });
 
@@ -325,9 +341,9 @@ test('a11y: the sequence is never carried by colour alone', () => {
   assert.match(fn, />Current</);
   assert.match(fn, />Next</);
   const row = body(stepsCode, "function stepRowHtml(s, { state = 'plain', undoable = false } = {})");
-  assert.match(row, /aria-label="\$\{s\.completed/, 'step ticks have no accessible label');
-  assert.match(row, /Mark done: \$\{esc\(s\.title\)\}/);
+  assert.match(row, /Mark done: \$\{esc\(s\.title\)\}/, 'step ticks have no accessible label');
   assert.match(row, /Undo: \$\{esc\(s\.title\)\}/);
+  assert.match(row, /Completed: \$\{esc\(s\.title\)\}/);
 });
 
 test('a11y: the ready state is announced, not merely styled', () => {
@@ -365,4 +381,68 @@ test('safety: project progress still counts parent tasks only', async () => {
   const p = (await h.get(`/projects/${project.id}`)).json().project;
   assert.deepEqual({ done: p.progress.done, total: p.progress.total }, { done: 0, total: 1 },
     'a fully stepped but incomplete task counted as project progress');
+});
+
+/* ── A guard against how I broke this twice ──────────────────────────────
+ *
+ * Rewriting a block of a module by replacing everything between two markers has
+ * now silently deleted a helper on two separate occasions: `readyHtml` in E2.6
+ * (completing the FINAL step threw inside the repaint, so the write succeeded
+ * and the DOM quietly stopped updating) and `confirmOverride` in E2.7 (the
+ * parent-completion override would have thrown the moment it was pressed).
+ *
+ * Both parsed cleanly, so `node --check` saw nothing. Both were invisible to
+ * tests that assert the source CONTAINS something — the deleted function was
+ * simply never mentioned again.
+ *
+ * The fix is to stop reading the source and start running it. `steps.js` is a
+ * pure string builder with no DOM access at module scope, so it can be
+ * imported here and asked to render every state. A missing helper throws
+ * ReferenceError, which is exactly the failure that shipped twice.
+ */
+test('module integrity: steps.js renders every state without a missing helper', async () => {
+  const steps = await import('../../web/steps.js' as string);
+  const task = (done: number[], n = 4) => ({
+    id: 't1', title: 'Probe',
+    steps: Array.from({ length: n }, (_, i) => ({
+      id: `s${i}`, title: `Step ${i}`, position: i, completed: done.includes(i),
+    })),
+  });
+
+  // Every shape the panel can take, including the two that broke.
+  const cases: [string, any][] = [
+    ['no steps', { id: 't1', title: 'Probe', steps: [] }],
+    ['none done', task([])],
+    ['one done', task([0])],
+    ['out-of-order override', task([2])],
+    ['all but one', task([0, 1, 2])],
+    ['ALL done (readyHtml)', task([0, 1, 2, 3])],
+    ['single step, done', task([0], 1)],
+  ];
+  for (const [name, t] of cases) {
+    const html = steps.stepsPanelInnerHtml(t);
+    assert.ok(typeof html === 'string' && html.length > 0, `${name} rendered nothing`);
+    // The ready line is the one that vanished with `readyHtml`.
+    const allDone = t.steps.length > 0 && t.steps.every((s: any) => s.completed);
+    assert.equal(/ready to finish/i.test(html), allDone, `${name}: ready state is wrong`);
+    steps.stepsChipHtml(t, true);
+    steps.stepsPanelHtml(t, false);
+  }
+
+  // And the control itself, in each state.
+  for (const state of ['done', 'open', 'locked']) {
+    const html = steps.stepTickHtml(state, { label: 'x', action: 'step-toggle' });
+    assert.match(html, /step-tick/, `the ${state} control did not render`);
+  }
+});
+
+test('module integrity: one control size, declared once', () => {
+  // The token is the single source of the control's dimensions. Four hard-coded
+  // sizes is what made the rows ragged in the first place.
+  assert.match(css, /--step-tick:18px/);
+  assert.match(css, /\.step-tick\{width:var\(--step-tick\);height:var\(--step-tick\)/,
+    'the control does not size itself from the token');
+  assert.match(css, /\.step-tick svg\{width:var\(--step-glyph\);height:var\(--step-glyph\)/);
+  // No context re-declares its own step control.
+  assert.ok(!/\.ms-tick|\.ts-tick\{/.test(css), 'a per-context step control is back');
 });

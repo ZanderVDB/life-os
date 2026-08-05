@@ -376,6 +376,57 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
   opacity:.7;transition:rotate var(--t-fast)}
 .tm-steps[aria-expanded="true"] .tm-steps-caret{rotate:180deg}
 
+/* ── ONE step control, ONE row grid ──
+   Four different controls existed before this: 15px, 16px, 15px and 16.7px,
+   each pushing the text column to a different x. The controls were vertically
+   centred to the pixel; the raggedness was horizontal. Tokens fix the size in
+   one place and the grid fixes the columns, so every row — completed, current,
+   locked preview, or an editor row — shares one left edge. */
+:root{
+  --step-tick:18px;          /* the control, everywhere */
+  --step-glyph:11px;         /* the checkmark inside it */
+  --step-gap:9px;            /* control to text */
+  --step-row-pad:2px;        /* the row's own left padding */
+  /* Where step TEXT begins. Everything that is not a step row — the Current
+     and Next labels, "N more steps", the ready line, the add field — hangs off
+     this one value, so they cannot drift 2px away from the text they belong to.
+     Measured: all three step texts start at exactly this x. */
+  --step-text:calc(var(--step-row-pad) + var(--step-tick) + var(--step-gap));
+}
+.step-tick{width:var(--step-tick);height:var(--step-tick);flex-shrink:0;
+  border-radius:6px;border:1.5px solid var(--border-strong);background:none;
+  display:grid;place-items:center;color:transparent;cursor:pointer;padding:0;
+  transition:background var(--t-hover),border-color var(--t-hover),color var(--t-hover)}
+.step-tick svg{width:var(--step-glyph);height:var(--step-glyph);display:block}
+.step-tick:not([disabled]):hover{border-color:var(--ok)}
+/* Completed: a filled control with a CENTRED, legible tick — not a green block
+   with a mark hidden in the corner. The glyph is 61% of the box. */
+.step-tick.is-done{background:var(--ok);border-color:var(--ok);color:#07231d}
+.step-tick[disabled]{cursor:default}
+.step-tick[disabled].is-done{opacity:.78}
+/* Locked: a dashed outline of the SAME size, so the text column does not move.
+   Not a disabled checkbox — this step is not unavailable, it is not yet. */
+.step-tick.is-locked{border-style:dashed;border-color:var(--border);
+  background:none;cursor:default}
+
+.ts-row{display:grid;grid-template-columns:var(--step-tick) minmax(0,1fr) auto;
+  align-items:center;gap:var(--step-gap);
+  padding:3px 6px 3px var(--step-row-pad);border-radius:7px;
+  transition:background var(--t-hover)}
+.ts-row:hover{background:rgba(255,255,255,.035)}
+.ts-name{min-width:0;background:none;border:none;font-size:12.5px;
+  color:var(--text-2);padding:2px 4px;margin-left:-4px;border-radius:5px;
+  font-family:inherit;line-height:1.45}
+.ts-name:focus{outline:none;background:var(--surface-2);color:var(--text)}
+.ts-row.is-done .ts-name{color:var(--muted);text-decoration:line-through;
+  text-decoration-color:var(--border-strong)}
+.ts-del{width:24px;height:24px;border:0;background:none;border-radius:6px;
+  color:transparent;font-size:15px;line-height:1;cursor:pointer;padding:0;
+  display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
+.ts-row:hover .ts-del,.ts-del:focus-visible{color:var(--muted)}
+.ts-del:hover{background:rgba(255,100,110,.12);color:var(--danger)}
+.ts-trail-spacer{width:24px;height:1px}
+
 .t-steps{margin:8px 0 2px 31px;display:flex;flex-direction:column;gap:1px}
 .t-steps[hidden]{display:none}
 .ts-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
@@ -386,88 +437,74 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
    step list in four colours reads as an alert, not as guidance. */
 .ts-group{display:flex;flex-direction:column;gap:2px;margin-top:7px}
 .ts-label{font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
-  color:var(--muted);padding-left:2px}
+  color:var(--muted);padding-left:var(--step-text)}
 .ts-group-current .ts-label{color:var(--accent)}
 
-/* Completed: readable, checked, and no longer asking for attention. */
 .ts-done-list .ts-name{color:var(--muted)}
 .ts-done-list .ts-row{opacity:.72}
 .ts-done-list .ts-row:hover{opacity:1}
 
-/* Current: the only step with any weight to it. */
-.ts-current{background:var(--surface);border-radius:8px;padding:5px 6px 5px 4px}
+/* Current: the only step with any weight to it. The text stays dominant over
+   the label above it. */
+.ts-current{background:var(--surface)}
 .ts-current .ts-name{color:var(--text);font-size:13px;font-weight:500}
-.ts-current .ts-tick{border-color:var(--accent);width:16px;height:16px}
-.ts-current .ts-tick:hover{border-color:var(--ok);background:rgba(0,217,163,.10)}
+.ts-current .step-tick{border-color:var(--accent)}
+.ts-current .step-tick:hover{background:rgba(0,217,163,.10)}
 
-/* Next: a preview. Legible, not actionable, and it says so in words. */
-.ts-next .ts-name-locked{background:none;border:0;padding:2px 4px;text-align:left;
-  font:inherit;font-size:12.5px;color:var(--text-2);cursor:pointer;border-radius:5px;
-  flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ts-next .ts-name-locked{background:none;border:0;padding:2px 4px;margin-left:-4px;
+  text-align:left;font:inherit;font-size:12.5px;color:var(--text-2);cursor:pointer;
+  border-radius:5px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .ts-next .ts-name-locked:hover{color:var(--text);background:var(--surface)}
-/* An outline ring, not a filled grey box: a disabled-looking control reads as
-   broken, and this step is not broken — it is simply not yet. */
-.ts-tick.is-locked{width:15px;height:15px;flex-shrink:0;border-radius:5px;
-  border:1.5px dashed var(--border);background:none}
 
-.ts-more{align-self:flex-start;margin-top:6px;border:0;background:none;padding:2px 4px;
-  font-size:11px;color:var(--muted);cursor:pointer;border-radius:5px;
-  text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--border-strong)}
+/* Aligned to the TEXT column, not the card edge — it is another step, so it
+   starts where the step names start. */
+.ts-more{align-self:flex-start;margin:6px 0 0 var(--step-text);
+  border:0;background:none;padding:2px 0;font-size:11px;color:var(--muted);
+  cursor:pointer;border-radius:5px;text-decoration:underline;text-underline-offset:2px;
+  text-decoration-color:var(--border-strong)}
 .ts-more:hover{color:var(--text-2)}
 
-/* A step that cannot be unticked here still looks finished, not disabled. */
-.ts-tick[disabled]{cursor:default}
-.ts-done-list .ts-tick[disabled]:hover{border-color:var(--ok)}
-.ts-row{display:flex;align-items:center;gap:8px;padding:3px 6px 3px 2px;
-  border-radius:7px;transition:background var(--t-hover)}
-.ts-row:hover{background:rgba(255,255,255,.035)}
-.ts-tick{width:15px;height:15px;flex-shrink:0;border-radius:5px;
-  border:1.5px solid var(--border-strong);display:grid;place-items:center;
-  color:transparent;background:none;cursor:pointer;
-  transition:background var(--t-hover),border-color var(--t-hover),color var(--t-hover)}
-.ts-tick:hover{border-color:var(--ok)}
-.ts-row.is-done .ts-tick{background:var(--ok);border-color:var(--ok);color:#08221c}
-.ts-name{flex:1;min-width:0;background:none;border:none;font-size:12.5px;
-  color:var(--text-2);padding:2px 4px;border-radius:5px;font-family:inherit}
-.ts-name:focus{outline:none;background:var(--surface-2);color:var(--text)}
-.ts-row.is-done .ts-name{color:var(--muted);text-decoration:line-through}
-.ts-del{width:22px;height:22px;flex-shrink:0;border:0;background:none;border-radius:6px;
-  color:transparent;font-size:15px;line-height:1;cursor:pointer;
-  display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
-/* Hidden until the row is hovered or focused: deleting is the rarest thing you
-   do to a step, and a permanent × on every row reads as clutter. */
-.ts-row:hover .ts-del,.ts-del:focus-visible{color:var(--muted)}
-.ts-del:hover{background:rgba(255,100,110,.12);color:var(--danger)}
-
-.ts-add{display:flex;gap:6px;align-items:center;margin-top:4px;padding-left:2px}
-.ts-new{flex:1;min-width:0;background:var(--surface);border:1px solid transparent;
-  border-radius:7px;padding:4px 8px;font-size:12.5px;color:var(--text);
-  font-family:inherit}
+.ts-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;
+  margin:6px 0 0 var(--step-text)}
+.ts-new{min-width:0;background:var(--surface);border:1px solid transparent;
+  border-radius:7px;padding:5px 8px;font-size:12.5px;color:var(--text);font-family:inherit}
 .ts-new::placeholder{color:var(--muted)}
 .ts-new:focus{outline:none;border-color:var(--accent);background:var(--surface-2)}
-.ts-add-btn{flex-shrink:0;border:0;background:var(--surface-2);color:var(--text-2);
-  border-radius:7px;padding:4px 10px;font-size:11.5px;font-weight:600;cursor:pointer;
+.ts-add-btn{border:0;background:var(--surface-2);color:var(--text-2);border-radius:7px;
+  padding:5px 11px;font-size:11.5px;font-weight:600;cursor:pointer;
   transition:background var(--t-hover),color var(--t-hover)}
 .ts-add-btn:hover{background:var(--accent-soft);color:var(--text)}
 
-/* Ready to finish. A note, not a trophy: the task is still open and still needs
-   a decision, so this states a fact and does not ask for anything. */
-.ts-ready{margin:6px 0 0;font-size:11px;color:var(--ok);font-weight:600;
-  letter-spacing:.01em}
-.ts-error{margin:6px 0 0;font-size:11px;color:var(--danger)}
-.task.is-ready .t-tick,.t-tick.is-ready{border-color:var(--ok)}
+/* Ready to finish. A note, not a trophy. */
+.ts-ready{margin:7px 0 0 var(--step-text);font-size:11px;
+  color:var(--ok);font-weight:600;letter-spacing:.01em}
+.ts-error{margin:6px 0 0 var(--step-text);font-size:11px;
+  color:var(--danger)}
 
-/* The parent control while steps remain: a progress ring showing how far in
-   you are, not a checkbox that looks pressable and is not. The count is the
-   accessible answer; the ring is the glanceable one. */
-.t-tick.is-blocked{border-color:transparent;cursor:default;position:relative;
+/* Ready to finish: the ordinary checkbox, outlined in the success colour. It
+   must be the SAME control a task without steps has — reaching the end of the
+   sequence hands back the normal way to finish, it does not invent one. */
+.task.is-ready .t-tick,.t-tick.is-ready{border-color:var(--ok)}
+.t-tick.is-ready:hover{background:rgba(0,217,163,.12)}
+
+/* The parent control while steps remain: a progress ARC, 22px, on the same
+   centre line as an ordinary checkbox so the two never appear to jump.
+   No number inside it — 7.5px digits in a 20px circle were unreadable, and the
+   `1/3 steps` chip in the meta line already carries the count legibly. */
+.t-tick.is-blocked{width:22px;height:22px;border:0;border-radius:50%;
+  position:relative;cursor:pointer;
   background:conic-gradient(var(--ok) calc(var(--step-frac) * 360deg),
-    var(--surface-3) 0);
-  display:grid;place-items:center}
-.t-tick.is-blocked::after{content:'';position:absolute;inset:2.5px;border-radius:50%;
-  background:#282431}
-.t-tick-count{position:relative;z-index:1;font-size:7.5px;font-weight:700;
-  color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+    var(--surface-3) 0)}
+.t-tick.is-blocked::after{content:'';position:absolute;inset:3px;border-radius:50%;
+  background:#282431;transition:background var(--t-hover)}
+.task:hover .t-tick.is-blocked::after{background:#312D3D}
+/* A 44px hit area on a 22px control, without changing the layout it sits in. */
+.t-tick.is-blocked::before{content:'';position:absolute;inset:-11px;border-radius:50%}
+.t-tick.is-blocked:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* Collapsed cards say it in words too, so the state does not depend on
+   noticing a ring — or on expanding the task to find out. */
+.tm-ready{color:var(--ok);font-weight:650}
 
 /* One aligned action group. Every control is the same size, centred on the
    card's vertical axis — nothing floats at the top edge. */
@@ -694,21 +731,15 @@ body.modal-open{overflow:hidden}
   letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .m-steps-count{margin-left:auto;letter-spacing:0;font-size:10px;background:var(--surface);
   border-radius:6px;padding:1px 7px}
-.m-steps{display:flex;flex-direction:column;gap:5px}
-.m-step{display:flex;align-items:center;gap:9px;background:var(--surface);border-radius:9px;
-  padding:6px 8px 6px 10px}
-.ms-tick{width:17px;height:17px;flex-shrink:0;border-radius:5px;border:1.5px solid var(--muted);
-  display:grid;place-items:center;color:transparent;
-  transition:background var(--t-hover),border-color var(--t-hover),color var(--t-hover)}
-.ms-tick:hover{border-color:var(--ok)}
-.m-step.is-done .ms-tick{background:var(--ok);border-color:var(--ok);color:#08221c}
-.ms-name{flex:1;min-width:0;background:none;border:none;font-size:13px;color:var(--text);
-  padding:3px 4px;border-radius:6px;font-family:inherit}
-.ms-name:focus{outline:none;background:var(--surface-2)}
-.m-step.is-done .ms-name{color:var(--muted);text-decoration:line-through}
-.ms-del{width:26px;height:26px;border-radius:7px;color:var(--muted);font-size:16px;
-  display:grid;place-items:center;transition:background var(--t-hover),color var(--t-hover)}
-.ms-del:hover{background:rgba(255,100,110,.12);color:var(--danger)}
+/* The editor's step list is the SAME list Today draws: same `.ts-row` grid,
+   same `.step-tick`. Only its behaviour differs — every step is tickable here,
+   in any order. It used to carry its own 16.7px control and its own spacing,
+   which is half of why the two lists never looked like the same thing. */
+.m-steps{display:flex;flex-direction:column;gap:4px}
+.m-steps .ts-row{background:var(--surface);padding:6px 8px 6px 10px;border-radius:9px}
+.m-steps .ts-name{font-size:13px;color:var(--text)}
+.m-steps .ts-row.is-done .ts-name{color:var(--muted)}
+.m-step-add{margin-left:calc(var(--step-text) + 8px)}
 /* The Add button is not decoration. Enter was the only way to commit a step,
    nothing said so, and typing one then clicking Save discarded it silently. */
 /* A completed task, opened from history. It is not an ordinary edit and must

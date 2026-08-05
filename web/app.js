@@ -810,7 +810,15 @@ function taskHtml(t) {
     bits.push(`<span class="tm-legacy" title="Time from the old app, kept as written">${esc(t.legacyScheduledTimeRaw)}</span>`);
   }
   // The chip is a control now, not a label. See steps.js.
-  if (steps.length) bits.push(stepsChipHtml(t, expandedSteps.has(t.id)));
+  if (steps.length) {
+    bits.push(stepsChipHtml(t, expandedSteps.has(t.id)));
+    /* Said in the meta line, not only inside the expanded panel.
+     *
+     * Otherwise a task that had become finishable looked identical to one that
+     * had not, and the only way to find out was to expand it. "3/3 steps" is
+     * arithmetic; "Ready to finish" is the answer. */
+    if (readyToFinish(t)) bits.push('<span class="tm-ready">Ready to finish</span>');
+  }
 
   /* Project context.
    *
@@ -867,14 +875,29 @@ function taskHtml(t) {
 function parentTickHtml(t) {
   const blocked = parentBlockedReason(t);
   if (!blocked) {
+    /* Ready, or no steps at all: the ORDINARY task checkbox.
+     *
+     * Not a ring showing 3/3 — that still reads as information rather than as
+     * something to press. Reaching the end of the steps has to hand back the
+     * same control every other task has, or the user is left wondering whether
+     * they are allowed to finish. */
     return `<button class="t-tick ${readyToFinish(t) ? 'is-ready' : ''}" data-act="toggle"
       aria-label="${readyToFinish(t) ? 'All steps complete — mark done' : 'Mark done'}"></button>`;
   }
+
   const { total, done } = stepCounts(t);
-  return `<button class="t-tick is-blocked" data-act="toggle" disabled
-    aria-label="${esc(blocked)}" title="${esc(blocked)}"
-    style="--step-frac:${total ? done / total : 0}">
-    <span class="t-tick-count" aria-hidden="true">${done}/${total}</span></button>`;
+  /* Blocked: a progress ring, and NOT a disabled button.
+   *
+   * A disabled control does nothing when pressed, which is its own small
+   * failure — the user gets no answer. This one is pressable, says what it is
+   * through `aria-disabled`, and opens the steps so the remaining work is on
+   * screen. The count lives in the label rather than inside the ring: 7.5px
+   * digits in a 20px circle were not readable, and the `1/3 steps` chip in the
+   * meta line already carries the number in a legible size. */
+  return `<button class="t-tick is-blocked" data-act="toggle" aria-disabled="true"
+    aria-label="${done} of ${total} steps complete. ${esc(blocked)}."
+    title="${esc(blocked)}"
+    style="--step-frac:${total ? done / total : 0}"></button>`;
 }
 
 /**
@@ -1086,7 +1109,12 @@ async function toggleTask(id, dirty = null) {
    */
   if (!wasDone) {
     const blocked = parentBlockedReason(t);
-    if (blocked) return toast(`${blocked}. Open the task to finish it anyway.`, true);
+    if (blocked) {
+      // Pressing it is not a mistake to be scolded for — it is a reasonable
+      // thing to try. So it answers: the steps open, and the reason is said.
+      expandSteps(id);
+      return toast(`${blocked}. Open the task to finish it anyway.`);
+    }
   }
   // Anything the user had typed but not saved rides along with the completion.
   if (dirty) Object.assign(t, dirty);

@@ -1393,3 +1393,50 @@ centre. That exact regression had been guarded since C4. The overlay is now
 
 679 tests passing. Boards remain planned and unbuilt; the mobile redesign
 remains deferred.
+
+## Phase E2.7 — step control alignment and parent completion state
+
+Two reported problems, and the measurements said something different from what
+either of us assumed.
+
+**"Step controls are off-centre" was a horizontal defect, not a vertical one.**
+Measured before touching anything: every control was centred against its text
+box to the pixel, `offCentre = 0` in all four contexts. But there were **four
+different controls** — 15px, 16px, 15px on Today and 16.7px in the editor — and
+because each row laid out its text with flexbox after the control, a control one
+pixel wider pushed its text one pixel right. Rows that should have shared a left
+edge were ragged. Vertical nudging would never have fixed it.
+
+One control now, `stepTickHtml()`, sized from tokens and placed by a grid with a
+fixed control column. Measured after: every step text, both group labels and the
+"N more steps" line begin at exactly x=366, in every state, in both contexts.
+The glyph is 61% of the box rather than 66% of a smaller one, so a completed
+step reads as a ticked control rather than a green block.
+
+**The parent control genuinely did not update.** §7 asked me to verify it, and
+it failed: at 5/5 the chip said `5/5 steps` and the panel said "All steps
+complete", while the control still showed a ring labelled "Complete the
+remaining 1 step first". The cause was mine, from E2.6: I had changed the
+blocked control from `disabled` to `aria-disabled` so that pressing it could
+open the steps rather than doing nothing — and left the detector in
+`repaintSteps` reading `.disabled`, which is now always false. The comparison
+never fired, so the row was never re-rendered. It reads the class now.
+
+The blocked control is a 22px progress arc with a 44px hit area and no number
+inside it — 7.5px digits in a 20px circle were unreadable, and the `1/3 steps`
+chip already carries the count legibly. At all-steps-complete it becomes the
+same 20px checkbox a task with no steps has. Collapsed cards read
+`5/5 steps · Ready to finish`.
+
+**And a second helper lost to a block replacement.** Rewriting the editor's step
+row deleted `confirmOverride`, so the entire parent-completion override would
+have thrown the moment it was pressed. That is the same mistake that deleted
+`readyHtml` in E2.6. Both parsed cleanly; both were invisible to tests that
+assert the source *contains* something, because the deleted function was simply
+never mentioned again.
+
+There is now a test that imports `steps.js` and renders every panel state,
+including all-complete. Verified it catches the real thing: deleting `readyHtml`
+again makes it fail with `ReferenceError: readyHtml is not defined`.
+
+681 tests passing.

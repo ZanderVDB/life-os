@@ -10,6 +10,8 @@
  * unusable.
  */
 import { reducedMotion, settle } from './motion.js';
+// The SAME step control Today uses. One control, one geometry, everywhere.
+import { stepTickHtml } from './steps.js';
 
 /**
  * Entrance/exit keyframes for a dialog.
@@ -123,7 +125,7 @@ export function openTaskModal(ctx) {
           <span>Steps</span>
           ${steps.length ? `<span class="m-steps-count">${doneSteps}/${steps.length}</span>` : ''}
         </div>
-        <div class="m-steps" id="m-steps">${steps.map(stepRow).join('')}</div>
+        <ul class="m-steps ts-list" id="m-steps" role="list">${steps.map(stepRow).join('')}</ul>
         <div class="m-step-add">
           <input id="m-step-new" class="m-input" placeholder="Add a step…">
           <button type="button" class="btn btn-sm" id="m-step-add">Add</button>
@@ -412,7 +414,7 @@ export function openTaskModal(ctx) {
       const id = row.dataset.step;
       try {
         if (e.target.closest('[data-step-del]')) await ctx.steps.remove(id);
-        else if (e.target.closest('.ms-tick')) {
+        else if (e.target.closest('[data-step-toggle]')) {
           const turningOn = !row.classList.contains('is-done');
           /* Out-of-order is ALLOWED here — this is the override surface — but
            * it should not be a surprise. Said once, before the write, so the
@@ -447,26 +449,43 @@ export function openTaskModal(ctx) {
   return { close, element: dlg };
 }
 
-const stepRow = (s) => `<div class="m-step ${s.completed ? 'is-done' : ''}" data-step="${s.id}">
-  <button class="ms-tick" aria-pressed="${s.completed}" aria-label="${s.completed ? 'Undo' : 'Complete'} step">
-    <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-      stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg></button>
-  <input class="ms-name" value="${esc(s.title)}" data-step-name data-original="${esc(s.title)}"
+/**
+ * A step row in the full editor.
+ *
+ * Uses the SAME `stepTickHtml` and the SAME `.ts-row` grid as Today. The editor
+ * had its own 16.7px control and its own spacing, which is half of why the step
+ * lists looked different in the two places. The only difference that remains is
+ * behavioural, and it is the point of this surface: every step here is freely
+ * tickable, in any order.
+ */
+const stepRow = (s) => `<li class="ts-row ts-plain ${s.completed ? 'is-done' : ''}"
+  data-step="${s.id}">
+  ${stepTickHtml(s.completed ? 'done' : 'open', {
+    action: 'step-toggle',
+    label: `${s.completed ? 'Mark not done' : 'Mark done'}: ${esc(s.title)}`,
+  })}
+  <input class="ts-name" value="${esc(s.title)}" data-step-name data-original="${esc(s.title)}"
     aria-label="Step name">
-  <button class="ms-del" data-step-del aria-label="Delete step">&times;</button>
-</div>`;
+  <button class="ts-del" data-step-del type="button"
+    aria-label="Delete step: ${esc(s.title)}">&times;</button>
+</li>`;
+
+export { stepRow };
+
+/** One step of a task, by id. */
+const findStep = (task, id) => (task?.steps ?? []).find((s) => s.id === id) ?? null;
 
 /**
  * "2 steps are still unfinished." — a choice, not a browser confirm().
  *
- * Rendered inside the editor rather than over it, so the task you are deciding
- * about stays visible behind the question. Escape and Go back both mean no;
- * there is no way to answer it by accident.
+ * A FIXED overlay, not one absolutely positioned inside the editor. `.modal` is
+ * `position:fixed` centred by a transform; giving it `position:relative` so it
+ * could contain this silently overrode that and threw the dialog 310px off
+ * centre — a regression guarded by test since C4. Fixed needs no containing
+ * block, and the editor still shows through behind it.
+ *
+ * Escape and Go back both mean no. There is no way to answer it by accident.
  */
-/** One step of a task, by id. */
-const findStep = (task, id) => (task?.steps ?? []).find((s) => s.id === id) ?? null;
-
 function confirmOverride(dlg, count) {
   return new Promise((resolve) => {
     const box = document.createElement('div');
@@ -483,7 +502,11 @@ function confirmOverride(dlg, count) {
           Complete task and mark all steps complete</button>
       </div>
     </div>`;
-    const done = (v) => { box.remove(); document.removeEventListener('keydown', esc, true); resolve(v); };
+    const done = (v) => {
+      box.remove();
+      document.removeEventListener('keydown', esc, true);
+      resolve(v);
+    };
     const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
     box.querySelector('[data-c="no"]').onclick = () => done(false);
     box.querySelector('[data-c="yes"]').onclick = () => done(true);
@@ -492,5 +515,3 @@ function confirmOverride(dlg, count) {
     box.querySelector('[data-c="yes"]').focus();
   });
 }
-
-export { stepRow };

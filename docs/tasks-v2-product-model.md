@@ -294,3 +294,80 @@ two copies in one response is how a slot and a row start disagreeing.
 `projects-v2-boards.md`. No empty Board UI is exposed.
 
 **The mobile redesign** remains deferred.
+
+---
+
+## E2.7 — one step control, and a parent control that changes state
+
+### The alignment root cause: four controls, not one
+
+Measured on screen before changing anything:
+
+| Context | Control | Glyph | Text column |
+|---|---|---|---|
+| Today, completed | 15px | 10px | x = 362 |
+| Today, current | **16px** | 10px | x = **363** |
+| Today, next | 15px | — | x = 362 |
+| Full editor | **16.7px** | **10.8px** | x = **387** |
+
+Every one of those was vertically centred against its text box **to the pixel**
+— `offCentre` was 0 everywhere. The defect was horizontal. Because each row laid
+its text out with flexbox *after* the control, a control one pixel wider pushed
+its text one pixel right, and rows that should have shared a left edge did not.
+That is what reads as "off", and chasing it with vertical nudges would never
+have fixed it.
+
+So there is now **one** control, `stepTickHtml()` in `steps.js`, used by Today,
+Project detail and the full editor, sized from tokens:
+
+```
+--step-tick : 18px   the control
+--step-glyph: 11px   the checkmark inside it (61% — legible, not a green block)
+--step-gap  :  9px   control to text
+--step-text : calc(row-padding + tick + gap)   where step TEXT begins
+```
+
+And the row is a **grid**, not a flex line:
+
+```
+grid-template-columns: var(--step-tick) minmax(0,1fr) auto
+```
+
+The trailing cell is rendered even when empty, so a row without a delete button
+does not let its text column stretch. Measured after: every step text, both
+group labels and "N more steps" begin at exactly the same x, in every state.
+
+Everything that is not a step row — the `Current` and `Next` labels, the more
+count, the ready line, the error line, the add field — hangs off `--step-text`,
+so none of them can drift a couple of pixels away from the text they belong to.
+
+### The parent control has three states, and they are different controls
+
+| State | Control |
+|---|---|
+| No steps | the ordinary task checkbox |
+| Steps remain | a 22px progress arc, `aria-disabled` |
+| All steps done | **the ordinary task checkbox**, outlined in the success colour |
+
+The middle one is a **progress arc with no number in it**. It used to carry
+`1/3` in 7.5px digits inside a 20px circle, which was not readable at any size
+anyone actually uses. The count already exists, legibly, in the `1/3 steps` chip
+on the meta line; the ring is the glanceable shape and the label carries the
+sentence:
+
+> 1 of 3 steps complete. Complete the remaining 2 steps first.
+
+It is **`aria-disabled`, not `disabled`**. A truly disabled button does nothing
+when pressed, and doing nothing is its own small failure — the user gets no
+answer. Pressing this one expands the steps and says why, so the remaining work
+is on screen instead of implied.
+
+When the last step completes it becomes the **same 20px checkbox a task with no
+steps has**. Not a 3/3 ring: reaching the end of a sequence has to hand back the
+normal way to finish, or the user is left wondering whether they are allowed to.
+
+### The collapsed card says so too
+
+`5/5 steps · Ready to finish`, with an active checkbox. Without the words, a
+finishable task looked identical to an unfinishable one and the only way to find
+out was to expand it.

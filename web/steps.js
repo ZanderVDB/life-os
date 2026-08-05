@@ -112,6 +112,45 @@ export function parentBlockedReason(task) {
   return `Complete the remaining ${remaining} step${remaining === 1 ? '' : 's'} first`;
 }
 
+/* ── The step control ────────────────────────────────────────────────────
+ *
+ * ONE control, used by Today, Project detail and the full editor.
+ *
+ * There used to be four. Measured on screen: 15px for a completed step, 16px
+ * for the current one, 15px for the locked preview, and 16.7px in the editor —
+ * each with its own glyph size and its own gap. Because the text column was
+ * laid out by flexbox after the control, every one of those widths pushed the
+ * step text to a different x, so rows that should have shared a left edge were
+ * ragged by a pixel or two. That reads as "off", and no amount of vertical
+ * centring fixes it: the controls were already centred to their text boxes, to
+ * the pixel. The defect was horizontal and it was caused by having four
+ * controls instead of one.
+ *
+ * So the size lives in a token, the glyph is a fixed fraction of it, and the
+ * row is a GRID with a fixed control column — the text starts at the same x
+ * whether the control is a checkbox, a locked outline, or absent entirely.
+ */
+
+/**
+ * @param {'done'|'open'|'locked'} state
+ * @param {object} opts  { label, disabled, action, title }
+ */
+export function stepTickHtml(state, { label = '', disabled = false, action = '', title = '' } = {}) {
+  const glyph = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg>`;
+  // Locked is not a button at all. A disabled checkbox still looks pressable,
+  // and this one is not merely unavailable — it is not yet its turn.
+  if (state === 'locked') {
+    return `<span class="step-tick is-locked" aria-hidden="true"></span>`;
+  }
+  return `<button type="button" class="step-tick ${state === 'done' ? 'is-done' : ''}"
+    ${action ? `data-${action}` : ''} ${disabled ? 'disabled' : ''}
+    aria-pressed="${state === 'done' ? 'true' : 'false'}"
+    ${title ? `title="${title}"` : ''}
+    aria-label="${label}">${glyph}</button>`;
+}
+
 /**
  * The summary chip that lives in the task's meta line.
  *
@@ -214,19 +253,17 @@ function stepRowHtml(s, { state = 'plain', undoable = false } = {}) {
   const tickable = state === 'current' || state === 'plain' || (state === 'done' && undoable);
 
   const tick = locked
-    ? `<span class="ts-tick is-locked" aria-hidden="true"></span>`
-    : `<button class="ts-tick" data-step-toggle type="button" ${tickable ? '' : 'disabled'}
-        aria-pressed="${s.completed ? 'true' : 'false'}"
-        aria-label="${s.completed
-    ? (undoable ? `Undo: ${esc(s.title)}` : `Completed: ${esc(s.title)}`)
-    : `Mark done: ${esc(s.title)}`}"
-        ${!tickable && s.completed
-    ? 'title="Open the task to change an earlier step"' : ''}>
-        <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-          stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg></button>`;
+    ? stepTickHtml('locked')
+    : stepTickHtml(s.completed ? 'done' : 'open', {
+      action: 'step-toggle',
+      disabled: !tickable,
+      title: !tickable && s.completed ? 'Open the task to change an earlier step' : '',
+      label: s.completed
+        ? (undoable ? `Undo: ${esc(s.title)}` : `Completed: ${esc(s.title)}`)
+        : `Mark done: ${esc(s.title)}`,
+    });
 
-  // A locked step's NAME is a button too, so a keyboard reaches the override.
+  // A locked step's NAME is a button, so a keyboard reaches the override.
   const name = locked
     ? `<button type="button" class="ts-name ts-name-locked" data-step-open
         aria-label="${esc(s.title)} — not yet; open the task to do it out of order"
@@ -234,11 +271,19 @@ function stepRowHtml(s, { state = 'plain', undoable = false } = {}) {
     : `<input class="ts-name" value="${esc(s.title)}" data-step-name
         data-original="${esc(s.title)}" aria-label="Step name">`;
 
+  /* The trailing cell is always PRESENT, even when empty.
+   *
+   * `grid-template-columns` fixes the first two columns, but a missing third
+   * cell would let the text column stretch on rows without a delete button —
+   * so every row renders the cell and only its contents vary. Same left edge,
+   * same right edge, every state. */
+  const trail = state === 'plain' || state === 'current'
+    ? `<button class="ts-del" data-step-del type="button"
+        aria-label="Delete step: ${esc(s.title)}">${'×'}</button>`
+    : '<span class="ts-trail-spacer" aria-hidden="true"></span>';
+
   return `<li class="ts-row ts-${state} ${s.completed ? 'is-done' : ''}" data-step="${s.id}">
-    ${tick}
-    ${name}
-    ${state === 'plain' || state === 'current' ? `<button class="ts-del" data-step-del type="button"
-      aria-label="Delete step: ${esc(s.title)}">${'×'}</button>` : ''}
+    ${tick}${name}${trail}
   </li>`;
 }
 
@@ -252,10 +297,16 @@ export function repaintSteps(rowEl, task) {
   const panel = rowEl.querySelector('.t-steps');
   if (!panel) return false;
   const expanded = !panel.hidden;
-  // Whether the parent's checkbox was blocked BEFORE this repaint. Finishing
-  // the last step, or adding one to a ready task, changes it — and the tick
-  // lives in the task row, which this function does not own.
-  const wasBlocked = !!rowEl.querySelector('.t-tick')?.disabled;
+  /* Whether the parent's checkbox was blocked BEFORE this repaint.
+   *
+   * Read from the CLASS, not from `.disabled`. The blocked control is no longer
+   * a disabled button — it is pressable so that pressing it can open the steps
+   * and say why, rather than doing nothing. When that changed, this detector
+   * kept reading `.disabled`, which is now always false: the comparison below
+   * never fired, so finishing the last step left a stale "Complete the
+   * remaining 1 step first" ring sitting next to a panel reading "All steps
+   * complete". The class is what actually carries the state. */
+  const wasBlocked = !!rowEl.querySelector('.t-tick')?.classList.contains('is-blocked');
   // The panel NODE is kept and only its contents replaced, so expansion state,
   // scroll position and the listeners bound to it all survive a step change.
   panel.innerHTML = stepsPanelInnerHtml(task);

@@ -245,3 +245,20 @@ moves once.
 No springs, no bounce, nothing celebratory. Everything routes through the
 existing `motion.js` helpers, so `prefers-reduced-motion` is respected without
 this phase adding a primitive of its own.
+
+---
+
+## E2.7 — the parent control changing state
+
+The ring does not morph into the checkbox. They are different elements, and the
+row is re-rendered when the state changes — which is honest, because the control
+genuinely becomes a different control with a different affordance.
+
+What makes that read as a transition rather than a flash is that everything
+around it is stable: the card does not move, the step panel keeps its node and
+its expansion, the meta line only gains a word. The 22px ring and the 20px
+checkbox share a centre line, so nothing jumps sideways.
+
+The re-render happens exactly once, driven by `repaintSteps` reporting that the
+parent's availability changed. Every other step completion repaints only the
+panel.

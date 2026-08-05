@@ -575,3 +575,31 @@ extra click for a real mistake.
 **The Browser pane would not composite for a screenshot during E2.6 either.**
 Every functional claim was verified through the DOM, computed styles and the
 API. The visual judgement of the Current/Next hierarchy is the user's.
+
+## E2.7 — known limitations
+
+**The Add-step field's box sits on the text column; its placeholder does not.**
+The field is a bordered input with 8px of its own padding, so its placeholder
+begins 9px right of where step text begins. Aligning the placeholder instead
+would outdent the box 9px left of everything else, which looks worse. The box
+edge framing the column is the correct reading for a bordered control under bare
+text — but it is a deliberate choice, not an oversight.
+
+**Editor control measurements in the Browser pane read ~0.3px small.** The modal
+has a scale-in animation, and this pane never advances animations — computed
+values are frozen start frames (the same limitation found in D4.7). The
+*declared* width is 18px in both contexts, which is the thing that matters; the
+17.73px reading is the frozen frame, not a real difference.
+
+**No screenshot was possible for E2.7 either.** The Browser pane would not
+composite. Everything was verified through bounding boxes, computed styles, glyph
+positions measured with Ranges, and the API. The remaining judgement — whether
+the 22px ring reads as progress rather than as a broken checkbox, and whether the
+completed step's green is restrained enough — is the user's.
+
+**The module-integrity test covers `steps.js` only.** It works by importing the
+module and rendering, which is possible because `steps.js` touches no DOM at
+module scope. `task-modal.js` and `app.js` cannot be imported in Node without a
+DOM, so the same class of bug could still hide there. A jsdom harness would close
+that; it has not been added because it is a test-infrastructure change and this
+was a corrective phase.
