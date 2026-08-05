@@ -45,6 +45,9 @@ import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHt
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { habitSummaryHtml } from './calendar.js';
 import { settingsHtml } from './settings.js';
+import {
+  initLibrary, renderLibrary, libraryHashChanged, libraryWillLeave,
+} from './library-view.js';
 
 const CFG = window.LIFE_OS_CONFIG;
 const BUCKETS = [
@@ -338,6 +341,18 @@ async function boot() {
   localStorage.setItem('los2_ws', me.workspace.id);
   applyPreferences();
 
+  /* Library is given the shell's own primitives rather than importing them.
+   * It never builds a URL, never opens its own dialog shell, and never decides
+   * what an error looks like — one voice for all of that, defined here. */
+  initLibrary({
+    api: (path, opts) => api(`/api/v1/workspaces/${ws()}${path}`, opts),
+    toast,
+    run,
+    openSurface: openUtilitySurface,
+    closeSurface: closeUtility,
+    choose: openChoiceDialog,
+  });
+
   renderShell();
   await loadRoute();
   // Habits populate the rail as soon as they arrive. Deliberately not awaited:
@@ -598,6 +613,9 @@ function wireShell() {
         else closeProjectDetail(false);
       }
     }
+    // Back and forward INSIDE Library move between the shelf, an item and a
+    // page of a book without a route change, so Library resolves it itself.
+    if (r === 'library') libraryHashChanged();
   });
   // The rail reflows between a column and a grid; the pill must follow the nav.
   window.addEventListener('resize', () => { positionPill(true); measureScrollbar(); });
@@ -687,6 +705,9 @@ const projectFromHash = () => {
 
 async function go(id) {
   if (state.route === id) { window.__closeDrawer?.(); return; }
+  // Leaving Library while a page is being written to must not lose the words.
+  // The write is awaited BEFORE the route changes, not alongside it.
+  if (state.route === 'library') await libraryWillLeave();
   // §7 A utility surface is anchored to a control on the page you are leaving.
   closeUtility();
   state.route = id;
@@ -778,6 +799,8 @@ async function loadRoute() {
   // header is written — `route` here is the route OBJECT, not its id, which is
   // why an earlier `route === 'calendar'` check never fired.
   if (state.route === 'calendar') return loadCalendar();
+
+  if (state.route === 'library') return renderLibrary();
 
   const ph = PLACEHOLDERS[state.route];
   head.innerHTML = `<p class="eyebrow">Life OS</p><h1>${esc(route.label)}</h1>

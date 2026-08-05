@@ -108,6 +108,25 @@ Library uses its width for Library. A contextual rail could eventually carry
 item details, links and backlinks and activity — none of which exist in F1, and
 an empty rail is worse than no rail.
 
+## The client — Phase F2
+
+F1 delivered no client. F2 built it: the shelf, the Book, the editor, autosave,
+conflict resolution, search and archive.
+
+The decisions, the two bugs worth remembering and the browser measurements are
+in [`library-v2-client.md`](library-v2-client.md). The rules above are unchanged
+by it — the client implements this model, it does not extend it.
+
+Two things in this file are now out of date in a good way:
+
+- Book is no longer the *only* deeply implemented type in the sense of having a
+  screen. Documents, Links, Images, Videos and Files all have a real item view
+  showing everything they hold. What they still lack is a viewer for their
+  bytes, because uploads do not exist.
+- "No mobile refinement" has been partly answered. The Book reads one page at a
+  time below 820px and the arrows move over the page edges below 480px. A
+  dedicated mobile design is still deferred.
+
 ## What F1 does not do
 
 - **No Legacy content migration**, of any kind. Notebook, Diary, images, links,

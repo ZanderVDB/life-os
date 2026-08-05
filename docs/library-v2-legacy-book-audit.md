@@ -168,3 +168,28 @@ into it.
 almost entirely in its geometry, its ruled paper and its type; the behaviour
 underneath it is a decade of single-file accretion with two defects (destructive
 re-render, whole-state autosave) that v2 has already paid to fix elsewhere.
+
+---
+
+## What F2 actually carried over — 2026-08-05
+
+Every geometric value in this document is in `web/index.html` and is asserted by
+`api/tests/library-f2.test.ts`, so it cannot be quietly rounded off. Measured in
+a browser at 1440px: ratio `1.414`, max-width `1320px`, gutter `6px`, padding
+`28px 32px 18px 58px` mirrored to `28px 58px 18px 32px`, radius `14px`, inset
+`3px`/`-3px`, stripe at `46px`, tabs `20px 20px 4px 4px`, rules `29px→30px` at
+`line-height: 30px` with `background-attachment: local`.
+
+**One addition the audit did not anticipate.** Legacy ruled a *textarea*, where
+every line is the same height. The v2 editor has headings, lists and quotes, so
+every block is pinned to a whole number of 30px rules — otherwise text floats
+between the lines the moment a heading appears, which is the same drift recorded
+in §3 for a different reason.
+
+**Two deliberate departures**, both recorded in `library-v2-client.md`: page body
+text is Inter rather than Kalam, and the paper is dark rather than white.
+
+**The behaviour was not carried over.** Legacy re-rendered the whole notebook
+with `innerHTML` on every change; F2 never replaces an editor element while it
+is being typed into. §8's note that the identity is "geometry, ruled paper and
+type" is exactly why that was safe to leave behind.

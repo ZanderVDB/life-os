@@ -13,6 +13,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["--yes", "serve", "web", "-l", "5173", "--no-clipboard"],
       "port": 5173
+    },
+    {
+      "name": "v2-api-live",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["api/node_modules/tsx/dist/cli.mjs", "api/tests/live-server.ts"],
+      "port": 8080
     }
   ]
 }

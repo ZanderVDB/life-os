@@ -19,7 +19,7 @@ export const ROUTES = [
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'projects', label: 'Projects', icon: 'projects' },
   { id: 'diary', label: 'Diary', icon: 'diary', placeholder: true },
-  { id: 'library', label: 'Library', icon: 'library', placeholder: true },
+  { id: 'library', label: 'Library', icon: 'library' },
   { id: 'brain', label: 'Brain', icon: 'brain', placeholder: true },
 ];
 
@@ -55,12 +55,6 @@ export const PLACEHOLDERS = {
     tagline: 'Coming soon.',
     body: 'A place to write. Personal writing deserves a considered home, so '
       + 'it is being built with care rather than rushed.',
-    note: 'Nothing you have saved has been lost.',
-  },
-  library: {
-    tagline: 'Coming soon.',
-    body: 'Books, sections and pages — somewhere to keep the things you want '
-      + 'to return to.',
     note: 'Nothing you have saved has been lost.',
   },
   brain: {

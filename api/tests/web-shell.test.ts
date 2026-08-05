@@ -102,17 +102,20 @@ test('nav: every section keeps a destination, unfinished ones are marked', () =>
     const end = routes.indexOf('\n', at);
     return routes.slice(at, end === -1 ? at + 160 : end);
   };
-  for (const id of ['today', 'calendar', 'projects']) {
+  for (const id of ['today', 'calendar', 'projects', 'library']) {
     assert.ok(!/placeholder:\s*true/.test(entryOf(id)), `${id} is built but still a placeholder`);
   }
-  for (const id of ['diary', 'library', 'brain']) {
+  for (const id of ['diary', 'brain']) {
     assert.match(entryOf(id), /placeholder:\s*true/, `${id} is not marked as a placeholder`);
     assert.ok(routes.includes(`${id}: {`), `${id} has no placeholder copy`);
   }
 });
 
 test('placeholders: product voice, reassuring, never fake data', () => {
-  for (const id of ['calendar', 'projects', 'diary', 'library', 'brain']) {
+  // Only sections that ARE placeholders keep placeholder copy. Calendar,
+  // Projects and Library are built; their entries stay for the day one of them
+  // is ever taken back out, but they are not asserted as live copy.
+  for (const id of ['calendar', 'projects', 'diary', 'brain']) {
     const block = routes.slice(routes.indexOf(`${id}: {`));
     const copy = block.slice(0, block.indexOf('},'));
     // Says what the section will BE, and that nothing was lost — without
@@ -477,8 +480,16 @@ test('mobile: the sidebar becomes a drawer and the rail stays reachable', () => 
   // (see the product model). Everywhere else the rail must still reflow below
   // the content rather than simply vanish.
   const hides = [...html.matchAll(/([^\n{]*)\.rail\{display:none/g)].map((m) => m[1]);
-  assert.deepEqual(hides, ['body:has(.cal-head) ', 'body:has(.pj-head) '],
+  // Calendar owns a rail inside its own frame. Projects and Library each
+  // deliberately have none — see their product models — and both collapse the
+  // grid track as well, so the column is genuinely returned to the content.
+  assert.deepEqual(hides,
+    ['body:has(.cal-head) ', 'body:has(.pj-head) ', 'body:has(.lib-page) '],
     'the rail is hidden with no alternative');
+  for (const marker of ['pj-head', 'lib-page']) {
+    assert.ok(html.includes(`body:has(.${marker}) .main-wrap{grid-template-columns:minmax(0,1fr) 0}`),
+      `${marker} hides the rail without collapsing its grid track`);
+  }
   assert.match(html, /\.cal-rail\{overflow:visible;position:static/,
     'the calendar rail does not reflow below the canvas on a narrow screen');
   const tablet = html.slice(html.indexOf('@media (max-width:1180px)'));
@@ -526,9 +537,20 @@ test('the Life OS lockup uses an inline self-contained gradient', () => {
   assert.match(app, /<linearGradient id="lotus\$\{n\}"/, 'the logo gradient is not inlined');
   assert.ok(!/<use\s/.test(app), 'the logo is drawn from a sprite');
   assert.match(html, /'Playfair Display'/, 'the wordmark font is missing');
-  // Playfair is for the wordmark ONLY.
+  /* Playfair is for the wordmark — and, since F2, for the Book.
+   *
+   * That is not the rule loosening. The Legacy book audit records Playfair as
+   * part of what MAKES the book a book: the cover title, the section tabs and
+   * the page headings. It is confined to `.bk-*` and the cover; body text on a
+   * page is still Inter, because a handwriting-adjacent serif at 15px on ruled
+   * lines is harder to read, not more charming. Anything else that reaches for
+   * Playfair is still wrong. */
   const playfairRules = html.match(/[^}]*Playfair Display[^}]*\}/g) ?? [];
   for (const rule of playfairRules) {
-    assert.ok(/logo-word|m-title/.test(rule), `Playfair used outside the wordmark: ${rule.slice(0, 60)}`);
+    assert.ok(/logo-word|m-title|\.bk-/.test(rule),
+      `Playfair used outside the wordmark and the Book: ${rule.slice(0, 60)}`);
   }
+  // And the Book does not put it on the body text of a page.
+  assert.ok(!/\.bk-editor\{[^}]*Playfair/.test(html),
+    'page body text is set in Playfair');
 });

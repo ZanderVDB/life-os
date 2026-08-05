@@ -1,0 +1,851 @@
+/**
+ * Library — the route controller.
+ *
+ * Owns three views behind one route: the shelf, an item, and an open book.
+ * Everything it renders is backed by an endpoint that exists — §35 forbids a
+ * control that does nothing, so if a button is on screen it works.
+ *
+ * ── The rendering rule ───────────────────────────────────────────────────
+ *
+ * The overview and the item view rebuild freely. The BOOK does not: while a
+ * spread is on screen its editor elements are never replaced, because replacing
+ * a contenteditable destroys the selection, the caret and the browser's undo
+ * history. Legacy re-rendered the whole notebook with innerHTML on every change
+ * and that is exactly what it cost. A spread is rebuilt only when the spread
+ * itself changes — a page turn, a section change — and never in response to
+ * typing or to a save completing.
+ */
+
+import {
+  lib, initLibraryApi, loadItems, createItem, updateItem, archiveItem, restoreItem,
+  createBook, loadBook, createSection, createPages, archivePage, archiveSection,
+  currentSection, currentSpread, spreadCount, findPage, search,
+  sampleCheck, sampleAdd, sampleRemove,
+} from './library-api.js';
+import {
+  headerHtml, bodyHtml, cardHtml, addMenuHtml, itemMenuHtml, visibleItems,
+  pageHitsHtml, TYPE_LABEL, typeIcon, metaLine, when, esc,
+} from './library-overview.js';
+import {
+  coverHtml, spreadHtml, toolbarHtml, mountSpread, wireToolbar, wireSaveStatus,
+  searchBook, searchPanelHtml, locateHit, canGoNext, ACCENTS,
+} from './library-book.js';
+import {
+  flush, flushAll, hasUnsaved, retry, statusOf, entryOf, onSaveStatus,
+  resolveKeepMine, resolveTakeTheirs, forgetAll,
+} from './library-save.js';
+import { openLibraryForm } from './library-modal.js';
+import { reducedMotion } from './motion.js';
+
+/**
+ * Waits for a CSS animation, with a timeout that always fires.
+ *
+ * `animationend` does not arrive if the element is removed, if the tab is
+ * backgrounded mid-animation, or if a stylesheet has not applied yet — and a
+ * page turn that never completes leaves the book frozen mid-flip. The timeout
+ * is the guarantee, the event is the optimisation.
+ */
+function afterAnimation(el, ms) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; el.removeEventListener('animationend', finish); resolve(); } };
+    el.addEventListener('animationend', finish);
+    setTimeout(finish, ms + 60);
+  });
+}
+
+/** Injected once by app.js: the API caller, the toast, and the error wrapper. */
+let ctx = null;
+export function initLibrary(c) {
+  ctx = c;
+  initLibraryApi(c.api);
+  installSampleHooks();
+  installGlobals();
+}
+
+/* ── Routing (§4) ────────────────────────────────────────────────────────
+ *
+ * #library                         the shelf
+ * #library/item/{id}               one non-book item
+ * #library/book/{bookId}           a book, at its cover
+ * #library/book/{bookId}?s=…&p=…   a book, at a section and page
+ *
+ * Section and page travel as IDS, never as page numbers. A saved link must not
+ * open the wrong page because a page was added in front of it.
+ */
+export function parseLibraryHash(hash = location.hash) {
+  const raw = hash.replace(/^#/, '');
+  const [path, qs] = raw.split('?');
+  const parts = path.split('/').filter(Boolean);
+  if (parts[0] !== 'library') return null;
+  const q = new URLSearchParams(qs ?? '');
+  if (parts[1] === 'item' && parts[2]) return { view: 'item', id: parts[2] };
+  if (parts[1] === 'book' && parts[2]) {
+    return {
+      view: 'book',
+      bookId: parts[2],
+      sectionId: q.get('s') ?? null,
+      pageId: q.get('p') ?? null,
+    };
+  }
+  return { view: 'overview' };
+}
+
+/** The hash for where the book is now. Written on every turn, so Back works. */
+function bookHash() {
+  const s = currentSection();
+  const { left } = currentSpread();
+  if (lib.cover || !s) return `#library/book/${lib.bookId}`;
+  return `#library/book/${lib.bookId}?s=${s.id}${left ? `&p=${left.id}` : ''}`;
+}
+
+let suppressHash = false;
+function setHash(next) {
+  if (location.hash === next) return;
+  suppressHash = true;
+  location.hash = next;
+  // Cleared on the next tick: hashchange fires asynchronously.
+  setTimeout(() => { suppressHash = false; }, 0);
+}
+export const hashWasOurs = () => suppressHash;
+
+/* ── Entry point ─────────────────────────────────────────────────────── */
+
+export async function renderLibrary() {
+  const head = document.getElementById('page-head');
+  const scroll = document.getElementById('main-scroll');
+  if (!head || !scroll) return;
+  const route = parseLibraryHash() ?? { view: 'overview' };
+
+  if (route.view === 'book') return renderBook(route, head, scroll);
+  if (route.view === 'item') return renderItem(route.id, head, scroll);
+  return renderOverview(head, scroll);
+}
+
+/* ── Overview ────────────────────────────────────────────────────────── */
+
+async function renderOverview(head, scroll) {
+  forgetAll();               // no book is open; nothing should still be pending
+  lib.book = null; lib.bookId = null;
+  lib.pageHits = [];         // results belong to a query, not to the route
+  head.innerHTML = headerHtml();
+  head.querySelector('#lib-add').addEventListener('click', (e) => openAddMenu(e.currentTarget));
+
+  if (!lib.itemsLoaded) {
+    scroll.innerHTML = `<div class="lib-grid">${'<div class="skeleton lib-skel"></div>'.repeat(6)}</div>`;
+    try { await loadItems({ archived: lib.showArchived }); } catch { /* shown below */ }
+  }
+  paintOverview(scroll);
+  /* Coming back from a book opened out of a search must land back on the
+   * results, not on "nothing matched". The query survives the round trip, so
+   * the half of it that lives on the server has to be asked again. */
+  if (lib.query.trim()) queueLibrarySearch(lib.query);
+}
+
+function paintOverview(scroll = document.getElementById('main-scroll')) {
+  if (!scroll) return;
+  scroll.innerHTML = bodyHtml();
+  wireOverview(scroll);
+}
+
+function wireOverview(scroll) {
+  scroll.querySelector('#lib-retry')?.addEventListener('click', () => {
+    lib.itemsLoaded = false;
+    void renderLibrary();
+  });
+  scroll.querySelector('#lib-clear-q')?.addEventListener('click', () => {
+    lib.query = '';
+    paintOverview(scroll);
+  });
+  scroll.querySelectorAll('[data-filter]').forEach((b) => {
+    b.addEventListener('click', () => {
+      lib.filter = b.dataset.filter;
+      paintOverview(scroll);
+      scroll.querySelector(`[data-filter="${lib.filter}"]`)?.focus();
+    });
+  });
+  scroll.querySelectorAll('[data-new]').forEach((b) => {
+    b.addEventListener('click', () => void createOfType(b.dataset.new));
+  });
+
+  const q = scroll.querySelector('#lib-q');
+  if (q) {
+    q.addEventListener('input', () => {
+      lib.query = q.value;
+      // Only the results change. Repainting the whole body would take the
+      // caret out of the box the user is still typing in.
+      paintResults(scroll);
+      queueLibrarySearch(q.value);
+    });
+  }
+
+  scroll.querySelectorAll('.lib-hit').forEach((b) => {
+    b.addEventListener('click', () => {
+      const { hitBook, hitSection, hitPage } = b.dataset;
+      setHashAndRender(`#library/book/${hitBook}?s=${hitSection}&p=${hitPage}`);
+    });
+  });
+
+  scroll.querySelector('#lib-archived')?.addEventListener('click', () => void ctx.run(async () => {
+    lib.itemsLoaded = false;
+    await loadItems({ archived: !lib.showArchived });
+    paintOverview(scroll);
+  }));
+
+  scroll.querySelectorAll('.lib-card').forEach((card) => {
+    const id = card.dataset.item;
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('[data-more]')) return;
+      openLibraryItem(id);
+    });
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLibraryItem(id); }
+    });
+  });
+  scroll.querySelectorAll('[data-more]').forEach((b) => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openItemMenu(b, b.dataset.more);
+    });
+  });
+}
+
+/** Repaints only the sections, keeping the filter bar (and its caret) intact. */
+function paintResults(scroll) {
+  const bar = scroll.querySelector('.lib-bar');
+  const html = bodyHtml();
+  const holder = document.createElement('div');
+  holder.innerHTML = html;
+  holder.querySelector('.lib-bar')?.remove();
+  [...scroll.children].forEach((c) => { if (c !== bar) c.remove(); });
+  while (holder.firstChild) scroll.appendChild(holder.firstChild);
+  wireOverview(scroll);
+}
+
+/**
+ * The half of the shelf search that has to ask the server (§22).
+ *
+ * The card filter is instant and local. This finds the words that are INSIDE a
+ * book, which nothing on the client knows. Debounced, and guarded by the query
+ * it was issued for: a slow answer to an older query must never replace the
+ * results for what is in the box now.
+ */
+let searchTimer = 0;
+let searchSeq = 0;
+function queueLibrarySearch(query) {
+  clearTimeout(searchTimer);
+  const q = query.trim();
+  if (q.length < 2) {
+    if (lib.pageHits.length) { lib.pageHits = []; paintResults(document.getElementById('main-scroll')); }
+    return;
+  }
+  const seq = ++searchSeq;
+  searchTimer = setTimeout(() => void (async () => {
+    try {
+      const r = await search(q);
+      if (seq !== searchSeq || lib.query.trim() !== q) return;   // a newer query won
+      lib.pageHits = r.pages ?? [];
+      paintResults(document.getElementById('main-scroll'));
+    } catch {
+      // A failed content search must not blank the cards that already matched.
+      lib.pageHits = [];
+    }
+  })(), 240);
+}
+
+function openLibraryItem(id) {
+  const item = lib.items.find((i) => i.id === id);
+  if (!item) return;
+  if (item.type === 'book' && item.book) setHashAndRender(`#library/book/${item.book.id}`);
+  else setHashAndRender(`#library/item/${item.id}`);
+}
+
+function setHashAndRender(next) {
+  setHash(next);
+  void renderLibrary();
+}
+
+function openAddMenu(anchor) {
+  ctx.openSurface(anchor, {
+    kind: 'library-add',
+    label: 'Add to Library',
+    html: addMenuHtml(),
+    wire: (el) => el.querySelectorAll('[data-new]').forEach((b) => {
+      b.addEventListener('click', () => { ctx.closeSurface(); void createOfType(b.dataset.new); });
+    }),
+  });
+}
+
+async function createOfType(type) {
+  const values = await openLibraryForm(type);
+  if (!values) return;
+  await ctx.run(async () => {
+    if (type === 'book') {
+      const r = await createBook(values);
+      lib.itemsLoaded = false;
+      await loadItems({ archived: lib.showArchived });
+      ctx.toast(`“${r.item.title}” created.`);
+      setHashAndRender(`#library/book/${r.book.id}`);
+      return;
+    }
+    await createItem({ type, ...values });
+    lib.itemsLoaded = false;
+    await loadItems({ archived: lib.showArchived });
+    paintOverview();
+    ctx.toast(`“${values.title}” saved to Library.`);
+  });
+}
+
+function openItemMenu(anchor, id) {
+  const item = lib.items.find((i) => i.id === id);
+  if (!item) return;
+  ctx.openSurface(anchor, {
+    kind: 'library-item-menu',
+    label: `Actions for ${item.title}`,
+    html: itemMenuHtml(item),
+    wire: (el) => el.querySelectorAll('[data-act]').forEach((b) => {
+      b.addEventListener('click', () => {
+        ctx.closeSurface();
+        void itemAction(b.dataset.act, item);
+      });
+    }),
+  });
+}
+
+async function itemAction(act, item) {
+  if (act === 'open') return openLibraryItem(item.id);
+  if (act === 'visit') { window.open(item.sourceUrl, '_blank', 'noopener,noreferrer'); return; }
+
+  if (act === 'rename') {
+    const v = await openLibraryForm('rename',
+      { title: item.title, description: item.description ?? '' });
+    if (!v) return;
+    return ctx.run(async () => {
+      const r = await updateItem(item.id, { title: v.title, description: v.description ?? null });
+      Object.assign(item, r.item);
+      repaintCard(item);
+      ctx.toast('Renamed.');
+    });
+  }
+
+  if (act === 'archive') {
+    /* Archive is reversible, so it does not need a confirmation — it needs an
+     * UNDO. A dialog before a reversible action is a tax on the common case. */
+    return ctx.run(async () => {
+      await archiveItem(item.id);
+      paintOverview();
+      ctx.toast(`“${item.title}” archived.`, false, {
+        label: 'Undo',
+        onAction: () => void ctx.run(async () => {
+          await restoreItem(item.id);
+          paintOverview();
+        }),
+      });
+    });
+  }
+
+  if (act === 'restore') {
+    return ctx.run(async () => {
+      await restoreItem(item.id);
+      paintOverview();
+      ctx.toast(`“${item.title}” restored.`);
+    });
+  }
+}
+
+/** Swaps one card in place, so renaming does not re-enter the whole shelf. */
+function repaintCard(item) {
+  const old = document.querySelector(`.lib-card[data-item="${item.id}"]`);
+  if (!old) { paintOverview(); return; }
+  const holder = document.createElement('div');
+  holder.innerHTML = cardHtml(item);
+  const next = holder.firstElementChild;
+  old.replaceWith(next);
+  wireOverview(document.getElementById('main-scroll'));
+}
+
+/* ── One item (§23) ──────────────────────────────────────────────────── */
+
+async function renderItem(id, head, scroll) {
+  if (!lib.itemsLoaded) {
+    scroll.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+    try { await loadItems({ archived: true }); } catch { /* handled below */ }
+  }
+  const item = lib.items.find((i) => i.id === id);
+  if (!item) {
+    head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Not found</h1>';
+    scroll.innerHTML = `<div class="state"><b>That item is not in your Library</b>
+      It may have been archived, or the link may be out of date.
+      <div style="margin-top:16px"><button class="btn" data-back>Back to Library</button></div></div>`;
+    scroll.querySelector('[data-back]').onclick = () => setHashAndRender('#library');
+    return;
+  }
+
+  head.innerHTML = `<p class="eyebrow lib-page">Library · ${esc(TYPE_LABEL[item.type] ?? 'Item')}</p>
+    <h1>${esc(item.title)}</h1>
+    <p class="sub">${esc(metaLine(item))} · updated ${esc(when(item.updatedAt))}</p>
+    <div class="page-actions">
+      <button class="btn btn-ghost" data-back>Back to Library</button>
+      <button class="btn" data-act="rename">Rename</button>
+      ${item.archivedAt
+    ? '<button class="btn" data-act="restore">Restore</button>'
+    : '<button class="btn" data-act="archive">Archive</button>'}
+    </div>`;
+
+  scroll.innerHTML = `<div class="lib-item">
+    <div class="lib-item-head">
+      <span class="lib-item-icon">${typeIcon(item.type, 22)}</span>
+      <span class="lib-item-type">${esc(TYPE_LABEL[item.type] ?? 'Item')}</span>
+      ${item.archivedAt ? '<span class="lib-card-arch">Archived</span>' : ''}
+    </div>
+    ${item.description
+    ? `<p class="lib-item-desc">${esc(item.description)}</p>`
+    : '<p class="lib-item-desc is-empty">No description yet. Use Rename to add one.</p>'}
+    ${item.sourceUrl ? `<p class="lib-item-url"><a href="${esc(item.sourceUrl)}"
+      target="_blank" rel="noopener noreferrer">${esc(item.sourceUrl)}</a></p>` : ''}
+    <dl class="lib-item-facts">
+      <div><dt>Added</dt><dd>${new Date(item.createdAt).toLocaleDateString(undefined,
+    { day: 'numeric', month: 'long', year: 'numeric' })}</dd></div>
+      <div><dt>Updated</dt><dd>${esc(when(item.updatedAt))}</dd></div>
+      ${item.mimeType ? `<div><dt>Type</dt><dd>${esc(item.mimeType)}</dd></div>` : ''}
+    </dl>
+    ${['image', 'video', 'file'].includes(item.type) ? `<p class="lib-item-note">
+      Uploads are the next Library phase. This item is a record of the resource;
+      its file is not stored yet.</p>` : ''}
+  </div>`;
+
+  head.querySelector('[data-back]').onclick = () => setHashAndRender('#library');
+  head.querySelectorAll('[data-act]').forEach((b) => {
+    b.addEventListener('click', () => void (async () => {
+      await itemAction(b.dataset.act, item);
+      if (b.dataset.act !== 'rename') setHashAndRender('#library');
+      else void renderLibrary();
+    })());
+  });
+}
+
+/* ── The Book ────────────────────────────────────────────────────────── */
+
+async function renderBook(route, head, scroll) {
+  if (lib.bookId !== route.bookId || !lib.book) {
+    scroll.innerHTML = '<div class="skeleton" style="height:60vh;border-radius:16px"></div>';
+    head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Opening…</h1>';
+    forgetAll();
+    try {
+      await loadBook(route.bookId);
+    } catch (e) {
+      head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Not found</h1>';
+      scroll.innerHTML = `<div class="state"><b>That book did not open</b>${esc(e.message)}
+        <div style="margin-top:16px"><button class="btn" data-back>Back to Library</button></div></div>`;
+      scroll.querySelector('[data-back]').onclick = () => setHashAndRender('#library');
+      return;
+    }
+    lib.sectionIdx = 0; lib.spreadIdx = 0; lib.cover = true; lib.half = 0;
+  }
+
+  // A deep link lands ON its page, not on the cover.
+  if (route.sectionId) {
+    const hit = locateHit(route.sectionId, route.pageId ?? '');
+    const si = lib.book.sections.findIndex((s) => s.id === route.sectionId);
+    if (hit) { lib.sectionIdx = hit.sectionIdx; lib.spreadIdx = hit.spreadIdx; lib.cover = false; }
+    else if (si > -1) { lib.sectionIdx = si; lib.spreadIdx = 0; lib.cover = false; }
+  }
+
+  paintBookHead(head);
+  paintBookBody(scroll);
+}
+
+function paintBookHead(head = document.getElementById('page-head')) {
+  const { item } = lib.book;
+  head.innerHTML = `<p class="eyebrow lib-page">Library · Book</p>
+    <h1>${esc(item.title)}</h1>
+    <p class="sub">${lib.book.sections.length} section${
+  lib.book.sections.length === 1 ? '' : 's'} · ${
+  lib.book.sections.reduce((n, s) => n + s.pages.length, 0)} pages</p>
+    <div class="page-actions">
+      <button class="btn btn-ghost" id="bk-back">Back to Library</button>
+      ${lib.cover ? '' : '<button class="btn" id="bk-cover-btn">Cover</button>'}
+    </div>`;
+  head.querySelector('#bk-back').onclick = () => void leaveBook('#library');
+  head.querySelector('#bk-cover-btn')?.addEventListener('click', () => void (async () => {
+    await flushAll();
+    lib.cover = true;
+    paintBookHead();
+    paintBookBody();
+    setHash(bookHash());
+  })());
+}
+
+let stopSaveWatch = null;
+
+function paintBookBody(scroll = document.getElementById('main-scroll')) {
+  stopSaveWatch?.();
+  if (lib.cover) {
+    scroll.innerHTML = `<div class="bk">${coverHtml()}</div>`;
+    scroll.querySelector('#bk-open').addEventListener('click', () => {
+      lib.cover = false;
+      paintBookHead();
+      paintBookBody();
+      setHash(bookHash());
+      document.querySelector('.bk-editor')?.focus();
+    });
+    return;
+  }
+
+  scroll.innerHTML = `<div class="bk">
+    ${toolbarHtml()}
+    ${spreadHtml()}
+  </div>`;
+  wireBook(scroll);
+  setHash(bookHash());
+}
+
+function wireBook(scroll) {
+  wireToolbar(scroll);
+  mountSpread(scroll, { onNavigate: (what, arg) => void navigate(what, arg) });
+  stopSaveWatch = wireSaveStatus(scroll);
+
+  scroll.querySelector('#bk-save')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-retry]');
+    if (b) void ctx.run(() => retry(b.dataset.retry));
+  });
+  scroll.querySelector('#bk-search-btn')?.addEventListener('click', () => openBookSearch(scroll));
+  applyHalf(scroll);
+}
+
+/* The one-page-at-a-time treatment below 820px. The spread stays a spread in
+ * the DOM; only which half is shown changes, so a resize needs no reload. */
+const isNarrow = () => window.matchMedia('(max-width: 820px)').matches;
+
+/**
+ * Which half to show after stepping BACKWARDS onto a spread.
+ *
+ * The right half if there is one, so back-then-forward returns you to where you
+ * were. On a wide screen the whole spread is visible and the half is moot.
+ * Read after `spreadIdx` and `sectionIdx` have been moved.
+ */
+const narrowLandingHalf = () => (isNarrow() && currentSpread().right ? 1 : 0);
+function applyHalf(scroll = document) {
+  const book = scroll.querySelector?.('#bk-book') ?? document.getElementById('bk-book');
+  book?.classList.toggle('show-right', isNarrow() && lib.half === 1);
+  /* Showing the other half is a move, so the forward arrow's availability
+   * changes with it. Without this the arrow keeps whatever state the last full
+   * repaint gave it and goes stale on the final spread. */
+  const next = document.getElementById('bk-next');
+  if (next) next.disabled = !canGoNext();
+}
+
+/* ── Navigation ──────────────────────────────────────────────────────── */
+
+async function navigate(what, arg) {
+  if (what === 'add-section') return addSection();
+  if (what === 'add-pages') return addPages();
+
+  // §16: anything that takes the current editor away flushes first.
+  await flushAll();
+
+  if (what === 'section') {
+    if (arg === lib.sectionIdx) return;
+    const dir = arg > lib.sectionIdx ? 'next' : 'prev';
+    lib.sectionIdx = arg; lib.spreadIdx = 0; lib.half = 0;
+    return turn(dir);
+  }
+
+  const section = currentSection();
+  const total = spreadCount(section);
+
+  if (what === 'next') {
+    if (isNarrow() && lib.half === 0 && currentSpread().right) {
+      lib.half = 1; applyHalf(); return;
+    }
+    if (lib.spreadIdx < total - 1) { lib.spreadIdx += 1; lib.half = 0; return turn('next'); }
+    if (lib.sectionIdx < lib.book.sections.length - 1) {
+      lib.sectionIdx += 1; lib.spreadIdx = 0; lib.half = 0; return turn('next');
+    }
+    return;   // the last page of the last section: the arrow simply stops
+  }
+
+  if (what === 'prev') {
+    if (isNarrow() && lib.half === 1) { lib.half = 0; applyHalf(); return; }
+    if (lib.spreadIdx > 0) {
+      lib.spreadIdx -= 1;
+      // Narrow reads one page at a time, so going back must land on the page
+      // you would have come from — the RIGHT half of the previous spread.
+      // Landing on the left half skips a page, and there is then no way to
+      // reach it going backwards at all.
+      lib.half = narrowLandingHalf();
+      return turn('prev');
+    }
+    if (lib.sectionIdx > 0) {
+      lib.sectionIdx -= 1;
+      lib.spreadIdx = spreadCount(lib.book.sections[lib.sectionIdx]) - 1;
+      lib.half = narrowLandingHalf();
+      return turn('prev');
+    }
+    // Before the first page is the cover.
+    lib.cover = true;
+    paintBookHead();
+    paintBookBody();
+  }
+}
+
+/**
+ * The page turn (§18, audit §6).
+ *
+ * Out, swap, in — both pages moving together so it reads as one motion rather
+ * than two panels sliding. With reduced motion it is an instant swap: the
+ * information is identical, only the theatre is dropped.
+ */
+async function turn(dir) {
+  const scroll = document.getElementById('main-scroll');
+  const book = document.getElementById('bk-book');
+  if (!book || reducedMotion()) { paintBookBody(scroll); paintBookHead(); return; }
+
+  book.classList.add(dir === 'next' ? 'leave-next' : 'leave-prev');
+  await afterAnimation(book, 260);
+  paintBookBody(scroll);
+  paintBookHead();
+  const fresh = document.getElementById('bk-book');
+  fresh?.classList.add(dir === 'next' ? 'enter-next' : 'enter-prev');
+}
+
+/* ── Structure (§19, §20) ────────────────────────────────────────────── */
+
+async function addSection() {
+  const values = await openLibraryForm('section');
+  if (!values) return;
+  await ctx.run(async () => {
+    await flushAll();
+    // The accent cycles through the six, so a new section is distinguishable
+    // from its neighbour without asking the user to pick a colour.
+    const accent = ACCENTS[lib.book.sections.length % ACCENTS.length];
+    const r = await createSection(lib.bookId, { title: values.title, accent });
+    /* The route creates the section AND its two pages in one transaction but
+     * returns only the section. Re-reading the book is how the client ends up
+     * holding what the server actually made, rather than a guess at it. */
+    await loadBook(lib.bookId);
+    const at = lib.book.sections.findIndex((s) => s.id === r.section.id);
+    lib.sectionIdx = at > -1 ? at : lib.book.sections.length - 1;
+    lib.spreadIdx = 0; lib.half = 0;
+    paintBookHead();
+    paintBookBody();
+    ctx.toast(`Section “${values.title}” added.`);
+  });
+}
+
+async function addPages() {
+  await ctx.run(async () => {
+    await flushAll();
+    const section = currentSection();
+    /* The button sits on the blank facing an odd final page. Adding two there
+     * would fill the blank and open a second one — the user pressed Add on a
+     * blank and got another blank. One page when the count is odd, a fresh
+     * spread of two when it is even. */
+    const count = section.pages.length % 2 === 1 ? 1 : 2;
+    const r = await createPages(section.id, count);
+    section.pages.push(...r.pages);
+    lib.spreadIdx = spreadCount(section) - 1;
+    lib.half = 0;
+    paintBookHead();
+    paintBookBody();
+    // Focus the page that was just made, not whichever one is leftmost.
+    const fresh = r.pages[0]?.id;
+    (document.querySelector(`[data-editor="${fresh}"]`)
+      ?? document.querySelector('.bk-editor'))?.focus();
+  });
+}
+
+/* ── Search within the book (§21) ────────────────────────────────────── */
+
+function openBookSearch(scroll) {
+  const existing = scroll.querySelector('.bk-search');
+  if (existing) { existing.remove(); return; }
+  const holder = document.createElement('div');
+  holder.innerHTML = searchPanelHtml(null, '');
+  const panel = holder.firstElementChild;
+  scroll.querySelector('.bk').style.position = 'relative';
+  scroll.querySelector('.bk').appendChild(panel);
+  const input = panel.querySelector('#bk-search-input');
+  input.focus();
+
+  let timer;
+  const rerender = (results, q) => {
+    const h = document.createElement('div');
+    h.innerHTML = searchPanelHtml(results, q);
+    const body = h.firstElementChild;
+    // Only the results are replaced — the input keeps its caret.
+    [...panel.children].forEach((c, i) => { if (i > 0) c.remove(); });
+    [...body.children].forEach((c, i) => { if (i > 0) panel.appendChild(c); });
+    wireHits(panel);
+  };
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value;
+    timer = setTimeout(() => void ctx.run(async () => {
+      rerender(q.trim() ? await searchBook(q) : null, q);
+    }), 220);
+  });
+  panel.querySelector('#bk-search-close').onclick = () => panel.remove();
+  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') panel.remove(); });
+  wireHits(panel);
+}
+
+function wireHits(panel) {
+  panel.querySelectorAll('.bk-search-hit').forEach((b) => {
+    b.addEventListener('click', () => void (async () => {
+      const hit = locateHit(b.dataset.hitSection, b.dataset.hitPage);
+      if (!hit) { ctx.toast('That page has moved. Reopen the book to see where.', true); return; }
+      await flushAll();
+      panel.remove();
+      lib.sectionIdx = hit.sectionIdx;
+      lib.spreadIdx = hit.spreadIdx;
+      lib.half = 0;
+      paintBookHead();
+      paintBookBody();
+      document.querySelector(`[data-editor="${hit.pageId}"]`)?.focus();
+    })());
+  });
+}
+
+/* ── Leaving (§16) ───────────────────────────────────────────────────── */
+
+/** Flush, then go. Never leaves typed text behind. */
+export async function leaveBook(next) {
+  const ok = await flushAll();
+  if (!ok && hasUnsaved()) {
+    ctx.toast('Some changes did not save. They are still here — try again.', true);
+    return;
+  }
+  forgetAll();
+  lib.book = null; lib.bookId = null;
+  setHashAndRender(next);
+}
+
+/** Called by app.js when the route changes away from Library. */
+export async function libraryWillLeave() {
+  if (!lib.bookId) return true;
+  await flushAll();
+  forgetAll();
+  lib.book = null; lib.bookId = null;
+  return true;
+}
+
+/** Called on hashchange while already inside Library. */
+export function libraryHashChanged() {
+  if (suppressHash) return;
+  void renderLibrary();
+}
+
+/* ── Conflict surface (§17) ──────────────────────────────────────────── */
+
+/**
+ * A page changed somewhere else.
+ *
+ * Three ways out, and all three keep what was typed. "Copy my text" exists
+ * because the only genuinely unacceptable outcome is a person losing words they
+ * wrote — whichever version they choose, they can still get their own back.
+ */
+export async function showConflict(pageId) {
+  const { page } = findPage(pageId);
+  const entry = entryOf(pageId);
+  if (!page || !entry) return;
+
+  const choice = await ctx.choose({
+    title: 'This page changed somewhere else',
+    body: 'Another tab or device saved this page while you were writing. '
+      + 'Nothing you typed has been lost — choose what to keep.',
+    choices: [
+      { id: 'mine', label: 'Keep what I wrote', detail: 'Overwrites the other version' },
+      { id: 'theirs', label: 'Load the newer version', detail: 'Your text is copied first' },
+      { id: 'copy', label: 'Copy my text', detail: 'Puts it on the clipboard, changes nothing' },
+    ],
+  });
+  if (!choice) return;
+
+  const fresh = await loadBook(lib.bookId);
+  const server = fresh.sections.flatMap((s) => s.pages).find((p) => p.id === pageId);
+  if (!server) { ctx.toast('That page no longer exists.', true); return; }
+
+  if (choice === 'copy') {
+    await copyText(entry.pending ?? entry.committed);
+    ctx.toast('Your text is on the clipboard.');
+    return;
+  }
+  if (choice === 'mine') {
+    await ctx.run(() => resolveKeepMine(pageId, server));
+    ctx.toast('Your version was saved.');
+    return;
+  }
+  // Taking theirs: copy first, then load. In that order, deliberately.
+  await copyText(resolveTakeTheirs(pageId, server) ?? entry.committed);
+  Object.assign(page, server);
+  paintBookHead();
+  paintBookBody();
+  ctx.toast('Newer version loaded. Your text is on the clipboard.');
+}
+
+async function copyText(doc) {
+  const { docToText } = await import('./library-doc.js');
+  const text = docToText(doc);
+  try { await navigator.clipboard.writeText(text); } catch { /* clipboard denied */ }
+  return text;
+}
+
+/* ── Sample hooks (§10) ──────────────────────────────────────────────── */
+
+/**
+ * A console hook, not a control. Test data does not belong in the product, and
+ * a button that seeds fake books is a button that eventually gets pressed by
+ * accident. The real guard is server-side: both endpoints refuse outright when
+ * NODE_ENV is production.
+ */
+function installSampleHooks() {
+  window.__sampleLibrary = {
+    check: () => sampleCheck(),
+    add: async () => {
+      const r = await sampleAdd();
+      lib.itemsLoaded = false;
+      if (document.getElementById('main-scroll') && !lib.bookId) await renderLibrary();
+      return r;
+    },
+    remove: async () => {
+      const r = await sampleRemove();
+      lib.itemsLoaded = false;
+      if (!lib.bookId) await renderLibrary();
+      return r;
+    },
+  };
+}
+
+/* ── Global wiring ───────────────────────────────────────────────────── */
+
+/**
+ * Attached from `initLibrary`, never at import time.
+ *
+ * A module that adds window listeners when it is imported cannot be loaded
+ * anywhere without a DOM — which means it cannot be unit-tested, and the
+ * routing and filtering rules in here are exactly the sort of thing that should
+ * be. Import should define; only initialisation should act.
+ */
+let conflictShown = null;
+function installGlobals() {
+  // A conflict anywhere: offer the choice once, not once per failed retry.
+  onSaveStatus((pageId, status) => {
+    if (status !== 'conflict') { if (conflictShown === pageId) conflictShown = null; return; }
+    if (conflictShown === pageId) return;
+    conflictShown = pageId;
+    void showConflict(pageId);
+  });
+
+  // Nothing typed is lost to a closed tab.
+  window.addEventListener('beforeunload', (e) => {
+    if (!hasUnsaved()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  // Crossing 820px changes whether a spread is read as one page or two.
+  window.addEventListener('resize', () => { if (lib.bookId && !lib.cover) applyHalf(); });
+}
+
+export { lib, visibleItems, archivePage, archiveSection, search, statusOf, flush };
