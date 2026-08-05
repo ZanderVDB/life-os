@@ -1557,3 +1557,48 @@ interpolates GAP as an untyped bind parameter and Postgres cannot resolve
 `- $1` — *operator is not unique: - unknown*. The arithmetic moved to JS.
 
 755 tests passing. No Legacy data was read or migrated; Legacy was not modified.
+
+---
+
+## D1 — Diary foundation and chronological writing (2026-08-05)
+
+Diary is a real route. One entry per workspace per **local calendar day**, with
+the Library editor and none of the Book's furniture.
+
+**Diary is not Library.** A diary entry is not a `library_items` row and never
+becomes one; the two share the editor and the document grammar and nothing else.
+Asserted by a test that writes a diary day and confirms the Library shelf and
+Library search stay empty.
+
+**The civil date belongs to the person.** The client sends the date it is
+showing; the server validates it as a real day, compares it, and never derives
+one. All arithmetic — both sides — happens at noon UTC so no offset can shift a
+computed day. `localToday()` uses local getters; `toISOString()` appears nowhere
+in Diary.
+
+**Nothing exists until somebody writes it.** Opening a date creates no row. An
+entry is meaningful when it has document text, a title, a mood, an energy, a
+weather note, a location note or a day summary — one rule, in one function, used
+by the write path and by history so they cannot disagree.
+
+**An archived entry keeps its date.** The unique index covers archived rows
+deliberately: a vacated date would let a second entry be written on top of the
+first and orphan it. Writing on an archived date is a 409 with a restore offer.
+
+**The editor was extracted, not forked.** `library-doc.js` and
+`library-blocks.js` had nothing Library-specific in them and were renamed to
+`editor-doc.js` and `editor-blocks.js`. `library-save.js` did, so it became a
+`createSaveCoordinator({ write })` factory — a factory rather than a singleton
+because each surface needs its own entries, or one surface's `forgetAll()` would
+clear the other's pending write. Library's behavioural save tests passed through
+the extraction unmodified, which is the proof it did not change.
+
+Two bugs found by running it. `onEntryCreated` called `adopt()`, moving the
+version token before the coordinator set it from the write's own result — its
+staleness guard then fired on its own success and left the status on "Saving…"
+for ever while the row sat in the database. And the sample marker lived on
+`day_summary`, which is displayed: it appeared on screen as "sample:d1: An
+ordinary Tuesday" in the history list, and moved to `timezone`.
+
+907 tests passing. No Legacy Diary content was read, previewed or migrated;
+Legacy was not modified.

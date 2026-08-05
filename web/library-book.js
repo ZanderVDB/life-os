@@ -15,7 +15,7 @@
  * typed into — see `mountSpread`.
  */
 
-import { docToHtml, htmlToDoc, docToText } from './library-doc.js';
+import { docToHtml, htmlToDoc, docToText } from './editor-doc.js';
 import {
   lib, currentSection, currentSpread, spreadCount,
   createSection, updateSection, archiveSection, createPages, archivePage, search,
@@ -26,7 +26,7 @@ import {
 import { reducedMotion } from './motion.js';
 import {
   handleEnter, handleBackspace, applyBlockStyle, currentStyleId, BLOCK_STYLES,
-} from './library-blocks.js';
+} from './editor-blocks.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

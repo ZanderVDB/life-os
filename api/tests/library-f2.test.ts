@@ -13,7 +13,7 @@
  * geometry's real proof is the browser measurements in the phase report; this
  * is the tripwire for someone rounding 58px to 56px a year from now.
  *
- * `library-doc.js` uses the DOM, so its round-trip is verified in a real
+ * `editor-doc.js` uses the DOM, so its round-trip is verified in a real
  * browser rather than faked here — a fake DOM would only prove the fake works.
  */
 import { test } from 'node:test';
@@ -31,7 +31,7 @@ const bookJs = read('library-book.js');
 const overviewJs = read('library-overview.js');
 const viewJs = read('library-view.js');
 const saveJs = read('library-save.js');
-const docJs = read('library-doc.js');
+const docJs = read('editor-doc.js');
 const audit = readFileSync(join('..', 'docs', 'library-v2-legacy-book-audit.md'), 'utf8');
 
 /** Comments are documentation, not contract — strip them before asserting. */

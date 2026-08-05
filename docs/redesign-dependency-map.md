@@ -332,3 +332,17 @@ referencing a Library item is an edge, never a copy.
 `size_bytes` and `thumbnail_key` exist on `library_items`; nothing fills them.
 Until they do, the Add menu deliberately omits the upload actions rather than
 disabling them.
+
+**Diary depends on the editor, not on Library.** D1 extracted `editor-doc.js`,
+`editor-blocks.js` and `editor-save.js` out of Library. Anything else that needs
+rich writing — Brain, eventually — binds the same three and owns its own state.
+The rule that made this safe: extract when a module has nothing of its owner in
+it, and make the stateful one a factory so two surfaces never share a queue.
+
+**Diary is a future link source and target.** Entries have stable ids and
+`item_links` already accepts arbitrary source/target types. Nothing writes Diary
+edges yet.
+
+**AI recaps depend on `day_summary` existing and being human-written.** D1
+stores it and generates nothing. A future assisted recap has an input that was
+never itself generated, which is what keeps the loop honest.

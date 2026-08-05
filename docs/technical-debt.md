@@ -679,3 +679,34 @@ upgradeable to a `tsvector` without changing the API.
 **Permanent deletion is unexposed on purpose.** It cannot be designed before
 `item_links` has real Library edges and uploads have real bytes — the questions
 it has to answer are listed in library-v2-product-model.md.
+
+## Diary (D1)
+
+**Read-only day context is deferred.** Showing the selected date's completed
+Tasks, Calendar events and Habit ticks beside the entry is designed in
+`diary-v2-product-model.md` and not built. It reads three existing services,
+each with its own shape and its own empty state, and a panel that half-duplicates
+Today is worse than no panel. Writing and history were the mandatory half of D1;
+this is the first candidate for D2.
+
+**Cross-system links are not built.** `item_links` (F1) is the path, and Diary
+is a valid future source and target — the entry `id` is stable for exactly this.
+No linking UI exists, and no Diary-specific link table was created, because a
+second general link table would give the codebase two answers to "what relates
+to what".
+
+**Search is `LIKE` over `document_text`.** Honest at this scale, upgradeable to
+`tsvector` without changing the API. The same note applies to Library.
+
+**The mobile keyboard is untested with a real keyboard.** The harness browser
+has none. Layout, touch targets and composer clearance were measured at 390px;
+the behaviour of iOS or Android resizing the visual viewport mid-edit was not
+exercised. Worth one pass on a real device.
+
+**Midnight is announced, not applied.** With the tab open across midnight, Diary
+offers "It is a new day. Open today?" rather than switching the date underneath
+someone mid-sentence. The check polls once a minute; it is not a timer aligned
+to the boundary, so the offer can appear up to a minute late.
+
+**No screenshots from the harness.** The Browser pane has not composited frames
+for several phases, so every visual claim in D1 is a measurement, not a picture.

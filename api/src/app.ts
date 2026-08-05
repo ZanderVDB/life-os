@@ -13,6 +13,7 @@ import { registerAreaRoutes } from './routes/areas.js';
 import { registerTaskRoutes } from './routes/tasks.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerLibraryRoutes } from './routes/library.js';
+import { registerDiaryRoutes } from './routes/diary.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerPreferenceRoutes } from './routes/preferences.js';
 import { registerHabitRoutes } from './routes/habits.js';
@@ -66,6 +67,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerTaskRoutes(app, db, guards);
   registerProjectRoutes(app, db, guards, env);
   registerLibraryRoutes(app, db, guards, env);
+  registerDiaryRoutes(app, db, guards, env);
   registerImportRoutes(app, db, guards, env);
   registerPreferenceRoutes(app, db, guards);
   registerHabitRoutes(app, db, guards);

@@ -32,7 +32,7 @@ const read = (f: string) => readFileSync(join(WEB, f), 'utf8');
 
 const html = read('index.html');
 const bookJs = read('library-book.js');
-const blocksJs = read('library-blocks.js');
+const blocksJs = read('editor-blocks.js');
 
 const code = (src: string) => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -124,7 +124,7 @@ test('no per-element escape hatches were used', () => {
 
 /* ══ The block rules (§4, §5, §7) ══════════════════════════════════════ */
 
-const blocks = await import('../../web/library-blocks.js' as string);
+const blocks = await import('../../web/editor-blocks.js' as string);
 
 test('the visible style names never expose a DOM tag', () => {
   // §5: Body / Heading / Subheading / Quote. `h2` is the document's business.
@@ -232,7 +232,7 @@ test('no spacer node is ever inserted to correct a visual offset', () => {
 test('headings, lists and quotes stay real elements', () => {
   // §13: not styled paragraphs imitating them.
   assert.match(bookCode, /docToHtml/);
-  const doc = code(read('library-doc.js'));
+  const doc = code(read('editor-doc.js'));
   assert.match(doc, /return `<h\$\{level\}>/);
   assert.match(doc, /type === 'bulletList' \? 'ul' : 'ol'/);
   assert.match(doc, /return `<blockquote>/);
@@ -275,8 +275,16 @@ test('body text is still Inter and no handwriting font was introduced', () => {
 });
 
 test('autosave and its conflict handling are untouched', () => {
-  const save = code(read('library-save.js'));
+  /* The rules moved to `editor-save.js` in D1 so Diary could reuse rather than
+   * fork them. The rules themselves did not change, and this asserts exactly
+   * that — the behavioural tests in library-f2.test.ts run the machine and are
+   * the real proof. */
+  const save = code(read('editor-save.js'));
   assert.match(save, /expectedUpdatedAt: sentVersion \?\? undefined/);
   assert.match(save, /if \(e\.version !== sentVersion\)/);
   assert.match(save, /err\.conflict\) setStatus\(e, 'conflict'/);
+  // And Library still binds it to Library's endpoint, not to a copy.
+  const binding = code(read('library-save.js'));
+  assert.match(binding, /createSaveCoordinator/);
+  assert.match(binding, /savePage\(pageId/);
 });

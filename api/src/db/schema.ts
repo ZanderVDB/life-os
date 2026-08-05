@@ -901,6 +901,56 @@ export const bookPages = pgTable('book_pages', {
   byWorkspace: index('book_pages_ws_idx').on(t.workspaceId),
 }));
 
+
+/* ── diary ─────────────────────────────────────────────────────────
+ *
+ * One entry per workspace per LOCAL calendar day.
+ *
+ * A diary entry is not a library item and never becomes one. Library holds
+ * durable resources you return to; Diary holds dated records of a life. They
+ * share the editor and the document grammar — nothing else.
+ */
+export const DIARY_MOODS = ['very_low', 'low', 'neutral', 'good', 'very_good'] as const;
+export const DIARY_ENERGIES = ['very_low', 'low', 'medium', 'high', 'very_high'] as const;
+
+export const diaryEntries = pgTable('diary_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  /* A civil date, supplied by the client. The local day belongs to the person,
+   * not to UTC — see the arrange-claim route for the same reasoning. The server
+   * validates the shape and compares it; it never derives one. */
+  entryDate: date('entry_date').notNull(),
+  /** What the browser believed its zone was. Recorded, never used for maths. */
+  timezone: text('timezone'),
+  /** Null means "show the date". The date is never written in here. */
+  title: text('title'),
+  /** The same grammar as bookPages.content, so one editor serves both. */
+  document: jsonb('document').notNull().default({ type: 'doc', content: [] }),
+  /** Plain text of `document`, maintained on write, so search is one query. */
+  documentText: text('document_text').notNull().default(''),
+  mood: text('mood'),
+  energy: text('energy'),
+  weatherNote: text('weather_note'),
+  locationNote: text('location_note'),
+  /** A short overview, separate from the entry, for history and search. */
+  daySummary: text('day_summary'),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  /* One entry per day, INCLUDING archived ones. Not a partial index: if an
+   * archived entry vacated its date, writing there again would create a second
+   * row and orphan the first — a day archived and then silently rebuilt on top
+   * of itself. Holding the date is what lets the API offer to restore. */
+  uniquePerDay: uniqueIndex('diary_entries_unique_day').on(t.workspaceId, t.entryDate),
+  byWorkspaceDate: index('diary_entries_ws_date_idx').on(t.workspaceId, t.entryDate),
+  moodCheck: check('diary_entries_mood_check',
+    sql`${t.mood} is null or ${t.mood} in ('very_low','low','neutral','good','very_good')`),
+  energyCheck: check('diary_entries_energy_check',
+    sql`${t.energy} is null or ${t.energy} in ('very_low','low','medium','high','very_high')`),
+}));
+
 /* ── relations ───────────────────────────────────────────────────────── */
 export const calendarConnectionsRelations = relations(calendarConnections, ({ many }) => ({
   calendars: many(calendars),

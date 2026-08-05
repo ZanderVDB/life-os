@@ -916,7 +916,7 @@ export async function showConflict(pageId) {
 }
 
 async function copyText(doc) {
-  const { docToText } = await import('./library-doc.js');
+  const { docToText } = await import('./editor-doc.js');
   const text = docToText(doc);
   try { await navigator.clipboard.writeText(text); } catch { /* clipboard denied */ }
   return text;

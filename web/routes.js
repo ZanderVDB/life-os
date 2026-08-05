@@ -18,7 +18,7 @@ export const ROUTES = [
   { id: 'today', label: 'Today', icon: 'today' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'projects', label: 'Projects', icon: 'projects' },
-  { id: 'diary', label: 'Diary', icon: 'diary', placeholder: true },
+  { id: 'diary', label: 'Diary', icon: 'diary' },
   { id: 'library', label: 'Library', icon: 'library' },
   { id: 'brain', label: 'Brain', icon: 'brain', placeholder: true },
 ];
@@ -49,12 +49,6 @@ export const PLACEHOLDERS = {
     tagline: 'Coming soon.',
     body: 'Projects are outcomes you are working towards. Tasks will roll up '
       + 'into them, so you can see progress rather than just a list.',
-    note: 'Nothing you have saved has been lost.',
-  },
-  diary: {
-    tagline: 'Coming soon.',
-    body: 'A place to write. Personal writing deserves a considered home, so '
-      + 'it is being built with care rather than rushed.',
     note: 'Nothing you have saved has been lost.',
   },
   brain: {

@@ -102,10 +102,10 @@ test('nav: every section keeps a destination, unfinished ones are marked', () =>
     const end = routes.indexOf('\n', at);
     return routes.slice(at, end === -1 ? at + 160 : end);
   };
-  for (const id of ['today', 'calendar', 'projects', 'library']) {
+  for (const id of ['today', 'calendar', 'projects', 'library', 'diary']) {
     assert.ok(!/placeholder:\s*true/.test(entryOf(id)), `${id} is built but still a placeholder`);
   }
-  for (const id of ['diary', 'brain']) {
+  for (const id of ['brain']) {
     assert.match(entryOf(id), /placeholder:\s*true/, `${id} is not marked as a placeholder`);
     assert.ok(routes.includes(`${id}: {`), `${id} has no placeholder copy`);
   }
@@ -115,7 +115,7 @@ test('placeholders: product voice, reassuring, never fake data', () => {
   // Only sections that ARE placeholders keep placeholder copy. Calendar,
   // Projects and Library are built; their entries stay for the day one of them
   // is ever taken back out, but they are not asserted as live copy.
-  for (const id of ['calendar', 'projects', 'diary', 'brain']) {
+  for (const id of ['calendar', 'projects', 'brain']) {
     const block = routes.slice(routes.indexOf(`${id}: {`));
     const copy = block.slice(0, block.indexOf('},'));
     // Says what the section will BE, and that nothing was lost — without
@@ -484,9 +484,10 @@ test('mobile: the sidebar becomes a drawer and the rail stays reachable', () => 
   // deliberately have none — see their product models — and both collapse the
   // grid track as well, so the column is genuinely returned to the content.
   assert.deepEqual(hides,
-    ['body:has(.cal-head) ', 'body:has(.pj-head) ', 'body:has(.lib-page) '],
+    ['body:has(.cal-head) ', 'body:has(.pj-head) ', 'body:has(.lib-page) ',
+      'body:has(.dia-page) '],
     'the rail is hidden with no alternative');
-  for (const marker of ['pj-head', 'lib-page']) {
+  for (const marker of ['pj-head', 'dia-page', 'lib-page']) {
     assert.ok(html.includes(`body:has(.${marker}) .main-wrap{grid-template-columns:minmax(0,1fr) 0}`),
       `${marker} hides the rail without collapsing its grid track`);
   }
@@ -547,10 +548,10 @@ test('the Life OS lockup uses an inline self-contained gradient', () => {
    * Playfair is still wrong. */
   const playfairRules = html.match(/[^}]*Playfair Display[^}]*\}/g) ?? [];
   for (const rule of playfairRules) {
-    assert.ok(/logo-word|m-title|\.bk-/.test(rule),
-      `Playfair used outside the wordmark and the Book: ${rule.slice(0, 60)}`);
+    assert.ok(/logo-word|m-title|\.bk-|\.dia-/.test(rule),
+      `Playfair used outside the wordmark, the Book and the Diary: ${rule.slice(0, 60)}`);
   }
-  // And the Book does not put it on the body text of a page.
-  assert.ok(!/\.bk-editor\{[^}]*Playfair/.test(html),
-    'page body text is set in Playfair');
+  // And neither surface puts it on the body text you write in.
+  assert.ok(!/\.bk-editor\{[^}]*Playfair/.test(html), 'Book body text is set in Playfair');
+  assert.ok(!/\.dia-editor\{[^}]*Playfair/.test(html), 'Diary body text is set in Playfair');
 });

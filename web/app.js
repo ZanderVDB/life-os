@@ -48,6 +48,9 @@ import { settingsHtml } from './settings.js';
 import {
   initLibrary, renderLibrary, libraryHashChanged, libraryWillLeave,
 } from './library-view.js';
+import {
+  initDiary, renderDiary, diaryHashChanged, diaryWillLeave,
+} from './diary-view.js';
 
 const CFG = window.LIFE_OS_CONFIG;
 const BUCKETS = [
@@ -344,14 +347,16 @@ async function boot() {
   /* Library is given the shell's own primitives rather than importing them.
    * It never builds a URL, never opens its own dialog shell, and never decides
    * what an error looks like — one voice for all of that, defined here. */
-  initLibrary({
+  const surfaceCtx = {
     api: (path, opts) => api(`/api/v1/workspaces/${ws()}${path}`, opts),
     toast,
     run,
     openSurface: openUtilitySurface,
     closeSurface: closeUtility,
     choose: openChoiceDialog,
-  });
+  };
+  initLibrary(surfaceCtx);
+  initDiary(surfaceCtx);
 
   renderShell();
   await loadRoute();
@@ -616,6 +621,8 @@ function wireShell() {
     // Back and forward INSIDE Library move between the shelf, an item and a
     // page of a book without a route change, so Library resolves it itself.
     if (r === 'library') libraryHashChanged();
+    // Diary does the same across dates and its history view.
+    if (r === 'diary') diaryHashChanged();
   });
   // The rail reflows between a column and a grid; the pill must follow the nav.
   window.addEventListener('resize', () => { positionPill(true); measureScrollbar(); });
@@ -705,9 +712,10 @@ const projectFromHash = () => {
 
 async function go(id) {
   if (state.route === id) { window.__closeDrawer?.(); return; }
-  // Leaving Library while a page is being written to must not lose the words.
-  // The write is awaited BEFORE the route changes, not alongside it.
+  // Leaving Library or Diary while something is being written to must not lose
+  // the words. The write is awaited BEFORE the route changes, not alongside it.
   if (state.route === 'library') await libraryWillLeave();
+  if (state.route === 'diary') await diaryWillLeave();
   // §7 A utility surface is anchored to a control on the page you are leaving.
   closeUtility();
   state.route = id;
@@ -801,6 +809,8 @@ async function loadRoute() {
   if (state.route === 'calendar') return loadCalendar();
 
   if (state.route === 'library') return renderLibrary();
+
+  if (state.route === 'diary') return renderDiary();
 
   const ph = PLACEHOLDERS[state.route];
   head.innerHTML = `<p class="eyebrow">Life OS</p><h1>${esc(route.label)}</h1>
