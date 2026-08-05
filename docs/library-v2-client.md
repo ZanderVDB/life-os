@@ -239,6 +239,25 @@ keeps its 320px and the book renders at 485px. Both rules are asserted in
 
 ---
 
+## Sections and pages
+
+The active tab and each page carry a small actions control. Only the ACTIVE
+tab — a control on every tab is six controls competing, and one section is being
+worked on at a time.
+
+Sections can be renamed, recoloured (the six audited accents) and archived.
+Pages can be archived, with Undo.
+
+**The API's two refusals are stated, not thrown.** The last section of a book
+and the last page of a section cannot be archived — a book with no section has
+nowhere to put a page, and a section with no page cannot be opened to. The menu
+says so where the button would have been. A control that fails when pressed
+teaches nothing; the same information given before the press is useful.
+
+**Archiving a section re-reads the book.** It takes its pages with it, and
+guessing which local rows went is how a stale page id ends up being written to.
+Archiving a page forgets its save entry first, so no pending write survives it.
+
 ## Honesty
 
 - **No fake buttons.** New Book, New Document and Save Link are the three types
@@ -288,6 +307,11 @@ inferred from source.
 | Responsive | 1440 / 1280 / 1024 / 768 / 390 / 375 — no horizontal overflow at any width |
 | Composer | 70px clearance at the bottom of the scroll on a 390px screen |
 | Reduced motion | no animation class applied; the spread swaps instantly |
+| New Book | cover shows the title and subtitle; arrives with 1 section, 2 pages |
+| Section colour | rose applied to the tab and the page edge together |
+| Archive page | count 6 to 5, Undo restores it |
+| Archive section | section and its pages gone, book re-read, header recounted |
+| Last-one guards | the only section and the only page show the reason, not a button |
 
 **Timing caveat.** The Browser pane throttles `setTimeout` when it is not
 displayed, so debounces measured there read as ~1s rather than their real value.

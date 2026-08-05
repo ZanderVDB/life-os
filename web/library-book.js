@@ -131,6 +131,8 @@ function pageHtml(page, side, section, isLast = false) {
       <input class="bk-page-title" data-page-title="${page.id}"
         value="${esc(page.title ?? '')}" placeholder="${esc(section?.title ?? '')}"
         aria-label="Page title">
+      <button type="button" class="bk-page-more" data-page-more="${page.id}"
+        aria-label="Actions for this page" aria-haspopup="menu">${dots()}</button>
     </div>
     <div class="bk-page-body">
       <div class="bk-editor" data-editor="${page.id}" contenteditable="true"
@@ -143,15 +145,24 @@ function pageHtml(page, side, section, isLast = false) {
 function tabsHtml() {
   const sections = lib.book?.sections ?? [];
   return `<div class="bk-tabs" role="tablist" aria-label="Sections">
-    ${sections.map((s, i) => `<button type="button" class="bk-tab ${i === lib.sectionIdx ? 'on' : ''}"
-      role="tab" aria-selected="${i === lib.sectionIdx}" data-section="${i}"
-      data-accent="${esc(s.accent)}">
-      <span class="bk-tab-t">${esc(s.title)}</span>
-      <span class="bk-tab-n">${s.pages.length}</span></button>`).join('')}
+    ${sections.map((s, i) => `<span class="bk-tab-wrap">
+      <button type="button" class="bk-tab ${i === lib.sectionIdx ? 'on' : ''}"
+        role="tab" aria-selected="${i === lib.sectionIdx}" data-section="${i}"
+        data-accent="${esc(s.accent)}">
+        <span class="bk-tab-t">${esc(s.title)}</span>
+        <span class="bk-tab-n">${s.pages.length}</span>
+      </button>${i === lib.sectionIdx ? `<button type="button" class="bk-tab-more"
+        data-section-more="${s.id}" aria-label="Actions for ${esc(s.title)}"
+        aria-haspopup="menu">${dots()}</button>` : ''}
+    </span>`).join('')}
     <button type="button" class="bk-tab bk-tab-add" id="bk-add-section"
       aria-label="Add a section">+</button>
   </div>`;
 }
+
+const dots = () => `<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"
+  aria-hidden="true"><circle cx="5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/>
+  <circle cx="15" cy="10" r="1.4"/></svg>`;
 
 const chev = (dir) => `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
   stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -262,6 +273,18 @@ export function mountSpread(root, { onNavigate, onDirty }) {
     tab.addEventListener('click', () => onNavigate('section', Number(tab.dataset.section)));
   });
   root.querySelector('#bk-add-section')?.addEventListener('click', () => onNavigate('add-section'));
+  root.querySelectorAll('[data-section-more]').forEach((b) => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onNavigate('section-menu', { id: b.dataset.sectionMore, anchor: b });
+    });
+  });
+  root.querySelectorAll('[data-page-more]').forEach((b) => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onNavigate('page-menu', { id: b.dataset.pageMore, anchor: b });
+    });
+  });
 }
 
 const pageOf = (id) => {

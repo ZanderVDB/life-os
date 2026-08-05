@@ -2757,11 +2757,29 @@ body:has(.lib-page) .rail{display:none}
   background:var(--accent-c,var(--a-peach));opacity:.35}
 .bk-page-right::before{left:auto;right:46px}
 
-.bk-page-hdr{flex:0 0 auto;margin-bottom:4px}
-.bk-page-title{width:100%;background:none;border:0;outline:0;
+.bk-page-hdr{flex:0 0 auto;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.bk-page-more,.bk-tab-more{flex:0 0 auto;background:none;border:0;cursor:pointer;
+  border-radius:7px;width:24px;height:24px;display:grid;place-items:center;
+  color:var(--paper-ink-2);opacity:0;
+  transition:opacity var(--t-hover),background var(--t-hover),color var(--t-hover)}
+.bk-page:hover .bk-page-more,.bk-page:focus-within .bk-page-more{opacity:.8}
+.bk-page-more:hover{background:rgba(255,255,255,.07);color:var(--paper-ink)}
+.bk-page-more:focus-visible,.bk-tab-more:focus-visible{opacity:1;
+  outline:2px solid var(--accent);outline-offset:1px}
+/* The section menu hangs off the ACTIVE tab only — one section is being
+   worked on, and a control on every tab is six controls competing. */
+.bk-tab-wrap{position:relative;display:inline-flex;align-items:center;flex:0 0 auto}
+.bk-tab-more{position:absolute;right:4px;top:50%;transform:translateY(-50%);
+  color:#1A1624;opacity:.55;width:20px;height:20px}
+.bk-tab-wrap:hover .bk-tab-more{opacity:.9}
+.bk-tab-wrap:has(.bk-tab.on) .bk-tab{padding-right:28px}
+.lib-menu-note{margin:0;padding:9px 11px;font-size:12px;color:var(--muted);line-height:1.5}
+
+.bk-page-title{flex:1;min-width:0;background:none;border:0;outline:0;
   font-family:'Playfair Display',Georgia,serif;font-size:19px;color:var(--paper-ink);
   padding:0 0 6px;border-bottom:1px solid transparent;
   transition:border-color var(--t-hover)}
+.bk-page-title{width:100%}
 .bk-page-title::placeholder{color:var(--paper-ink-2);opacity:.5}
 .bk-page-title:focus{border-bottom-color:var(--accent-c,var(--a-peach))}
 .bk-page-body{flex:1;min-height:0;display:flex}

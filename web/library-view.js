@@ -18,7 +18,8 @@
 
 import {
   lib, initLibraryApi, loadItems, createItem, updateItem, archiveItem, restoreItem,
-  createBook, loadBook, createSection, createPages, archivePage, archiveSection,
+  createBook, loadBook, createSection, updateSection, createPages,
+  archivePage, restorePage, archiveSection,
   currentSection, currentSpread, spreadCount, findPage, search,
   sampleCheck, sampleAdd, sampleRemove,
 } from './library-api.js';
@@ -32,7 +33,7 @@ import {
 } from './library-book.js';
 import {
   flush, flushAll, hasUnsaved, retry, statusOf, entryOf, onSaveStatus,
-  resolveKeepMine, resolveTakeTheirs, forgetAll,
+  resolveKeepMine, resolveTakeTheirs, forgetAll, forgetPage,
 } from './library-save.js';
 import { openLibraryForm } from './library-modal.js';
 import { reducedMotion } from './motion.js';
@@ -540,6 +541,8 @@ function applyHalf(scroll = document) {
 async function navigate(what, arg) {
   if (what === 'add-section') return addSection();
   if (what === 'add-pages') return addPages();
+  if (what === 'section-menu') return openSectionMenu(arg.anchor, arg.id);
+  if (what === 'page-menu') return openPageMenu(arg.anchor, arg.id);
 
   // §16: anything that takes the current editor away flushes first.
   await flushAll();
@@ -654,6 +657,134 @@ async function addPages() {
       ?? document.querySelector('.bk-editor'))?.focus();
   });
 }
+
+/**
+ * Section actions.
+ *
+ * The API refuses to archive the LAST section of a book — a book with no
+ * section has nowhere to put a page and no way to reach its own content. That
+ * refusal is a product rule, so it is stated up front rather than delivered as
+ * an error after the fact.
+ */
+function openSectionMenu(anchor, sectionId) {
+  const section = lib.book.sections.find((s) => s.id === sectionId);
+  if (!section) return;
+  const onlyOne = lib.book.sections.length === 1;
+  ctx.openSurface(anchor, {
+    kind: 'library-section-menu',
+    label: `Actions for ${section.title}`,
+    html: `<div class="lib-menu lib-menu-sm" role="menu">
+      <button type="button" role="menuitem" data-act="rename">Rename section…</button>
+      <button type="button" role="menuitem" data-act="accent">Change colour…</button>
+      ${onlyOne
+    ? '<p class="lib-menu-note">The only section cannot be archived. Archive the book instead.</p>'
+    : '<button type="button" role="menuitem" data-act="archive">Archive section</button>'}
+    </div>`,
+    wire: (el) => el.querySelectorAll('[data-act]').forEach((b) => {
+      b.addEventListener('click', () => {
+        ctx.closeSurface();
+        void sectionAction(b.dataset.act, section);
+      });
+    }),
+  });
+}
+
+async function sectionAction(act, section) {
+  if (act === 'rename') {
+    const v = await openLibraryForm('section', { title: section.title });
+    if (!v) return;
+    return ctx.run(async () => {
+      const r = await updateSection(section.id, { title: v.title });
+      Object.assign(section, r.section);
+      paintBookHead();
+      paintBookBody();
+    });
+  }
+
+  if (act === 'accent') {
+    const choice = await ctx.choose({
+      title: 'Section colour',
+      body: 'The colour marks the tab, the page edge and the margin rule.',
+      choices: ACCENTS.map((a) => ({ id: a, label: a[0].toUpperCase() + a.slice(1) })),
+    });
+    if (!choice) return;
+    return ctx.run(async () => {
+      const r = await updateSection(section.id, { accent: choice });
+      Object.assign(section, r.section);
+      paintBookBody();
+    });
+  }
+
+  if (act === 'archive') {
+    return ctx.run(async () => {
+      await flushAll();
+      await archiveSection(section.id);
+      // Re-read rather than splice: archiving a section takes its pages with
+      // it, and guessing which local rows went is how a stale page id ends up
+      // being saved to.
+      await loadBook(lib.bookId);
+      forgetAll();
+      lib.sectionIdx = Math.min(lib.sectionIdx, lib.book.sections.length - 1);
+      lib.spreadIdx = 0;
+      lib.half = 0;
+      paintBookHead();
+      paintBookBody();
+      ctx.toast(`“${section.title}” archived. Its pages went with it.`);
+    });
+  }
+}
+
+/**
+ * Page actions.
+ *
+ * The last page of a section refuses to archive, for the same reason: a section
+ * with no page cannot be opened to.
+ */
+function openPageMenu(anchor, pageId) {
+  const { page, section } = findPage(pageId);
+  if (!page) return;
+  const onlyOne = section.pages.length === 1;
+  ctx.openSurface(anchor, {
+    kind: 'library-page-menu',
+    label: 'Actions for this page',
+    html: `<div class="lib-menu lib-menu-sm" role="menu">
+      ${onlyOne
+    ? '<p class="lib-menu-note">The only page of a section cannot be archived.</p>'
+    : '<button type="button" role="menuitem" data-act="archive">Archive page</button>'}
+    </div>`,
+    wire: (el) => el.querySelectorAll('[data-act]').forEach((b) => {
+      b.addEventListener('click', () => {
+        ctx.closeSurface();
+        void pageAction(b.dataset.act, page, section);
+      });
+    }),
+  });
+}
+
+async function pageAction(act, page, section) {
+  if (act !== 'archive') return;
+  await ctx.run(async () => {
+    await flushAll();
+    await archivePage(page.id);
+    forgetPage(page.id);          // no pending write to a page that is now gone
+    const at = section.pages.findIndex((p) => p.id === page.id);
+    if (at > -1) section.pages.splice(at, 1);
+    lib.spreadIdx = Math.min(lib.spreadIdx, spreadCount(section) - 1);
+    lib.half = 0;
+    paintBookHead();
+    paintBookBody();
+    ctx.toast('Page archived.', false, {
+      label: 'Undo',
+      onAction: () => void ctx.run(async () => {
+        await restorePage(page.id);
+        await loadBook(lib.bookId);
+        paintBookHead();
+        paintBookBody();
+      }),
+    });
+  });
+}
+
 
 /* ── Search within the book (§21) ────────────────────────────────────── */
 

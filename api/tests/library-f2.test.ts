@@ -473,6 +473,42 @@ test('the editor is reachable and announced', () => {
   assert.match(bookJs, /role="status"/);
 });
 
+test('every archive endpoint the API exposes is reachable from the interface', () => {
+  // The reverse of a fake button: an endpoint with real guards and no control
+  // leaves the Book unmanageable. Items, sections and pages all have one.
+  assert.match(viewCode, /archiveItem\(/);
+  assert.match(viewCode, /archiveSection\(section\.id\)/);
+  assert.match(viewCode, /archivePage\(page\.id\)/);
+  assert.match(bookCode, /data-section-more=/);
+  assert.match(bookCode, /data-page-more=/);
+});
+
+test('the last section and the last page state the reason instead of erroring', () => {
+  // The API refuses both. A control that fails when pressed teaches nothing;
+  // saying so up front is the same information delivered usefully.
+  assert.match(viewCode, /The only section cannot be archived\. Archive the book instead\./);
+  assert.match(viewCode, /The only page of a section cannot be archived\./);
+  const sec = viewCode.slice(viewCode.indexOf('function openSectionMenu'));
+  assert.match(sec.slice(0, 900), /lib\.book\.sections\.length === 1/);
+  const pg = viewCode.slice(viewCode.indexOf('function openPageMenu'));
+  assert.match(pg.slice(0, 700), /section\.pages\.length === 1/);
+});
+
+test('archiving a section re-reads the book rather than guessing what went', () => {
+  // Archiving a section takes its pages with it. Splicing locally is how a
+  // stale page id ends up being written to.
+  const act = viewCode.slice(viewCode.indexOf("if (act === 'archive')",
+    viewCode.indexOf('async function sectionAction')));
+  assert.match(act.slice(0, 700), /await loadBook\(lib\.bookId\)/);
+  assert.match(act.slice(0, 700), /forgetAll\(\)/);
+});
+
+test('archiving a page cancels any pending write to it', () => {
+  const act = viewCode.slice(viewCode.indexOf('async function pageAction'));
+  assert.match(act.slice(0, 700), /forgetPage\(page\.id\)/);
+  assert.match(act.slice(0, 900), /label: 'Undo'/);
+});
+
 test('the forward arrow is disabled only when there is genuinely nowhere to go', () => {
   // And the back arrow never is: on the first page, back is the cover.
   assert.match(bookCode, /id="bk-next" \$\{canGoNext\(\) \? '' : 'disabled'\}/);
