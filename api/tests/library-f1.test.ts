@@ -72,7 +72,7 @@ test('legacy: nothing in this phase reads or writes Legacy content', () => {
   const seeder = readFileSync(join(here, '..', 'src', 'lib', 'sample-library.ts'), 'utf8');
   assert.match(seeder, /SAMPLE_PREFIX = 'sample:f1:'/);
   // Every value it assigns is built from that prefix.
-  for (const value of [...seeder.matchAll(/legacyId[,:]\s*([^,\n}]*)/g)].map((m) => m[1].trim())) {
+  for (const value of [...seeder.matchAll(/legacyId[,:]\s*([^,\n}]*)/g)].map((m) => (m[1] ?? '').trim())) {
     assert.ok(
       value === ''                              // shorthand `legacyId,`
       || /legacyId|bookLegacyId/.test(value)    // a local built from the prefix

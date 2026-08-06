@@ -54,7 +54,9 @@ async function setup(nodeEnv = 'test') {
 
 const doc = (text: string) =>
   ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
-const EMPTY = { type: 'doc', content: [] };
+// `as const` on the discriminant: `Doc.type` is the literal 'doc', and a
+// widened `string` is not assignable to it.
+const EMPTY = { type: 'doc' as const, content: [] };
 /** What a contenteditable round-trips to when nobody has typed. */
 const EDITOR_BOILERPLATE = { type: 'doc', content: [{ type: 'paragraph', content: [] }] };
 

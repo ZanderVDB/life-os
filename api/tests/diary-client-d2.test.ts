@@ -349,14 +349,20 @@ test('a chosen chip can be un-chosen', () => {
 
 test('the streak is a fact, not a scoreboard', () => {
   /* It MOVED in D2.1: continuity belongs beside the other things you keep up,
-   * not at the bottom of the page you are writing on. It is now the computed
-   * `Write in Diary` habit on Today — see shell-nav-d21.test.ts. What survives
+   * not at the bottom of the page you are writing on.
+   *
+   * D2.2 finished the move. The row no longer draws its own streak markup — it
+   * calls `streakHtml`, the SAME function every ordinary habit row uses, which
+   * is the whole of the visual-parity requirement in one line. What survives
    * from D2 is the tone: a run is stated, never demanded. */
   assert.doesNotMatch(checkinCode, /dia-streak/, 'the streak is back on the diary page');
   const rail = code(read('app.js'));
   const fn = rail.slice(rail.indexOf('function diarySystemHabitHtml'));
-  assert.match(fn.slice(0, 900), /day streak/);
-  assert.doesNotMatch(fn.slice(0, 900), /don't break|keep it up|streak lost|missed/i);
+  assert.match(fn.slice(0, 1600), /streakHtml\(d\)/,
+    'the Diary habit draws its own streak instead of sharing the habit one');
+  const streak = rail.slice(rail.indexOf('function streakHtml'));
+  assert.match(streak.slice(0, 500), /day streak/);
+  assert.doesNotMatch(streak.slice(0, 500), /don't break|keep it up|streak lost|missed/i);
 });
 
 test('the guided prompts sit BELOW the free writing', () => {
@@ -395,10 +401,17 @@ test('what is typed into a prompt or a note is searchable', () => {
 });
 
 test('presence in the calendar is never carried by colour alone', () => {
+  /* REVISED by D2.2 §13. The dot is gone because a written day now shows a
+   * line of what it was about and the broad feeling as a WORD — strictly more
+   * information than a dot, and still not colour. Three non-colour carriers,
+   * as before: the context line, the bolder weight, the accessible name. */
   assert.match(historyJs, /has an entry.*no entry|no entry/);
-  assert.match(historyJs, /class="dia-dot"/);
+  assert.match(historyJs, /class="dia-day-prev"/);
+  assert.match(historyJs, /class="dia-day-feel"/);
   assert.match(html, /\.dia-day-cell\.has-entry \.dia-day-n\{font-weight:700/);
   assert.match(historyJs, /aria-label="\$\{esc\(label\)\}"/);
+  // The feeling reaches the accessible name too, not only the tint.
+  assert.match(historyJs, /felt \$\{feeling\.label\.toLowerCase\(\)\}/);
 });
 
 test('no native dialogs anywhere in Diary', () => {
@@ -425,8 +438,12 @@ test('the date change moves the spread, not the frame, and never curls', () => {
   // 3%, not the Book's 14%: a diary day is replaced in the same frame, and a
   // large translation reads as the layout breaking rather than as time passing.
   assert.doesNotMatch(html, /diaLeave[^}]*translateX\(-?1[0-9]%\)/);
-  const go = viewCode.slice(viewCode.indexOf('export async function goToDate'));
-  assert.match(go.slice(0, 900), /reducedMotion\(\)/);
+  /* MOVED by D2.2 §14 into `leaveSpread`, which also fixed a real defect: the
+   * leave targeted `.dia-sheet`, an element that stopped existing when D2 made
+   * Diary a spread, so the transition had silently not run since. */
+  const leave = viewCode.slice(viewCode.indexOf('async function leaveSpread'));
+  assert.match(leave.slice(0, 700), /reducedMotion\(\)/);
+  assert.match(leave.slice(0, 700), /querySelector\('\.dia-book'\)/);
 });
 
 test('an animation that never finishes cannot strand the page', () => {
@@ -439,10 +456,15 @@ test('an animation that never finishes cannot strand the page', () => {
 test('clicking a section you are already in returns you to its top level', () => {
   /* Inside an open Book, "Library" in the sidebar has to mean the shelf. It
    * used to mean nothing at all — the same-route guard returned early, so the
-   * one control that looks like a way out was the one that did not work. */
+   * one control that looks like a way out was the one that did not work.
+   *
+   * D2.2 changed HOW the hash is written, not what happens: a raw
+   * `location.hash =` was invisible to nav.js and counted as a navigation,
+   * which is the Library regression. Everything goes through `setHash` now. */
   assert.match(code(app), /async function goToSectionRoot\(id, nav = navToken\(\)\)/);
-  assert.match(code(app), /if \(id === 'library'\)[\s\S]{0,240}location\.hash = '#library'/);
-  assert.match(code(app), /if \(id === 'diary'\)[\s\S]{0,240}location\.hash = '#diary'/);
+  assert.match(code(app), /if \(id === 'library'\)[\s\S]{0,240}setHash\('#library'\)/);
+  assert.match(code(app), /if \(id === 'diary'\)[\s\S]{0,240}setHash\('#diary'\)/);
+  assert.doesNotMatch(code(app), /location\.hash = '#/, 'a raw hash write is back');
   // Only when the hash is deeper than the section root.
   assert.match(code(app), /if \(path\.length > 1\) await goToSectionRoot\(id, nav\)/);
   // And the flush still happens first, so nothing typed is lost on the way out.

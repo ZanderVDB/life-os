@@ -92,3 +92,42 @@ The hash is written on every date change, so Back walks back through the days
 you visited and a refresh lands where you were. Typing and autosaving never
 touch it. Opening a search result and pressing Back returns to the results, not
 to a blank calendar.
+
+---
+
+# D2.2 — local patching on the right page
+
+The rendering rule was "the right page repaints without touching the left". §12
+asks for one more step: **update only its local component.**
+
+    paintSheet()    the whole day. Only when the DATE changes.
+    paintCheckin()  the whole right page. Only when its SHAPE changes.
+    paintGroup(id)  ONE <section>. The normal case.
+    paintPrompts()  the prompts block on the LEFT page — a sibling of the
+                    editor, so the caret, the selection and the undo history
+                    are untouched.
+
+Selecting an energy replaces the energy group and leaves the other three,
+including a Moment field somebody is typing in. Choosing a broad feeling
+replaces the feeling group, because adding the row of finer words is a change to
+what the group *is*.
+
+## A repaint rewires only what it replaced
+
+Found by measurement, and it is the kind of bug that looks like nothing at all:
+`paintGroup` called `wireCheckin` on the whole scroller, so a chip in a group
+that had **not** been replaced ended up with two click listeners. It selected
+itself and then immediately deselected itself, and nothing happened.
+
+`wireCheckin(root)` and `wirePrompts(root)` now take the subtree that was just
+replaced. Fresh nodes only; then a node can never carry two.
+
+## Typing never repaints the field being typed in
+
+A Moment input patches state and queues a save. It does not repaint — repainting
+the field you are typing in is how a caret jumps to the end of the line. The
+tile's summary catches up when the group next redraws, which is exactly when it
+should.
+
+The local reflection copy is authoritative until the server answers, so a tap
+shows immediately and no interaction can produce a false "Saved".

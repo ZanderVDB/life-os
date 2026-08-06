@@ -50,9 +50,25 @@ test('go() claims the navigation BEFORE it awaits anything', () => {
 test('a hash written BY go() is not treated as a new navigation', () => {
   /* `location.hash = id` fires hashchange, and bumping there invalidated the
    * very navigation that had just written it — Today fetched its tasks and then
-   * refused to paint them. */
-  assert.match(app, /ownHashWrite = `#\$\{id\}`/);
-  assert.match(app, /if \(location\.hash === ownHashWrite\) ownHashWrite = null;\s*else bumpNav\(\)/);
+   * refused to paint them.
+   *
+   * D2.2 moved the record into nav.js, because app.js's private `ownHashWrite`
+   * only ever knew about ITS OWN writes. Library and Diary each kept a separate
+   * flag the shell could not see, so every hash they wrote about themselves
+   * bumped the token — which IS the Library regression. One writer, one record,
+   * one answer, and the shell asks exactly once per event. */
+  assert.equal(typeof nav.setHash, 'function');
+  assert.equal(typeof nav.hashWasOurs, 'function');
+  assert.match(app, /const ours = hashWasOurs\(\);/);
+  assert.match(app, /if \(!ours\) bumpNav\(\)/);
+  assert.doesNotMatch(app, /ownHashWrite/, 'the private flag is back');
+  // …and the answer is passed down rather than asked for again. `hashWasOurs`
+  // consumes the record, so a second caller would be told "no".
+  assert.match(app, /libraryHashChanged\(ours\)/);
+  assert.match(app, /diaryHashChanged\(ours\)/);
+  // Neither section keeps a flag of its own any more.
+  assert.doesNotMatch(libView, /let suppressHash/);
+  assert.doesNotMatch(diaView, /let suppressHash/);
 });
 
 test('every async route branch checks the token before it paints', () => {
@@ -183,32 +199,56 @@ test('Move to top and bottom mean the partition, not the bucket', () => {
 test('Write in Diary is computed, pinned, and cannot be mutated', () => {
   assert.match(app, /function diarySystemHabitHtml\(\)/);
   const fn = app.slice(app.indexOf('function diarySystemHabitHtml'));
-  assert.match(fn.slice(0, 900), /Write in Diary/);
-  // Rendered ABOVE the list, so it cannot be reordered into it.
+  assert.match(fn.slice(0, 1600), /d\.name/);
+  /* REVERSED by D2.2 §7. It used to be rendered ABOVE the list so it could not
+   * be reordered into it, and the result read as a different component that
+   * happened to live in the habits card. It is now the FIRST ROW OF THE LIST,
+   * with the same `.hb-row` class, the same 32px ring markup and the same
+   * `streakHtml`. Being first is still structural: it is emitted before the
+   * map, so nothing can reorder it. */
   const rail = app.slice(app.indexOf('function renderRail'));
-  assert.ok(rail.indexOf('diarySystemHabitHtml()') < rail.indexOf('due.map(habitRowHtml)'),
-    'the system habit is not pinned above the ordinary habits');
+  const list = rail.slice(rail.indexOf('hb-list'));
+  assert.ok(list.indexOf('diarySystemHabitHtml()') < list.indexOf('due.map(habitRowHtml)'),
+    'the computed habit is not first inside the list');
+  assert.match(fn.slice(0, 1600), /class="hb-row hb-diary/);
+  assert.match(fn.slice(0, 1600), /class="hb-ring"/);
+  assert.doesNotMatch(fn.slice(0, 1600), /hb-sys-tag/, 'the SYSTEM badge is back');
   // No toggle: completing it means writing something, so it opens the Diary.
-  assert.doesNotMatch(fn.slice(0, 900), /data-habit-toggle/);
-  assert.match(app, /#hb-diary'\)\?\.addEventListener\('click', \(\) => go\('diary'\)\)/);
+  assert.doesNotMatch(fn.slice(0, 1600), /data-habit-toggle/);
+  assert.match(app, /\[data-diary-open\]'\)\.forEach[\s\S]{0,180}go\('diary'\)/);
 });
 
 test('the habit stores nothing — Diary stays the only source of truth', () => {
+  /* Still true, and now enforced on the SERVER, where the one provider lives.
+   * D2.2 moved the client's refresh from `/diary/streak` to `/habits`, because
+   * the totals have to move with the row — asking for the streak alone updated
+   * the row and left `1/6` reading `0/6`. */
   const fn = app.slice(app.indexOf('async function loadDiaryStreak'));
-  assert.match(fn.slice(0, 500), /diary\/streak\?today=/);
-  // It reads Diary. It never writes a habit or a habit entry.
-  assert.doesNotMatch(fn.slice(0, 500), /habits|toggleHabit|habitEntries/i);
+  assert.match(fn.slice(0, 500), /await loadHabits\(\)/);
+  const lib = readFileSync(join('src', 'lib', 'diary-habit.ts'), 'utf8');
+  assert.match(lib, /export const DIARY_HABIT_ID = 'system:diary'/);
+  // It reads Diary. It never writes a habit or a habit_entries row.
+  assert.doesNotMatch(lib, /db\.insert|db\.update|db\.delete/,
+    'the computed habit writes something');
+  // And the id is deliberately not a UUID, so a check or delete cannot name it.
+  assert.doesNotMatch(lib, /DIARY_HABIT_ID = '[0-9a-f]{8}-/);
 });
 
 test('the streak counts MEANINGFUL days, not surviving rows', () => {
   /* A row survives having its content cleared — that is what makes restore
    * possible — so counting rows said somebody had written on a day they had
-   * just emptied, and the habit stayed complete. */
+   * just emptied, and the habit stayed complete.
+   *
+   * D2.2 moved the rule into `lib/diary-habit.ts`, so the streak, Today's
+   * totals and the Calendar history all read the same `writtenDays`. */
+  const lib = readFileSync(join('src', 'lib', 'diary-habit.ts'), 'utf8');
+  assert.match(lib, /export function writtenDays\(/);
+  assert.match(lib, /if \(isMeaningfulEntry\(/);
   const route = readFileSync(join('src', 'routes', 'diary.ts'), 'utf8');
   const fn = route.slice(route.indexOf('/diary/streak'));
-  assert.match(fn.slice(0, 2200), /\.filter\(\(r\) => isMeaningfulEntry\(/);
-  // …and by the SAME rule the write path uses, not a re-implementation in SQL.
-  assert.doesNotMatch(fn.slice(0, 2200), /document_text <> ''/);
+  assert.match(fn.slice(0, 2400), /const have = writtenDays\(rows\)/);
+  // …by the SAME rule the write path uses, not a re-implementation in SQL.
+  assert.doesNotMatch(fn.slice(0, 2400), /document_text <> ''/);
 });
 
 test('the streak line left the Diary page', () => {
@@ -235,7 +275,10 @@ test('the permanent Diary toolbar is gone, and storage is untouched', () => {
 
 test('a prompt response is a surface, not an underline', () => {
   const rule = html.slice(html.indexOf('.dia-prompt-a{'), html.indexOf('.dia-prompt-a::placeholder'));
-  assert.match(rule, /min-height:46px/);
+  /* 46px in D2.1; 40px from D2.2 §5, the top of the 36–40px range the phase
+   * asked for. Still a SURFACE — the border, the radius and the inset shadow
+   * are what make it one, not its height. */
+  assert.match(rule, /min-height:40px/);
   assert.match(rule, /border-radius:8px/);
   assert.match(rule, /border:1px solid/);
   assert.match(rule, /box-shadow:inset/);
@@ -245,10 +288,33 @@ test('a prompt response is a surface, not an underline', () => {
   assert.match(code(read('diary-checkin.js')), /export function autosize/);
 });
 
-test('the spread grows with its content', () => {
-  // aspect-ratio becomes a MINIMUM; the grid keeps both pages the same height.
-  assert.match(html, /\.dia-book\.bk-spread\{aspect-ratio:auto;min-height:/);
+test('the spread grows with its content, from a stated base', () => {
+  /* REVISED by D2.2 §3/§4. D2 made `aspect-ratio` a minimum by writing
+   * `min-height:calc((100vw - 460px) * 297/420)` — reading the WINDOW to size
+   * an element inside a column. It over-corrected: the empty spread ran far
+   * below the fold, and the number was wrong at every width where the rail or
+   * the drawer changed the column.
+   *
+   *   height = max(approvedBaseHeight, leftRequired, rightRequired)
+   *
+   * All three terms are layout. The base is a zero-content pseudo-element
+   * spanning both columns at the Book's own 420:297, so it is exactly the open
+   * Book's height at the same width and needs no arithmetic at all. */
+  assert.match(html, /\.dia-book\.bk-spread\{aspect-ratio:auto;height:auto;align-items:stretch\}/);
+  assert.match(html, /\.dia-book\.bk-spread::before\{content:'';grid-row:1;grid-column:1\/-1;[\s\S]{0,60}aspect-ratio:420\/297/);
+  assert.doesNotMatch(html, /\.dia-book\.bk-spread\{[^}]*min-height:calc\(\(100vw/,
+    'the viewport-derived minimum is back');
+  // Both pages take the taller of the two, so the gutter and edges extend.
+  assert.match(html, /\.dia-book\.bk-spread > \.dia-left\{grid-row:1;grid-column:1\}/);
+  assert.match(html, /\.dia-book\.bk-spread > \.dia-right\{grid-row:1;grid-column:2\}/);
   assert.match(html, /\.dia-scroll\{[^}]*overflow:visible/);
+  /* The ruled writing area absorbs the slack, and its floor is well below the
+   * height it renders at — a floor tall enough to bind is one that pushes the
+   * spread past the base, which is what the old 180px did. */
+  assert.match(html, /\.dia-editor\{flex:1 0 auto\}/);
+  assert.match(html, /\.dia-editor\{outline:0;min-height:120px/);
+  // No JavaScript owns the height, so there is no inline value to go stale.
+  assert.doesNotMatch(diaView, /style\.height = /);
 });
 
 /* ══ Drag geometry ═════════════════════════════════════════════════════ */

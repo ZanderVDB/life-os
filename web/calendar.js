@@ -959,14 +959,30 @@ function habitCardHtml(day) {
   }
 
   const due = (dh.habits ?? []).filter((h) => h.dueToday);
-  if (!due.length) {
+  /* The computed `Write in Diary` habit is part of the same system (D2.2 §9),
+   * so it appears here as a series like any other — but it OPENS that day's
+   * diary instead of ticking, because completing it means writing something. */
+  const diary = dh.diaryHabit ?? null;
+  if (!due.length && !diary) {
     return `<div class="cs-sec cs-habits"><span class="cs-lab">Habits</span>
       <p class="cs-habit-note">Nothing was due.</p></div>`;
   }
-  const done = due.filter((h) => h.completedToday).length;
+  const done = due.filter((h) => h.completedToday).length + (diary?.completedToday ? 1 : 0);
+  const total = due.length + (diary ? 1 : 0);
 
   return `<div class="cs-sec cs-habits">
-    <span class="cs-lab">Habits <b class="cs-habit-count">${done}/${due.length}</b></span>
+    <span class="cs-lab">Habits <b class="cs-habit-count">${done}/${total}</b></span>
+    ${diary ? `<button class="cs-habit-row cs-habit-diary ${
+  diary.completedToday ? 'is-done' : ''}" data-diary-day="${day}"
+      aria-label="${esc(diary.name)}${diary.completedToday ? ', written' : ', not written'
+}. Opens this day's diary.">
+      <span class="cs-habit-tick" aria-hidden="true">
+        <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+          stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg></span>
+      <b>${esc(diary.name)}</b>
+      <span class="cs-habit-auto" title="Automatic — kept from your Diary">Automatic</span>
+    </button>` : ''}
     ${due.map((h) => `<button class="cs-habit-row ${h.completedToday ? 'is-done' : ''}"
       data-habit="${h.id}" data-habit-day="${day}"
       aria-pressed="${h.completedToday ? 'true' : 'false'}"

@@ -15,11 +15,15 @@ import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
   calendars, calendarEvents, calendarEventAttendees, reminders,
-  taskScheduleBlocks, itemLinks, tasks, habitEntries, habits,
+  taskScheduleBlocks, itemLinks, tasks, habitEntries, habits, diaryEntries,
   reminderRecurrenceRules,
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { habitHistory } from '../lib/habit-history.js';
+import {
+  writtenDays, diaryHabitSince, addDiaryToHabitDays, diaryHabitEnabled,
+} from '../lib/diary-habit.js';
+import { readPreferences } from './preferences.js';
 import { isStagingCleanupAllowed } from '../lib/import-writer.js';
 import { expand, describe as describeRule, nextAfter } from '../lib/recurrence.js';
 
@@ -230,9 +234,40 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
         lte(habitEntries.entryDate, q.data.to),
       ))
       : [];
-    const habitDays = habitHistory(habitRows, habitEntryRows, q.data.from, q.data.to)
-      .filter((d) => d.due > 0);
-    const habitTotal = habitRows.length;
+    /* The computed `Write in Diary` habit is part of the same system (D2.2 §9),
+     * so it is folded in HERE rather than drawn separately — a day that was 2/3
+     * becomes 2/4 or 3/4, and the month grid, the day sheet and the totals are
+     * all correct without any of them knowing Diary exists. Same provider as
+     * Today and `/habits/history`; there is no second rule. */
+    const diaryPrefs = await readPreferences(db, req.principal!.userId);
+    const diaryOn = diaryHabitEnabled(diaryPrefs);
+    const diaryRows = diaryOn
+      ? await db.select({
+        entryDate: diaryEntries.entryDate,
+        document: diaryEntries.document,
+        title: diaryEntries.title,
+        mood: diaryEntries.mood,
+        energy: diaryEntries.energy,
+        weatherNote: diaryEntries.weatherNote,
+        locationNote: diaryEntries.locationNote,
+        daySummary: diaryEntries.daySummary,
+        reflection: diaryEntries.reflection,
+      }).from(diaryEntries).where(and(
+        eq(diaryEntries.workspaceId, workspaceId),
+        isNull(diaryEntries.archivedAt),
+        lte(diaryEntries.entryDate, q.data.to),
+      ))
+      : [];
+    const written = writtenDays(diaryRows);
+    const habitDays = addDiaryToHabitDays(
+      habitHistory(habitRows, habitEntryRows, q.data.from, q.data.to),
+      written,
+      { enabled: diaryOn, since: diaryHabitSince(written, q.data.to) },
+    ).filter((d) => d.due > 0);
+    const habitTotal = habitRows.length + (diaryOn ? 1 : 0);
+    const diaryDays = diaryOn ? [...written].filter(
+      (d) => d >= q.data.from && d <= q.data.to,
+    ).sort() : [];
 
     const links = await db.select().from(itemLinks)
       .where(eq(itemLinks.workspaceId, workspaceId));
@@ -251,6 +286,8 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       deadlines,
       habitDays,
       habitTotal,
+      /** The days in range with a meaningful diary entry, or [] when off. */
+      diaryDays,
       links,
     };
   });

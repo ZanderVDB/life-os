@@ -101,6 +101,12 @@ export function settingsHtml(state) {
       return `
       <p class="setting-intro">Habits are recurring intentions, kept separately from
         tasks and from your diary. Tick them from the rail on Today.</p>
+      ${row('Count writing in Diary as a daily habit',
+    'Adds <b>Write in Diary</b> to Today and to your Habit history, completed '
+    + 'automatically on any day that holds a diary entry. It is worked out from '
+    + 'what you have written, so turning it off changes nothing in your Diary — '
+    + 'and turning it back on brings the whole history with it.',
+    segment('diaryHabit', p.diaryHabit ?? 'on', [['on', 'On'], ['off', 'Off']]))}
       ${active.length ? `<div class="habit-list">
         ${active.map((h) => `<div class="habit-row" data-habit-row="${h.id}">
           <span class="habit-dot" style="--hc:var(--ok)"></span>

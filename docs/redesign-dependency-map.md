@@ -346,3 +346,22 @@ edges yet.
 **AI recaps depend on `day_summary` existing and being human-written.** D1
 stores it and generates nothing. A future assisted recap has an input that was
 never itself generated, which is what keeps the loop honest.
+
+## D2.2 (Aug 2026)
+
+**Unblocked:** Library is usable again (release-blocking regression cleared).
+The habit system now has one shared totals/history provider, which any future
+statistics, Brain summary or weekly review can read without re-deriving it.
+
+**New shared foundations:**
+
+- `web/nav.js` — the single owner of the navigation token AND of programmatic
+  hash writes. Any section that writes a hash must go through `setHash`.
+- `api/src/lib/diary-habit.ts` — the computed `Write in Diary` provider. Any new
+  surface showing habit totals reads this, never its own count.
+- `docs/animation-house-rules.md` — binding on every phase from here.
+
+**Still blocking Brain:** nothing new. Brain remains unstarted by instruction.
+
+**Still blocking Library L3:** nothing new. The shelf redesign was deliberately
+not begun; D2.2 only restored the existing one and rebuilt its loading states.

@@ -49,3 +49,68 @@ export function ifCurrent(t, fn) {
   if (navStale(t)) return undefined;
   return fn();
 }
+
+/* ── Who wrote the hash ──────────────────────────────────────────────────
+ *
+ * The D2.2 Library regression, and it is the other half of the same idea.
+ *
+ * A hash change is a NAVIGATION when a person made it — a sidebar click, Back,
+ * Forward, a pasted URL. It is not a navigation when the app wrote it itself to
+ * record where the person already is: opening a Book, turning a page, moving to
+ * the next diary day. Those writes come AFTER the decision, not before it.
+ *
+ * Three modules were writing hashes and each kept its own private flag — app.js
+ * `ownHashWrite`, library-view `suppressHash`, diary-view `suppressHash`. Only
+ * app.js's was consulted by the shell's `hashchange` handler, so a Library or
+ * Diary write bumped the token and invalidated the very render that had just
+ * made it. Opening a Book set the hash, the token moved, `loadBook` came back,
+ * found itself stale and returned without painting — leaving "Opening…" and a
+ * skeleton on screen for ever.
+ *
+ * One writer, one record, one answer. Anything that writes `location.hash` goes
+ * through `setHash`, and the shell asks `hashWasOurs()` exactly once per event.
+ */
+
+/** Hashes we wrote and whose `hashchange` has not arrived yet. */
+const pendingWrites = [];
+
+/**
+ * Writes the hash and records that we did.
+ *
+ * @returns {boolean} whether the URL actually changed
+ */
+export function setHash(next) {
+  const want = next.startsWith('#') ? next : `#${next}`;
+  if (location.hash === want) return false;
+  pendingWrites.push(want);
+  location.hash = want;
+  /* The safety net. `hashchange` fires as a task queued during the assignment
+   * above, so it is dispatched before this timer — but if it never arrives at
+   * all (a same-value write the browser folded away, a document being torn
+   * down) the record must not survive to mislabel a LATER, genuine navigation
+   * as ours. Worst case we fall back to treating our own write as a
+   * navigation, which is exactly the old behaviour and merely wasteful. */
+  setTimeout(() => forget(want), 0);
+  return true;
+}
+
+function forget(hash) {
+  const at = pendingWrites.indexOf(hash);
+  if (at > -1) pendingWrites.splice(at, 1);
+}
+
+/**
+ * Was the hash now in the URL one WE wrote?
+ *
+ * Consumes the record, so it answers true exactly once per write. Call it once
+ * per `hashchange`, at the top of the handler, and pass the answer down.
+ */
+export function hashWasOurs(hash = location.hash) {
+  const at = pendingWrites.indexOf(hash);
+  if (at === -1) return false;
+  pendingWrites.splice(at, 1);
+  return true;
+}
+
+/** Test seam: forgets every outstanding write. */
+export function resetHashWrites() { pendingWrites.length = 0; }

@@ -29,6 +29,17 @@ export const PREFERENCE_SCHEMA = {
   appearance: { values: ['system', 'dark'] as const, default: 'system' },
   sounds: { values: ['on', 'off'] as const, default: 'off' },
   reducedMotion: { values: ['system', 'always'] as const, default: 'system' },
+  /**
+   * `Count writing in Diary as a daily habit` (D2.2 §8).
+   *
+   * Default ON, and the default is what makes this migration-safe: no row is
+   * written for a workspace that has never touched the setting, and turning it
+   * off writes 'off' rather than deleting anything. Diary itself is unaffected
+   * either way — the habit is computed FROM diary content and no diary content
+   * is computed from it, so the setting can be flipped for ever without
+   * touching a single entry.
+   */
+  diaryHabit: { values: ['on', 'off'] as const, default: 'on' },
 } as const;
 
 export type PreferenceKey = keyof typeof PREFERENCE_SCHEMA;
@@ -43,24 +54,36 @@ export function defaultPreferences(): Record<string, string> {
   return Object.fromEntries(PREFERENCE_KEYS.map((k) => [k, PREFERENCE_SCHEMA[k].default]));
 }
 
+/**
+ * The stored preferences for a user, defaults filled in.
+ *
+ * Exported because preferences stopped being purely cosmetic in D2.2: whether
+ * the computed Diary habit counts is a preference, and Habits and Calendar both
+ * have to read it before they can answer "how many were due". One reader, so
+ * "what is the default" has one answer.
+ */
+export async function readPreferences(db: Db, userId: string): Promise<Record<string, string>> {
+  const rows = await db.select().from(userPreferences).where(and(
+    eq(userPreferences.userId, userId),
+    isNull(userPreferences.deviceId),
+  ));
+  const prefs = defaultPreferences();
+  for (const r of rows) {
+    if (PREFERENCE_KEYS.includes(r.key as PreferenceKey) && typeof r.value === 'string') {
+      prefs[r.key] = r.value;
+    }
+  }
+  return prefs;
+}
+
 export function registerPreferenceRoutes(app: AppInstance, db: Db, guards: Guards) {
   const pre = { preHandler: [guards.authenticate] };
 
   /** GET /api/v1/preferences — defaults merged with anything stored. */
-  app.get('/api/v1/preferences', pre, async (req) => {
-    const userId = req.principal!.userId;
-    const rows = await db.select().from(userPreferences).where(and(
-      eq(userPreferences.userId, userId),
-      isNull(userPreferences.deviceId),
-    ));
-    const prefs = defaultPreferences();
-    for (const r of rows) {
-      if (PREFERENCE_KEYS.includes(r.key as PreferenceKey) && typeof r.value === 'string') {
-        prefs[r.key] = r.value;
-      }
-    }
-    return { preferences: prefs, deviceScoped: DEVICE_SCOPED_SETTINGS };
-  });
+  app.get('/api/v1/preferences', pre, async (req) => ({
+    preferences: await readPreferences(db, req.principal!.userId),
+    deviceScoped: DEVICE_SCOPED_SETTINGS,
+  }));
 
   /** PUT /api/v1/preferences — partial update, allow-listed keys only. */
   app.put('/api/v1/preferences', pre, async (req) => {

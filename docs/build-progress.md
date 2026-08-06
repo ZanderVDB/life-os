@@ -1643,3 +1643,92 @@ replacement is ready, in Diary and in Library. Prefetch and the page-turn
 illusion were not reached.
 
 919 tests pass, 12 new.
+
+---
+
+## Phase D2.2 — Library regression, Diary size, the habit joins the system
+
+Three defects reported from authenticated staging, and one thing joined them:
+**something knew the right answer and something else was allowed to overrule
+it.**
+
+### 1. Library was broken (release-blocking)
+
+`#library` opened, showed `Opening…` above a large permanent skeleton, and never
+rendered the shelf.
+
+**Root cause.** Three modules wrote `location.hash` and each kept a private flag
+saying "that one was mine" — `app.js`'s `ownHashWrite`, and a `suppressHash` in
+each of `library-view.js` and `diary-view.js`. The shell's `hashchange` handler
+could only see app.js's. So every hash Library wrote *about where the person
+already was* — opening a Book, turning a page — was counted as a navigation,
+bumped the D2.1 token, and invalidated the render that had just written it.
+`loadBook` returned, found itself stale, and left the shell up for ever.
+
+**Fix.** `nav.js` owns the token *and* the record of what was written.
+`setHash` writes and remembers; `hashWasOurs()` answers once and consumes. The
+shell asks at the top of the handler and passes the answer down. Nobody keeps a
+private flag. It also fixed deep links across a route change: `go(id)` no longer
+flattens `#diary/2026-08-05` to `#diary`.
+
+**Lifecycle.** Every loading shell arms a watchdog; every path to a real screen
+disarms it. The three legitimate ends are overview, empty and error-with-retry.
+The 60vh grey slab is replaced by card- and book-shaped skeletons, and the Book
+header carries its real title while it loads.
+
+### 2. The Diary spread was too tall
+
+D2's `min-height: calc((100vw - 460px) * 297/420)` read the window to size an
+element inside a column. The rule is now
+
+    height = max(approvedBaseHeight, leftRequired, rightRequired)
+
+with all three terms in CSS — an `aspect-ratio` pseudo-element for the base and
+`align-items: stretch` for the pages. Nothing is measured, no inline height is
+written, nothing animates it.
+
+**Measured at 1280×720:** blank day **569 = base exactly**; twenty paragraphs
+1021, both pages equal; deleted again **569**; four Moment tiles open 631, closed
+**569**. No inline `style` at any point.
+
+Three prompts rest open (five empty fields cost 411px), at a 40px resting
+height.
+
+### 3. `Write in Diary` was a picture, not a member
+
+Today said `0/5` with the row visibly complete: the total was `due.length` and
+the computed row is not in `due`.
+
+`api/src/lib/diary-habit.ts` is now the one provider — Today's totals, the
+Calendar month cells, the Calendar day sheet, the history series and
+`/diary/streak` all come through it. `habitTotals` is the only place the two
+kinds are added together. The row is visually identical to an ordinary habit
+(46px, 32×32 ring, shared `streakHtml`), first inside `.hb-list`, with the
+`SYSTEM` badge gone. A `diaryHabit` preference, default on, removes it from
+every total without touching a single diary entry.
+
+### 4. The right page, and History
+
+Four grouped surfaces; an energy meter, a social battery and a check-in-scoped
+day tint; Moment tiles that open into one line each. Every selection patches one
+`<section>` and the left caret never moves.
+
+History is a compact six-week grid at 60px per cell, and a written day shows one
+line of context (chosen and cut on the server) plus the broad feeling as a word.
+Rough and Low are muted warm rose; Good is soft green; Great is lilac; Steady is
+the plain surface. Never `--danger`.
+
+### 5. The animation house rule
+
+Two more animations were found owning a final state, one of them by measurement:
+a **200ms entrance still `running` at six seconds with the whole spread at
+opacity 0**. Both the leave and the entrance now take their class off on a
+timer. Written down in `docs/animation-house-rules.md`:
+
+> Animations illustrate state changes; DOM and CSS own the final state.
+
+The Diary transition also turned out never to have run since D2 — it targeted
+`.dia-sheet`, an element the spread replaced.
+
+**976 tests pass, 41 new.** TypeScript clean, including three pre-existing test
+typecheck errors cleared on the way past.

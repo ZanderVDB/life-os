@@ -10,6 +10,7 @@
 import {
   dia, monthGrid, monthName, relativeDay, formatShort, localToday, MOODS,
 } from './diary-api.js';
+import { FEELINGS } from './diary-checkin.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -43,10 +44,10 @@ export function historyHtml() {
               ${week.map((c) => dayCell(c, byDate.get(c.date), today)).join('')}
             </div>`).join('')}
           </div>
-          <p class="dia-cal-key">
-            <span class="dia-dot" aria-hidden="true"></span>
-            A dot and a bolder date mean you wrote that day.
-          </p>
+          <p class="dia-cal-key" title="A written day shows one line of what it
+            was about, and the tint follows how it felt. It is never a
+            judgement: a hard day is warm, never red.">A written day shows what
+            it was about. The tint follows how it felt, never how it went.</p>
         </section>`}
     </div>
 
@@ -68,33 +69,48 @@ export function historyHtml() {
 /**
  * One day.
  *
- * Presence is carried by THREE things — a dot, a bolder weight, and the
- * accessible name — because colour alone would leave the whole calendar
- * unreadable to anyone who cannot distinguish it (§26).
+ * ── What a written day shows (D2.2 §13) ──────────────────────────────────
+ *
+ * The day number, one short line of context, and the broad feeling as a word.
+ * D2 showed a dot and nothing else, so a month of writing looked like a month
+ * of identical dots and the grid answered "did I write" but never "what was
+ * that day". The line comes from the server, already chosen and already cut to
+ * length — see `previewOf` in routes/diary.ts.
+ *
+ * Presence is still carried by THREE things — the context line, a bolder
+ * weight, and the accessible name — because colour alone would leave the whole
+ * calendar unreadable to anyone who cannot distinguish it (§26). The tint is
+ * the fourth, and it is decoration.
  */
 function dayCell(cell, entry, today) {
   const has = !!entry;
   const isToday = cell.date === today;
   const isOpen = cell.date === dia.date;
+  const feeling = has ? FEELINGS.find((f) => f.id === entry.feeling) ?? null : null;
+  const preview = has ? (entry.preview ?? null) : null;
   const label = [
     formatShort(cell.date),
     has ? 'has an entry' : 'no entry',
+    feeling ? `felt ${feeling.label.toLowerCase()}` : '',
+    preview ?? '',
     isToday ? 'today' : '',
   ].filter(Boolean).join(', ');
   return `<button type="button" role="gridcell" class="dia-day-cell${
     cell.inMonth ? '' : ' is-outside'}${has ? ' has-entry' : ''}${
     isToday ? ' is-today' : ''}${isOpen ? ' is-open' : ''}"
     data-open="${esc(cell.date)}" aria-label="${esc(label)}"
+    ${feeling ? `data-feel="${esc(feeling.id)}"` : ''}
     ${isOpen ? 'aria-current="date"' : ''} tabindex="${isOpen ? '0' : '-1'}">
     <span class="dia-day-n">${cell.day}</span>
-    ${has ? '<span class="dia-dot" aria-hidden="true"></span>' : ''}
+    ${preview ? `<span class="dia-day-prev">${esc(preview)}</span>` : ''}
+    ${feeling ? `<span class="dia-day-feel">${esc(feeling.label)}</span>` : ''}
   </button>`;
 }
 
 const summaryOf = (e) => (e.daySummary ? e.daySummary.slice(0, 80) : null);
 /* An entry with no title and no summary still has words in it. Showing those
  * beats showing "Untitled", which describes the label rather than the day. */
-const excerptOf = (e) => (e.excerpt ? `${e.excerpt.slice(0, 80)}…` : 'Untitled');
+const excerptOf = (e) => (e.preview ?? (e.excerpt ? `${e.excerpt.slice(0, 80)}…` : 'Untitled'));
 
 function chunk(arr, n) {
   const out = [];

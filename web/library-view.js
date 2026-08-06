@@ -37,7 +37,7 @@ import {
 } from './library-save.js';
 import { openLibraryForm } from './library-modal.js';
 import { reducedMotion } from './motion.js';
-import { navToken, navStale } from './nav.js';
+import { navToken, navStale, setHash } from './nav.js';
 
 /**
  * Waits for a CSS animation, with a timeout that always fires.
@@ -54,6 +54,21 @@ function afterAnimation(el, ms) {
     el.addEventListener('animationend', finish);
     setTimeout(finish, ms + 60);
   });
+}
+
+/**
+ * Plays an entrance, then takes the class off.
+ *
+ * See `docs/animation-house-rules.md`. An entrance whose fill-mode is `none`
+ * looks safe because the element returns to its computed style when the
+ * animation ends — but an animation that never ends never returns anything.
+ * The timer is what makes the stylesheet the owner of the final state.
+ */
+function enterOnce(el, cls, ms) {
+  el.classList.add(cls);
+  const off = () => el.classList.remove(cls);
+  el.addEventListener('animationend', off, { once: true });
+  setTimeout(off, ms + 120);
 }
 
 /** Injected once by app.js: the API caller, the toast, and the error wrapper. */
@@ -101,15 +116,91 @@ function bookHash() {
   return `#library/book/${lib.bookId}?s=${s.id}${left ? `&p=${left.id}` : ''}`;
 }
 
-let suppressHash = false;
-function setHash(next) {
-  if (location.hash === next) return;
-  suppressHash = true;
-  location.hash = next;
-  // Cleared on the next tick: hashchange fires asynchronously.
-  setTimeout(() => { suppressHash = false; }, 0);
+/* `setHash` comes from nav.js now. Library used to keep its own `suppressHash`
+ * flag, which the shell's hashchange handler could not see — so every hash
+ * Library wrote about itself was counted as a navigation and invalidated the
+ * render that had just written it. See nav.js. */
+
+/* ── The loading lifecycle (§2) ──────────────────────────────────────────
+ *
+ * A loading state is a PROMISE that something is coming. If it can be left on
+ * screen for ever the promise is a lie, and the D2.2 report is what that looks
+ * like: `Opening…` above a large grey rectangle, permanently.
+ *
+ * The root cause was the navigation token (see nav.js) and it is fixed. This is
+ * the guarantee that no future cause produces the same screen: whenever Library
+ * puts up a loading state it arms a watchdog, and any render that terminates
+ * — overview, empty, item, book, error — disarms it. If the watchdog fires, the
+ * shell is replaced by a retry state that says what happened.
+ *
+ * The three legitimate ends are overview / empty / error. Nothing else.
+ */
+
+const LOADING_LIMIT = 8000;
+let watchdog = 0;
+/** What to say if the wait never ends. Set alongside the shell it guards. */
+let watchdogRetry = null;
+
+function beginLoading(what, onRetry) {
+  clearTimeout(watchdog);
+  watchdogRetry = onRetry;
+  watchdog = setTimeout(() => {
+    watchdog = 0;
+    const head = document.getElementById('page-head');
+    const scroll = document.getElementById('main-scroll');
+    if (!scroll || !scroll.querySelector('[data-loading]')) return;
+    if (head) head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Library</h1>';
+    scroll.innerHTML = `<div class="state"><b>${esc(what)} is taking too long</b>
+      Nothing was lost. This is usually the connection rather than your Library.
+      <div style="margin-top:16px"><button class="btn" id="lib-retry">Try again</button></div></div>`;
+    scroll.querySelector('#lib-retry').onclick = () => (watchdogRetry ?? (() => {
+      lib.itemsLoaded = false;
+      void renderLibrary();
+    }))();
+  }, LOADING_LIMIT);
 }
-export const hashWasOurs = () => suppressHash;
+
+/** Called by every path that reaches a real screen — success or failure. */
+function endLoading() {
+  clearTimeout(watchdog);
+  watchdog = 0;
+  watchdogRetry = null;
+}
+
+/** Test seam and diagnostic: is a Library loading shell still on screen? */
+export const isLoadingShellUp = () =>
+  !!document.querySelector('#main-scroll [data-loading]');
+
+/**
+ * The shelf, waiting.
+ *
+ * Card-shaped, at the size the cards will actually be, so the arrival is a fill
+ * rather than a reflow. Four, not six: a placeholder that promises more than
+ * arrives is its own small dishonesty, and four already reads as "a shelf".
+ */
+const shelfLoadingHtml = () => `<div data-loading="shelf">
+  <div class="lib-skel-bar" aria-hidden="true">
+    ${'<span class="skeleton lib-skel-pill"></span>'.repeat(4)}
+  </div>
+  <div class="lib-grid">${'<div class="skeleton lib-skel"></div>'.repeat(4)}</div>
+  <p class="sr-only" role="status">Loading your Library</p>
+</div>`;
+
+/**
+ * A book, opening.
+ *
+ * Two page shapes in the spread's own proportions rather than one 60vh slab.
+ * The old rectangle was the single most visible symptom of the regression, and
+ * a placeholder that already looks like a book makes an overlong wait obvious
+ * instead of ambiguous.
+ */
+const bookLoadingHtml = () => `<div class="bk" data-loading="book">
+  <div class="bk-skel" aria-hidden="true">
+    <span class="skeleton bk-skel-page"></span>
+    <span class="skeleton bk-skel-page"></span>
+  </div>
+  <p class="sr-only" role="status">Opening this book</p>
+</div>`;
 
 /* ── Entry point ─────────────────────────────────────────────────────── */
 
@@ -134,10 +225,18 @@ async function renderOverview(head, scroll, nav = navToken()) {
   head.querySelector('#lib-add').addEventListener('click', (e) => openAddMenu(e.currentTarget));
 
   if (!lib.itemsLoaded) {
-    scroll.innerHTML = `<div class="lib-grid">${'<div class="skeleton lib-skel"></div>'.repeat(6)}</div>`;
+    /* The filter bar and the card shapes, not a giant rectangle — §2. The
+     * header above is already real, so the page does not lurch when the items
+     * arrive; only the cards fill in. */
+    scroll.innerHTML = shelfLoadingHtml();
+    beginLoading('Your Library', () => { lib.itemsLoaded = false; void renderLibrary(); });
     try { await loadItems({ archived: lib.showArchived }); } catch { /* shown below */ }
   }
   if (navStale(nav)) return;
+  /* `bodyHtml` renders the error-with-retry state when `lib.error` is set and
+   * nothing loaded, so this terminates into overview, empty OR error — never
+   * back into a loading shell. */
+  endLoading();
   paintOverview(scroll);
   /* Coming back from a book opened out of a search must land back on the
    * results, not on "nothing matched". The query survives the round trip, so
@@ -371,10 +470,13 @@ function repaintCard(item) {
 
 async function renderItem(id, head, scroll, nav = navToken()) {
   if (!lib.itemsLoaded) {
-    scroll.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+    scroll.innerHTML = `<div data-loading="item"><div class="skeleton lib-skel"></div>
+      <p class="sr-only" role="status">Loading this item</p></div>`;
+    beginLoading('This item', () => { lib.itemsLoaded = false; void renderLibrary(); });
     try { await loadItems({ archived: true }); } catch { /* handled below */ }
   }
   if (navStale(nav)) return;
+  endLoading();
   const item = lib.items.find((i) => i.id === id);
   if (!item) {
     head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Not found</h1>';
@@ -433,18 +535,28 @@ async function renderItem(id, head, scroll, nav = navToken()) {
 async function renderBook(route, head, scroll, nav = navToken()) {
   if (lib.bookId !== route.bookId || !lib.book) {
     // Keep whatever is on screen until the replacement is ready — no blank book.
-    if (!scroll.querySelector('.bk-book')) {
-      scroll.innerHTML = '<div class="skeleton" style="height:60vh;border-radius:16px"></div>';
-    }
-    head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Opening…</h1>';
+    if (!scroll.querySelector('.bk-book')) scroll.innerHTML = bookLoadingHtml();
+    /* The title the shelf already showed, not the word "Opening…". The shelf
+     * knows what this book is called before the book itself arrives, and a
+     * stable header is what makes the wait read as loading rather than as
+     * having landed somewhere unnamed. */
+    const known = lib.items.find((i) => i.book?.id === route.bookId);
+    head.innerHTML = `<p class="eyebrow lib-page">Library · Book</p>
+      <h1>${esc(known?.title ?? 'Opening…')}</h1>
+      <p class="sub">Opening…</p>`;
+    beginLoading(known?.title ?? 'This book', () => void renderLibrary());
     forgetAll();
     try {
       await loadBook(route.bookId);
     } catch (e) {
       if (navStale(nav)) return;
+      endLoading();
       head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Not found</h1>';
       scroll.innerHTML = `<div class="state"><b>That book did not open</b>${esc(e.message)}
-        <div style="margin-top:16px"><button class="btn" data-back>Back to Library</button></div></div>`;
+        <div style="margin-top:16px">
+          <button class="btn" data-retry>Try again</button>
+          <button class="btn btn-ghost" data-back>Back to Library</button></div></div>`;
+      scroll.querySelector('[data-retry]').onclick = () => void renderLibrary();
       scroll.querySelector('[data-back]').onclick = () => setHashAndRender('#library');
       return;
     }
@@ -454,6 +566,7 @@ async function renderBook(route, head, scroll, nav = navToken()) {
   /* Painting from here would replace whatever the person navigated to, and
    * `setHash` inside paintBookBody would rewrite the URL back into this Book. */
   if (navStale(nav)) return;
+  endLoading();
 
   // A deep link lands ON its page, not on the cover.
   if (route.sectionId) {
@@ -615,12 +728,28 @@ async function turn(dir) {
   const book = document.getElementById('bk-book');
   if (!book || reducedMotion()) { paintBookBody(scroll); paintBookHead(); return; }
 
-  book.classList.add(dir === 'next' ? 'leave-next' : 'leave-prev');
-  await afterAnimation(book, 260);
+  const cls = dir === 'next' ? 'leave-next' : 'leave-prev';
+  book.classList.add(cls);
+  try {
+    await afterAnimation(book, 260);
+  } finally {
+    /* `animation-fill-mode: forwards` holds the book at the last keyframe —
+     * off to one side and transparent. Normally the repaint below throws the
+     * node away, but if anything between here and there fails, the class
+     * coming off is what keeps a book from being stranded off-screen.
+     * Animations illustrate a change; the DOM owns the final state. */
+    book.classList.remove(cls);
+  }
   paintBookBody(scroll);
   paintBookHead();
   const fresh = document.getElementById('bk-book');
-  fresh?.classList.add(dir === 'next' ? 'enter-next' : 'enter-prev');
+  /* The class comes OFF on a timer. `bkEnter*` starts at opacity 0 with
+   * fill-mode `none`, so it looks safe — the element returns to its computed
+   * style the moment the animation finishes. An animation that never finishes
+   * never returns anything, and a throttled timeline was measured holding a
+   * 260ms entrance running indefinitely with the book invisible. The
+   * stylesheet owns the final state; this only draws the arrival. */
+  if (fresh) enterOnce(fresh, dir === 'next' ? 'enter-next' : 'enter-prev', 260);
 }
 
 /* ── Structure (§19, §20) ────────────────────────────────────────────── */
@@ -872,9 +1001,15 @@ export async function libraryWillLeave() {
   return true;
 }
 
-/** Called on hashchange while already inside Library. */
-export function libraryHashChanged() {
-  if (suppressHash) return;
+/**
+ * Called on hashchange while already inside Library.
+ *
+ * `ours` is decided by the shell, once, from nav.js's record of what it wrote.
+ * A hash Library wrote about where it already is needs no second render — and
+ * rendering anyway is how a page turn used to repaint itself twice.
+ */
+export function libraryHashChanged(ours = false) {
+  if (ours) return;
   void renderLibrary();
 }
 

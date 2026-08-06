@@ -13,13 +13,26 @@ import type { AppInstance, Guards } from '../types.js';
 import { and, asc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
-import { habits, habitEntries, areas, FREQUENCY_TYPES } from '../db/schema.js';
+import {
+  habits, habitEntries, areas, diaryEntries, FREQUENCY_TYPES,
+} from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
 // One implementation of "due and done on a day", shared with Calendar.
 import { habitHistory } from '../lib/habit-history.js';
+/* The computed `Write in Diary` habit. Habits, Calendar and Today all go
+ * through this one provider — §6 of D2.2 exists because they did not. */
+import {
+  writtenDays, diaryHabitRow, diaryHabitSince, addDiaryToHabitDays,
+  diaryHabitEnabled, habitTotals, DIARY_HABIT_ID,
+} from '../lib/diary-habit.js';
+import { readPreferences } from './preferences.js';
 
 const GAP = 1000;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Civil date arithmetic on UTC midnights. A day counter, not a timestamp. */
+const addDaysUtc = (date: string, days: number) =>
+  new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
 const HabitCreate = z.object({
   name: z.string().trim().min(1, 'A name is required.').max(200),
@@ -58,6 +71,36 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
   const pre = { preHandler: [guards.authenticate, guards.resolveWorkspace] };
   const base = '/api/v1/workspaces/:workspaceId';
 
+  /**
+   * The diary side of the habit system, for a date range.
+   *
+   * One query, one rule, whatever asked. Returns an empty set when the setting
+   * is off, so every caller's arithmetic stays the same and no caller has to
+   * remember to check the preference twice.
+   */
+  const diarySide = async (wsId: string, userId: string, from: string, to: string) => {
+    const prefs = await readPreferences(db, userId);
+    const enabled = diaryHabitEnabled(prefs);
+    if (!enabled) return { enabled, written: new Set<string>() };
+    const rows = await db.select({
+      entryDate: diaryEntries.entryDate,
+      document: diaryEntries.document,
+      title: diaryEntries.title,
+      mood: diaryEntries.mood,
+      energy: diaryEntries.energy,
+      weatherNote: diaryEntries.weatherNote,
+      locationNote: diaryEntries.locationNote,
+      daySummary: diaryEntries.daySummary,
+      reflection: diaryEntries.reflection,
+    }).from(diaryEntries).where(and(
+      eq(diaryEntries.workspaceId, wsId),
+      isNull(diaryEntries.archivedAt),
+      gte(diaryEntries.entryDate, from),
+      lte(diaryEntries.entryDate, to),
+    ));
+    return { enabled, written: writtenDays(rows) };
+  };
+
   const assertArea = async (wsId: string, areaId?: string | null) => {
     if (!areaId) return;
     const a = (await db.select().from(areas).where(and(
@@ -84,7 +127,25 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
 
     const rows = await db.select().from(habits).where(and(...where))
       .orderBy(asc(habits.position), asc(habits.createdAt));
-    if (!rows.length) return { habits: [], date: today };
+
+    /* The computed row and the totals, from the ONE provider. Fetched even when
+     * there are no ordinary habits: "0/1" on a workspace whose only habit is
+     * the diary is a correct answer, and returning early with `{habits: []}`
+     * was how Today came to report `0/5` with the diary written. */
+    const diaryFrom = addDaysUtc(today, -400);
+    const { enabled: diaryOn, written } = await diarySide(
+      wsId, req.principal!.userId, diaryFrom, today,
+    );
+    const diaryHabit = diaryOn ? diaryHabitRow(written, today) : null;
+
+    if (!rows.length) {
+      return {
+        date: today,
+        habits: [],
+        diaryHabit,
+        totals: habitTotals([], diaryHabit),
+      };
+    }
 
     const from = new Date(`${today}T00:00:00Z`);
     from.setUTCDate(from.getUTCDate() - q.historyDays);
@@ -102,9 +163,7 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
       list.push(e); byHabit.set(e.habitId, list);
     }
 
-    return {
-      date: today,
-      habits: rows.map((h) => {
+    const ordinary = rows.map((h) => {
         const mine = byHabit.get(h.id) ?? [];
         const todayEntry = mine.find((e) => e.entryDate === today) ?? null;
         // Consecutive days ending today (or yesterday, so an unticked today
@@ -126,7 +185,17 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
           streak,
           historyCount: mine.length,
         };
-      }),
+      });
+
+    return {
+      date: today,
+      habits: ordinary,
+      /* Beside the list, never IN it. It has no row, no position and nothing to
+       * tick, so a client that merged it into `habits` would eventually try to
+       * PATCH or check it. The totals below are the only place the two are
+       * added together, and they are added in exactly one place. */
+      diaryHabit,
+      totals: habitTotals(ordinary, diaryHabit),
     };
   });
 
@@ -172,7 +241,29 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
       ))
       : [];
 
-    return { from: q.from, to: q.to, days: habitHistory(rows, entries, q.from, q.to) };
+    /* The Diary series, folded into the same day rows (§9). Not a second
+     * response field the caller has to remember to add: a day that was 2/3
+     * becomes 2/4 or 3/4 here, and every existing reader is already correct. */
+    const { enabled, written } = await diarySide(
+      wsId, req.principal!.userId, addDaysUtc(q.from, -400), q.to,
+    );
+    const days = addDiaryToHabitDays(
+      habitHistory(rows, entries, q.from, q.to),
+      written,
+      { enabled, since: diaryHabitSince(written, q.to) },
+    );
+
+    return {
+      from: q.from,
+      to: q.to,
+      days,
+      /* Named so a caller can label the series and open the day it belongs to.
+       * Null when the setting is off — which is also how the client knows to
+       * stop drawing it, without a second request for the preference. */
+      diarySeries: enabled
+        ? { id: DIARY_HABIT_ID, name: 'Write in Diary', route: '#diary' }
+        : null,
+    };
   });
 
   app.post(`${base}/habits`, pre, async (req, reply) => {

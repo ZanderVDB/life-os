@@ -151,7 +151,7 @@ export function spreadHtml() {
             role="textbox" aria-multiline="true"
             aria-label="Diary entry for ${esc(formatLong(dia.date))}"
             data-placeholder="Write about your day…">${docToHtml(e?.document)}</div>
-          ${promptsHtml(dia.reflection)}
+          ${promptsHtml(dia.reflection, dia.promptsOpen)}
         </div>
       </div>
 

@@ -142,3 +142,45 @@ spread and the gutter extends with it. Ordinary page scrolling replaces the
 cramped internal wells.
 
 **The streak left the right page** for Today's habits panel.
+
+## D2.2 additions
+
+**The spread rests at the Book's height.** It grows only when real content
+exceeds the page, and shrinks back exactly. Empty prompts and empty right-page
+controls do not count as content. See `diary-v2-responsive.md`.
+
+**Three prompts rest open**, with the other two one press away. A prompt holding
+an answer is never hidden.
+
+**The right page has four groups on four quiet surfaces** — Overall feeling,
+Energy, Social battery, Moments. Four questions running down one page with
+nothing between them read as a form to complete; four small surfaces read as
+four things you may answer, which is what they are.
+
+Three visual responses were chosen from the six offered, each answering a
+question that words answer slowly: an **energy meter** (five segments), a
+**social battery** (four cells), and a restrained **day tint** scoped to the
+check-in and no further — a wash across the spread would tint the writing on the
+other side of the gutter, which is somebody's diary and not a mood indicator.
+Every one sits beside a text label and never replaces it.
+
+**Moments are tiles.** Highlight, A win, Challenge and Grateful for begin as four
+compact labelled tiles and open into one line each. Four always-open fields cost
+262px of a 569px page for something most days leave blank; four tiles cost 96px
+and ask the same four questions. A tile holding an answer shows it — a collapsed
+answer is a lost answer.
+
+**A feeling constellation, a page-wide colour wash and a "one word for today"
+field were declined.** The first two compete with the writing across the gutter;
+the third is a new searchable concept, and §11 says not to add one unless it
+fits the validated structure. It would have fitted — it is a good idea for a
+later phase, recorded in `technical-debt.md`.
+
+**Nothing here is required, and no interaction gates the writing.** A day is
+meaningful on its document, title, mood, energy, notes or summary; no chip, tile
+or meter is needed for a day to count.
+
+**The Diary habit is part of the habit system.** Today's totals, the Calendar
+history and the day sheet all include it when the preference is on. Diary itself
+is unchanged either way: the habit is computed *from* diary content and no diary
+content is computed from it. See `habits-v2-product-model.md`.

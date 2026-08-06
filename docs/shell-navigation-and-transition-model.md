@@ -75,3 +75,63 @@ Prefetch of adjacent days / spreads / months (§5), the directional page-turn
 illusion during a fetch (§4), and measured transition latency (§19) were not
 reached in D2.1. The no-blank rule above is the half that mattered most: it
 removes the empty colourless frame without needing a cache to do it.
+
+---
+
+# D2.2 — one owner for the hash
+
+D2.1 gave the shell a navigation token: the most recent user navigation wins,
+and any asynchronous continuation must check the token before it paints. That
+is still the rule. What D2.2 fixed is **what counted as a navigation**.
+
+## The defect
+
+`#library` opened, showed `Opening…` above a large skeleton, and never rendered
+the shelf. Release-blocking, and architectural rather than a slip.
+
+Three modules wrote `location.hash` and each kept a private flag saying "that
+one was mine" — `app.js`'s `ownHashWrite`, and a `suppressHash` in each of
+`library-view.js` and `diary-view.js`. The shell's `hashchange` handler could
+only see app.js's. So every hash Library or Diary wrote **about where the person
+already was** bumped the token and invalidated the render that had just written
+it. `loadBook` returned, found itself stale, and left the shell up for ever.
+
+## The rule
+
+A hash change is a **navigation** when a person made it — a sidebar click, Back,
+Forward, a pasted URL. It is **not** a navigation when the app wrote it to
+record where the person already is: opening a Book, turning a page, moving to
+the next diary day. Those writes come *after* the decision, not before it.
+
+## The implementation
+
+`web/nav.js` owns both halves — the token and the record of what was written.
+
+    bumpNav() / navToken() / navStale(t)   the token
+    setHash(next)                          writes, and remembers that we did
+    hashWasOurs(hash?)                     answers ONCE, and consumes the record
+
+Everything that writes a hash goes through `setHash`. Nothing keeps a private
+flag. The shell asks `hashWasOurs()` exactly once per event, at the top of the
+handler, and passes the answer down to `libraryHashChanged(ours)` and
+`diaryHashChanged(ours)`.
+
+Consuming is deliberate: a second caller would be told "no" and would treat our
+own write as a navigation, which is the bug again. A `setTimeout(…, 0)` safety
+net clears the record if a `hashchange` never arrives, so it can never mislabel
+a later, genuine navigation.
+
+## Deep links survive a route change
+
+`go(id)` used to flatten the hash to `#id`. A deep link arriving from another
+section — `#diary/2026-08-05` from a Calendar habit row — silently opened
+*today*. A hash already inside the target section is now left alone, and the
+section's own renderer reads it.
+
+## Every loading state terminates
+
+Verified in a browser: opening a Book, clicking Library from inside one,
+refreshing `#library`, a simulated shelf failure, a simulated book failure, a
+request that never answers (the watchdog fires at 8s with a working Retry), and
+the empty state. Rapid sidebar navigation still lands on the newest route, and a
+Library render abandoned mid-flight cannot reclaim the screen.

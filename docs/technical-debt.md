@@ -764,3 +764,51 @@ and were verified in D2.
 **Contextual selection toolbar.** Deliberately omitted. The prompt said omitting
 it is preferable to another distracting toolbar, and nothing about new diary
 writing needs it.
+
+---
+
+## Phase D2.2 — what was cleared, and what remains
+
+### Cleared
+
+The D2.1 items above are now built, and the entries above them are superseded:
+
+- **History density (§11-13)** — the month is a compact six-week grid at 60px
+  per cell, and a written day shows a context line, the broad feeling as a word
+  and a restrained tint. See `diary-v2-history.md`.
+- **Right-page grouping and ambience (§6-7)** — four grouped surfaces, an
+  energy meter, a social battery, moment tiles, and a day tint scoped to the
+  check-in.
+- **The directional day transition** — it had silently not been running since
+  D2 (it targeted `.dia-sheet`, which stopped existing). Fixed, and both the
+  leave and the entrance now have guaranteed teardown.
+
+### Still not built
+
+**Prefetch, cache and latency.** Unchanged from D2.1: not built and not
+measured. No adjacent-day, adjacent-spread or adjacent-month prefetch exists, so
+a cold navigation is exactly as fast as its request. **No performance claim is
+made.**
+
+**Calendar month transitions.** §14 asked that Calendar month changes retain
+structure. They do — the frame and rail never redraw — but no directional
+transition was added there, and Calendar was otherwise untouched.
+
+**`One word for today` (§11-F).** Declined for this phase, not rejected. It fits
+the validated reflection structure without a migration (`checkin.oneWord`), and
+it would be genuinely useful in History and in search. It was left out because
+§11 asked for two or three interactive ideas, not all six, and three were
+already chosen. Worth building.
+
+**The feeling constellation and the page-wide day colour (§11-A, §11-D).**
+Declined on merit: both compete with the writing across the gutter. The tint
+that *was* built is scoped to the check-in for that reason.
+
+**History at 720px viewport height.** The month column is 539px and needs about
+23px of scroll below a 765px viewport. Fits at every ordinary desktop height.
+
+**Contextual selection toolbar.** Still deliberately omitted.
+
+**Screenshots.** The harness browser has not composited for screenshots for
+several phases, so every visual claim in D2.2 is backed by measured geometry and
+computed styles rather than by an image. Visual judgement remains a user check.

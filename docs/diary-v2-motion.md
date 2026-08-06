@@ -32,3 +32,59 @@ than no animation at all.
 
 **Reduced motion**: `reducedMotion()` is checked before any class is added, so
 the sheet is replaced instantly. Opacity feedback and every function remain.
+
+---
+
+# D2.2 — what the audit found
+
+## The transition had not been running
+
+`goToDate` added `leave-next` to `.dia-sheet` — an element that stopped existing
+when D2 made Diary a spread. The selector matched nothing, so the directional
+date transition had silently not run since D2 shipped. It now targets
+`.dia-book`, via `leaveSpread`.
+
+## Two animations were allowed to own a final state
+
+**The leave.** `.dia-book.leave-next` is `animation-fill-mode: forwards`, which
+holds the element translated aside and transparent. Correct while the next day
+is on its way; catastrophic if it never arrives — a `renderEntry` that returns
+early on a stale navigation would leave the day permanently invisible. The class
+now comes off in a `finally`.
+
+**The entrance.** `diaEnterPrev` starts at `opacity: 0` with fill-mode `none`,
+so it *looks* safe: the element returns to its computed style the moment the
+animation finishes. An animation that never finishes never returns anything.
+Measured in a browser with a throttled timeline, a **200ms entrance was still
+`running` at six seconds with the whole spread at opacity 0** — the day was
+there, laid out correctly, and invisible. `enterOnce()` now takes the class off
+on a timer.
+
+Both are instances of one rule, now written down in
+`docs/animation-house-rules.md`:
+
+> **Animations illustrate state changes; DOM and CSS own the final state.**
+
+## The height animates nothing at all
+
+The strongest form of the rule is not needing it. The spread's height is
+`max(base, left, right)`, resolved entirely by CSS grid — see
+`diary-v2-responsive.md`. Growth and shrink are the grid re-solving: instant,
+correct under any throttling, and leaving no stale value behind because there
+was never a value to leave.
+
+## The right page's motion
+
+Restrained, and none of it load-bearing:
+
+- the energy meter's segments transition their fill colour, and lift 12% while
+  the group has focus
+- the battery's cells transition their fill
+- a Moment tile's input fades in with the existing `diaOpen` keyframe
+- the feeling tint transitions on the group's background
+
+All are covered by the global reduced-motion rules — `prefers-reduced-motion`
+and `html[data-motion="reduced"]`. Because no animation owns a final state,
+reducing every duration to 1ms cannot break a layout. Verified: with reduced
+motion on, the tint, the meter, the battery, the tile expansion, the save and
+the caret all behaved identically.

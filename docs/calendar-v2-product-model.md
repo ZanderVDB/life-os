@@ -352,3 +352,45 @@ both could be open at once.
   described is worse than none, because it now describes something else.
 
 Only the content differs.
+
+---
+
+# D2.2 — the Diary habit joins Calendar's habit summary
+
+Calendar summarises **rhythm**. It has never turned habits into events and does
+not now: what changed is that the counts include one more member of the habit
+system.
+
+## Where it appears
+
+**Month cells.** A day that was `2/3` becomes `2/4` or `3/4`. The fold happens
+in `/calendar/range`, from the same provider Today uses
+(`api/src/lib/diary-habit.ts`), so the grid, the day sheet and the totals are
+all correct without any of them knowing Diary exists.
+
+**The day sheet.** `Write in Diary` appears as a row like any other — same
+height, same tick, same type, same completed appearance — with the word
+"Automatic" where an ordinary row has its count. Pressing it **opens that day's
+Diary** rather than ticking, because writing something is the only way to
+complete it, on any day. It is never given a `data-habit`, so `toggleHabitOn`
+cannot find it.
+
+**`diaryDays`** is returned alongside `habitDays`: the days in range holding a
+meaningful entry, or `[]` when the preference is off.
+
+## Rules it inherits
+
+- **The same local-date authority as Diary.** The client sends the civil day it
+  is drawing; nothing converts a day into an instant.
+- **Due from the first written day**, never before — the same rule
+  `habit-history.ts` applies to an ordinary habit's `createdAt`. An eight-year-old
+  month does not suddenly read `3/4` instead of `3/3`.
+- **No duplicate `habit_entries` rows.** There are none at all: it is computed.
+- **The preference hides the series and deletes nothing.** With `diaryHabit`
+  off, `habitDays` and `habitTotal` return to their previous values exactly and
+  `diaryDays` is empty.
+
+## Calendar data is otherwise unchanged
+
+No event, reminder, block, deadline, calendar or link behaviour was touched in
+D2.2, and Google remains strictly read-only.

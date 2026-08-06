@@ -10,7 +10,9 @@
  */
 import { ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
 import { initServiceWorker } from './pwa.js';
-import { bumpNav, navToken, navStale } from './nav.js';
+import {
+  bumpNav, navToken, navStale, setHash, hashWasOurs,
+} from './nav.js';
 import { flip, pulse, collapseOut, reducedMotion, afterTransition, settle } from './motion.js';
 import { openUtilityMenu, openUtilitySurface, closeUtility,
   utilityTriggerHtml } from './utility-menu.js';
@@ -69,6 +71,10 @@ const state = {
   route: 'today', areaFilter: null, menu: null, settingsTab: 'account',
   todayResume: null,   // scroll, filter and focused card, for the way back
   habits: [], habitsLoaded: false, habitsError: null,
+  /** The computed `Write in Diary` row, or null when the setting is off. */
+  diaryHabit: null,
+  /** `{ due, done }` for today — ordinary habits PLUS the computed one. */
+  habitTotals: null,
   // id -> { id, title, status, focus, nextActionId }, sent with the task list so
   // Today can name a task's project without a second request or a copy of it
   // on every task row.
@@ -610,13 +616,16 @@ function wireShell() {
   });
 
   window.addEventListener('hashchange', () => {
+    /* Asked ONCE per event, at the top, and passed down. `hashWasOurs`
+     * consumes the record, so a second caller would be told "no" and treat our
+     * own write as a navigation — which is the D2.2 Library regression. */
+    const ours = hashWasOurs();
     const r = routeFromHash();
     if (r !== state.route) return go(r);
     /* Back and forward inside a section ARE navigations, and a slower fetch
      * from before them must not reclaim the screen. A hashchange we caused
      * ourselves is not one. */
-    if (location.hash === ownHashWrite) ownHashWrite = null;
-    else bumpNav();
+    if (!ours) bumpNav();
     // Back/forward within Calendar moves between the calendar and its
     // utilities without a route change, so it is handled here.
     const u = utilityFromHash();
@@ -633,9 +642,9 @@ function wireShell() {
     }
     // Back and forward INSIDE Library move between the shelf, an item and a
     // page of a book without a route change, so Library resolves it itself.
-    if (r === 'library') libraryHashChanged();
+    if (r === 'library') libraryHashChanged(ours);
     // Diary does the same across dates and its history view.
-    if (r === 'diary') diaryHashChanged();
+    if (r === 'diary') diaryHashChanged(ours);
   });
   // The rail reflows between a column and a grid; the pill must follow the nav.
   window.addEventListener('resize', () => { positionPill(true); measureScrollbar(); });
@@ -723,9 +732,6 @@ const projectFromHash = () => {
   return route === 'projects' && sub ? sub : null;
 };
 
-/** The hash value `go()` last wrote, so its own hashchange is not a navigation. */
-let ownHashWrite = null;
-
 async function go(id) {
   /* Claimed BEFORE any await. `go` waits on a pending save before it changes
    * the route, and during that wait `state.route` is still the old one — so a
@@ -754,11 +760,17 @@ async function go(id) {
   // §7 A utility surface is anchored to a control on the page you are leaving.
   closeUtility();
   state.route = id;
-  /* Remembered so the hashchange this triggers is recognised as OURS. Without
-   * that, the handler below bumped the navigation token and invalidated the
-   * very navigation that had just written the hash — Today loaded its tasks
-   * and then refused to paint them, because by then it looked stale. */
-  if (location.hash.slice(1) !== id) { ownHashWrite = `#${id}`; location.hash = id; }
+  /* Recorded by nav.js so the hashchange this triggers is recognised as OURS.
+   * Without that, the handler above bumped the navigation token and
+   * invalidated the very navigation that had just written the hash — Today
+   * loaded its tasks and then refused to paint them, because by then it looked
+   * stale. `setHash` is a no-op when the URL already says this.
+   *
+   * A hash that is ALREADY inside the target section is left exactly as it is.
+   * `#diary/2026-08-05` arriving from Calendar is a request for that day, and
+   * flattening it to `#diary` would silently open today instead. */
+  const inSection = location.hash.slice(1).split('?')[0].split('/')[0] === id;
+  if (!inSection) setHash(`#${id}`);
   document.querySelectorAll('[data-route]').forEach((a) => {
     if (a.dataset.route === id && a.closest('.nav')) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -779,13 +791,13 @@ async function goToSectionRoot(id, nav = navToken()) {
   if (id === 'library') {
     await libraryWillLeave();
     if (navStale(nav)) return undefined;
-    location.hash = '#library';
+    setHash('#library');
     return renderLibrary(nav);
   }
   if (id === 'diary') {
     await diaryWillLeave();
     if (navStale(nav)) return undefined;
-    location.hash = '#diary';
+    setHash('#diary');
     return renderDiary(nav);
   }
   return loadRoute(nav);
@@ -1802,7 +1814,15 @@ function renderRail() {
   const now = new Date();
   const hs = state.habits ?? [];
   const due = hs.filter((h) => h.dueToday && !h.archivedAt);
-  const doneCount = due.filter((h) => h.completedToday).length;
+  /* The totals come from the SERVER, not from counting `due` here.
+   *
+   * That is the whole of D2.2 §6. Counting here is what produced `0/5` with
+   * the diary written and the row above showing complete — the computed habit
+   * was drawn by this function but was never in the sum, because the sum was
+   * `due.length` and it is not in `due`. One calculation, on the server, in
+   * `lib/diary-habit.ts`, shared with Calendar. */
+  const totals = state.habitTotals ?? { due: due.length, done: due.filter((h) => h.completedToday).length };
+  const diary = state.diaryHabit;
 
   rail.innerHTML = `
     <div class="rail-when">
@@ -1811,14 +1831,14 @@ function renderRail() {
     </div>
 
     <div class="rail-card habits-card">
-      <h3>Habits today${due.length ? ` <span class="hb-count">${doneCount}/${due.length}</span>` : ''}
+      <h3>Habits today${totals.due ? ` <span class="hb-count">${totals.done}/${totals.due}</span>` : ''}
         <button class="hb-add" id="hb-add" aria-label="Add a habit" title="Add a habit">+</button></h3>
-      ${diarySystemHabitHtml()}
       ${!state.habitsLoaded ? '<p class="rail-quiet">Loading…</p>'
         : state.habitsError ? `<p class="rail-quiet" style="color:var(--danger)">
              Could not load habits.<br><span style="color:var(--muted)">${esc(state.habitsError)}</span>
              <button class="rail-link" id="hb-retry">Try again</button></p>`
-        : due.length ? `<div class="hb-list">${due.map(habitRowHtml).join('')}</div>`
+        : (due.length || diary) ? `<div class="hb-list">${
+          diarySystemHabitHtml()}${due.map(habitRowHtml).join('')}</div>`
         : hs.length ? '<p class="rail-quiet">Nothing due today.</p>'
         : '<p class="rail-quiet">No habits yet. Add one to start building a streak.</p>'}
     </div>`;
@@ -1826,52 +1846,73 @@ function renderRail() {
   wireRail();
 }
 
-/* ── The Diary system habit ───────────────────────────────────────────────
+/* ── The Diary habit ──────────────────────────────────────────────────────
  *
  * `Write in Diary` is COMPUTED, not stored.
  *
  * There is no habit row and no habit_entries row behind it. Its completion is
- * whether today has a meaningful Diary entry, decided by Diary's own rule, and
- * its streak is Diary's own `/diary/streak`. Storing a parallel habit would
- * give the question "did I write today?" two answers that can disagree — and
- * the one people would see is the copy.
+ * whether today has a meaningful Diary entry, decided by Diary's own rule.
+ * Storing a parallel habit would give the question "did I write today?" two
+ * answers that can disagree — and the one people would see is the copy.
  *
  * Consequences of being computed, all deliberate:
  *
  *   it cannot be deleted or renamed — there is nothing to delete or rename;
- *   it cannot be reordered — it is not in the list, it is above it;
+ *   it cannot be reordered — it is first, or it is absent;
  *   it cannot be ticked — ticking would mean writing something, so the control
  *     opens today's Diary instead. A habit you can mark done without doing it
  *     is a habit that stops meaning anything.
+ *
+ * ── Why it now LOOKS like the others (D2.2 §7) ───────────────────────────
+ *
+ * D2.1 gave it a `SYSTEM` badge, its own ring and its own weight, and the
+ * result read as a different component that happened to live in the habits
+ * card. It is not a different component: it is one of your habits, and it is
+ * inside `.hb-list` with the rest.
+ *
+ * What remains different is exactly what BEHAVES differently, and no more —
+ * a quiet divider below it, a small diary mark where an ordinary row has a
+ * streak-only right edge, and the word "Automatic" as its title. The ring,
+ * the row height, the type, the spacing, the hover and the completed
+ * appearance are the ordinary ones, from the ordinary rules.
  */
 function diarySystemHabitHtml() {
-  const s = state.diaryStreak;
-  const done = !!s?.wroteToday;
-  const streak = s?.current ?? 0;
-  return `<button type="button" class="hb-row hb-system${done ? ' is-done' : ''}"
-    id="hb-diary" aria-label="Write in Diary — ${
-  done ? 'written today' : 'not written yet'}. Opens today's diary.">
-    <span class="hb-ring hb-sys-ring" aria-hidden="true">${
-  done ? icon('check', 14) : ''}</span>
-    <span class="hb-name">Write in Diary</span>
-    ${streak ? `<span class="hb-prog">${streak} day streak</span>` : ''}
-    <span class="hb-sys-tag" title="Kept for you from your diary">System</span>
-  </button>`;
+  const d = state.diaryHabit;
+  if (!d) return '';
+  const done = !!d.completedToday;
+  return `<div class="hb-row hb-diary ${done ? 'is-done' : ''}" data-habit="${DIARY_HABIT_ID}">
+    <button class="hb-ring" data-diary-open aria-pressed="${done}"
+      aria-label="${done ? 'Written today' : 'Not written yet'} — open today's diary">
+      <svg class="hr-svg" viewBox="0 0 32 32" aria-hidden="true">
+        <circle class="hr-track" cx="16" cy="16" r="13" pathLength="100"/>
+        <circle class="hr-fill ${done ? '' : 'is-empty'}" cx="16" cy="16" r="13"
+          pathLength="100" stroke-dasharray="100" stroke-dashoffset="${done ? '0.00' : '100.00'}"/>
+      </svg>
+      ${done ? `<span class="hr-mark">${icon('check', 14)}</span>` : '<span class="hr-mark"></span>'}
+    </button>
+    <button class="hb-name" data-diary-open
+      title="Automatic — kept from what you write in your Diary">${esc(d.name)}</button>
+    <span class="hb-auto" title="Automatic — kept from what you write in your Diary"
+      aria-hidden="true">${icon('diary', 13)}</span>
+    ${streakHtml(d)}
+  </div>`;
 }
 
+/** The id the server gives the computed row. Never a UUID — see diary-habit.ts. */
+const DIARY_HABIT_ID = 'system:diary';
+
 /**
- * Refreshes the computed habit.
+ * Refreshes the computed habit after a Diary save may have changed the answer.
  *
- * Called after Today loads and whenever a diary save may have changed the
- * answer. Failure is silent: the row simply shows as not-yet-written, which is
- * the honest reading of "we could not tell".
+ * Asks the habits endpoint, because that is where the shared calculation lives
+ * — the totals have to move with the row, and asking `/diary/streak` alone
+ * updated the row and left `1/6` reading `0/6`. Failure is silent: the row
+ * shows as not-yet-written, the honest reading of "we could not tell".
  */
 async function loadDiaryStreak() {
   try {
-    const today = localDate();
-    state.diaryStreak = await api(
-      `/api/v1/workspaces/${ws()}/diary/streak?today=${today}`);
-  } catch { state.diaryStreak = null; }
+    await loadHabits();
+  } catch { /* loadHabits never throws; belt and braces */ }
   if (state.route === 'today') renderRail();
 }
 
@@ -1940,10 +1981,12 @@ function wireRail() {
   rail.querySelector('#hb-retry')?.addEventListener('click',
     () => run(async () => { await loadHabits(); renderRail(); }));
   rail.querySelector('#hb-add')?.addEventListener('click', () => editHabit(null));
-  /* The computed Diary habit. The WHOLE row opens today's diary, including
-   * the ring — there is nothing to toggle, because completing it means
-   * writing something. */
-  rail.querySelector('#hb-diary')?.addEventListener('click', () => go('diary'));
+  /* The computed Diary habit. Both controls open today's diary, including the
+   * completion circle — there is nothing to toggle, because completing it
+   * means writing something. */
+  rail.querySelectorAll('[data-diary-open]').forEach((el) => {
+    el.addEventListener('click', () => go('diary'));
+  });
 
   rail.querySelectorAll('[data-habit-toggle]').forEach((el) => {
     el.onclick = () => toggleHabit(el.dataset.habitToggle);
@@ -1957,11 +2000,21 @@ function wireRail() {
 async function loadHabits() {
   state.habitsError = null;
   try {
-    const r = await api(`/api/v1/workspaces/${ws()}/habits?includeArchived=true&historyDays=14`);
+    /* `date` is the LOCAL civil day, sent explicitly. The server must not
+     * derive it: south of the equator and east of Greenwich the UTC date is
+     * tomorrow for two hours every evening, which would ask for the wrong
+     * day's completion — the same rule Diary lives by. */
+    const r = await api(`/api/v1/workspaces/${ws()}/habits`
+      + `?includeArchived=true&historyDays=14&date=${localDate()}`);
     state.habits = r.habits ?? [];
+    // The computed row and the combined totals, both from the shared provider.
+    state.diaryHabit = r.diaryHabit ?? null;
+    state.habitTotals = r.totals ?? null;
   } catch (e) {
     // Must not take Today down — and must NOT masquerade as "no habits".
     state.habits = [];
+    state.diaryHabit = null;
+    state.habitTotals = null;
     state.habitsError = e.message;
     console.error('[habits] load failed:', e);
   }
@@ -2011,11 +2064,23 @@ function patchHabitRow(id) {
   const streak = row.querySelector('.hb-streak');
   if (streak) streak.outerHTML = streakHtml(h);
 
-  // The header tally stays honest without redrawing the card.
-  const due = (state.habits ?? []).filter((x) => x.dueToday && !x.archivedAt);
+  /* The header tally stays honest without redrawing the card.
+   *
+   * The optimistic tick has already changed `state.habits` but the server has
+   * not answered, so the totals it sent are one press out of date. They are
+   * ADJUSTED here rather than recomputed: the diary half of the sum is not
+   * something this screen knows how to derive, and deriving it locally is the
+   * second calculation §6 exists to prevent. `loadHabits` replaces the whole
+   * object with the server's answer on the next refresh. */
+  if (state.habitTotals) {
+    const ordinary = (state.habits ?? []).filter((x) => x.dueToday && !x.archivedAt);
+    const done = ordinary.filter((x) => x.completedToday).length
+      + (state.diaryHabit?.completedToday ? 1 : 0);
+    state.habitTotals = { due: state.habitTotals.due, done };
+  }
   const badge = document.querySelector('.hb-count');
-  if (badge) {
-    const text = `${due.filter((x) => x.completedToday).length}/${due.length}`;
+  if (badge && state.habitTotals) {
+    const text = `${state.habitTotals.done}/${state.habitTotals.due}`;
     if (badge.textContent !== text) { badge.textContent = text; pulse(badge); }
   }
 }
@@ -2151,6 +2216,10 @@ function wireSettings() {
       const r = await api('/api/v1/preferences', { method: 'PUT', body: { [pref]: value } });
       state.prefs = r.preferences;
       applyPreferences();
+      /* The Diary habit preference changes what the habit SYSTEM contains, so
+       * the totals and the row have to come again from the server rather than
+       * being toggled locally. Everything else here is presentation. */
+      if (pref === 'diaryHabit') { await loadHabits(); renderRail(); }
       renderSettings();
       toast('Saved');
     });
@@ -2588,6 +2657,15 @@ function renderCalendarRail() {
   rail.querySelectorAll('[data-habit]').forEach((b) => {
     b.onclick = () => toggleHabitOn(b.dataset.habit, b.dataset.habitDay);
   });
+  /* The computed Diary habit on a chosen day. §9: clicking a historical Diary
+   * completion opens that day's Diary. There is nothing to tick — writing
+   * something is the only way to complete it, on any day. */
+  rail.querySelectorAll('[data-diary-day]').forEach((b) => {
+    /* Writing the hash IS the navigation. The shell's hashchange handler sees
+     * a different route and calls `go`, which is exactly what a person pasting
+     * the same URL would get — one path, not two. */
+    b.onclick = () => setHash(`#diary/${b.dataset.diaryDay}`);
+  });
 }
 
 /* ── Habits on a chosen day ───────────────────────────────────────────── */
@@ -2611,7 +2689,10 @@ async function loadDayHabits(day) {
   try {
     const r = await api(`/api/v1/workspaces/${ws()}/habits?date=${day}`);
     if (cal.selected !== day) return;
-    cal.dayHabits = { date: day, habits: r.habits ?? [] };
+    /* `diaryHabit` is the day's diary completion, from the same shared
+     * provider Today uses. It is kept beside the list rather than merged in:
+     * it has no row to tick and `toggleHabitOn` must never be able to find it. */
+    cal.dayHabits = { date: day, habits: r.habits ?? [], diaryHabit: r.diaryHabit ?? null };
   } catch (e) {
     if (cal.selected !== day) return;
     cal.dayHabits = { date: day, error: e.message };
@@ -2713,19 +2794,23 @@ function patchCalHabitRow(habitId) {
 function patchHabitCell(day) {
   const dh = cal.dayHabits;
   if (!dh || dh.date !== day || !cal.data) return;
-  const due = (dh.habits ?? []).filter((x) => x.dueToday);
-  const done = due.filter((x) => x.completedToday).length;
+  const ordinary = (dh.habits ?? []).filter((x) => x.dueToday);
+  // The computed Diary habit counts here too — the same sum the server made.
+  const diary = dh.diaryHabit ?? null;
+  const dueN = ordinary.length + (diary ? 1 : 0);
+  const done = ordinary.filter((x) => x.completedToday).length
+    + (diary?.completedToday ? 1 : 0);
 
   cal.data.habitDays = cal.data.habitDays ?? [];
   const row = cal.data.habitDays.find((x) => x.date === day);
-  if (row) { row.due = due.length; row.done = done; }
-  else if (due.length) cal.data.habitDays.push({ date: day, due: due.length, done });
+  if (row) { row.due = dueN; row.done = done; }
+  else if (dueN) cal.data.habitDays.push({ date: day, due: dueN, done });
 
   const cell = document.querySelector(`.cm-cell[data-day="${day}"] .cm-foot`);
   if (!cell) return;
   cell.querySelector('.cm-habit')?.remove();
   cell.insertAdjacentHTML('beforeend', habitSummaryHtml(
-    { due: due.length, done }, day, iso(new Date()),
+    { due: dueN, done }, day, iso(new Date()),
   ));
   const chip = cell.querySelector('.cm-habit');
   if (chip) pulse(chip);

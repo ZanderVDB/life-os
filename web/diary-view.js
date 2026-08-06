@@ -23,7 +23,9 @@ import {
 import {
   headerHtml, spreadHtml, jumpHtml, loadingHtml, errorHtml, esc,
 } from './diary-entry.js';
-import { autosize, checkinHtml, FEELINGS } from './diary-checkin.js';
+import {
+  autosize, checkinHtml, promptsHtml, FEELINGS,
+} from './diary-checkin.js';
 import { historyHtml } from './diary-history.js';
 import { docToHtml, htmlToDoc, docToText } from './editor-doc.js';
 import {
@@ -35,7 +37,7 @@ import {
   resolveKeepMine, resolveTakeTheirs, STATUS_LABEL,
 } from './diary-save.js';
 import { reducedMotion } from './motion.js';
-import { navToken, navStale } from './nav.js';
+import { navToken, navStale, setHash } from './nav.js';
 
 /** Injected once by app.js: the API caller, the toast, the error wrapper. */
 let ctx = null;
@@ -64,13 +66,9 @@ export function parseDiaryHash(hash = location.hash, today = localToday()) {
   return { mode: 'entry', date: today };
 }
 
-let suppressHash = false;
-function setHash(next) {
-  if (location.hash === next) return;
-  suppressHash = true;
-  location.hash = next;
-  setTimeout(() => { suppressHash = false; }, 0);
-}
+/* `setHash` comes from nav.js. Diary kept its own `suppressHash` flag, which
+ * the shell's hashchange handler could not see — the same defect that broke
+ * Library in D2.2. One writer, one record. See nav.js. */
 
 /* ── Entry point ─────────────────────────────────────────────────────── */
 
@@ -136,7 +134,7 @@ function paintSheet(scroll = document.getElementById('main-scroll'), animate = n
   wireSheet(scroll);
   if (animate && !reducedMotion()) {
     const book = scroll.querySelector('.dia-book');
-    book?.classList.add(animate === 'next' ? 'enter-next' : 'enter-prev');
+    if (book) enterOnce(book, animate === 'next' ? 'enter-next' : 'enter-prev', 200);
   }
   // Registered while the entry is still exactly what the server holds.
   trackDate(dia.date, dia.entry);
@@ -149,14 +147,49 @@ function paintSheet(scroll = document.getElementById('main-scroll'), animate = n
  * may be sitting in the editor, and rebuilding a contenteditable destroys the
  * selection and the undo history. Same rule as the Book, applied across the
  * gutter instead of across a save.
+ *
+ * §12 goes further: "update only its local component". `paintGroup` below
+ * replaces one <section> and leaves the other three — and, crucially, leaves a
+ * Moment field the person is typing in.
  */
 function paintCheckin() {
   const right = document.querySelector('.dia-right .dia-scroll');
   if (!right) return;
   const top = right.scrollTop;
-  right.innerHTML = checkinHtml(dia.entry, dia.reflection, dia.streak);
+  right.innerHTML = checkinHtml(dia.entry, dia.reflection, dia.streak, openMoment);
   right.scrollTop = top;
-  wireCheckin(document.getElementById('main-scroll'));
+  wireCheckin(right);
+}
+
+/** Which Moment tile is expanded. A view state; never written anywhere. */
+let openMoment = null;
+
+/**
+ * Repaints ONE check-in group.
+ *
+ * Selecting an energy must not rebuild the Moments beneath it, and it must
+ * certainly not rebuild the group holding the caret. The whole right page is
+ * still rebuilt when the shape changes — choosing a broad feeling adds a row of
+ * finer ones — because that is a change to what the group IS.
+ */
+function paintGroup(id) {
+  const right = document.querySelector('.dia-right .dia-scroll');
+  const old = right?.querySelector(`.dia-ci-group[data-group-id="${id}"]`);
+  if (!old) { paintCheckin(); return; }
+  const holder = document.createElement('div');
+  holder.innerHTML = checkinHtml(dia.entry, dia.reflection, dia.streak, openMoment);
+  const next = holder.querySelector(`.dia-ci-group[data-group-id="${id}"]`);
+  if (!next) { paintCheckin(); return; }
+  old.replaceWith(next);
+  /* The tone lives on the container, so it is set here rather than being lost
+   * with the group that was replaced. */
+  const box = right.querySelector('.dia-checkin');
+  const feeling = dia.reflection?.checkin?.feeling;
+  if (box) {
+    if (feeling) box.dataset.tone = feeling; else delete box.dataset.tone;
+  }
+  // The replaced subtree ONLY. See the note on wireCheckin.
+  wireCheckin(next);
 }
 
 let stopSaveWatch = null;
@@ -260,14 +293,7 @@ function wireSheet(scroll) {
     queueSave(dia.date, undefined, { title: e.target.value });
   });
 
-  // The guided prompts, beneath the writing on the left page.
-  scroll.querySelectorAll('[data-prompt]').forEach((el) => {
-    autosize(el);
-    el.addEventListener('input', () => {
-      autosize(el);
-      setPrompt(el.dataset.prompt, el.value);
-    });
-  });
+  wirePrompts(scroll);
 
   wireCheckin(scroll);
 
@@ -282,16 +308,60 @@ function wireSheet(scroll) {
   stopSaveWatch = wireSaveStatus(scroll);
 }
 
+/**
+ * The guided prompts, beneath the writing on the left page.
+ *
+ * Only `.dia-prompts` is ever replaced. It is a SIBLING of the editor inside
+ * the same scroller, so swapping it leaves the contenteditable — and therefore
+ * the caret, the selection and the undo history — completely untouched.
+ */
+function wirePrompts(root) {
+  root.querySelectorAll('[data-prompt]').forEach((el) => {
+    autosize(el);
+    el.addEventListener('input', () => {
+      autosize(el);
+      setPrompt(el.dataset.prompt, el.value);
+    });
+  });
+  root.querySelector('[data-prompts-more]')?.addEventListener('click', () => {
+    dia.promptsOpen = true;
+    paintPrompts();
+  });
+}
+
+function paintPrompts() {
+  const old = document.querySelector('.dia-prompts');
+  if (!old) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = promptsHtml(dia.reflection, dia.promptsOpen);
+  const next = holder.firstElementChild;
+  old.replaceWith(next);
+  // The replaced subtree ONLY — the same rule `wireCheckin` lives by. Wiring
+  // the whole scroller would eventually bind a second listener to something
+  // that had not been replaced.
+  wirePrompts(next);
+  // The first newly revealed prompt takes focus: the press asked for it.
+  next.querySelectorAll('[data-prompt]')[3]?.focus();
+}
+
 /* -- The right page ------------------------------------------------------ */
 
 /**
- * Wires the check-in.
+ * Wires the check-in, within `root` and nowhere else.
  *
  * Rebound after every right-page repaint, because tapping a broad feeling adds
  * a whole row of finer ones and there is nothing to bind until it exists.
+ *
+ * ── Why the scope matters ────────────────────────────────────────────────
+ *
+ * `root` is the subtree that was just REPLACED, never the whole page. Calling
+ * this on `#main-scroll` after a single-group repaint bound a second listener
+ * to every group that had not been replaced — and a chip with two listeners
+ * selects itself and then immediately deselects itself, so nothing happens at
+ * all. Fresh nodes only; then a node can never carry two.
  */
-function wireCheckin(scroll) {
-  scroll.querySelectorAll('.dia-chips[data-group]').forEach((group) => {
+function wireCheckin(root) {
+  root.querySelectorAll('.dia-chips[data-group]').forEach((group) => {
     const name = group.dataset.group;
     group.querySelectorAll('[data-choice]').forEach((chip) => {
       chip.addEventListener('click', () => onChip(name, chip.dataset.choice));
@@ -310,8 +380,29 @@ function wireCheckin(scroll) {
     });
   });
 
-  scroll.querySelectorAll('[data-note]').forEach((el) => {
+  /* A Moment field. Typing patches state and queues a save; it never repaints,
+   * because repainting the field you are typing in is how a caret jumps to the
+   * end of the line. The tile's summary text catches up when the group next
+   * redraws, which is exactly when it should. */
+  root.querySelectorAll('[data-note]').forEach((el) => {
     el.addEventListener('input', () => setCheckin(el.dataset.note, el.value.trim() || undefined));
+    // Leaving an empty tile folds it back up, so the page returns to rest.
+    el.addEventListener('blur', () => {
+      if (el.value.trim() || openMoment !== el.dataset.note) return;
+      openMoment = null;
+      paintGroup('moments');
+    });
+  });
+
+  /* A Moment tile. Opening one closes the last, so the page never quietly
+   * unfolds into the four-field form these tiles replaced. */
+  root.querySelectorAll('[data-moment-open]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const id = b.dataset.momentOpen;
+      openMoment = openMoment === id ? null : id;
+      paintGroup('moments');
+      document.getElementById(`dia-moment-${id}`)?.focus();
+    });
   });
 }
 
@@ -328,7 +419,7 @@ function onChip(group, id) {
     if (dia.entry) dia.entry.energy = next;
     else dia.entry = { energy: next };
     queueSave(dia.date, undefined, { energy: next });
-    paintCheckin();
+    paintGroup('energy');
     return;
   }
 
@@ -351,7 +442,14 @@ function onChip(group, id) {
     if (c.social === id) delete c.social; else c.social = id;
   }
   writeReflection({ ...dia.reflection, checkin: c });
-  paintCheckin();
+  /* Feeling and feelingDetail both redraw the FEELING group — choosing a broad
+   * word adds or removes the finer row beneath it, which is a change to the
+   * group's shape and not just its selection. Social redraws its own. */
+  paintGroup(group === 'social' ? 'social' : 'feeling');
+  /* The chosen chip keeps the focus it just took. Without this a keyboard user
+   * choosing with the arrow keys would be returned to the top of the page by
+   * the very control they were operating. */
+  document.querySelector(`[data-group="${group}"] [data-choice="${id}"]`)?.focus();
 }
 
 /** A one-line note on the right page. */
@@ -528,15 +626,12 @@ export async function goToDate(date, direction = null) {
   dia.date = date;
   dia.mode = 'entry';
   dia.entry = null;
+  // View state belongs to the day you were on, not to the one you are opening.
+  dia.promptsOpen = false;
+  openMoment = null;
   const scroll = document.getElementById('main-scroll');
   const head = document.getElementById('page-head');
-  if (direction && !reducedMotion()) {
-    const sheet = scroll?.querySelector('.dia-sheet');
-    if (sheet) {
-      sheet.classList.add(direction === 'next' ? 'leave-next' : 'leave-prev');
-      await afterAnimation(sheet, 200);
-    }
-  }
+  await leaveSpread(scroll, direction);
   await renderEntry(head, scroll, { animate: direction });
   announce(`Showing ${formatLong(date)}`);
 }
@@ -553,6 +648,61 @@ function afterAnimation(el, ms) {
     el.addEventListener('animationend', finish);
     setTimeout(finish, ms + 60);
   });
+}
+
+/**
+ * Plays an entrance, then takes the class off.
+ *
+ * ── Measured, not theorised (D2.2 §14) ───────────────────────────────────
+ *
+ * `diaEnterPrev` starts at `opacity: 0`. Its fill-mode is `none`, so the
+ * moment it FINISHES the element returns to its computed style — which is why
+ * this looked safe. It is not: an animation that never finishes never returns
+ * anything. Sampled in a browser with a throttled timeline, a 200ms entrance
+ * was still `running` at six seconds with the whole spread at opacity 0 — the
+ * day was there, laid out correctly, and invisible.
+ *
+ * The class comes off on a timer, so the final state belongs to the stylesheet
+ * whatever the timeline does. The same fix the Today drag needed, and the same
+ * one `settle()` gives a Web Animation.
+ */
+function enterOnce(el, cls, ms) {
+  el.classList.add(cls);
+  const off = () => el.classList.remove(cls);
+  el.addEventListener('animationend', off, { once: true });
+  setTimeout(off, ms + 120);
+}
+
+/**
+ * The spread leaving, on its way to another day.
+ *
+ * ── The house rule (D2.2 §14) ────────────────────────────────────────────
+ *
+ * ANIMATIONS ILLUSTRATE STATE CHANGES; DOM AND CSS OWN THE FINAL STATE.
+ *
+ * `.dia-book.leave-next` is `animation-fill-mode: forwards`, which holds the
+ * element at the last keyframe — translated aside and transparent. That is
+ * correct while the replacement is on its way and catastrophic if it never
+ * arrives: a `renderEntry` that bails on a stale navigation would leave the
+ * day permanently invisible. So the class comes off in a `finally`, whatever
+ * happened, and `afterAnimation`'s timeout means the wait always ends even
+ * when `animationend` does not fire — a backgrounded tab, a throttled
+ * timeline, a stylesheet that had not applied.
+ *
+ * It also targeted `.dia-sheet`, which stopped existing when D2 made Diary a
+ * spread — so the transition had silently not run since. Fixed here.
+ */
+async function leaveSpread(scroll, direction) {
+  if (!direction || reducedMotion()) return;
+  const book = scroll?.querySelector('.dia-book');
+  if (!book) return;
+  const cls = direction === 'next' ? 'leave-next' : 'leave-prev';
+  book.classList.add(cls);
+  try {
+    await afterAnimation(book, 200);
+  } finally {
+    book.classList.remove(cls);
+  }
 }
 
 /** Says the date out loud for a screen reader, without stealing focus. */
@@ -784,8 +934,9 @@ export async function diaryWillLeave() {
   return true;
 }
 
-export function diaryHashChanged() {
-  if (suppressHash) return;
+/** `ours` is decided by the shell, once, from nav.js's record of what it wrote. */
+export function diaryHashChanged(ours = false) {
+  if (ours) return;
   void renderDiary();
 }
 

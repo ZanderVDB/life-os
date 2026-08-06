@@ -38,6 +38,50 @@ import {
 import {
   seedSampleDiary, removeSampleDiary, sampleDiaryFootprint, isDiarySampleAllowed,
 } from '../lib/sample-diary.js';
+/* The streak is one face of the computed `Write in Diary` habit, so it comes
+ * from the same provider Habits and Calendar use. See lib/diary-habit.ts. */
+import { writtenDays, diaryStreak } from '../lib/diary-habit.js';
+
+/**
+ * How much of a day a month cell may carry (D2.2 §13).
+ *
+ * A hard limit, applied in SQL. One line of a 60px square is about eight words;
+ * 90 characters is generous for that and small enough that a whole month of
+ * long entries is still a small response.
+ */
+const PREVIEW_CHARS = 90;
+
+/**
+ * The one line that stands for a day.
+ *
+ * In order of how deliberately it was written: a title the person chose, then
+ * the Highlight they named, then the day summary, then the opening words. Never
+ * "Untitled" — that describes the label rather than the day.
+ */
+export function previewOf(
+  { title, highlight, daySummary, excerpt }:
+  { title?: string | null; highlight?: string | null;
+    daySummary?: string | null; excerpt?: string | null },
+): string | null {
+  const pick = [title, highlight, daySummary, excerpt]
+    .map((s) => (s ?? '').replace(/\s+/g, ' ').trim())
+    .find((s) => s.length > 0);
+  if (!pick) return null;
+  return pick.length > PREVIEW_CHARS ? `${pick.slice(0, PREVIEW_CHARS - 1)}…` : pick;
+}
+
+/**
+ * The `mood` column, read as a broad feeling.
+ *
+ * Two vocabularies exist for the same question: `mood` is a column that
+ * predates the check-in, and `reflection.checkin.feeling` is what the right
+ * page writes. They are the same five steps under different names, so a day
+ * recorded before the check-in existed still has a feeling — and the history
+ * grid does not need to know which one it came from.
+ */
+const MOOD_AS_FEELING: Record<string, string> = {
+  very_low: 'rough', low: 'low', neutral: 'steady', good: 'good', very_good: 'great',
+};
 
 const civilDate = z.string().regex(ISO_DATE, 'A date must be YYYY-MM-DD')
   .refine(isValidCivilDate, 'That is not a real date.');
@@ -250,6 +294,11 @@ export function registerDiaryRoutes(
       mood: diaryEntries.mood,
       /* Length, not content: enough to show "a long day" without shipping it. */
       length: sql<number>`length(${diaryEntries.documentText})`,
+      /* D2.2 §13: a month cell shows one short line of context. TRUNCATED IN
+       * SQL, not on the client — a month of full entries is a large response
+       * to send in order to throw away, and the cell can only show one line. */
+      excerpt: sql<string>`left(${diaryEntries.documentText}, ${PREVIEW_CHARS})`,
+      reflection: diaryEntries.reflection,
       updatedAt: diaryEntries.updatedAt,
     }).from(diaryEntries)
       .where(and(
@@ -260,7 +309,26 @@ export function registerDiaryRoutes(
       ))
       .orderBy(asc(diaryEntries.entryDate));
 
-    return { from, to, days: rows };
+    return {
+      from,
+      to,
+      /* One line of context per day, decided here so the grid cannot decide it
+       * differently from the recent list. `feeling` is the BROAD one only: the
+       * finer words belong to the day, not to a 60px square. */
+      days: rows.map(({ reflection, excerpt, ...r }) => {
+        const c = (reflection as Reflection | null)?.checkin ?? {};
+        return {
+          ...r,
+          feeling: c.feeling ?? (r.mood ? MOOD_AS_FEELING[r.mood] ?? null : null),
+          preview: previewOf({
+            title: r.title,
+            highlight: c.highlight ?? null,
+            daySummary: r.daySummary,
+            excerpt,
+          }),
+        };
+      }),
+    };
   });
 
   /** The most recently written days, for the history panel. */
@@ -332,7 +400,7 @@ export function registerDiaryRoutes(
     // 400 days is a year and a bit — enough to answer honestly, bounded enough
     // that the query cannot grow with the diary.
     const rows = await db.select({
-      date: diaryEntries.entryDate,
+      entryDate: diaryEntries.entryDate,
       document: diaryEntries.document,
       title: diaryEntries.title,
       mood: diaryEntries.mood,
@@ -355,18 +423,10 @@ export function registerDiaryRoutes(
      * what makes `restore` possible — so counting rows said somebody had
      * written on a day they had just emptied, and Today's computed habit stayed
      * complete. Re-implementing the rule in SQL would give the question two
-     * answers; filtering here gives it one. */
-    const have = new Set(rows
-      .filter((r) => isMeaningfulEntry(r.document as any, {
-        title: r.title, mood: r.mood, energy: r.energy,
-        weatherNote: r.weatherNote, locationNote: r.locationNote,
-        daySummary: r.daySummary, reflection: r.reflection as any,
-      }))
-      .map((r) => r.date));
-    const wroteToday = have.has(today);
-    let cursor = wroteToday ? today : addDays(today, -1);
-    let current = 0;
-    while (have.has(cursor)) { current += 1; cursor = addDays(cursor, -1); }
+     * answers; `writtenDays` gives it one, and it is the same function the
+     * Habits and Calendar endpoints use. */
+    const have = writtenDays(rows);
+    const { current, wroteToday } = diaryStreak(have, today);
 
     return { current, wroteToday, daysInWindow: rows.length };
   });

@@ -118,3 +118,46 @@ answered.
 
 **Library bookshelf redesign.** The shelf is a card grid. It could be a shelf.
 Out of scope while the Book itself is still settling.
+
+---
+
+# D2.2 — the correction
+
+D2 was right about the spread and wrong about its size. Two of its decisions
+over-corrected, and one thing it added was never wired into the system it
+belonged to.
+
+## What was reversed
+
+**"The spread grows."** It grew from a viewport formula —
+`min-height: calc((100vw - 460px) * 297/420)` — which reads the *window* to size
+an element inside a column. Combined with five always-open prompt fields, an
+empty day ran far below the fold. The base is now the Book's own 420:297 shape,
+expressed as a pseudo-element, and content is the only thing that adds to it.
+See `diary-v2-responsive.md`.
+
+**Five prompts, all open.** Three now, with two a press away. Five empty fields
+cost 411px — more than the free writing above them.
+
+**Four always-open Moment fields.** Four tiles now, opening into one line each.
+262px became 96px for something most days leave blank.
+
+## What was completed
+
+**The computed habit was a picture, not a member.** D2.1 drew `Write in Diary`
+on Today and left the totals alone, so the panel said `0/5` with the row visibly
+complete. It is now part of one shared calculation on the server, and it reaches
+Today, the Calendar month cells, the Calendar day sheet and the history series.
+See `habits-v2-product-model.md`.
+
+## What was kept, unchanged
+
+The spread itself, and the reason for it: two kinds of thinking, one object.
+Reflective writing on the left, a fast check-in on the right. The `.bk-*`
+geometry, the ruled paper, the 30px block grid, the margin stripe, the mirrored
+coloured edge. Diary and Library remain separate in the data model, and a diary
+entry is still never a `library_items` row.
+
+Nothing about Tasks, Calendar events or Habit details entered Diary. The only
+connection still runs the other way: Today and Calendar ask Diary whether a day
+holds writing.

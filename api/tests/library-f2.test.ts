@@ -323,7 +323,7 @@ test('the six section colours are all present', () => {
     assert.ok(html.includes(`--a-${c}:`), `the ${c} accent is missing`);
     assert.ok(audit.includes(c), `${c} is not one of the audited colours`);
   }
-  assert.deepEqual(bookJs.match(/export const ACCENTS = \[([^\]]+)\]/)?.[1]
+  assert.deepEqual((bookJs.match(/export const ACCENTS = \[([^\]]+)\]/)?.[1] ?? '')
     .split(',').map((s) => s.trim().replace(/'/g, '')),
   ['peach', 'sage', 'lavender', 'gold', 'blue', 'rose']);
 });

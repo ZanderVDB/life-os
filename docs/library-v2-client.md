@@ -434,3 +434,27 @@ inferred from source.
 **Timing caveat.** The Browser pane throttles `setTimeout` when it is not
 displayed, so debounces measured there read as ~1s rather than their real value.
 The API itself answered search in 7–11ms; the delay is the harness, not the app.
+
+---
+
+# D2.2 — the loading lifecycle
+
+The route/render lifecycle and the hash-ownership regression are documented
+separately in `library-v2-client-architecture.md`. In summary, for this file:
+
+- **`Opening…` above a permanent skeleton** was caused by Library's own hash
+  writes being counted as navigations. `setHash` now lives in `nav.js` and the
+  shell asks who wrote it, once.
+- **The 60vh grey slab is gone.** The shelf waits as a filter bar plus four card
+  skeletons at the cards' real height; a Book waits as two page shapes in the
+  spread's own 420:297 proportions; an item waits as one card. Arrival is a fill
+  rather than a reflow.
+- **The Book's header carries its real title while it loads**, taken from the
+  shelf's own items — a stable header is what makes a wait read as loading
+  rather than as having landed somewhere unnamed.
+- **Every loading shell is watched.** `beginLoading` arms a watchdog, every path
+  to a real screen calls `endLoading`, and a shell still up after 8s becomes a
+  retry state. The three legitimate ends are overview, empty and error.
+- **A failed Book now offers Retry as well as Back.**
+- **Page-turn animations no longer own the final state.** Both the leave and the
+  entrance classes come off on a timer — see `docs/animation-house-rules.md`.

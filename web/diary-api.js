@@ -126,6 +126,14 @@ export const dia = {
 
   mode: 'entry',        // 'entry' | 'history'
   contextOpen: false,   // the optional daily context panel
+  /**
+   * Whether the guided prompts past the first three are showing (D2.2 §5).
+   *
+   * A view preference, not data: it is never saved, and it resets with the day.
+   * Five empty prompt fields cost 411px of the left page — more than the free
+   * writing above them — which is what pushed the spread far below the fold.
+   */
+  promptsOpen: false,
   loading: false,
   error: null,
 

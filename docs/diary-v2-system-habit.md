@@ -58,3 +58,62 @@ the weeks that matter.
 Diary completion is a **computed series**, derived on read from `diary_entries`.
 It is never materialised into `habit_entries`. Any future history view must ask
 Diary for the range rather than joining habit data.
+
+---
+
+# D2.2 — it joined the system
+
+## The defect
+
+The row was drawn on Today and was not **in** the habit system. Today reported
+`0/5` with `Write in Diary` visibly complete, because the total was
+`due.length` and the computed row is not in `due`. Calendar knew nothing about
+it at all.
+
+A habit you can see completed while the counter beside it says you have done
+nothing is worse than no habit.
+
+## One provider
+
+`api/src/lib/diary-habit.ts`. Today's totals, the Calendar day totals, the
+Calendar history series, the day sheet and `/diary/streak` all come through it.
+There is deliberately **no second implementation in the web client** — the
+client renders what the server returns and computes nothing.
+
+    writtenDays(rows)                  meaningful days, by isMeaningfulEntry
+    diaryStreak(written, today)        the run ending today, or yesterday
+    diaryHabitSince(written, today)    the first day it counts as due
+    diaryHabitRow(written, today)      the row Today draws
+    addDiaryToHabitDays(days, …)       folds the series into per-day totals
+    habitTotals(ordinary, diary)       the ONE sum
+
+`habitTotals` is the only place ordinary habits and the computed one are added
+together. §6's example holds: five ordinary plus an enabled Diary habit is six,
+and writing only the diary shows `1/6`.
+
+## Due from when you started
+
+Today is always due — that is the point of the row. History is due from the
+**first day you wrote**, the equivalent of an ordinary habit's `createdAt`.
+`habit-history.ts` already refuses to count days before a habit existed, and a
+history screen that backfills guilt for the years before you kept a diary is not
+worth looking at.
+
+## The preference
+
+`diaryHabit`, default **on**. Off removes it from Today, from every total and
+from the Calendar series — and touches **no diary data in either direction**.
+Verified: with the setting off, `/diary/streak` still answered `current 1,
+wroteToday true`, and re-enabling restored the whole history derived, with
+nothing to restore.
+
+## Visual parity
+
+Same row, same 32px ring markup, same type, same spacing, same hover, same
+completed appearance, same `streakHtml`. Inside `.hb-list`, first. The `SYSTEM`
+badge is gone.
+
+Measured: the Diary row and every ordinary row are **46px tall with a 32×32
+ring**. What remains different is a quiet divider, a small diary mark, and
+"Automatic" as the title — which explains the behaviour without inventing a
+component.
