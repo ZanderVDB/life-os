@@ -28,7 +28,7 @@
  * Nothing is written while dragging. One save happens after the drop, from the
  * placeholder's final neighbours.
  */
-import { reducedMotion } from './motion.js';
+import { settle, reducedMotion } from './motion.js';
 
 const LIFT_THRESHOLD = 5;      // px of movement before a drag begins
 const TOUCH_HOLD = 180;        // ms of stillness before a touch becomes a drag
@@ -109,6 +109,44 @@ function onPointerDown(e, hooks) {
   document.addEventListener('pointercancel', cancel, true);
 }
 
+/* ── Drag geometry ─────────────────────────────────────────────────────
+ *
+ * `.bucket.future` is `grid-column: 1/-1`, so a Future task rests at two or
+ * three times the width of one in Today, This Week or This Month.
+ *
+ * Lifting it at its RESTING width made the floating card cover the neighbouring
+ * buckets and hide the very thing the drag is for — you could not see where the
+ * card was going, because the card was on top of it. It also hid the TASKS and
+ * PROJECTS partition previews.
+ *
+ * So the drag visual is always the COMPACT width, whatever it was resting at.
+ */
+
+/** The narrowest drop zone on the board — the standard upper-bucket column. */
+function compactZoneWidth() {
+  const zones = [...document.querySelectorAll('.drop[data-bucket]')]
+    .filter((z) => z.dataset.bucket !== 'project' && z.clientWidth > 0);
+  if (!zones.length) return null;
+  return Math.min(...zones.map((z) => z.clientWidth));
+}
+
+/**
+ * The width the dragged card uses for the WHOLE gesture.
+ *
+ * Measured once, at lift, and never changed again. Resizing per-bucket as the
+ * pointer crossed a boundary would make the card breathe, which reads as a
+ * glitch rather than as feedback — and the addendum asks explicitly for one
+ * stable geometry.
+ *
+ * On a narrow screen every bucket is the same width, so this returns the card's
+ * own width and nothing changes.
+ */
+function dragWidth(card) {
+  const own = card.getBoundingClientRect().width;
+  const compact = compactZoneWidth();
+  return compact ? Math.min(own, compact) : own;
+}
+
 /* ── Lift ──────────────────────────────────────────────────────────────── */
 
 function begin(card, e, hooks) {
@@ -132,10 +170,23 @@ function begin(card, e, hooks) {
   const rect = card.getBoundingClientRect();
   const from = card.closest('.drop');
 
+  /* The compact drag width, and the height the card will actually BE at that
+   * width. A Future card is wide and short; the same words in a column wrap and
+   * are taller, so measuring the gap from the resting rect would open a
+   * placeholder too small for what is about to land in it. */
+  const width = dragWidth(card);
+  let height = rect.height;
+  if (width < rect.width) {
+    const prev = card.style.width;
+    card.style.width = `${width}px`;
+    height = card.getBoundingClientRect().height;
+    card.style.width = prev;
+  }
+
   // The placeholder is the proposed position, made of real layout.
   const ph = document.createElement('div');
   ph.className = 'task-placeholder';
-  ph.style.height = `${rect.height}px`;
+  ph.style.height = `${height}px`;
   ph.dataset.placeholder = '1';
 
   session = {
@@ -147,10 +198,14 @@ function begin(card, e, hooks) {
     ph,
     fromBucket: from?.dataset.bucket ?? null,
     // Where the pointer sits inside the card, so it does not jump on lift.
-    grabX: e.clientX - rect.left,
+    /* Clamped to the compact width, so a wide Future card does not leave the
+     * pointer holding empty space where the card used to extend. */
+    grabX: Math.min(e.clientX - rect.left, width - 24),
     grabY: e.clientY - rect.top,
-    width: rect.width,
-    height: rect.height,
+    width,
+    height,
+    /** The resting width, so a cancel can put it back exactly. */
+    restWidth: rect.width,
     raf: 0,
     scrollRoot: hooks.getScrollRoot?.() ?? document.scrollingElement,
     lastY: e.clientY,
@@ -160,8 +215,8 @@ function begin(card, e, hooks) {
 
   card.parentNode.insertBefore(ph, card);
   card.classList.add('is-dragging');
-  card.style.width = `${rect.width}px`;
-  card.style.height = `${rect.height}px`;
+  card.style.width = `${width}px`;
+  card.style.height = `${height}px`;
   card.style.position = 'fixed';
   card.style.left = '0';
   card.style.top = '0';
@@ -360,34 +415,38 @@ function updateInsertion(x, y) {
     // it first reported a width 3px short. The resulting placeholder height
     // change is part of this same FLIP, so the cards below it slide rather
     // than jump.
-    if (parentChanged) adoptWidth(zone);
+    /* The card keeps ONE width for the whole gesture. It used to adopt each
+     * destination bucket's width here, which made it breathe as the pointer
+     * crossed boundaries and — when a measurement was stale — left it at the
+     * wrong one. Only the placeholder follows the destination now. */
+    if (parentChanged) adoptGap(zone);
   });
 }
 
 /**
- * Resizes the lifted card to the destination bucket's width, and the
- * placeholder to whatever height the card becomes at that width — a long title
- * wraps to two lines in a narrow bucket and one in a wide one, so the gap has
- * to follow the card, not the other way round.
+ * Resizes the PLACEHOLDER to the gap this card will actually need here.
  *
- * The grab point is kept proportional, so a card that shrinks does not jump out
- * from under the pointer.
+ * A long title wraps to two lines in a narrow bucket and one in a wide one, so
+ * the gap has to follow the destination. The dragged CARD does not: it keeps
+ * the compact width it was lifted at, for the whole gesture. Resizing the card
+ * per bucket made it breathe as the pointer crossed boundaries, and a Future
+ * card that adopted the full-row width covered the buckets either side of the
+ * one being aimed at.
+ *
+ * Measured on the card at the destination width and then put straight back, so
+ * nothing the user sees flickers.
  */
-function adoptWidth(zone) {
+function adoptGap(zone) {
   const width = zone.clientWidth;
-  if (!width || Math.abs(width - session.width) < 1) return;
-
-  const ratio = session.width ? session.grabX / session.width : 0.5;
-  session.width = width;
-  session.grabX = Math.min(width - 8, ratio * width);
-
+  if (!width) return;
   const card = session.card;
+  const prevW = card.style.width;
+  const prevH = card.style.height;
   card.style.width = `${width}px`;
-  // Let the card reflow at its new width before measuring the height it needs.
   card.style.height = 'auto';
   const h = card.getBoundingClientRect().height;
-  card.style.height = `${h}px`;
-  session.height = h;
+  card.style.width = prevW;
+  card.style.height = prevH;
   session.ph.style.height = `${h}px`;
 
   position(session.lastX, session.lastY);
@@ -548,6 +607,29 @@ function finish(hooks) {
         { transform: 'none', boxShadow: 'none' }],
       { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' },
     );
+    /* Dropped into Future, which is full width.
+     *
+     * It SETTLES first and widens after — never while still floating over
+     * Future before release, which would make the card cover the buckets
+     * either side at the exact moment the person is aiming. The card is already
+     * in its final slot here, so this animates a width it has genuinely
+     * reached, not a guess. */
+    const landed = s.card.getBoundingClientRect().width;
+    if (landed > s.width + 1) {
+      const grow = s.card.animate(
+        [{ width: `${s.width}px` }, { width: `${landed}px` }],
+        { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' },
+      );
+      /* CANCELLED on a guaranteed timer, not merely left to finish.
+       *
+       * A running animation overrides the computed width, so an animation that
+       * never completes — a backgrounded tab, a throttled timeline — would hold
+       * the card at the compact width for ever, in a bucket where it should be
+       * full width. Cancelling drops the effect and returns the card to its own
+       * layout whatever happened. The card's real width is never the
+       * animation's to decide; the animation only paints the journey. */
+      settle(grow, 260, () => grow.cancel());
+    }
   }
 
   document.body.classList.remove('is-dragging-task');
@@ -571,6 +653,10 @@ function nextTaskAfter(ph) {
 function restoreCard(s) {
   const c = s.card;
   c.classList.remove('is-dragging');
+  /* EVERY temporary value, on every teardown path — drop, cancel and orphan
+   * reclaim all come through here. A stale inline width is the one that would
+   * survive invisibly: the card would look right in the bucket it landed in and
+   * wrong the moment the board reflowed. */
   for (const p of ['width', 'height', 'position', 'left', 'top', 'zIndex',
     'pointerEvents', 'margin', 'transform']) c.style[p] = '';
   // The steps come back exactly as they were. A drag is a reorder, and a

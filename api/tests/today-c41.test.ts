@@ -153,12 +153,16 @@ test('drag: native HTML5 drag-and-drop is gone', () => {
 
 test('drag: a real placeholder holds the proposed position', () => {
   assert.match(dragCode, /className = 'task-placeholder'/, 'no placeholder element');
-  assert.match(dragCode, /ph\.style\.height = `\$\{rect\.height\}px`/,
+  /* The gap is the height the card will BE where it is going, which since the
+   * D2.1 addendum is measured at the compact drag width rather than taken from
+   * the resting rect — a Future card is wide and short, and the same words in a
+   * column wrap and are taller. */
+  assert.match(dragCode, /ph\.style\.height = `\$\{height\}px`/,
     'the placeholder does not match the card height');
   assert.match(html, /\.task-placeholder\{/, 'the placeholder has no styling');
-  // The card keeps its visible size while lifted.
-  assert.match(dragCode, /card\.style\.width = `\$\{rect\.width\}px`/,
-    'the lifted card does not keep its width');
+  // The lifted card takes the compact width, not its resting one.
+  assert.match(dragCode, /card\.style\.width = `\$\{width\}px`/,
+    'the lifted card does not take the drag width');
 });
 
 test('drag: insertion index is decided by card midpoints', () => {
@@ -355,22 +359,29 @@ test('data: dragging can never write more than once per drop', () => {
 
 /* ── Follow-up corrections ───────────────────────────────────────────── */
 
-test('drag: the card takes the destination bucket\'s width', () => {
-  // Future spans the full row (grid-column:1/-1) while Today, This Week and
-  // This Month share it, so a card carried between them changes width.
+test('drag: the card keeps ONE compact width; only the gap follows the bucket', () => {
+  /* REVERSED by the D2.1 addendum. The card used to adopt each destination
+   * bucket's width, which made a Future card — `grid-column: 1/-1`, two or
+   * three times as wide — cover the buckets either side of the one being aimed
+   * at, hiding the insertion point and the partition previews. It also made the
+   * card breathe as the pointer crossed boundaries.
+   *
+   * Now the width is decided once at lift and never re-adopted. `adoptGap`
+   * resizes only the PLACEHOLDER, because a long title still wraps differently
+   * in a narrow bucket than in a wide one. */
   assert.match(html, /\.bucket\.future\{grid-column:1\/-1\}/, 'Future is no longer full-width');
-  assert.match(dragCode, /function adoptWidth/, 'the card keeps its original width');
-  assert.match(dragCode, /if \(parentChanged\) adoptWidth\(zone\)/,
-    'width is not adopted when the bucket changes');
+  assert.doesNotMatch(dragCode, /function adoptWidth/, 'the card still adopts bucket widths');
+  assert.match(dragCode, /function adoptGap\(zone\)/);
+  assert.match(dragCode, /if \(parentChanged\) adoptGap\(zone\)/);
   // Measured after the placeholder lands: an empty drop zone carries a 1.5px
   // dashed border, so measuring first reported a width 3px short.
   const fn = body(dragCode, 'function updateInsertion(x, y)');
   const flipAt = fn.indexOf('flipSiblings(');
-  assert.ok(fn.indexOf('adoptWidth(zone)') > flipAt,
-    'width is measured before the placeholder lands, while .is-empty still applies');
-  // The placeholder must follow the card's new height, not the other way round.
+  assert.ok(fn.indexOf('adoptGap(zone)') > flipAt,
+    'the gap is measured before the placeholder lands, while .is-empty still applies');
+  // The gap follows the DESTINATION, measured on the card at that width.
   assert.match(dragCode, /session\.ph\.style\.height = `\$\{h\}px`/,
-    'the gap does not follow the resized card');
+    'the gap does not follow the destination width');
   assert.match(html, /transition:width var\(--d-base\)[^}]*height var\(--d-base\)/,
     'the resize snaps instead of easing');
 });

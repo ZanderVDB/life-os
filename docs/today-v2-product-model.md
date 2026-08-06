@@ -275,3 +275,54 @@ The adaptive headings are correct on both paths: the keyboard route goes through
 Verified in a browser: moving a standalone task back one bucket into a
 project-only bucket produced `[tasks] S [projects] P P P P` and removed the
 now-empty `[tasks]` heading from the bucket it left.
+
+## Drag geometry: one width for the whole gesture
+
+`.bucket.future` is `grid-column: 1/-1`, so a Future task rests two or three
+times wider than one in Today, This Week or This Month.
+
+**The defect.** Lifting it at that resting width made the floating card cover
+the neighbouring buckets and hide the very thing the drag is for — you could not
+see where the card was going, because the card was on top of it. It also hid the
+TASKS and PROJECTS partition previews.
+
+There was a second, opposite half: `adoptWidth(zone)` re-measured the card
+against each destination as the pointer crossed into it. That made the card
+breathe, and when a measurement was stale it left the card at the wrong width —
+the "does not always shrink reliably" in the report.
+
+**The rule now.** The drag visual takes the **compact** width, decided once at
+lift by `dragWidth()` — the narrowest drop zone on the board — and never
+re-adopted. On a narrow screen every bucket is the same width, so nothing
+changes.
+
+| | |
+|---|---|
+| resting | Future full-width; the other three compact |
+| lift | compact immediately, whatever it was resting at |
+| during | one width, unchanged, whichever bucket is beneath |
+| placeholder | follows the DESTINATION — `adoptGap` measures the card at that width, because a long title wraps differently in a column |
+| drop into a compact bucket | stays compact |
+| drop into Future | settles into position, then widens |
+| cancel / failure | exact resting width, nothing inline left behind |
+
+**Expansion happens after settling, never while floating** — widening over
+Future before release would cover the buckets either side at the exact moment
+the person is aiming.
+
+### The animation may not own the final width
+
+A running Web Animation overrides the computed width. One that never completes —
+a backgrounded tab, a throttled timeline — would hold the card compact in a
+bucket where it should be full width.
+
+Observed directly: the harness browser throttles its animation timeline, and the
+card sat at 160px inside a 577px bucket indefinitely. The grow animation is now
+`settle(grow, 260, () => grow.cancel())`, so the effect is dropped on a
+guaranteed timer and the card returns to its own layout whatever happened. The
+animation paints the journey; it never decides the destination.
+
+Measured at 1280px: resting 577 -> lift 160 -> stable 160 across the whole drag
+-> no overlap with the neighbouring bucket -> lands 160 in Today, 577 in Future,
+with a clean `style` attribute every time. Cancel restores exactly, with no
+stray placeholder, preview heading or duplicate node.

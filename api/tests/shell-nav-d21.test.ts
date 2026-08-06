@@ -250,3 +250,80 @@ test('the spread grows with its content', () => {
   assert.match(html, /\.dia-book\.bk-spread\{aspect-ratio:auto;min-height:/);
   assert.match(html, /\.dia-scroll\{[^}]*overflow:visible/);
 });
+
+/* ══ Drag geometry ═════════════════════════════════════════════════════ */
+
+test('the dragged card is always the compact width, whatever it was resting at', () => {
+  /* `.bucket.future` is grid-column 1/-1, so a Future task rests two or three
+   * times wider. Lifting it at that width made the floating card cover the
+   * neighbouring buckets and hide the insertion point — you could not see where
+   * the card was going, because the card was on top of it. */
+  assert.match(dragJs, /function compactZoneWidth\(\)/);
+  assert.match(dragJs, /function dragWidth\(card\)/);
+  const fn = dragJs.slice(dragJs.indexOf('function dragWidth'));
+  assert.match(fn.slice(0, 400), /Math\.min\(own, compact\)/);
+  // Applied at lift, to the card and to the session.
+  assert.match(dragJs, /card\.style\.width = `\$\{width\}px`/);
+  assert.match(html, /\.bucket\.future\{grid-column:1\/-1\}/);
+});
+
+test('the width is measured ONCE and never re-adopted mid-drag', () => {
+  /* Resizing per-bucket as the pointer crossed a boundary made the card breathe
+   * — and a Future card that adopted the full-row width covered the buckets
+   * either side of the one being aimed at. `adoptWidth` is gone; `adoptGap`
+   * resizes only the PLACEHOLDER.
+   *
+   * Asserted on `session.width`, not on `style.width`: adoptGap does set the
+   * card's width for a moment to measure the height it would need there, and
+   * puts it straight back. What must never happen is the session's geometry
+   * changing after lift. */
+  assert.doesNotMatch(dragJs, /function adoptWidth/, 'the card still adopts bucket widths');
+  assert.match(dragJs, /function adoptGap\(zone\)/);
+  const after = dragJs.slice(dragJs.indexOf('function begin(card, e, hooks)') + 200);
+  assert.doesNotMatch(after, /session\.width = /,
+    'the drag width is reassigned after the lift');
+  assert.doesNotMatch(after, /session\.grabX = /,
+    'the grab point is recomputed mid-drag, which makes the card jump');
+  // The gap still follows the destination, because a title wraps differently.
+  const gap = dragJs.slice(dragJs.indexOf('function adoptGap'));
+  assert.match(gap.slice(0, 800), /session\.ph\.style\.height/);
+});
+
+test('the placeholder gap is measured at the width the card will actually be', () => {
+  // A Future card is wide and short; the same words in a column wrap and are
+  // taller, so measuring from the resting rect opens a gap too small.
+  const fn = dragJs.slice(dragJs.indexOf('const width = dragWidth(card)'));
+  assert.match(fn.slice(0, 500), /card\.style\.width = `\$\{width\}px`;\s*height = card\.getBoundingClientRect\(\)\.height/);
+  assert.match(dragJs, /ph\.style\.height = `\$\{height\}px`/);
+});
+
+test('expansion into Future happens after settling, never while floating', () => {
+  const fn = dragJs.slice(dragJs.indexOf('const landed = s.card.getBoundingClientRect().width'));
+  assert.match(fn.slice(0, 900), /if \(landed > s\.width \+ 1\)/);
+  // It is measured AFTER the card has been placed in its final slot.
+  const finish = dragJs.slice(dragJs.indexOf('function finish(hooks)'));
+  assert.ok(finish.indexOf('s.ph.replaceWith(s.card)') < finish.indexOf('const landed ='),
+    'the landed width is measured before the card is in place');
+});
+
+test('an unfinished grow animation cannot strand the card at the wrong width', () => {
+  /* A running animation overrides the computed width. One that never completes
+   * — a backgrounded tab, a throttled timeline — would hold the card compact in
+   * a bucket where it should be full width. Observed in the harness browser,
+   * whose animation timeline is throttled: the card sat at 160px in a 577px
+   * bucket until the animation was cancelled. */
+  assert.match(dragJs, /settle\(grow, 260, \(\) => grow\.cancel\(\)\)/);
+  assert.match(dragJs, /import \{ settle, reducedMotion \}/);
+});
+
+test('every teardown path clears the temporary geometry', () => {
+  const fn = dragJs.slice(dragJs.indexOf('function restoreCard(s)'));
+  assert.match(fn.slice(0, 700), /'width', 'height', 'position', 'left', 'top', 'zIndex'/);
+  // Cancel, drop and orphan-reclaim all go through it.
+  assert.match(dragJs, /function abort\(\)[\s\S]{0,300}restoreCard/);
+  assert.match(dragJs, /function reclaimOrphan\(s\)\s*\{\s*restoreCard\(s\)/);
+});
+
+test('the resting width is remembered, so a cancel restores it exactly', () => {
+  assert.match(dragJs, /restWidth: rect\.width/);
+});
