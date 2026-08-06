@@ -37,6 +37,7 @@ import {
 } from './library-save.js';
 import { openLibraryForm } from './library-modal.js';
 import { reducedMotion } from './motion.js';
+import { navToken, navStale } from './nav.js';
 
 /**
  * Waits for a CSS animation, with a timeout that always fires.
@@ -112,20 +113,20 @@ export const hashWasOurs = () => suppressHash;
 
 /* ── Entry point ─────────────────────────────────────────────────────── */
 
-export async function renderLibrary() {
+export async function renderLibrary(nav = navToken()) {
   const head = document.getElementById('page-head');
   const scroll = document.getElementById('main-scroll');
   if (!head || !scroll) return;
   const route = parseLibraryHash() ?? { view: 'overview' };
 
-  if (route.view === 'book') return renderBook(route, head, scroll);
-  if (route.view === 'item') return renderItem(route.id, head, scroll);
-  return renderOverview(head, scroll);
+  if (route.view === 'book') return renderBook(route, head, scroll, nav);
+  if (route.view === 'item') return renderItem(route.id, head, scroll, nav);
+  return renderOverview(head, scroll, nav);
 }
 
 /* ── Overview ────────────────────────────────────────────────────────── */
 
-async function renderOverview(head, scroll) {
+async function renderOverview(head, scroll, nav = navToken()) {
   forgetAll();               // no book is open; nothing should still be pending
   lib.book = null; lib.bookId = null;
   lib.pageHits = [];         // results belong to a query, not to the route
@@ -136,6 +137,7 @@ async function renderOverview(head, scroll) {
     scroll.innerHTML = `<div class="lib-grid">${'<div class="skeleton lib-skel"></div>'.repeat(6)}</div>`;
     try { await loadItems({ archived: lib.showArchived }); } catch { /* shown below */ }
   }
+  if (navStale(nav)) return;
   paintOverview(scroll);
   /* Coming back from a book opened out of a search must land back on the
    * results, not on "nothing matched". The query survives the round trip, so
@@ -367,11 +369,12 @@ function repaintCard(item) {
 
 /* ── One item (§23) ──────────────────────────────────────────────────── */
 
-async function renderItem(id, head, scroll) {
+async function renderItem(id, head, scroll, nav = navToken()) {
   if (!lib.itemsLoaded) {
     scroll.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
     try { await loadItems({ archived: true }); } catch { /* handled below */ }
   }
+  if (navStale(nav)) return;
   const item = lib.items.find((i) => i.id === id);
   if (!item) {
     head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Not found</h1>';
@@ -427,22 +430,30 @@ async function renderItem(id, head, scroll) {
 
 /* ── The Book ────────────────────────────────────────────────────────── */
 
-async function renderBook(route, head, scroll) {
+async function renderBook(route, head, scroll, nav = navToken()) {
   if (lib.bookId !== route.bookId || !lib.book) {
-    scroll.innerHTML = '<div class="skeleton" style="height:60vh;border-radius:16px"></div>';
+    // Keep whatever is on screen until the replacement is ready — no blank book.
+    if (!scroll.querySelector('.bk-book')) {
+      scroll.innerHTML = '<div class="skeleton" style="height:60vh;border-radius:16px"></div>';
+    }
     head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Opening…</h1>';
     forgetAll();
     try {
       await loadBook(route.bookId);
     } catch (e) {
+      if (navStale(nav)) return;
       head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Not found</h1>';
       scroll.innerHTML = `<div class="state"><b>That book did not open</b>${esc(e.message)}
         <div style="margin-top:16px"><button class="btn" data-back>Back to Library</button></div></div>`;
       scroll.querySelector('[data-back]').onclick = () => setHashAndRender('#library');
       return;
     }
+    if (navStale(nav)) return;
     lib.sectionIdx = 0; lib.spreadIdx = 0; lib.cover = true; lib.half = 0;
   }
+  /* Painting from here would replace whatever the person navigated to, and
+   * `setHash` inside paintBookBody would rewrite the URL back into this Book. */
+  if (navStale(nav)) return;
 
   // A deep link lands ON its page, not on the cover.
   if (route.sectionId) {
@@ -880,6 +891,8 @@ export async function showConflict(pageId) {
   const { page } = findPage(pageId);
   const entry = entryOf(pageId);
   if (!page || !entry) return;
+  // A conflict on a book nobody is looking at is resolved when they come back.
+  if (!document.querySelector('.bk-book')) return;
 
   const choice = await ctx.choose({
     title: 'This page changed somewhere else',

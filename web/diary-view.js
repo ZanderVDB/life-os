@@ -35,6 +35,7 @@ import {
   resolveKeepMine, resolveTakeTheirs, STATUS_LABEL,
 } from './diary-save.js';
 import { reducedMotion } from './motion.js';
+import { navToken, navStale } from './nav.js';
 
 /** Injected once by app.js: the API caller, the toast, the error wrapper. */
 let ctx = null;
@@ -73,26 +74,29 @@ function setHash(next) {
 
 /* ── Entry point ─────────────────────────────────────────────────────── */
 
-export async function renderDiary() {
+export async function renderDiary(nav = navToken()) {
   const head = document.getElementById('page-head');
   const scroll = document.getElementById('main-scroll');
   if (!head || !scroll) return;
 
   const route = parseDiaryHash() ?? { mode: 'entry', date: localToday() };
   dia.mode = route.mode;
-  if (route.mode === 'history') return renderHistory(head, scroll);
+  if (route.mode === 'history') return renderHistory(head, scroll, nav);
 
   dia.date = route.date;
-  return renderEntry(head, scroll);
+  return renderEntry(head, scroll, { nav });
 }
 
 /* ── Entry mode ──────────────────────────────────────────────────────── */
 
-async function renderEntry(head, scroll, { animate = null } = {}) {
+async function renderEntry(head, scroll, { animate = null, nav = navToken() } = {}) {
   head.innerHTML = headerHtml();
   wireHead(head);
 
-  scroll.innerHTML = loadingHtml();
+  /* Only cleared when there is nothing to keep. A day already on screen stays
+   * there until its replacement is ready — see the no-blank rule in
+   * shell-navigation-and-transition-model.md. */
+  if (!scroll.querySelector('.dia-book')) scroll.innerHTML = loadingHtml();
   try {
     /* The day, the streak and the month are fetched together: the streak sits
      * on the right page and the month fills the date-jump grid, and loading
@@ -103,10 +107,16 @@ async function renderEntry(head, scroll, { animate = null } = {}) {
       loadMonth(dia.month ?? dia.date).catch(() => null),
     ]);
   } catch (e) {
+    if (navStale(nav)) return;
     scroll.innerHTML = errorHtml(e.message);
     scroll.querySelector('#dia-retry')?.addEventListener('click', () => void renderDiary());
     return;
   }
+
+  /* The person navigated away while this was in flight. Painting now would
+   * replace whatever they asked for, and `setHash` below would put the URL
+   * back into Diary — which is how a stale load used to reclaim the screen. */
+  if (navStale(nav)) return;
 
   head.innerHTML = headerHtml();
   wireHead(head);
@@ -576,6 +586,7 @@ async function goHistory() {
 async function renderHistory(
   head = document.getElementById('page-head'),
   scroll = document.getElementById('main-scroll'),
+  nav = navToken(),
 ) {
   dia.mode = 'history';
   dia.date = dia.date ?? localToday();
@@ -589,14 +600,18 @@ async function renderHistory(
     </div>`;
   head.querySelector('#dia-back').addEventListener('click', () => void goToDate(dia.date));
 
-  scroll.innerHTML = '<div class="skeleton" style="height:320px;border-radius:16px"></div>';
+  if (!scroll.querySelector('.dia-history')) {
+    scroll.innerHTML = '<div class="skeleton" style="height:320px;border-radius:16px"></div>';
+  }
   try {
     await Promise.all([loadMonth(dia.month), loadRecent()]);
   } catch (e) {
+    if (navStale(nav)) return;
     scroll.innerHTML = errorHtml(e.message);
     scroll.querySelector('#dia-retry')?.addEventListener('click', () => void renderHistory());
     return;
   }
+  if (navStale(nav)) return;
   paintHistory(scroll);
   setHash('#diary/history');
 }
@@ -718,6 +733,8 @@ let conflictShown = null;
 export async function showConflict(date) {
   const entry = entryOf(date);
   if (!entry) return;
+  // A conflict on a day nobody is looking at is resolved when they come back.
+  if (dia.mode !== 'entry' || dia.date !== date) return;
 
   const choice = await ctx.choose({
     title: 'This day changed somewhere else',
@@ -784,6 +801,8 @@ function installGlobals() {
    * response was for a version already passed, returned early, and left the
    * status on "Saving…" forever while the row sat happily in the database. */
   onEntryCreated((entry) => {
+    /* A save may land after the person has left. It updates its own record and
+     * its own coordinator; it must not touch a screen that is no longer here. */
     const foot = document.querySelector('.dia-foot');
     if (!foot || foot.querySelector('#dia-archive')) return;
     foot.querySelector('.dia-hint').textContent = '';

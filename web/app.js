@@ -10,6 +10,7 @@
  */
 import { ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
 import { initServiceWorker } from './pwa.js';
+import { bumpNav, navToken, navStale } from './nav.js';
 import { flip, pulse, collapseOut, reducedMotion, afterTransition, settle } from './motion.js';
 import { openUtilityMenu, openUtilitySurface, closeUtility,
   utilityTriggerHtml } from './utility-menu.js';
@@ -401,6 +402,11 @@ async function boot() {
     onDrop: (id, bucket, anchor) => (bucket === 'project'
       ? reorderProjectTask(id, anchor)
       : moveTask(id, bucket, anchor, { settled: true })),
+    /* After the move settles, the HEADINGS may be wrong in two places: the
+     * bucket that gained a kind it did not have, and the one that lost its
+     * last. Reconciling them is not a re-sort — the rows are already where the
+     * drop put them — it is recomputing which dividers still earn their place. */
+    onSettled: syncBucketHeads,
   });
   initServiceWorker();
 }
@@ -604,6 +610,11 @@ function wireShell() {
   window.addEventListener('hashchange', () => {
     const r = routeFromHash();
     if (r !== state.route) return go(r);
+    /* Back and forward inside a section ARE navigations, and a slower fetch
+     * from before them must not reclaim the screen. A hashchange we caused
+     * ourselves is not one. */
+    if (location.hash === ownHashWrite) ownHashWrite = null;
+    else bumpNav();
     // Back/forward within Calendar moves between the calendar and its
     // utilities without a route change, so it is handled here.
     const u = utilityFromHash();
@@ -710,7 +721,15 @@ const projectFromHash = () => {
   return route === 'projects' && sub ? sub : null;
 };
 
+/** The hash value `go()` last wrote, so its own hashchange is not a navigation. */
+let ownHashWrite = null;
+
 async function go(id) {
+  /* Claimed BEFORE any await. `go` waits on a pending save before it changes
+   * the route, and during that wait `state.route` is still the old one — so a
+   * second and third click entered here and took the same branch. Three
+   * concurrent navigations, and whichever finished last painted last. */
+  const nav = bumpNav();
   if (state.route === id) {
     /* Clicking the section you are already in returns you to its TOP LEVEL.
      *
@@ -720,7 +739,7 @@ async function go(id) {
      * Only fires when the hash is deeper than the section root, so clicking
      * the section you are already at the top of is still a no-op. */
     const path = location.hash.slice(1).split('?')[0].split('/').filter(Boolean);
-    if (path.length > 1) await goToSectionRoot(id);
+    if (path.length > 1) await goToSectionRoot(id, nav);
     window.__closeDrawer?.();
     return;
   }
@@ -728,10 +747,16 @@ async function go(id) {
   // the words. The write is awaited BEFORE the route changes, not alongside it.
   if (state.route === 'library') await libraryWillLeave();
   if (state.route === 'diary') await diaryWillLeave();
+  // Somebody clicked again while that flush was running. Their click wins.
+  if (navStale(nav)) return;
   // §7 A utility surface is anchored to a control on the page you are leaving.
   closeUtility();
   state.route = id;
-  if (location.hash.slice(1) !== id) location.hash = id;
+  /* Remembered so the hashchange this triggers is recognised as OURS. Without
+   * that, the handler below bumped the navigation token and invalidated the
+   * very navigation that had just written the hash — Today loaded its tasks
+   * and then refused to paint them, because by then it looked stale. */
+  if (location.hash.slice(1) !== id) { ownHashWrite = `#${id}`; location.hash = id; }
   document.querySelectorAll('[data-route]').forEach((a) => {
     if (a.dataset.route === id && a.closest('.nav')) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -739,7 +764,7 @@ async function go(id) {
   positionPill();
   /* account popover removed */
   window.__closeDrawer?.();
-  await loadRoute();
+  await loadRoute(nav);
 }
 
 /**
@@ -748,22 +773,24 @@ async function go(id) {
  * Only the two sections that HAVE a deeper level need an entry here. Anything
  * else falls through to a plain route reload, which is already correct.
  */
-async function goToSectionRoot(id) {
+async function goToSectionRoot(id, nav = navToken()) {
   if (id === 'library') {
     await libraryWillLeave();
+    if (navStale(nav)) return undefined;
     location.hash = '#library';
-    return renderLibrary();
+    return renderLibrary(nav);
   }
   if (id === 'diary') {
     await diaryWillLeave();
+    if (navStale(nav)) return undefined;
     location.hash = '#diary';
-    return renderDiary();
+    return renderDiary(nav);
   }
-  return loadRoute();
+  return loadRoute(nav);
 }
 
 /* ── Routes — only the main column changes ───────────────────────────── */
-async function loadRoute() {
+async function loadRoute(nav = navToken()) {
   // Polling a calendar nobody is looking at is a request that can only cost
   // something. loadCalendar() starts it again on the way back in.
   stopCalendarLive();
@@ -788,6 +815,7 @@ async function loadRoute() {
     scroll.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
     try {
       await loadTasks();
+      if (navStale(nav)) return;
       scroll.innerHTML = todayHtml();
       wireToday();
       restoreTodayState();
@@ -819,6 +847,7 @@ async function loadRoute() {
     scroll.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
     try {
       await loadHistory(true);
+      if (navStale(nav)) return;
       scroll.innerHTML = historyHtml();
       wireHistory();
     } catch (e) {
@@ -840,9 +869,9 @@ async function loadRoute() {
   // why an earlier `route === 'calendar'` check never fired.
   if (state.route === 'calendar') return loadCalendar();
 
-  if (state.route === 'library') return renderLibrary();
+  if (state.route === 'library') return renderLibrary(nav);
 
-  if (state.route === 'diary') return renderDiary();
+  if (state.route === 'diary') return renderDiary(nav);
 
   const ph = PLACEHOLDERS[state.route];
   head.innerHTML = `<p class="eyebrow">Life OS</p><h1>${esc(route.label)}</h1>
@@ -928,6 +957,48 @@ function bucketInnerHtml(list) {
 
 const subHeadHtml = (id, label) =>
   `<div class="sub-head" data-sub="${id}" role="presentation">${label}</div>`;
+
+/**
+ * Brings every bucket's headings back in line with what it actually holds.
+ *
+ * A drop moves ROWS. The headings around them are decided by the adaptive rule
+ * in `bucketInnerHtml` — both kinds present means both headings, one kind means
+ * at most one — and a patched DOM does not re-run it. So a bucket that just
+ * gained its first standalone task kept no TASKS heading, and the bucket that
+ * lost its last one kept an empty TASKS heading over nothing.
+ *
+ * Deliberately not a re-render of the bucket: the rows are already correct and
+ * in the right order, and rebuilding them would throw away the FLIP the drop
+ * just finished animating. This adds and removes dividers only.
+ */
+function syncBucketHeads() {
+  document.querySelectorAll('.drop[data-bucket]').forEach((zone) => {
+    if (zone.dataset.bucket === 'project') return;   // the project list has none
+    const cards = [...zone.querySelectorAll('.task')];
+    const standalone = cards.filter((c) => !c.dataset.project);
+    const project = cards.filter((c) => c.dataset.project);
+    const bothKinds = standalone.length > 0 && project.length > 0;
+
+    const want = { tasks: bothKinds, projects: project.length > 0 };
+    for (const [id, label] of [['tasks', 'Tasks'], ['projects', 'Projects']]) {
+      const existing = zone.querySelector(`.sub-head[data-sub="${id}"]`);
+      if (!want[id]) { existing?.remove(); continue; }
+      const anchor = id === 'tasks' ? standalone[0] : project[0];
+      if (!anchor) { existing?.remove(); continue; }
+      if (existing) {
+        // Present but in the wrong place — a heading must sit on its own group.
+        if (existing.nextElementSibling !== anchor) zone.insertBefore(existing, anchor);
+        continue;
+      }
+      const el = document.createElement('div');
+      el.className = 'sub-head';
+      el.dataset.sub = id;
+      el.setAttribute('role', 'presentation');
+      el.textContent = label;
+      zone.insertBefore(el, anchor);
+    }
+  });
+}
 
 const emptyHtml = (b) => `<div class="empty">${
   b.id === 'today' ? 'Nothing planned for today' : 'Empty'}</div>`;

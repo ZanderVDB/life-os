@@ -213,3 +213,37 @@ at once, and doing that as N separate calls would leave the board half-sorted
 whenever the network dropped in the middle: an order nobody chose and nothing
 would ever correct. It accepts position only; letting it move a task between
 buckets would turn a display concern into a data migration.
+
+## Today — partition-aware drag insertion (D2.1)
+
+A standalone Task has `project_id = null`; a Project Task does not. **A drag
+never changes that identity** — project membership is edited in the task editor,
+deliberately, and never as a side effect of where a card was released.
+
+`updateInsertion` enforces that by filtering drag candidates to the dragged
+card's own kind, so the placeholder stops at the partition boundary.
+
+**The regression:** with no candidates of that kind — a standalone task dragged
+into a bucket holding only project work — the filter left an empty list, and the
+code fell through to `zone.appendChild(placeholder)`. The task landed *after*
+every project row. The bucket where the boundary matters most was the one where
+it was not applied.
+
+**The fix is in the insertion model, not in a post-drop re-sort:**
+
+- `partitionAnchor(zone, kind)` returns where a partition BEGINS even when it
+  holds nothing — standalone work before the first project row or its heading,
+  project work at the end.
+- `syncPartitionHeads()` shows the heading the drop *would* create, during the
+  drag, above the placeholder. The placeholder is the real future layout; a
+  preview without the heading would be lying about where the card is going.
+  Previews are marked `data-ph-head` and swept on every teardown, including a
+  cancelled drag.
+- `syncBucketHeads()` runs after the drop settles and reconciles which dividers
+  still earn their place, using the same adaptive rule as `bucketInnerHtml`.
+  It adds and removes headings only — the rows are already where the drop put
+  them, and re-sorting would discard the FLIP that just finished.
+
+Measured in a browser, the exact reported case: during the drag,
+`[tasks*] PH [projects] P P P`; after the drop, `[tasks] S [projects] P P P`;
+and the source bucket loses its now-empty `[tasks]` heading.

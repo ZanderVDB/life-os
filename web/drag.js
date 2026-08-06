@@ -209,6 +209,78 @@ function sectionOf(card) {
   return card.dataset.project ? 'project' : 'standalone';
 }
 
+/**
+ * Where a partition BEGINS in a zone that has none of its cards yet.
+ *
+ * This is the fix for the reported regression. `updateInsertion` filters
+ * candidates to the dragged card's own kind, which is what stops a standalone
+ * task being dropped among project rows. But when the target bucket holds only
+ * project work, that filter leaves NO candidates — and the code fell through to
+ * `zone.appendChild(ph)`, which put the standalone task after every project
+ * row. Exactly the bucket where the boundary matters most was the one where it
+ * was not applied.
+ *
+ * Standalone work comes first, so an empty standalone partition begins before
+ * the first project row (or its heading). Project work comes last, so an empty
+ * project partition begins at the end. Returning `null` means "the end", which
+ * is what `insertBefore` already does with a null reference.
+ */
+function partitionAnchor(zone, kind) {
+  if (kind !== 'standalone') return null;
+  const head = zone.querySelector('.sub-head[data-sub="projects"]');
+  if (head) return head;
+  return [...zone.querySelectorAll('.task')].find((c) => sectionOf(c) === 'project') ?? null;
+}
+
+/**
+ * Shows the headings the drop would produce, while it is still a proposal.
+ *
+ * The placeholder is the real future layout — that is the whole premise of this
+ * drag. A standalone task landing in a project-only bucket will create a TASKS
+ * heading, so the heading has to appear during the drag, above the placeholder,
+ * or the preview is lying about where the card is going.
+ *
+ * Previews are marked and swept, so nothing survives a cancelled drag.
+ */
+function syncPartitionHeads() {
+  document.querySelectorAll('[data-ph-head]').forEach((el) => el.remove());
+  const ph = session.ph;
+  const zone = ph?.parentNode;
+  if (!zone || !zone.classList?.contains('drop')) return;
+
+  const kinds = (sel) => [...zone.querySelectorAll('.task')]
+    .filter((c) => c !== session.card && sectionOf(c) === sel);
+  const standalone = kinds('standalone');
+  const project = kinds('project');
+  const withPh = {
+    standalone: standalone.length + (session.kind === 'standalone' ? 1 : 0),
+    project: project.length + (session.kind === 'project' ? 1 : 0),
+  };
+  // Same adaptive rule the rendered bucket uses: a heading that separates one
+  // thing from nothing is noise.
+  if (!withPh.standalone || !withPh.project) return;
+
+  const head = (id, label) => {
+    const el = document.createElement('div');
+    el.className = 'sub-head';
+    el.dataset.sub = id;
+    el.dataset.phHead = '1';
+    el.setAttribute('role', 'presentation');
+    el.textContent = label;
+    return el;
+  };
+
+  if (!zone.querySelector('.sub-head[data-sub="tasks"]')) {
+    const first = [...zone.children].find((c) =>
+      (c.classList.contains('task') && sectionOf(c) === 'standalone') || c === ph);
+    if (first) zone.insertBefore(head('tasks', 'Tasks'), first);
+  }
+  if (!zone.querySelector('.sub-head[data-sub="projects"]')) {
+    const firstProject = project[0] ?? (session.kind === 'project' ? ph : null);
+    if (firstProject) zone.insertBefore(head('projects', 'Projects'), firstProject);
+  }
+}
+
 function updateInsertion(x, y) {
   const zone = zoneAt(x, y);
   if (!zone) return;
@@ -237,12 +309,30 @@ function updateInsertion(x, y) {
     return y < r.top + r.height / 2;
   }) ?? null;
 
+  /* No cards of this kind here yet. The placeholder still has a correct home —
+   * the START of its own partition — and appending to the zone instead is what
+   * put a standalone task below every project row. */
+  if (!cards.length) {
+    const anchor = partitionAnchor(zone, kind);
+    if (session.ph.parentNode !== zone || session.ph.nextElementSibling !== anchor) {
+      flipSiblings(() => {
+        if (anchor) zone.insertBefore(session.ph, anchor);
+        else zone.appendChild(session.ph);
+        syncPartitionHeads();
+        document.querySelectorAll('.drop').forEach((d) => {
+          d.classList.toggle('is-empty', !d.querySelector('.task,.task-placeholder'));
+        });
+      });
+    }
+    return;
+  }
+
   /* Past the last card of this section, the placeholder goes after it — not at
    * the end of the whole zone, which would put it inside the other section. */
   if (!before && cards.length) {
     const last = cards[cards.length - 1];
     if (last.nextElementSibling !== session.ph) {
-      flipSiblings(() => last.after(session.ph));
+      flipSiblings(() => { last.after(session.ph); syncPartitionHeads(); });
     }
     return;
   }
@@ -254,6 +344,7 @@ function updateInsertion(x, y) {
   flipSiblings(() => {
     if (before) zone.insertBefore(session.ph, before);
     else zone.appendChild(session.ph);
+    syncPartitionHeads();
     // An emptied bucket must not collapse its drop area away mid-drag.
     document.querySelectorAll('.drop').forEach((d) => {
       d.classList.toggle('is-empty', !d.querySelector('.task,.task-placeholder'));
@@ -415,6 +506,7 @@ function reclaimOrphan(s) {
   if (live && live !== s.card) s.card.remove();
   else document.querySelector('.drop')?.appendChild(s.card);
   s.ph.remove();
+  document.querySelectorAll('[data-ph-head]').forEach((el) => el.remove());
   document.body.classList.remove('is-dragging-task');
   session = null;
 }
@@ -422,6 +514,10 @@ function reclaimOrphan(s) {
 function finish(hooks) {
   const s = session;
   cancelAnimationFrame(s.raf);
+  /* Preview headings are a proposal, not layout. They go before anything is
+   * committed, so a cancelled drag leaves nothing behind and the re-render
+   * that follows a drop decides the real headings from the real data. */
+  document.querySelectorAll('[data-ph-head]').forEach((el) => el.remove());
 
   // The list was replaced mid-drag. Drop the gesture rather than writing an
   // order derived from a placeholder that is no longer in the document.
@@ -459,6 +555,10 @@ function finish(hooks) {
 
   // One write, after the drop. Never during.
   hooks.onDrop(s.id, bucket, anchor);
+  /* The rows have landed. Which DIVIDERS still earn their place is a separate
+   * question — a bucket that just gained its first standalone task needs a
+   * TASKS heading, and the one that lost its last needs its heading gone. */
+  hooks.onSettled?.();
 }
 
 /** The next real task after the placeholder — never a hidden or dragged one. */

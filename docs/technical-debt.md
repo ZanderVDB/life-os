@@ -710,3 +710,31 @@ to the boundary, so the offer can appear up to a minute late.
 
 **No screenshots from the harness.** The Browser pane has not composited frames
 for several phases, so every visual claim in D1 is a measurement, not a picture.
+
+## D2.1 — what was specified and NOT built
+
+The phase listed nine items in priority order. Items 1 and 2 shipped; item 3
+shipped in half. Everything below is outstanding and was not started.
+
+**Prefetch and cache (§5).** No adjacent-day, adjacent-spread or adjacent-month
+prefetch, and no cache layer. The no-blank rule was implemented without one —
+existing content simply stays until its replacement arrives — which removes the
+empty frame but does not make the next day feel instant.
+
+**The page-turn illusion during a fetch (§4)** and **measured transition latency
+(§19).** Not built, not measured.
+
+**The Diary system Habit (§14).** `Write in Diary` as a pinned computed habit in
+Today, with completion derived from whether the day has a meaningful entry, is
+designed in the prompt and not implemented. The streak line is still on the
+Diary right page.
+
+**Diary toolbar removal (§7)**, **guided-prompt field redesign (§8)**,
+**growing spread (§9)**, **right-page visual hierarchy (§10-13)**. The Diary
+still has its permanent toolbar and its thin underline prompt fields.
+
+**History density (§15-17).** The month still requires scrolling on a desktop
+viewport, and day cells still show only a dot.
+
+These are independent of each other and of the two fixes that shipped. The
+navigation guard and the partition fix were the ones with correctness at stake.

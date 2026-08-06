@@ -442,7 +442,7 @@ test('live: the signature ignores what changes on every sync', () => {
 });
 
 test('live: polling stops when the calendar is not on screen', () => {
-  const route = body(appCode, 'async function loadRoute()');
+  const route = body(appCode, 'async function loadRoute(');
   assert.match(route, /stopCalendarLive\(\)/, 'the calendar keeps polling from other routes');
   assert.match(appCode, /startCalendarLive\(\);/, 'polling never starts');
   const stop = body(appCode, 'function stopCalendarLive()');

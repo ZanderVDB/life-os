@@ -272,7 +272,7 @@ test('the sheet is rebuilt only when the date changes', () => {
 test('Diary is a real route, not a placeholder', () => {
   assert.doesNotMatch(routes, /id: 'diary'[^}]*placeholder/);
   assert.doesNotMatch(routes, /^\s*diary: \{/m);
-  assert.match(code(app), /if \(state\.route === 'diary'\) return renderDiary\(\)/);
+  assert.match(code(app), /if \(state\.route === 'diary'\) return renderDiary\(nav\)/);
 });
 
 test('the formatted date is never written into the title', () => {
@@ -435,13 +435,13 @@ test('clicking a section you are already in returns you to its top level', () =>
   /* Inside an open Book, "Library" in the sidebar has to mean the shelf. It
    * used to mean nothing at all — the same-route guard returned early, so the
    * one control that looks like a way out was the one that did not work. */
-  assert.match(code(app), /async function goToSectionRoot\(id\)/);
-  assert.match(code(app), /if \(id === 'library'\)[\s\S]{0,160}location\.hash = '#library'/);
-  assert.match(code(app), /if \(id === 'diary'\)[\s\S]{0,160}location\.hash = '#diary'/);
+  assert.match(code(app), /async function goToSectionRoot\(id, nav = navToken\(\)\)/);
+  assert.match(code(app), /if \(id === 'library'\)[\s\S]{0,240}location\.hash = '#library'/);
+  assert.match(code(app), /if \(id === 'diary'\)[\s\S]{0,240}location\.hash = '#diary'/);
   // Only when the hash is deeper than the section root.
-  assert.match(code(app), /if \(path\.length > 1\) await goToSectionRoot\(id\)/);
+  assert.match(code(app), /if \(path\.length > 1\) await goToSectionRoot\(id, nav\)/);
   // And the flush still happens first, so nothing typed is lost on the way out.
-  assert.match(code(app), /goToSectionRoot[\s\S]{0,300}await libraryWillLeave\(\)/);
+  assert.match(code(app), /goToSectionRoot[\s\S]{0,400}await libraryWillLeave\(\)/);
 });
 
 test('the closed cover is one page of the open book', () => {
@@ -466,7 +466,7 @@ test('Library and the Book editor are unchanged by the extraction', () => {
     'border-radius:20px 20px 4px 4px', 'height:round(down,100%,30px)']) {
     assert.ok(html.includes(r), `Library's ${r} moved`);
   }
-  assert.match(code(app), /if \(state\.route === 'library'\) return renderLibrary\(\)/);
+  assert.match(code(app), /if \(state\.route === 'library'\) return renderLibrary\(nav\)/);
   // Library binds the SHARED editor now, not a copy of it.
   assert.match(read('library-book.js'), /from '\.\/editor-blocks\.js'/);
   assert.match(read('library-book.js'), /from '\.\/editor-doc\.js'/);

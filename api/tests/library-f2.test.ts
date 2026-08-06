@@ -407,7 +407,7 @@ test('paste is taken as plain text', () => {
 test('Library is a real route, not a placeholder', () => {
   assert.doesNotMatch(routes, /id: 'library'[^}]*placeholder/);
   assert.doesNotMatch(routes, /^\s*library: \{/m);
-  assert.match(code(app), /if \(state\.route === 'library'\) return renderLibrary\(\)/);
+  assert.match(code(app), /if \(state\.route === 'library'\) return renderLibrary\(nav\)/);
 });
 
 test('no native dialogs anywhere in Library', () => {

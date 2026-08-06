@@ -1602,3 +1602,44 @@ ordinary Tuesday" in the history list, and moved to `timezone`.
 
 907 tests passing. No Legacy Diary content was read, previewed or migrated;
 Legacy was not modified.
+
+---
+
+## D2.1 (partial) — navigation reliability and the Today partition (2026-08-06)
+
+Two reported defects, both fixed and verified. The phase specified nine work
+items in an explicit priority order with "reliability comes before decorative
+polish"; items 1 and 2 are done, item 3 is half done, and items 4-9 are NOT
+started. See technical-debt.md for exactly what remains.
+
+**The navigation race.** Inside a Library Book, clicking Projects, Calendar and
+Today in quick succession could land you back in Library. Root cause: `go()`
+awaits the leave-flush BEFORE changing the route, so during that wait
+`state.route` was still the old one and every subsequent click took the same
+branch. Three concurrent navigations; whichever finished last painted last. And
+because Library and Diary call `setHash()` when they render, a stale render
+rewrote the URL rather than merely repainting.
+
+Fixed with one monotonic token in `web/nav.js`, claimed before any await and
+checked before anything is drawn or the hash is written. A trap inside the fix:
+`go()`'s own `location.hash` write fires `hashchange`, and bumping there
+invalidated the navigation that had just written it — Today loaded its tasks and
+then refused to paint them. The handler now recognises its own write.
+
+Saves are not navigations. A 409 for a page or a day nobody is looking at no
+longer opens a dialog over whatever is on screen.
+
+**The Today partition.** A standalone Task dragged into a project-only bucket
+landed at the bottom of PROJECTS. `updateInsertion` filters candidates to the
+dragged card's kind, which is what keeps the boundary — but with no candidates
+it fell through to `zone.appendChild`. The bucket where the boundary matters
+most was the one where it was not applied. Fixed in the insertion model:
+`partitionAnchor` gives an empty partition a home, the drag previews the heading
+its drop would create, and `syncBucketHeads` reconciles dividers after the drop
+without re-sorting rows.
+
+**No blank frame,** partially: known content is no longer cleared before its
+replacement is ready, in Diary and in Library. Prefetch and the page-turn
+illusion were not reached.
+
+919 tests pass, 12 new.
