@@ -738,3 +738,29 @@ viewport, and day cells still show only a dot.
 
 These are independent of each other and of the two fixes that shipped. The
 navigation guard and the partition fix were the ones with correctness at stake.
+
+## D2.1 — still outstanding after the completion pass
+
+Items 1-6 of the completion prompt shipped. Items 7-9 did not.
+
+**History density (§11-13).** The month still uses tall cells and needs
+scrolling on a desktop viewport, and day cells still show only a dot — no title,
+no feeling, no excerpt, no mood ambience.
+
+**Transition framework (§14).** The no-blank rule holds in Diary and Library —
+known content is never cleared before its replacement is ready — but there is no
+directional paper transition, and Calendar month changes were not touched.
+
+**Prefetch, cache and latency (§15-16).** Not built and not measured. No
+adjacent-day, adjacent-spread or adjacent-month prefetch exists, so a cold
+navigation is exactly as fast as its request. **No performance claim is made.**
+
+**Right-page visual grouping (§6-7).** The check-in still renders as one flat
+column of chip rows. The emotional ambience wash, the grouped modules and the
+transition between fine-feeling sets were not built. The interactions
+themselves — selection, expansion, deselection, right-page-only repaint — work
+and were verified in D2.
+
+**Contextual selection toolbar.** Deliberately omitted. The prompt said omitting
+it is preferable to another distracting toolbar, and nothing about new diary
+writing needs it.

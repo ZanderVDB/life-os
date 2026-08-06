@@ -146,7 +146,6 @@ export function spreadHtml() {
           <input class="dia-title" id="dia-title" value="${esc(e?.title ?? '')}"
             placeholder="Add a title (optional)" aria-label="Entry title" maxlength="300">
         </header>
-        ${toolbarHtml()}
         <div class="dia-scroll">
           <div class="dia-editor" id="dia-editor" contenteditable="true" spellcheck="true"
             role="textbox" aria-multiline="true"
@@ -174,7 +173,23 @@ export function spreadHtml() {
   </div>`;
 }
 
-/** The same restrained set as the Book, in Diary's chrome. */
+/**
+ * The formatting toolbar — no longer rendered.
+ *
+ * Diary is a place to begin writing, not a document editor, and a permanent
+ * ribbon over a journal page makes the whole spread read as a form. Removed in
+ * D2.1 along with the block-style dropdown.
+ *
+ * Nothing about STORAGE changed. Existing entries containing headings,
+ * subheadings, quotes and lists still render exactly as before — `docToHtml`
+ * and the block grid are untouched — and the shared Enter/Backspace rules still
+ * apply, so pressing Enter at the end of an old heading still produces a body
+ * paragraph. What is gone is the way to CREATE new block types by hand, which
+ * new diary writing did not want.
+ *
+ * Kept as a function rather than deleted so the intent is legible and the
+ * decision is reversible in one line.
+ */
 export function toolbarHtml() {
   const b = (cmd, label, glyph, key) =>
     `<button type="button" class="dia-tb" data-cmd="${cmd}" aria-label="${label}"

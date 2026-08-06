@@ -3006,6 +3006,25 @@ body:has(.lib-page) .rail{display:none}
 .bk-book.enter-next{animation:bkEnterLeft .26s cubic-bezier(.4,0,.2,1)}
 .bk-book.enter-prev{animation:bkEnterRight .26s cubic-bezier(.4,0,.2,1)}
 
+/* The computed Diary habit. Quietly marked as a system row: it is not one of
+   your habits, it is Life OS keeping count of one for you. */
+.hb-system{width:100%;text-align:left;background:none;border:0;font-family:inherit;
+  cursor:pointer;border-radius:9px}
+.hb-system .hb-sys-ring{width:22px;height:22px;flex:0 0 auto;border-radius:50%;
+  display:grid;place-items:center;color:var(--accent);
+  box-shadow:inset 0 0 0 1.5px var(--border-strong);
+  transition:box-shadow var(--t-select),background var(--t-select),color var(--t-select)}
+.hb-system.is-done .hb-sys-ring{background:var(--accent-soft);color:#fff;
+  box-shadow:inset 0 0 0 1.5px var(--accent)}
+.hb-sys-tag{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);background:var(--surface-2);border-radius:5px;padding:2px 6px;
+  margin-left:6px;flex:0 0 auto}
+.hb-system:hover{background:var(--surface-2)}
+.hb-system:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* It sits above the list, separated, so it never looks like one of yours. */
+.hb-system{margin-bottom:8px;padding-bottom:10px;
+  border-bottom:1px dashed var(--border)}
+
 /* ═══════════════════════════════════════════════════════════════════════
    DIARY (Phase D2)
    A two-page spread, in the same book language as Library.
@@ -3067,10 +3086,18 @@ body:has(.dia-page) .rail{display:none}
 
 /* Both pages scroll their own content: a spread is a fixed frame, and a long
    day must not stretch it. */
+/* THE SPREAD GROWS.
+   A fixed 420/297 frame with two internally-scrolling pages was right for a
+   Book, where a page is a page. A diary day is as long as the day was, and
+   scrolling inside a 300px well while the browser window has room is a worse
+   answer than letting the paper get taller.
+   `aspect-ratio` becomes a MINIMUM: the grid keeps both page backgrounds the
+   same outer height automatically, so the taller side sets the spread and the
+   gutter and edges extend with it. Ordinary page scrolling does the rest. */
+.dia-book.bk-spread{aspect-ratio:auto;min-height:calc((100vw - 460px) * 297 / 420);
+  height:auto;align-items:stretch}
 .dia-left,.dia-right{display:flex;flex-direction:column;min-height:0}
-.dia-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
-.dia-scroll::-webkit-scrollbar{width:6px}
-.dia-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}
+.dia-scroll{flex:1;min-height:0;overflow:visible}
 
 .dia-sheet-head{flex:0 0 auto;padding-bottom:12px;margin-bottom:6px;
   border-bottom:1px solid rgba(255,255,255,.06)}
@@ -3136,14 +3163,40 @@ body:has(.dia-page) .rail{display:none}
   text-transform:uppercase;color:var(--paper-ink-2)}
 .dia-prompts-n{margin-left:auto;font-size:10.5px;color:var(--paper-ink-2);opacity:.75;
   font-variant-numeric:tabular-nums}
-.dia-prompt{display:block;margin-bottom:12px}
-.dia-prompt-q{display:block;font-size:12.5px;color:var(--paper-ink-2);margin-bottom:3px;
+/* A response AREA, not an underline pretending to be one.
+   The old field was a thin rounded line: empty it read as decoration, and
+   filled it became ordinary page prose with no boundary — you could not tell
+   an answer from the paragraph above it. A modest inset surface says "this is
+   somewhere to write" while empty and "this is an answer" once filled, and it
+   grows with the text rather than scrolling inside two lines. */
+.dia-prompt{display:block;margin-bottom:10px}
+.dia-prompt-q{display:block;font-size:12px;color:var(--paper-ink-2);margin-bottom:5px;
   transition:color var(--t-hover)}
 .dia-prompt.is-filled .dia-prompt-q{color:var(--accent-c)}
-.dia-prompt-a{width:100%;background:none;border:0;border-bottom:1px solid rgba(255,255,255,.09);
-  outline:0;resize:none;overflow:hidden;font-family:inherit;font-size:14px;line-height:1.6;
-  color:var(--paper-ink);padding:2px 0 5px;transition:border-color var(--t-hover)}
-.dia-prompt-a:focus{border-bottom-color:var(--accent-c)}
+.dia-prompt-a{width:100%;display:block;min-height:46px;
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.07);border-radius:8px;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.12);
+  outline:0;resize:none;overflow:hidden;
+  font-family:inherit;font-size:14px;line-height:23px;color:var(--paper-ink);
+  padding:11px 12px;
+  transition:border-color var(--t-hover),background var(--t-hover),height var(--d-base) var(--e-out)}
+.dia-prompt-a::placeholder{color:var(--paper-ink-2);opacity:.4}
+.dia-prompt-a:hover{background:rgba(255,255,255,.05)}
+.dia-prompt-a:focus{border-color:var(--accent-c);background:rgba(255,255,255,.055)}
+.dia-prompt.is-filled .dia-prompt-a{background:rgba(255,255,255,.05);
+  border-color:rgba(255,255,255,.10)}
+
+/* The moment fields use the SAME grammar, one column, lighter than the main
+   writing surface — the right page's answers and the left page's answers should
+   not look like two different kinds of thing. */
+.dia-note-i{background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.07);border-radius:8px;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.12);
+  padding:9px 11px;min-height:40px;
+  transition:border-color var(--t-hover),background var(--t-hover)}
+.dia-note-i:hover{background:rgba(255,255,255,.05)}
+.dia-note-i:focus{border-color:var(--accent-c);background:rgba(255,255,255,.055)}
 
 /* ── The right page: the check-in ─────────────────────────────────────── */
 .dia-checkin{display:flex;flex-direction:column;gap:16px}

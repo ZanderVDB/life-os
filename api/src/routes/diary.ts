@@ -331,8 +331,17 @@ export function registerDiaryRoutes(
 
     // 400 days is a year and a bit — enough to answer honestly, bounded enough
     // that the query cannot grow with the diary.
-    const rows = await db.select({ date: diaryEntries.entryDate })
-      .from(diaryEntries)
+    const rows = await db.select({
+      date: diaryEntries.entryDate,
+      document: diaryEntries.document,
+      title: diaryEntries.title,
+      mood: diaryEntries.mood,
+      energy: diaryEntries.energy,
+      weatherNote: diaryEntries.weatherNote,
+      locationNote: diaryEntries.locationNote,
+      daySummary: diaryEntries.daySummary,
+      reflection: diaryEntries.reflection,
+    }).from(diaryEntries)
       .where(and(
         eq(diaryEntries.workspaceId, ws),
         isNull(diaryEntries.archivedAt),
@@ -341,7 +350,19 @@ export function registerDiaryRoutes(
       ))
       .orderBy(desc(diaryEntries.entryDate));
 
-    const have = new Set(rows.map((r) => r.date));
+    /* MEANINGFUL rows, not merely existing ones, and decided by the SAME rule
+     * the write path uses. A row survives having its content cleared — that is
+     * what makes `restore` possible — so counting rows said somebody had
+     * written on a day they had just emptied, and Today's computed habit stayed
+     * complete. Re-implementing the rule in SQL would give the question two
+     * answers; filtering here gives it one. */
+    const have = new Set(rows
+      .filter((r) => isMeaningfulEntry(r.document as any, {
+        title: r.title, mood: r.mood, energy: r.energy,
+        weatherNote: r.weatherNote, locationNote: r.locationNote,
+        daySummary: r.daySummary, reflection: r.reflection as any,
+      }))
+      .map((r) => r.date));
     const wroteToday = have.has(today);
     let cursor = wroteToday ? today : addDays(today, -1);
     let current = 0;

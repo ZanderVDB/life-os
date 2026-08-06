@@ -247,3 +247,31 @@ it was not applied.
 Measured in a browser, the exact reported case: during the drag,
 `[tasks*] PH [projects] P P P`; after the drop, `[tasks] S [projects] P P P`;
 and the source bucket loses its now-empty `[tasks]` heading.
+
+## Keyboard and menu moves obey the same partition rule (D2.1)
+
+The pointer drag enforced the boundary by filtering its candidates. Every
+non-pointer path — Move up, Move down, Move to top, Move to bottom, and the
+bucket shift arrows — was still anchoring against the WHOLE bucket, which is how
+"Move down" and "Move to bottom" walked a standalone task into the project half.
+
+Two shared helpers, and every path uses them:
+
+- `partitionFor(task)` — the rows a move may land among: the task's own
+  partition, never the bucket. Stepping past its edge does nothing, which is the
+  same boundary the drag placeholder shows.
+- `boundaryAnchor(task, bucket)` — where a task lands in a bucket that has none
+  of its kind yet. Standalone work goes before the first project row; project
+  work goes last, which is `{}` and already correct. The keyboard twin of
+  `partitionAnchor` in `drag.js`.
+
+`project_id` is never touched by any of them. Identity is edited in the task
+editor, deliberately, and never as a side effect of a move.
+
+The adaptive headings are correct on both paths: the keyboard route goes through
+`rebuildBucket`, which re-runs `bucketInnerHtml`; the pointer route uses
+`syncBucketHeads` after the drop settles.
+
+Verified in a browser: moving a standalone task back one bucket into a
+project-only bucket produced `[tasks] S [projects] P P P P` and removed the
+now-empty `[tasks]` heading from the bucket it left.

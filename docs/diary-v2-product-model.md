@@ -115,3 +115,30 @@ lets the API refuse and offer to restore instead.
   `technical-debt.md`. Writing and history were the mandatory half; a context
   panel that duplicates Today is worth doing carefully rather than quickly.
 - **No uploads, no images in entries.** Waiting on Library upload storage.
+
+## D2.1 additions
+
+**Diary contains no Tasks, no Calendar events and no Habit details.** The only
+connection to Habits runs the other way: Today asks Diary whether today has a
+meaningful entry, for the computed `Write in Diary` row. See
+`diary-v2-system-habit.md`.
+
+**The writing surface is simplified.** The permanent formatting toolbar and the
+block-style dropdown are gone — Diary is a place to begin writing, not a
+document editor, and a ribbon over a journal page made the spread read as a
+form. Storage is unchanged: existing entries with headings, subheadings, quotes
+and lists render exactly as before, and the shared Enter/Backspace rules still
+apply. What is gone is the way to create new block types by hand.
+
+**Prompt and moment responses share one grammar.** A modest inset surface —
+8px radius, 1px border, inner shadow, 46px minimum — that grows with its text
+rather than scrolling inside itself. The old thin underline read as decoration
+when empty and as ordinary page prose when filled; you could not tell an answer
+from the paragraph above it.
+
+**The spread grows.** `aspect-ratio` is a minimum, not a fixed frame. The grid
+keeps both page backgrounds the same outer height, so the taller side sets the
+spread and the gutter extends with it. Ordinary page scrolling replaces the
+cramped internal wells.
+
+**The streak left the right page** for Today's habits panel.

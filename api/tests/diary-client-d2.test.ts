@@ -348,10 +348,15 @@ test('a chosen chip can be un-chosen', () => {
 });
 
 test('the streak is a fact, not a scoreboard', () => {
-  // A diary that punishes the weeks you could not write is a diary you stop
-  // opening during the weeks that matter.
-  assert.match(checkinCode, /Today is a good day to start\./);
-  assert.doesNotMatch(checkinCode, /don't break|keep it up|streak lost|missed/i);
+  /* It MOVED in D2.1: continuity belongs beside the other things you keep up,
+   * not at the bottom of the page you are writing on. It is now the computed
+   * `Write in Diary` habit on Today — see shell-nav-d21.test.ts. What survives
+   * from D2 is the tone: a run is stated, never demanded. */
+  assert.doesNotMatch(checkinCode, /dia-streak/, 'the streak is back on the diary page');
+  const rail = code(read('app.js'));
+  const fn = rail.slice(rail.indexOf('function diarySystemHabitHtml'));
+  assert.match(fn.slice(0, 900), /day streak/);
+  assert.doesNotMatch(fn.slice(0, 900), /don't break|keep it up|streak lost|missed/i);
 });
 
 test('the guided prompts sit BELOW the free writing', () => {

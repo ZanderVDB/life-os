@@ -19,6 +19,7 @@ const app = code(read('app.js'));
 const dragJs = code(read('drag.js'));
 const libView = code(read('library-view.js'));
 const diaView = code(read('diary-view.js'));
+const html = read('index.html');
 
 /* ══ The navigation token ══════════════════════════════════════════════ */
 
@@ -142,4 +143,110 @@ test('a drag still cannot change what a task IS', () => {
   // Project membership is changed in the editor, never by where a card landed.
   assert.match(dragJs, /sectionOf\(c\) === kind/);
   assert.match(read('arrange.js'), /export const isStandalone = \(t\) => t\.projectId == null/);
+});
+
+/* ══ Keyboard partition moves ══════════════════════════════════════════ */
+
+test('every non-pointer move works within the task own partition', () => {
+  /* The pointer drag filtered its candidates; the keyboard and menu paths were
+   * still anchoring against the WHOLE bucket, which is how Move down and Move
+   * to bottom walked a standalone task into the project half. */
+  assert.match(app, /function partitionFor\(task, bucket = task\.bucket\)/);
+  const nudge = app.slice(app.indexOf('function nudge(id, dir)'));
+  assert.match(nudge.slice(0, 400), /const list = partitionFor\(t\)/);
+  assert.doesNotMatch(nudge.slice(0, 400), /inBucket\(t\.bucket\)/,
+    'nudge still anchors against the whole bucket');
+});
+
+test('a move into a bucket with no matching partition lands at its boundary', () => {
+  assert.match(app, /function boundaryAnchor\(task, bucket\)/);
+  const fn = app.slice(app.indexOf('function boundaryAnchor'));
+  // Standalone work goes before the first project row; project work goes last,
+  // which is `{}` and already correct.
+  assert.match(fn.slice(0, 600), /if \(!isStandalone\(task\)\) return \{\};/);
+  assert.match(fn.slice(0, 600), /beforeTaskId: project\[0\]\.id/);
+  // Used by every non-pointer path that can cross into a new bucket.
+  assert.match(app, /moveTask\(id, b\.dataset\.b, boundaryAnchor\(t, b\.dataset\.b\)\)/);
+  assert.match(app, /moveTask\(id, next\.id, boundaryAnchor\(t, next\.id\)\)/);
+});
+
+test('Move to top and bottom mean the partition, not the bucket', () => {
+  const at = app.indexOf("b.dataset.o === 'top'");
+  assert.ok(at > -1);
+  const around = app.slice(at - 500, at + 200);
+  assert.match(around, /const list = partitionFor\(t\)\.filter/);
+  assert.match(around, /if \(!list\.length\) return moveTask\(id, t\.bucket, boundaryAnchor/);
+});
+
+/* ══ The computed Diary habit ══════════════════════════════════════════ */
+
+test('Write in Diary is computed, pinned, and cannot be mutated', () => {
+  assert.match(app, /function diarySystemHabitHtml\(\)/);
+  const fn = app.slice(app.indexOf('function diarySystemHabitHtml'));
+  assert.match(fn.slice(0, 900), /Write in Diary/);
+  // Rendered ABOVE the list, so it cannot be reordered into it.
+  const rail = app.slice(app.indexOf('function renderRail'));
+  assert.ok(rail.indexOf('diarySystemHabitHtml()') < rail.indexOf('due.map(habitRowHtml)'),
+    'the system habit is not pinned above the ordinary habits');
+  // No toggle: completing it means writing something, so it opens the Diary.
+  assert.doesNotMatch(fn.slice(0, 900), /data-habit-toggle/);
+  assert.match(app, /#hb-diary'\)\?\.addEventListener\('click', \(\) => go\('diary'\)\)/);
+});
+
+test('the habit stores nothing — Diary stays the only source of truth', () => {
+  const fn = app.slice(app.indexOf('async function loadDiaryStreak'));
+  assert.match(fn.slice(0, 500), /diary\/streak\?today=/);
+  // It reads Diary. It never writes a habit or a habit entry.
+  assert.doesNotMatch(fn.slice(0, 500), /habits|toggleHabit|habitEntries/i);
+});
+
+test('the streak counts MEANINGFUL days, not surviving rows', () => {
+  /* A row survives having its content cleared — that is what makes restore
+   * possible — so counting rows said somebody had written on a day they had
+   * just emptied, and the habit stayed complete. */
+  const route = readFileSync(join('src', 'routes', 'diary.ts'), 'utf8');
+  const fn = route.slice(route.indexOf('/diary/streak'));
+  assert.match(fn.slice(0, 2200), /\.filter\(\(r\) => isMeaningfulEntry\(/);
+  // …and by the SAME rule the write path uses, not a re-implementation in SQL.
+  assert.doesNotMatch(fn.slice(0, 2200), /document_text <> ''/);
+});
+
+test('the streak line left the Diary page', () => {
+  const checkin = read('diary-checkin.js');
+  assert.doesNotMatch(code(checkin), /dia-streak/,
+    'the streak is still rendered on the diary right page');
+  assert.match(checkin, /moved to Today's Habits panel/);
+});
+
+/* ══ Diary writing surface ═════════════════════════════════════════════ */
+
+test('the permanent Diary toolbar is gone, and storage is untouched', () => {
+  const entry = code(read('diary-entry.js'));
+  const spread = entry.slice(entry.indexOf('export function spreadHtml'));
+  assert.doesNotMatch(spread.slice(0, 1800), /toolbarHtml\(\)/,
+    'the spread still renders a permanent toolbar');
+  // Existing formatted entries must still RENDER — docToHtml is untouched.
+  assert.match(entry, /docToHtml\(e\?\.document\)/);
+  const doc = code(read('editor-doc.js'));
+  assert.match(doc, /return `<h\$\{level\}>/);
+  assert.match(doc, /type === 'bulletList' \? 'ul' : 'ol'/);
+  assert.match(doc, /return `<blockquote>/);
+});
+
+test('a prompt response is a surface, not an underline', () => {
+  const rule = html.slice(html.indexOf('.dia-prompt-a{'), html.indexOf('.dia-prompt-a::placeholder'));
+  assert.match(rule, /min-height:46px/);
+  assert.match(rule, /border-radius:8px/);
+  assert.match(rule, /border:1px solid/);
+  assert.match(rule, /box-shadow:inset/);
+  // It grows rather than scrolling inside itself.
+  assert.match(rule, /overflow:hidden/);
+  assert.match(rule, /resize:none/);
+  assert.match(code(read('diary-checkin.js')), /export function autosize/);
+});
+
+test('the spread grows with its content', () => {
+  // aspect-ratio becomes a MINIMUM; the grid keeps both pages the same height.
+  assert.match(html, /\.dia-book\.bk-spread\{aspect-ratio:auto;min-height:/);
+  assert.match(html, /\.dia-scroll\{[^}]*overflow:visible/);
 });

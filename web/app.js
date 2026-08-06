@@ -364,6 +364,8 @@ async function boot() {
   // Habits populate the rail as soon as they arrive. Deliberately not awaited:
   // Today must never wait on a secondary system to appear.
   loadHabits().then(renderRail).catch(() => {});
+  // The computed Diary habit. Not awaited: the rail must never wait on it.
+  loadDiaryStreak().catch(() => {});
   // Kept in state for the account menu's Completed entry; no longer surfaced
   // on Today, where finished work was competing with what still needs doing.
   api(`/api/v1/workspaces/${ws()}/tasks?status=done&limit=1`)
@@ -817,6 +819,9 @@ async function loadRoute(nav = navToken()) {
       await loadTasks();
       if (navStale(nav)) return;
       scroll.innerHTML = todayHtml();
+      // Refreshed on every entry to Today, so writing in Diary and coming back
+      // shows the row already complete.
+      loadDiaryStreak().catch(() => {});
       wireToday();
       restoreTodayState();
       document.getElementById('today-more')?.addEventListener('click', (e) =>
@@ -1463,9 +1468,43 @@ function syncBucketCounts() {
   }
 }
 
+/**
+ * The rows a move may land among: the task's OWN partition, never the bucket.
+ *
+ * Today splits every bucket into standalone work and project work, and a move
+ * must not cross that line — a standalone task among the project rows would
+ * claim it had joined a project. The pointer drag already enforced this by
+ * filtering its candidates; every keyboard and menu path was still working off
+ * the whole bucket, which is how Move down and Move to bottom walked a
+ * standalone task into the project half.
+ */
+function partitionFor(task, bucket = task.bucket) {
+  const { standalone, project } = partition(inBucket(bucket), state.projectsById);
+  return isStandalone(task) ? standalone : project;
+}
+
+/**
+ * Where a task lands in a bucket that has none of its kind yet.
+ *
+ * Standalone work comes first, so an empty standalone partition begins before
+ * the first project row. Project work comes last, so an empty project partition
+ * begins at the end — which is `{}`, the default, and already correct.
+ *
+ * This is the keyboard twin of `partitionAnchor` in drag.js, and it fixes the
+ * same defect: moving a standalone task into a project-only bucket used to send
+ * it to the end, below every project row.
+ */
+function boundaryAnchor(task, bucket) {
+  if (!isStandalone(task)) return {};
+  const { project } = partition(inBucket(bucket), state.projectsById);
+  return project.length ? { beforeTaskId: project[0].id } : {};
+}
+
 function nudge(id, dir) {
   const t = findTask(id);
-  const list = inBucket(t.bucket);
+  // Neighbours WITHIN the partition. Stepping past its edge does nothing,
+  // which is the same boundary the drag placeholder shows.
+  const list = partitionFor(t);
   const target = list[list.findIndex((x) => x.id === id) + dir];
   if (!target) return;
   moveTask(id, t.bucket, dir < 0 ? { beforeTaskId: target.id } : { afterTaskId: target.id });
@@ -1487,7 +1526,10 @@ function shiftBucket(id, dir) {
   const i = BUCKETS.findIndex((b) => b.id === t.bucket);
   const next = BUCKETS[i + dir];
   if (!next) return;
-  moveTask(id, next.id);
+  /* Explicit, so the STORED position lands inside the task's own partition
+   * too. The render groups by kind regardless, but a position that says
+   * "after the projects" is one the next reader has to distrust. */
+  moveTask(id, next.id, boundaryAnchor(t, next.id));
 }
 
 /** The quiet save indicator — silent by default, only ever a whisper. */
@@ -1537,11 +1579,15 @@ function openTaskMenu(id, anchorEl) {
       // The way in for a task with no steps yet: there is no chip to click,
       // because a chip on every task would be noise on the ones that have none.
       if (b.dataset.x === 'steps') return expandSteps(id);
-      if (b.dataset.b) return moveTask(id, b.dataset.b);
+      // Moving to another bucket lands at the start of its OWN partition, not
+      // at the end of the bucket — see boundaryAnchor.
+      if (b.dataset.b) return moveTask(id, b.dataset.b, boundaryAnchor(t, b.dataset.b));
       // Ordering must not be drag-only: keyboard and touch users reorder here.
       if (b.dataset.n) return nudge(id, Number(b.dataset.n));
-      const list = inBucket(t.bucket).filter((x) => x.id !== id);
-      if (!list.length) return;
+      // Top and bottom mean the top and bottom of the PARTITION. Anchoring on
+      // the whole bucket sent "Move to bottom" below the project rows.
+      const list = partitionFor(t).filter((x) => x.id !== id);
+      if (!list.length) return moveTask(id, t.bucket, boundaryAnchor(t, t.bucket));
       moveTask(id, t.bucket, b.dataset.o === 'top'
         ? { beforeTaskId: list[0].id } : { afterTaskId: list[list.length - 1].id });
     };
@@ -1767,6 +1813,7 @@ function renderRail() {
     <div class="rail-card habits-card">
       <h3>Habits today${due.length ? ` <span class="hb-count">${doneCount}/${due.length}</span>` : ''}
         <button class="hb-add" id="hb-add" aria-label="Add a habit" title="Add a habit">+</button></h3>
+      ${diarySystemHabitHtml()}
       ${!state.habitsLoaded ? '<p class="rail-quiet">Loading…</p>'
         : state.habitsError ? `<p class="rail-quiet" style="color:var(--danger)">
              Could not load habits.<br><span style="color:var(--muted)">${esc(state.habitsError)}</span>
@@ -1777,6 +1824,55 @@ function renderRail() {
     </div>`;
 
   wireRail();
+}
+
+/* ── The Diary system habit ───────────────────────────────────────────────
+ *
+ * `Write in Diary` is COMPUTED, not stored.
+ *
+ * There is no habit row and no habit_entries row behind it. Its completion is
+ * whether today has a meaningful Diary entry, decided by Diary's own rule, and
+ * its streak is Diary's own `/diary/streak`. Storing a parallel habit would
+ * give the question "did I write today?" two answers that can disagree — and
+ * the one people would see is the copy.
+ *
+ * Consequences of being computed, all deliberate:
+ *
+ *   it cannot be deleted or renamed — there is nothing to delete or rename;
+ *   it cannot be reordered — it is not in the list, it is above it;
+ *   it cannot be ticked — ticking would mean writing something, so the control
+ *     opens today's Diary instead. A habit you can mark done without doing it
+ *     is a habit that stops meaning anything.
+ */
+function diarySystemHabitHtml() {
+  const s = state.diaryStreak;
+  const done = !!s?.wroteToday;
+  const streak = s?.current ?? 0;
+  return `<button type="button" class="hb-row hb-system${done ? ' is-done' : ''}"
+    id="hb-diary" aria-label="Write in Diary — ${
+  done ? 'written today' : 'not written yet'}. Opens today's diary.">
+    <span class="hb-ring hb-sys-ring" aria-hidden="true">${
+  done ? icon('check', 14) : ''}</span>
+    <span class="hb-name">Write in Diary</span>
+    ${streak ? `<span class="hb-prog">${streak} day streak</span>` : ''}
+    <span class="hb-sys-tag" title="Kept for you from your diary">System</span>
+  </button>`;
+}
+
+/**
+ * Refreshes the computed habit.
+ *
+ * Called after Today loads and whenever a diary save may have changed the
+ * answer. Failure is silent: the row simply shows as not-yet-written, which is
+ * the honest reading of "we could not tell".
+ */
+async function loadDiaryStreak() {
+  try {
+    const today = localDate();
+    state.diaryStreak = await api(
+      `/api/v1/workspaces/${ws()}/diary/streak?today=${today}`);
+  } catch { state.diaryStreak = null; }
+  if (state.route === 'today') renderRail();
 }
 
 /**
@@ -1844,6 +1940,10 @@ function wireRail() {
   rail.querySelector('#hb-retry')?.addEventListener('click',
     () => run(async () => { await loadHabits(); renderRail(); }));
   rail.querySelector('#hb-add')?.addEventListener('click', () => editHabit(null));
+  /* The computed Diary habit. The WHOLE row opens today's diary, including
+   * the ring — there is nothing to toggle, because completing it means
+   * writing something. */
+  rail.querySelector('#hb-diary')?.addEventListener('click', () => go('diary'));
 
   rail.querySelectorAll('[data-habit-toggle]').forEach((el) => {
     el.onclick = () => toggleHabit(el.dataset.habitToggle);

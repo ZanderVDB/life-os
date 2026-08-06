@@ -120,30 +120,13 @@ export function checkinHtml(entry, refl, streak) {
       </label>`).join('')}
     </div>
 
-    ${streakHtml(streak)}
   </div>`;
 }
 
-/**
- * The streak.
- *
- * Small, factual, and it never scolds. A diary that punishes the weeks you
- * could not write is a diary you stop opening during the weeks that matter —
- * so a broken run says nothing at all about the person, and a zero simply
- * invites today.
- */
-function streakHtml(streak) {
-  if (!streak) return '<div class="dia-streak dia-streak-idle" aria-hidden="true"></div>';
-  const { current, wroteToday } = streak;
-  if (!current) {
-    return `<p class="dia-streak" role="status">Today is a good day to start.</p>`;
-  }
-  return `<p class="dia-streak" role="status">
-    <span class="dia-streak-n">${current}</span>
-    <span>${current === 1 ? 'day' : 'days'} in a row${
-  wroteToday ? '' : ' — today is still open'}</span>
-  </p>`;
-}
+/* The streak used to live here. It moved to Today's Habits panel, as the
+ * computed `Write in Diary` system habit — continuity belongs beside the other
+ * things you keep up, not at the bottom of the page you are writing on. Diary
+ * remains the source of truth for both; Today asks it. */
 
 /* ── The left page's guided prompts ──────────────────────────────────── */
 
