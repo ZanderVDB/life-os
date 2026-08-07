@@ -126,14 +126,8 @@ export const dia = {
 
   mode: 'entry',        // 'entry' | 'history'
   contextOpen: false,   // the optional daily context panel
-  /**
-   * Whether the guided prompts past the first three are showing (D2.2 §5).
-   *
-   * A view preference, not data: it is never saved, and it resets with the day.
-   * Five empty prompt fields cost 411px of the left page — more than the free
-   * writing above them — which is what pushed the spread far below the fold.
-   */
-  promptsOpen: false,
+  /* `promptsOpen` was removed in D2.4 §7: all five prompts show, so there is
+   * no disclosure state left to keep. */
   loading: false,
   error: null,
 
@@ -304,4 +298,16 @@ export const sampleCheck = () => call('/diary/sample');
 export const sampleAdd = () => call('/diary/sample', {
   method: 'POST', body: { today: localToday() },
 });
+/**
+ * The visual-QA month (D2.4 §19).
+ *
+ * A second SET behind the same marker, so `sampleRemove` already removes it.
+ * `today` is the client's civil day, as everywhere else in Diary — the server
+ * does not know what day it is for you, and a fixture that lands on the wrong
+ * day cannot demonstrate a month.
+ */
+export const sampleHistory = () => call('/diary/sample/history', {
+  method: 'POST', body: { today: localToday() },
+});
+
 export const sampleRemove = () => call('/diary/sample/remove', { method: 'POST' });

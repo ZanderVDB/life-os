@@ -121,6 +121,44 @@ inside it may carry brand blue.
 needs differentiating, reach for **typography, spacing, icons, shape, or
 hierarchy before colour.**
 
+### Group hues — identity, never rank *(added D2.4)*
+A surface that asks several **different questions** in the same visual language
+may tint each group with one hue, to say *which question this is*. It may not
+use hue to say *how good an answer is*.
+
+| | | |
+|---|---|---|
+| `--ci-lav` | `#B69BF0` | Diary — Overall feeling |
+| `--ci-blu` | `#8FA6F5` | Diary — Energy |
+| `--ci-tea` | `#7FC6D9` | Diary — Social battery |
+| `--ci-neu` | `#A79ECB` | Diary — Daily Rhythm |
+
+Rules that make this safe:
+- The group sets **one** variable (`--ci`); every state inside it reads that
+  variable. A group cannot end up half-recoloured.
+- The hue appears on **selection only**. An unselected option carries no hue.
+- Within a group, every option gets the **same** hue. Hue never varies along a
+  scale, so no option can read as the good one.
+- This is not a second accent. Purple remains the app accent and still owns
+  focus — see the interaction states below.
+
+### Three interaction states, three different signals *(added D2.4)*
+Hover, selected and focused must be distinguishable at a glance and by
+mechanism, not just by degree:
+
+| State | Owns | Never |
+|---|---|---|
+| hover | surface + `translateY(-1px)` | changes fill |
+| selected | **fill** + a shape mark | relies on colour alone |
+| focused | accent outline, `:focus-visible` | uses the group hue |
+
+A selected element that is also hovered brightens; it never falls back to the
+hover appearance. Selection carries a shape as well as a fill so it survives
+greyscale; hover does not need to, because hover is transient.
+
+Focus is drawn in the **app accent**, never in a group hue, so keyboard position
+is never confused with a chosen value.
+
 ---
 
 ## 3. Typography
@@ -391,6 +429,27 @@ reconciles behind them.
 
 ---
 
+### Equal-width option rows *(added D2.4)*
+A row of mutually exclusive options is a grid of equal tracks, never a flex row
+that lets content decide widths:
+
+    grid-template-columns: repeat(auto-fit, minmax(<min>px, 1fr))
+
+Two rules come with it:
+- **Pick the minimum from the narrowest real track**, not from the label. A
+  minimum that does not fit does not clip — it *wraps*, silently costing the
+  container a whole extra line. In Diary a 44px rhythm minimum in a 183.4px
+  track wrapped all four rows and pushed a blank spread 24px past the composer.
+- **Rows that must align share one grid.** Use `display: contents` on the row so
+  every row's label lands in the same track. Labels line up because they are the
+  same track, not because several paddings were tuned to agree.
+
+Where a component's width depends on its container rather than the window
+(a page inside a split, a card in a rail), size it with a **container query**
+against its own inline size. The window is the wrong thing to ask.
+
+---
+
 ## Changelog
 - **2026-07-30 — v2.0** established (design reset). Palette, type scale, radius,
   shadow, spacing, animation, a11y, components codified from the graphite
@@ -414,3 +473,11 @@ reconciles behind them.
   re-renders**, remote changes defer while typing/dragging, writes coalesce and
   retry with backoff, failures never revert, indicator silent on success.
   Added `build-progress.md` + `design-ideas.md`. No pages redesigned.
+- **2026-08-07 — D2.4** §2 gains **group hues** (identity, never rank; selection
+  only; one variable per group) and the **three interaction states** rule
+  (hover owns surface, selection owns fill plus a shape, focus owns the accent
+  outline). §6 gains **equal-width option rows** — `auto-fit` grids sized from
+  the narrowest real track, `display: contents` for rows that must align, and
+  container queries where width comes from the container rather than the window.
+  Recorded because a wrapped option row is invisible in review and expensive in
+  layout: a 2px-too-large minimum cost the Diary 130px.

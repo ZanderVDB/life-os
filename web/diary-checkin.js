@@ -85,19 +85,32 @@ export const FEELINGS = [
   },
 ];
 
+/**
+ * FIVE states from D2.4 §4.
+ *
+ * Four made this the odd one out beside Overall Feeling and Energy, and it
+ * forced an uneven battery — four cells cannot be evenly spaced against a
+ * five-step sibling. `good` is the state that was missing: between "just
+ * enough to get through" and "plenty".
+ *
+ * The chip says `Low`; the accessible name and every tooltip say
+ * `Running low`. Five words across a 286px control need to be short, and
+ * `long` is how nothing is lost by shortening one.
+ */
 export const SOCIAL = [
   { id: 'empty', label: 'Empty' },
-  { id: 'low', label: 'Running low' },
+  { id: 'low', label: 'Low', long: 'Running low' },
   { id: 'ok', label: 'Enough' },
+  { id: 'good', label: 'Good' },
   { id: 'full', label: 'Full' },
 ];
 
 export const ENERGIES = [
-  { id: 'very_low', label: 'Very low' },
+  { id: 'very_low', label: 'Lowest', long: 'Very low' },
   { id: 'low', label: 'Low' },
   { id: 'medium', label: 'Medium' },
   { id: 'high', label: 'High' },
-  { id: 'very_high', label: 'Very high' },
+  { id: 'very_high', label: 'Highest', long: 'Very high' },
 ];
 
 /* ── The passive daily check-ins (§7, §8) ────────────────────────────────
@@ -137,13 +150,26 @@ export const OUTSIDE = [
   { id: 'some', label: 'Some', long: 'Some time' },
   { id: 'plenty', label: 'Plenty' },
 ];
+/**
+ * FOUR states from D2.4 §8, like every other Daily Rhythm row.
+ *
+ * `Rested` is the top state rather than `Great`, deliberately: it names the
+ * outcome you actually notice the next morning rather than grading the night.
+ * "Great sleep" and "I feel rested" are the same answer, and only one of them
+ * is a thing you can report without thinking about it.
+ *
+ * `great` is still accepted on the way in and normalised to `rested` by the
+ * server — see `SLEEP_ALIAS` in `diary-reflection.ts`.
+ */
 export const SLEEP = [
   { id: 'rough', label: 'Rough' },
   { id: 'poor', label: 'Poor' },
   { id: 'fine', label: 'Fine' },
   { id: 'rested', label: 'Rested' },
-  { id: 'great', label: 'Great' },
 ];
+
+/** Retired ids, so an old day still draws. Read only; never written. */
+export const SLEEP_ALIAS = { great: 'rested' };
 
 /** The four passive rows, in the order they are asked. */
 export const PASSIVE = [
@@ -194,12 +220,29 @@ const glyph = (name, size = 14) => `<svg viewBox="0 0 20 20" width="${size}" hei
  * the meter reads "Medium" and loses nothing.
  */
 
-/** The energy arc. Five segments rising left to right, filled to the choice. */
+/**
+ * The energy signal. Five bars rising left to right, filled to the choice.
+ *
+ * ── The geometry (D2.4 §13) ──────────────────────────────────────────────
+ *
+ * `height: calc(6px + var(--seg) * 2px)` gave 6, 8, 10, 12, 14 — a 33% jump
+ * from bar 1 to bar 2 and only 17% from bar 4 to 5, so at History's size the
+ * first gap read as a mistake. The rise is now LINEAR in the bar's own index
+ * over a stated box:
+ *
+ *     h(i) = MIN + (MAX - MIN) * i / 4
+ *
+ * with equal width and equal gap, so every step is the same number of pixels
+ * and the icon box is fixed however many bars are lit. `--n` is the bar's
+ * index and `--bars` the count; the arithmetic lives in one CSS rule, used at
+ * both sizes.
+ */
 export function energyMeter(selected, cls = '') {
   const at = ENERGIES.findIndex((e) => e.id === selected);
-  return `<span class="dia-meter ${cls}" aria-hidden="true">${ENERGIES.map((e, i) =>
+  return `<span class="dia-meter ${cls}" aria-hidden="true"
+    style="--bars:${ENERGIES.length}">${ENERGIES.map((e, i) =>
     `<span class="dia-meter-seg${at > -1 && i <= at ? ' on' : ''}"
-      style="--seg:${i}"></span>`).join('')}</span>`;
+      style="--n:${i}"></span>`).join('')}</span>`;
 }
 
 /**
@@ -215,15 +258,20 @@ export function energyMeter(selected, cls = '') {
  * spaced: two cells plus one gap is not twice one cell.
  *
  * Now the shell holds ONE continuous fill whose width is a percentage of the
- * inner track, and the percentages are exactly `index / (length - 1)` rounded
- * to the model §6 asks for:
+ * inner track, and the percentages are exactly `index / (length - 1)`.
  *
- *   Empty 0%   Running low 33%   Enough 67%   Full 100%
+ * D2.4 §4 made the scale FIVE states, which makes the arithmetic land on
+ * quarters — the clean progression the brief asked for:
+ *
+ *   Empty 0%   Running low 25%   Enough 50%   Good 75%   Full 100%
  *
  * The outer shell, the internal padding and the cap are identical in every
  * state — only the fill's width changes — so the progression is monotonic by
  * construction and no state can be accidentally wider than its neighbour.
- * The four tick marks are decoration drawn on top at the same fractions.
+ * The tick marks are decoration drawn on top at the same fractions.
+ *
+ * ONE component, at two sizes: the right page and History share this function
+ * and differ only by a class (§14). There is no second approximation.
  */
 export function batteryMeter(selected, cls = '') {
   const v = scaleValue(SOCIAL, selected);
@@ -238,63 +286,41 @@ export function batteryMeter(selected, cls = '') {
   </span>`;
 }
 
-/* ── Day Pulse (§10) ─────────────────────────────────────────────────────
+/**
+ * The per-option preview inside a core chip.
  *
- * A SNAPSHOT, NOT A GRADE.
+ * ── Why it exists (D2.4 §3) ──────────────────────────────────────────────
  *
- * Three bars, each one dimension, each read straight off its own scale. There
- * is deliberately no total, no percentage, no average and no colour that means
- * "good" or "bad" — a day is not a score, and a diary that grades you is a
- * diary you start performing for.
+ * §3 asks the three core rows to be one designed system with consistent
+ * height. Overall Feeling's chips are face-over-word; Energy's and Social
+ * Battery's were word-only, so the rows could only match by padding text out
+ * to 50px, which reads as a mistake rather than a system.
  *
- * A dimension nobody answered is drawn as an empty track, not as zero. "I did
- * not say" and "it was the lowest it goes" are different answers, and showing
- * them the same way would put words in somebody's mouth.
+ * Instead every core option previews ITSELF, with the same component that
+ * shows the answer afterwards: the third Energy chip shows three bars, the
+ * fourth Social chip shows a 75% battery. The rows become structurally
+ * identical — indicator over word, five across — and each chip now says what
+ * choosing it means before you choose it, which the word alone did not.
  */
-export const PULSE = [
-  { key: 'mind', label: 'Mind', from: 'Overall feeling' },
-  { key: 'energy', label: 'Energy', from: 'Energy' },
-  { key: 'connection', label: 'Connection', from: 'Social battery' },
-];
-
-export function pulseValues(entry, checkin) {
-  const c = checkin ?? {};
-  return {
-    mind: scaleValue(FEELINGS, c.feeling),
-    energy: scaleValue(ENERGIES, entry?.energy ?? null),
-    connection: scaleValue(SOCIAL, c.social),
-  };
+function optionPreview(group, o) {
+  if (group === 'feeling') return face(o, 19);
+  if (group === 'energy') return energyMeter(o.id, 'dia-meter-opt');
+  if (group === 'social') return batteryMeter(o.id, 'dia-batt-opt');
+  return '';
 }
 
-export function pulseHtml(entry, checkin) {
-  const v = pulseValues(entry, checkin);
-  const c = checkin ?? {};
-  const said = {
-    mind: labelOf(FEELINGS, c.feeling),
-    energy: labelOf(ENERGIES, entry?.energy ?? null),
-    connection: labelOf(SOCIAL, c.social),
-  };
-  const any = PULSE.some((p) => v[p.key] !== null);
-  return `<section class="dia-pulse" aria-label="Today at a glance">
-    <div class="dia-pulse-bars">
-      ${PULSE.map((p) => {
-    const val = v[p.key];
-    const pct = val === null ? 0 : Math.round(val * 100);
-    return `<div class="dia-pulse-col${val === null ? ' is-unset' : ''}"
-        title="${esc(p.label)} — ${esc(said[p.key] ?? 'not said yet')}">
-        <span class="dia-pulse-track" aria-hidden="true">
-          <span class="dia-pulse-fill" style="height:${pct}%"></span>
-        </span>
-        <span class="dia-pulse-l">${esc(p.label)}</span>
-        <span class="sr-only">${esc(p.label)}: ${esc(said[p.key] ?? 'not said yet')}</span>
-      </div>`;
-  }).join('')}
-    </div>
-    <p class="dia-pulse-note">${any
-    ? 'A snapshot of today, not a score.'
-    : 'Tap below and this fills in.'}</p>
-  </section>`;
-}
+/* The Day Pulse was REMOVED in D2.4 §6.
+ *
+ * Three bars derived from Overall Feeling, Energy and Social Battery — sitting
+ * directly above Overall Feeling, Energy and Social Battery. It restated the
+ * three controls beneath it and added a line of copy explaining that it was not
+ * a score, which is a good sign a component is not earning its place: nothing
+ * that says what it is for needs to.
+ *
+ * The three controls now preview themselves (see `optionPreview`), so the
+ * information the pulse carried is on the controls that own it, and the page
+ * has one fewer thing to read. Nothing was kept merely because it was built.
+ */
 
 /* ── Groups ──────────────────────────────────────────────────────────────
  *
@@ -317,16 +343,34 @@ const group = (id, title, body, extra = '') => `<section class="dia-ci-group"
  * `radiogroup`, so a screen reader hears "Energy, Medium, 3 of 5" rather than
  * five unrelated toggles. Roving tabindex, so the group is one tab stop and the
  * arrow keys move within it.
+ *
+ * ── ONE CONTROL GRID (D2.4 §5) ───────────────────────────────────────────
+ *
+ * `kind` selects a grid, never a set of margins. §5 forbids correcting each row
+ * independently, and it was right to: before D2.4 the Social Battery's chips
+ * were `flex-wrap` with intrinsic widths, so its five words came out
+ * 53 / 84 / 60 / 38px while Energy's were a uniform 53.9. Two rows of the same
+ * system disagreeing about their own column widths.
+ *
+ *   `core`    5 equal columns, indicator over word — Feeling, Energy, Social
+ *   `rhythm`  4 equal columns, word only — the Daily Rhythm rows
+ *   `detail`  intrinsic, wrapping — the precise feelings, which are a tag list
+ *             rather than a scale and must not pretend to be one
+ *
+ * The grid is `repeat(n, minmax(0, 1fr))`, so every option in a row is exactly
+ * the same width by construction and the row starts and ends where its
+ * neighbours do. No row can terminate early.
  */
-function chips(name, options, selected, { small = true, faces = false } = {}) {
+function chips(name, options, selected, kind = 'core') {
   const at = Math.max(0, options.findIndex((o) => o.id === selected));
-  return `<div class="dia-chips${small ? ' dia-chips-sm' : ''}${faces ? ' dia-chips-face' : ''}"
+  return `<div class="dia-chips dia-chips-${kind}" style="--opts:${options.length}"
     role="radiogroup" aria-labelledby="dia-ci-${name}-l" data-group="${name}">
     ${options.map((o, i) => `<button type="button" role="radio" class="dia-chip${
-  small ? ' dia-chip-sm' : ''}${selected === o.id ? ' on' : ''}" data-choice="${o.id}"
+  selected === o.id ? ' on' : ''}" data-choice="${o.id}"
       aria-checked="${selected === o.id}" tabindex="${i === at ? '0' : '-1'}"
       ${o.long ? `aria-label="${esc(o.long)}" title="${esc(o.long)}"` : ''}
-      >${faces ? face(o, 19) : ''}<span>${esc(o.label)}</span></button>`).join('')}
+      >${kind === 'core' ? `<span class="dia-chip-i">${optionPreview(name, o)}</span>` : ''
+}<span class="dia-chip-t">${esc(o.label)}</span></button>`).join('')}
   </div>`;
 }
 
@@ -358,36 +402,32 @@ export function checkinHtml(entry, refl) {
       <p class="dia-ci-sub">A few taps. Nothing here is required.</p>
     </header>
 
-    ${pulseHtml(entry, c)}
-
     ${group('feeling', 'Overall feeling', `
-      ${chips('feeling', FEELINGS, c.feeling, { small: false, faces: true })}
+      ${chips('feeling', FEELINGS, c.feeling)}
       ${feeling ? `<div class="dia-detail" role="group"
         aria-label="More precisely than ${esc(feeling.label)}">
         <p class="dia-detail-lead">More precisely?</p>
-        <div class="dia-chips dia-chips-sm" data-group="feelingDetail">
-          ${feeling.detail.map((d) => `<button type="button" class="dia-chip dia-chip-sm${
+        <div class="dia-chips dia-chips-detail" data-group="feelingDetail">
+          ${feeling.detail.map((d) => `<button type="button" class="dia-chip${
   chosen.has(d) ? ' on' : ''}" data-choice="${d}"
-            aria-pressed="${chosen.has(d)}"><span>${esc(cap(d))}</span></button>`).join('')}
+            aria-pressed="${chosen.has(d)}"><span class="dia-chip-t"
+            >${esc(cap(d))}</span></button>`).join('')}
         </div>
-      </div>` : ''}`, feeling
-    ? `<span class="dia-ci-face">${face(feeling, 20)}</span>
-       <span class="dia-ci-read">${esc(feeling.label)}</span>`
-    : '<span class="dia-ci-read">—</span>')}
+      </div>` : ''}`,
+    `<span class="dia-ci-read">${esc(feeling?.label ?? '—')}</span>`)}
 
     ${group('energy', 'Energy', chips('energy', ENERGIES, energy),
-    `${energyMeter(energy)}<span class="dia-ci-read">${
-  esc(labelOf(ENERGIES, energy) ?? '—')}</span>`)}
+    `<span class="dia-ci-read">${esc(labelOf(ENERGIES, energy) ?? '—')}</span>`)}
 
     ${group('social', 'Social battery', chips('social', SOCIAL, c.social),
-    `${batteryMeter(c.social)}<span class="dia-ci-read">${
-  esc(labelOf(SOCIAL, c.social) ?? '—')}</span>`)}
+    `<span class="dia-ci-read">${esc(labelOf(SOCIAL, c.social) ?? '—')}</span>`)}
 
     ${group('rhythm', 'Day rhythm', `<div class="dia-rhythm">
       ${PASSIVE.map((p) => `<div class="dia-rh-row" data-rhythm="${p.key}">
         <span class="dia-rh-l" id="dia-ci-${p.key}-l">
-          <span class="dia-rh-i" aria-hidden="true">${glyph(p.icon)}</span>${esc(p.label)}</span>
-        ${chips(p.key, p.scale, c[p.key])}
+          <span class="dia-rh-i" aria-hidden="true">${glyph(p.icon)}</span
+          ><span class="dia-rh-t">${esc(p.label)}</span></span>
+        ${chips(p.key, p.scale, c[p.key], 'rhythm')}
       </div>`).join('')}
     </div>`)}
   </div>`;
@@ -424,8 +464,18 @@ export const MOMENT_PROMPTS = [
   { id: 'gratitude', label: 'Grateful for', store: 'checkin' },
 ];
 
-/** How many prompts rest open. The others are one press away. */
-export const PROMPTS_LEAD = 3;
+/* PROGRESSIVE DISCLOSURE REMOVED in D2.4 §7.
+ *
+ * D2.2 showed three and hid two behind `+ 2 more prompts`, because five empty
+ * fields cost 411px on a page whose editor was also absorbing every spare
+ * pixel. D2.3 gave the editor a seven-line floor and stopped it growing into
+ * the slack, which returned that space — so the reason for hiding two prompts
+ * no longer exists, and a control that exists only to undo a constraint that
+ * has gone is worse than the fields it hides.
+ *
+ * All five show. The measurement that justifies it is in
+ * `diary-v2-responsive.md`; if it ever stops being true, the fields get more
+ * compact before the disclosure comes back. */
 
 /** Every prompt this day should offer, in order, with where each is stored. */
 export function promptsFor(refl) {
@@ -451,20 +501,16 @@ const valueOf = (refl, p) => (p.store === 'checkin'
  * A prompt that already HAS an answer is never hidden — collapsing something
  * somebody wrote out of sight is how they lose track of having written it.
  */
-export function promptsHtml(refl, open = false) {
+export function promptsHtml(refl) {
   const all = promptsFor(refl);
   const answered = all.filter((p) => valueOf(refl, p)).length;
-  const forced = all.slice(PROMPTS_LEAD).some((p) => valueOf(refl, p));
-  const showAll = open || forced;
-  const shown = showAll ? all : all.slice(0, PROMPTS_LEAD);
-  const hidden = all.length - shown.length;
 
   return `<section class="dia-prompts" aria-labelledby="dia-prompts-h">
     <div class="dia-prompts-head">
       <h3 class="dia-prompts-h" id="dia-prompts-h">If you want a place to start</h3>
       ${answered ? `<span class="dia-prompts-n">${answered} of ${all.length}</span>` : ''}
     </div>
-    ${shown.map((p) => {
+    ${all.map((p) => {
     const v = valueOf(refl, p);
     return `<label class="dia-prompt${v ? ' is-filled' : ''}">
       <span class="dia-prompt-q">${esc(p.label)}</span>
@@ -472,8 +518,6 @@ export function promptsHtml(refl, open = false) {
         rows="1" maxlength="2000" aria-label="${esc(p.label)}">${esc(v)}</textarea>
     </label>`;
   }).join('')}
-    ${hidden ? `<button type="button" class="dia-prompts-more" data-prompts-more
-      aria-expanded="false">${hidden} more prompt${hidden === 1 ? '' : 's'}</button>` : ''}
   </section>`;
 }
 

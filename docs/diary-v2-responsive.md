@@ -112,3 +112,53 @@ open: collapsing something somebody wrote out of sight is how they lose track of
 having written it.
 
 The empty resting height is 40px, the top of the 36–40px the phase asked for.
+
+---
+
+# D2.4 — the right page sizes itself against its own width
+
+## The container query is keyed on the page, not the window
+
+    .dia-right { container-type: inline-size; container-name: diapage }
+
+    @container diapage (max-width: 264px) {
+      .dia-rhythm { grid-template-columns: minmax(0, 1fr); row-gap: 3px }
+    }
+
+The window is the wrong thing to ask. The right page's width depends on the
+sidebar, the drawer and the spread's own column split, so the same 1024px window
+can give it 220px or 290px. A media query would have to guess which; a container
+query measures it.
+
+Under the breakpoint the Daily Rhythm label moves **above** its options rather
+than the options getting narrower, so the four chips get the full page width at
+the width where they need it most.
+
+## The `auto-fit` minimums, and what they cost when wrong
+
+| | minimum | why that number |
+|---|---|---|
+| core rows | `52px` | five chips × 52 + four gaps = 276, inside the 286px option track at a 310px page |
+| rhythm rows | `42px` | four × 42 + three gaps = 180, inside the 183.4px option track — 44px needed 188 and wrapped every row |
+
+A minimum that does not fit does not clip, it **wraps**, and a wrapped row costs
+the page a whole extra line. The rhythm at 44px cost 130px and put a blank spread
+past the composer; see `diary-v2-daily-checkin.md` for the measured table.
+
+## Measured, blank day, page unscrolled
+
+| Viewport | right page | rhythm cols | lines per row | spread | clearance |
+|---|---|---|---|---|---|
+| 1440×900 | 476 | `91 / 259` | 1 | 685 | +15 |
+| 1280×900 | 310 | `91 / 183` | 1 | 685 | +15 |
+| 1024×768 | 290 | stacked, `193.5` | 1 | — | scrolls |
+
+At 1024 the **core** rows wrap to two lines by design — five 52px chips do not
+fit a 266px track, and §9's rule is compact rows rather than a permanently taller
+Diary. Nothing truncates there, no chip escapes its group, and both the right
+page and the document report zero horizontal scroll.
+
+> A measurement note worth keeping: `display: contents` elements return a **zero**
+> `getBoundingClientRect()`, so an overflow check written against a chip row's
+> immediate parent (`.dia-rh-row`) reports overflow for every row, always. Check
+> against `.dia-rhythm`, or against the group box, and check `scrollWidth` too.

@@ -340,12 +340,12 @@ test('the check-in uses the app\'s own controls, never a native select', () => {
 });
 
 test('every check-in option carries a word', () => {
-  /* Unchanged in spirit, wider in scope. D2.3 added an expressive face to each
-   * broad feeling and four passive dimensions; §5 is explicit that the icon
-   * SUPPORTS the label rather than replacing it, so every option — old and new
-   * — still renders its word. */
+  /* Unchanged in spirit, wider in scope. D2.4 gave every CORE option a preview
+   * of itself — a face, a signal, a battery — and §5 is explicit that the icon
+   * supports the label rather than replacing it. Every option still renders
+   * its word, in `.dia-chip-t`. */
   const fn = checkinCode.slice(checkinCode.indexOf('function chips('));
-  assert.match(fn.slice(0, 1200), /<span>\$\{esc\(o\.label\)\}<\/span>/);
+  assert.match(fn.slice(0, 1400), /<span class="dia-chip-t"\s*>\$\{esc\(o\.label\)\}<\/span>/);
   for (const list of ['FEELINGS', 'SOCIAL', 'ENERGIES', 'NOURISHMENT', 'MOVEMENT',
     'OUTSIDE', 'SLEEP']) {
     const at = checkinCode.indexOf(`export const ${list} = [`);
@@ -356,7 +356,7 @@ test('every check-in option carries a word', () => {
     assert.equal(labels, ids, `${list} has an option with no word`);
   }
   // A shortened chip keeps the full wording as its accessible name.
-  assert.match(fn.slice(0, 1200), /o\.long \? `aria-label="\$\{esc\(o\.long\)\}"/);
+  assert.match(fn.slice(0, 1400), /o\.long \? `aria-label="\$\{esc\(o\.long\)\}"/);
 });
 
 test('a feeling opens into finer words, and the broad answer is complete on its own', async () => {

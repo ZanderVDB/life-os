@@ -19,13 +19,13 @@ import {
   loadDay, loadMonth, loadRecent, loadStreak, searchDiary,
   archiveEntry, restoreEntry, formatLong,
   beginDayNav, dayNavToken, dayNavStale,
-  sampleCheck, sampleAdd, sampleRemove,
+  sampleCheck, sampleAdd, sampleHistory, sampleRemove,
 } from './diary-api.js';
 import {
   headerHtml, spreadHtml, jumpHtml, loadingHtml, errorHtml, esc,
 } from './diary-entry.js';
 import {
-  autosize, checkinHtml, promptsHtml, pulseHtml, FEELINGS, PASSIVE,
+  autosize, checkinHtml, promptsHtml, FEELINGS, PASSIVE,
 } from './diary-checkin.js';
 
 /** The four passive dimensions, by storage key. They behave as one family. */
@@ -197,22 +197,6 @@ function paintCheckin() {
 }
 
 /**
- * Redraws the Day Pulse, and nothing else.
- *
- * Every selection on this page changes at most one of its three bars, so it is
- * repainted on its own rather than as part of whichever group was tapped. It
- * holds no focus and no caret — it is a readout — so replacing it outright is
- * safe and is the cheapest correct thing to do.
- */
-function paintPulse() {
-  const old = document.querySelector('.dia-pulse');
-  if (!old) return;
-  const holder = document.createElement('div');
-  holder.innerHTML = pulseHtml(dia.entry, dia.reflection?.checkin ?? {});
-  old.replaceWith(holder.firstElementChild);
-}
-
-/**
  * Repaints ONE check-in group.
  *
  * Selecting an energy must not rebuild the Moments beneath it, and it must
@@ -238,8 +222,6 @@ function paintGroup(id) {
   }
   // The replaced subtree ONLY. See the note on wireCheckin.
   wireCheckin(next);
-  // Every selection may move one of its three bars.
-  paintPulse();
 }
 
 let stopSaveWatch = null;
@@ -373,17 +355,16 @@ function wirePrompts(root) {
       setPrompt(el.dataset.prompt, el.value, el.dataset.store);
     });
   });
-  root.querySelector('[data-prompts-more]')?.addEventListener('click', () => {
-    dia.promptsOpen = true;
-    paintPrompts();
-  });
+  /* No disclosure control to wire: D2.4 §7 shows all five prompts. The
+   * `paintPrompts` repaint below stays, because a prompt still needs
+   * re-rendering when a day loads with answers already in it. */
 }
 
 function paintPrompts() {
   const old = document.querySelector('.dia-prompts');
   if (!old) return;
   const holder = document.createElement('div');
-  holder.innerHTML = promptsHtml(dia.reflection, dia.promptsOpen);
+  holder.innerHTML = promptsHtml(dia.reflection);
   const next = holder.firstElementChild;
   old.replaceWith(next);
   // The replaced subtree ONLY — the same rule `wireCheckin` lives by. Wiring
@@ -689,8 +670,6 @@ export async function goToDate(date, direction = null) {
   dia.entry = null;
   dia.archivedEntry = null;
   dia.reflection = {};
-  // View state belongs to the day you were on, not to the one you are opening.
-  dia.promptsOpen = false;
 
   const scroll = document.getElementById('main-scroll');
   const head = document.getElementById('page-head');
@@ -1115,6 +1094,13 @@ function installSampleHooks() {
     check: () => sampleCheck(),
     add: async () => {
       const r = await sampleAdd();
+      await renderDiary();
+      return r;
+    },
+    /* A month of varied days for reviewing History (D2.4 §19). Same marker as
+     * `add`, so `remove` clears both — there is one sample system, not two. */
+    history: async () => {
+      const r = await sampleHistory();
       await renderDiary();
       return r;
     },

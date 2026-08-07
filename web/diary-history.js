@@ -121,7 +121,12 @@ function dayCell(cell, entry, today) {
     isToday ? 'today' : '',
   ].filter(Boolean).join(', ');
 
-  const marks = PASSIVE.filter((p) => rhythm[p.key]);
+  /* §17: ALL FOUR passive dimensions, always, on a day that answered any of
+   * them. An unanswered one is drawn faint rather than omitted, so the four
+   * marks sit in the same four positions on every cell and a month can be
+   * scanned down a column. Omitting the missing ones made the row shuffle
+   * left, which is unreadable at a glance and was the point of having it. */
+  const anyRhythm = PASSIVE.some((p) => rhythm[p.key]);
 
   return `<button type="button" role="gridcell" class="dia-day-cell${
     cell.inMonth ? '' : ' is-outside'}${has ? ' has-entry' : ''}${
@@ -133,16 +138,17 @@ function dayCell(cell, entry, today) {
     <span class="dia-day-top">
       <span class="dia-day-n">${cell.day}</span>
       ${has ? `<span class="dia-day-ind" aria-hidden="true">
-        ${feeling ? face(feeling, 15) : ''}
-        ${energy ? energyMeter(energy, 'dia-meter-xs') : ''}
-        ${social ? batteryMeter(social, 'dia-batt-xs') : ''}
+        ${feeling ? face(feeling, 16) : '<span class="dia-day-gap"></span>'}
+        ${energy ? energyMeter(energy, 'dia-meter-xs') : '<span class="dia-day-gap"></span>'}
+        ${social ? batteryMeter(social, 'dia-batt-xs') : '<span class="dia-day-gap"></span>'}
       </span>` : ''}
     </span>
     ${preview ? `<span class="dia-day-prev">${esc(preview)}</span>` : ''}
-    ${marks.length ? `<span class="dia-day-rh" aria-hidden="true">${marks.map((p) => {
-    const v = scaleValue(p.scale, rhythm[p.key]);
-    return `<span class="dia-day-rh-i" style="--v:${Math.round(v * 100)}%"
-      >${glyph(p.icon, 11)}</span>`;
+    ${anyRhythm ? `<span class="dia-day-rh" aria-hidden="true">${PASSIVE.map((p) => {
+    const id = rhythm[p.key];
+    const v = id ? scaleValue(p.scale, id) : null;
+    return `<span class="dia-day-rh-i${v === null ? ' is-unset' : ''}"
+      style="--v:${v === null ? 0 : Math.round(v * 100)}">${glyph(p.icon, 11)}</span>`;
   }).join('')}</span>` : ''}
   </button>`;
 }

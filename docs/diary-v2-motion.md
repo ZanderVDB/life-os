@@ -128,3 +128,29 @@ ring must not have one, or its two butt caps meet and leave a seam. The offset
 is driven to 0 and the dash is dropped on a timer once it has arrived. See
 `animation-house-rules.md` for the measurements — the seam is worst at high DPR,
 where coverage fell to 0.6% of the surrounding stroke.
+
+---
+
+# D2.4 — what moves now
+
+Day Pulse is gone, and its 200ms bar transition with it. Nothing replaced it:
+the check-in's motion budget got smaller, not different.
+
+| | |
+|---|---|
+| chip hover | `translateY(-1px)` — transform only |
+| chip selection | fill, border and shadow to `--ci` |
+| History cell hover | `translateY(-1px)` plus shadow |
+| History cell selected | ring and fill, no transform |
+
+**Hover is transform-and-surface; selection is fill.** Keeping them on different
+properties is what makes them distinguishable at a glance, and it is why a
+selected chip that is also hovered brightens rather than lifting into the hover
+look.
+
+The house rule still holds and is worth restating here because D2.4 added
+states rather than animations: *animations illustrate state changes; DOM and CSS
+own the final state.* Every state above is expressed as a class and a variable.
+Setting every duration to 1ms changes how the page arrives at a state and
+nothing about which state it is in — which is exactly what
+`prefers-reduced-motion` does.

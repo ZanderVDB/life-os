@@ -41,11 +41,22 @@ export const FEELINGS = [
   { id: 'great', label: 'Great', detail: ['excited', 'grateful', 'joyful', 'inspired', 'loved'] },
 ] as const;
 
-/** How much company was left in the tank. Words, not a battery icon alone. */
+/**
+ * How much company was left in the tank. Words, not a battery icon alone.
+ *
+ * FIVE states from D2.4 §4. Four made this the odd one out beside Overall
+ * Feeling and Energy, and it forced an uneven battery: four cells cannot be
+ * evenly spaced against a five-step sibling.
+ *
+ * `good` is the state that was missing — between "just enough to get through"
+ * and "plenty". The order is deliberately monotonic in how much company was
+ * left, not in how the day went.
+ */
 export const SOCIAL = [
   { id: 'empty', label: 'Empty' },
   { id: 'low', label: 'Running low' },
   { id: 'ok', label: 'Enough' },
+  { id: 'good', label: 'Good' },
   { id: 'full', label: 'Full' },
 ] as const;
 
@@ -91,13 +102,27 @@ export const OUTSIDE = [
   { id: 'plenty', label: 'Plenty' },
 ] as const;
 
+/**
+ * FOUR states from D2.4 §8, like every other Daily Rhythm row.
+ *
+ * `rested` is the top state rather than `great`, deliberately: it names the
+ * OUTCOME you actually notice the next morning rather than grading the night.
+ * "Great sleep" and "I feel rested" are the same answer, and only one of them
+ * is a thing you can report without thinking about it.
+ *
+ * `great` is still accepted on the way in and normalised to `rested` — see
+ * `SLEEP_ALIAS`. Dropping it would silently empty the sleep value on any day
+ * recorded before D2.4 the first time that day was re-saved.
+ */
 export const SLEEP = [
   { id: 'rough', label: 'Rough' },
   { id: 'poor', label: 'Poor' },
   { id: 'fine', label: 'Fine' },
   { id: 'rested', label: 'Rested' },
-  { id: 'great', label: 'Great' },
 ] as const;
+
+/** Retired ids, and what they became. Read on the way in, never written. */
+export const SLEEP_ALIAS: Record<string, string> = { great: 'rested' };
 
 /** The passive dimensions, by the key they are stored under. */
 export const PASSIVE = {
@@ -201,9 +226,12 @@ export function validateReflection(raw: unknown): Reflection {
       if (detail.length) checkin.feelingDetail = detail;
     }
     if (typeof c.social === 'string' && SOCIAL_IDS.has(c.social)) checkin.social = c.social;
-    // The passive dimensions. Each is one id from its own ordered scale.
+    /* The passive dimensions. Each is one id from its own ordered scale, with
+     * retired ids normalised rather than dropped — see `SLEEP_ALIAS`. */
     for (const k of PASSIVE_KEYS) {
-      if (typeof c[k] === 'string' && PASSIVE_IDS[k].has(c[k])) checkin[k] = c[k];
+      if (typeof c[k] !== 'string') continue;
+      const v = k === 'sleep' ? (SLEEP_ALIAS[c[k]] ?? c[k]) : c[k];
+      if (PASSIVE_IDS[k].has(v)) checkin[k] = v;
     }
     /* Still accepted, still stored, no longer offered on a new day — see the
      * note on the type. Dropping them here would delete somebody's Highlight

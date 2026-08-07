@@ -211,10 +211,55 @@ Outside, Sleep. They describe how the day went. **They are not habits, and they
 never write one** — see `diary-v2-daily-checkin.md` for the boundary and why
 Gym is deliberately absent.
 
-**A Day Pulse** sits at the top of the right page: three bars for Mind, Energy
-and Connection, each read straight off its own scale. It is a snapshot, not a
-grade — no total, no percentage, no average, no judgement.
+**A Day Pulse** sat at the top of the right page: three bars for Mind, Energy
+and Connection, each read straight off its own scale. **Removed in D2.4** — see
+below. The constraint it was built under survives it: nothing in Diary produces
+a total, a percentage, an average or a grade.
 
 **Diary History shows the day, never a habit.** The month cell now draws the
 same three indicators the right page uses, from the same components. Habit
 analytics stay in Calendar and Habits.
+
+---
+
+## D2.4 — the taxonomy, stated once
+
+The product rule from D2.3 gained three lines. All five now decide every
+question this feature raises:
+
+    LEFT PAGE = THINGS YOU WRITE.
+    RIGHT PAGE = THINGS YOU TAP.
+    HISTORY = SCAN PATTERNS.
+    HABITS = INTENTIONAL BEHAVIOURS.
+    DIARY CHECK-INS = PASSIVE OBSERVATIONS ABOUT THE DAY.
+
+The last two are the pair that keeps getting re-litigated, so they are written
+down as product rules rather than as an implementation note. A habit is a
+behaviour you decided to repeat. A check-in is something that was true about the
+day. `Movement = A lot` is an observation; a Gym habit is an intention; and the
+first must never complete the second. Nothing in Diary writes a `habit_entries`
+row, and a test inspects the database after a full check-in to prove it.
+
+`HISTORY = SCAN PATTERNS` is the one that changed code: it is why every History
+cell now draws every slot in the same place, with unanswered dimensions faded
+rather than absent. A grid you read cell-by-cell is not a grid you scan.
+
+## Day Pulse is gone
+
+Three bars restating three answers given one scroll-length above them, in the
+language of a dashboard. It re-presented a selection as a measurement. The
+scales say it better, in the user's own words, where the tap happened.
+
+## All five prompts are visible
+
+D2.2 rested three prompts open and hid two behind a press. Five empty fields
+cost 411px then; at the current 36–40px resting height they cost less, and a
+prompt you cannot see is a prompt you do not answer.
+
+The room came from the writing region, which went from **seven ruled lines to
+six** (`min-height` 210 → 180px, at a 30px rule). That is the right trade: the
+editor grows freely as you write, so a line fewer costs nothing to anybody who
+is writing, while a hidden prompt costs something to everybody who is not.
+
+No disclosure control, no lead-in copy, no `PROMPTS_LEAD`. The set is simply
+rendered.

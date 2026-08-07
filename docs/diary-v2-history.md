@@ -176,3 +176,66 @@ no colour at all.
 
 Month card 557px, whole History column ending at 751px against a composer top of
 836px — **it fits**, with six week-rows at 72px and no overflow in any cell.
+
+---
+
+# D2.4 — cell density and the indicator grammar
+
+## A column you can scan down
+
+The problem was not how much a cell held, it was that the marks moved. A day
+with no feeling recorded drew its rhythm marks where a day with a feeling drew
+its face, so nothing lined up down a column and the grid had to be read cell by
+cell.
+
+Two rules fix it, and both are about **position**, not content:
+
+1. A missing primary indicator leaves a `dia-day-gap` — 16×9px of nothing — so
+   the marks after it keep their place.
+2. **All four** rhythm marks are always drawn. An unanswered one is the same
+   mark at `opacity: .12`.
+
+An unanswered dimension is therefore visibly *unanswered* rather than absent,
+which is the honest reading: "I did not say" is not "it did not happen". And
+because every cell has the same slots in the same places, a column can be
+scanned in one pass — which is what History is for.
+
+Cells are 80px, and a month fits above the composer with 37px to spare at
+1280×900.
+
+## The grammar
+
+| Slot | Drawn when | Drawn how when missing |
+|---|---|---|
+| feeling face | a feeling is recorded | `dia-day-gap`, 16×9px |
+| energy meter | energy is recorded | `dia-day-gap` |
+| social battery | social is recorded | `dia-day-gap` |
+| 4 rhythm marks | **always** | same mark, `opacity: .12` |
+
+The face, the meter and the battery are the same components the right page uses.
+There is no History-only iconography to learn.
+
+## Hover, selected and today are three different things
+
+| | |
+|---|---|
+| **hover** | `inset 0 0 0 1.5px` strong border, a soft drop shadow, `translateY(-1px)` |
+| **selected** (`.is-open`) | `--accent-soft` fill, `inset 0 0 0 2px` accent ring, white text |
+| **today** | its own marker, independent of both — today can be hovered, selected, neither or both |
+
+Selection overrides the feeling tint (`.dia-day-cell[data-feel].is-open` is
+specific enough to win), because a cell you have opened should read as opened
+first and as a mood second. Hover never overrides the tint: it lifts and outlines
+the cell without repainting it, so passing the pointer across a month cannot be
+mistaken for having selected something.
+
+## Sample data for visual QA
+
+`POST /diary/sample/history` seeds **14 days across four weeks**, with gaps, so
+the grid can be judged with realistic density instead of one hand-made day.
+
+It is refused unless `NODE_ENV` allows it — there is no production sample
+capability, and the route returns the refusal rather than seeding a subset.
+Every row is marked with the existing `sample:d1:` prefix on `timezone`, so the
+existing cleanup removes exactly the sample records and nothing else. No private
+data is used anywhere in the set.

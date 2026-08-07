@@ -1810,3 +1810,104 @@ in the tooltip and the accessible name. 72px cells, six rows, fits above the
 composer at 1280×900.
 
 **1002 tests pass, 25 new.** TypeScript clean.
+
+---
+
+## D2.4 — Diary visual refinement, check-in consistency, History density, Today filter polish
+
+The taxonomy the phase locked, and which decided most of the calls below:
+
+    LEFT PAGE = THINGS YOU WRITE.
+    RIGHT PAGE = THINGS YOU TAP.
+    HISTORY = SCAN PATTERNS.
+    HABITS = INTENTIONAL BEHAVIOURS.
+    DIARY CHECK-INS = PASSIVE OBSERVATIONS ABOUT THE DAY.
+
+### The check-in
+
+**5/5/5 and 4/4/4/4.** The three core scales have five options each, the four
+Daily Rhythm rows four each. Social battery gained a step (`OK`, `Good`); Sleep
+lost one it could not distinguish. Old `sleep: great` days still read correctly
+— `SLEEP_ALIAS` normalises them on the way in, on both server and client, so
+nothing was migrated and no stored day changed meaning.
+
+**One grid.** Every option row is `repeat(auto-fit, minmax(N, 1fr))`, and all
+four rhythm rows are `display: contents` inside a single parent grid. That
+removed a real defect: `Nourishment` needs 98px against a fixed 66px label
+column with `overflow: visible`, so 24.3px of painted text sat on top of the
+first chip. A wider fixed column fixes one word and waits for the next.
+
+**Day Pulse removed**, element and copy. It restated three answers a scroll
+above the chips that gave them, in the language of a dashboard.
+
+**Every option previews itself** — face, meter or battery, from the same
+components History uses. Rhythm chips stay text-only; four rows of icons is a
+texture, not a legend.
+
+**Colour hierarchy.** Four hues, one per group, selection only, `--ci` read by
+every state inside the group. Hue says which question, never how good the
+answer.
+
+**Three states, not two.** Hover owns surface and a 1px lift; selection owns
+fill plus a `::after` shape (so it survives greyscale); focus owns the accent
+outline on `:focus-visible`. A selected chip that is hovered brightens — it
+never falls back to the hover look.
+
+Type dropped 11 → 10px: sixteen labels truncated at 11px once the core rows
+went to five. Zero truncate now, at every width down to the container-query
+breakpoint.
+
+### The left page
+
+**All five prompts are visible** — no disclosure, no lead-in copy. The room came
+from the writing region, seven ruled lines → **six** (210 → 180px at a 30px
+rule). The editor grows freely as you write, so a line fewer costs a writer
+nothing, while a hidden prompt costs everyone who is not writing.
+
+### History
+
+**Every cell has the same slots in the same places.** A missing primary
+indicator leaves a 16×9px gap; all four rhythm marks are always drawn, with
+unanswered ones at `opacity: .12`. Unanswered is now visibly unanswered rather
+than absent — and a column can be scanned in one pass, which is the point.
+
+Cells 80px; a month fits above the composer with 37px to spare at 1280×900.
+Hover (lift + outline), selected (accent ring + fill, overriding the mood tint)
+and today (its own marker) are three independent signals.
+
+**Sample data for visual QA:** `POST /diary/sample/history` seeds 14 days across
+four weeks with gaps. Refused unless `NODE_ENV` allows it — there is no
+production sample capability. Marked with the existing `sample:d1:` prefix, so
+existing cleanup removes exactly the sample records. No private data.
+
+### Today
+
+The Area filter pills sat on ~4px of inline whitespace because `.filters` had
+**no CSS rule at all** — not a wrong value, no value. One `--chip-gap: 9px`
+token now drives the toolbar and the filter row through `gap`, so spacing is
+identical between pills, across the toolbar, and on wrap. A half-gap marks the
+seam after a preceding button.
+
+### The bug that only measurement finds
+
+`auto-fit` with a minimum that does not fit **wraps**. At 1280×900 the rhythm's
+option track is 183.4px and a 44px minimum needs 188, so three chips fitted and
+the fourth dropped to a second line — in all four rows. The right page paid
+130px and a **blank** spread landed 24px past the composer. 42px fits.
+
+An earlier reading had said it fitted; that reading was taken on a scrolled
+page and was worthless. Re-measured on a genuinely blank day with `scrollY: 0`:
+
+| | 44px | 42px |
+|---|---|---|
+| check-in | 678 | **550** |
+| Daily Rhythm | 261 | **133** |
+| spread | 724 | **685** |
+| clearance above composer | **−24** | **+15** |
+
+Verified at 1440×900, 1280×900 and 1024×768: one line per rhythm row
+everywhere, zero truncated labels, no chip outside its group, and zero
+horizontal scroll on both the right page and the document. At 1024 the core rows
+wrap to two lines by design — §9's rule is compact rows, not a taller Diary.
+
+**1021 tests pass, 19 new.** TypeScript clean.

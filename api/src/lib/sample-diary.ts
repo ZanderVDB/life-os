@@ -276,3 +276,171 @@ export async function removeSampleDiary(db: Db, workspaceId: string) {
   )).returning({ date: diaryEntries.entryDate });
   return { removed: deleted.length, dates: deleted.map((d) => d.date) };
 }
+
+
+/* ══ THE HISTORY MONTH (D2.4 §19, §20) ═════════════════════════════════
+ *
+ * A month of days whose only purpose is VISUAL QA: enough variety that the
+ * History grid can be judged without anybody filling in four weeks by hand.
+ *
+ * This is not user modelling and it is not a story. It is a test fixture with
+ * deliberate patterns, so a reviewer can look at a month and see whether the
+ * indicators actually read:
+ *
+ *   week 1   lower mood, lower energy
+ *   week 2   mixed
+ *   week 3   several positive days
+ *   week 4   mixed, with the widest spread of Daily Rhythm values
+ *
+ * Coverage is ASSERTED by a test rather than hoped for: all five Overall
+ * Feelings, all five Energies, all five Social Battery states and every value
+ * of all four Daily Rhythm scales appear at least once; some days carry a
+ * title and some do not; some hold writing and some are check-in only; and
+ * there are gaps between written days so an empty cell can be compared with a
+ * full one.
+ *
+ * Same marker, same cleanup. `SAMPLE_PREFIX` on `timezone` means
+ * `removeSampleDiary` already removes these and nothing else — §19 asks for
+ * the existing tooling to be extended rather than competed with, and this is
+ * what that means in practice.
+ */
+
+type HistoryDay = {
+  /** Days back from the client's today. */
+  back: number;
+  title?: string;
+  text?: string;
+  feeling: string;
+  energy: string;
+  social: string;
+  nourishment: string;
+  movement: string;
+  outside: string;
+  sleep: string;
+};
+
+/**
+ * Fourteen days across four weeks, with gaps.
+ *
+ * Written out rather than generated, so the coverage is readable here and the
+ * fixture is identical on every machine — a random fixture makes a visual
+ * review unrepeatable, which defeats the point of having one.
+ */
+const HISTORY_SET: HistoryDay[] = [
+  /* Week 1 — lower mood, lower energy. */
+  { back: 27, feeling: 'rough', energy: 'very_low', social: 'empty',
+    nourishment: 'poor', movement: 'barely', outside: 'none', sleep: 'rough',
+    title: 'A long one', text: 'Slept badly and it followed me all day.' },
+  { back: 26, feeling: 'low', energy: 'very_low', social: 'empty',
+    nourishment: 'poor', movement: 'barely', outside: 'none', sleep: 'poor' },
+  { back: 24, feeling: 'low', energy: 'low', social: 'low',
+    nourishment: 'okay', movement: 'light', outside: 'little', sleep: 'poor',
+    text: 'Better than yesterday, which is the whole review.' },
+
+  /* Week 2 — mixed. */
+  { back: 20, feeling: 'steady', energy: 'medium', social: 'ok',
+    nourishment: 'okay', movement: 'light', outside: 'some', sleep: 'fine',
+    title: 'Ordinary Tuesday' },
+  { back: 19, feeling: 'rough', energy: 'low', social: 'low',
+    nourishment: 'poor', movement: 'barely', outside: 'little', sleep: 'rough',
+    text: 'A difficult conversation, handled badly by me.' },
+  { back: 17, feeling: 'good', energy: 'high', social: 'good',
+    nourishment: 'good', movement: 'active', outside: 'some', sleep: 'rested' },
+  { back: 15, feeling: 'steady', energy: 'medium', social: 'ok',
+    nourishment: 'good', movement: 'light', outside: 'little', sleep: 'fine',
+    title: 'Quiet, and that was fine' },
+
+  /* Week 3 — several positive days. */
+  { back: 12, feeling: 'good', energy: 'high', social: 'full',
+    nourishment: 'great', movement: 'active', outside: 'plenty', sleep: 'rested',
+    text: 'Walked the long way twice, on purpose.' },
+  { back: 11, feeling: 'great', energy: 'very_high', social: 'full',
+    nourishment: 'great', movement: 'very_active', outside: 'plenty', sleep: 'rested',
+    title: 'The good kind of tired' },
+  { back: 10, feeling: 'great', energy: 'high', social: 'good',
+    nourishment: 'good', movement: 'active', outside: 'some', sleep: 'fine' },
+  { back: 8, feeling: 'good', energy: 'medium', social: 'ok',
+    nourishment: 'okay', movement: 'light', outside: 'some', sleep: 'fine',
+    text: 'Steady all the way through. Nothing to report and nothing wrong.' },
+
+  /* Week 4 — mixed, and the widest rhythm spread. */
+  { back: 5, feeling: 'steady', energy: 'low', social: 'low',
+    nourishment: 'great', movement: 'barely', outside: 'none', sleep: 'poor',
+    title: 'Ate well, moved not at all' },
+  { back: 3, feeling: 'low', energy: 'medium', social: 'empty',
+    nourishment: 'poor', movement: 'very_active', outside: 'plenty', sleep: 'rough' },
+  { back: 2, feeling: 'great', energy: 'very_high', social: 'good',
+    nourishment: 'great', movement: 'active', outside: 'plenty', sleep: 'rested',
+    text: 'Out early, back late, and glad of both.' },
+];
+
+/** Every id the fixture uses, so a test can assert coverage rather than trust it. */
+export const historySampleCoverage = () => ({
+  feeling: [...new Set(HISTORY_SET.map((d) => d.feeling))],
+  energy: [...new Set(HISTORY_SET.map((d) => d.energy))],
+  social: [...new Set(HISTORY_SET.map((d) => d.social))],
+  nourishment: [...new Set(HISTORY_SET.map((d) => d.nourishment))],
+  movement: [...new Set(HISTORY_SET.map((d) => d.movement))],
+  outside: [...new Set(HISTORY_SET.map((d) => d.outside))],
+  sleep: [...new Set(HISTORY_SET.map((d) => d.sleep))],
+  titled: HISTORY_SET.filter((d) => d.title).length,
+  untitled: HISTORY_SET.filter((d) => !d.title).length,
+  written: HISTORY_SET.filter((d) => d.text).length,
+  checkinOnly: HISTORY_SET.filter((d) => !d.text).length,
+  days: HISTORY_SET.length,
+});
+
+/**
+ * Seeds the visual-QA month.
+ *
+ * Same skip-do-not-overwrite rule as `seedSampleDiary`: on a staging workspace
+ * with real writing in it, seeding must never replace a day somebody wrote.
+ */
+export async function seedHistorySample(
+  db: Db, workspaceId: string, today: string,
+): Promise<SampleDiaryResult> {
+  const set = HISTORY_SET.map((d) => ({ ...d, date: addDays(today, -d.back) }));
+  const existing = await db.select({ date: diaryEntries.entryDate })
+    .from(diaryEntries).where(eq(diaryEntries.workspaceId, workspaceId));
+  const taken = new Set(existing.map((r) => r.date));
+
+  const rows = set.filter((s) => !taken.has(s.date)).map((s) => {
+    const document = s.text ? doc([p(s.text)]) : doc([]);
+    return {
+      workspaceId,
+      entryDate: s.date,
+      title: s.title ?? null,
+      document: document as any,
+      documentText: docToText(document),
+      mood: null,
+      energy: s.energy,
+      weatherNote: null,
+      locationNote: null,
+      daySummary: null,
+      reflection: {
+        checkin: {
+          feeling: s.feeling,
+          social: s.social,
+          nourishment: s.nourishment,
+          movement: s.movement,
+          outside: s.outside,
+          sleep: s.sleep,
+        },
+      } as any,
+      /* THE SAME MARKER. `removeSampleDiary` matches this exact prefix on
+       * `timezone` and nothing else, so this month is removed by the cleanup
+       * that already exists and a real entry is never touched. */
+      timezone: `${SAMPLE_PREFIX}Africa/Johannesburg`,
+      archivedAt: null,
+    };
+  });
+
+  if (rows.length) await db.insert(diaryEntries).values(rows);
+
+  return {
+    entriesCreated: rows.length,
+    archivedCreated: 0,
+    alreadyPresent: set.length - rows.length,
+    dates: rows.map((r) => r.entryDate),
+  };
+}

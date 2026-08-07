@@ -140,54 +140,74 @@ test('every broad feeling has a face from ONE system, beside its word', () => {
   assert.match(checkin, /const face = \(f, size = 20\)/);
   assert.match(checkin, /viewBox="0 0 20 20"[\s\S]{0,140}stroke-width="1\.7"/);
   assert.doesNotMatch(list, /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u, 'an emoji crept in');
-  // The label is always present — the icon supports it, never replaces it.
+  /* D2.4 §3: every CORE option previews itself with the same component that
+   * shows the answer afterwards, so the three rows are structurally identical
+   * — indicator over word — and a chip says what choosing it means before you
+   * choose it. The label is still always there. */
+  assert.match(checkin, /function optionPreview\(group, o\)/);
+  assert.match(checkin, /if \(group === 'feeling'\) return face\(o, 19\)/);
   const fn = checkin.slice(checkin.indexOf('function chips('));
-  assert.match(fn.slice(0, 1200), /faces \? face\(o, 19\) : ''\}<span>\$\{esc\(o\.label\)\}<\/span>/);
+  assert.match(fn.slice(0, 1400), /optionPreview\(name, o\)/);
+  assert.match(fn.slice(0, 1400), /<span class="dia-chip-t"/);
   // History reuses the same component rather than drawing its own.
-  assert.match(historyJs, /face\(feeling, 15\)/);
+  assert.match(historyJs, /face\(feeling, 16\)/);
 });
 
 /* ══ §6 THE SOCIAL BATTERY GEOMETRY ════════════════════════════════════ */
 
-test('the battery is one fill on a fixed shell, evenly stepped', () => {
+test('the battery is FIVE states on a fixed shell, evenly stepped', () => {
   /* D2.2 lit one CELL per level, so the lit width depended on how many
-   * inter-cell gaps fell inside it — 2 cells + 1 gap is not twice 1 cell — and
-   * the two middle states read as almost the same amount.
+   * inter-cell gaps fell inside it. D2.3 replaced that with one continuous
+   * fill. D2.4 §4 made the scale FIVE states, which is what makes the
+   * arithmetic land on clean quarters and puts this row in step with Overall
+   * Feeling and Energy:
    *
-   * Measured in a browser after the fix: shell 30x13 in EVERY state, fill
-   * 0 / 7.91 / 16.08 / 24px, steps 7.91 / 8.17 / 7.92. Even to a quarter-pixel. */
-  assert.doesNotMatch(checkin, /dia-batt-cell/, 'the per-cell battery is back');
-  assert.match(checkin, /class="dia-batt-fill" style="width:\$\{pct\}%"/);
-  assert.match(html, /\.dia-batt-body\{position:relative;width:30px;height:13px/);
-  // The percentages come from the scale, not from a hand-written list.
-  const fn = checkin.slice(checkin.indexOf('export function batteryMeter'));
-  assert.match(fn.slice(0, 900), /scaleValue\(SOCIAL, selected\)/);
-  assert.match(fn.slice(0, 900), /Math\.round\(v \* 100\)/);
-  // `index / (length - 1)` gives §6's model exactly.
+   *   Empty 0%   Running low 25%   Enough 50%   Good 75%   Full 100%
+   *
+   * Measured in a browser: shell 30x13 in every state, and History's cells
+   * showed 0% / 25% / 50% from the same component at the `-xs` size. */
+  assert.equal(SOCIAL.length, 5, 'the social battery lost a state');
   assert.deepEqual(SOCIAL.map((s) => Math.round(scaleValue(SOCIAL, s.id)! * 100)),
-    [0, 33, 67, 100]);
+    [0, 25, 50, 75, 100]);
   const steps = SOCIAL.map((s) => scaleValue(SOCIAL, s.id)!);
   const deltas = steps.slice(1).map((v, i) => v - steps[i]!);
   assert.ok(Math.max(...deltas) - Math.min(...deltas) < 1e-9, 'the steps are uneven');
+  assert.doesNotMatch(checkin, /dia-batt-cell/, 'the per-cell battery is back');
+  assert.match(checkin, /class="dia-batt-fill" style="width:\$\{pct\}%"/);
+  // ONE shell, at three sizes, driven by variables rather than three rules.
+  assert.match(html, /\.dia-batt\{--b-w:30px; --b-h:13px; --b-pad:2px;/);
+  assert.match(html, /\.dia-batt-opt\{--b-w:26px/);
+  assert.match(html, /\.dia-batt-xs\{--b-w:18px/);
+  const fn = checkin.slice(checkin.indexOf('export function batteryMeter'));
+  assert.match(fn.slice(0, 900), /scaleValue\(SOCIAL, selected\)/);
 });
 
 /* ══ §7, §8 THE PASSIVE DIMENSIONS ═════════════════════════════════════ */
 
-test('the four passive dimensions are validated scales, ordered least to most', () => {
+test('the four passive dimensions are FOUR-option scales, least to most', () => {
   assert.deepEqual(PASSIVE_KEYS, ['nourishment', 'movement', 'outside', 'sleep']);
-  assert.equal(NOURISHMENT.length, 4);
-  assert.equal(MOVEMENT.length, 4);
-  assert.equal(OUTSIDE.length, 4);
-  assert.equal(SLEEP.length, 5);
+  /* D2.4 §8: exactly four options in EVERY Daily Rhythm row. Sleep had five,
+   * which made it the one row that could not share the others' grid. `Rested`
+   * is now the top state rather than `Great` — it names the outcome you notice
+   * the next morning rather than grading the night, and `great` is still
+   * accepted on the way in and normalised, so no existing day is emptied. */
+  for (const k of PASSIVE_KEYS) {
+    assert.equal(PASSIVE[k].length, 4, `${k} does not have four options`);
+  }
   for (const k of PASSIVE_KEYS) {
     const scale = PASSIVE[k];
     assert.equal(scaleValue(scale, scale[0]!.id), 0, `${k} does not start at 0`);
     assert.equal(scaleValue(scale, scale[scale.length - 1]!.id), 1, `${k} does not end at 1`);
     const vals = scale.map((o) => scaleValue(scale, o.id)!);
     assert.ok(vals.every((v, i) => i === 0 || v > vals[i - 1]!), `${k} is not monotonic`);
+    // Four options put every step on an exact third.
+    assert.deepEqual(vals.map((v) => Math.round(v * 100)), [0, 33, 67, 100]);
   }
   assert.equal(scaleValue(SLEEP, null), null, 'unanswered is not the same as zero');
   assert.equal(scaleValue(SLEEP, 'nonsense'), null);
+  // The retired id is normalised, not dropped.
+  const kept = validateReflection({ checkin: { sleep: 'great' } });
+  assert.equal(kept.checkin?.sleep, 'rested', 'an old sleep value was silently emptied');
 });
 
 test('the server stores the passive dimensions and drops anything else', async () => {
@@ -271,36 +291,30 @@ test('A DIARY CHECK-IN IS NOT A HABIT', async () => {
 
 /* ══ §10 DAY PULSE ═════════════════════════════════════════════════════ */
 
-test('the Day Pulse is a snapshot, never a grade', () => {
-  assert.match(checkin, /export const PULSE = \[/);
-  assert.match(checkin, /export function pulseValues\(entry, checkin\)/);
-  const fn = checkin.slice(checkin.indexOf('export function pulseValues'));
-  // Three dimensions, each read straight off its own scale.
-  assert.match(fn.slice(0, 600), /mind: scaleValue\(FEELINGS, c\.feeling\)/);
-  assert.match(fn.slice(0, 600), /energy: scaleValue\(ENERGIES, entry\?\.energy \?\? null\)/);
-  assert.match(fn.slice(0, 600), /connection: scaleValue\(SOCIAL, c\.social\)/);
-  // NOTHING sums, averages or scores them.
-  const pulse = checkin.slice(checkin.indexOf('export function pulseHtml'),
-    checkin.indexOf('const group ='));
-  /* Asserted on the ARITHMETIC, not on words: the reassuring line the page
-   * shows contains "score", so a keyword scan would fail on the very sentence
-   * that states the rule. What must not exist is a combination of the three. */
-  assert.doesNotMatch(pulse, /reduce\(|\.length\s*\)?\s*$|\/\s*3/m,
-    'the pulse folds its three dimensions into one figure');
-  assert.doesNotMatch(pulse, /v\.mind\s*\+|\+\s*v\.energy|\+\s*v\.connection/,
-    'the pulse adds its dimensions together');
-  // Each bar's height comes from ITS OWN value and nothing else.
-  assert.match(pulse, /const val = v\[p\.key\]/);
-  assert.match(pulse, /height:\$\{pct\}%/);
-  // No colour on this page means "good" or "bad".
-  assert.doesNotMatch(pulse, /--ok|--danger/, 'the pulse judges the day');
-  assert.match(pulse, /A snapshot of today, not a score/);
-  // Unanswered is drawn as an empty track, not as zero: "I did not say" and
-  // "the lowest it goes" are different answers.
-  assert.match(pulse, /val === null \? ' is-unset' : ''/);
-  assert.match(pulse, /not said yet/);
-  // Every bar carries its label and its word for a screen reader.
-  assert.match(pulse, /class="sr-only">\$\{esc\(p\.label\)\}: /);
+test('THE DAY PULSE WAS REMOVED', () => {
+  /* D2.4 §6. Three bars derived from Overall Feeling, Energy and Social
+   * Battery — sitting directly above Overall Feeling, Energy and Social
+   * Battery. It restated the three controls beneath it, and it carried a line
+   * of copy explaining that it was not a score, which is a reliable sign a
+   * component is not earning its place: nothing that has to say what it is for
+   * needs to be there.
+   *
+   * §6 is explicit that a component must not be kept merely because it was
+   * already built. The information it carried now lives on the controls that
+   * own it — every core option previews itself. */
+  assert.doesNotMatch(checkin, /pulseHtml|pulseValues|PULSE|dia-pulse/);
+  assert.doesNotMatch(diaView, /pulseHtml|paintPulse/);
+  assert.doesNotMatch(html, /\.dia-pulse/);
+  assert.doesNotMatch(checkin, /A snapshot of today, not a score/);
+  /* What the rule protected survives: no total, no percentage, no average, no
+   * colour that means good or bad. `scaleValue` is still the ONLY arithmetic
+   * these scales permit, and it is a position on one list. */
+  const fn = checkin.slice(checkin.indexOf('export const scaleValue'));
+  assert.match(fn.slice(0, 400), /at \/ \(scale\.length - 1\)/);
+  const body = checkin.slice(checkin.indexOf('export function checkinHtml'),
+    checkin.indexOf('export const PROMPTS'));
+  assert.doesNotMatch(body, /reduce\(|average|overall score/i,
+    'something folds the dimensions into one figure');
 });
 
 test('the pulse derives, and derives nothing when nothing was said', () => {
@@ -320,18 +334,15 @@ test('the pulse derives, and derives nothing when nothing was said', () => {
 test('right-page motion sits inside the stated budget, and nothing loops', () => {
   assert.match(html, /\.dia-chip\{[^}]*transition:background var\(--t-hover\)/);
   assert.match(html, /\.dia-batt-fill\{[^}]*transition:width var\(--d-base\)/);
-  assert.match(html, /\.dia-pulse-fill\{[^}]*transition:height var\(--d-base\)/);
-  assert.match(html, /\.dia-meter-seg\{[^}]*transition:background var\(--d-fast\)/);
+  assert.match(html, /\.dia-meter-seg\{[^}]*transition:opacity var\(--d-fast\)/);
   assert.match(html, /\.dia-detail\{[^}]*animation:diaOpen var\(--d-base\)/);
-  // --d-fast is 140ms and --d-base is 200ms; both are §11's numbers.
+  // --d-fast is 140ms and --d-base is 200ms; both are the stated numbers.
   assert.match(html, /--d-fast:140ms/);
   assert.match(html, /--d-base:200ms/);
   // Nothing on this page repeats, bounces or celebrates.
   const dia = html.slice(html.indexOf('.dia-checkin{'), html.indexOf('/* ── History'));
   assert.doesNotMatch(dia, /animation-iteration-count:\s*infinite|infinite/);
   assert.doesNotMatch(dia, /confetti|bounce|elastic|back\.out/i);
-  // Reduced motion is global and cannot break a layout, because none of this
-  // owns a final state.
   assert.match(html, /@media \(prefers-reduced-motion:reduce\)\{\s*\*\{animation-duration:1ms/);
 });
 
@@ -342,21 +353,24 @@ test('the month cell speaks the right page\'s language, using its components', (
   for (const fn of ['face', 'glyph', 'energyMeter', 'batteryMeter', 'scaleValue', 'labelOf']) {
     assert.match(historyJs, new RegExp(`\\b${fn}\\b`), `history does not reuse ${fn}`);
   }
-  // Row 1: feeling, energy, social. Row 2: the day and its context line.
   assert.match(historyJs, /class="dia-day-ind"/);
   assert.match(historyJs, /energyMeter\(energy, 'dia-meter-xs'\)/);
   assert.match(historyJs, /batteryMeter\(social, 'dia-batt-xs'\)/);
   assert.match(historyJs, /class="dia-day-prev"/);
-  // Row 3: the four passive dimensions as MARKS, never as words (§13).
-  assert.match(historyJs, /class="dia-day-rh"/);
+  /* D2.4 §17: ALL FOUR passive marks, always, on a day that answered any of
+   * them — an unanswered one holds its place faintly rather than closing the
+   * gap, so the four sit at the same four positions on every cell and a month
+   * can be read down a column. */
+  assert.match(historyJs, /const anyRhythm = PASSIVE\.some/);
+  assert.match(historyJs, /anyRhythm \? [\s\S]{0,120}PASSIVE\.map/);
+  assert.match(historyJs, /is-unset/);
+  assert.match(html, /\.dia-day-rh-i\.is-unset\{opacity/);
   assert.match(historyJs, /glyph\(p\.icon, 11\)/);
-  assert.match(html, /\.dia-day-rh-i\{[^}]*opacity:calc/);
-  // Exact values on hover and in the accessible name, not in the square.
+  // A missing PRIMARY indicator holds its place too, for the same reason.
+  assert.match(historyJs, /class="dia-day-gap"/);
+  assert.doesNotMatch(historyJs, /dia-day-rh[\s\S]{0,200}labelOf\(p\.scale/,
+    'the passive values are written into the cell as text');
   assert.match(historyJs, /title="\$\{esc\(said\.join\(' · '\)\)\}"/);
-  assert.match(historyJs, /aria-label="\$\{esc\(label\)\}"/);
-  // The cell height is stated, so the grid cannot creep, and nothing overflows.
-  assert.match(html, /\.dia-day-cell\{[^}]*height:72px/);
-  assert.match(html, /\.dia-day-cell\{[^}]*overflow:hidden/);
 });
 
 test('the month endpoint sends ids for the indicators, not writing', async () => {

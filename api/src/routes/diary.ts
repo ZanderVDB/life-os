@@ -37,6 +37,7 @@ import {
 } from '../lib/diary-reflection.js';
 import {
   seedSampleDiary, removeSampleDiary, sampleDiaryFootprint, isDiarySampleAllowed,
+  seedHistorySample,
 } from '../lib/sample-diary.js';
 /* The streak is one face of the computed `Write in Diary` habit, so it comes
  * from the same provider Habits and Calendar use. See lib/diary-habit.ts. */
@@ -497,6 +498,22 @@ export function registerDiaryRoutes(
     }
     const { today } = z.object({ today: civilDate }).parse(req.body ?? {});
     return seedSampleDiary(db, wsId(req), today);
+  });
+
+  /**
+   * The visual-QA month (D2.4 §19).
+   *
+   * A second SET behind the same marker, not a second system: it writes
+   * `SAMPLE_PREFIX` on `timezone` exactly as the original does, so
+   * `/diary/sample/remove` already removes it and nothing else. The same
+   * production refusal guards it.
+   */
+  app.post(`${base}/diary/sample/history`, pre, async (req) => {
+    if (!isDiarySampleAllowed(env.NODE_ENV)) {
+      throw forbidden('Sample data is not available in production.');
+    }
+    const { today } = z.object({ today: civilDate }).parse(req.body ?? {});
+    return seedHistorySample(db, wsId(req), today);
   });
 
   app.post(`${base}/diary/sample/remove`, pre, async (req) => {

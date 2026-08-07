@@ -203,7 +203,23 @@ h1{font-size:var(--fs-h1);font-weight:800;letter-spacing:-1px;line-height:1.06;m
 h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .sub{font-size:13px;color:var(--muted);margin:0}
 .main-scroll{min-width:0;animation:fade var(--t-page) backwards}
-.toolbar{display:flex;gap:9px;align-items:center;margin:0 0 20px;flex-wrap:wrap}
+/* ── The Today toolbar and its Area filters (D2.4 §21) ──────────────────
+   THE DEFECT: `.filters` had no rule at all. Its chips are inline-block, so
+   the only thing between them was the whitespace in the template — about 4px
+   at 12px type — and the pill borders read as touching. `.toolbar`'s own 9px
+   gap separated Add Task from the GROUP, which is why only the pills inside
+   looked wrong.
+
+   One token, used by both, so the two gaps can never drift apart: the space
+   between the button and the group is the same space as between two pills. */
+:root{--chip-gap:9px}
+.toolbar{display:flex;gap:var(--chip-gap);align-items:center;margin:0 0 20px;
+  flex-wrap:wrap}
+.filters{display:flex;gap:var(--chip-gap);align-items:center;flex-wrap:wrap;
+  min-width:0}
+/* Add Task keeps a wider separation than the pills keep from each other, so
+   the group reads as one thing rather than as five siblings of the button. */
+.toolbar > .btn + .filters{margin-left:calc(var(--chip-gap) * .5)}
 
 /* ── Right rail ─────────────────────────────────────────────────────── */
 /* Legacy's rail is a sticky COLUMN inside the content grid — not a full-height
@@ -3173,11 +3189,12 @@ body:has(.dia-page) .rail{display:none}
 
 /* RULED PAPER and the F2.1 BLOCK GRID, carried over exactly.
    height = (lead + lines) x 30px. Lead is padding, and a lead row is unruled. */
-/* 210px = SEVEN ruled lines, exactly on the 30px block grid — the middle of
-   the 6–8 D2.3 §1 asks for. Enough room to begin writing and not so much that
-   the page is mostly empty before anything else appears. It is a floor: past
-   seven lines the editor simply grows and the prompts move down with it. */
-.dia-editor{outline:0;min-height:210px;position:relative;
+/* 180px = SIX ruled lines, on the 30px block grid, the floor of the 6–8 range
+   D2.3 §1 asks for. D2.4 §7 put all five prompts back on the page, and six
+   lines is what pays for the fifth: the writing region is still the first
+   thing on the paper and still large enough to start in. It is a FLOOR — past
+   six lines the editor grows and the prompts move down with it. */
+.dia-editor{outline:0;min-height:180px;position:relative;
   color:var(--paper-ink);font-size:15px;line-height:30px;
   background-image:repeating-linear-gradient(to bottom,
     transparent 0,transparent 29px,var(--paper-line) 29px,var(--paper-line) 30px);
@@ -3227,15 +3244,7 @@ body:has(.dia-page) .rail{display:none}
 .dia-prompts{margin-top:10px;padding-top:12px;border-top:1px dashed rgba(255,255,255,.09);
   flex:0 0 auto}
 .dia-prompts-head{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
-.dia-prompts-more{display:block;width:100%;margin-top:2px;padding:7px 10px;
-  background:rgba(255,255,255,.025);border:1px dashed rgba(255,255,255,.10);
-  border-radius:8px;font-family:inherit;font-size:11.5px;color:var(--paper-ink-2);
-  cursor:pointer;text-align:left;
-  transition:background var(--t-hover),color var(--t-hover),border-color var(--t-hover)}
-.dia-prompts-more:hover{background:rgba(255,255,255,.05);color:var(--paper-ink);
-  border-color:rgba(255,255,255,.16)}
-.dia-prompts-more:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.dia-prompts-more::before{content:'+ ';opacity:.7}
+/* `.dia-prompts-more` went with the disclosure control in D2.4 §7. */
 .dia-prompts-h{margin:0;font-size:11px;font-weight:700;letter-spacing:.1em;
   text-transform:uppercase;color:var(--paper-ink-2)}
 .dia-prompts-n{margin-left:auto;font-size:10.5px;color:var(--paper-ink-2);opacity:.75;
@@ -3246,11 +3255,11 @@ body:has(.dia-page) .rail{display:none}
    an answer from the paragraph above it. A modest inset surface says "this is
    somewhere to write" while empty and "this is an answer" once filled, and it
    grows with the text rather than scrolling inside two lines. */
-.dia-prompt{display:block;margin-bottom:8px}
+.dia-prompt{display:block;margin-bottom:6px}
 .dia-prompt-q{display:block;font-size:12px;color:var(--paper-ink-2);margin-bottom:4px;
   transition:color var(--t-hover)}
 .dia-prompt.is-filled .dia-prompt-q{color:var(--accent-c)}
-.dia-prompt-a{width:100%;display:block;min-height:40px;
+.dia-prompt-a{width:100%;display:block;min-height:36px;
   background:rgba(255,255,255,.035);
   border:1px solid rgba(255,255,255,.07);border-radius:8px;
   box-shadow:inset 0 1px 2px rgba(0,0,0,.12);
@@ -3269,184 +3278,251 @@ body:has(.dia-page) .rail{display:none}
    not look like two different kinds of thing. */
 /* `.dia-note-i` removed with the Moment tiles — see §3 above. */
 
-/* ── The right page: the check-in ─────────────────────────────────────── */
-.dia-checkin{display:flex;flex-direction:column;gap:9px}
+/* ══ THE RIGHT PAGE: THE CHECK-IN ═══════════════════════════════════════
+   D2.4 rebuilt this block. Three things it establishes, in order:
+     1. semantic Diary colour tokens, one family per group (§2, §23)
+     2. ONE control grid, shared by every row (§5)
+     3. three explicit interaction states, never colour alone (§11)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. COLOUR (§2, §23) ────────────────────────────────────────────────
+   Semantic tokens, not inline colours. Each group gets a family; the page
+   itself stays dark paper, and the Book is not recoloured.
+
+   Every one is a TINT of an existing Life OS accent, so nothing here invents
+   a hue: lavender is `--a-lavender`, the Diary book's own accent; the energy
+   blue-violet and the social teal-lavender are its cool neighbours. Selected
+   text is always `#1A1624` on a light fill or `--paper-ink` on a dark one —
+   never a mid-grey on a mid-tint. */
+.dia-checkin{
+  --ci-lav:#B69BF0;   /* Overall feeling — the Diary accent itself */
+  --ci-blu:#8FA6F5;   /* Energy — blue-violet */
+  --ci-tea:#7FC6D9;   /* Social battery — teal-lavender */
+  --ci-neu:#A79ECB;   /* Day rhythm — neutral, differentiated only when chosen */
+  /* The group's own colour. Every rule below reads this, so a group changes
+     family by setting one variable rather than by having its own rules. */
+  --ci:var(--ci-neu);
+}
+.dia-ci-group[data-group-id="feeling"]{--ci:var(--ci-lav)}
+.dia-ci-group[data-group-id="energy"]{--ci:var(--ci-blu)}
+.dia-ci-group[data-group-id="social"]{--ci:var(--ci-tea)}
+.dia-ci-group[data-group-id="rhythm"]{--ci:var(--ci-neu)}
+
+.dia-checkin{display:flex;flex-direction:column;gap:10px}
 .dia-ci-head{border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:8px}
 .dia-ci-title{margin:0;font-family:'Playfair Display',Georgia,serif;font-weight:500;
   font-size:20px;line-height:1.2;color:var(--paper-ink)}
 .dia-ci-sub{margin:3px 0 0;font-size:11.5px;color:var(--paper-ink-2)}
 .dia-ci-label{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
   color:var(--paper-ink-2)}
-.dia-chips{display:flex;flex-wrap:wrap;gap:6px}
+/* The group's label takes its family once anything is chosen, so the page
+   gains colour as it is filled in rather than arriving pre-decorated. */
+.dia-ci-group:has(.dia-chip.on) .dia-ci-label{color:var(--ci)}
 
-/* D2.2 §10 — four questions on four quiet surfaces.
-   Four rows running down one page with nothing between them read as a form to
-   complete. Four small surfaces read as four things you MAY answer, which is
-   what they are. The inset is barely there: this sits on paper, beside somebody
-   writing, and a card with a real edge would compete with the writing. */
-.dia-ci-group{padding:9px 11px 10px;border-radius:11px;
+.dia-ci-group{padding:10px 12px 11px;border-radius:11px;
   background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.05);
-  display:flex;flex-direction:column;gap:7px;
+  display:flex;flex-direction:column;gap:8px;
   transition:background var(--t-hover),border-color var(--t-hover)}
+/* A group holding an answer carries a hairline of its family down the side.
+   Group identity (§2) without a coloured panel. */
+.dia-ci-group{position:relative;overflow:hidden}
+.dia-ci-group::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:var(--ci);opacity:0;transition:opacity var(--t-hover)}
+.dia-ci-group:has(.dia-chip.on)::before{opacity:.55}
 .dia-ci-group:focus-within{background:rgba(255,255,255,.04);
   border-color:rgba(255,255,255,.10)}
 .dia-ci-grouphead{display:flex;align-items:center;gap:8px;min-height:16px}
-/* The reading, in words, at the end of the label row. The meters beside it are
-   decoration for the same fact — remove them and nothing is lost. */
+/* The reading, in words. Never removed: colour is never the only signal. */
 .dia-ci-read{margin-left:auto;font-size:11.5px;color:var(--paper-ink-2);
   font-variant-numeric:tabular-nums}
+.dia-ci-group:has(.dia-chip.on) .dia-ci-read{color:var(--paper-ink)}
 
-/* B — THE ENERGY ARC. Five segments rising left to right, filled to the
-   choice. A bar chart of one value, which is all "how much energy" is. */
-.dia-meter{display:inline-flex;align-items:flex-end;gap:2px;height:14px;margin-left:6px}
-.dia-meter-seg{width:4px;border-radius:1.5px;background:rgba(255,255,255,.13);
-  height:calc(6px + var(--seg) * 2px);
-  transition:background var(--d-fast) var(--e-out),transform var(--d-fast) var(--e-out);
-  transform-origin:bottom}
-.dia-meter-seg.on{background:var(--accent-c)}
-.dia-ci-group[data-group-id="energy"]:focus-within .dia-meter-seg.on{transform:scaleY(1.12)}
+/* ── 2. ONE CONTROL GRID (§5) ───────────────────────────────────────────
+   `repeat(var(--opts), minmax(0,1fr))` — every option in a row is exactly the
+   same width, and every row starts and ends at the same two x positions,
+   because they are all the same grid over the same container.
 
-/* C — THE SOCIAL BATTERY (D2.3 §6, corrected).
+   Before D2.4 the Social Battery's chips were flex-wrapped at intrinsic
+   widths, so its five words came out 53 / 84 / 60 / 38px while Energy's were
+   a uniform 53.9. §5 forbids fixing that with per-row margins, and this is
+   why: one declaration is the fix for all of them. */
+/* `auto-fit` with a stated minimum, not a fixed column count.
+   At a 310px page all five fit on one line. At 1024px the right page is only
+   220px wide, and five columns there gave 44px chips whose labels ALL
+   ellipsised — §25 forbids squeezing options until the words stop being
+   readable. `minmax(52px, 1fr)` fits as many as will hold their word and
+   wraps the rest, still equal-width and still aligned, because every core row
+   has the same option count and therefore the same column count. */
+.dia-chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(52px,1fr));
+  gap:var(--ci-gap,4px);align-items:stretch}
+/* 42px, not 44. At a 310px page the rhythm's option column is 183.4px wide;
+   4 x 44 + 3 gaps is 188, so a 44px minimum fitted only three and wrapped the
+   fourth — which cost the right page 130px and pushed the spread past the
+   composer. 4 x 42 + 12 = 180 fits, and 42px still holds `Rested` without
+   ellipsis. Below 264px of page width the container query stacks the label
+   instead, so the options never get squeezed further than this. */
+.dia-chips-rhythm{grid-template-columns:repeat(auto-fit,minmax(42px,1fr))}
+/* The precise feelings are a TAG LIST, not a scale — they wrap, they are
+   multi-select, and forcing them onto the scale grid would imply an order
+   they do not have. */
+.dia-chips-detail{display:flex;flex-wrap:wrap;gap:5px}
 
-   D2.2 drew one CELL per level and lit them cumulatively. That made the lit
-   width depend on how many inter-cell gaps happened to fall inside it, so the
-   two middle states were not evenly spaced — 2 cells + 1 gap is not twice
-   1 cell — and "Running low" and "Enough" read as almost the same amount.
+/* ── 3. THE CHIP, AND ITS THREE STATES (§11) ────────────────────────────
+     DEFAULT   neutral surface, hairline border
+     HOVER     lighter surface + brighter border + 1px lift. NO fill.
+     SELECTED  the group's family as a fill, dark ink, a raised indicator dot
+     FOCUS     a 2px accent ring, distinct from both
 
-   Now the shell is fixed and holds ONE continuous fill whose width is a
-   percentage of the inner track:
+   A selected chip under hover must still read as selected, so `.on` sets its
+   own background and the hover rule only lightens what is already there. */
+.dia-chip{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.035);
+  border-radius:10px;padding:5px 4px;font-family:inherit;font-size:10px;
+  color:var(--paper-ink-2);cursor:pointer;min-width:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  transition:background var(--t-hover),color var(--t-hover),
+    border-color var(--t-hover),transform var(--d-fast) var(--e-out),
+    box-shadow var(--t-hover)}
+.dia-chip-t{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;line-height:1.25}
+/* The preview box is STATED, so every core chip is the same height whatever
+   its indicator draws — a face, five bars or a battery. */
+.dia-chip-i{display:flex;align-items:center;justify-content:center;height:17px;
+  opacity:.5;transition:opacity var(--t-hover),transform var(--d-fast) var(--e-out)}
 
-       Empty 0%    Running low 33%    Enough 67%    Full 100%
+.dia-chip:hover{background:rgba(255,255,255,.085);color:var(--paper-ink);
+  border-color:rgba(255,255,255,.2);transform:translateY(-1px)}
+.dia-chip:hover .dia-chip-i{opacity:.8}
+.dia-chip:active{transform:translateY(0) scale(.97)}
+.dia-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px;
+  border-color:transparent}
 
-   which is exactly `index / (length - 1)`. The outer shell, the border, the
-   padding and the cap are identical in every state; only the fill's width
-   changes, so the progression is monotonic by construction. The two ticks are
-   drawn ON TOP at the same fractions and take no space of their own. */
-.dia-batt{display:inline-flex;align-items:center;margin-left:6px}
-.dia-batt-body{position:relative;width:30px;height:13px;padding:2px;overflow:hidden;
-  border:1px solid rgba(255,255,255,.22);border-radius:3.5px;box-sizing:border-box}
-.dia-batt-fill{display:block;height:100%;border-radius:1.5px;background:var(--accent-c);
-  transition:width var(--d-base) var(--e-out),background var(--d-fast) var(--e-out)}
-.dia-batt-tick{position:absolute;top:2px;bottom:2px;width:1px;
-  background:var(--paper);opacity:.5;transform:translateX(-.5px)}
-.dia-batt-cap{width:2px;height:6px;border-radius:0 1.5px 1.5px 0;
-  background:rgba(255,255,255,.22)}
-/* Empty is the one level that should not read as "fine". Warm, never alarming
-   — the rule about difficult days applies here too, and never `--danger`. */
-.dia-batt.is-empty .dia-batt-fill{background:var(--a-coral,#E08A7A)}
+.dia-chip.on{background:var(--ci);border-color:var(--ci);color:#1A1624;
+  font-weight:600;transform:none;
+  box-shadow:0 2px 10px -4px var(--ci)}
+.dia-chip.on .dia-chip-i{opacity:1}
+/* Selected AND hovered: brighter, still unmistakably filled. */
+.dia-chip.on:hover{background:var(--ci);filter:brightness(1.1);
+  transform:translateY(-1px)}
+/* The shape carries the state too, so selection survives greyscale. */
+.dia-chip.on::after{content:'';position:absolute;left:50%;bottom:3px;width:12px;height:2px;
+  border-radius:2px;background:#1A1624;opacity:.45;transform:translateX(-50%)}
+.dia-chip{position:relative}
+.dia-chips-detail .dia-chip{flex-direction:row;padding:5px 10px;border-radius:99px;
+  font-size:11px}
+.dia-chips-detail .dia-chip.on::after{display:none}
 
-/* ── THE OVERALL FEELING FACE (D2.3 §5) ─────────────────────────────────
-   ONE system: a 20×20 circle, 1.7 stroke, and only the mouth and brows change
-   across the five. Not emoji — an emoji set renders differently on every
-   platform and would be the single thing on this page drawn by someone else.
-   The label is always beside it; the face supports the word, never replaces
-   it. History reuses this exact component. */
+/* ── THE ICONS ──────────────────────────────────────────────────────────
+   Every one is `currentColor`, so a selected chip's dark ink flows straight
+   into its face, bars and battery — one rule instead of a selected variant
+   per icon. */
 .dia-face{display:block;flex:0 0 auto;color:currentColor}
-.dia-chips-face{gap:5px}
-.dia-chips-face .dia-chip{display:flex;flex-direction:column;align-items:center;gap:3px;
-  padding:7px 9px 6px;border-radius:12px;flex:1 1 0;min-width:0}
-.dia-chips-face .dia-chip span{font-size:10.5px;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.dia-chips-face .dia-chip .dia-face{opacity:.62;
-  transition:opacity var(--t-hover),transform var(--d-fast) var(--e-out)}
-.dia-chips-face .dia-chip:hover .dia-face{opacity:.9}
-.dia-chips-face .dia-chip.on .dia-face{opacity:1;transform:scale(1.06)}
-.dia-ci-face{display:inline-flex;color:var(--accent-c);margin-left:auto}
-.dia-ci-face + .dia-ci-read{margin-left:6px}
 
-/* ── DAY PULSE (D2.3 §10) ───────────────────────────────────────────────
-   A SNAPSHOT, NOT A GRADE. Three bars, one per dimension, each read straight
-   off its own scale — no total, no percentage, no average, and no colour that
-   means good or bad. A dimension nobody answered is an empty track, because
-   "I did not say" and "the lowest it goes" are different answers. */
-.dia-pulse{display:flex;align-items:center;gap:12px;padding:8px 11px;border-radius:11px;
-  background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.05)}
-.dia-pulse-bars{display:flex;gap:9px;flex:0 0 auto}
-.dia-pulse-col{display:flex;flex-direction:column;align-items:center;gap:3px;width:26px}
-.dia-pulse-track{display:block;width:7px;height:28px;border-radius:4px;
-  background:rgba(255,255,255,.09);position:relative;overflow:hidden}
-.dia-pulse-fill{position:absolute;left:0;right:0;bottom:0;border-radius:4px;
-  background:linear-gradient(180deg,var(--accent-c),rgba(168,140,255,.55));
-  transition:height var(--d-base) var(--e-out)}
-.dia-pulse-col.is-unset .dia-pulse-fill{background:transparent}
-.dia-pulse-l{font-size:8.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
-  color:var(--paper-ink-2);opacity:.75}
-.dia-pulse-note{margin:0;font-size:11px;line-height:1.4;color:var(--paper-ink-2);opacity:.8}
+/* THE ENERGY SIGNAL (§13). h(i) = MIN + (MAX-MIN) * i/(bars-1) — linear, so
+   every step is the same number of pixels. The old `6px + i*2px` gave a 33%
+   jump from bar 1 to 2 and 17% from 4 to 5, which read as a mistake at
+   History's size. Equal width, equal gap, fixed box. */
+.dia-meter{--m-min:5px; --m-max:15px; --m-w:3px; --m-gap:2px;
+  display:inline-flex;align-items:flex-end;gap:var(--m-gap);height:var(--m-max)}
+.dia-meter-seg{width:var(--m-w);border-radius:1.5px;background:currentColor;opacity:.22;
+  height:calc(var(--m-min) + (var(--m-max) - var(--m-min)) * var(--n) / (var(--bars) - 1));
+  transition:opacity var(--d-fast) var(--e-out)}
+.dia-meter-seg.on{opacity:1}
+/* Two sizes of the SAME component: the chip preview and the History cell. */
+.dia-meter-opt{--m-min:4px; --m-max:14px; --m-w:2.5px; --m-gap:1.5px}
+.dia-meter-xs{--m-min:3px; --m-max:9px; --m-w:2px; --m-gap:1.5px}
 
-/* ── DAY RHYTHM — the four passive dimensions (D2.3 §7) ─────────────────
-   Compact rows rather than four more cards: §9 asks for a full page that is
-   not cluttered, and four headed surfaces here would double the page's height
-   for four one-tap questions.
-   Measured: stacked rows with the label on its own line cost 305px of a 734px
-   page, because "Barely moved" and "Some time" wrapped their rows to two
-   lines. Inline label + one row of chips is 149px for the same four questions,
-   and the shorter wording (§7 permits it) is what makes one line possible. */
-.dia-rhythm{display:flex;flex-direction:column;gap:6px}
-.dia-rh-row{display:flex;align-items:center;gap:8px;min-width:0}
-.dia-rh-l{display:flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;
-  letter-spacing:.07em;text-transform:uppercase;color:var(--paper-ink-2);
-  flex:0 0 66px;min-width:0}
-.dia-rh-i{display:inline-flex;opacity:.65;flex:0 0 auto}
-.dia-rh-row .dia-chips{flex:1 1 auto;min-width:0;gap:4px;flex-wrap:nowrap}
-.dia-rh-row .dia-chip{padding:3px 7px;font-size:10.5px;flex:1 1 0;min-width:0;
-  text-align:center;overflow:hidden}
-.dia-rh-row .dia-chip span{display:block;overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap}
+/* THE SOCIAL BATTERY (§14). One shell, one fill formula, one state mapping,
+   at three sizes. Five states put the fill on exact quarters:
+     Empty 0%   Running low 25%   Enough 50%   Good 75%   Full 100%   */
+.dia-batt{--b-w:30px; --b-h:13px; --b-pad:2px;
+  display:inline-flex;align-items:center;color:currentColor}
+.dia-batt-body{position:relative;width:var(--b-w);height:var(--b-h);padding:var(--b-pad);
+  overflow:hidden;box-sizing:border-box;border-radius:3.5px;
+  border:1px solid currentColor;opacity:.9}
+.dia-batt-fill{display:block;height:100%;border-radius:1.5px;background:currentColor;
+  transition:width var(--d-base) var(--e-out)}
+.dia-batt-tick{position:absolute;top:var(--b-pad);bottom:var(--b-pad);width:1px;
+  background:var(--paper);opacity:.45;transform:translateX(-.5px)}
+.dia-batt-cap{width:2px;height:calc(var(--b-h) * .46);border-radius:0 1.5px 1.5px 0;
+  background:currentColor;opacity:.9}
+.dia-batt-opt{--b-w:26px; --b-h:11px; --b-pad:1.5px}
+.dia-batt-xs{--b-w:18px; --b-h:9px; --b-pad:1.5px}
 
-/* D — THE DAY'S COLOUR, scoped to the check-in and no further. A wash across
-   the whole page would tint the writing on the other side of the gutter, which
-   is somebody's diary and not a mood indicator. */
-.dia-checkin[data-tone]{--tone:rgba(255,255,255,.05)}
-.dia-checkin[data-tone="rough"],.dia-checkin[data-tone="low"]{--tone:rgba(224,138,122,.11)}
-.dia-checkin[data-tone="steady"]{--tone:rgba(255,255,255,.055)}
-.dia-checkin[data-tone="good"]{--tone:rgba(140,196,158,.11)}
-.dia-checkin[data-tone="great"]{--tone:rgba(168,140,255,.13)}
+/* THE DAY'S COLOUR, scoped to the check-in and no further. A wash across the
+   whole page would tint the writing on the other side of the gutter, which is
+   somebody's diary and not a mood indicator. Subtle enough that it can never
+   be confused with a hover — §11 and §18 both depend on that. */
+.dia-checkin[data-tone]{--tone:rgba(255,255,255,.04)}
+.dia-checkin[data-tone="rough"],.dia-checkin[data-tone="low"]{--tone:rgba(224,138,122,.10)}
+.dia-checkin[data-tone="steady"]{--tone:rgba(255,255,255,.05)}
+.dia-checkin[data-tone="good"]{--tone:rgba(140,196,158,.10)}
+.dia-checkin[data-tone="great"]{--tone:rgba(168,140,255,.12)}
 .dia-checkin[data-tone] .dia-ci-group[data-group-id="feeling"]{
   background:var(--tone);border-color:rgba(255,255,255,.09)}
 
-/* The Moment tiles went with D2.3 §3: the right page is TAP-ONLY, and a tile
-   that opens a text field is a writing surface wearing a control's clothes.
-   Anything already written into one is now a guided prompt on the LEFT page.
-   `.dia-moments`, `.dia-moment*` and `.dia-note-i` were removed with them. */
+/* ── DAY RHYTHM (§8, §9, §10) ───────────────────────────────────────────
+   ONE GRID FOR ALL FOUR ROWS.
 
-/* Chips, not a <select>. A browser dropdown in the middle of a journal reads
-   as a form and makes the whole spread feel like one. Every chip carries a
-   WORD — nothing depends on reading a glyph or telling two colours apart. */
-.dia-chip{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.035);
-  border-radius:99px;padding:7px 14px;font-family:inherit;font-size:12.5px;
-  color:var(--paper-ink-2);cursor:pointer;
-  transition:background var(--t-hover),color var(--t-hover),
-    border-color var(--t-hover),transform var(--d-instant) var(--e-out)}
-.dia-chip:hover{background:rgba(255,255,255,.075);color:var(--paper-ink)}
-.dia-chip:active{transform:scale(.96)}
-.dia-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.dia-chip.on{background:var(--accent-c);border-color:var(--accent-c);color:#1A1624;
-  font-weight:600}
-.dia-chips-sm .dia-chip,.dia-chip-sm{padding:4px 9px;font-size:11px}
-/* Energy's five words fit one line at this size. At 11.5px they wrapped, and
-   a second line there cost the page 32px for no extra information. */
-.dia-ci-group[data-group-id="energy"] .dia-chips{gap:4px;flex-wrap:nowrap}
-.dia-ci-group[data-group-id="energy"] .dia-chip{flex:1 1 0;min-width:0;text-align:center;
-  padding:4px 6px}
-.dia-ci-group[data-group-id="energy"] .dia-chip span{display:block;overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap}
+   THE OVERLAP DEFECT: the label was `flex: 0 0 66px` with `overflow: visible`.
+   NOURISHMENT needs 98px of content, so 24.3px of text painted on top of its
+   first chip; MOVEMENT overflowed by 7.2px; the other two happened to fit. Not
+   a Nourishment bug — a fixed column narrower than its widest content, and §9
+   is explicit that it must not be fixed with a per-row margin.
 
-/* RIGHT-PAGE MOTION (D2.3 §11). The stated budget, in one place:
-     broad feeling         140ms  (--d-fast, on .dia-chip)
-     precise expansion     200ms  (--d-base, diaOpen below)
-     Day Pulse             200ms  (--d-base, .dia-pulse-fill)
-     energy meter          140ms  (--d-fast, .dia-meter-seg)
-     social battery        200ms  (--d-base, .dia-batt-fill)
-     passive selection     140ms  (--d-fast, .dia-chip)
-   Nothing loops, nothing bounces, nothing celebrates. A selection should feel
-   answered, not rewarded — this is a diary, not a game. */
+   `.dia-rhythm` is now the grid and each row is `display: contents`, so all
+   four rows share ONE `auto` label column sized to the widest label and ONE
+   set of four equal option columns. The column cannot be narrower than its
+   content, so the overlap is unreachable rather than merely absent. */
+.dia-rhythm{display:grid;grid-template-columns:auto minmax(0,1fr);
+  column-gap:9px;row-gap:7px;align-items:center}
+/* The page is the constraint, not the window — a container query asks the
+   right question. Below 260px the label cannot sit beside four readable
+   options, so it goes above them and the options take the full width. §25
+   permits exactly this: stack deliberately rather than squeeze. */
+.dia-right{container-type:inline-size;container-name:diapage}
+@container diapage (max-width: 264px){
+  .dia-rhythm{grid-template-columns:minmax(0,1fr);row-gap:3px}
+  .dia-rh-l{min-height:0;margin-top:5px}
+  .dia-rh-row + .dia-rh-row .dia-rh-l{margin-top:9px}
+  .dia-rhythm .dia-rh-l:not(:first-of-type),
+  .dia-rhythm .dia-chips:not(:first-of-type){box-shadow:none}
+}
+.dia-rh-row{display:contents}
+/* 9px, and the tracking with it. At 10px/.06em `NOURISHMENT` claimed a 102px
+   column of a 310px page, leaving 39px per option and ellipsising `Rested`,
+   `Barely` and `Plenty`. The label is a category marker beside its own glyph,
+   not reading copy; the option words are the ones that must be legible. */
+.dia-rh-l{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--paper-ink-2);
+  white-space:nowrap;min-height:28px}
+.dia-rh-i{display:inline-flex;opacity:.6;flex:0 0 auto;
+  transition:opacity var(--t-hover),color var(--t-hover)}
+.dia-rh-t{display:block}
+/* An answered row lights its own icon and label — the group is neutral by
+   default and differentiates only where something was chosen (§2). */
+.dia-rh-row:has(.dia-chip.on) .dia-rh-i{opacity:1;color:var(--ci)}
+.dia-rh-row:has(.dia-chip.on) .dia-rh-l{color:var(--paper-ink)}
+/* §10: more presence without more weight. Taller rows, a quiet divider
+   between them, and the group gets room above and below. */
+.dia-rh-row .dia-chip{min-height:28px;padding:5px 4px;font-size:10px}
+.dia-ci-group[data-group-id="rhythm"]{padding-top:11px;padding-bottom:13px;gap:10px}
+.dia-rhythm .dia-rh-l:not(:first-of-type){box-shadow:0 -1px 0 rgba(255,255,255,.05)}
+.dia-rhythm .dia-chips:not(:first-of-type){box-shadow:0 -1px 0 rgba(255,255,255,.05)}
+
+/* RIGHT-PAGE MOTION (D2.4 §24 = D2.3 §11, unchanged). The stated budget:
+     hover                 140ms  (--t-hover)
+     selection             140ms  (--t-hover)
+     precise expansion     200ms  (--d-base)
+     indicator movement    200ms  (--d-base)
+   Nothing loops, bounces or celebrates. A selection should feel answered,
+   not rewarded. Reduced motion is global and cannot break a layout, because
+   nothing here owns a final state. */
 
 /* The finer words, revealed by the broad one. Two levels, never twenty. */
 .dia-detail{padding:11px 12px;border-radius:11px;background:rgba(255,255,255,.03);
   border:1px solid rgba(255,255,255,.06);animation:diaOpen var(--d-base) var(--e-out)}
 .dia-detail-lead{margin:0 0 8px;font-size:11.5px;color:var(--paper-ink-2)}
 @keyframes diaOpen{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-
 
 /* The streak: a fact, never a scoreboard. A diary that punishes the weeks you
    could not write is a diary you stop opening during the weeks that matter. */
@@ -3515,7 +3591,7 @@ body:has(.dia-page) .rail{display:none}
 .dia-grid-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
 .dia-grid-head span{text-align:center;font-size:10.5px;font-weight:700;letter-spacing:.06em;
   text-transform:uppercase;color:var(--muted);padding-bottom:3px}
-.dia-day-cell{position:relative;height:72px;border:0;border-radius:9px;overflow:hidden;
+.dia-day-cell{position:relative;height:80px;border:0;border-radius:9px;overflow:hidden;
   background:none;cursor:pointer;color:var(--text-2);font-family:inherit;font-size:13px;
   display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:1px;
   padding:5px 6px;text-align:left;
@@ -3526,50 +3602,78 @@ body:has(.dia-page) .rail{display:none}
 .dia-day-n{font-size:12px;line-height:1.2;flex:0 0 auto}
 .dia-day-cell.has-entry .dia-day-n{font-weight:700;color:var(--text)}
 
-/* ── THE DAILY SNAPSHOT (D2.3 §12) ──────────────────────────────────────
-   The same three indicators the right page uses, drawn by the same
-   components at a smaller size. A month of `GREAT` in capitals was a word,
-   not a snapshot; this is what the day actually was, at a glance. */
+/* ── THE DAILY SNAPSHOT (D2.3 §12, rebuilt D2.4 §15–§18) ────────────────
+   A written day should look richer than an empty one, and it should use the
+   card it has. Three bands, in a stated order that never changes:
+
+     top       the day number, and the three primary indicators opposite
+     middle    the title, or the best line of context there is
+     bottom    four passive marks, always in the same four positions
+
+   §16 wants the primary three "sufficiently large to scan, small enough not
+   to dominate": the face is 16px and the two meters are the `-xs` size of the
+   SAME components the right page uses. Nothing here is redrawn. */
 .dia-day-top{display:flex;align-items:center;gap:5px;flex:0 0 auto;min-width:0}
-.dia-day-ind{display:flex;align-items:center;gap:4px;margin-left:auto;min-width:0}
-.dia-day-ind .dia-face{color:var(--text-2);opacity:.9}
-.dia-meter-xs{height:9px;gap:1.5px;margin-left:0}
-.dia-meter-xs .dia-meter-seg{width:2px;height:calc(4px + var(--seg) * 1.2px)}
-.dia-batt-xs{margin-left:0}
-.dia-batt-xs .dia-batt-body{width:18px;height:9px;padding:1.5px;border-radius:2.5px}
-.dia-batt-xs .dia-batt-cap{width:1.5px;height:4px}
-.dia-batt-xs .dia-batt-tick{top:1.5px;bottom:1.5px}
+.dia-day-ind{display:flex;align-items:center;gap:5px;margin-left:auto;min-width:0;
+  color:var(--text-2)}
+.dia-day-ind .dia-face{opacity:.95}
+/* A dimension this day did not answer holds its place rather than closing the
+   gap, so the three indicators sit at the same x on every cell in the month
+   and a column can be read straight down. */
+.dia-day-gap{display:block;width:16px;height:9px}
 
-/* One line each, and both truncate. No overflow, ever — a long Highlight must
-   not push the row taller than its neighbours. */
-.dia-day-prev{flex:1;min-height:0;font-size:10px;line-height:1.3;color:var(--text-2);
-  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  word-break:break-word}
+/* §15: the context line is the middle band and gets the room. Two lines, and
+   it truncates rather than pushing the row — the grid must never creep. */
+.dia-day-prev{flex:1 1 auto;min-height:0;font-size:10px;line-height:1.32;
+  color:var(--text-2);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;word-break:break-word}
+.dia-day-cell.has-entry .dia-day-prev{color:var(--text)}
 
-/* §13 — the four passive dimensions, as four tiny marks. The GLYPH says which
-   dimension; its opacity says roughly how much. Exact values are in the
-   accessible name and the tooltip, never written into the square. */
-.dia-day-rh{display:flex;align-items:center;gap:4px;flex:0 0 auto;
-  color:var(--muted);height:12px}
-.dia-day-rh-i{display:inline-flex;opacity:calc(.34 + (.62 * (var(--v) / 100%)))}
+/* §17: four marks, one per passive dimension, in one stable order. The GLYPH
+   says which dimension; its opacity says roughly how much. Exact values are
+   in the tooltip and the accessible name, never written into the square.
+   Subordinate to the primary three by size, weight and position. */
+.dia-day-rh{display:flex;align-items:center;gap:6px;flex:0 0 auto;
+  color:var(--muted);height:13px;margin-top:1px}
+.dia-day-rh-i{display:inline-flex;opacity:calc(.3 + (.6 * var(--v) / 100))}
+.dia-day-rh-i.is-unset{opacity:.12}
 .dia-day-cell.is-open .dia-day-rh{color:#fff}
-.dia-dot{width:4px;height:4px;border-radius:50%;background:var(--accent);display:block}
-.dia-day-cell.is-today{box-shadow:inset 0 0 0 1px var(--border-strong)}
-.dia-day-cell.is-open{background:var(--accent-soft);color:#fff}
-.dia-day-cell.is-open .dia-day-prev{color:#fff;opacity:.85}
-.dia-day-cell.is-open .dia-day-ind .dia-face{color:#fff}
 
-/* THE MOOD TINT. §13 names the rule and it is a rule about tone, not palette:
-   a difficult day is not an error. Never `--danger`. Rough and Low are a muted
-   warm rose; Good is a soft green; Great is lilac; Steady is the plain surface,
-   because "ordinary" should look like the days around it. */
+/* ══ THREE STATES, UNMISTAKABLY DIFFERENT (D2.4 §18) ════════════════════
+
+     MOOD TINT   how the day FELT. Always present, always subtle, background
+                 only. No border, no lift — it is ambience, not feedback.
+     HOVER       my pointer is here. A visible outline and a lift. Temporary,
+                 and it never changes the tint underneath.
+     SELECTED    this is the open day. A persistent accent ring and fill.
+
+   D2.3 used `filter: brightness(1.22)` for hover, which merely made the tint
+   brighter — so "hovered Steady" and "resting Good" looked alike, which is
+   exactly the confusion §18 exists to remove. Hover now adds something the
+   tint never does: an outline and a shadow. */
 .dia-day-cell[data-feel="rough"]{background:rgba(214,124,110,.16)}
 .dia-day-cell[data-feel="low"]{background:rgba(214,142,124,.11)}
 .dia-day-cell[data-feel="steady"]{background:var(--surface-2)}
 .dia-day-cell[data-feel="good"]{background:rgba(122,190,146,.13)}
 .dia-day-cell[data-feel="great"]{background:rgba(160,136,240,.15)}
-.dia-day-cell[data-feel]:hover{filter:brightness(1.22)}
-.dia-day-cell[data-feel].is-open{background:var(--accent-soft)}
+
+/* HOVER — outline + lift, on any cell, tinted or not. */
+.dia-day-cell:hover{box-shadow:inset 0 0 0 1.5px var(--border-strong),0 4px 12px -6px rgba(0,0,0,.5);
+  transform:translateY(-1px)}
+.dia-day-cell:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;
+  transform:translateY(-1px)}
+/* TODAY — a quiet ring, so "today" is findable without being selected. */
+.dia-day-cell.is-today{box-shadow:inset 0 0 0 1px var(--border-strong)}
+.dia-day-cell.is-today:hover{box-shadow:inset 0 0 0 1.5px var(--border-strong),
+  0 4px 12px -6px rgba(0,0,0,.5)}
+/* SELECTED — the accent, filled and ringed, and it beats every tint. */
+.dia-day-cell.is-open,.dia-day-cell[data-feel].is-open{background:var(--accent-soft);
+  box-shadow:inset 0 0 0 2px var(--accent);color:#fff}
+.dia-day-cell.is-open:hover{box-shadow:inset 0 0 0 2px var(--accent),
+  0 4px 12px -6px rgba(0,0,0,.5)}
+.dia-day-cell.is-open .dia-day-prev{color:#fff;opacity:.9}
+.dia-day-cell.is-open .dia-day-ind{color:#fff}
+
 .dia-cal-key{margin:8px 0 0;font-size:10.5px;line-height:1.4;color:var(--muted);
   overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}
 

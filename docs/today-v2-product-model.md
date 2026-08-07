@@ -326,3 +326,28 @@ Measured at 1280px: resting 577 -> lift 160 -> stable 160 across the whole drag
 -> no overlap with the neighbouring bucket -> lands 160 in Today, 577 in Future,
 with a clean `style` attribute every time. Cancel restores exactly, with no
 stray placeholder, preview heading or duplicate node.
+
+---
+
+## Area-filter spacing (D2.4)
+
+The Area pills sat on whatever inline whitespace the markup happened to leave —
+about 4px — because `.filters` had **no CSS rule at all**. Not a wrong value: no
+value. The toolbar around them used 9px, so the filter row read as a different,
+tighter component than the row it lives in.
+
+One token now owns it:
+
+    :root    { --chip-gap: 9px }
+    .toolbar { display: flex; gap: var(--chip-gap); flex-wrap: wrap }
+    .filters { display: flex; gap: var(--chip-gap); flex-wrap: wrap; min-width: 0 }
+
+    .toolbar > .btn + .filters { margin-left: calc(var(--chip-gap) * .5) }
+
+`gap` rather than margins, so the spacing is identical between pills, between the
+toolbar's own children, and — the case margins always get wrong — **on wrap**.
+Measured uniform 9px throughout, including across a wrapped row.
+
+The half-gap after a preceding button is the one deliberate exception: it marks
+the seam between "an action" and "a filter" without inventing a second spacing
+value.

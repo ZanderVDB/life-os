@@ -183,33 +183,40 @@ test('growth is layout, so there is no height to leave behind', () => {
 });
 
 test('empty prompts and empty controls do not inflate the page', () => {
-  /* What must be ignored is satisfied by construction: prompts past the third
-   * are ABSENT from the DOM rather than hidden, and D2.3 removed the four
-   * editable Moment tiles outright — the right page is tap-only, so there is
-   * no collapsed text field left to account for. */
+  /* REVISED by D2.4 §7. D2.2 hid two prompts behind a disclosure control
+   * because five empty fields cost 411px on a page whose editor was also
+   * absorbing every spare pixel. D2.3 gave the editor a stated floor and
+   * stopped it growing into the slack, which returned that space — so the
+   * reason for hiding two prompts stopped existing, and a control that exists
+   * only to undo a constraint that has gone is worse than the fields it hides.
+   *
+   * All five show. What keeps the page honest now is the FIELD size, not a
+   * disclosure: a compact resting height and a six-line writing floor. */
+  assert.doesNotMatch(checkin, /PROMPTS_LEAD/, 'the disclosure threshold is back');
+  assert.doesNotMatch(checkin, /data-prompts-more/, 'the disclosure control is back');
   const fn = checkin.slice(checkin.indexOf('export function promptsHtml'));
-  assert.match(fn.slice(0, 1600), /const shown = showAll \? all : all\.slice\(0, PROMPTS_LEAD\)/);
-  assert.match(fn.slice(0, 2000), /shown\.map/);
+  assert.match(fn.slice(0, 1400), /\$\{all\.map\(\(p\) => \{/, 'not every prompt is rendered');
   assert.doesNotMatch(checkin, /function momentsHtml/, 'the Moment tiles are back');
-  /* The ruled editor is a FLOOR of seven lines and no longer grows into spare
-   * space — D2.3 §1. The slack sits below the prompts instead, so the writing
-   * region stays the size it was asked to be. */
   assert.match(html, /\.dia-editor\{flex:0 0 auto\}/);
-  assert.match(html, /\.dia-editor\{outline:0;min-height:210px/);
+  assert.match(html, /\.dia-editor\{outline:0;min-height:180px/);
+  assert.match(html, /\.dia-prompt-a\{[^}]*min-height:36px/);
   assert.match(html, /\.dia-left \.dia-scroll::after\{content:'';flex:1 1 auto/);
 });
 
 /* ══ §5 PROMPT DENSITY ═════════════════════════════════════════════════ */
 
-test('three prompts rest open, and an answered one is never hidden', () => {
-  assert.match(checkin, /export const PROMPTS_LEAD = 3/);
-  const fn = checkin.slice(checkin.indexOf('export function promptsHtml'));
-  // Collapsing something somebody wrote out of sight is how they lose track of
-  // having written it.
-  assert.match(fn.slice(0, 1600), /const forced = all\.slice\(PROMPTS_LEAD\)\.some\(\(p\) => valueOf\(refl, p\)\)/);
-  assert.match(fn.slice(0, 1600), /const showAll = open \|\| forced/);
-  assert.match(fn.slice(0, 2000), /data-prompts-more/);
-  // Opening them replaces ONLY the prompts — a sibling of the editor.
+test('all five prompts are visible, with no disclosure control', () => {
+  /* REVERSED by D2.4 §7 — see the note on the test above. The rule this
+   * replaces ("a prompt that already has an answer is never hidden") is now
+   * true by construction: nothing is ever hidden. */
+  assert.doesNotMatch(checkin, /PROMPTS_LEAD|dia-prompts-more|promptsOpen/);
+  assert.doesNotMatch(diaView, /promptsOpen/);
+  assert.doesNotMatch(html, /\.dia-prompts-more\{/);
+  const list = checkin.slice(checkin.indexOf('export const PROMPTS = ['),
+    checkin.indexOf('export const MOMENT_PROMPTS'));
+  assert.equal((list.match(/id: '/g) ?? []).length, 5, 'there are not five prompts');
+  // Repainting them still replaces ONLY the prompts — a sibling of the editor,
+  // so the caret, the selection and the undo history are untouched.
   const paint = diaView.slice(diaView.indexOf('function paintPrompts'));
   assert.match(paint.slice(0, 900), /querySelector\('\.dia-prompts'\)/);
   assert.match(paint.slice(0, 900), /old\.replaceWith\(next\)/);
@@ -552,8 +559,12 @@ test('the energy meter and the social battery respond, and both carry words', ()
   assert.match(checkin, /esc\(labelOf\(SOCIAL, c\.social\) \?\? '—'\)/);
   // The meters are `aria-hidden`: they are a second telling of the label.
   assert.match(checkin, /class="dia-meter \$\{cls\}" aria-hidden="true"/);
-  assert.match(checkin, /class="dia-batt [\s\S]{0,60}aria-hidden="true"/);
-  assert.match(html, /\.dia-meter-seg\.on\{background:var\(--accent-c\)/);
+  assert.match(checkin, /class="dia-batt \$\{cls\}[\s\S]{0,60}aria-hidden="true"/);
+  /* D2.4 §2 made every icon `currentColor`, so a selected chip's dark ink
+   * flows into its face, bars and battery — one rule rather than a selected
+   * variant per icon. */
+  assert.match(html, /\.dia-meter-seg\{[^}]*background:currentColor/);
+  assert.match(html, /\.dia-batt-fill\{[^}]*background:currentColor/);
 });
 
 test('THE RIGHT PAGE IS TAP-ONLY', () => {
@@ -599,9 +610,10 @@ test('a selection patches ONE group, and never the group holding the caret', () 
   const paint = diaView.slice(diaView.indexOf('function paintCheckin'));
   assert.match(paint.slice(0, 600), /\.dia-right \.dia-scroll/);
   assert.doesNotMatch(paint.slice(0, 600), /paintSheet|spreadHtml/);
-  // And the Day Pulse is its own repaint — every selection may move one bar.
-  assert.match(diaView, /function paintPulse\(\)/);
-  assert.match(fn.slice(0, 1400), /paintPulse\(\)/);
+  /* The Day Pulse repaint went with the Day Pulse (D2.4 §6): it restated the
+   * three controls directly beneath it, and a component that needs a line of
+   * copy saying what it is for is a component that is not earning its place. */
+  assert.doesNotMatch(diaView, /paintPulse|pulseHtml/);
 });
 
 test('a repaint rewires only what it replaced', () => {
@@ -635,10 +647,11 @@ test('a selection saves, and the local copy is authoritative', () => {
 
 test('the month is a compact six-week grid, not seven squares tall', () => {
   assert.doesNotMatch(html, /\.dia-day-cell\{[^}]*aspect-ratio:1/);
-  // 72px from D2.3 §12: the cell carries three rows now — the indicator row,
-  // the context line and the passive marks — and it is still stated, so the
-  // grid cannot creep.
-  assert.match(html, /\.dia-day-cell\{[^}]*height:72px/);
+  /* 80px from D2.4 §15: the cell carries three bands now — the day number and
+   * the three primary indicators, the context line, and four passive marks —
+   * and a written day should look richer than an empty one. Still STATED, so
+   * the grid cannot creep. */
+  assert.match(html, /\.dia-day-cell\{[^}]*height:80px/);
   assert.match(html, /\.dia-day-cell\{[^}]*overflow:hidden/);
   assert.match(html, /\.dia-day-prev\{[^}]*-webkit-line-clamp:2/);
 });

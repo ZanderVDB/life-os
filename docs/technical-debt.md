@@ -852,3 +852,47 @@ pixel coverage rather than an image. Visual judgement remains a user check.
 label-plus-chips, sized for a ~310px page. Verified not to overflow at 375px in
 D2.2's layout, but the rhythm rows are new and were measured at desktop width
 only. Worth a look on a real phone.
+
+---
+
+## D2.4
+
+### Resolved
+
+- **Fixed-width label column in Daily Rhythm.** `flex: 0 0 66px` with
+  `overflow: visible` painted `Nourishment` 24.3px over the first chip. Replaced
+  by one shared grid with `display: contents` rows, which cannot have the
+  problem for any label.
+- **`.filters` had no CSS rule.** The Today Area pills spaced themselves on
+  inline whitespace. Now `gap: var(--chip-gap)`.
+- **Truncated chip labels** after the 5/5/5 change — sixteen of them at 11px.
+  Resolved at 10px with tighter padding; zero truncate at any verified width.
+
+### Carried, with the reason
+
+- **`SLEEP_ALIAS` is permanent, not a migration step.** `sleep: great` days are
+  normalised to `rested` on read, in both the server validator and the client.
+  Nothing rewrites stored rows. This is deliberate — a migration would rewrite
+  history to match a UI decision, and the alias costs one map lookup. Anything
+  that later reads `reflection.checkin.sleep` **must** go through the alias;
+  there is no database guarantee that only the four current ids appear.
+- **The core rows wrap to two lines at 1024px.** Five 52px chips do not fit a
+  266px track. This is §9's compact-row response and is verified to truncate
+  nothing, but it does mean the check-in is taller at 1024 than at 1280.
+- **Sample History data is staging-only and cannot be exercised in production.**
+  `POST /diary/sample/history` is refused unless `NODE_ENV` allows it, so the
+  seeding path has no production coverage by construction. That is the intended
+  trade.
+
+### Measurement notes worth not relearning
+
+- **A `display: contents` element returns a zero `getBoundingClientRect()`.** An
+  overflow check written against a chip row's immediate parent reports overflow
+  for every row, always. Measure against the real box, and cross-check
+  `scrollWidth - clientWidth`.
+- **A geometry reading taken on a scrolled page is worthless.** Reset `scrollY`
+  and the scroll container, then measure. One "it fits" reading in this phase was
+  wrong for exactly this reason and hid a 24px overflow.
+- **`requestAnimationFrame` never fires while the harness browser pane is
+  hidden.** Any measurement that awaits rAF hangs until the tool times out. Use
+  `setTimeout` (throttled to ~1s, but it does fire) or a `MutationObserver`.

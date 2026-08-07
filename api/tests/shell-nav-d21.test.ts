@@ -296,10 +296,10 @@ test('the permanent Diary toolbar is gone, and storage is untouched', () => {
 
 test('a prompt response is a surface, not an underline', () => {
   const rule = html.slice(html.indexOf('.dia-prompt-a{'), html.indexOf('.dia-prompt-a::placeholder'));
-  /* 46px in D2.1; 40px from D2.2 §5, the top of the 36–40px range the phase
-   * asked for. Still a SURFACE — the border, the radius and the inset shadow
-   * are what make it one, not its height. */
-  assert.match(rule, /min-height:40px/);
+  /* 46px in D2.1, 40px in D2.2, 36px from D2.4 §7 — which is what pays for the
+   * fifth prompt coming back onto the page. Still a SURFACE: the border, the
+   * radius and the inset shadow are what make it one, not its height. */
+  assert.match(rule, /min-height:36px/);
   assert.match(rule, /border-radius:8px/);
   assert.match(rule, /border:1px solid/);
   assert.match(rule, /box-shadow:inset/);
@@ -310,38 +310,25 @@ test('a prompt response is a surface, not an underline', () => {
 });
 
 test('the spread grows with its content, from a stated base', () => {
-  /* REVISED by D2.2 §3/§4. D2 made `aspect-ratio` a minimum by writing
-   * `min-height:calc((100vw - 460px) * 297/420)` — reading the WINDOW to size
-   * an element inside a column. It over-corrected: the empty spread ran far
-   * below the fold, and the number was wrong at every width where the rail or
-   * the drawer changed the column.
+  /* The base is a zero-content pseudo-element spanning both columns at the
+   * Book's own 420:297, so it is exactly the open Book's height at the same
+   * width and needs no arithmetic at all.
    *
-   *   height = max(approvedBaseHeight, leftRequired, rightRequired)
-   *
-   * All three terms are layout. The base is a zero-content pseudo-element
-   * spanning both columns at the Book's own 420:297, so it is exactly the open
-   * Book's height at the same width and needs no arithmetic at all. */
+   *   height = max(approvedBaseHeight, leftRequired, rightRequired)  */
   assert.match(html, /\.dia-book\.bk-spread\{aspect-ratio:auto;height:auto;align-items:stretch\}/);
   assert.match(html, /\.dia-book\.bk-spread::before\{content:'';grid-row:1;grid-column:1\/-1;[\s\S]{0,60}aspect-ratio:420\/297/);
   assert.doesNotMatch(html, /\.dia-book\.bk-spread\{[^}]*min-height:calc\(\(100vw/,
     'the viewport-derived minimum is back');
-  // Both pages take the taller of the two, so the gutter and edges extend.
   assert.match(html, /\.dia-book\.bk-spread > \.dia-left\{grid-row:1;grid-column:1\}/);
   assert.match(html, /\.dia-book\.bk-spread > \.dia-right\{grid-row:1;grid-column:2\}/);
   assert.match(html, /\.dia-scroll\{[^}]*overflow:visible/);
-  /* The ruled writing area absorbs the slack, and its floor is well below the
-   * height it renders at — a floor tall enough to bind is one that pushes the
-   * spread past the base, which is what the old 180px did. */
-  /* REVISED by D2.3 §1. `flex:1 0 auto` let the ruled area swallow every spare
-   * pixel, so a blank day opened with half a page of empty paper before the
-   * prompts appeared. The editor is now exactly as tall as its content with a
-   * SEVEN-LINE floor, and the spare room sits below the prompts instead. */
+  /* D2.4 §7 put the fifth prompt back, and SIX ruled lines is what pays for
+   * it — the floor of the 6–8 range. The editor is still exactly as tall as
+   * its content, with the slack below the prompts. */
   assert.match(html, /\.dia-editor\{flex:0 0 auto\}/);
-  assert.match(html, /\.dia-editor\{outline:0;min-height:210px/);
+  assert.match(html, /\.dia-editor\{outline:0;min-height:180px/);
   assert.match(html, /\.dia-left \.dia-scroll::after\{content:'';flex:1 1 auto/);
-  /* No JavaScript owns the SPREAD's height, so there is no inline value to go
-   * stale. The one height D2.3 writes belongs to the outgoing ghost, which is
-   * pinned to the box it replaces and then deletes itself. */
+  // No JavaScript owns the height, so there is no inline value to go stale.
   const spreadCode = diaView.replace(
     diaView.slice(diaView.indexOf('function beginTurn'), diaView.indexOf('function endTurn')), '');
   assert.doesNotMatch(spreadCode, /style\.height = /);
