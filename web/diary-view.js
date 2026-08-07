@@ -18,14 +18,18 @@ import {
   dia, initDiaryApi, localToday, isValidDate, addDays, addMonths,
   loadDay, loadMonth, loadRecent, loadStreak, searchDiary,
   archiveEntry, restoreEntry, formatLong,
+  beginDayNav, dayNavToken, dayNavStale,
   sampleCheck, sampleAdd, sampleRemove,
 } from './diary-api.js';
 import {
   headerHtml, spreadHtml, jumpHtml, loadingHtml, errorHtml, esc,
 } from './diary-entry.js';
 import {
-  autosize, checkinHtml, promptsHtml, FEELINGS,
+  autosize, checkinHtml, promptsHtml, pulseHtml, FEELINGS, PASSIVE,
 } from './diary-checkin.js';
+
+/** The four passive dimensions, by storage key. They behave as one family. */
+const PASSIVE_KEYS = PASSIVE.map((p) => p.key);
 import { historyHtml } from './diary-history.js';
 import { docToHtml, htmlToDoc, docToText } from './editor-doc.js';
 import {
@@ -81,45 +85,77 @@ export async function renderDiary(nav = navToken()) {
   dia.mode = route.mode;
   if (route.mode === 'history') return renderHistory(head, scroll, nav);
 
-  dia.date = route.date;
-  return renderEntry(head, scroll, { nav });
+  /* Back, Forward, a pasted URL and the first entry into Diary are all real
+   * date navigations (§20), so each claims a token. Without this a render
+   * started by Back carried whatever token the last button press had, and the
+   * first in-flight day change would silently cancel it. */
+  const day = beginDayNav(route.date);
+  return renderEntry(head, scroll, { nav, day });
 }
 
 /* ── Entry mode ──────────────────────────────────────────────────────── */
 
-async function renderEntry(head, scroll, { animate = null, nav = navToken() } = {}) {
+/**
+ * Draws one day.
+ *
+ * Guarded by TWO tokens, because there are two ways to become stale and they
+ * are genuinely different questions:
+ *
+ *   `nav`  did the person leave Diary altogether? (the shell's route token)
+ *   `day`  did the person ask for a different DATE? (D2.3 §18)
+ *
+ * The route token cannot answer the second: moving between days does not
+ * change the route, so `navStale` was false for every date press and every
+ * stale render was free to paint. That was the rubber-band.
+ */
+async function renderEntry(
+  head, scroll,
+  { animate = null, nav = navToken(), day = dayNavToken() } = {},
+) {
+  const date = dia.date;
+  const stale = () => navStale(nav) || dayNavStale(day);
+
   head.innerHTML = headerHtml();
   wireHead(head);
 
-  /* Only cleared when there is nothing to keep. A day already on screen stays
-   * there until its replacement is ready — see the no-blank rule in
-   * shell-navigation-and-transition-model.md. */
-  if (!scroll.querySelector('.dia-book')) scroll.innerHTML = loadingHtml();
+  /* The live layer becomes the REQUESTED day immediately — its heading, its
+   * paper, its ruled lines — while the outgoing day leaves as a ghost above
+   * it. The no-blank rule is still honoured: nothing is ever cleared to
+   * nothing, and on a slow connection what remains is the day you asked for
+   * rather than the one you left (§21). */
+  if (animate || !scroll.querySelector('.dia-book')) {
+    scroll.innerHTML = loadingHtml(date);
+  }
   try {
     /* The day, the streak and the month are fetched together: the streak sits
      * on the right page and the month fills the date-jump grid, and loading
-     * them after the paint would make both pop in a beat late. */
+     * them after the paint would make both pop in a beat late.
+     *
+     * The month is given the token so a slow preload cannot move `dia.month`
+     * — §19 forbids a History or month preload changing the selected day. */
     await Promise.all([
-      loadDay(dia.date),
+      loadDay(date),
       loadStreak().catch(() => null),
-      loadMonth(dia.month ?? dia.date).catch(() => null),
+      loadMonth(dia.month ?? date, day).catch(() => null),
     ]);
   } catch (e) {
-    if (navStale(nav)) return;
+    if (stale()) return;
     scroll.innerHTML = errorHtml(e.message);
     scroll.querySelector('#dia-retry')?.addEventListener('click', () => void renderDiary());
     return;
   }
 
-  /* The person navigated away while this was in flight. Painting now would
-   * replace whatever they asked for, and `setHash` below would put the URL
-   * back into Diary — which is how a stale load used to reclaim the screen. */
-  if (navStale(nav)) return;
+  /* The person navigated away, or asked for another day, while this was in
+   * flight. Painting now would replace what they actually asked for, and
+   * `setHash` would put the URL back — which is how a stale load reclaimed
+   * the screen in both D2.1 and D2.3. */
+  if (stale()) return;
 
   head.innerHTML = headerHtml();
   wireHead(head);
   paintSheet(scroll, animate);
-  setHash(`#diary/${dia.date}`);
+  setHash(`#diary/${date}`);
+  endTurn(scroll);
 }
 
 /**
@@ -149,20 +185,32 @@ function paintSheet(scroll = document.getElementById('main-scroll'), animate = n
  * gutter instead of across a save.
  *
  * §12 goes further: "update only its local component". `paintGroup` below
- * replaces one <section> and leaves the other three — and, crucially, leaves a
- * Moment field the person is typing in.
+ * replaces one <section> and leaves the other three.
  */
 function paintCheckin() {
   const right = document.querySelector('.dia-right .dia-scroll');
   if (!right) return;
   const top = right.scrollTop;
-  right.innerHTML = checkinHtml(dia.entry, dia.reflection, dia.streak, openMoment);
+  right.innerHTML = checkinHtml(dia.entry, dia.reflection);
   right.scrollTop = top;
   wireCheckin(right);
 }
 
-/** Which Moment tile is expanded. A view state; never written anywhere. */
-let openMoment = null;
+/**
+ * Redraws the Day Pulse, and nothing else.
+ *
+ * Every selection on this page changes at most one of its three bars, so it is
+ * repainted on its own rather than as part of whichever group was tapped. It
+ * holds no focus and no caret — it is a readout — so replacing it outright is
+ * safe and is the cheapest correct thing to do.
+ */
+function paintPulse() {
+  const old = document.querySelector('.dia-pulse');
+  if (!old) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = pulseHtml(dia.entry, dia.reflection?.checkin ?? {});
+  old.replaceWith(holder.firstElementChild);
+}
 
 /**
  * Repaints ONE check-in group.
@@ -177,7 +225,7 @@ function paintGroup(id) {
   const old = right?.querySelector(`.dia-ci-group[data-group-id="${id}"]`);
   if (!old) { paintCheckin(); return; }
   const holder = document.createElement('div');
-  holder.innerHTML = checkinHtml(dia.entry, dia.reflection, dia.streak, openMoment);
+  holder.innerHTML = checkinHtml(dia.entry, dia.reflection);
   const next = holder.querySelector(`.dia-ci-group[data-group-id="${id}"]`);
   if (!next) { paintCheckin(); return; }
   old.replaceWith(next);
@@ -190,6 +238,8 @@ function paintGroup(id) {
   }
   // The replaced subtree ONLY. See the note on wireCheckin.
   wireCheckin(next);
+  // Every selection may move one of its three bars.
+  paintPulse();
 }
 
 let stopSaveWatch = null;
@@ -320,7 +370,7 @@ function wirePrompts(root) {
     autosize(el);
     el.addEventListener('input', () => {
       autosize(el);
-      setPrompt(el.dataset.prompt, el.value);
+      setPrompt(el.dataset.prompt, el.value, el.dataset.store);
     });
   });
   root.querySelector('[data-prompts-more]')?.addEventListener('click', () => {
@@ -380,30 +430,9 @@ function wireCheckin(root) {
     });
   });
 
-  /* A Moment field. Typing patches state and queues a save; it never repaints,
-   * because repainting the field you are typing in is how a caret jumps to the
-   * end of the line. The tile's summary text catches up when the group next
-   * redraws, which is exactly when it should. */
-  root.querySelectorAll('[data-note]').forEach((el) => {
-    el.addEventListener('input', () => setCheckin(el.dataset.note, el.value.trim() || undefined));
-    // Leaving an empty tile folds it back up, so the page returns to rest.
-    el.addEventListener('blur', () => {
-      if (el.value.trim() || openMoment !== el.dataset.note) return;
-      openMoment = null;
-      paintGroup('moments');
-    });
-  });
-
-  /* A Moment tile. Opening one closes the last, so the page never quietly
-   * unfolds into the four-field form these tiles replaced. */
-  root.querySelectorAll('[data-moment-open]').forEach((b) => {
-    b.addEventListener('click', () => {
-      const id = b.dataset.momentOpen;
-      openMoment = openMoment === id ? null : id;
-      paintGroup('moments');
-      document.getElementById(`dia-moment-${id}`)?.focus();
-    });
-  });
+  /* There is nothing else to wire. The right page is TAP-ONLY (D2.3 §3): no
+   * textarea, no input, nothing that opens a keyboard. If a `[data-note]`
+   * listener ever needs to come back here, the product rule has been broken. */
 }
 
 /**
@@ -438,31 +467,44 @@ function onChip(group, id) {
     const set = new Set(c.feelingDetail ?? []);
     if (set.has(id)) set.delete(id); else set.add(id);
     if (set.size) c.feelingDetail = [...set]; else delete c.feelingDetail;
-  } else if (group === 'social') {
-    if (c.social === id) delete c.social; else c.social = id;
+  } else if (group === 'social' || PASSIVE_KEYS.includes(group)) {
+    /* Social and the four passive dimensions behave identically: one id from
+     * one ordered scale, and tapping the chosen one clears it. They are stored
+     * side by side in `checkin` because they are all observations of the day —
+     * and NONE of them writes a habit. See diary-v2-daily-checkin.md. */
+    if (c[group] === id) delete c[group]; else c[group] = id;
   }
   writeReflection({ ...dia.reflection, checkin: c });
   /* Feeling and feelingDetail both redraw the FEELING group — choosing a broad
    * word adds or removes the finer row beneath it, which is a change to the
-   * group's shape and not just its selection. Social redraws its own. */
-  paintGroup(group === 'social' ? 'social' : 'feeling');
+   * group's shape and not just its selection. The four passive dimensions all
+   * live in one `rhythm` group; everything else redraws its own. */
+  paintGroup(PASSIVE_KEYS.includes(group) ? 'rhythm'
+    : (group === 'social' ? 'social' : 'feeling'));
   /* The chosen chip keeps the focus it just took. Without this a keyboard user
    * choosing with the arrow keys would be returned to the top of the page by
    * the very control they were operating. */
   document.querySelector(`[data-group="${group}"] [data-choice="${id}"]`)?.focus();
 }
 
-/** A one-line note on the right page. */
-function setCheckin(key, value) {
-  const c = { ...(dia.reflection.checkin ?? {}) };
-  if (value === undefined) delete c[key]; else c[key] = value;
-  writeReflection({ ...dia.reflection, checkin: c });
-}
-
-/** A guided prompt on the left page. */
-function setPrompt(id, value) {
-  const prompts = { ...(dia.reflection.prompts ?? {}) };
+/**
+ * A guided prompt on the left page.
+ *
+ * `store` says which half of the reflection it belongs in. The five standing
+ * prompts live under `prompts`; the four retired Moment lines keep their
+ * original `checkin` keys so that a day already holding one needs no migration
+ * — see `MOMENT_PROMPTS`. One field, one storage location, decided by the
+ * prompt rather than by which page it happens to be drawn on.
+ */
+function setPrompt(id, value, store = 'prompts') {
   const t = value.trim();
+  if (store === 'checkin') {
+    const c = { ...(dia.reflection.checkin ?? {}) };
+    if (t) c[id] = t; else delete c[id];
+    writeReflection({ ...dia.reflection, checkin: c });
+    return;
+  }
+  const prompts = { ...(dia.reflection.prompts ?? {}) };
   if (t) prompts[id] = t; else delete prompts[id];
   writeReflection({ ...dia.reflection, prompts });
 }
@@ -608,32 +650,64 @@ async function navigate(what) {
 }
 
 /**
- * Moves to a date.
+ * Moves to a date. THE DATE-NAVIGATION TRANSACTION (D2.3 §18, §19).
  *
- * §16: the flush happens BEFORE the date changes, not alongside it. If the
- * write cannot complete the move is abandoned and the words stay on screen —
- * losing a day's writing to a navigation is the one outcome that is never
- * acceptable.
+ * ── What this replaces, and why ──────────────────────────────────────────
+ *
+ * The old order was: flush, wait, THEN change the date, then fetch, then
+ * paint. Two consequences, both measured before the rewrite:
+ *
+ *   The date on screen did not move for two seconds. `dia.date` was committed
+ *   only after the network agreed, so a second press computed its target from
+ *   the date still showing — and pressing Next, Next, Previous, Next produced
+ *   four requests for three different days.
+ *
+ *   Nothing said which press a render belonged to. Whichever finished LAST
+ *   painted last, so the visible date went 8 Aug → 7 Aug → 8 Aug and settled
+ *   after 3.6 seconds. That is the rubber-band.
+ *
+ * ── The new order ────────────────────────────────────────────────────────
+ *
+ * 1. Claim the navigation and COMMIT THE DATE, before anything is awaited.
+ *    The heading, the day controls and the hash are correct in the first
+ *    frame, so the next press computes from the right base.
+ * 2. Start the outgoing layer moving.
+ * 3. Let the flush for the day being LEFT continue in the background. It
+ *    updates that day's record and its coordinator; §18 is explicit that it
+ *    may not hold the screen or restore the day visually. Nothing is lost:
+ *    the coordinator is keyed by date, and `beforeunload` still guards the
+ *    tab.
+ * 4. Fetch, and paint only if this is still the newest navigation.
  */
 export async function goToDate(date, direction = null) {
   if (date === dia.date && dia.mode === 'entry') return;
-  const ok = await flushAll();
-  if (!ok && hasUnsaved()) {
-    ctx.toast('That did not save yet — staying here so nothing is lost.', true);
-    return;
-  }
-  forgetAll();
-  dia.date = date;
+
+  /* Claimed and committed BEFORE any await. Everything after this point is
+   * allowed to touch the screen only while `day` is still current. */
+  const day = beginDayNav(date);
   dia.mode = 'entry';
   dia.entry = null;
+  dia.archivedEntry = null;
+  dia.reflection = {};
   // View state belongs to the day you were on, not to the one you are opening.
   dia.promptsOpen = false;
-  openMoment = null;
+
   const scroll = document.getElementById('main-scroll');
   const head = document.getElementById('page-head');
-  await leaveSpread(scroll, direction);
-  await renderEntry(head, scroll, { animate: direction });
+
+  /* The heading and the controls, immediately and from the target date. §19:
+   * never set the selected date back to the source while awaiting data. */
+  if (head) { head.innerHTML = headerHtml(); wireHead(head); }
+  setHash(`#diary/${date}`);
   announce(`Showing ${formatLong(date)}`);
+  beginTurn(scroll, direction);
+
+  /* The day being left finishes writing on its own time. It cannot repaint:
+   * the coordinator writes by date, and both `dia.entry` and `onEntryCreated`
+   * are guarded by "is this date still open". */
+  void flushAll();
+
+  await renderEntry(head, scroll, { animate: direction, day });
 }
 
 function afterAnimation(el, ms) {
@@ -673,36 +747,68 @@ function enterOnce(el, cls, ms) {
   setTimeout(off, ms + 120);
 }
 
-/**
- * The spread leaving, on its way to another day.
+/* ── The day turn (D2.3 §21) ─────────────────────────────────────────────
  *
- * ── The house rule (D2.2 §14) ────────────────────────────────────────────
+ * A real outgoing layer, not a wait.
  *
- * ANIMATIONS ILLUSTRATE STATE CHANGES; DOM AND CSS OWN THE FINAL STATE.
+ * D2.2's `leaveSpread` AWAITED the leave animation before the fetch even
+ * started, which added 200ms to every day change and — worse — meant the old
+ * day was still the only thing on screen while it played. The book frame, the
+ * gutter and the coloured edges stay exactly where they are; only the CONTENT
+ * moves, and the incoming day arrives over the outgoing one.
  *
- * `.dia-book.leave-next` is `animation-fill-mode: forwards`, which holds the
- * element at the last keyframe — translated aside and transparent. That is
- * correct while the replacement is on its way and catastrophic if it never
- * arrives: a `renderEntry` that bails on a stale navigation would leave the
- * day permanently invisible. So the class comes off in a `finally`, whatever
- * happened, and `afterAnimation`'s timeout means the wait always ends even
- * when `animationend` does not fire — a backgrounded tab, a throttled
- * timeline, a stylesheet that had not applied.
+ * The outgoing layer is a detached clone. It is inert: no ids, no listeners,
+ * `aria-hidden`, `inert`, and it cannot be typed into. Cloning rather than
+ * keeping the live node is what lets `paintSheet` rebuild the real spread
+ * immediately, whenever the data arrives, without waiting for theatre.
  *
- * It also targeted `.dia-sheet`, which stopped existing when D2 made Diary a
- * spread — so the transition had silently not run since. Fixed here.
+ * ANIMATIONS ILLUSTRATE STATE CHANGES; DOM AND CSS OWN THE FINAL STATE. The
+ * clone removes itself on a timer as well as on `animationend`, so a throttled
+ * timeline cannot leave a ghost day sitting over the real one.
  */
-async function leaveSpread(scroll, direction) {
-  if (!direction || reducedMotion()) return;
-  const book = scroll?.querySelector('.dia-book');
+const TURN_MS = 260;
+
+function beginTurn(scroll, direction) {
+  endTurn(scroll);
+  if (!direction || !scroll || reducedMotion()) return;
+  const book = scroll.querySelector('.dia-book');
   if (!book) return;
-  const cls = direction === 'next' ? 'leave-next' : 'leave-prev';
-  book.classList.add(cls);
-  try {
-    await afterAnimation(book, 200);
-  } finally {
-    book.classList.remove(cls);
-  }
+
+  const host = book.parentElement;
+  if (!host) return;
+
+  const ghost = book.cloneNode(true);
+  ghost.classList.add('dia-ghost');
+  ghost.classList.add(direction === 'next' ? 'leave-next' : 'leave-prev');
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.inert = true;
+  // Ids must not exist twice in one document, even for 260ms.
+  ghost.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+  ghost.querySelectorAll('[contenteditable]').forEach((el) => {
+    el.setAttribute('contenteditable', 'false');
+  });
+
+  /* Pinned to exactly where the book is, so the two layers overlap precisely
+   * and the frame appears not to move. Measured once, on an element that is
+   * about to be replaced, and written only onto a node that deletes itself —
+   * the house rule forbids an animation owning a FINAL state, and this one's
+   * final state is "gone". */
+  const a = book.getBoundingClientRect();
+  const b = host.getBoundingClientRect();
+  ghost.style.left = `${Math.round(a.left - b.left)}px`;
+  ghost.style.top = `${Math.round(a.top - b.top)}px`;
+  ghost.style.width = `${Math.round(a.width)}px`;
+  ghost.style.height = `${Math.round(a.height)}px`;
+  host.appendChild(ghost);
+
+  const drop = () => ghost.remove();
+  ghost.addEventListener('animationend', drop, { once: true });
+  setTimeout(drop, TURN_MS + 120);
+}
+
+/** Belt and braces: no ghost outlives the paint that replaced its day. */
+function endTurn(scroll = document.getElementById('main-scroll')) {
+  scroll?.querySelectorAll('.dia-ghost').forEach((g) => g.remove());
 }
 
 /** Says the date out loud for a screen reader, without stealing focus. */
@@ -951,9 +1057,11 @@ function installGlobals() {
    * sentVersion` true — its staleness guard then correctly concluded the
    * response was for a version already passed, returned early, and left the
    * status on "Saving…" forever while the row sat happily in the database. */
-  onEntryCreated((entry) => {
-    /* A save may land after the person has left. It updates its own record and
-     * its own coordinator; it must not touch a screen that is no longer here. */
+  onEntryCreated((entry, created, date) => {
+    /* A save may land after the person has left — the route, or the DAY. It
+     * updates its own record and its own coordinator; it must not touch a
+     * screen that is no longer showing the day it belongs to (D2.3 §18). */
+    if (date && date !== dia.date) return;
     const foot = document.querySelector('.dia-foot');
     if (!foot || foot.querySelector('#dia-archive')) return;
     foot.querySelector('.dia-hint').textContent = '';

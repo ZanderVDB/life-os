@@ -10,7 +10,13 @@
 import {
   dia, monthGrid, monthName, relativeDay, formatShort, localToday, MOODS,
 } from './diary-api.js';
-import { FEELINGS } from './diary-checkin.js';
+/* The SAME components the right page draws with (D2.3 §12). Reused, never
+ * re-implemented: a month grid that spoke a second visual language would be a
+ * second vocabulary to learn, and the two would drift. */
+import {
+  FEELINGS, ENERGIES, SOCIAL, PASSIVE,
+  face, glyph, energyMeter, batteryMeter, scaleValue, labelOf,
+} from './diary-checkin.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -69,18 +75,27 @@ export function historyHtml() {
 /**
  * One day.
  *
- * ── What a written day shows (D2.2 §13) ──────────────────────────────────
+ * ── THE DAILY SNAPSHOT (D2.3 §12) ────────────────────────────────────────
  *
- * The day number, one short line of context, and the broad feeling as a word.
- * D2 showed a dot and nothing else, so a month of writing looked like a month
- * of identical dots and the grid answered "did I write" but never "what was
- * that day". The line comes from the server, already chosen and already cut to
- * length — see `previewOf` in routes/diary.ts.
+ * D2.2's cell showed a line of context and the feeling as a word, and on most
+ * days that word was the only thing there: a month read as a column of
+ * `GREAT`, `STEADY`, `GOOD`. A word is not a snapshot.
  *
- * Presence is still carried by THREE things — the context line, a bolder
- * weight, and the accessible name — because colour alone would leave the whole
- * calendar unreadable to anyone who cannot distinguish it (§26). The tint is
- * the fourth, and it is decoration.
+ * The cell now speaks the SAME visual language as the right page, using the
+ * same components — `face`, `energyMeter`, `batteryMeter` — imported from
+ * `diary-checkin.js` rather than re-drawn here. One vocabulary, learned once:
+ *
+ *   row 1   feeling face · energy meter · social battery
+ *   row 2   the day number and one short line of context
+ *   row 3   four tiny passive marks, when there are any (§13)
+ *
+ * Exact values live in the accessible name and in `title`, so hovering or
+ * focusing a day says what it actually was without any of it being written
+ * into a 60px square.
+ *
+ * Presence is carried by FOUR non-colour things — the indicators, the context
+ * line, a bolder weight, and the accessible name. The tint is decoration and
+ * is never the only signal (§14).
  */
 function dayCell(cell, entry, today) {
   const has = !!entry;
@@ -88,22 +103,47 @@ function dayCell(cell, entry, today) {
   const isOpen = cell.date === dia.date;
   const feeling = has ? FEELINGS.find((f) => f.id === entry.feeling) ?? null : null;
   const preview = has ? (entry.preview ?? null) : null;
+  const energy = has ? entry.energy ?? null : null;
+  const social = has ? entry.social ?? null : null;
+  const rhythm = (has && entry.rhythm) || {};
+  const said = [
+    feeling ? `felt ${feeling.label.toLowerCase()}` : '',
+    energy ? `energy ${(labelOf(ENERGIES, energy) ?? '').toLowerCase()}` : '',
+    social ? `social battery ${(labelOf(SOCIAL, social) ?? '').toLowerCase()}` : '',
+    ...PASSIVE.map((p) => (rhythm[p.key]
+      ? `${p.label.toLowerCase()} ${(labelOf(p.scale, rhythm[p.key]) ?? '').toLowerCase()}` : '')),
+  ].filter(Boolean);
   const label = [
     formatShort(cell.date),
     has ? 'has an entry' : 'no entry',
-    feeling ? `felt ${feeling.label.toLowerCase()}` : '',
+    ...said,
     preview ?? '',
     isToday ? 'today' : '',
   ].filter(Boolean).join(', ');
+
+  const marks = PASSIVE.filter((p) => rhythm[p.key]);
+
   return `<button type="button" role="gridcell" class="dia-day-cell${
     cell.inMonth ? '' : ' is-outside'}${has ? ' has-entry' : ''}${
     isToday ? ' is-today' : ''}${isOpen ? ' is-open' : ''}"
     data-open="${esc(cell.date)}" aria-label="${esc(label)}"
+    ${said.length ? `title="${esc(said.join(' · '))}"` : ''}
     ${feeling ? `data-feel="${esc(feeling.id)}"` : ''}
     ${isOpen ? 'aria-current="date"' : ''} tabindex="${isOpen ? '0' : '-1'}">
-    <span class="dia-day-n">${cell.day}</span>
+    <span class="dia-day-top">
+      <span class="dia-day-n">${cell.day}</span>
+      ${has ? `<span class="dia-day-ind" aria-hidden="true">
+        ${feeling ? face(feeling, 15) : ''}
+        ${energy ? energyMeter(energy, 'dia-meter-xs') : ''}
+        ${social ? batteryMeter(social, 'dia-batt-xs') : ''}
+      </span>` : ''}
+    </span>
     ${preview ? `<span class="dia-day-prev">${esc(preview)}</span>` : ''}
-    ${feeling ? `<span class="dia-day-feel">${esc(feeling.label)}</span>` : ''}
+    ${marks.length ? `<span class="dia-day-rh" aria-hidden="true">${marks.map((p) => {
+    const v = scaleValue(p.scale, rhythm[p.key]);
+    return `<span class="dia-day-rh-i" style="--v:${Math.round(v * 100)}%"
+      >${glyph(p.icon, 11)}</span>`;
+  }).join('')}</span>` : ''}
   </button>`;
 }
 

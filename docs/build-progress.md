@@ -1732,3 +1732,81 @@ The Diary transition also turned out never to have run since D2 — it targeted
 
 **976 tests pass, 41 new.** TypeScript clean, including three pre-existing test
 typecheck errors cleared on the way past.
+
+---
+
+## Phase D2.3 — tap-only right page, daily pulse, History snapshots, two regressions
+
+The product rule this phase locks:
+
+    LEFT PAGE  = THINGS YOU WRITE.
+    RIGHT PAGE = THINGS YOU TAP.
+
+### The two regressions
+
+**The habit ring's seam.** `pathLength="100"` with `stroke-dasharray="100"`
+makes the dash exactly one full turn, so its flat `butt` end lands on its own
+start — two abutting caps, not a join. Each antialiases alone and the coverage
+where they meet sums to less than a pixel of paint. Rasterised at four device
+pixel ratios, coverage at the seam as a fraction of the surrounding stroke:
+**46.5% / 34.5% / 21.5% / 0.6%** at DPR 1 / 1.25 / 1.5 / 2. At DPR 2 it is a
+hole, which is why it showed on a retina screenshot. A complete ring now has no
+dash at all, so the stroke is a continuous closed circle: **93.1 / 88.4 / 93.2 /
+94.0%**, which is ordinary curve antialiasing. One `ringSvg` component for
+ordinary and Diary habits alike.
+
+*(A first attempt to measure this found nothing — a 3×3 neighbourhood maximum
+washed the sub-pixel dip out, and the control passed too. A measurement whose
+control passes is not a measurement.)*
+
+**The Diary rubber-band.** Reproduced before changing anything: Next, Next,
+Previous, Next showed 8 Aug, then **7 Aug**, then 8 Aug, settling after **3.6
+seconds**, with four requests for three days. Three causes — `loadDay` set
+`dia.date` itself so a late response made an abandoned day current again;
+nothing distinguished a render belonging to the newest press from one three
+presses old; and the target was computed from a date not committed until after
+the save flush.
+
+Fixed with a **date-navigation transaction**: a monotonic day token beside the
+route token, the date committed before anything is awaited, and the flush for
+the day being left continuing in the background where it can update its own
+record but not the screen. Measured after: heading and hash correct in **~3ms**,
+paper painted at **24–28ms**, one request each. With 1.2s of injected latency
+the visible date goes straight to the requested day and never shows the old one.
+
+### The right page
+
+Every text input is gone. Four groups on quiet surfaces — Overall feeling (five
+faces from one drawn system), Energy, Social battery, Day rhythm — plus a **Day
+Pulse** of three bars that is explicitly a snapshot and not a grade: no total,
+no percentage, no average, no judgement.
+
+**The social battery's geometry was wrong and is now proven.** Cells replaced by
+one continuous fill: shell **30×13 in every state**, fill 0 / 7.91 / 16.08 /
+24px, steps of 7.91 / 8.17 / 7.92 — even to a quarter-pixel.
+
+**Four passive dimensions** — Nourishment, Movement, Outside, Sleep. They
+describe the day and **never write a habit**; asserted against the database.
+Gym is deliberately absent because it is an intentional activity.
+
+Measured at 1280×900: the right page went 734 → **542px** and the whole spread
+780 → **631px**, fitting above the composer with 69px to spare. The rhythm block
+alone went 305 → **114px** once the rows went inline and two labels were
+shortened (§7 permits it; measurement required it).
+
+### The left page
+
+The writing region is **seven ruled lines**, not half an empty page — the editor
+stopped absorbing spare space, which now sits below the prompts. The four
+Moment text fields moved here as prompts, and only on days that already hold
+one.
+
+### History
+
+The month cell draws the right page's own indicators, from the same components:
+feeling face, energy meter, social battery, plus four passive marks whose glyph
+says which dimension and whose opacity says roughly how much. Exact values live
+in the tooltip and the accessible name. 72px cells, six rows, fits above the
+composer at 1280×900.
+
+**1002 tests pass, 25 new.** TypeScript clean.

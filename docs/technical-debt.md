@@ -812,3 +812,43 @@ that *was* built is scoped to the check-in for that reason.
 **Screenshots.** The harness browser has not composited for screenshots for
 several phases, so every visual claim in D2.2 is backed by measured geometry and
 computed styles rather than by an image. Visual judgement remains a user check.
+
+---
+
+## Phase D2.3
+
+### Cleared
+
+- **The Diary rubber-band** and **the habit ring's seam** — both root-caused and
+  measured, not patched.
+- **The directional day transition** now genuinely runs, as two layers.
+
+### Still not built
+
+**Adjacent-day prefetch.** Measured and **declined on the numbers**: the whole
+navigation is ~26ms against a local API and the three requests are already
+parallel. Over a real network one round trip would dominate, and that is the
+case a prefetch could help — but there is no measurement of the user's own
+latency to staging, and building a cache against an unmeasured number is how
+caches become correctness bugs. **The measurement to take is: click→paint on
+staging over the user's connection.** The design already makes latency harmless
+(date and hash correct in ~3ms regardless), so this is an optimisation, not a
+fix.
+
+**`Customize daily check-in` (§16).** Documented in
+`diary-v2-daily-checkin.md`, deliberately not built: enable/disable trackers,
+reorder them, add dimensions, and **deliberately** link one to a habit. There is
+no `+ Add habit` beside a Diary tracker and there must not be.
+
+**History at short viewports.** The month column ends at 751px against a
+composer top of 836px at 1280×900 — it fits. Below roughly 840px of viewport
+height it needs a little scroll.
+
+**Screenshots.** The harness browser still does not composite for screenshots,
+so every visual claim in D2.3 is measured geometry, computed style or rasterised
+pixel coverage rather than an image. Visual judgement remains a user check.
+
+**Right-page density on a phone.** The four rhythm rows are inline
+label-plus-chips, sized for a ~310px page. Verified not to overflow at 375px in
+D2.2's layout, but the rhythm rows are new and were measured at desktop width
+only. Worth a look on a real phone.

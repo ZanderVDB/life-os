@@ -167,26 +167,36 @@ test('growth is layout, so there is no height to leave behind', () => {
   assert.match(html, /\.dia-book\.bk-spread\{aspect-ratio:auto;height:auto;align-items:stretch\}/);
   assert.match(html, /\.dia-book\.bk-spread > \.dia-left\{grid-row:1;grid-column:1\}/);
   assert.match(html, /\.dia-book\.bk-spread > \.dia-right\{grid-row:1;grid-column:2\}/);
-  // Nothing measures, nothing writes an inline height, nothing animates it.
-  assert.doesNotMatch(diaView, /style\.height = /);
-  assert.doesNotMatch(diaView, /getBoundingClientRect/);
+  /* Nothing writes an inline height onto the SPREAD, and nothing animates it.
+   * The ghost's own box is excluded: it is measured once and deleted. */
+  const spreadCode = diaView.replace(
+    diaView.slice(diaView.indexOf('function beginTurn'), diaView.indexOf('function endTurn')), '');
+  assert.doesNotMatch(spreadCode, /style\.height = /);
   assert.doesNotMatch(code(read('diary-entry.js')), /style="height/);
+  /* D2.3 §21 introduced ONE measurement: the outgoing ghost is pinned to the
+   * box it is replacing. It is written onto a node that deletes itself, so
+   * there is still no final state for a stale value to be left in. */
+  const turn = diaView.slice(diaView.indexOf('function beginTurn'));
+  assert.match(turn.slice(0, 2000), /ghost\.style\.(left|width)/);
+  assert.match(turn.slice(0, 2000), /setTimeout\(drop, TURN_MS \+ 120\)/);
+  assert.match(diaView, /function endTurn\(/);
 });
 
 test('empty prompts and empty controls do not inflate the page', () => {
-  /* §4 lists what must be ignored. Hidden progressive-disclosure content is
-   * ignored because it is not rendered at all — the prompts past the third are
-   * absent from the DOM, not merely `display:none`, and a closed Moment tile
-   * has no input in it. */
+  /* What must be ignored is satisfied by construction: prompts past the third
+   * are ABSENT from the DOM rather than hidden, and D2.3 removed the four
+   * editable Moment tiles outright — the right page is tap-only, so there is
+   * no collapsed text field left to account for. */
   const fn = checkin.slice(checkin.indexOf('export function promptsHtml'));
-  assert.match(fn.slice(0, 1400), /const shown = showAll \? PROMPTS : PROMPTS\.slice\(0, PROMPTS_LEAD\)/);
-  assert.match(fn.slice(0, 1600), /shown\.map/);
-  const mom = checkin.slice(checkin.indexOf('function momentsHtml'));
-  assert.match(mom.slice(0, 1400), /\$\{open \? `<input/);
-  // The ruled editor's FLOOR is well below the height it renders at, so the
-  // base wins on an empty day. A floor tall enough to bind pushes the spread.
-  assert.match(html, /\.dia-editor\{flex:1 0 auto\}/);
-  assert.match(html, /\.dia-editor\{outline:0;min-height:120px/);
+  assert.match(fn.slice(0, 1600), /const shown = showAll \? all : all\.slice\(0, PROMPTS_LEAD\)/);
+  assert.match(fn.slice(0, 2000), /shown\.map/);
+  assert.doesNotMatch(checkin, /function momentsHtml/, 'the Moment tiles are back');
+  /* The ruled editor is a FLOOR of seven lines and no longer grows into spare
+   * space — D2.3 §1. The slack sits below the prompts instead, so the writing
+   * region stays the size it was asked to be. */
+  assert.match(html, /\.dia-editor\{flex:0 0 auto\}/);
+  assert.match(html, /\.dia-editor\{outline:0;min-height:210px/);
+  assert.match(html, /\.dia-left \.dia-scroll::after\{content:'';flex:1 1 auto/);
 });
 
 /* ══ §5 PROMPT DENSITY ═════════════════════════════════════════════════ */
@@ -196,16 +206,14 @@ test('three prompts rest open, and an answered one is never hidden', () => {
   const fn = checkin.slice(checkin.indexOf('export function promptsHtml'));
   // Collapsing something somebody wrote out of sight is how they lose track of
   // having written it.
-  assert.match(fn.slice(0, 1400), /const forced = PROMPTS\.slice\(PROMPTS_LEAD\)\.some\(\(p\) => answers\[p\.id\]\)/);
-  assert.match(fn.slice(0, 1400), /const showAll = open \|\| forced/);
-  assert.match(fn.slice(0, 1800), /data-prompts-more/);
-  // Opening them replaces ONLY the prompts — a sibling of the editor, so the
-  // caret, the selection and the undo history are untouched.
+  assert.match(fn.slice(0, 1600), /const forced = all\.slice\(PROMPTS_LEAD\)\.some\(\(p\) => valueOf\(refl, p\)\)/);
+  assert.match(fn.slice(0, 1600), /const showAll = open \|\| forced/);
+  assert.match(fn.slice(0, 2000), /data-prompts-more/);
+  // Opening them replaces ONLY the prompts — a sibling of the editor.
   const paint = diaView.slice(diaView.indexOf('function paintPrompts'));
   assert.match(paint.slice(0, 900), /querySelector\('\.dia-prompts'\)/);
   assert.match(paint.slice(0, 900), /old\.replaceWith\(next\)/);
   assert.doesNotMatch(paint.slice(0, 900), /paintSheet|scroll\.innerHTML/);
-  // And it rewires only what it replaced, so nothing ends up with two listeners.
   assert.match(paint.slice(0, 900), /wirePrompts\(next\)/);
 });
 
@@ -279,20 +287,18 @@ test('GET /habits returns the row and the total together', async () => {
 test('the Diary row is an ordinary habit row, minus the badge', () => {
   const fn = app.slice(app.indexOf('function diarySystemHabitHtml'));
   const row = fn.slice(0, 1600);
-  // The same class, the same 32px ring markup, the same shared streak.
+  /* THE SAME RING COMPONENT, literally — D2.3 §17 required it, and sharing the
+   * function is the only way the two can never diverge again. */
   assert.match(row, /class="hb-row hb-diary/);
   assert.match(row, /class="hb-ring"/);
-  assert.match(row, /class="hr-svg" viewBox="0 0 32 32"/);
-  assert.match(row, /pathLength="100"/);
+  assert.match(row, /\$\{ringSvg\(/);
+  assert.match(app.slice(app.indexOf('function habitRowHtml')).slice(0, 900), /\$\{ringSvg\(h\)\}/);
   assert.match(row, /streakHtml\(d\)/);
   assert.match(row, /class="hb-name"/);
   // And the prominent badge is gone.
   assert.doesNotMatch(row, /hb-sys-tag/);
   assert.doesNotMatch(html, /\.hb-sys-tag\{/, 'the SYSTEM badge styles are back');
   assert.doesNotMatch(html, /\.hb-system\{/, 'the separate system-row styles are back');
-  /* Nothing overrides the shared row geometry or type. The divider is a
-   * `::after`, which is why it is excluded — it draws BESIDE the row rather
-   * than changing it, and is one of the distinctions §7 explicitly allows. */
   const rules = html.slice(html.indexOf('.hb-diary{'), html.indexOf('.hb-auto{'))
     .split('\n').filter((l) => !l.includes('::after') && !l.includes('background:var(--border)'))
     .join('\n');
@@ -352,7 +358,15 @@ test('disabling removes it from every total and deletes no diary data', async ()
   const hist = await call('GET',
     `/api/v1/workspaces/${ws}/habits/history?from=2026-08-01&to=2026-08-31`);
   assert.equal(hist.body.diarySeries, null);
-  assert.deepEqual(hist.body.days.find((d: any) => d.date === today), { date: today, due: 1, done: 0 });
+  /* The diary series is gone from every day, which is the claim. The ordinary
+   * habit's own `due` is NOT asserted here: it was created a moment ago, and
+   * `habitHistory` correctly refuses to count days before a habit existed — so
+   * pinning a number would make this test fail on a different day of the month
+   * rather than on a real defect. (It did, the first time the calendar moved
+   * past the date this was written on.) */
+  const row = hist.body.days.find((d: any) => d.date === today);
+  assert.ok(row, 'the day is missing from the history');
+  assert.equal(row.done, 0, 'a completion survived the setting being turned off');
 
   // THE DIARY IS UNTOUCHED. The entry, and the streak derived from it, both
   // still answer — the setting hides a series, it does not delete a life.
@@ -516,96 +530,139 @@ test('a day is written when it is MEANINGFUL, not when a row survives', () => {
 
 test('the four groups are surfaces, and the feeling tints only its own', () => {
   assert.match(checkin, /const group = \(id, title, body, extra = ''\)/);
-  for (const id of ['feeling', 'energy', 'social', 'moments']) {
+  /* The fourth group is `rhythm` now, not `moments`: D2.3 §3 removed the
+   * editable tiles and §7 put the four passive dimensions in their place. */
+  for (const id of ['feeling', 'energy', 'social', 'rhythm']) {
     assert.match(checkin, new RegExp(`group\\('${id}'`), `the ${id} group is not a surface`);
   }
+  assert.doesNotMatch(checkin, /group\('moments'/, 'the Moment tiles are back');
   assert.match(html, /\.dia-ci-group\{/);
-  // The tint is scoped to the check-in, never the page: a wash across the
-  // spread would tint the writing on the other side of the gutter.
+  // The tint is scoped to the check-in, never the page.
   assert.match(html, /\.dia-checkin\[data-tone="great"\]/);
   assert.match(html, /\.dia-checkin\[data-tone\] \.dia-ci-group\[data-group-id="feeling"\]/);
   assert.doesNotMatch(html, /\.dia-book\[data-tone\]|\.dia-left\[data-tone\]/);
 });
 
 test('the energy meter and the social battery respond, and both carry words', () => {
-  assert.match(checkin, /function energyMeter\(selected\)/);
-  assert.match(checkin, /function batteryMeter\(selected\)/);
-  // Filled up to the choice.
-  assert.match(checkin, /at > -1 && i <= at \? ' on' : ''/);
+  assert.match(checkin, /export function energyMeter\(selected/);
+  assert.match(checkin, /export function batteryMeter\(selected/);
   // A text reading beside each, so nothing depends on the graphic.
   assert.match(checkin, /class="dia-ci-read"/);
-  assert.match(checkin, /esc\(energy\?\.label \?\? '—'\)/);
-  assert.match(checkin, /esc\(social\?\.label \?\? '—'\)/);
+  assert.match(checkin, /esc\(labelOf\(ENERGIES, energy\) \?\? '—'\)/);
+  assert.match(checkin, /esc\(labelOf\(SOCIAL, c\.social\) \?\? '—'\)/);
   // The meters are `aria-hidden`: they are a second telling of the label.
-  assert.match(checkin, /class="dia-meter" aria-hidden="true"/);
-  assert.match(checkin, /class="dia-batt[\s\S]{0,90}aria-hidden="true"/);
+  assert.match(checkin, /class="dia-meter \$\{cls\}" aria-hidden="true"/);
+  assert.match(checkin, /class="dia-batt [\s\S]{0,60}aria-hidden="true"/);
   assert.match(html, /\.dia-meter-seg\.on\{background:var\(--accent-c\)/);
-  assert.match(html, /\.dia-batt-cell\.on\{background:var\(--accent-c\)/);
 });
 
-test('a Moment tile expands, and a filled one always shows its answer', () => {
-  const fn = checkin.slice(checkin.indexOf('function momentsHtml'));
-  assert.match(fn.slice(0, 1400), /const open = openNote === n\.id \|\| !!value/);
-  assert.match(fn.slice(0, 1400), /aria-expanded="\$\{open\}"/);
-  assert.match(html, /\.dia-moments\{display:grid;grid-template-columns:repeat\(2/);
-  assert.match(html, /\.dia-moment\.is-open\{grid-column:1\/-1\}/);
-  // Opening one closes the last, so the page never unfolds back into the
-  // four-field form these tiles replaced.
-  assert.match(diaView, /openMoment = openMoment === id \? null : id/);
+test('THE RIGHT PAGE IS TAP-ONLY', () => {
+  /* REVERSED by D2.3 §3, and it is the phase's central product rule:
+   *
+   *     LEFT PAGE  = THINGS YOU WRITE.
+   *     RIGHT PAGE = THINGS YOU TAP.
+   *
+   * D2.2's Moment tiles were a second writing surface pretending to be a
+   * control. They opened the keyboard, competed with the writing across the
+   * gutter, and made a fast check-in end in an essay. Anything already written
+   * into one is surfaced on the LEFT page as a guided prompt. */
+  assert.doesNotMatch(checkin, /<textarea[^>]*data-note|<input[^>]*data-note/,
+    'a text field is back on the right page');
+  assert.doesNotMatch(checkin, /momentsHtml|data-moment-open|dia-moment/);
+  const body = checkin.slice(checkin.indexOf('export function checkinHtml'),
+    checkin.indexOf('export const PROMPTS'));
+  assert.doesNotMatch(body, /<textarea|<input|contenteditable/,
+    'the right page renders something that opens a keyboard');
+  // Nothing wires one either.
+  assert.doesNotMatch(diaView.slice(diaView.indexOf('function wireCheckin')).slice(0, 1600),
+    /data-note|data-moment-open/);
+  assert.doesNotMatch(html, /\.dia-moments\{|\.dia-moment-t\{/);
+  // The four retired lines live on as LEFT-page prompts, and only when a day
+  // already holds one — a fresh day is not given nine questions.
+  assert.match(checkin, /export const MOMENT_PROMPTS = \[/);
+  const fn = checkin.slice(checkin.indexOf('export function promptsFor'));
+  assert.match(fn.slice(0, 600), /MOMENT_PROMPTS\.filter\(\(m\) => c\[m\.id\]\)/);
+  // …keeping their original storage key, so nothing has to be migrated.
+  assert.match(checkin, /store: 'checkin'/);
+  assert.match(diaView, /function setPrompt\(id, value, store = 'prompts'\)/);
 });
 
 test('a selection patches ONE group, and never the group holding the caret', () => {
   assert.match(diaView, /function paintGroup\(id\)/);
   const fn = diaView.slice(diaView.indexOf('function paintGroup'));
-  assert.match(fn.slice(0, 1200), /old\.replaceWith\(next\)/);
-  assert.doesNotMatch(fn.slice(0, 1200), /scroll\.innerHTML|paintSheet/);
-  // Energy and social redraw only themselves.
+  assert.match(fn.slice(0, 1400), /old\.replaceWith\(next\)/);
+  assert.doesNotMatch(fn.slice(0, 1400), /scroll\.innerHTML|paintSheet/);
   assert.match(diaView, /paintGroup\('energy'\)/);
-  assert.match(diaView, /paintGroup\(group === 'social' \? 'social' : 'feeling'\)/);
+  // The four passive dimensions share one group; everything else redraws itself.
+  assert.match(diaView, /paintGroup\(PASSIVE_KEYS\.includes\(group\) \? 'rhythm'/);
   // The left page is never rebuilt by a right-page interaction.
   const paint = diaView.slice(diaView.indexOf('function paintCheckin'));
   assert.match(paint.slice(0, 600), /\.dia-right \.dia-scroll/);
   assert.doesNotMatch(paint.slice(0, 600), /paintSheet|spreadHtml/);
+  // And the Day Pulse is its own repaint — every selection may move one bar.
+  assert.match(diaView, /function paintPulse\(\)/);
+  assert.match(fn.slice(0, 1400), /paintPulse\(\)/);
 });
 
 test('a repaint rewires only what it replaced', () => {
-  /* Found by measurement: `paintGroup` re-wired every group, so a chip that had
-   * not been replaced carried two listeners — it selected itself and then
-   * immediately deselected itself, and nothing happened at all. */
+  /* Found by measurement in D2.2: `paintGroup` re-wired every group, so a chip
+   * that had not been replaced carried two listeners — it selected itself and
+   * then immediately deselected itself, and nothing happened at all. */
   assert.match(diaView, /function wireCheckin\(root\)/);
   assert.match(diaView, /root\.querySelectorAll\('\.dia-chips\[data-group\]'\)/);
-  assert.match(diaView, /root\.querySelectorAll\('\[data-moment-open\]'\)/);
   const fn = diaView.slice(diaView.indexOf('function paintGroup'));
   assert.match(fn.slice(0, 1400), /wireCheckin\(next\)/);
   assert.doesNotMatch(fn.slice(0, 1400), /wireCheckin\(document\.getElementById/);
+  assert.match(diaView, /function wirePrompts\(root\)/);
 });
 
-test('typing in a Moment saves and never repaints the field being typed in', () => {
-  const fn = diaView.slice(diaView.indexOf("root.querySelectorAll('[data-note]')"));
-  assert.match(fn.slice(0, 600), /setCheckin\(el\.dataset\.note, el\.value\.trim\(\) \|\| undefined\)/);
-  assert.doesNotMatch(fn.slice(0, 200), /paintGroup|paintCheckin/);
-  // The local copy is authoritative until the server answers, so a tap shows
-  // immediately and no interaction can produce a false "Saved".
+test('a selection saves, and the local copy is authoritative', () => {
+  /* The Moment fields this used to guard are gone (§3). What survives is the
+   * rule they were protecting: a selection updates the local reflection FIRST,
+   * so the page answers immediately, and the write is queued after — no
+   * interaction can produce a false "Saved". */
   assert.match(diaView, /function writeReflection\(next\)/);
   assert.match(diaView, /queueSave\(dia\.date, undefined, \{ reflection: clean \}\)/);
+  const fn = diaView.slice(diaView.indexOf('function writeReflection'));
+  assert.ok(fn.indexOf('dia.reflection = clean') < fn.indexOf('queueSave'),
+    'the write is queued before the local copy is updated');
+  // The chosen chip keeps the focus it just took, so a keyboard user is not
+  // returned to the top of the page by the control they were operating.
+  assert.match(diaView, /\[data-group="\$\{group\}"\] \[data-choice="\$\{id\}"\]`\)\?\.focus\(\)/);
 });
 
 /* ══ §13 HISTORY ═══════════════════════════════════════════════════════ */
 
 test('the month is a compact six-week grid, not seven squares tall', () => {
   assert.doesNotMatch(html, /\.dia-day-cell\{[^}]*aspect-ratio:1/);
-  assert.match(html, /\.dia-day-cell\{[^}]*height:60px/);
-  // Nothing can overflow a cell, so one long Highlight cannot push a row.
+  // 72px from D2.3 §12: the cell carries three rows now — the indicator row,
+  // the context line and the passive marks — and it is still stated, so the
+  // grid cannot creep.
+  assert.match(html, /\.dia-day-cell\{[^}]*height:72px/);
   assert.match(html, /\.dia-day-cell\{[^}]*overflow:hidden/);
   assert.match(html, /\.dia-day-prev\{[^}]*-webkit-line-clamp:2/);
-  assert.match(html, /\.dia-day-feel\{[^}]*text-overflow:ellipsis/);
 });
 
-test('a written cell shows the day, one line of context, and the feeling', () => {
+test('a written cell shows the same indicators the right page does', () => {
+  /* D2.3 §12. A month of the word `GREAT` is not a snapshot. The cell now
+   * speaks the right page's visual language, using the SAME components rather
+   * than re-drawing them — one vocabulary, learned once, and the two cannot
+   * drift apart. */
+  assert.match(historyJs, /from '\.\/diary-checkin\.js'/);
+  for (const fn of ['face', 'energyMeter', 'batteryMeter', 'scaleValue', 'labelOf', 'glyph']) {
+    assert.match(historyJs, new RegExp(`\\b${fn}\\b`), `history does not reuse ${fn}`);
+  }
   assert.match(historyJs, /class="dia-day-n"/);
+  assert.match(historyJs, /class="dia-day-ind"/);
   assert.match(historyJs, /class="dia-day-prev"/);
-  assert.match(historyJs, /class="dia-day-feel"/);
   assert.match(historyJs, /data-feel="\$\{esc\(feeling\.id\)\}"/);
+  // §13 — the four passive dimensions as four small marks, never as text.
+  assert.match(historyJs, /class="dia-day-rh"/);
+  assert.match(historyJs, /glyph\(p\.icon, 11\)/);
+  assert.doesNotMatch(historyJs, /dia-day-rh[\s\S]{0,200}labelOf\(p\.scale/,
+    'the passive values are written into the cell as text');
+  // Exact values live in the tooltip and the accessible name.
+  assert.match(historyJs, /title="\$\{esc\(said\.join\(' · '\)\)\}"/);
 });
 
 test('the preview is chosen and cut on the server, once', () => {
@@ -674,15 +731,20 @@ test('the phone keeps the information the density can carry', () => {
 /* ══ §14 ANIMATION CLEANUP ═════════════════════════════════════════════ */
 
 test('a `forwards` animation never owns the final state', () => {
-  /* `.dia-book.leave-next` holds the element translated aside and transparent.
-   * Correct while the replacement is on its way; catastrophic if it never
-   * arrives — a `renderEntry` that bails on a stale navigation would leave the
-   * day permanently invisible. */
-  const fn = diaView.slice(diaView.indexOf('async function leaveSpread'));
-  assert.match(fn.slice(0, 800), /finally \{\s*book\.classList\.remove\(cls\);/);
-  const turn = libView.slice(libView.indexOf('async function turn(dir)'));
-  assert.match(turn.slice(0, 900), /finally \{[\s\S]{0,60}book\.classList\.remove\(cls\);/);
-  // The wait always ends, whether or not `animationend` arrives.
+  /* The outgoing day is `animation-fill-mode: forwards` — translated aside and
+   * transparent — so it must be REMOVED rather than merely allowed to finish.
+   * D2.3 made it a detached clone, which makes the guarantee simpler: the
+   * ghost deletes itself, on `animationend` and on a timer, and the live
+   * spread underneath was never animated at all. */
+  const turn = diaView.slice(diaView.indexOf('function beginTurn'));
+  assert.match(turn.slice(0, 2200), /const drop = \(\) => ghost\.remove\(\)/);
+  assert.match(turn.slice(0, 2200), /animationend', drop, \{ once: true \}/);
+  assert.match(turn.slice(0, 2200), /setTimeout\(drop, TURN_MS \+ 120\)/);
+  // …and every paint sweeps any ghost that somehow survived.
+  assert.match(diaView, /function endTurn\(scroll = document\.getElementById\('main-scroll'\)\)/);
+  assert.match(diaView, /querySelectorAll\('\.dia-ghost'\)\.forEach\(\(g\) => g\.remove\(\)\)/);
+  const lib = libView.slice(libView.indexOf('async function turn(dir)'));
+  assert.match(lib.slice(0, 900), /finally \{[\s\S]{0,60}book\.classList\.remove\(cls\);/);
   assert.match(diaView, /setTimeout\(finish, ms \+ 60\)/);
   assert.match(libView, /setTimeout\(finish, ms \+ 60\)/);
 });

@@ -163,11 +163,67 @@ export const ENERGIES = [
 
 export const EMPTY_DOC = { type: 'doc', content: [] };
 
+/* ── The date-navigation transaction (D2.3 §18) ────────────────────────────
+ *
+ * The rubber-band, and it is a different problem from the shell's route token.
+ *
+ * Moving between days does not change the ROUTE, so `navStale` is false for
+ * every one of them and every stale render was free to paint. Measured before
+ * the fix: pressing Next, Next, Previous, Next showed 8 Aug, then **7 Aug**,
+ * then 8 Aug again, settling after 3.6 seconds, with four requests where one
+ * would do.
+ *
+ * Three causes, and this token addresses the first two:
+ *
+ *   1. `loadDay` set `dia.date` itself. A response for a day already left did
+ *      not merely repaint it — it made that day CURRENT again. The state moved
+ *      backwards, so everything downstream was correctly drawing the wrong day.
+ *   2. Nothing distinguished "this render belongs to the newest date press"
+ *      from "this render belongs to one three presses ago".
+ *   3. The target date was computed from `dia.date` at click time, and
+ *      `dia.date` was not committed until after the save flush — so rapid
+ *      presses all computed from the same stale base. Fixed in `goToDate` by
+ *      committing the date before anything is awaited.
+ *
+ * THE RULE: the latest date navigation wins. A save or a load belonging to an
+ * earlier one may finish, and may update that day's own record — it may never
+ * touch the date heading, the document, the reflection, the prompts, the hash
+ * or the month.
+ */
+
+let dayNav = 0;
+
+/**
+ * Claims a date navigation and commits the date immediately.
+ *
+ * Called BEFORE any await, so `dia.date` is the answer to "which day is on
+ * screen" from the first frame — not after the network agrees.
+ */
+export function beginDayNav(date) {
+  dia.date = date;
+  dayNav += 1;
+  return dayNav;
+}
+
+/** The token to capture when something must survive to paint. */
+export const dayNavToken = () => dayNav;
+
+/** True when a newer date navigation has happened since `t` was taken. */
+export const dayNavStale = (t) => t !== dayNav;
+
 /* ── Requests ────────────────────────────────────────────────────────── */
 
+/**
+ * Reads a day.
+ *
+ * **It does not decide which day is open.** `dia.date` belongs to
+ * `beginDayNav`, and the guard below is what stops a late answer for a day
+ * already left from reinstating it. The response is still returned, so a caller
+ * that wants it for a specific date (conflict resolution, archive) gets it.
+ */
 export async function loadDay(date) {
   const r = await call(`/diary/entries/${date}`);
-  dia.date = date;
+  if (date !== dia.date) return r;
   dia.entry = r.entry;
   dia.archivedEntry = r.archivedEntry ?? null;
   dia.reflection = r.entry?.reflection ?? {};
@@ -213,8 +269,17 @@ export const archiveEntry = (id) =>
 export const restoreEntry = (id) =>
   call(`/diary/entries/${id}/restore`, { method: 'POST' });
 
-export async function loadMonth(monthDate) {
+/**
+ * Reads a month, for the date-jump grid and History.
+ *
+ * @param {string} monthDate any day in the month
+ * @param {number} [day] the date navigation this belongs to. §19: a month
+ *   preload must never change which day is selected, so a stale one applies
+ *   nothing at all rather than moving `dia.month` under a newer view.
+ */
+export async function loadMonth(monthDate, day = null) {
   const r = await call(`/diary/days?month=${monthDate}`);
+  if (day !== null && dayNavStale(day)) return r;
   dia.month = r.from;
   dia.days = r.days;
   return r;

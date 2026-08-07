@@ -157,7 +157,7 @@ export function spreadHtml() {
 
       <div class="bk-page bk-page-right dia-right" data-accent="lavender">
         <div class="dia-scroll">
-          ${checkinHtml(e, dia.reflection, dia.streak)}
+          ${checkinHtml(e, dia.reflection)}
         </div>
       </div>
     </div>
@@ -248,10 +248,28 @@ function archivedHtml(entry) {
 
 /* ── Loading and error, without a blank page ─────────────────────────── */
 
-export const loadingHtml = () => `<div class="bk-stage dia-stage">
+/**
+ * The paper, waiting for a day.
+ *
+ * It carries the REQUESTED date's heading (D2.3 §19, §21). When the network is
+ * slow the outgoing ghost fades in 260ms and whatever is underneath becomes
+ * visible — so if that were still the old day, a slow connection would show
+ * the day you just left as the current one, which is the rubber-band wearing a
+ * different hat. The heading is right from the first frame; only the writing
+ * is still on its way.
+ */
+export const loadingHtml = (date = dia.date) => `<div class="bk-stage dia-stage">
   <div class="bk-book bk-spread dia-book dia-book-skel" data-accent="lavender">
-    <div class="bk-page bk-page-left" data-accent="lavender"></div>
-    <div class="bk-page bk-page-right" data-accent="lavender"></div>
+    <div class="bk-page bk-page-left dia-left" data-accent="lavender">
+      <header class="dia-sheet-head">
+        <p class="dia-day">${esc(dayName(date))}</p>
+        <h2 class="dia-date">${esc(formatLong(date))}</h2>
+      </header>
+      <div class="dia-scroll" aria-hidden="true">
+        <div class="dia-skel-lines">${'<span></span>'.repeat(6)}</div>
+      </div>
+    </div>
+    <div class="bk-page bk-page-right dia-right" data-accent="lavender"></div>
   </div>
 </div>`;
 

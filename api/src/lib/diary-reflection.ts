@@ -49,10 +49,74 @@ export const SOCIAL = [
   { id: 'full', label: 'Full' },
 ] as const;
 
+/* ── The passive daily check-ins (D2.3 §7, §8) ───────────────────────────
+ *
+ * THESE DESCRIBE A DAY. THEY ARE NOT HABITS.
+ *
+ * A habit is a behaviour somebody intends to repeat and chose to track. These
+ * are observations of how the day actually went, and the difference is not
+ * pedantic — it decides what the app is allowed to conclude.
+ *
+ *   `Movement = Very active` does NOT complete a Gym habit.
+ *   `Nourishment = Great`    does NOT create or complete an Eating Well habit.
+ *
+ * Nothing here writes a `habit_entries` row, and nothing here is counted in a
+ * habit total. The one computed habit Diary feeds — `Write in Diary` — is
+ * about whether you WROTE, not about what you recorded.
+ *
+ * Gym is deliberately absent: it is an intentional activity and belongs to
+ * Habits. Movement is universal and descriptive, which is why it belongs here.
+ *
+ * Each scale is ordered from least to most, and `index / (length - 1)` is the
+ * only arithmetic anything is allowed to do with them — see `scaleValue`.
+ */
+export const NOURISHMENT = [
+  { id: 'poor', label: 'Poor' },
+  { id: 'okay', label: 'Okay' },
+  { id: 'good', label: 'Good' },
+  { id: 'great', label: 'Great' },
+] as const;
+
+export const MOVEMENT = [
+  { id: 'barely', label: 'Barely moved' },
+  { id: 'light', label: 'Light' },
+  { id: 'active', label: 'Active' },
+  { id: 'very_active', label: 'Very active' },
+] as const;
+
+export const OUTSIDE = [
+  { id: 'none', label: 'None' },
+  { id: 'little', label: 'A little' },
+  { id: 'some', label: 'Some time' },
+  { id: 'plenty', label: 'Plenty' },
+] as const;
+
+export const SLEEP = [
+  { id: 'rough', label: 'Rough' },
+  { id: 'poor', label: 'Poor' },
+  { id: 'fine', label: 'Fine' },
+  { id: 'rested', label: 'Rested' },
+  { id: 'great', label: 'Great' },
+] as const;
+
+/** The passive dimensions, by the key they are stored under. */
+export const PASSIVE = {
+  nourishment: NOURISHMENT,
+  movement: MOVEMENT,
+  outside: OUTSIDE,
+  sleep: SLEEP,
+} as const;
+
+export type PassiveKey = keyof typeof PASSIVE;
+export const PASSIVE_KEYS = Object.keys(PASSIVE) as PassiveKey[];
+
 const FEELING_IDS = new Set(FEELINGS.map((f) => f.id as string));
 const DETAIL_IDS = new Set(FEELINGS.flatMap((f) => f.detail as readonly string[]));
 const SOCIAL_IDS = new Set(SOCIAL.map((s) => s.id as string));
 const PROMPT_IDS = new Set(PROMPTS.map((p) => p.id as string));
+const PASSIVE_IDS = Object.fromEntries(
+  PASSIVE_KEYS.map((k) => [k, new Set((PASSIVE[k] as readonly { id: string }[]).map((o) => o.id))]),
+) as Record<PassiveKey, Set<string>>;
 
 /** One short line each. Long-form belongs in the document, not in a field. */
 const MAX_LINE = 500;
@@ -64,12 +128,37 @@ export type Reflection = {
     feeling?: string;
     feelingDetail?: string[];
     social?: string;
+    /** Passive daily dimensions — observations, never habits. */
+    nourishment?: string;
+    movement?: string;
+    outside?: string;
+    sleep?: string;
+    /* The four Moment lines. D2.3 §2/§3 moved them off the right page, which
+     * is now tap-only, and they are no longer offered on a fresh day. They stay
+     * in the grammar and in storage so that days already holding one keep it —
+     * the left page surfaces those as guided prompts. Nothing writes a NEW one. */
     highlight?: string;
     challenge?: string;
     gratitude?: string;
     win?: string;
   };
 };
+
+/**
+ * A scale position as a 0–1 fraction, for a meter or a bar.
+ *
+ * The ONLY arithmetic these scales permit. It is a position on an ordered list
+ * — never a score, never summed with another dimension, never averaged into a
+ * "day rating". D2.3 §10 is explicit that the day is not graded.
+ */
+export function scaleValue(
+  scale: readonly { id: string }[], id: string | null | undefined,
+): number | null {
+  if (!id) return null;
+  const at = scale.findIndex((o) => o.id === id);
+  if (at < 0) return null;
+  return scale.length > 1 ? at / (scale.length - 1) : 1;
+}
 
 const str = (v: unknown, max: number): string | undefined => {
   if (typeof v !== 'string') return undefined;
@@ -112,6 +201,13 @@ export function validateReflection(raw: unknown): Reflection {
       if (detail.length) checkin.feelingDetail = detail;
     }
     if (typeof c.social === 'string' && SOCIAL_IDS.has(c.social)) checkin.social = c.social;
+    // The passive dimensions. Each is one id from its own ordered scale.
+    for (const k of PASSIVE_KEYS) {
+      if (typeof c[k] === 'string' && PASSIVE_IDS[k].has(c[k])) checkin[k] = c[k];
+    }
+    /* Still accepted, still stored, no longer offered on a new day — see the
+     * note on the type. Dropping them here would delete somebody's Highlight
+     * the first time an old entry was re-saved by a new build. */
     for (const k of ['highlight', 'challenge', 'gratitude', 'win'] as const) {
       const t = str(c[k], MAX_LINE);
       if (t) checkin[k] = t;

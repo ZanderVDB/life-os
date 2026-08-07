@@ -233,15 +233,37 @@ test('nothing outside the coordinator moves the version token', () => {
     'the created hook moves the version behind the coordinator');
 });
 
-test('a flush happens before anything takes the editor away', () => {
+test('leaving a day never loses what was written on it', () => {
+  /* REVISED by D2.3 §18/§19. D2's rule was "flush, WAIT, then change the
+   * date". It was safe and it was the rubber-band's other half: the visible
+   * date could not move until the network agreed, so a second press computed
+   * its target from the day still on screen, and four presses produced four
+   * requests for three days.
+   *
+   * The new rule keeps the guarantee and drops the wait. The save coordinator
+   * is keyed by DATE, so a write for the day being left completes on its own
+   * time and lands on the right record. What it may no longer do is touch the
+   * screen — `dia.entry` and `onEntryCreated` are both guarded by "is this
+   * date still open", so a late save cannot restore the day it belongs to.
+   *
+   * Verified in a browser: navigating mid-autosave landed on the requested day
+   * and the abandoned day's text was still on the server afterwards. */
   const go = viewCode.slice(viewCode.indexOf('export async function goToDate'));
-  assert.match(go.slice(0, 500), /await flushAll\(\)/);
-  // And if it could not save, the navigation is abandoned.
-  assert.match(go.slice(0, 600), /if \(!ok && hasUnsaved\(\)\)/);
-  assert.match(viewCode, /export async function diaryWillLeave[\s\S]{0,200}await flushAll\(\)/);
-  assert.match(code(app), /if \(state\.route === 'diary'\) await diaryWillLeave\(\)/);
-  const hist = viewCode.slice(viewCode.indexOf('async function goHistory'));
-  assert.match(hist.slice(0, 400), /await flushAll\(\)/);
+  const head = go.slice(0, go.indexOf('await renderEntry'));
+  // The date is claimed BEFORE anything is awaited.
+  assert.ok(head.indexOf('beginDayNav(date)') < head.indexOf('flushAll()'),
+    'the date is still committed after the flush');
+  assert.match(head, /void flushAll\(\)/, 'the flush blocks the navigation again');
+  // The save still cannot be lost: the coordinator is keyed by date…
+  const save = code(read('diary-save.js'));
+  assert.match(save, /if \(date === dia\.date\) \{/,
+    'a save for another day can write into the open day');
+  // …and the tab still refuses to close on unsaved work.
+  assert.match(viewCode, /beforeunload[\s\S]{0,200}hasUnsaved\(\)/);
+  // History and archiving DO still flush first — they take the editor away
+  // without a date to hand the write to.
+  assert.match(viewCode.slice(viewCode.indexOf('async function goHistory')).slice(0, 400),
+    /await flushAll\(\)/);
 });
 
 test('the conflict surface keeps the writing whichever way it goes', () => {
@@ -317,14 +339,24 @@ test('the check-in uses the app\'s own controls, never a native select', () => {
   assert.match(checkinCode, /role="radiogroup"/);
 });
 
-test('every check-in option carries a word', async () => {
-  // Nothing depends on reading a glyph or telling two colours apart.
-  const checkin = await import('../../web/diary-checkin.js' as string);
-  for (const f of checkin.FEELINGS) assert.ok(f.label && f.label.length > 1, f.id);
-  for (const s of checkin.SOCIAL) assert.ok(s.label && s.label.length > 1, s.id);
-  for (const e of checkin.ENERGIES) assert.ok(e.label && e.label.length > 1, e.id);
-  for (const n of checkin.NOTES) assert.ok(n.label && n.hint, n.id);
-  assert.doesNotMatch(checkinCode, /[\u{1F300}-\u{1FAFF}]/u, 'an emoji stands in for a label');
+test('every check-in option carries a word', () => {
+  /* Unchanged in spirit, wider in scope. D2.3 added an expressive face to each
+   * broad feeling and four passive dimensions; §5 is explicit that the icon
+   * SUPPORTS the label rather than replacing it, so every option — old and new
+   * — still renders its word. */
+  const fn = checkinCode.slice(checkinCode.indexOf('function chips('));
+  assert.match(fn.slice(0, 1200), /<span>\$\{esc\(o\.label\)\}<\/span>/);
+  for (const list of ['FEELINGS', 'SOCIAL', 'ENERGIES', 'NOURISHMENT', 'MOVEMENT',
+    'OUTSIDE', 'SLEEP']) {
+    const at = checkinCode.indexOf(`export const ${list} = [`);
+    assert.ok(at > -1, `${list} is missing`);
+    const block = checkinCode.slice(at, checkinCode.indexOf('];', at));
+    const ids = (block.match(/id: '/g) ?? []).length;
+    const labels = (block.match(/label: '/g) ?? []).length;
+    assert.equal(labels, ids, `${list} has an option with no word`);
+  }
+  // A shortened chip keeps the full wording as its accessible name.
+  assert.match(fn.slice(0, 1200), /o\.long \? `aria-label="\$\{esc\(o\.long\)\}"/);
 });
 
 test('a feeling opens into finer words, and the broad answer is complete on its own', async () => {
@@ -339,12 +371,15 @@ test('a feeling opens into finer words, and the broad answer is complete on its 
 });
 
 test('a chosen chip can be un-chosen', () => {
-  // A control you cannot un-choose has trapped you into an answer you did not
-  // mean. Every one of these is optional.
+  // Every one of these is optional, and a control you cannot un-choose has
+  // trapped you into an answer you did not mean.
   const fn = viewCode.slice(viewCode.indexOf('function onChip'));
-  assert.match(fn.slice(0, 1400), /c\.feeling === id.*delete c\.feeling/s);
-  assert.match(fn.slice(0, 1400), /c\.social === id.*delete c\.social/s);
+  assert.match(fn.slice(0, 1600), /c\.feeling === id.*delete c\.feeling/s);
   assert.match(fn.slice(0, 600), /dia\.entry\?\.energy === id \? null : id/);
+  // Social and the four passive dimensions share one branch: same shape, same
+  // toggle, and none of them writes a habit.
+  assert.match(fn.slice(0, 1600),
+    /group === 'social' \|\| PASSIVE_KEYS\.includes\(group\)[\s\S]{0,400}delete c\[group\]/);
 });
 
 test('the streak is a fact, not a scoreboard', () => {
@@ -401,17 +436,19 @@ test('what is typed into a prompt or a note is searchable', () => {
 });
 
 test('presence in the calendar is never carried by colour alone', () => {
-  /* REVISED by D2.2 §13. The dot is gone because a written day now shows a
-   * line of what it was about and the broad feeling as a WORD — strictly more
-   * information than a dot, and still not colour. Three non-colour carriers,
-   * as before: the context line, the bolder weight, the accessible name. */
+  /* WIDENED by D2.3 §12. A written day now shows the same three indicators the
+   * right page uses, so presence is carried by FOUR non-colour things: the
+   * indicator row, the context line, the bolder weight and the accessible
+   * name. The tint is the fifth and is decoration. */
   assert.match(historyJs, /has an entry.*no entry|no entry/);
+  assert.match(historyJs, /class="dia-day-ind"/);
   assert.match(historyJs, /class="dia-day-prev"/);
-  assert.match(historyJs, /class="dia-day-feel"/);
   assert.match(html, /\.dia-day-cell\.has-entry \.dia-day-n\{font-weight:700/);
   assert.match(historyJs, /aria-label="\$\{esc\(label\)\}"/);
-  // The feeling reaches the accessible name too, not only the tint.
+  // Every exact value reaches the accessible name, not only the picture.
   assert.match(historyJs, /felt \$\{feeling\.label\.toLowerCase\(\)\}/);
+  assert.match(historyJs, /energy \$\{\(labelOf\(ENERGIES, energy\)/);
+  assert.match(historyJs, /social battery \$\{\(labelOf\(SOCIAL, social\)/);
 });
 
 test('no native dialogs anywhere in Diary', () => {
@@ -434,16 +471,25 @@ test('sample data is a console hook, and the server is the real guard', () => {
 test('the date change moves the spread, not the frame, and never curls', () => {
   assert.match(html, /@keyframes diaLeaveNext\{to\{transform:translateX\(-3%\)/);
   assert.match(html, /@keyframes diaEnterNext\{from\{transform:translateX\(3%\)/);
-  assert.match(html, /\.dia-book\.leave-next\{animation:diaLeaveNext var\(--d-base\)/);
   // 3%, not the Book's 14%: a diary day is replaced in the same frame, and a
   // large translation reads as the layout breaking rather than as time passing.
   assert.doesNotMatch(html, /diaLeave[^}]*translateX\(-?1[0-9]%\)/);
-  /* MOVED by D2.2 §14 into `leaveSpread`, which also fixed a real defect: the
-   * leave targeted `.dia-sheet`, an element that stopped existing when D2 made
-   * Diary a spread, so the transition had silently not run since. */
-  const leave = viewCode.slice(viewCode.indexOf('async function leaveSpread'));
-  assert.match(leave.slice(0, 700), /reducedMotion\(\)/);
-  assert.match(leave.slice(0, 700), /querySelector\('\.dia-book'\)/);
+  /* REBUILT by D2.3 §21. D2.2 animated the live book and AWAITED it before
+   * fetching, which added 200ms to every day change and left the old day as
+   * the only thing on screen while it played. The outgoing day is now a
+   * detached clone stacked over the same box, so the frame and the gutter
+   * never move and the incoming day arrives over it. */
+  assert.match(html, /\.dia-ghost\{position:absolute/);
+  assert.match(html, /\.dia-ghost\.leave-next\{animation-name:diaLeaveNext\}/);
+  const turn = viewCode.slice(viewCode.indexOf('function beginTurn'));
+  assert.match(turn.slice(0, 1800), /reducedMotion\(\)/);
+  assert.match(turn.slice(0, 1800), /book\.cloneNode\(true\)/);
+  // The clone is inert and carries no ids — never a second editor.
+  assert.match(turn.slice(0, 1800), /ghost\.inert = true/);
+  assert.match(turn.slice(0, 1800), /removeAttribute\('id'\)/);
+  assert.match(turn.slice(0, 1800), /contenteditable', 'false'/);
+  // 260ms, the stated structural maximum.
+  assert.match(viewCode, /const TURN_MS = 260/);
 });
 
 test('an animation that never finishes cannot strand the page', () => {

@@ -3146,11 +3146,18 @@ body:has(.dia-page) .rail{display:none}
 .dia-book.bk-spread > .dia-right{grid-row:1;grid-column:2}
 .dia-left,.dia-right{display:flex;flex-direction:column;min-height:0}
 .dia-scroll{flex:1;min-height:0;overflow:visible;display:flex;flex-direction:column}
-/* The ruled writing area absorbs the slack, so a light day is a page of paper
-   rather than a short block of paper above an empty gap. It never SHRINKS
-   below its minimum, so it can also push the spread taller — which is the
-   growth §4 asks for, arriving one 30px ruled line at a time. */
-.dia-editor{flex:1 0 auto}
+/* The left page's spare room sits BELOW the prompts, not inside the editor —
+   so the writing region stays the size §1 asks for and the prompts stay where
+   the eye can find them. */
+.dia-left .dia-scroll::after{content:'';flex:1 1 auto;min-height:0}
+/* THE INITIAL WRITING REGION (D2.3 §1).
+   `flex:1 0 auto` let the ruled area swallow every spare pixel, so a blank day
+   opened with roughly half a page of empty paper before the prompts appeared —
+   "enough space to begin writing" had become "nothing else is visible".
+   `flex:0 0 auto` makes the editor exactly as tall as its content, floored at
+   the initial region below. The prompts then sit immediately beneath the
+   writing and move down with it, one 30px ruled line at a time. */
+.dia-editor{flex:0 0 auto}
 
 .dia-sheet-head{flex:0 0 auto;padding-bottom:12px;margin-bottom:6px;
   border-bottom:1px solid rgba(255,255,255,.06)}
@@ -3166,13 +3173,11 @@ body:has(.dia-page) .rail{display:none}
 
 /* RULED PAPER and the F2.1 BLOCK GRID, carried over exactly.
    height = (lead + lines) x 30px. Lead is padding, and a lead row is unruled. */
-/* 120px = four ruled lines, exactly on the 30px block grid. It is a FLOOR, not
-   a resting size: `flex:1 0 auto` above lets the ruled area take whatever the
-   page has spare, so on an empty day it actually renders around 155px and the
-   spread rests on the BASE. The floor is deliberately well below that, because
-   a floor tall enough to bind is a floor that pushes the spread past the base
-   — which is what the old 180px did, and what §3 is about. */
-.dia-editor{outline:0;min-height:120px;position:relative;
+/* 210px = SEVEN ruled lines, exactly on the 30px block grid — the middle of
+   the 6–8 D2.3 §1 asks for. Enough room to begin writing and not so much that
+   the page is mostly empty before anything else appears. It is a floor: past
+   seven lines the editor simply grows and the prompts move down with it. */
+.dia-editor{outline:0;min-height:210px;position:relative;
   color:var(--paper-ink);font-size:15px;line-height:30px;
   background-image:repeating-linear-gradient(to bottom,
     transparent 0,transparent 29px,var(--paper-line) 29px,var(--paper-line) 30px);
@@ -3262,13 +3267,7 @@ body:has(.dia-page) .rail{display:none}
 /* The moment fields use the SAME grammar, one column, lighter than the main
    writing surface — the right page's answers and the left page's answers should
    not look like two different kinds of thing. */
-.dia-note-i{background:rgba(255,255,255,.035);
-  border:1px solid rgba(255,255,255,.07);border-radius:8px;
-  box-shadow:inset 0 1px 2px rgba(0,0,0,.12);
-  padding:9px 11px;min-height:40px;
-  transition:border-color var(--t-hover),background var(--t-hover)}
-.dia-note-i:hover{background:rgba(255,255,255,.05)}
-.dia-note-i:focus{border-color:var(--accent-c);background:rgba(255,255,255,.055)}
+/* `.dia-note-i` removed with the Moment tiles — see §3 above. */
 
 /* ── The right page: the check-in ─────────────────────────────────────── */
 .dia-checkin{display:flex;flex-direction:column;gap:9px}
@@ -3307,19 +3306,92 @@ body:has(.dia-page) .rail{display:none}
 .dia-meter-seg.on{background:var(--accent-c)}
 .dia-ci-group[data-group-id="energy"]:focus-within .dia-meter-seg.on{transform:scaleY(1.12)}
 
-/* C — THE SOCIAL BATTERY. A battery, drawn the way a battery is drawn, with
-   the word beside it. Four cells for four levels. */
+/* C — THE SOCIAL BATTERY (D2.3 §6, corrected).
+
+   D2.2 drew one CELL per level and lit them cumulatively. That made the lit
+   width depend on how many inter-cell gaps happened to fall inside it, so the
+   two middle states were not evenly spaced — 2 cells + 1 gap is not twice
+   1 cell — and "Running low" and "Enough" read as almost the same amount.
+
+   Now the shell is fixed and holds ONE continuous fill whose width is a
+   percentage of the inner track:
+
+       Empty 0%    Running low 33%    Enough 67%    Full 100%
+
+   which is exactly `index / (length - 1)`. The outer shell, the border, the
+   padding and the cap are identical in every state; only the fill's width
+   changes, so the progression is monotonic by construction. The two ticks are
+   drawn ON TOP at the same fractions and take no space of their own. */
 .dia-batt{display:inline-flex;align-items:center;margin-left:6px}
-.dia-batt-body{display:inline-flex;gap:1.5px;align-items:center;height:13px;padding:2px;
-  border:1px solid rgba(255,255,255,.22);border-radius:3.5px}
-.dia-batt-cell{width:5px;height:100%;border-radius:1px;background:transparent;
-  transition:background var(--d-fast) var(--e-out)}
-.dia-batt-cell.on{background:var(--accent-c)}
+.dia-batt-body{position:relative;width:30px;height:13px;padding:2px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.22);border-radius:3.5px;box-sizing:border-box}
+.dia-batt-fill{display:block;height:100%;border-radius:1.5px;background:var(--accent-c);
+  transition:width var(--d-base) var(--e-out),background var(--d-fast) var(--e-out)}
+.dia-batt-tick{position:absolute;top:2px;bottom:2px;width:1px;
+  background:var(--paper);opacity:.5;transform:translateX(-.5px)}
 .dia-batt-cap{width:2px;height:6px;border-radius:0 1.5px 1.5px 0;
   background:rgba(255,255,255,.22)}
 /* Empty is the one level that should not read as "fine". Warm, never alarming
-   — §13's rule about difficult days applies here too. */
-.dia-batt.is-empty .dia-batt-cell.on{background:var(--a-coral,#E08A7A)}
+   — the rule about difficult days applies here too, and never `--danger`. */
+.dia-batt.is-empty .dia-batt-fill{background:var(--a-coral,#E08A7A)}
+
+/* ── THE OVERALL FEELING FACE (D2.3 §5) ─────────────────────────────────
+   ONE system: a 20×20 circle, 1.7 stroke, and only the mouth and brows change
+   across the five. Not emoji — an emoji set renders differently on every
+   platform and would be the single thing on this page drawn by someone else.
+   The label is always beside it; the face supports the word, never replaces
+   it. History reuses this exact component. */
+.dia-face{display:block;flex:0 0 auto;color:currentColor}
+.dia-chips-face{gap:5px}
+.dia-chips-face .dia-chip{display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:7px 9px 6px;border-radius:12px;flex:1 1 0;min-width:0}
+.dia-chips-face .dia-chip span{font-size:10.5px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.dia-chips-face .dia-chip .dia-face{opacity:.62;
+  transition:opacity var(--t-hover),transform var(--d-fast) var(--e-out)}
+.dia-chips-face .dia-chip:hover .dia-face{opacity:.9}
+.dia-chips-face .dia-chip.on .dia-face{opacity:1;transform:scale(1.06)}
+.dia-ci-face{display:inline-flex;color:var(--accent-c);margin-left:auto}
+.dia-ci-face + .dia-ci-read{margin-left:6px}
+
+/* ── DAY PULSE (D2.3 §10) ───────────────────────────────────────────────
+   A SNAPSHOT, NOT A GRADE. Three bars, one per dimension, each read straight
+   off its own scale — no total, no percentage, no average, and no colour that
+   means good or bad. A dimension nobody answered is an empty track, because
+   "I did not say" and "the lowest it goes" are different answers. */
+.dia-pulse{display:flex;align-items:center;gap:12px;padding:8px 11px;border-radius:11px;
+  background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.05)}
+.dia-pulse-bars{display:flex;gap:9px;flex:0 0 auto}
+.dia-pulse-col{display:flex;flex-direction:column;align-items:center;gap:3px;width:26px}
+.dia-pulse-track{display:block;width:7px;height:28px;border-radius:4px;
+  background:rgba(255,255,255,.09);position:relative;overflow:hidden}
+.dia-pulse-fill{position:absolute;left:0;right:0;bottom:0;border-radius:4px;
+  background:linear-gradient(180deg,var(--accent-c),rgba(168,140,255,.55));
+  transition:height var(--d-base) var(--e-out)}
+.dia-pulse-col.is-unset .dia-pulse-fill{background:transparent}
+.dia-pulse-l{font-size:8.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--paper-ink-2);opacity:.75}
+.dia-pulse-note{margin:0;font-size:11px;line-height:1.4;color:var(--paper-ink-2);opacity:.8}
+
+/* ── DAY RHYTHM — the four passive dimensions (D2.3 §7) ─────────────────
+   Compact rows rather than four more cards: §9 asks for a full page that is
+   not cluttered, and four headed surfaces here would double the page's height
+   for four one-tap questions.
+   Measured: stacked rows with the label on its own line cost 305px of a 734px
+   page, because "Barely moved" and "Some time" wrapped their rows to two
+   lines. Inline label + one row of chips is 149px for the same four questions,
+   and the shorter wording (§7 permits it) is what makes one line possible. */
+.dia-rhythm{display:flex;flex-direction:column;gap:6px}
+.dia-rh-row{display:flex;align-items:center;gap:8px;min-width:0}
+.dia-rh-l{display:flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--paper-ink-2);
+  flex:0 0 66px;min-width:0}
+.dia-rh-i{display:inline-flex;opacity:.65;flex:0 0 auto}
+.dia-rh-row .dia-chips{flex:1 1 auto;min-width:0;gap:4px;flex-wrap:nowrap}
+.dia-rh-row .dia-chip{padding:3px 7px;font-size:10.5px;flex:1 1 0;min-width:0;
+  text-align:center;overflow:hidden}
+.dia-rh-row .dia-chip span{display:block;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
 
 /* D — THE DAY'S COLOUR, scoped to the check-in and no further. A wash across
    the whole page would tint the writing on the other side of the gutter, which
@@ -3332,31 +3404,10 @@ body:has(.dia-page) .rail{display:none}
 .dia-checkin[data-tone] .dia-ci-group[data-group-id="feeling"]{
   background:var(--tone);border-color:rgba(255,255,255,.09)}
 
-/* E — THE MOMENT TILES. Four labelled tiles that open into one line each.
-   Four always-open fields cost 262px of a 569px page for something most days
-   leave blank; four tiles cost 96px and ask the same four questions. A tile
-   holding an answer shows it — a collapsed answer is a lost answer. */
-.dia-moments{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.dia-moment{min-width:0}
-.dia-moment.is-open{grid-column:1/-1}
-.dia-moment-t{width:100%;display:flex;flex-direction:column;gap:1px;text-align:left;
-  padding:7px 10px;border-radius:8px;cursor:pointer;font-family:inherit;
-  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
-  transition:background var(--t-hover),border-color var(--t-hover)}
-.dia-moment-t:hover{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.12)}
-.dia-moment-t:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.dia-moment.is-open .dia-moment-t{border-bottom-left-radius:0;border-bottom-right-radius:0;
-  border-bottom-color:transparent;background:rgba(255,255,255,.05)}
-.dia-moment-l{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
-  color:var(--paper-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dia-moment.is-filled .dia-moment-l{color:var(--accent-c)}
-.dia-moment-h,.dia-moment-v{font-size:12px;white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis}
-.dia-moment-h{color:var(--paper-ink-2);opacity:.5}
-.dia-moment-v{color:var(--paper-ink)}
-.dia-moment.is-open .dia-note-i{border-top-left-radius:0;border-top-right-radius:0;
-  min-height:38px;animation:diaOpen var(--d-fast) var(--e-out)}
-.dia-moment.is-open .dia-moment-h,.dia-moment.is-open .dia-moment-v{display:none}
+/* The Moment tiles went with D2.3 §3: the right page is TAP-ONLY, and a tile
+   that opens a text field is a writing surface wearing a control's clothes.
+   Anything already written into one is now a guided prompt on the LEFT page.
+   `.dia-moments`, `.dia-moment*` and `.dia-note-i` were removed with them. */
 
 /* Chips, not a <select>. A browser dropdown in the middle of a journal reads
    as a form and makes the whole spread feel like one. Every chip carries a
@@ -3371,18 +3422,31 @@ body:has(.dia-page) .rail{display:none}
 .dia-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .dia-chip.on{background:var(--accent-c);border-color:var(--accent-c);color:#1A1624;
   font-weight:600}
-.dia-chips-sm .dia-chip,.dia-chip-sm{padding:5px 11px;font-size:11.5px}
+.dia-chips-sm .dia-chip,.dia-chip-sm{padding:4px 9px;font-size:11px}
+/* Energy's five words fit one line at this size. At 11.5px they wrapped, and
+   a second line there cost the page 32px for no extra information. */
+.dia-ci-group[data-group-id="energy"] .dia-chips{gap:4px;flex-wrap:nowrap}
+.dia-ci-group[data-group-id="energy"] .dia-chip{flex:1 1 0;min-width:0;text-align:center;
+  padding:4px 6px}
+.dia-ci-group[data-group-id="energy"] .dia-chip span{display:block;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+
+/* RIGHT-PAGE MOTION (D2.3 §11). The stated budget, in one place:
+     broad feeling         140ms  (--d-fast, on .dia-chip)
+     precise expansion     200ms  (--d-base, diaOpen below)
+     Day Pulse             200ms  (--d-base, .dia-pulse-fill)
+     energy meter          140ms  (--d-fast, .dia-meter-seg)
+     social battery        200ms  (--d-base, .dia-batt-fill)
+     passive selection     140ms  (--d-fast, .dia-chip)
+   Nothing loops, nothing bounces, nothing celebrates. A selection should feel
+   answered, not rewarded — this is a diary, not a game. */
 
 /* The finer words, revealed by the broad one. Two levels, never twenty. */
 .dia-detail{padding:11px 12px;border-radius:11px;background:rgba(255,255,255,.03);
-  border:1px solid rgba(255,255,255,.06);animation:diaOpen var(--d-fast) var(--e-out)}
+  border:1px solid rgba(255,255,255,.06);animation:diaOpen var(--d-base) var(--e-out)}
 .dia-detail-lead{margin:0 0 8px;font-size:11.5px;color:var(--paper-ink-2)}
 @keyframes diaOpen{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
-/* `.dia-notes` / `.dia-note` / `.dia-note-l` went with the four always-open
-   fields they styled. `.dia-note-i` remains: it is the input a Moment tile
-   opens into, and it keeps the inset grammar the left page's prompts use. */
-.dia-note-i::placeholder{color:var(--paper-ink-2);opacity:.45}
 
 /* The streak: a fact, never a scoreboard. A diary that punishes the weeks you
    could not write is a diary you stop opening during the weeks that matter. */
@@ -3394,6 +3458,14 @@ body:has(.dia-page) .rail{display:none}
 
 .dia-right-quiet{background:var(--paper-2)}
 .dia-book-skel .bk-page{opacity:.45}
+/* Ruled lines waiting for words. On the 30px grid, like everything else on
+   this paper, so the real editor arrives exactly where the placeholder was. */
+.dia-skel-lines{display:flex;flex-direction:column;gap:0}
+.dia-skel-lines span{display:block;height:30px;position:relative}
+.dia-skel-lines span::after{content:'';position:absolute;left:0;bottom:0;height:1px;
+  right:calc(6% + var(--n,0%));background:var(--paper-line)}
+.dia-skel-lines span:nth-child(3n+2)::after{right:22%}
+.dia-skel-lines span:nth-child(4n+3)::after{right:38%}
 
 .dia-foot{display:flex;align-items:center;gap:12px;font-size:11.5px;color:var(--muted)}
 .dia-hint{flex:1;min-width:0}
@@ -3443,7 +3515,7 @@ body:has(.dia-page) .rail{display:none}
 .dia-grid-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
 .dia-grid-head span{text-align:center;font-size:10.5px;font-weight:700;letter-spacing:.06em;
   text-transform:uppercase;color:var(--muted);padding-bottom:3px}
-.dia-day-cell{position:relative;height:60px;border:0;border-radius:9px;overflow:hidden;
+.dia-day-cell{position:relative;height:72px;border:0;border-radius:9px;overflow:hidden;
   background:none;cursor:pointer;color:var(--text-2);font-family:inherit;font-size:13px;
   display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:1px;
   padding:5px 6px;text-align:left;
@@ -3453,18 +3525,39 @@ body:has(.dia-page) .rail{display:none}
 .dia-day-cell.is-outside{color:var(--muted);opacity:.45}
 .dia-day-n{font-size:12px;line-height:1.2;flex:0 0 auto}
 .dia-day-cell.has-entry .dia-day-n{font-weight:700;color:var(--text)}
-/* One line each, and both truncate. §13: no overflow, ever — a long Highlight
-   must not push the row taller than its neighbours. */
-.dia-day-prev{flex:1;min-height:0;font-size:10.5px;line-height:1.35;color:var(--text-2);
+
+/* ── THE DAILY SNAPSHOT (D2.3 §12) ──────────────────────────────────────
+   The same three indicators the right page uses, drawn by the same
+   components at a smaller size. A month of `GREAT` in capitals was a word,
+   not a snapshot; this is what the day actually was, at a glance. */
+.dia-day-top{display:flex;align-items:center;gap:5px;flex:0 0 auto;min-width:0}
+.dia-day-ind{display:flex;align-items:center;gap:4px;margin-left:auto;min-width:0}
+.dia-day-ind .dia-face{color:var(--text-2);opacity:.9}
+.dia-meter-xs{height:9px;gap:1.5px;margin-left:0}
+.dia-meter-xs .dia-meter-seg{width:2px;height:calc(4px + var(--seg) * 1.2px)}
+.dia-batt-xs{margin-left:0}
+.dia-batt-xs .dia-batt-body{width:18px;height:9px;padding:1.5px;border-radius:2.5px}
+.dia-batt-xs .dia-batt-cap{width:1.5px;height:4px}
+.dia-batt-xs .dia-batt-tick{top:1.5px;bottom:1.5px}
+
+/* One line each, and both truncate. No overflow, ever — a long Highlight must
+   not push the row taller than its neighbours. */
+.dia-day-prev{flex:1;min-height:0;font-size:10px;line-height:1.3;color:var(--text-2);
   overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   word-break:break-word}
-.dia-day-feel{flex:0 0 auto;font-size:9px;font-weight:700;letter-spacing:.07em;
-  text-transform:uppercase;color:var(--muted);
-  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
+/* §13 — the four passive dimensions, as four tiny marks. The GLYPH says which
+   dimension; its opacity says roughly how much. Exact values are in the
+   accessible name and the tooltip, never written into the square. */
+.dia-day-rh{display:flex;align-items:center;gap:4px;flex:0 0 auto;
+  color:var(--muted);height:12px}
+.dia-day-rh-i{display:inline-flex;opacity:calc(.34 + (.62 * (var(--v) / 100%)))}
+.dia-day-cell.is-open .dia-day-rh{color:#fff}
 .dia-dot{width:4px;height:4px;border-radius:50%;background:var(--accent);display:block}
 .dia-day-cell.is-today{box-shadow:inset 0 0 0 1px var(--border-strong)}
 .dia-day-cell.is-open{background:var(--accent-soft);color:#fff}
-.dia-day-cell.is-open .dia-day-prev,.dia-day-cell.is-open .dia-day-feel{color:#fff;opacity:.85}
+.dia-day-cell.is-open .dia-day-prev{color:#fff;opacity:.85}
+.dia-day-cell.is-open .dia-day-ind .dia-face{color:#fff}
 
 /* THE MOOD TINT. §13 names the rule and it is a rule about tone, not palette:
    a difficult day is not an error. Never `--danger`. Rough and Low are a muted
@@ -3512,14 +3605,24 @@ body:has(.dia-page) .rail{display:none}
 
 /* Motion — the spread shifts directionally, the frame never moves. No page
    curl: Diary is chronological, not an object you hold. */
+/* THE DAY TURN (D2.3 §21). Two layers, not one element being cleared.
+   The outgoing day is a detached clone stacked over the same grid cell, so the
+   book frame, the gutter and the coloured edges never move — only the content
+   crosses. `pointer-events:none` because it is already `inert`, and 260ms is
+   the stated structural maximum. */
 @keyframes diaLeaveNext{to{transform:translateX(-3%);opacity:0}}
 @keyframes diaLeavePrev{to{transform:translateX(3%);opacity:0}}
 @keyframes diaEnterNext{from{transform:translateX(3%);opacity:0}}
 @keyframes diaEnterPrev{from{transform:translateX(-3%);opacity:0}}
-.dia-book.leave-next{animation:diaLeaveNext var(--d-base) var(--e-inout) forwards}
-.dia-book.leave-prev{animation:diaLeavePrev var(--d-base) var(--e-inout) forwards}
+.dia-ghost{position:absolute;z-index:2;pointer-events:none;
+  animation-duration:var(--d-slow);animation-timing-function:var(--e-inout);
+  animation-fill-mode:forwards}
+.dia-ghost.leave-next{animation-name:diaLeaveNext}
+.dia-ghost.leave-prev{animation-name:diaLeavePrev}
 .dia-book.enter-next{animation:diaEnterNext var(--d-base) var(--e-out)}
 .dia-book.enter-prev{animation:diaEnterPrev var(--d-base) var(--e-out)}
+/* The stage is the positioning context for the ghost. */
+.dia-stage{position:relative}
 
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
   clip:rect(0 0 0 0);white-space:nowrap;border:0}
@@ -3552,7 +3655,8 @@ body:has(.dia-page) .rail{display:none}
   .dia-day-cell{height:auto;min-height:44px;align-items:center;justify-content:center;
     text-align:center;padding:4px}
   .dia-day-prev{display:none}
-  .dia-day-feel{display:none}
+  .dia-day-ind{display:none}
+  .dia-day-rh{display:none}
   .dia-day-cell.has-entry::after{content:'';width:4px;height:4px;border-radius:50%;
     background:var(--accent);display:block}
   .dia-jump-cell{min-height:38px}

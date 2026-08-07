@@ -135,3 +135,73 @@ Reduced motion is honoured globally in `index.html` (`prefers-reduced-motion`
 plus `html[data-motion="reduced"]`, which the Settings preference sets). Because
 no animation owns a final state, reducing motion to 1ms cannot break a layout —
 which is the other reason the rule is worth keeping.
+
+---
+
+# D2.3 — a fifth defect, and the rule applied to a stroke
+
+### 5. The habit ring's seam
+
+Not an animation this time — a **dash** — but the same shape of mistake, and it
+belongs here because the fix has the same form.
+
+`pathLength="100"` with `stroke-dasharray="100"` makes the dash exactly one
+full turn of the circle, so its END lands precisely on its own START. With
+`stroke-linecap: butt` those are two flat cuts meeting, not a join —
+`stroke-linejoin` never applies to a dash boundary — and each is antialiased on
+its own, so where they abut the coverage sums to less than one pixel of paint.
+
+Rasterised at four device pixel ratios, stroke coverage at the seam as a
+fraction of the average around the ring:
+
+| DPR | before | after |
+|---|---|---|
+| 1 | 46.5% | 93.1% |
+| 1.25 | 34.5% | 88.4% |
+| 1.5 | 21.5% | 93.2% |
+| 2 | **0.6%** | 94.0% |
+
+At DPR 2 it is not a hairline, it is a hole — which is why it showed on a
+retina screenshot and was easy to miss elsewhere. **The defect gets worse with
+pixel density**, the opposite of most rendering artefacts.
+
+The fix is not to paint over the seam. It is to stop drawing a dash when there
+is nothing to dash: a complete ring has `stroke-dasharray: none`, so the stroke
+is a genuinely continuous closed circle with no start and no end for a seam to
+appear at.
+
+**A first attempt at measuring this found nothing** — a 3×3 neighbourhood
+maximum washed the sub-pixel dip out entirely, and the control (the OLD
+geometry) passed too. A measurement whose control passes is not a measurement.
+Integrating alpha across the stroke at 0.5° steps is what made it visible.
+
+### The rule, applied here
+
+The sweep to full still needs a dash to animate along; the finished ring must
+not have one. So the offset is driven to 0, and the dash is removed **on a
+timer** once it has arrived:
+
+    fill.addEventListener('transitionend', drop, { once: true });
+    fill._dashT = setTimeout(drop, 320);
+
+`transitionend` alone would leave the seam exactly where §17 says it must not
+be, on any throttled timeline. The same rule as everywhere else on this page:
+the animation paints the journey, and something else guarantees the
+destination.
+
+### 6. The Diary day turn
+
+D2.2 animated the live spread and awaited it before fetching. D2.3 makes the
+outgoing day a **detached clone** instead, which turns the guarantee from
+"remember to take the class off" into "the thing deletes itself":
+
+    const drop = () => ghost.remove();
+    ghost.addEventListener('animationend', drop, { once: true });
+    setTimeout(drop, TURN_MS + 120);
+
+and every paint sweeps any survivor with `endTurn()`. The live layer is never
+animated at all, so there is no state on it for a stalled timeline to hold.
+
+The clone carries one measurement — the box it is pinned to. That is permitted
+by the rule as stated: what is forbidden is an animation owning a **final**
+state, and this one's final state is *gone*.

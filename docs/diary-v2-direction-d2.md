@@ -161,3 +161,41 @@ entry is still never a `library_items` row.
 Nothing about Tasks, Calendar events or Habit details entered Diary. The only
 connection still runs the other way: Today and Calendar ask Diary whether a day
 holds writing.
+
+---
+
+# D2.3 — the page rule, and two regressions
+
+The two-page spread is approved and unchanged. What D2.3 settles is **what each
+page is for**, which D2.2 had left implicit and then violated.
+
+## The rule
+
+    LEFT PAGE  = THINGS YOU WRITE.
+    RIGHT PAGE = THINGS YOU TAP.
+
+D2.2's Moment tiles were the counter-example that made the rule necessary: four
+text fields dressed as controls, on the page whose whole value is that it is
+fast. They opened the keyboard, competed with the writing across the gutter, and
+put an essay at the end of a two-tap check-in.
+
+## What was reversed
+
+- **The four Moment text fields** left the right page. They survive on the left,
+  as prompts, only on days that already hold one.
+- **The initial writing region** stopped absorbing spare space. Seven ruled
+  lines, then the prompts.
+- **The social battery's geometry** — cells replaced by one continuous fill, so
+  the four states are evenly spaced by construction rather than by accident.
+
+## What was added
+
+Five feeling faces from one system; four passive daily dimensions; a Day Pulse;
+History cells that draw the right page's own indicators.
+
+## What was fixed
+
+The Diary rubber-band and the habit ring's seam — both documented at length in
+`diary-v2-navigation.md` and `animation-house-rules.md`. Both had the shape of
+every defect in this project so far: **something arriving late, or drawn
+twice, was allowed to overrule a decision that was already correct.**

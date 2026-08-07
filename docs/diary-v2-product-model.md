@@ -184,3 +184,37 @@ or meter is needed for a day to count.
 history and the day sheet all include it when the preference is on. Diary itself
 is unchanged either way: the habit is computed *from* diary content and no diary
 content is computed from it. See `habits-v2-product-model.md`.
+
+## D2.3 — the page rule
+
+> **LEFT PAGE = THINGS YOU WRITE. RIGHT PAGE = THINGS YOU TAP.**
+
+Locked. The left page holds the date, an optional title, the free writing and
+the guided prompts. The right page holds chips, scales and small visual
+readouts, and **no text field of any kind** — it can be completed without
+opening the keyboard, in ten to twenty seconds.
+
+D2.2's four editable "Moment" tiles broke that rule while appearing to obey it.
+They are gone from the right page; anything already written into one appears as
+a guided prompt on the left, keeping its storage key so nothing had to move. A
+fresh day is not offered them — the five standing prompts ask the same
+questions, and nine prompts is a form.
+
+**The initial writing region is seven ruled lines**, not half a page. D2.2 let
+the editor absorb every spare pixel, so a blank day opened with more empty paper
+than anything else. The spare room now sits below the prompts, so the prompts
+stay where the eye can find them and the writing region stays the size it was
+asked to be.
+
+**Four passive daily dimensions** join the check-in: Nourishment, Movement,
+Outside, Sleep. They describe how the day went. **They are not habits, and they
+never write one** — see `diary-v2-daily-checkin.md` for the boundary and why
+Gym is deliberately absent.
+
+**A Day Pulse** sits at the top of the right page: three bars for Mind, Energy
+and Connection, each read straight off its own scale. It is a snapshot, not a
+grade — no total, no percentage, no average, no judgement.
+
+**Diary History shows the day, never a habit.** The month cell now draws the
+same three indicators the right page uses, from the same components. Habit
+analytics stay in Calendar and Habits.

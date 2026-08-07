@@ -88,3 +88,43 @@ and `html[data-motion="reduced"]`. Because no animation owns a final state,
 reducing every duration to 1ms cannot break a layout. Verified: with reduced
 motion on, the tint, the meter, the battery, the tile expansion, the save and
 the caret all behaved identically.
+
+---
+
+# D2.3 — the right page's motion, and the day turn
+
+## The right page
+
+| | |
+|---|---|
+| broad feeling | 140ms (`--d-fast`) |
+| precise expansion | 200ms (`--d-base`) |
+| Day Pulse | 200ms |
+| energy meter | 140ms |
+| social battery | 200ms |
+| passive selection | 140ms |
+
+Nothing loops, bounces or celebrates. A selection should feel **answered, not
+rewarded** — this is a diary, not a game.
+
+## The day turn
+
+D2.2 animated the live spread and **awaited** it before fetching, which added
+200ms to every day change and meant the old day was still the only thing on
+screen while it played.
+
+The outgoing day is now a detached clone pinned over the box it replaces, and
+the live layer underneath becomes the requested day immediately. The book frame,
+the gutter and the coloured edges never move; only content crosses. 260ms.
+
+The clone is `inert`, `aria-hidden`, has every id stripped and every
+contenteditable disabled — never a second editor, even briefly — and it removes
+itself on `animationend` **and** on a timer.
+
+## The ring
+
+The habit ring's completion sweep needs a dash to animate along; the finished
+ring must not have one, or its two butt caps meet and leave a seam. The offset
+is driven to 0 and the dash is dropped on a timer once it has arrived. See
+`animation-house-rules.md` for the measurements — the seam is worst at high DPR,
+where coverage fell to 0.6% of the surrounding stroke.

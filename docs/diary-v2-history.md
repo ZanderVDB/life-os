@@ -110,3 +110,69 @@ the cells are 44px tall.
 - No export from this screen.
 - No filtering by feeling — the tints make a month scannable, and a filter would
   turn a record into a dataset.
+
+---
+
+# D2.3 — the daily snapshot
+
+D2.2's cell showed a context line and the feeling as a word. On most days the
+word was the only thing there, so a month read as a column of `GREAT`,
+`STEADY`, `GOOD`. **A word is not a snapshot.**
+
+## The cell now
+
+    row 1   feeling face · energy meter · social battery
+    row 2   the day number and one short line of context
+    row 3   four small marks, one per passive dimension
+
+Drawn with the **same components** the right page uses — `face()`,
+`energyMeter()`, `batteryMeter()`, `glyph()`, imported from `diary-checkin.js`
+rather than re-implemented. One vocabulary, learned once, and the two surfaces
+cannot drift apart.
+
+The cell is 72px, stated, and identical on every row, with `overflow: hidden`
+and a two-line clamp on the context line, so nothing can push a row taller than
+its neighbours.
+
+## The passive marks (§13)
+
+Four glyphs — bowl, stride, sun, moon. The **glyph** says which dimension; its
+**opacity** says roughly how much, from `scaleValue`. No option text is written
+into the square.
+
+Exact values live in the cell's `title` and its accessible name:
+
+    felt good · energy high · social battery running low ·
+    nourishment great · movement light · outside some · sleep rough
+
+so hovering or focusing a day says exactly what it was, and a month can be
+scanned for patterns without any of it being spelled out in a 60px box.
+
+## What the endpoint sends
+
+`/diary/days` returns **ids**, not writing: `feeling`, `energy`, `social` and a
+`rhythm` object. The prompts and the retired Moment lines are deliberately not
+sent — those are writing, and a month grid is not where writing belongs. The
+context line is still chosen and cut to 90 characters in SQL.
+
+## §15 — History shows days, not goals
+
+Diary History answers *what did my days feel like*, never *how many did I
+complete*. Ordinary habit completion does not appear here and must not: habit
+analytics belong to Calendar and Habits. The passive dimensions do appear,
+because they are part of the Diary reflection itself.
+
+Asserted directly: `diary-history.js` contains no reference to habits or
+streaks at all.
+
+## Colour is still subordinate
+
+The tint is unchanged — muted warm rose for Rough and Low, plain surface for
+Steady, soft green for Good, lilac for Great, never `--danger`. What changed is
+that it now has less work to do: the indicators carry the same information with
+no colour at all.
+
+## Measured at 1280×900
+
+Month card 557px, whole History column ending at 751px against a composer top of
+836px — **it fits**, with six week-rows at 72px and no overflow in any cell.

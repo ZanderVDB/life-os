@@ -30,8 +30,11 @@ const co = createSaveCoordinator({
     if (content !== undefined) body.document = content;
     if (reflection !== undefined) body.reflection = reflection;
     if (expectedUpdatedAt) body.expectedUpdatedAt = expectedUpdatedAt;
-    // Recorded on every write; the server only stores it when creating.
-    if (!dia.entry) body.timezone = localZone();
+    /* Recorded on every write; the server only stores it when creating.
+     * `dia.entry` is only this date's entry while this date is open — for a
+     * write belonging to a day already left, there is nothing local to consult
+     * and the timezone is sent. Harmless: the server ignores it on update. */
+    if (date !== dia.date || !dia.entry) body.timezone = localZone();
 
     const r = await saveDay(date, body);
 
@@ -40,11 +43,19 @@ const co = createSaveCoordinator({
      * here is what lets the header stop saying "no entry yet" without the
      * editor being re-rendered underneath the caret.
      *
+     * ONLY while this date is still the open one (D2.3 §18). A write for
+     * yesterday landing after a day change would otherwise put yesterday's
+     * entry into the state behind today's spread — the save half of the
+     * rubber-band. The coordinator's own record is keyed by date and is
+     * updated either way, so the write still completes correctly.
+     *
      * `reflection` is deliberately NOT copied back from the response: the local
      * copy is ahead of it whenever a chip was tapped while the write was in
      * flight, and overwriting it here would make the tap appear to undo itself. */
-    dia.entry = r.entry;
-    onCreated?.(r.entry, r.created);
+    if (date === dia.date) {
+      dia.entry = r.entry;
+      onCreated?.(r.entry, r.created, date);
+    }
     return { updatedAt: r.entry.updatedAt, content: r.entry.document };
   },
 });

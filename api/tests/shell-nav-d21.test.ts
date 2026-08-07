@@ -86,8 +86,13 @@ test('a stale Library or Diary render can neither paint nor rewrite the hash', (
   // not merely repaint, it called setHash and changed the URL.
   assert.match(libView, /export async function renderLibrary\(nav = navToken\(\)\)/);
   assert.match(diaView, /export async function renderDiary\(nav = navToken\(\)\)/);
+  /* Diary is guarded by TWO tokens from D2.3 §18: the route token above, and a
+   * DATE-navigation token. Moving between days does not change the route, so
+   * `navStale` was false for every date press and every stale render was free
+   * to paint — that was the rubber-band. `stale()` is both questions. */
   const entry = diaView.slice(diaView.indexOf('async function renderEntry'));
-  assert.ok(entry.indexOf('if (navStale(nav)) return;') < entry.indexOf('setHash('),
+  assert.match(entry.slice(0, 900), /const stale = \(\) => navStale\(nav\) \|\| dayNavStale\(day\)/);
+  assert.ok(entry.indexOf('if (stale()) return;') < entry.indexOf('setHash('),
     'the diary sets the hash before checking whether the navigation is current');
   const book = libView.slice(libView.indexOf('async function renderBook'));
   assert.match(book.slice(0, 1800), /if \(navStale\(nav\)\) return;/);
@@ -105,8 +110,20 @@ test('a save landing late may finish, but it may not take the screen', () => {
 /* ══ No blank frame while fetching ═════════════════════════════════════ */
 
 test('known content is not cleared before its replacement is ready', () => {
-  // A day already on screen stays there until the next one has arrived.
-  assert.match(diaView, /if \(!scroll\.querySelector\('\.dia-book'\)\) scroll\.innerHTML = loadingHtml\(\)/);
+  /* A day already on screen stays there until the next one has arrived.
+   *
+   * D2.3 §21 sharpened this rather than relaxing it. On a DATE change the live
+   * layer is replaced immediately with the REQUESTED day's paper and heading,
+   * while the day being left animates away as a ghost above it — because when
+   * the network is slow the ghost fades in 260ms and whatever is underneath
+   * becomes visible. If that were still the old day, a slow connection would
+   * show the day you just left as the current one. Nothing is ever cleared to
+   * nothing; what changes is which day the placeholder belongs to. */
+  assert.match(diaView, /if \(animate \|\| !scroll\.querySelector\('\.dia-book'\)\)/);
+  assert.match(diaView, /scroll\.innerHTML = loadingHtml\(date\)/);
+  assert.match(code(read('diary-entry.js')),
+    /export const loadingHtml = \(date = dia\.date\)/);
+  assert.match(read('diary-entry.js'), /esc\(formatLong\(date\)\)/);
   assert.match(diaView, /if \(!scroll\.querySelector\('\.dia-history'\)\)/);
   assert.match(libView, /if \(!scroll\.querySelector\('\.bk-book'\)\)/);
 });
@@ -255,7 +272,11 @@ test('the streak line left the Diary page', () => {
   const checkin = read('diary-checkin.js');
   assert.doesNotMatch(code(checkin), /dia-streak/,
     'the streak is still rendered on the diary right page');
-  assert.match(checkin, /moved to Today's Habits panel/);
+  /* The prose moved with D2.3's rewrite of this file; what is asserted is the
+   * behaviour, not a sentence. Continuity lives on Today as the computed
+   * habit — the right page shows how the day WAS, never a running total. */
+  assert.doesNotMatch(code(checkin), /streak/i,
+    'a streak has crept back onto the right page');
 });
 
 /* ══ Diary writing surface ═════════════════════════════════════════════ */
@@ -311,10 +332,19 @@ test('the spread grows with its content, from a stated base', () => {
   /* The ruled writing area absorbs the slack, and its floor is well below the
    * height it renders at — a floor tall enough to bind is one that pushes the
    * spread past the base, which is what the old 180px did. */
-  assert.match(html, /\.dia-editor\{flex:1 0 auto\}/);
-  assert.match(html, /\.dia-editor\{outline:0;min-height:120px/);
-  // No JavaScript owns the height, so there is no inline value to go stale.
-  assert.doesNotMatch(diaView, /style\.height = /);
+  /* REVISED by D2.3 §1. `flex:1 0 auto` let the ruled area swallow every spare
+   * pixel, so a blank day opened with half a page of empty paper before the
+   * prompts appeared. The editor is now exactly as tall as its content with a
+   * SEVEN-LINE floor, and the spare room sits below the prompts instead. */
+  assert.match(html, /\.dia-editor\{flex:0 0 auto\}/);
+  assert.match(html, /\.dia-editor\{outline:0;min-height:210px/);
+  assert.match(html, /\.dia-left \.dia-scroll::after\{content:'';flex:1 1 auto/);
+  /* No JavaScript owns the SPREAD's height, so there is no inline value to go
+   * stale. The one height D2.3 writes belongs to the outgoing ghost, which is
+   * pinned to the box it replaces and then deletes itself. */
+  const spreadCode = diaView.replace(
+    diaView.slice(diaView.indexOf('function beginTurn'), diaView.indexOf('function endTurn')), '');
+  assert.doesNotMatch(spreadCode, /style\.height = /);
 });
 
 /* ══ Drag geometry ═════════════════════════════════════════════════════ */

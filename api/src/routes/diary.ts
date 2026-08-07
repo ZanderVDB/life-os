@@ -292,6 +292,9 @@ export function registerDiaryRoutes(
       title: diaryEntries.title,
       daySummary: diaryEntries.daySummary,
       mood: diaryEntries.mood,
+      /* Energy keeps its own column rather than living in the reflection, so
+       * the month grid has to ask for it explicitly — D2.3 §12 draws it. */
+      energy: diaryEntries.energy,
       /* Length, not content: enough to show "a long day" without shipping it. */
       length: sql<number>`length(${diaryEntries.documentText})`,
       /* D2.2 §13: a month cell shows one short line of context. TRUNCATED IN
@@ -320,6 +323,20 @@ export function registerDiaryRoutes(
         return {
           ...r,
           feeling: c.feeling ?? (r.mood ? MOOD_AS_FEELING[r.mood] ?? null : null),
+          /* D2.3 §12–13: the month cell draws the SAME three indicators the
+           * right page uses — feeling, energy, social — plus a compact summary
+           * of the four passive dimensions. Sent as ids, so the client renders
+           * them with the shared components rather than re-deriving anything.
+           * Deliberately NOT the whole reflection: the prompts and the retired
+           * Moment lines are writing, and a month grid is not where writing
+           * belongs. */
+          social: c.social ?? null,
+          rhythm: {
+            nourishment: c.nourishment ?? null,
+            movement: c.movement ?? null,
+            outside: c.outside ?? null,
+            sleep: c.sleep ?? null,
+          },
           preview: previewOf({
             title: r.title,
             highlight: c.highlight ?? null,

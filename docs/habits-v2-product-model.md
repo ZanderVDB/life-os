@@ -126,3 +126,53 @@ brings the whole history with it, derived, with nothing restored.
 - **No habit inside Diary.** The connection runs one way only: Today and
   Calendar ask Diary whether a day holds writing. Diary shows no habits, no
   tasks and no events.
+
+---
+
+# D2.3 — the completion ring, and the boundary with Diary
+
+## The ring closes
+
+One component, `ringSvg(h)`, drawn identically for an ordinary habit and for the
+computed `Write in Diary` row — neither builds its own `<circle>` any more,
+which is what stops them drifting apart again.
+
+**A complete ring has no dash at all.** `pathLength="100"` with
+`stroke-dasharray="100"` makes the dash exactly one full turn, so its flat end
+lands on its own start and the two butt caps antialias into a visible seam —
+worst at high pixel density, where measured coverage fell to **0.6%** of the
+surrounding stroke. Removing the dash makes the stroke a genuinely continuous
+closed circle. Full detail and the four-DPR measurements are in
+`animation-house-rules.md`.
+
+Completion is read from `completedToday`, never from arithmetic: a 99.x% final
+state is impossible because no percentage is consulted.
+
+## A Diary check-in is not a habit
+
+D2.3 added four passive daily dimensions to Diary — Nourishment, Movement,
+Outside, Sleep. **None of them touches this system.**
+
+|  | Diary check-in | Habit |
+|---|---|---|
+| is | an observation of how the day went | a behaviour you intend to repeat |
+| chosen by | nobody — it is always asked | you, deliberately |
+| stored in | `diary_entries.reflection.checkin` | `habits` + `habit_entries` |
+
+    Movement = Very active   does NOT complete a Gym habit.
+    Nourishment = Great      does NOT create an Eating Well habit.
+
+**Gym belongs here, not in Diary**, and that is the clearest statement of the
+boundary: going to the gym is something you decided to do and want to keep
+doing. Movement is something that happens to everybody every day, in some
+amount, whether or not they meant it.
+
+Asserted with a test that inspects the database directly after a full check-in:
+zero habit rows, zero habit entries, and the ordinary habit list byte-identical
+before and after. The only thing that moves is `Write in Diary`, and it moves
+because the day now holds writing — never because of what was recorded in it.
+
+A future `Customize daily check-in` surface may allow a **deliberate** link
+between a Diary dimension and a habit. That is the only sanctioned route, it
+must be an explicit act in settings, and D2.3 builds none of it — see
+`diary-v2-daily-checkin.md`.

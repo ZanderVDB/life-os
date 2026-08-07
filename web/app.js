@@ -1883,11 +1883,8 @@ function diarySystemHabitHtml() {
   return `<div class="hb-row hb-diary ${done ? 'is-done' : ''}" data-habit="${DIARY_HABIT_ID}">
     <button class="hb-ring" data-diary-open aria-pressed="${done}"
       aria-label="${done ? 'Written today' : 'Not written yet'} — open today's diary">
-      <svg class="hr-svg" viewBox="0 0 32 32" aria-hidden="true">
-        <circle class="hr-track" cx="16" cy="16" r="13" pathLength="100"/>
-        <circle class="hr-fill ${done ? '' : 'is-empty'}" cx="16" cy="16" r="13"
-          pathLength="100" stroke-dasharray="100" stroke-dashoffset="${done ? '0.00' : '100.00'}"/>
-      </svg>
+      ${/* The SAME ring component as every ordinary habit — §17. */ ''}
+      ${ringSvg({ completedToday: done, todayCount: done ? 1 : 0, targetCount: 1 })}
       ${done ? `<span class="hr-mark">${icon('check', 14)}</span>` : '<span class="hr-mark"></span>'}
     </button>
     <button class="hb-name" data-diary-open
@@ -1937,6 +1934,61 @@ function habitPct(h) {
   return h.completedToday ? 1 : 0;
 }
 
+/* ── The completion ring (D2.3 §17) ──────────────────────────────────────
+ *
+ * THE SEAM, and it was geometry rather than rendering.
+ *
+ * `pathLength="100"` with `stroke-dasharray="100"` makes the dash exactly one
+ * full turn of the circle — so the dash's END lands precisely on its own
+ * START. With `stroke-linecap: butt` those are two flat cuts meeting, not a
+ * join: `stroke-linejoin` never applies, because a dash boundary is not a
+ * corner. Each cap is antialiased on its own, and where they abut the coverage
+ * sums to less than one pixel of paint. The darker track shows through as a
+ * hairline — worse at fractional device pixel ratios, where the seam lands
+ * between physical pixels.
+ *
+ * The fix is to stop drawing a dash when there is nothing to dash. A complete
+ * ring has NO dasharray at all, so the stroke is a genuinely continuous closed
+ * circle with no start and no end for a seam to appear at. Nothing is painted
+ * over anything.
+ *
+ * Completion is read from `completedToday`, never from the arithmetic — §17
+ * forbids a 99.x% final state, and floating-point division is exactly how one
+ * would arrive.
+ */
+const ringDash = (h) => {
+  if (h.completedToday) return 'stroke-dasharray="none" stroke-dashoffset="0"';
+  const pct = habitPct(h);
+  return `stroke-dasharray="100" stroke-dashoffset="${(100 - pct * 100).toFixed(2)}"`;
+};
+
+/** The ring itself. ONE component, for ordinary habits and the Diary one. */
+const ringSvg = (h) => `<svg class="hr-svg" viewBox="0 0 32 32" aria-hidden="true">
+    <circle class="hr-track" cx="16" cy="16" r="13" pathLength="100"/>
+    <circle class="hr-fill ${habitPct(h) === 0 ? 'is-empty' : ''}" cx="16" cy="16" r="13"
+      pathLength="100" ${ringDash(h)}/>
+  </svg>`;
+
+/**
+ * Removes the dash once the sweep to full has arrived.
+ *
+ * The transition needs a dash to animate along; the finished ring must not have
+ * one. So the offset goes to 0 and the dash is dropped after the sweep. The
+ * timer is the guarantee, not `transitionend` — a throttled timeline would
+ * otherwise leave the seam exactly where §17 says it must not be, which is the
+ * animation house rule applied to a stroke instead of a layout.
+ */
+function settleDash(fill) {
+  clearTimeout(fill._dashT);
+  const drop = () => {
+    if (!fill.isConnected) return;
+    fill.setAttribute('stroke-dasharray', 'none');
+    fill.setAttribute('stroke-dashoffset', '0');
+  };
+  fill.addEventListener('transitionend', drop, { once: true });
+  fill._dashT = setTimeout(drop, 320);
+}
+
 /** Centre content: check when complete, count while partial, nothing at zero. */
 function habitCentre(h) {
   const target = Math.max(1, h.targetCount ?? 1);
@@ -1962,12 +2014,7 @@ function habitRowHtml(h) {
     <button class="hb-ring" data-habit-toggle="${h.id}" aria-pressed="${!!h.completedToday}"
       aria-label="${label} ${esc(h.name)}"
       ${target > 1 ? `aria-valuenow="${h.todayCount ?? 0}" aria-valuemax="${target}"` : ''}>
-      <svg class="hr-svg" viewBox="0 0 32 32" aria-hidden="true">
-        <circle class="hr-track" cx="16" cy="16" r="13" pathLength="100"/>
-        <circle class="hr-fill ${pct === 0 ? 'is-empty' : ''}" cx="16" cy="16" r="13"
-          pathLength="100" stroke-dasharray="100"
-          stroke-dashoffset="${(100 - pct * 100).toFixed(2)}"/>
-      </svg>
+      ${ringSvg(h)}
       ${habitCentre(h)}
     </button>
     <button class="hb-name" data-habit-open="${h.id}" title="Edit ${esc(h.name)}">${esc(h.name)}</button>
@@ -2044,7 +2091,18 @@ function patchHabitRow(id) {
   if (fill) {
     // Toggle emptiness BEFORE the offset so the fade and the sweep run together.
     fill.classList.toggle('is-empty', pct === 0);
-    fill.setAttribute('stroke-dashoffset', (100 - pct * 100).toFixed(2));
+    /* Completion drops the dash entirely, so the closed ring is one continuous
+     * stroke with no seam (§17). The sweep still animates: the offset is
+     * driven to 0 first and the dash is removed once it has arrived, so the
+     * transition has a value to interpolate to and the final state is the
+     * dashless circle rather than a dash that happens to be full length. */
+    if (h.completedToday) {
+      fill.setAttribute('stroke-dashoffset', '0');
+      settleDash(fill);
+    } else {
+      fill.setAttribute('stroke-dasharray', '100');
+      fill.setAttribute('stroke-dashoffset', (100 - pct * 100).toFixed(2));
+    }
   }
 
   const ring = row.querySelector('.hb-ring');
