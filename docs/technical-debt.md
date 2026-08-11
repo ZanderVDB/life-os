@@ -1030,3 +1030,35 @@ only. Worth a look on a real phone.
 - **`scroll-snap` can refuse a programmatic `scrollLeft`.** A request for 70px
   landed at 0 and made a correct clear-on-scroll rule look broken. Always read
   back the actual value.
+
+---
+
+## L3.3
+
+### Deliberately temporary
+
+- **`web/modules/library-lab/` is disposable.** Nine files, deleted in one move
+  once a direction is chosen. A test asserts nothing outside that folder imports
+  a concept, so removing it cannot break the real Library.
+- **Five of six concepts are visually representative, not complete** (§28).
+  Only A has a full interaction. The others demonstrate their premise.
+- **Desktop only.** Narrow widths get a viability preview. The chosen concept
+  gets real responsive work later.
+
+### Carried, with the reason
+
+- **The lab gate costs one request.** `labAllowed()` asks the server and caches
+  for the session. A synchronous flag would be faster but would mean a new
+  config value that could be set wrong; asking the thing that actually knows is
+  worth one round trip on an internal route.
+- **`Open` in a concept routes to the real Library.** The lab does not own a
+  Book view, and building one would be six more prototypes.
+
+### Worth not relearning
+
+- **A CSS class built by interpolation can collide with an element class.**
+  `lab-cover-${template}` produced `lab-cover-rule`, which was already the
+  divider inside the cover. Namespace interpolated class fragments.
+- **A banned-word list in a test reads the dictionary, not the code.** Banning
+  the string `archive` flagged Concept F's "personal archive" prose. Ban call
+  shapes — `createItem(`, `method: 'POST'` — not English words.

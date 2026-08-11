@@ -2190,3 +2190,62 @@ the cover, the folio and the media frame.
 
 **1100 tests pass, 18 new**, and 20 superseded L3/L3.1 assertions rewritten with
 the reversal recorded in place. TypeScript clean.
+
+---
+
+## L3.3 — Library visual concept bake-off
+
+A change of process, not another correction.
+
+L3, L3.1 and L3.2 each fixed something real — overlap, spine geometry, scale
+blur, pull distance, shadows, baseline, fore-edge, shelf depth — and the shelf
+still did not look like a Library. Every fix was measurable and correct. That
+pattern is the signature of optimising the wrong metaphor, and no further
+correction pass answers it.
+
+So: a staging-only **design lab** at `#library/lab` with six complete visual
+directions over one fixed set of objects.
+
+| | |
+|---|---|
+| A | Spine-first hardbacks that turn to face you |
+| B | Fantasy shelf — a deep framed bay, cloth and leather |
+| C | Modern library — level spines, one stone lip, typography |
+| D | Cover-forward — covers out, leaning back against the ledge |
+| E | Alcoves — each category in a framed opening |
+| F | Personal archive — shelf, rack, board, clipboard, drawers |
+
+Full write-up: `library-v2-l33-concept-bakeoff.md`. **No winner is declared.**
+
+### Three properties make it safe to ship
+
+**It cannot appear in production.** Availability is asked of the SERVER —
+`GET /library/sample` reports `allowed`, which is exactly
+`NODE_ENV !== 'production'`, the same guard the sample tooling uses. No hostname
+guess, no new config. In production the route falls through to the Library.
+
+**It cannot write.** The subject is a literal set in `lab-data.js`, so the lab
+issues exactly one request in its lifetime — the availability check. Read-only
+by construction rather than by discipline.
+
+**It cannot leak.** Every concept returns a teardown; switching calls it before
+mounting the next. Measured: A→B→C→A three times left the stage node count
+identical at 203, with exactly one concept mounted throughout.
+
+### Concept A's turn
+
+The one prototype that had to actually work. Each book is a real 3D box with a
+spine face and a cover face; turning the volume swings the cover to the front
+over 300ms. When the transition ends the 3D is **dropped entirely** and the
+cover becomes an ordinary untransformed element — measured after the commit:
+cover 126 x 214, title box 104px, `transform: none`. A timer guarantees the
+commit; `transitionend` is only the optimisation.
+
+### One bug worth recording
+
+The cover templates were first named `rule`, `band`, `frame`, `plate`, producing
+`lab-cover-rule` on the cover — colliding with the divider class INSIDE it.
+Every book on that template inherited `width:30px;height:1px` for its whole
+cover. Measured as a 30px cover in a 126px face. Namespaced to `tpl-*`.
+
+**1117 tests pass, 17 new.** TypeScript clean. The real Library is untouched.

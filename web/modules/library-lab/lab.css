@@ -1,0 +1,519 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   LIBRARY DESIGN LAB — staging only (L3.3)
+
+   Six complete visual directions over one fixed set of objects. Every concept
+   designs its own SHELF as well as its own objects (§12): a back plane, a
+   surface, a front edge, a baseline and a contact shadow. None of them is
+   "dark rectangle plus a line".
+
+   Loaded only on the lab route, so none of this reaches the real Library.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.lab{display:flex;flex-direction:column;gap:18px}
+
+/* ── The comparison bar (§21) ─────────────────────────────────────────── */
+.lab-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lab-pick{display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+  padding:7px 13px;border-radius:10px;cursor:pointer;font-family:inherit;
+  background:var(--surface);border:1px solid var(--border);color:var(--text-2);
+  transition:background var(--t-hover),border-color var(--t-hover),color var(--t-hover)}
+.lab-pick b{font-size:13px;font-weight:700;letter-spacing:.04em}
+.lab-pick small{font-size:10.5px;color:var(--muted)}
+.lab-pick:hover{background:var(--surface-2);border-color:var(--border-strong);color:var(--text)}
+.lab-pick.on{background:var(--accent-soft);border-color:var(--accent);color:#fff}
+.lab-pick.on small{color:rgba(255,255,255,.75)}
+.lab-pick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lab-current{margin-left:auto;font-size:12px;color:var(--muted)}
+
+.lab-notes{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:10px 14px;font-size:13px;color:var(--text-2);max-width:640px}
+.lab-notes summary{cursor:pointer;font-weight:600;color:var(--text);font-size:12.5px}
+.lab-notes ul{margin:9px 0 2px;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+
+.lab-stage{min-height:420px}
+.lab-shelf-h{font-size:11px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 9px}
+
+/* ── Shared cover templates (§14) ─────────────────────────────────────── */
+/* `width:100%` and `height:100%` explicitly.
+   The cover is a `<span>` promoted to a flex container, and inside the various
+   faces each concept builds it was shrinking to its content: measured 30px
+   inside a 126px face, which wrapped the title one character per line. A face
+   sets the size; the cover fills it. */
+.lab-cover{position:relative;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;padding:13px 11px;overflow:hidden;
+  width:100%;height:100%;box-sizing:border-box;
+  background:linear-gradient(150deg,var(--paper) 0%,var(--paper-2) 100%)}
+.lab-cover-mark{font-family:'Playfair Display',Georgia,serif;font-size:7.5px;
+  letter-spacing:.16em;color:var(--paper-ink-2);opacity:.7}
+.lab-cover-pre{font-size:6px;font-weight:700;letter-spacing:.28em;text-transform:uppercase;
+  color:var(--accent-c,var(--a-peach))}
+.lab-cover-title{font-family:'Playfair Display',Georgia,serif;font-weight:500;font-size:14px;
+  line-height:1.15;color:var(--paper-ink);text-align:center;margin-top:5px;
+  display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;-webkit-box-orient:vertical;
+  overflow:hidden;overflow-wrap:anywhere}
+.lab-cover-sub{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:8px;
+  line-height:1.3;color:var(--paper-ink-2);text-align:center;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.lab-cover-rule{width:30px;height:1px;background:var(--paper-ink-2);opacity:.35;margin:6px 0 4px}
+.lab-cover-author{font-size:6px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--paper-ink-2);opacity:.8;text-align:center}
+/* Four templates, assigned per book and stable across concepts. */
+.lab-cover-tpl-band::before{content:'';position:absolute;left:0;right:0;top:26%;height:16px;
+  background:color-mix(in srgb,var(--accent-c,var(--a-peach)) 26%,transparent)}
+.lab-cover-tpl-frame{box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),
+  inset 0 0 0 5px transparent,inset 0 0 0 6px color-mix(in srgb,var(--accent-c,var(--a-peach)) 32%,transparent)}
+.lab-cover-tpl-plate::before{content:'';position:absolute;left:11px;right:11px;top:20px;bottom:34px;
+  border:1px solid color-mix(in srgb,var(--accent-c,var(--a-peach)) 34%,transparent)}
+.lab-cover-tpl-plate .lab-cover-title{font-size:13px}
+
+/* ═══ CONCEPT A — spine-first hardback shelf ═════════════════════════════
+   The shelf: a back plane, a bright surface line, a 6px front lip with a lit
+   top edge, and a soft floor wash. Books stand ON that lip. */
+.cA{display:flex;flex-direction:column;gap:26px}
+.cA-shelf{position:relative;padding:30px 22px 0;border-radius:3px;
+  background:
+    linear-gradient(180deg,rgba(0,0,0,.30) 0%,rgba(255,255,255,.015) 30%,
+      rgba(255,255,255,.03) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.cA-row{display:flex;align-items:flex-end;gap:2px;min-height:230px;
+  padding-bottom:0;perspective:1400px}
+.cA-shelf::after{content:'';display:block;height:9px;margin:0 -22px;border-radius:0 0 3px 3px;
+  background:linear-gradient(180deg,rgba(255,255,255,.16) 0,rgba(255,255,255,.06) 2px,
+    #171320 3px,#100D18 100%);
+  box-shadow:0 7px 14px -6px rgba(0,0,0,.7)}
+
+.cA-vol{position:relative;width:var(--sw);height:var(--h);cursor:pointer;
+  transition:transform 300ms var(--e-out);transform-style:preserve-3d;flex:0 0 auto}
+.cA-box{position:absolute;inset:0;transform-style:preserve-3d;
+  transition:transform 300ms var(--e-out)}
+.cA-face{position:absolute;top:0;height:100%;backface-visibility:hidden;overflow:hidden}
+.cA-spine{left:0;width:var(--sw);transform:translateZ(63px);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  padding:10px 0;border-radius:2px 2px 0 0;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 26%,#0C0912) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 52%,#171223) 30%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 24%,#0F0B17) 82%,rgba(0,0,0,.6) 100%);
+  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.16),inset -2px 0 4px rgba(0,0,0,.45)}
+.cA-band{flex:0 0 auto;width:calc(100% - 10px);height:2px;border-radius:1px;
+  background:color-mix(in srgb,var(--accent-c,var(--a-peach)) 80%,#fff);opacity:.55}
+.cA-spine-t{flex:1 1 auto;min-height:0;writing-mode:vertical-rl;transform:rotate(180deg);
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;
+  letter-spacing:.03em;color:rgba(255,255,255,.94);text-shadow:0 1px 2px rgba(0,0,0,.55);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cA-imprint{flex:0 0 auto;font-size:7px;font-weight:700;letter-spacing:.12em;
+  color:rgba(255,255,255,.5)}
+.cA-front{left:calc(var(--sw) / 2 - 63px);width:126px;
+  transform:rotateY(90deg) translateZ(calc(var(--sw) / 2));
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.cA-front .lab-cover{height:100%}
+
+/* THE TURN. The volume slides out of the row and rotates so the cover faces
+   the viewer. 300ms — inside §16's 260–320 band. */
+.cA-vol.is-turned{transform:translateX(0) translateZ(40px);z-index:5}
+.cA-vol.is-turned .cA-box{transform:translateX(46px) rotateY(-90deg)}
+/* THE COMMIT (§17). When the turn ends the 3D is dropped entirely: the cover
+   becomes an ordinary untransformed element and rasterises exactly as it would
+   have if it had never moved. */
+.cA-vol.is-flat{transform:none;z-index:5}
+.cA-vol.is-flat .cA-box{transform:none;transform-style:flat}
+.cA-vol.is-flat .cA-spine{display:none}
+.cA-vol.is-flat .cA-front{position:relative;left:0;width:126px;height:var(--h);
+  transform:none;box-shadow:0 18px 30px -14px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,255,255,.07)}
+.cA-vol.is-flat{width:126px;transition:width 300ms var(--e-out)}
+.cA-vol:hover:not(.is-turned):not(.is-flat){transform:translateY(-4px)}
+.cA-vol:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* Contact: tight at rest, weaker when out. */
+.cA-vol::after{content:'';position:absolute;left:0;right:0;bottom:-4px;height:6px;
+  border-radius:50%;background:radial-gradient(ellipse at center,rgba(0,0,0,.6),transparent 72%);
+  transition:opacity 300ms var(--e-out)}
+.cA-vol.is-turned::after,.cA-vol.is-flat::after{opacity:.4}
+
+.cA-foot{position:absolute;left:0;top:100%;margin-top:16px;width:150px;
+  display:flex;flex-direction:column;gap:1px;opacity:0;pointer-events:none;
+  transition:opacity 160ms var(--e-out)}
+.cA-vol.is-flat .cA-foot,.cA-vol.is-turned .cA-foot,
+.cA-binder.is-out .cA-foot{opacity:1;pointer-events:auto}
+.cA-foot-t{font-size:12px;font-weight:600;color:var(--text);line-height:1.25}
+.cA-foot-s{font-size:10.5px;color:var(--muted)}
+.cA-open{margin-top:4px;font-size:11.5px;font-weight:600;color:var(--accent);cursor:pointer}
+
+/* Documents: slim labelled binders standing on the same shelf. */
+.cA-binder{position:relative;flex:0 0 auto;width:26px;height:196px;cursor:pointer;
+  display:flex;transition:transform 220ms var(--e-out)}
+.cA-binder-spine{width:100%;border-radius:2px 2px 0 0;display:flex;align-items:center;
+  justify-content:center;padding:14px 0;
+  background:linear-gradient(90deg,#3A3348 0%,#2A2437 40%,#1D1927 100%);
+  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.12),inset 0 0 0 1px rgba(0,0,0,.3)}
+.cA-binder-label{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9.5px;
+  font-weight:600;color:var(--a-blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-height:160px}
+.cA-binder::before{content:'';position:absolute;left:3px;right:3px;top:8px;height:3px;
+  background:var(--a-blue);opacity:.7;border-radius:1px}
+.cA-binder.is-out{transform:translateY(-18px)}
+.cA-binder:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* ═══ CONCEPT B — fantasy bookshelf ═════════════════════════════════════
+   A deep framed bay: side posts, a top rail, a heavy front ledge, and light
+   falling from the top of the opening onto the books. */
+.cB{display:flex;flex-direction:column;gap:24px}
+.cB-bay{position:relative}
+.cB-frame{position:relative;padding:16px 26px 0;border-radius:5px;
+  background:
+    radial-gradient(120% 70% at 50% 0%,rgba(182,155,240,.10) 0%,transparent 62%),
+    linear-gradient(180deg,#0B0810 0%,#151021 42%,#1A1428 100%);
+  box-shadow:inset 0 14px 22px -14px rgba(0,0,0,.9),
+    inset 0 0 0 1px rgba(255,255,255,.05)}
+/* Side posts and top rail, drawn. */
+.cB-frame::before,.cB-frame::after{content:'';position:absolute;top:0;bottom:0;width:11px;
+  background:linear-gradient(90deg,#2A2338 0%,#191325 55%,#0E0A16 100%);
+  box-shadow:inset 1px 0 0 rgba(255,255,255,.10)}
+.cB-frame::before{left:0;border-radius:5px 0 0 0}
+.cB-frame::after{right:0;transform:scaleX(-1);border-radius:5px 0 0 0}
+.cB-row{display:flex;align-items:flex-end;gap:3px;min-height:262px;padding:0 4px}
+.cB-frame > .lab-shelf-h{color:rgba(214,203,240,.6)}
+.cB-bay::after{content:'';display:block;height:14px;border-radius:0 0 5px 5px;
+  background:linear-gradient(180deg,rgba(255,255,255,.20) 0,rgba(255,255,255,.08) 3px,
+    #241D33 4px,#120E1D 100%);
+  box-shadow:0 10px 20px -8px rgba(0,0,0,.8)}
+
+.cB-vol{position:relative;flex:0 0 auto;width:var(--sw);height:var(--h);cursor:pointer;
+  display:flex;flex-direction:column;transform-origin:bottom center;
+  transition:transform 260ms var(--e-out)}
+.cB-spine{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:9px;padding:8px 0;overflow:hidden;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 22%,#0A0710) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 46%,#1A1329) 34%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 20%,#0D0916) 86%,rgba(0,0,0,.65) 100%);
+  box-shadow:inset 2px 0 0 rgba(255,255,255,.14),inset -3px 0 6px rgba(0,0,0,.5)}
+.cB-head,.cB-tail{flex:0 0 auto;height:7px;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 70%,#fff) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 40%,#000) 100%);
+  opacity:.85;border-radius:2px 2px 0 0}
+.cB-tail{border-radius:0 0 2px 2px}
+.cB-gilt{width:calc(100% - 12px);height:1.5px;
+  background:linear-gradient(90deg,transparent,#E8C062 30%,#E8C062 70%,transparent);opacity:.65}
+.cB-spine-t{flex:1 1 auto;min-height:0;writing-mode:vertical-rl;transform:rotate(180deg);
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;
+  letter-spacing:.05em;color:#F0E9FF;text-shadow:0 1px 3px rgba(0,0,0,.7);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cB-crest{flex:0 0 auto;font-size:9px;color:#E8C062;opacity:.8}
+.cB-peek{display:none}
+.cB-vol.is-out{transform:translateY(-20px) rotate(-3deg)}
+.cB-vol.is-out .cB-peek{display:block;position:absolute;left:calc(100% + 8px);bottom:0;
+  width:120px;height:170px;box-shadow:0 20px 34px -14px rgba(0,0,0,.8)}
+.cB-vol.is-out .lab-cover{height:100%}
+.cB-vol:hover:not(.is-out){transform:translateY(-5px)}
+.cB-vol:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.cB-foot{position:absolute;left:0;top:100%;margin-top:12px;width:170px;opacity:0;
+  transition:opacity 160ms var(--e-out)}
+.cB-vol.is-out .cB-foot,.cB-folio.is-out .cB-foot{opacity:1}
+.cB-foot-t{display:block;font-size:12px;font-weight:600;color:var(--text)}
+.cB-open{font-size:11.5px;font-weight:600;color:var(--accent);cursor:pointer}
+
+.cB-row-folio{min-height:150px;gap:16px}
+.cB-folio{position:relative;flex:0 0 auto;width:132px;height:118px;cursor:pointer;
+  transition:transform 220ms var(--e-out)}
+.cB-folio-cloth{position:absolute;inset:0;border-radius:2px 4px 4px 2px;overflow:hidden;
+  display:flex;flex-direction:column;gap:5px;padding:13px 14px;
+  background:linear-gradient(150deg,#3A2F46 0%,#241C31 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 3px 6px -3px rgba(0,0,0,.6)}
+.cB-folio-tie{position:absolute;left:0;right:0;top:44%;height:5px;
+  background:linear-gradient(90deg,#8B7BA8,#5C4E75);opacity:.8}
+.cB-folio-plate{font-size:11.5px;font-weight:600;color:#EDE6FA;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cB-folio-kind{margin-top:auto;font-size:8px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:#B6A6D6}
+.cB-folio.is-out{transform:translateY(-14px)}
+.cB-folio:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* ═══ CONCEPT C — modern luxury library ═════════════════════════════════
+   Plain back plane, generous space, one precise stone-and-metal lip. */
+.cC{display:flex;flex-direction:column;gap:34px}
+.cC-shelf{position:relative;padding:34px 0 0;
+  background:linear-gradient(180deg,rgba(255,255,255,.012) 0%,rgba(255,255,255,.03) 100%)}
+.cC-row{display:flex;align-items:flex-end;gap:22px;min-height:236px}
+.cC-shelf::after{content:'';display:block;height:5px;
+  background:linear-gradient(180deg,#C9C2D8 0,#8E869E 1px,#4A4458 2px,#232030 100%);
+  box-shadow:0 5px 12px -5px rgba(0,0,0,.65)}
+.cC-vol{position:relative;flex:0 0 auto;width:var(--sw);height:212px;cursor:pointer;
+  transition:width 260ms var(--e-out),transform 260ms var(--e-out)}
+.cC-spine{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:space-between;padding:16px 0;overflow:hidden;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 16%,#1C1826) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 30%,#241F31) 50%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 14%,#171320) 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+  transition:opacity 260ms var(--e-out)}
+.cC-rule{width:60%;height:1px;background:var(--accent-c,var(--a-peach));opacity:.75}
+.cC-spine-t{writing-mode:vertical-rl;transform:rotate(180deg);font-size:11.5px;font-weight:500;
+  letter-spacing:.09em;color:#EFEBF7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-height:150px}
+.cC-mark{font-size:8px;letter-spacing:.16em;color:var(--muted);font-variant-numeric:tabular-nums}
+.cC-reveal{position:absolute;inset:0;opacity:0;transition:opacity 260ms var(--e-out)}
+.cC-reveal .lab-cover{height:100%;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+.cC-vol.is-open{width:132px;transform:translateY(-6px)}
+.cC-vol.is-open .cC-spine{opacity:0}
+.cC-vol.is-open .cC-reveal{opacity:1}
+.cC-vol:hover:not(.is-open){transform:translateY(-3px)}
+.cC-vol:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.cC-vol::after,.cC-folder::after{content:'';position:absolute;left:2px;right:2px;bottom:-3px;
+  height:5px;border-radius:50%;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,.55),transparent 70%)}
+.cC-cap{position:absolute;left:0;top:100%;margin-top:14px;width:190px;opacity:0;
+  transition:opacity 160ms var(--e-out)}
+.cC-vol.is-open .cC-cap,.cC-folder.is-open .cC-cap{opacity:1}
+.cC-cap-t{display:block;font-size:12.5px;font-weight:600;color:var(--text)}
+.cC-cap-s{display:block;font-size:10.5px;color:var(--muted);margin-top:1px}
+.cC-open{display:inline-block;margin-top:5px;font-size:11.5px;font-weight:600;
+  color:var(--accent);cursor:pointer}
+
+.cC-folder{position:relative;flex:0 0 auto;width:186px;height:126px;cursor:pointer;
+  transition:transform 220ms var(--e-out)}
+.cC-folder-case{position:absolute;inset:0;padding:16px 18px;overflow:hidden;
+  display:flex;flex-direction:column;gap:9px;background:#EFEAF6;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.14),0 3px 8px -4px rgba(0,0,0,.55)}
+.cC-folder-index{font-size:12.5px;font-weight:600;color:#211E2C;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cC-folder-line{height:1px;background:#211E2C;opacity:.2}
+.cC-folder-kind{margin-top:auto;font-size:8.5px;font-weight:700;letter-spacing:.16em;
+  text-transform:uppercase;color:#5A5470}
+.cC-folder.is-open{transform:translateY(-8px)}
+.cC-folder:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* ═══ CONCEPT D — cover-forward collection ══════════════════════════════
+   Covers out, leaning back against the ledge, with real thickness. */
+.cD{display:flex;flex-direction:column;gap:28px}
+.cD-shelf{position:relative;padding:30px 18px 0;
+  background:linear-gradient(180deg,rgba(255,255,255,.02) 0%,rgba(0,0,0,.16) 100%)}
+.cD-row{display:flex;align-items:flex-end;gap:18px;min-height:214px}
+.cD-shelf::after{content:'';display:block;height:11px;
+  background:linear-gradient(180deg,rgba(255,255,255,.14) 0,#211C2E 3px,#100D18 100%);
+  box-shadow:0 8px 16px -7px rgba(0,0,0,.7)}
+.cD-vol,.cD-port{position:relative;flex:0 0 auto;cursor:pointer;
+  transition:transform 240ms var(--e-out)}
+.cD-body{display:flex;align-items:stretch;transform-origin:bottom center;
+  /* The lean. This is what stops a cover-forward book reading as a poster. */
+  transform:rotate(-1.6deg);transition:transform 240ms var(--e-out)}
+.cD-front{width:124px;height:176px;overflow:hidden;
+  box-shadow:0 3px 7px -3px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.05)}
+.cD-front .lab-cover{height:100%}
+.cD-side{width:11px;height:176px;position:relative;
+  background:linear-gradient(90deg,rgba(0,0,0,.5) 0%,#2A2437 40%,#1B1725 100%)}
+.cD-block{position:absolute;inset:2px 1px 2px 2px;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.10) 0 1px,transparent 1px 2px)}
+.cD-vol.is-up .cD-body,.cD-port.is-up .cD-body{transform:rotate(0deg) translateY(-16px)}
+.cD-vol:hover:not(.is-up) .cD-body,.cD-port:hover:not(.is-up) .cD-body{transform:rotate(-1deg) translateY(-4px)}
+.cD-vol:focus-visible,.cD-port:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.cD-vol::after,.cD-port::after{content:'';position:absolute;left:6px;right:6px;bottom:-3px;height:6px;
+  border-radius:50%;background:radial-gradient(ellipse at center,rgba(0,0,0,.6),transparent 72%);
+  transition:opacity 240ms var(--e-out)}
+.cD-vol.is-up::after,.cD-port.is-up::after{opacity:.45}
+.cD-cap{position:absolute;left:0;top:100%;margin-top:14px;width:135px;opacity:0;
+  transition:opacity 160ms var(--e-out)}
+.cD-vol.is-up .cD-cap,.cD-port.is-up .cD-cap{opacity:1}
+.cD-cap-t{display:block;font-size:12px;font-weight:600;color:var(--text);line-height:1.25}
+.cD-cap-s{display:block;font-size:10.5px;color:var(--muted)}
+.cD-open{display:inline-block;margin-top:4px;font-size:11.5px;font-weight:600;
+  color:var(--accent);cursor:pointer}
+.cD-port-face{position:relative;width:150px;height:132px;overflow:hidden;
+  display:flex;flex-direction:column;gap:6px;padding:14px 15px;
+  background:linear-gradient(150deg,var(--paper) 0%,var(--paper-2) 100%);
+  box-shadow:0 3px 7px -3px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.05)}
+.cD-port-kind{font-size:8px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--a-blue)}
+.cD-port-t{font-size:12.5px;font-weight:600;color:var(--paper-ink);line-height:1.28;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cD-port-x{font-size:9.5px;line-height:1.4;color:var(--paper-ink-2);
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cD-port-flap{position:absolute;left:0;right:0;bottom:0;height:26px;
+  background:linear-gradient(180deg,transparent,rgba(0,0,0,.28));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.cD-port .cD-side{height:132px}
+
+/* ═══ CONCEPT E — library alcoves ═══════════════════════════════════════ */
+.cE{display:flex;flex-direction:column;gap:20px}
+.cE-open-frame{position:relative;padding:0 13px 13px;border-radius:4px;
+  background:linear-gradient(180deg,#231D33 0%,#171223 100%);
+  box-shadow:0 3px 10px -4px rgba(0,0,0,.7)}
+.cE-lintel{display:block;height:13px;margin:0 -13px;border-radius:4px 4px 0 0;
+  background:linear-gradient(180deg,#2E2740 0%,#1A1526 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10)}
+.cE-inner{position:relative;padding:16px 16px 0;border-radius:2px;
+  background:
+    linear-gradient(180deg,rgba(0,0,0,.55) 0%,rgba(0,0,0,.12) 18%,transparent 46%),
+    linear-gradient(180deg,#0E0B15 0%,#141020 100%);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.5)}
+.cE-h{color:rgba(206,199,232,.5)}
+.cE-content{min-height:120px}
+.cE-sill{display:block;height:9px;margin:0 -13px;border-radius:0 0 4px 4px;
+  background:linear-gradient(180deg,rgba(255,255,255,.14) 0,#241E33 3px,#100D18 100%)}
+.cE-bay-sm .cE-content{min-height:0}
+.cE-row{display:flex;align-items:flex-end;gap:3px;padding-bottom:14px}
+.cE-vol{position:relative;flex:0 0 auto;width:34px;height:176px;cursor:pointer;
+  transition:transform 220ms var(--e-out)}
+.cE-spine{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:12px 0;overflow:hidden;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 24%,#0C0913) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 48%,#181324) 40%,rgba(0,0,0,.55) 100%);
+  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.14)}
+.cE-spine-t{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:600;
+  color:rgba(255,255,255,.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:150px}
+.cE-peek{display:none}
+.cE-vol.is-out{transform:translateY(-22px)}
+.cE-vol.is-out .cE-peek{display:block;position:absolute;left:calc(100% + 6px);bottom:0;
+  width:112px;height:158px;box-shadow:0 16px 28px -12px rgba(0,0,0,.8)}
+.cE-vol.is-out .lab-cover{height:100%}
+.cE-vol:focus-visible,.cE-rack-item:focus-visible,.cE-frame:focus-visible,
+.cE-cubby:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.cE-cap{position:absolute;left:0;top:100%;margin-top:8px;width:150px;opacity:0;
+  transition:opacity 150ms var(--e-out)}
+.cE-vol.is-out .cE-cap,.cE-rack-item.is-out .cE-cap{opacity:1}
+.cE-cap-t{display:block;font-size:11.5px;font-weight:600;color:var(--text)}
+.cE-open{font-size:11px;font-weight:600;color:var(--accent);cursor:pointer}
+
+.cE-rack{display:flex;align-items:flex-start;gap:8px;padding-bottom:16px}
+.cE-rack-item{position:relative;flex:0 0 auto;width:104px;cursor:pointer;
+  transition:transform 200ms var(--e-out)}
+.cE-tab{display:block;padding:5px 8px;font-size:9.5px;font-weight:700;color:#1A1624;
+  background:var(--a-blue);border-radius:2px 2px 0 0;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.cE-sheet{display:block;height:88px;
+  background:linear-gradient(150deg,var(--paper) 0%,var(--paper-2) 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.cE-rack-item.is-out{transform:translateY(-12px)}
+
+.cE-tray{display:flex;gap:12px;padding-bottom:16px}
+.cE-frame{position:relative;flex:0 0 auto;width:130px;cursor:pointer}
+.cE-frame-glass{position:relative;display:block;height:84px;border-radius:2px;
+  background:linear-gradient(150deg,#2A2437 0%,#191424 100%);
+  box-shadow:inset 0 0 0 3px #0E0B15,inset 0 0 0 4px rgba(255,255,255,.08)}
+.cE-play{position:absolute;left:8px;bottom:6px;font-size:10px;color:#fff;opacity:.8}
+.cE-frame-meta{position:absolute;right:7px;bottom:6px;font-size:9px;color:rgba(255,255,255,.6)}
+.cE-frame-t{display:block;margin-top:6px;font-size:10.5px;color:var(--text-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.cE-wall{display:flex;gap:9px;flex-wrap:wrap;padding-bottom:16px}
+.cE-cubby{flex:0 0 auto;width:150px;cursor:pointer}
+.cE-cubby-in{display:flex;flex-direction:column;gap:3px;padding:10px 11px;height:74px;
+  background:linear-gradient(180deg,#100C18 0%,#181322 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),inset 0 5px 9px -5px rgba(0,0,0,.9)}
+.cE-cubby-kind{font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent-c,var(--a-sage))}
+.cE-cubby-t{font-size:11px;font-weight:600;color:var(--text);line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cE-cubby-meta{margin-top:auto;font-size:9.5px;color:var(--muted)}
+
+/* ═══ CONCEPT F — personal archive ══════════════════════════════════════ */
+.cF{display:flex;flex-direction:column;gap:22px}
+.cF-unit-in{display:flex;align-items:flex-end;gap:4px;position:relative}
+.cF-shelf .cF-unit-in{padding:20px 14px 0;
+  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.2));
+  border-bottom:9px solid #17131F;box-shadow:0 7px 14px -7px rgba(0,0,0,.7)}
+.cF-vol{position:relative;flex:0 0 auto;width:32px;height:172px;cursor:pointer;
+  transition:transform 220ms var(--e-out)}
+.cF-spine{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:12px 0;overflow:hidden;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 24%,#0C0913) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 50%,#181324) 42%,rgba(0,0,0,.55) 100%);
+  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.14)}
+.cF-spine-t{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:600;
+  color:rgba(255,255,255,.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:145px}
+.cF-peek{display:none}
+.cF-vol.is-out{transform:translateY(-20px)}
+.cF-vol.is-out .cF-peek{display:block;position:absolute;left:calc(100% + 6px);bottom:0;
+  width:110px;height:155px;box-shadow:0 16px 28px -12px rgba(0,0,0,.8)}
+.cF-vol.is-out .lab-cover{height:100%}
+.cF-cap{position:absolute;left:0;top:100%;margin-top:10px;width:150px;opacity:0;
+  transition:opacity 150ms var(--e-out)}
+.cF-vol.is-out .cF-cap,.cF-folio.is-out .cF-cap{opacity:1}
+.cF-cap-t{display:block;font-size:11.5px;font-weight:600;color:var(--text)}
+.cF-open{font-size:11px;font-weight:600;color:var(--accent);cursor:pointer}
+.cF-vol:focus-visible,.cF-folio:focus-visible,.cF-print:focus-visible,
+.cF-clipping:focus-visible,.cF-drawer:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+.cF-rack .cF-unit-in{gap:10px;padding:16px 14px;border-radius:3px;
+  background:linear-gradient(180deg,#191423 0%,#100D17 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),inset 0 8px 14px -9px rgba(0,0,0,.9)}
+.cF-folio{position:relative;flex:0 0 auto;width:126px;cursor:pointer;
+  transition:transform 200ms var(--e-out)}
+.cF-folio-pull{display:block;width:34px;height:7px;margin:0 auto 2px;border-radius:3px 3px 0 0;
+  background:var(--a-blue);opacity:.85}
+.cF-folio-face{display:flex;flex-direction:column;gap:5px;padding:12px 13px;height:96px;
+  background:linear-gradient(150deg,var(--paper) 0%,var(--paper-2) 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),0 3px 7px -4px rgba(0,0,0,.6)}
+.cF-folio-kind{font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--a-blue)}
+.cF-folio-t{font-size:11.5px;font-weight:600;color:var(--paper-ink);line-height:1.28;
+  display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cF-folio.is-out{transform:translateY(-12px)}
+
+.cF-board .cF-unit-in{gap:14px;padding:18px 14px 14px;border-radius:3px;
+  background:linear-gradient(180deg,#1C1727 0%,#141020 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.cF-print{position:relative;flex:0 0 auto;width:124px;cursor:pointer;
+  transition:transform 200ms var(--e-out)}
+.cF-clip{position:absolute;left:50%;top:-7px;translate:-50% 0;width:22px;height:9px;
+  border-radius:2px;background:linear-gradient(180deg,#C9C2D8,#6E6784);z-index:2}
+.cF-print-face{position:relative;display:block;height:82px;
+  background:linear-gradient(150deg,#2A2437 0%,#191424 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+.cF-play{position:absolute;left:8px;bottom:6px;font-size:10px;color:#fff;opacity:.8}
+.cF-print-meta{position:absolute;right:7px;bottom:6px;font-size:9px;color:rgba(255,255,255,.6)}
+.cF-print-t{display:block;margin-top:6px;font-size:10.5px;color:var(--text-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cF-print.is-out{transform:translateY(-8px) rotate(-1.5deg)}
+
+.cF-clipboard .cF-unit-in{gap:10px;flex-wrap:wrap;padding:16px 14px;border-radius:3px;
+  background:linear-gradient(180deg,#1A1524 0%,#120F1B 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),inset 0 4px 8px -5px rgba(0,0,0,.8)}
+.cF-clipping{position:relative;flex:0 0 auto;width:158px;padding:11px 12px 10px;cursor:pointer;
+  background:linear-gradient(150deg,#EFEAF6 0%,#DCD5E8 100%);
+  box-shadow:0 3px 7px -3px rgba(0,0,0,.6);transition:transform 200ms var(--e-out)}
+.cF-pin{position:absolute;left:50%;top:-5px;translate:-50% 0;width:9px;height:9px;
+  border-radius:50%;background:radial-gradient(circle at 35% 35%,#F0A07A,#9C5B3C)}
+.cF-clipping-t{display:block;font-size:11px;font-weight:600;color:#211E2C;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cF-clipping-m{display:block;margin-top:3px;font-size:9.5px;color:#5A5470}
+.cF-clipping.is-out{transform:translateY(-6px) rotate(1deg)}
+
+.cF-cabinet .cF-unit-in{flex-direction:column;align-items:stretch;gap:5px}
+.cF-drawer{cursor:pointer;transition:transform 200ms var(--e-out)}
+.cF-drawer-face{display:flex;align-items:center;gap:14px;padding:13px 16px;
+  background:linear-gradient(180deg,#282133 0%,#1A1526 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 3px 7px -4px rgba(0,0,0,.7)}
+.cF-drawer-plate{flex:1;display:flex;flex-direction:column;gap:2px;padding:6px 10px;
+  background:rgba(0,0,0,.3);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+.cF-drawer-t{font-size:11.5px;font-weight:600;color:var(--text)}
+.cF-drawer-m{font-size:9.5px;color:var(--muted)}
+.cF-handle{width:44px;height:8px;border-radius:4px;
+  background:linear-gradient(180deg,#B9B2C8,#5E5872)}
+.cF-drawer.is-out{transform:translateX(10px)}
+
+/* ── Reduced motion (§32) ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce){
+  .lab-stage *{transition:none !important;animation:none !important}
+  /* Concept A cannot turn in 3D without motion, so it goes straight to the
+     committed flat state: the same information, no travel. */
+  .cA-vol.is-turned .cA-box{transform:none}
+  .cA-vol.is-turned .cA-spine{display:none}
+  .cA-vol.is-turned .cA-front{position:relative;left:0;width:126px;height:var(--h);transform:none}
+  .cA-vol.is-turned{width:126px}
+  .cB-vol.is-out,.cD-vol.is-up .cD-body,.cE-vol.is-out,.cF-vol.is-out{transform:none}
+  .cD-body{transform:none}
+}
+
+/* ── Narrow (§23: a viability preview, not a finished mobile design) ──── */
+@media (max-width:820px){
+  .lab-stage{overflow-x:auto}
+  .cA-row,.cB-row,.cC-row,.cD-row,.cE-row,.cF-shelf .cF-unit-in{flex-wrap:nowrap}
+  .cC-row{gap:14px}
+  .cF-clipboard .cF-unit-in,.cE-wall{flex-wrap:nowrap;overflow-x:auto}
+  .lab-pick small{display:none}
+}

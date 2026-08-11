@@ -100,6 +100,11 @@ export function parseLibraryHash(hash = location.hash) {
   const parts = path.split('/').filter(Boolean);
   if (parts[0] !== 'library') return null;
   const q = new URLSearchParams(qs ?? '');
+  /* The staging-only design lab (L3.3). Parsed unconditionally; whether it
+   * RENDERS is decided by the server, which is the only thing that knows
+   * whether this is production. In production the lab falls through to the
+   * ordinary overview, so the route is inert rather than an error. */
+  if (parts[1] === 'lab') return { view: 'lab' };
   if (parts[1] === 'item' && parts[2]) return { view: 'item', id: parts[2] };
   if (parts[1] === 'book' && parts[2]) {
     return {
@@ -214,9 +219,39 @@ export async function renderLibrary(nav = navToken()) {
   if (!head || !scroll) return;
   const route = parseLibraryHash() ?? { view: 'overview' };
 
+  if (route.view === 'lab') return renderLabRoute(head, scroll, nav);
   if (route.view === 'book') return renderBook(route, head, scroll, nav);
   if (route.view === 'item') return renderItem(route.id, head, scroll, nav);
   return renderOverview(head, scroll, nav);
+}
+
+/**
+ * The design lab (L3.3), loaded lazily and only when asked for.
+ *
+ * A dynamic import, so the six concept modules and their stylesheet are never
+ * fetched by anybody who does not visit the route — and never at all in
+ * production, where `renderLab` refuses before mounting anything.
+ *
+ * If it refuses, this falls through to the ordinary overview: an internal route
+ * that does not exist here should look like the Library, not like a broken page.
+ */
+let labCss = null;
+async function renderLabRoute(head, scroll, nav) {
+  const mod = await import('./modules/library-lab/lab-view.js');
+  if (navStale(nav)) return;
+  mod.initLab(ctx);
+  if (!labCss) {
+    labCss = document.createElement('link');
+    labCss.rel = 'stylesheet';
+    labCss.href = './modules/library-lab/lab.css';
+    document.head.appendChild(labCss);
+  }
+  const shown = await mod.renderLab(head, scroll, nav);
+  if (!shown && !navStale(nav)) {
+    setHash('#library');
+    return renderOverview(head, scroll, nav);
+  }
+  return undefined;
 }
 
 /* ── Overview ────────────────────────────────────────────────────────── */
@@ -1149,6 +1184,9 @@ export async function leaveBook(next) {
 
 /** Called by app.js when the route changes away from Library. */
 export async function libraryWillLeave() {
+  /* The lab holds listeners and timers of its own. Tearing it down here means
+   * leaving Library by any route stops it, not only switching concepts. */
+  void import('./modules/library-lab/lab-view.js').then((m) => m.leaveLab()).catch(() => {});
   /* Leaving Library for another section. The shelves are captured whether or
    * not a Book is open, because coming back to Library from Today should also
    * land where you were. */
