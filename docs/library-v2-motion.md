@@ -97,3 +97,37 @@ the movement off costs nothing.
 `is-returned` is a class with a timer, added to an object that is already in its
 final position. If the timer never fires the worst case is a permanently
 highlighted book — visible, harmless, and corrected by the next repaint.
+
+---
+
+## L3.1 — the shelf's motion, corrected
+
+| | |
+|---|---|
+| hover lift | 140ms |
+| pull forward | 200ms |
+| return to rest | 200ms |
+| open handoff | 320ms |
+| return glow | **320ms**, then gone |
+
+**Nothing moves unless somebody moved it.** No object animates on idle, nothing
+loops, no shelf scrolls itself, and there is no keyframe animation on the shelf
+at all — every state is a transition to a class.
+
+### The return glow replaced an accent ring
+
+L3 drew the "you were just here" mark as a 2px accent ring for 1400ms. An accent
+ring is what **focus** looks like, so returning from a Book left something that
+read as selected, for long enough to look permanent.
+
+It is now a soft glow in the **object's own accent** — not the app accent — for
+320ms, inside the 200—400ms band the phase allows. It cannot be mistaken for
+focus because it is not an outline, and it cannot be mistaken for a selection
+because it is gone before you could act on it.
+
+### Reduced motion
+
+Travel goes, information stays. Pulled-forward keeps its shadow, its Open
+control and its label; hover keeps its surface; focus keeps its outline; the
+return glow does not play at all. Nothing in the shelf was ever *only* movement,
+which is why turning the movement off costs nothing.

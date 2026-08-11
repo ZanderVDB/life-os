@@ -96,3 +96,27 @@ the cover; a control measured by its ink is measured wrong. Verified with
 > section on each side, so an overflow check written against its parent reports
 > overflow on every shelf, always. Check `document.documentElement.scrollWidth`
 > instead — that is the number that means something.
+
+---
+
+## L3.1 — overlap and touch
+
+What varies by width is now the **overlap** rather than a depth effect:
+
+| Width | cover | spine | overlap | visible per book |
+|---|---|---|---|---|
+| desktop | 126px | 24px | 64px | 86px |
+| ≤1024px | 124px | 24px | 60px | 88px |
+| ≤820px | 132px | 22px | **44px** | 110px |
+| ≤480px | 128px | 22px | 40px | 110px |
+
+Books sit further apart under a finger, because a book you have to hit exactly
+is a book you miss.
+
+**Hover is switched off entirely below 820px.** There is no hover on a finger,
+and a state only a mouse can reach must never be on the path to anything. The
+Open control grows there too, because on a phone it is the primary route rather
+than a convenience.
+
+The open view stacks to one column below 820px, with the object centred above
+what is known about it.

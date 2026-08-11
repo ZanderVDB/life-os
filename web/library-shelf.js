@@ -12,22 +12,28 @@
  * is a plain `overflow-x` element, so scrolling it works before any of this
  * JavaScript has run and keeps working if it fails.
  *
- * ── What "prominent" means, and what it does not ─────────────────────────
+ * ── RESTING → PULLED FORWARD → OPEN (L3.1) ——
  *
- * L3 §23 asks for five distinct states, and they are five distinct mechanisms
- * here rather than five shades of one:
+ * L3 gave prominence to whatever object happened to be nearest a read line as
+ * the shelf scrolled. It was wrong, and the review said so: a shelf sitting
+ * untouched had one book permanently raised, which reads as "this one is
+ * chosen" when nothing had been chosen at all. Worse, the raise survived
+ * coming back from a Book, so the Library never looked calm.
  *
- *   default     resting
- *   hover       surface lifts — pointer only, never required for anything
- *   focus       an accent outline, from :focus-visible
- *   prominent   the item the shelf is CURRENTLY ABOUT: raised, cover fuller
- *   open        the one being handed over to the Book view
+ * A resting shelf now has NO raised object. Every state below is caused by the
+ * user, and ends when their attention does:
  *
- * Prominence is not selection. Nothing is chosen by scrolling past it, nothing
- * is committed, and the route never changes because a shelf moved — see §33.
- * It is the shelf saying "this is the one under your attention", which is what
- * makes surrounding items feel like they are beside something rather than
- * merely next to each other.
+ *   RESTING     on the shelf. No object is elevated, ever, by itself.
+ *   HOVER       a small lift — pointer only, never required for anything.
+ *   FOCUS       a keyboard ring. Never confused with pulled-forward.
+ *   PULLED      explicit: a click, Enter/Space, or a tap. ONE per page.
+ *   OPENING     the handoff, on a node the next paint destroys.
+ *   RETURNED    a soft glow for 320ms after coming back, then nothing.
+ *
+ * A pulled object is not a selection either — it is being looked at, not
+ * chosen — but unlike prominence it is something somebody did on purpose, and
+ * it can be undone: Escape, a click on empty shelf, scrolling away, or pulling
+ * something else. The route still never changes because a shelf moved.
  */
 
 import { lib } from './library-api.js';
@@ -93,18 +99,31 @@ export function recencyLabel(item) {
 
 /* ── The book object ─────────────────────────────────────────────────────
  *
- * A cover face in the approved 210:297 proportion, plus a spine standing to
- * its left. Not a photograph of a book: a flat cover and a narrow gradient
- * strip, which reads as an object on a shelf at a glance and costs one element
- * each. The spine is `aria-hidden` — its title is the cover's title, and a
- * screen reader should hear a book once.
+ * A cover face in the approved 210:297 proportion with a spine standing to its
+ * left, and — the L3.1 change — the pair OVERLAPS its neighbours, so the
+ * shelf reads as a row of STORED books rather than a row of displayed ones. At
+ * rest you see each spine and a strip of each cover, which is what a shelf
+ * actually looks like. Pulling a book forward raises it above its neighbours
+ * and the whole cover appears: nothing grows, nothing reflows, and the object
+ * never leaves the shelf.
  *
- * Deliberately NOT drawn in 3D. Twelve `preserve-3d` subtrees with rotated text
- * is a lot of compositing for a shelf that has to stay smooth while it scrolls,
- * and rotated glyphs are exactly where type stops being crisp. The one item
- * that rotates is the prominent one — see `.is-prominent` in the stylesheet —
- * so at most one 3D layer exists per shelf at any moment.
+ * Not drawn in 3D, and after L3.1 not rotated at all. Rotated glyphs are where
+ * type stops being crisp, the review noticed it, and §21 is explicit that
+ * crispness outranks novelty. Depth is carried by overlap, shadow, scale and
+ * translation — all of which leave text on the pixel grid.
+ *
+ * `lib-obj-pull` is the explicit Open control that appears in the pulled state,
+ * so a second click is never a mystery: there is a labelled button saying what
+ * happens next. It is also what makes this work on a phone and for a screen
+ * reader (§27).
  */
+const openControl = (label) => `<span class="lib-obj-pull" aria-hidden="true">
+    <span class="lib-obj-pull-t">${label}</span>
+    <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+      ><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+  </span>`;
+
 export function bookObjectHtml(item, index, total) {
   const b = item.book ?? {};
   const archived = !!item.archivedAt;
@@ -112,12 +131,14 @@ export function bookObjectHtml(item, index, total) {
   const year = new Date(item.createdAt).getFullYear();
   return `<article class="lib-obj lib-book${archived ? ' is-archived' : ''}"
     data-item="${esc(item.id)}" data-type="book" data-book="${esc(b.id ?? '')}"
-    data-accent="${accent}" role="button" tabindex="-1"
+    data-accent="${accent}" role="button" tabindex="-1" aria-expanded="false"
     aria-label="${esc(item.title)}${b.subtitle ? `. ${esc(b.subtitle)}` : ''}, Book, ${
   index + 1} of ${total}${archived ? ', archived' : ''}"
     title="${esc(item.title)}">
     <span class="lib-spine" aria-hidden="true">
-      <span class="lib-spine-t">${esc(item.title)}</span>
+      <span class="lib-spine-band"></span>
+      <span class="lib-spine-t">${esc(spineTitle(item.title))}</span>
+      <span class="lib-spine-band"></span>
     </span>
     <span class="lib-cover">
       <span class="lib-cover-mark" aria-hidden="true">Life OS</span>
@@ -128,12 +149,35 @@ export function bookObjectHtml(item, index, total) {
       <span class="lib-cover-author">${esc(b.authorLabel || 'Life OS')} · ${year}</span>
     </span>
     ${archived ? '<span class="lib-obj-flag">Archived</span>' : ''}
+    ${openControl('Open book')}
     <button type="button" class="lib-obj-more" data-more="${esc(item.id)}"
       aria-label="Actions for ${esc(item.title)}" aria-haspopup="menu" tabindex="-1">
       <svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor" aria-hidden="true"
         ><circle cx="5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="15" cy="10" r="1.4"/></svg>
     </button>
+    <span class="lib-obj-label" aria-hidden="true">
+      <span class="lib-obj-label-t">${esc(item.title)}</span>
+      ${b.subtitle ? `<span class="lib-obj-label-s">${esc(b.subtitle)}</span>` : ''}
+    </span>
   </article>`;
+}
+
+/**
+ * The spine's title, shortened on purpose (§8).
+ *
+ * A spine is roughly 150px of vertical room at 10px type, which is about
+ * twenty-two characters. Setting a thirty-character title in it produces
+ * exactly what the review called poor: unreadably small text, or text clipped
+ * mid-word with nothing to say it was clipped. Cutting at a word boundary and
+ * marking it with an ellipsis is honest — and the full title is still on
+ * the cover, in `title`, in the accessible name, and under the pulled book.
+ */
+export function spineTitle(title, max = 22) {
+  const t = String(title ?? '').trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max - 1);
+  const at = cut.lastIndexOf(' ');
+  return `${(at > max * 0.55 ? cut.slice(0, at) : cut).trimEnd()}…`;
 }
 
 /**
@@ -147,9 +191,13 @@ export function bookObjectHtml(item, index, total) {
  */
 export function diaryObjectHtml() {
   return `<article class="lib-obj lib-book lib-book-system" data-system="diary"
-    data-accent="lavender" role="button" tabindex="-1"
-    aria-label="My Diary, opens Diary" title="My Diary">
-    <span class="lib-spine" aria-hidden="true"><span class="lib-spine-t">My Diary</span></span>
+    data-accent="lavender" role="button" tabindex="-1" aria-expanded="false"
+    aria-label="My Diary, system journal, opens Diary" title="My Diary">
+    <span class="lib-spine" aria-hidden="true">
+      <span class="lib-spine-band"></span>
+      <span class="lib-spine-t">My Diary</span>
+      <span class="lib-spine-band"></span>
+    </span>
     <span class="lib-cover">
       <span class="lib-cover-mark" aria-hidden="true">Life OS</span>
       <span class="lib-cover-pre" aria-hidden="true">Journal</span>
@@ -157,10 +205,10 @@ export function diaryObjectHtml() {
       <span class="lib-cover-rule" aria-hidden="true"></span>
       <span class="lib-cover-author">Every day</span>
     </span>
-    <span class="lib-obj-sys" aria-hidden="true" title="Part of Life OS">
-      <svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor"
-        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
-        ><path d="M10 3.2 12 8h4.8l-3.9 3 1.5 4.8L10 13l-4.4 2.8L7.1 11 3.2 8H8z"/></svg>
+    ${openControl('Open Diary')}
+    <span class="lib-obj-label" aria-hidden="true">
+      <span class="lib-obj-label-t">My Diary</span>
+      <span class="lib-obj-label-s">System journal</span>
     </span>
   </article>`;
 }
@@ -254,6 +302,7 @@ export function resourceObjectHtml(item, index, total) {
   return `<article class="lib-obj lib-res lib-res-${esc(item.type)}${
     archived ? ' is-archived' : ''}"
     data-item="${esc(item.id)}" data-type="${esc(item.type)}" role="button" tabindex="-1"
+    aria-expanded="false"
     aria-label="${esc(item.title)}, ${TYPE_LABEL[item.type] ?? 'item'}, ${
   index + 1} of ${total}${archived ? ', archived' : ''}"
     title="${esc(item.title)}">
@@ -261,6 +310,7 @@ export function resourceObjectHtml(item, index, total) {
       <span class="lib-res-glyph">${glyph(item.type, 18)}</span>
       ${item.type === 'document' && item.description
     ? `<span class="lib-res-excerpt">${esc(item.description)}</span>` : ''}
+      ${item.type === 'document' ? '<span class="lib-res-kind">Document</span>' : ''}
       ${item.type === 'file' ? `<span class="lib-res-kind">${esc(fileKind(item))}</span>` : ''}
       ${item.type === 'link' ? `<span class="lib-res-domain">${esc(domainOf(item.sourceUrl))}</span>` : ''}
     </span>`}
@@ -269,11 +319,16 @@ export function resourceObjectHtml(item, index, total) {
       ${sub ? `<span class="lib-res-sub">${esc(sub)}</span>` : ''}
     </span>
     ${archived ? '<span class="lib-obj-flag">Archived</span>' : ''}
+    ${openControl(item.type === 'link' ? 'Open link' : 'Open')}
     <button type="button" class="lib-obj-more" data-more="${esc(item.id)}"
       aria-label="Actions for ${esc(item.title)}" aria-haspopup="menu" tabindex="-1">
       <svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor" aria-hidden="true"
         ><circle cx="5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="15" cy="10" r="1.4"/></svg>
     </button>
+    <span class="lib-obj-label" aria-hidden="true">
+      <span class="lib-obj-label-t">${esc(item.title)}</span>
+      ${item.description ? `<span class="lib-obj-label-s">${esc(item.description)}</span>` : ''}
+    </span>
   </article>`;
 }
 
@@ -321,7 +376,6 @@ export function shelfHtml({ id, title, items, extraLead = '', note = '', kind = 
         ${items.map((it, i) => `<li class="lib-slot">${objectHtml(it, i, n)}</li>`).join('')}
       </ul>
     </div>
-    <p class="lib-shelf-cap" aria-hidden="true"></p>
   </section>`;
 }
 
@@ -339,83 +393,110 @@ function stepSize(rail) {
 }
 
 /**
- * Which object the shelf is currently ABOUT.
+ * THE SHELF CURSOR — a keyboard position, and nothing visual.
  *
- * The one whose centre is nearest a READ LINE — and the read line travels with
- * the scroll rather than sitting still.
+ * L3 had one function doing two jobs: deciding which object looked raised AND
+ * deciding which object was the shelf's tab stop. Tying them together is what
+ * produced the defect the review found — scrolling moved the tab stop, so it
+ * also raised a book, so a shelf nobody had touched had one book standing out.
  *
- * A fixed line does not work, and it fails at exactly the moment that matters
- * most. Put it a third of the way in and, on a shelf sitting at rest, the
- * SECOND book is nearest it: the first book is 185px away and the second is
- * 26px away, so a shelf you have not touched is about the book you did not
- * land on — and because you cannot scroll left of zero, the first book can
- * never become prominent at all. Measured on the Books shelf: index 1 at
- * scrollLeft 0. The same thing happens mirrored at the far end.
- *
- * So the line runs from the left edge to the right edge as the shelf runs from
- * its start to its end. At rest it is over the first object, at the end it is
- * over the last, and in between it is wherever you have got to — which is both
- * correct at the extremes and a truer description of where somebody is looking.
+ * They are separate now. The cursor is where Tab lands and where the arrow keys
+ * start from. It has NO appearance of its own: an object at the cursor looks
+ * exactly like every other resting object until it is focused or pulled.
  */
-function nearestIndex(rail) {
-  const slots = [...rail.querySelectorAll('.lib-slot')];
-  if (!slots.length) return -1;
-  const box = rail.getBoundingClientRect();
-  const max = rail.scrollWidth - rail.clientWidth;
-  const progress = max > 1 ? Math.min(1, Math.max(0, rail.scrollLeft / max)) : 0;
-  const inset = Math.min(box.width * 0.18, 90);
-  const line = box.left + inset + progress * (box.width - inset * 2);
-  let best = 0; let bestD = Infinity;
-  slots.forEach((s, i) => {
-    const r = s.getBoundingClientRect();
-    const d = Math.abs((r.left + r.width / 2) - line);
-    if (d < bestD) { bestD = d; best = i; }
-  });
-  return best;
-}
-
-/**
- * Marks one object prominent, and exactly one.
- *
- * Two class writes per change, never per frame — the scroll handler computes an
- * index and returns immediately if it has not moved. Prominence is a
- * presentation state and lives only in the DOM: it is never written to the
- * hash (§33) and never sent anywhere.
- */
-function setProminent(rail, index, { focus = false } = {}) {
+function setCursor(rail, index, { focus = false } = {}) {
   const objs = [...rail.querySelectorAll('.lib-obj')];
   if (!objs.length) return;
   const at = Math.max(0, Math.min(index, objs.length - 1));
-  if (rail.dataset.prominent === String(at) && !focus) return;
-  rail.dataset.prominent = String(at);
-  objs.forEach((o, i) => {
-    o.classList.toggle('is-prominent', i === at);
-    /* Roving tabindex: one stop per shelf. Tab lands on the item the shelf is
-     * about, arrows move along it. Forty books must not be forty tab stops. */
-    o.tabIndex = i === at ? 0 : -1;
-  });
-  /* The full title, unclamped, for the object the shelf is about (§24). A
-   * cover clamps a long title to four lines and a spine cannot hold one at all,
-   * so this is where "Systems That Survive Contact With A Tuesday" is readable
-   * without hovering. `aria-hidden`, because the object's own accessible name
-   * already carries it and announcing it twice helps nobody. */
-  const cap = rail.parentElement?.querySelector('.lib-shelf-cap');
-  if (cap) cap.textContent = objs[at].getAttribute('title') ?? '';
+  rail.dataset.cursor = String(at);
+  /* One tab stop per shelf. Forty books must not be forty tab stops. */
+  objs.forEach((o, i) => { o.tabIndex = i === at ? 0 : -1; });
   if (focus) objs[at].focus({ preventScroll: true });
 }
 
+/* —— Pulled forward (L3.1 §6/§7) ——
+ *
+ * ONE object across the whole page, not one per shelf. Two books half-out of
+ * two different shelves is a page that has lost track of what you were doing,
+ * and the rule "clicking another Book returns the previous one" is much easier
+ * to trust when there is only ever one thing to return.
+ *
+ * Held as a module-level node reference rather than in `lib`, deliberately: it
+ * is presentation, it must not survive a route change, and it dies with the DOM
+ * it points at. Nothing about it is ever written to the hash.
+ */
+let pulled = null;
+
+/** Puts the pulled object back on the shelf. Safe to call at any time. */
+export function clearPulled({ restoreFocus = false } = {}) {
+  if (!pulled) return;
+  const obj = pulled;
+  pulled = null;
+  obj.classList.remove('is-pulled');
+  obj.setAttribute('aria-expanded', 'false');
+  if (restoreFocus && obj.isConnected) obj.focus({ preventScroll: true });
+}
+
+export const pulledObject = () => (pulled?.isConnected ? pulled : null);
+
+/**
+ * Pulls one object forward, returning any other one first.
+ *
+ * `aria-expanded` is how a screen reader learns that the first activation did
+ * something other than nothing — and the Open control inside the pulled state
+ * is what it does next, so a second activation is never an unexplained ritual
+ * (§27).
+ */
+export function pullForward(obj) {
+  if (!obj || obj === pulled) return;
+  clearPulled();
+  pulled = obj;
+  obj.classList.add('is-pulled');
+  obj.setAttribute('aria-expanded', 'true');
+  const rail = obj.closest('.lib-rail');
+  if (rail) {
+    const at = [...rail.querySelectorAll('.lib-obj')].indexOf(obj);
+    if (at > -1) setCursor(rail, at);
+    /* Where the shelf was WHEN THIS WAS PULLED. Recorded here rather than
+     * tracked by the scroll handler, because the handler only learns about
+     * positions it was told about: `restoreShelfScroll` moves a rail by
+     * assignment, and a synthetic move fires no event, so an anchor maintained
+     * from scroll events is stale exactly when the shelf has been moved for
+     * you. Reading it at the moment of pulling cannot be stale. */
+    /* The reveal is INSTANT here, and the anchor is read after it.
+     *
+     * Pulling an object near the shelf edge scrolls it into view, and that
+     * scroll can exceed the clear threshold — so a smooth reveal trips the
+     * "you have browsed away" rule mid-flight and cancels the pull that caused
+     * it. Measured: the last book on the Books shelf pulled and cleared itself
+     * in the same gesture.
+     *
+     * Anchoring to the scroll's TARGET does not fix it, because during a smooth
+     * scroll the current position is far from the target by design. Making this
+     * one reveal instant makes the position exact the moment it is read, and
+     * removes timing from the question entirely. Arrow-key browsing keeps its
+     * smooth scroll, where the travel is the point. */
+    revealAt(rail, [...rail.querySelectorAll('.lib-slot')]
+      .findIndex((sl) => sl.contains(obj)), { instant: true });
+    rail.dataset.pullAt = String(rail.scrollLeft);
+  }
+}
+
 /** Brings an object fully into view without yanking the whole page. */
-function revealAt(rail, index) {
+function revealAt(rail, index, { instant = false } = {}) {
   const slots = [...rail.querySelectorAll('.lib-slot')];
   const slot = slots[index];
-  if (!slot) return;
+  if (!slot) return 0;
   const box = rail.getBoundingClientRect();
   const r = slot.getBoundingClientRect();
   const pad = 24;
   let delta = 0;
   if (r.left < box.left + pad) delta = r.left - box.left - pad;
   else if (r.right > box.right - pad) delta = r.right - box.right + pad;
-  if (delta) rail.scrollBy({ left: delta, behavior: scrollBehavior() });
+  if (delta) {
+    rail.scrollBy({ left: delta, behavior: instant ? 'auto' : scrollBehavior() });
+  }
+  return delta;
 }
 
 const prefersReduced = () =>
@@ -445,6 +526,25 @@ const scrollBehavior = () => (prefersReduced() ? 'auto' : 'smooth');
  * doing the right thing and the browser handles it natively.
  */
 const LATCH_MS = 220;
+
+/**
+ * How far the shelf may move before a pulled object goes back (§22).
+ *
+ * 48px is about a third of a book. Below that it is the small drift of a
+ * trackpad settling and returning the object would feel twitchy; above it the
+ * user is browsing somewhere else, and a book held out over a shelf that has
+ * moved on is an object in the wrong place.
+ */
+const PULL_SCROLL_CLEAR = 48;
+
+/**
+ * How far a pointer may travel and still count as a tap (§26).
+ *
+ * Separates a swipe from a tap on touch, where the two start identically. 10px
+ * is the usual platform slop; anything more and the gesture was browsing, so
+ * nothing opens and nothing pulls forward.
+ */
+const TAP_SLOP = 10;
 function wireWheel(rail) {
   let latchedOut = false;
   let idle = 0;
@@ -480,22 +580,18 @@ function wireWheel(rail) {
 export function wireRail(rail, { onOpen, onMenu, onScrollChange } = {}) {
   const objs = () => [...rail.querySelectorAll('.lib-obj')];
 
-  setProminent(rail, Number(rail.dataset.prominent ?? 0));
+  setCursor(rail, Number(rail.dataset.cursor ?? 0));
 
-  /* Scroll → prominence. Coalesced into one rAF, and `setProminent` exits
-   * immediately when the index has not changed, so a long scroll writes classes
-   * a handful of times rather than sixty times a second. */
-  let ticking = false;
+  /* Scrolling changes NOTHING about how anything looks (L3.1 §3). It records
+   * the position, keeps the arrows honest, and — past a threshold — returns a
+   * pulled object to the shelf, because an object held forward while the shelf
+   * slides underneath it is an object in the wrong place (§22). */
   rail.addEventListener('scroll', () => {
-    if (!ticking) {
-      ticking = true;
-      requestAnimationFrame(() => {
-        ticking = false;
-        setProminent(rail, nearestIndex(rail));
-      });
-    }
-    /* Remembered per shelf so returning from a Book lands where you left. */
     if (rail.dataset.rail) lib.shelfScroll[rail.dataset.rail] = rail.scrollLeft;
+    if (pulled && rail.contains(pulled)) {
+      const from = Number(rail.dataset.pullAt ?? rail.scrollLeft);
+      if (Math.abs(rail.scrollLeft - from) > PULL_SCROLL_CLEAR) clearPulled();
+    }
     onScrollChange?.(rail);
     syncSteps(rail);
   }, { passive: true });
@@ -504,11 +600,35 @@ export function wireRail(rail, { onOpen, onMenu, onScrollChange } = {}) {
 
   rail.addEventListener('pointerenter', () => syncSteps(rail));
 
+  /* A tap that was really a swipe must not open anything. Tracked on the rail
+   * rather than per object, because the finger that started on a book very
+   * often ends up somewhere else entirely. */
+  let downAt = null;
+  rail.addEventListener('pointerdown', (e) => {
+    downAt = { x: e.clientX, y: e.clientY, left: rail.scrollLeft };
+  }, { passive: true });
+
   rail.addEventListener('click', (e) => {
     const more = e.target.closest('[data-more]');
     if (more) { e.stopPropagation(); onMenu?.(more, more.dataset.more); return; }
+
     const obj = e.target.closest('.lib-obj');
-    if (obj) onOpen?.(obj);
+    if (!obj) { clearPulled(); return; }   // empty shelf space returns it
+
+    if (downAt) {
+      const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+      const scrolled = Math.abs(rail.scrollLeft - downAt.left);
+      downAt = null;
+      /* A drag is browsing, not choosing. Either the pointer travelled or the
+       * shelf did; either one means this was a swipe. */
+      if (moved > TAP_SLOP || scrolled > TAP_SLOP) return;
+    }
+
+    /* Two stages. The first is "let me look at this", the second is "open it",
+     * and the second is also reachable from the labelled Open control — which
+     * is the route a phone and a screen reader actually take. */
+    if (obj === pulled || e.target.closest('.lib-obj-pull')) onOpen?.(obj);
+    else pullForward(obj);
   });
 
   rail.addEventListener('keydown', (e) => {
@@ -518,23 +638,34 @@ export function wireRail(rail, { onOpen, onMenu, onScrollChange } = {}) {
     const at = all.indexOf(obj);
     const go = (next) => {
       e.preventDefault();
-      setProminent(rail, next, { focus: true });
+      /* Moving along the shelf returns whatever was held forward. Browsing past
+       * a pulled book while it stays out is the keyboard version of the scroll
+       * problem in §22. */
+      clearPulled();
+      setCursor(rail, next, { focus: true });
       revealAt(rail, next);
     };
     if (e.key === 'ArrowRight') return go(Math.min(at + 1, all.length - 1));
     if (e.key === 'ArrowLeft') return go(Math.max(at - 1, 0));
     if (e.key === 'Home') return go(0);
     if (e.key === 'End') return go(all.length - 1);
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen?.(obj); }
+    if (e.key === 'Escape' && pulled) { e.preventDefault(); clearPulled({ restoreFocus: true }); return; }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      // Same two stages as the pointer, so the models cannot drift apart.
+      if (obj === pulled) onOpen?.(obj);
+      else pullForward(obj);
+    }
   });
 
-  /* Focus follows prominence, so tabbing into a shelf and then scrolling it
-   * does not leave the outline behind on an object that has left the screen. */
+  /* Focus moves the CURSOR, never the appearance. Tabbing onto an object shows
+   * a focus ring and nothing else — pulling forward stays something you ask
+   * for. */
   rail.addEventListener('focusin', (e) => {
     const obj = e.target.closest('.lib-obj');
     if (!obj) return;
     const at = objs().indexOf(obj);
-    if (at > -1) { setProminent(rail, at); revealAt(rail, at); }
+    if (at > -1) { setCursor(rail, at); revealAt(rail, at); }
   });
 
   rail.parentElement?.querySelectorAll('[data-shelf-step]').forEach((btn) => {
@@ -598,18 +729,31 @@ export function restoreShelfScroll(root = document) {
   root.querySelectorAll('.lib-rail[data-rail]').forEach((rail) => {
     const at = lib.shelfScroll[rail.dataset.rail];
     if (at) rail.scrollLeft = at;
-    setProminent(rail, nearestIndex(rail));
+    /* The cursor goes back to the start of the shelf, not to whatever is under
+     * the scroll position. It is a keyboard position with no appearance, so
+     * there is nothing to see either way — and deriving it from scroll is what
+     * used to leave a raised book on a shelf nobody had touched. */
+    setCursor(rail, 0);
     syncSteps(rail);
   });
 }
 
 /**
- * Re-identifies the object you came back from, briefly (§18).
+ * Re-identifies the object you came back from, briefly (§23).
  *
- * A class with a timer, not an animation that owns anything: the object is
- * already in its final position and this only draws attention to it. If the
- * timer never fires the worst case is a permanently highlighted book, so the
- * class is also removed on the next interaction with the shelf.
+ * L3 drew this as a 2px accent ring for 1400ms, and the review was right about
+ * it: an accent ring is what FOCUS looks like, so returning from a Book left
+ * something that read as "this is selected" sitting on the shelf, for long
+ * enough to look permanent. Two different meanings, one appearance.
+ *
+ * It is now a soft glow, in the object's own accent rather than the app accent,
+ * for 320ms — inside the 200—400ms §4 allows. It cannot be mistaken for
+ * focus because it is not an outline, and it cannot be mistaken for a selection
+ * because it is gone before you could act on it.
+ *
+ * The object is already in its final position; this only draws attention to it.
+ * A missed timer would leave a glowing book, which is visible, harmless, and
+ * cleared by the next repaint.
  */
 export function markReturn(root = document, itemId, shelfId = null) {
   if (!itemId) return;
@@ -623,13 +767,19 @@ export function markReturn(root = document, itemId, shelfId = null) {
   if (!obj) return;
   const rail = obj.closest('.lib-rail');
   if (rail) {
+    /* Bring it into view and put the keyboard cursor on it, so Tab lands where
+     * you were — but do NOT pull it forward. Coming back from a Book should
+     * leave the Library at rest (§23). */
     const at = [...rail.querySelectorAll('.lib-obj')].indexOf(obj);
-    setProminent(rail, at);
+    setCursor(rail, at);
     revealAt(rail, at);
   }
-  if (prefersReduced()) return;         // §31: no spatial emphasis when reduced
+  if (prefersReduced()) return;         // §25: no spatial emphasis when reduced
   obj.classList.add('is-returned');
-  setTimeout(() => obj.classList.remove('is-returned'), 1400);
+  setTimeout(() => obj.classList.remove('is-returned'), RETURN_GLOW_MS);
 }
 
-export { esc, accentOf, setProminent, nearestIndex, stepSize };
+/** 320ms, inside the 200—400ms band §4 allows. */
+const RETURN_GLOW_MS = 320;
+
+export { esc, accentOf, setCursor, stepSize };

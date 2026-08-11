@@ -29,6 +29,7 @@ import {
 } from './library-overview.js';
 import {
   wireRail, restoreShelfScroll, captureShelfScroll, markReturn, syncSteps,
+  clearPulled, pulledObject, pullForward, objectHtml, fileSize, domainOf,
 } from './library-shelf.js';
 import {
   coverHtml, spreadHtml, toolbarHtml, mountSpread, wireToolbar, wireSaveStatus,
@@ -255,8 +256,13 @@ function paintOverview(scroll = document.getElementById('main-scroll')) {
    * here means every one of those paths keeps its place without each having to
    * remember to, which is the difference between a rule and a habit. */
   captureShelfScroll(scroll);
+  /* The pulled object is about to be destroyed with the DOM it lives in, so the
+   * module's reference to it has to go too. A stale reference would make the
+   * next click on the same book open it instead of pulling it forward. */
+  clearPulled();
   scroll.innerHTML = bodyHtml();
   wireOverview(scroll);
+  bindPullDismiss();
   /* Position first, THEN identify. Restoring the scroll and then highlighting
    * means the highlight happens on a shelf that is already where it should be,
    * so nothing has to travel across the screen to find it (§18). */
@@ -317,17 +323,29 @@ function wireOverview(scroll) {
   scroll.querySelectorAll('.lib-rail').forEach((rail) => {
     wireRail(rail, { onOpen: openShelfObject, onMenu: (anchor, id) => openItemMenu(anchor, id) });
   });
+  /* The result surface is not a rail, but it uses the SAME two stages: a
+   * result that behaved differently from the same object on its shelf would be
+   * the kind of inconsistency this phase exists to remove. Every object here is
+   * its own tab stop, because a wrapped set has no single reading order for a
+   * cursor to follow. */
   scroll.querySelectorAll('.lib-found').forEach((found) => {
     found.querySelectorAll('.lib-obj').forEach((o) => { o.tabIndex = 0; });
     found.addEventListener('click', (e) => {
       const more = e.target.closest('[data-more]');
       if (more) { e.stopPropagation(); openItemMenu(more, more.dataset.more); return; }
       const obj = e.target.closest('.lib-obj');
-      if (obj) openShelfObject(obj);
+      if (!obj) { clearPulled(); return; }
+      if (obj === pulledObject() || e.target.closest('.lib-obj-pull')) openShelfObject(obj);
+      else pullForward(obj);
     });
     found.addEventListener('keydown', (e) => {
       const obj = e.target.closest('.lib-obj');
-      if (obj && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openShelfObject(obj); }
+      if (!obj) return;
+      if (e.key === 'Escape' && pulledObject()) { e.preventDefault(); clearPulled(); return; }
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      if (obj === pulledObject()) openShelfObject(obj);
+      else pullForward(obj);
     });
   });
 
@@ -345,6 +363,28 @@ function wireOverview(scroll) {
 
 /** Watches shelf widths. One observer for the page, replaced on every paint. */
 let shelfSizer = null;
+
+/**
+ * Clicking anywhere that is not an object returns the pulled one (§6).
+ *
+ * Bound ONCE, on the document, rather than per paint — a listener added on
+ * every repaint is a listener leaked on every repaint, and this one has to
+ * outlive the shelves it is about. The rail's own handler already covers empty
+ * space inside a shelf; this covers the rest of the page.
+ */
+let outsideBound = false;
+function bindPullDismiss() {
+  if (outsideBound) return;
+  outsideBound = true;
+  document.addEventListener('click', (e) => {
+    if (!pulledObject()) return;
+    if (e.target.closest('.lib-obj') || e.target.closest('.lib-menu')) return;
+    clearPulled();
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && pulledObject()) clearPulled({ restoreFocus: true });
+  });
+}
 
 /**
  * Opening something from a shelf (§17).
@@ -367,6 +407,7 @@ function openShelfObject(obj) {
   /* Where every shelf is, captured BEFORE the route changes and the page is
    * replaced. This is the snapshot §18 restores from. */
   captureShelfScroll(obj.closest('#main-scroll') ?? document);
+  clearPulled();
   lib.cameFrom = id;
   lib.cameFromShelf = obj.closest('.lib-rail')?.dataset.rail ?? null;
   markOpened(id);
@@ -566,26 +607,64 @@ async function renderItem(id, head, scroll, nav = navToken()) {
     : '<button class="btn" data-act="archive">Archive</button>'}
     </div>`;
 
-  scroll.innerHTML = `<div class="lib-item">
-    <div class="lib-item-head">
-      <span class="lib-item-icon">${typeIcon(item.type, 22)}</span>
-      <span class="lib-item-type">${esc(TYPE_LABEL[item.type] ?? 'Item')}</span>
-      ${item.archivedAt ? '<span class="lib-card-arch">Archived</span>' : ''}
+  /* THE OPEN VIEW (L3.1 §19).
+   *
+   * It was a small metadata card in the corner of an empty page, and the review
+   * said so. What it is now is a composed page with three parts: the object
+   * itself drawn large on the left, what it says in the middle, and what is
+   * known about it underneath.
+   *
+   * The one thing it deliberately does NOT do is fake an editor. A Document has
+   * no body model yet — `library_items` stores a title, a description and some
+   * metadata, and nothing else — so the page says exactly that, in a state that
+   * looks intentional rather than unfinished. An empty text area with a cursor
+   * in it would be a promise the schema cannot keep.
+   */
+  const facts = [
+    ['Added', new Date(item.createdAt).toLocaleDateString(undefined,
+      { day: 'numeric', month: 'long', year: 'numeric' })],
+    ['Last edited', when(item.updatedAt)],
+    item.lastOpenedAt ? ['Last opened', when(item.lastOpenedAt)] : null,
+    item.mimeType ? ['Format', item.mimeType] : null,
+    item.sizeBytes ? ['Size', fileSize(item.sizeBytes)] : null,
+    item.sourceUrl ? ['Source', domainOf(item.sourceUrl) || item.sourceUrl] : null,
+  ].filter(Boolean);
+
+  scroll.innerHTML = `<div class="lib-open">
+    <div class="lib-open-object">
+      ${objectHtml({ ...item, archivedAt: null }, 0, 1)}
     </div>
-    ${item.description
-    ? `<p class="lib-item-desc">${esc(item.description)}</p>`
-    : '<p class="lib-item-desc is-empty">No description yet. Use Rename to add one.</p>'}
-    ${item.sourceUrl ? `<p class="lib-item-url"><a href="${esc(item.sourceUrl)}"
-      target="_blank" rel="noopener noreferrer">${esc(item.sourceUrl)}</a></p>` : ''}
-    <dl class="lib-item-facts">
-      <div><dt>Added</dt><dd>${new Date(item.createdAt).toLocaleDateString(undefined,
-    { day: 'numeric', month: 'long', year: 'numeric' })}</dd></div>
-      <div><dt>Updated</dt><dd>${esc(when(item.updatedAt))}</dd></div>
-      ${item.mimeType ? `<div><dt>Type</dt><dd>${esc(item.mimeType)}</dd></div>` : ''}
-    </dl>
-    ${['image', 'video', 'file'].includes(item.type) ? `<p class="lib-item-note">
-      Uploads are the next Library phase. This item is a record of the resource;
-      its file is not stored yet.</p>` : ''}
+    <div class="lib-open-body">
+      <div class="lib-open-kind">
+        <span class="lib-open-kind-i">${typeIcon(item.type, 16)}</span>
+        <span>${esc(TYPE_LABEL[item.type] ?? 'Item')}</span>
+        ${item.archivedAt ? '<span class="lib-card-arch">Archived</span>' : ''}
+      </div>
+      ${item.description
+    ? `<p class="lib-open-desc">${esc(item.description)}</p>`
+    : '<p class="lib-open-desc is-empty">No description yet.</p>'}
+      ${item.sourceUrl ? `<p class="lib-open-url"><a href="${esc(item.sourceUrl)}"
+        target="_blank" rel="noopener noreferrer">${esc(item.sourceUrl)}</a></p>` : ''}
+
+      <dl class="lib-open-facts">
+        ${facts.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}
+      </dl>
+
+      <div class="lib-open-note">
+        ${item.type === 'document'
+    ? `<b>This Document holds a title and a description.</b>
+         Writing inside a Document is not built yet — Books are where long-form
+         writing lives today, and a Document is a record you can point at from
+         anywhere in Life OS. When a body model arrives it will open here.`
+    : ['image', 'video', 'file'].includes(item.type)
+      ? `<b>This is a record of the resource, not the file.</b>
+         Uploads are a later Library phase. Everything known about it is above,
+         and nothing here pretends the file is stored.`
+      : `<b>This is a saved link.</b>
+         Life OS keeps the address and what you said about it; the page itself
+         stays where it is.`}
+      </div>
+    </div>
   </div>`;
 
   head.querySelector('[data-back]').onclick = () => setHashAndRender('#library');

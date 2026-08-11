@@ -448,6 +448,36 @@ Where a component's width depends on its container rather than the window
 (a page inside a split, a card in a rail), size it with a **container query**
 against its own inline size. The window is the wrong thing to ask.
 
+### An appearance is a claim *(added L3.1)*
+The rule that came out of correcting the Library shelf, and it generalises:
+
+> **Nothing may look like a state the user did not put it in, and no two
+> meanings may share a look.**
+
+Three failures it names, each of which shipped before being caught:
+
+- **A derived state that looks chosen.** The shelf raised whichever object was
+  nearest a read line as it scrolled, so a page nobody had touched showed one
+  item standing proud. If a state is not something somebody did, it may not have
+  an appearance.
+- **Two meanings, one look.** A "you were just here" mark drawn as an accent
+  outline is indistinguishable from focus. Give each meaning its own
+  MECHANISM — outline, fill, lift, glow — rather than its own shade of one.
+- **A control that is not one.** A glyph in a rounded tinted box in a corner is
+  read as a button whatever it is called. A feature that does not exist may not
+  be implied by a mark that looks like its control.
+
+Corollary for two-stage interactions: the first stage must produce a **labelled
+control** naming the second. A second click nobody explained is a ritual, and it
+is what makes such patterns fail on touch and for screen readers.
+
+### Crispness outranks novelty *(added L3.1)*
+Do not rotate type to suggest depth. A few degrees of `rotateY` puts glyphs on a
+plane that no longer aligns with the pixel grid, and at display sizes in a serif
+that is visible as blur. Depth that costs nothing to legibility: **overlap,
+translation, scale, z-index and shadow.** Reach for a real 3D transform only
+when nothing inside it is text.
+
 ---
 
 ## Changelog
@@ -481,3 +511,10 @@ against its own inline size. The window is the wrong thing to ask.
   container queries where width comes from the container rather than the window.
   Recorded because a wrapped option row is invisible in review and expensive in
   layout: a 2px-too-large minimum cost the Diary 130px.
+- **2026-08-11 — L3.1** adds **an appearance is a claim** (no derived state may
+  look chosen; no two meanings may share a look; a mark that is not a control
+  must not be drawn as one) and **crispness outranks novelty** (depth from
+  overlap, translation, scale, z-index and shadow, never from rotating type).
+  Both came from correcting the Library shelf, where a scroll-derived raised
+  book read as a selection, a return highlight read as focus, and a decorative
+  star read as a favourite button.

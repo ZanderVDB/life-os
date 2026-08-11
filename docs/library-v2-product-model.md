@@ -178,3 +178,40 @@ than a disabled one.
 
 Uploads, permanent deletion, semantic search, folders, and a right rail. All
 unchanged, all for the reasons already recorded.
+
+---
+
+## L3.1 — what the shelf means
+
+The spatial direction is unchanged. What L3.1 fixed is that several things on
+the shelf **looked like something they were not**:
+
+- a raised book looked chosen, and nothing had been chosen;
+- an accent ring after returning looked like focus, or like a selection;
+- a star on the Diary looked like a favourite control, and there is no
+  favourite feature;
+- a title at the shelf's left edge looked like it belonged to the shelf rather
+  than to a book.
+
+The rule that came out of it, and that the interaction model is built on:
+
+> **An appearance is a claim. Nothing on a shelf may claim a state the user did
+> not put it in, and no two meanings may share a look.**
+
+`RESTING → PULLED FORWARD → OPEN` is in
+`library-v2-interaction-model.md`. Collections and Favourites — both wanted,
+neither built — are in `library-v2-future-collections.md`.
+
+### Documents are a first-class object now
+
+A Document was a rounded rectangle with a glyph. It is a **folio**: sheets
+showing behind a front sheet, a tab down the jacket edge, and paper stock rather
+than surface stock — the same `--paper` a Book cover and a Diary page are made of.
+Visibly the same material as a Book, without imitating one, and with no spine,
+because it is not bound.
+
+Opening one is now a composed page rather than a card in the corner: the object
+drawn large, what it says, what is known about it, and an honest note saying
+what it currently stores. **It does not fake an editor.** `library_items` holds
+a title, a description and metadata; an empty text area with a cursor in it
+would be a promise the schema cannot keep.

@@ -139,57 +139,66 @@ test('wheel: preventDefault only happens when the shelf can actually consume it'
 
 /* ── §23  Five states, five mechanisms ───────────────────────────────── */
 
-test('states: default, hover, focus, prominent and open are all distinct', () => {
-  // Hover owns TRANSFORM and surface. It never fills anything.
-  assert.match(html, /\.lib-obj:hover\{transform:translateY\(-4px\)\}/);
-  // Focus owns the app accent, from :focus-visible only.
+/* L3 asserted a `prominent` state that the shelf gave to whatever object was
+ * nearest a read line as it scrolled. L3.1 removed it outright: a shelf nobody
+ * had touched had one book permanently raised, which reads as "this one is
+ * chosen" when nothing had been chosen. These three tests now assert the model
+ * that replaced it — explicit pull-forward — and, just as importantly, that
+ * the old one has not crept back. */
+
+test('states: resting, hover, focus, pulled, opening and returned are all distinct', () => {
+  // RESTING owns nothing. There is no `.lib-obj{transform:...}` at all.
+  assert.ok(!/\.lib-obj\{[^}]*transform:(?!\s*none)/.test(html),
+    'the resting object has a transform, which is how permanent prominence returns');
+  // HOVER owns a lift and a surface. It never fills anything.
+  assert.match(html, /\.lib-obj:hover\{transform:translateY\(-5px\);z-index:3\}/);
+  // FOCUS owns an outline, from :focus-visible only...
   assert.match(html, /\.lib-obj:focus-visible\{outline:2px solid var\(--accent\)/);
-  // Prominent owns lift + scale + a very small turn, and a fuller shadow.
-  assert.match(html, /\.lib-obj\.is-prominent\{transform:translateY\(-10px\) scale\(1\.045\) rotateY\(-7deg\)\}/);
-  // Open owns the handoff, and is only ever on a node about to be discarded.
-  assert.match(html, /\.lib-obj\.is-opening\{transform:translateY\(-16px\) scale\(1\.09\);opacity:\.15/);
-  // Returned owns a brief re-identification.
-  assert.match(html, /\.lib-obj\.is-returned \.lib-cover\{box-shadow:0 0 0 2px var\(--accent\)/);
-
-  // Not one class doing all five.
-  const classes = ['is-prominent', 'is-opening', 'is-returned'];
-  for (const c of classes) {
-    assert.ok(shelf.includes(c) || view.includes(c), `${c} is never applied`);
-  }
+  // ...and it is the ONLY state that owns one, which is what keeps it from
+  // being confused with pulled-forward (L3.1 27).
+  const objectRules = [...html.matchAll(/^\.lib-obj[.:][^{]*\{[^}]*\}/gm)].map((m) => m[0]);
+  const withOutline = objectRules.filter((r) => /outline:(?!none)/.test(r));
+  assert.ok(withOutline.every((r) => /focus/.test(r)),
+    `a non-focus state declares an outline: ${withOutline.find((r) => !/focus/.test(r))}`);
+  // PULLED owns lift + scale + depth, and reveals its Open control and label.
+  assert.match(html, /\.lib-obj\.is-pulled\{transform:translateY\(-22px\) scale\(1\.06\);z-index:6\}/);
+  assert.match(html, /\.lib-obj\.is-pulled \.lib-obj-pull\{opacity:1/);
+  assert.match(html, /\.lib-obj\.is-pulled \.lib-obj-label\{opacity:1/);
+  // OPENING owns the handoff.
+  assert.match(html, /\.lib-obj\.is-opening\{transform:translateY\(-30px\) scale\(1\.12\);opacity:\.12/);
+  // RETURNED owns a glow, never an outline (L3.1 4).
+  assert.match(html, /\.lib-obj\.is-returned \.lib-cover[^{]*\{\s*box-shadow:0 0 18px/);
+  assert.ok(!/is-returned[^{]*\{[^}]*outline/.test(html),
+    'the return highlight is an outline, which is what focus looks like');
 });
 
-test('states: prominence is presentation only — it never touches the route', () => {
-  /* §33. A shelf moving is not a navigation. If scrolling wrote the hash, the
-   * back button would replay somebody's browsing rather than their decisions,
-   * and every shelf would fight the navigation token. */
-  const prom = shelf.slice(shelf.indexOf('function setProminent'));
-  const body = prom.slice(0, prom.indexOf('\n}'));
-  for (const banned of ['location.hash', 'setHash', 'history.']) {
-    assert.ok(!body.includes(banned), `setProminent writes ${banned}`);
+test('prominence: the scroll-driven raised object is gone entirely', () => {
+  /* Not merely unused — ABSENT. A dormant `setProminent` is one call site away
+   * from the defect coming back, so the machinery is deleted rather than left
+   * switched off. */
+  for (const gone of ['setProminent', 'nearestIndex', 'is-prominent', 'lib-shelf-cap']) {
+    assert.ok(!shelf.includes(gone), `${gone} still exists in the shelf module`);
+    assert.ok(!view.includes(gone), `${gone} still exists in the view`);
   }
-  assert.ok(!shelf.includes('setHash'), 'the shelf module writes the hash directly');
-  // Nor does it keep a private hash flag — the D2.2 defect, in a new file.
-  for (const banned of ['suppressHash', 'ownHashWrite', 'hashWasOurs']) {
-    assert.ok(!shelf.includes(banned), `the shelf module keeps a private ${banned}`);
-  }
+  assert.ok(!html.includes('is-prominent'), 'the prominent style rule is still in the stylesheet');
+  // The shelf keeps a CURSOR instead: a keyboard position with no appearance.
+  assert.match(shelf, /function setCursor\(rail, index/);
+  const cursor = shelf.slice(shelf.indexOf('function setCursor'));
+  const body = cursor.slice(0, cursor.indexOf('\n}'));
+  assert.ok(!/classList/.test(body),
+    'setCursor writes a class, which would give the cursor an appearance again');
 });
 
-test('prominence: the read line travels, so the first and last are reachable', () => {
-  /* MEASURED DEFECT. With a read line pinned a third of the way in, a Books
-   * shelf sitting at rest reported prominent index 1: the first book was 185px
-   * from the line and the second was 26px. Since a rail cannot scroll left of
-   * zero, book one could never become prominent at all.
-   *
-   * The line now runs edge to edge with scroll progress. Re-measured on the
-   * same shelf: index 0 at rest, index 10 of 11 at the end, monotonic between. */
-  assert.match(shelf, /const progress = max > 1 \? Math\.min\(1, Math\.max\(0, rail\.scrollLeft \/ max\)\) : 0;/);
-  assert.match(shelf, /const line = box\.left \+ inset \+ progress \* \(box\.width - inset \* 2\);/);
-});
-
-test('prominence: one write per change, not one per frame', () => {
-  // §39 — the scroll handler must not do work sixty times a second.
-  assert.match(shelf, /if \(rail\.dataset\.prominent === String\(at\) && !focus\) return;/);
-  assert.match(shelf, /requestAnimationFrame\(\(\) => \{\s*ticking = false;/);
+test('pull-forward: one per page, and scrolling does not create one', () => {
+  // ONE object across the whole page, not one per shelf.
+  assert.match(shelf, /^let pulled = null;$/m);
+  assert.match(shelf, /export function clearPulled/);
+  assert.match(shelf, /export function pullForward/);
+  // The scroll handler cannot pull anything; it can only put one back.
+  const onScroll = shelf.slice(shelf.indexOf("rail.addEventListener('scroll'"));
+  const body = onScroll.slice(0, onScroll.indexOf('}, { passive: true });'));
+  assert.ok(!body.includes('pullForward'), 'scrolling pulls an object forward');
+  assert.ok(body.includes('clearPulled'), 'scrolling never returns a pulled object');
 });
 
 /* ── §36  Keyboard and screen reader ─────────────────────────────────── */
@@ -220,20 +229,29 @@ test('a11y: nothing needs hover, and no state is colour alone', () => {
   assert.match(html, /@media \(max-width:820px\)[\s\S]*?\.lib-obj-more\{opacity:1/);
   // …with a 44px hit area even though the drawn control stays 30px.
   assert.match(html, /\.lib-obj-more::before\{content:'';position:absolute[\s\S]*?width:44px;height:44px/);
-  // The system Book carries a MARK, not merely a different colour.
-  assert.match(shelf, /class="lib-obj-sys"/);
-  assert.match(html, /\.lib-obj-sys\{/);
+  /* The system Book's mark was a STAR in a tinted rounded box, which looks like
+   * a favourite button and did nothing when pressed (L3.1 12). It is gone.
+   * What distinguishes the Diary now is material — a deeper cloth, a lavender
+   * spine edge — plus the words "System journal" under it when pulled forward.
+   * None of it is a control, so none of it can imply an action that does not
+   * exist. */
+  assert.ok(!shelf.includes('lib-obj-sys'), 'the fake favourite star is back');
+  assert.ok(!html.includes('.lib-obj-sys'), 'the fake favourite star still has a style');
+  assert.match(html, /\.lib-book-system \.lib-spine\{box-shadow:inset 1\.5px 0 0 rgba\(182,155,240/);
+  assert.match(shelf, /System journal/);
 });
 
 test('motion: reduced motion removes travel, not information', () => {
   const block = html.slice(html.indexOf('@media (prefers-reduced-motion: reduce){',
     html.indexOf('.lib-obj')));
   const reduced = block.slice(0, block.indexOf('\n}'));
-  assert.match(reduced, /\.lib-obj,\.lib-obj:hover,\.lib-obj\.is-prominent,\.lib-res\.is-prominent\{transform:none\}/);
-  /* Prominence survives as a RING when it cannot survive as movement — the
-   * state must still be distinguishable, which is the whole point. */
-  assert.match(reduced, /\.lib-obj\.is-prominent \.lib-cover\{box-shadow:0 0 0 1\.5px/);
-  // And the return highlight simply does not play.
+  assert.match(reduced, /\.lib-obj,\.lib-obj:hover,\.lib-obj\.is-pulled,\.lib-res\.is-pulled\{transform:none\}/);
+  /* Pulled forward survives as a RING when it cannot survive as movement, and
+   * its Open control and label are unaffected — the state has to stay
+   * distinguishable, which is the whole point. */
+  assert.match(reduced, /\.lib-obj\.is-pulled \.lib-cover\{box-shadow:0 0 0 2px/);
+  assert.match(reduced, /\.lib-obj\.is-pulled \.lib-obj-pull,\.lib-obj\.is-pulled \.lib-obj-label\{transform:none\}/);
+  // And the return glow simply does not play.
   assert.match(shelf, /if \(prefersReduced\(\)\) return;\s*\n\s*obj\.classList\.add\('is-returned'\)/);
 });
 
@@ -252,28 +270,44 @@ test('cover: the shelf object carries the approved Book identity', () => {
   assert.match(shelf, /const accentOf = \(item\) => \(ACCENTS\.includes\(item\.book\?\.accent\)/);
 });
 
-test('spine: drawn, not rotated — and it never carries the accessible name', () => {
-  /* §9 allows a rotated title, and one is drawn. It is `aria-hidden`, small and
-   * decorative: a screen reader must hear a book once, and the cover already
-   * says everything. */
+test('spine: wide enough to be read, and flush with the cover', () => {
+  /* L3 drew a 13px strip with the whole title crammed into it at 8.5px. The
+   * review called it poor, and measurement agreed: at that width a title
+   * either disappears or is clipped mid-word with nothing to say so.
+   *
+   * 24px, 10px type, a title cut at a word boundary with an ellipsis, and two
+   * accent bands at head and tail. Measured flush with the cover: spine and
+   * cover both 178.2px tall, gap between them 0.00px. */
+  assert.match(html, /\.lib-book\{--bw:126px;--spine-w:24px\}/);
+  assert.match(html, /\.lib-spine-t\{[^}]*font-size:10px/);
+  assert.match(html, /\.lib-spine-band\{/);
+  assert.match(shelf, /export function spineTitle\(title, max = 22\)/);
   assert.match(shelf, /<span class="lib-spine" aria-hidden="true">/);
-  assert.match(html, /\.lib-spine\{flex:0 0 auto;width:var\(--spine-w\)/);
-  // Turning toward the viewer narrows the spine, as a real cover would.
-  assert.match(html, /\.lib-obj\.is-prominent \.lib-spine\{--spine-w:9px\}/);
-  // Measured: 13px at rest, 9px prominent, on the same element.
-  assert.match(html, /\.lib-book\{--bw:128px;--spine-w:13px\}/);
+  /* One object, not two: the spine's height is derived from the cover's own
+   * width and ratio, so they cannot drift apart, and the gutter shadow is
+   * drawn on the COVER so the junction is a fold rather than a seam. */
+  assert.match(html, /\.lib-spine\{[^}]*height:calc\(var\(--bw\) \* 297 \/ 210\)/);
+  assert.match(html, /\.lib-cover::before\{content:'';position:absolute;left:0/);
 });
 
-test('3D is confined to the one prominent object per shelf', () => {
-  /* §39 — twelve preserve-3d subtrees with rotated glyphs is a lot of
-   * compositing for something that has to stay smooth while it scrolls, and
-   * rotated text is where type stops being crisp. Perspective sits on the SLOT
-   * so each object gets its own small context, and only `.is-prominent`
-   * actually rotates. Measured: 6 prominent of 45 objects. */
-  assert.match(html, /\.lib-slot\{scroll-snap-align:start;flex:0 0 auto;[\s\S]*?perspective:900px\}/);
-  const rotates = [...html.matchAll(/rotateY\([^)]*\)/g)].length;
-  assert.ok(rotates <= 2, `${rotates} rules rotate in 3D; only the prominent object should`);
+test('depth is drawn, not rendered in 3D', () => {
+  /* L3 put `perspective` on every slot and rotated the prominent object by 7
+   * degrees. L3.1 removed all of it, and the reason is in the review: a
+   * rotated cover puts glyphs on a plane that no longer aligns with the pixel
+   * grid, and at 15px Playfair that is visible as blur. §21 of L3.1 is
+   * explicit — crispness outranks novelty.
+   *
+   * What carries depth instead costs nothing to type: books OVERLAP their
+   * neighbours, they lift and scale, they cast a contact shadow, and the
+   * pulled one rises above the rest on z-index. Measured: 0 objects with any
+   * 3D transform, at every width. */
+  const shelfCss = html.slice(html.indexOf('.lib-obj{'), html.indexOf('.lib-hits'));
+  assert.ok(!/rotateY|rotate3d|perspective:|preserve-3d/.test(shelfCss),
+    'a 3D transform is back on the shelf');
+  assert.match(html, /\.lib-shelf-book \.lib-slot \+ \.lib-slot\{margin-left:calc\(var\(--overlap\) \* -1\)\}/);
+  assert.match(html, /\.lib-obj::after\{content:'';position:absolute/);
 });
+
 
 /* ── §10  The non-Book family ────────────────────────────────────────── */
 
@@ -375,8 +409,12 @@ test('return: the position is captured at the moment of leaving, not trusted to 
   assert.match(shelf, /export function captureShelfScroll/);
   assert.match(view, /captureShelfScroll\(obj\.closest\('#main-scroll'\) \?\? document\)/);
   assert.match(view, /export async function libraryWillLeave\(\) \{[\s\S]*?captureShelfScroll\(\);/);
-  // Every repaint too, so a filter change keeps its place (§14).
-  assert.match(view, /captureShelfScroll\(scroll\);\s*\n\s*scroll\.innerHTML = bodyHtml\(\);/);
+  /* Every repaint too, so a filter change keeps its place (14). `clearPulled`
+   * sits between them in L3.1: the pulled object is about to be destroyed with
+   * the DOM it lives in, and a stale reference would make the next click on
+   * that book open it instead of pulling it forward. */
+  assert.match(view, /captureShelfScroll\(scroll\);[\s\S]{0,300}?scroll\.innerHTML = bodyHtml\(\);/);
+  assert.match(view, /clearPulled\(\);\s*\n\s*scroll\.innerHTML = bodyHtml\(\);/);
 });
 
 test('return: the shelf is positioned before the book is re-identified', () => {
@@ -423,8 +461,10 @@ test('diary: a system Book with no Library identity at all', () => {
   assert.ok(!body.includes('data-item='), 'the Diary object carries a library item id');
   assert.ok(!body.includes('data-more'), 'the Diary object has an overflow menu');
   assert.ok(!body.includes('archive'), 'the Diary object offers archiving');
-  // It says what it is, on screen, not only in the code.
-  assert.match(body, /class="lib-obj-sys"/);
+  /* It says what it is on screen, in words rather than in a glyph that looks
+   * like a button (L3.1 12). */
+  assert.ok(!body.includes('lib-obj-sys'), 'the fake favourite star is back on the Diary');
+  assert.match(body, /System journal/);
   assert.match(overview, /Part of Life OS, not a Library item/);
 });
 
@@ -505,10 +545,16 @@ test('responsive: the shelf stays a shelf and the objects get bigger', () => {
    * 124 at tablet, 132 at phone, 128 at small phone — the cover grows where the
    * finger is, which is the opposite of what squeezing would do. */
   assert.match(html, /@media \(max-width:1024px\)\{[\s\S]*?\.lib-book\{--bw:124px\}/);
-  assert.match(html, /@media \(max-width:820px\)\{[\s\S]*?\.lib-book\{--bw:132px;--spine-w:12px\}/);
+  assert.match(html, /@media \(max-width:820px\)\{[\s\S]*?\.lib-book\{--bw:132px;--spine-w:22px\}/);
   assert.match(html, /@media \(max-width:480px\)\{[\s\S]*?\.lib-book\{--bw:128px\}/);
-  // Tablet drops the 3D turn: under a finger, turning the item you touched is noise.
-  assert.match(html, /@media \(max-width:1024px\)\{\s*\n?\s*\.lib-obj\.is-prominent\{transform:translateY\(-8px\) scale\(1\.03\)\}/);
+  /* The tablet rule that dropped a 3D turn is gone with the turn itself: L3.1
+   * removed rotation everywhere, because rotated glyphs are where type stopped
+   * being crisp (21). What varies by width now is the OVERLAP — books sit
+   * further apart under a finger, because a book you have to hit exactly is a
+   * book you miss. */
+  assert.ok(!/rotateY/.test(html), 'a 3D rotation is back on the shelf');
+  assert.match(html, /\.lib-shelf-book\{--overlap:64px\}/);
+  assert.match(html, /@media \(max-width:820px\)[\s\S]*?\.lib-shelf-book\{--overlap:44px\}/);
   // The last shelf clears the fixed composer. Measured at 375×667: 173px spare.
   assert.match(html, /\.lib-shelves\{gap:18px;padding-bottom:calc\(84px \+ env\(safe-area-inset-bottom,0px\)\)\}/);
 });

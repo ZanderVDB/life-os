@@ -942,3 +942,48 @@ only. Worth a look on a real phone.
 - **`.lib-rail` is deliberately 4px wider than its section on each side**, so an
   overflow check against its parent reports overflow on every shelf, always.
   Check `document.documentElement.scrollWidth` instead.
+
+---
+
+## L3.1
+
+### Fixed
+
+- **Scroll-derived prominence.** Removed, not disabled. `setProminent`,
+  `nearestIndex`, `is-prominent` and `.lib-shelf-cap` are gone from the source.
+- **The persistent return outline.** An accent ring for 1400ms, which is what
+  focus looks like. Now a 320ms glow in the object's own accent.
+- **`--overlap` declared where it could not be inherited.** A custom property
+  inherits downward only; the element that consumes this one is the book's
+  parent. Declared on `.lib-book` it resolved to nothing and every shelf
+  measured 0px of overlap while looking correct in the source.
+- **The pull anchor and the self-cancelling reveal.** Both described in
+  `library-v2-interaction-model.md`.
+
+### Carried, with the reason
+
+- **`:focus-visible` cannot be verified in this harness.** It requires trusted
+  keyboard input and synthetic `KeyboardEvent`s do not qualify, so the rule is
+  asserted against the stylesheet instead — including that no other state
+  declares an outline. A real keyboard pass needs a human.
+- **The pulled object is module state, not `lib` state.** Deliberate: it is
+  presentation, it must not survive a route change, and it dies with the DOM it
+  points at. It does mean a second Library surface on the same page would share
+  it — which is the intended behaviour (one pulled object per page), but is worth
+  knowing before anything embeds a shelf somewhere else.
+- **Documents have no body model.** The open view says so plainly rather than
+  showing an editor. When one arrives it opens in that page.
+- **Collections and Favourites are documented, not built** —
+  `library-v2-future-collections.md`. The Diary's star was removed specifically
+  so Favourites is not half-implied before it exists.
+
+### Measurement notes worth not relearning
+
+- **Scroll events do not dispatch in a non-rendering pane**, so a
+  `scrollLeft` assignment runs no handler. Dispatch a synthetic `scroll` to
+  drive the logic — and remember `scroll-snap` may refuse the position you asked
+  for: a request for 70px landed at 0 and made a correct clear-on-scroll rule
+  look broken.
+- **A `.click()` on an already-pulled object OPENS it**, which navigates away
+  and makes every later query in the same probe return null. Reset to a known
+  state between interaction probes.

@@ -2013,3 +2013,101 @@ horizontal page scroll, and the last shelf clearing the composer by 173px at
 375×667.
 
 **1061 tests pass, 40 new.** TypeScript clean.
+
+---
+
+## L3.1 — Library shelf feeling, interaction consistency and visual correction
+
+    RESTING → PULLED FORWARD → OPEN
+
+L3's concept was approved; its execution was not. The review named the faults
+precisely, and nearly every one was **something that looked like a state nobody
+had put it in**.
+
+### Permanent prominence is gone
+
+The shelf raised whichever object was nearest a read line as it scrolled, so a
+Library you had just opened had one book standing proud for no reason you had
+given — and it survived returning from a Book, so the page never settled.
+
+Deleted outright rather than switched off: `setProminent`, `nearestIndex`,
+`is-prominent` and the shelf caption no longer exist. A dormant one is one call
+site away from the defect coming back.
+
+A resting shelf now has **no elevated object at all**. Pulling one forward is a
+click, Enter/Space or a tap, and it undoes four ways: pull something else, click
+empty space, press Escape, or scroll the shelf more than 48px.
+
+### The keyboard cursor is not a state
+
+L3 had one function deciding both which object looked raised and which was the
+shelf's tab stop. That coupling IS the defect: scrolling moved the tab stop, so
+scrolling raised a book. They are separate now, and the cursor has no appearance
+at all — asserted by a test that fails if `setCursor` ever writes a class.
+
+### The purple outline on return
+
+Drawn as a 2px accent ring for 1400ms. An accent ring is what FOCUS looks like,
+so coming back from a Book left something that read as selected. It is now a
+**320ms glow** in the object's own accent. Measured immediately on return:
+0 pulled, 0 objects with any outline, shelf scroll restored. After the glow:
+0 returned, 0 raised.
+
+### Books rest on a shelf
+
+Books **overlap** their neighbours, so at rest you see each spine and a strip of
+each cover. Pulling one raises it above the rest and the whole cover appears —
+nothing grows, nothing reflows.
+
+Measured at 1280 with the full sample: step per book **150 → 86px**, rail
+scrollWidth **1739 → 1030**, books across a 933px shelf **6 → 10**.
+
+The shelf itself gained a back plane, a lit front edge and a floor wash, plus a
+contact shadow under each object — the cheapest thing that makes something look
+like it is resting on rather than floating above.
+
+### The spine
+
+24px rather than 13, 10px type rather than 8.5, the title cut at a word boundary
+with an ellipsis rather than crammed, and accent bands at head and tail. The lit
+edge runs across the spine and falls away toward the cover, and the gutter
+shadow is drawn on the COVER so the junction reads as a fold.
+
+Measured: spine 24 and cover 126, both **178.2px tall**, gap **0.00px**,
+**0 clipped** spine titles across the sample shelf.
+
+### Crispness
+
+All rotation and all `perspective` removed. A 7-degree `rotateY` puts glyphs on
+a plane that no longer aligns with the pixel grid — which is what the review
+meant by "slightly blurred". Measured after: 0 objects with a 3D transform.
+
+### Diary and Documents
+
+Diary gained the full grammar — hover, focus, pull forward, open — while staying
+system-owned with no item id, no menu and no archive. Its **star is gone**: a
+glyph in a rounded tinted box in the corner is read as a favourite button, and
+there is no favourite feature. What marks it now is material and words.
+
+Documents became **folios**: sheets showing behind a front sheet, a tab down the
+jacket edge, and paper stock rather than surface stock. Opening one is a
+composed two-column page rather than a card in the corner — and it does not fake
+an editor, because `library_items` holds a title, a description and metadata,
+and an empty text area with a cursor in it would be a promise the schema cannot
+keep.
+
+### Two measured traps, both self-inflicted
+
+**The pull anchor went stale.** Maintained by the scroll handler, which only
+learns about positions it is told about — and `restoreShelfScroll` moves rails by
+assignment on every paint. Pulls cleared themselves on the next scroll. Fixed by
+reading the anchor at the moment of pulling.
+
+**The pull cancelled its own reveal.** Pulling an object near the shelf edge
+scrolls it into view, and a smooth scroll is far from its target for the whole
+animation — so the clear-on-scroll rule fired mid-reveal. Measured: the last book
+on the Books shelf pulled and vanished in the same gesture. Fixed by making that
+one reveal instant; arrow-key browsing keeps its smooth scroll.
+
+**1082 tests pass, 22 new**, and 10 L3 assertions rewritten with the reversal
+recorded in place. TypeScript clean.

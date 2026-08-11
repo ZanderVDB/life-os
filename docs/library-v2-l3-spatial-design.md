@@ -77,6 +77,15 @@ Seven degrees, not twenty-five. Past about ten the type degrades and the shelf
 starts being a diorama. §6 says prefer usability over spectacle, and this is
 where that is spent.
 
+## The five states (superseded by L3.1)
+
+> **Corrected in L3.1.** The `prominent` state below was given to whichever
+> object was nearest a read line as the shelf scrolled, and it was wrong: a
+> shelf nobody had touched had one book permanently raised. It is replaced by
+> an explicit **pulled-forward** state that only a user action can cause.
+> The current model is `library-v2-interaction-model.md`; the section below is
+> kept because the read-line arithmetic and its defect are still worth knowing.
+
 ## The five states (§23)
 
 Five distinct **mechanisms**, not five shades of one:
@@ -247,3 +256,70 @@ So L3 adds one nullable column, `library_items.last_opened_at`:
   `updated_at`**, so reading and editing stay two different facts;
 - and where the fallback is in use, the object says **"Edited"** rather than
   **"Opened"**, which is what actually happened.
+
+---
+
+# L3.1 corrections
+
+L3's concept was approved and its execution was not. What changed:
+
+| L3 | L3.1 |
+|---|---|
+| a raised object chosen by scroll position | **nothing raised until a user raises it** |
+| a 1400ms accent ring after returning | a **320ms glow** in the object's own accent |
+| a title at the far left of the shelf | the title **under the pulled object** |
+| a star mark on the Diary | **no mark that looks like a control** |
+| 13px spine, whole title crammed in | **24px spine**, title cut at a word, accent bands |
+| books spaced like cards | books **overlap** — 10 across a shelf instead of 6 |
+| a 7' rotation on the prominent object | **no rotation at all** — crispness outranks novelty |
+| Documents as rounded rectangles | Documents as **folios**: a stack of sheets in a tabbed jacket |
+| Diary looked like a Book, behaved like a poster | Diary has the **same interaction** as everything else |
+| the item view as a card in the corner | a **composed** two-column open view |
+
+## The shelf, strengthened
+
+Three drawn layers on the rail, and one shadow per object:
+
+1. a **back plane** one shade lighter than the page, that books stand in front of;
+2. the **ledge front edge** — a 3px band lit along its top, which is the part
+   the eye reads as "a surface with thickness";
+3. a **floor wash** below it, where the shadow gathers;
+4. a **contact shadow** under each object, which shrinks and softens as it lifts.
+
+The contact shadow is the single cheapest thing that makes an object look like
+it is *resting on* rather than *floating above*. Still no wood, no grain, no
+furniture.
+
+## Density: books overlap
+
+`--overlap: 64px`, declared on the **shelf**, applied as a negative margin
+between slots. At rest each book shows its 24px spine plus 62px of cover — which
+is what a shelf actually looks like. Pulling one forward raises it above its
+neighbours on z-index and the whole cover appears; nothing grows and nothing
+reflows.
+
+Measured at 1280 with the full sample: step per book **150px → 86px**, rail
+scrollWidth **1739 → 1030**, books visible across a 933px shelf **6 → 10**.
+
+> `--overlap` must be declared where the SLOT can inherit it, not on
+> `.lib-book`. A custom property inherits downward only, and the element that
+> consumes it is the book's parent. Declared on the book it resolved to nothing
+> and every shelf measured 0px of overlap while looking correct in the source.
+
+## The spine, redesigned
+
+24px rather than 13, 10px type rather than 8.5, a title cut at a word boundary
+with an ellipsis rather than crammed, and two accent bands at head and tail the
+way a bound spine has. The lit edge runs across the spine and falls away toward
+the cover, and the gutter shadow is drawn on the **cover** — so the junction reads
+as a fold rather than a seam between two separate things.
+
+Measured: spine 24px, cover 126px, both **178.2px tall**, gap between them
+**0.00px**, 0 clipped spine titles across the sample shelf.
+
+## Crispness
+
+All rotation and all `perspective` are gone. A 7-degree `rotateY` puts glyphs on
+a plane that no longer aligns with the pixel grid, and at 15px Playfair that is
+visible — which is what the review meant by "slightly blurred". Depth is now
+overlap, translation, scale, z-index and shadow, none of which resamples text.

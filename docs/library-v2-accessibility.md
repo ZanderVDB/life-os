@@ -103,3 +103,44 @@ cannot disagree — which is the specific risk §36 names about 3D.
 The on-screen-keyboard case on a real phone is still verified by geometry rather
 than with a real keyboard: the harness browser has none. Recorded in
 `technical-debt.md`.
+
+---
+
+## L3.1 — a two-stage control that explains itself
+
+A second activation nobody explained is a ritual. Three things stop it being
+one:
+
+1. **`aria-expanded`** on the object — false at rest, true when pulled. The first
+   activation is announced as having done something.
+2. **A labelled Open control** appears in the pulled state, saying exactly what
+   the next activation does. It is the primary route on touch and the clearest
+   one for a screen reader.
+3. **Escape** returns the object to the shelf *and* returns focus to it.
+
+### Focus can never be confused with pulled-forward
+
+Focus is the **only** state on a shelf object that draws an outline. Pulled
+uses lift, scale, shadow and z-index; hover uses lift and surface; returned uses
+a glow. A test walks every `.lib-obj` rule in the stylesheet and fails if a
+non-focus state declares an outline.
+
+The keyboard **cursor** — the shelf's single tab stop — has no appearance at all.
+An object at the cursor looks exactly like every other resting object. L3 had
+one function doing both jobs, which is precisely why scrolling used to raise a
+book; a test now asserts `setCursor` never writes a class.
+
+### The system mark
+
+The Diary's star is gone (§12). It was a glyph in a rounded tinted box in the
+corner — where a favourite button goes — and pressing it did nothing. What
+distinguishes the Diary now is material and words: a deeper cloth, a lavender
+spine edge, "System journal" under it when pulled forward, and an accessible
+name that says *My Diary, system journal, opens Diary*.
+
+### Known limitation
+
+`:focus-visible` cannot be verified in this harness: it requires **trusted**
+keyboard input, and synthetic `KeyboardEvent`s do not qualify. The rule's
+existence and its uniqueness are asserted against the stylesheet instead. A real
+keyboard pass is on the list of checks that need a human.
