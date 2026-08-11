@@ -215,3 +215,34 @@ drawn large, what it says, what is known about it, and an honest note saying
 what it currently stores. **It does not fake an editor.** `library_items` holds
 a title, a description and metadata; an empty text area with a cursor in it
 would be a promise the schema cannot keep.
+
+---
+
+## L3.2 — the shelf became physical
+
+L3.1 fixed what the shelf DID. L3.2 fixed what it LOOKED LIKE, and the review
+was specific: overlapped books read as layered cards, the pulled book went soft,
+the Open action was a badge stuck on the cover, and Personal, Books and
+Documents sat at visibly different heights.
+
+The full model is `library-v2-physical-object-model.md`. Three rules came out of
+it, and they are product rules rather than styling preferences:
+
+1. **One plane.** Every object rests the same distance from its shelf's ledge.
+   A Document is shorter than a Book and touches the same surface.
+2. **One physics.** Everything lifts by the same amount, with the same two
+   shadows, and nothing scales.
+3. **The pulled state is the best state.** The object you have chosen must be
+   the clearest thing on the shelf, not a softer copy of it.
+
+The third is the one worth remembering, because it is the trap: every technique
+that adds depth to a chosen object — scale, rotation, blur behind it — makes that
+object harder to read. Depth has to come from things that do not touch the
+typography: overlap, translation, z-order and shadow.
+
+### Density is a product decision, not a formula
+
+Two Books must read as two Books; a dozen should read as a shelf. One overlap
+value for both is what made a small Library look like a deck of cards, and the
+real Library currently HAS two books. Below four objects they sit apart; at four
+or more they touch.

@@ -120,3 +120,22 @@ than a convenience.
 
 The open view stacks to one column below 820px, with the object centred above
 what is known about it.
+
+---
+
+## L3.2 — what varies by width
+
+The overlap tokens are gone entirely. What changes with width is the object size
+and the gap, never how much of a book is hidden.
+
+| Width | cover | spine | fore-edge | folio |
+|---|---|---|---|---|
+| desktop | 126px | 22px | 6px | 178 x 118 |
+| ≤1024px | 124px | 22px | 6px | 164 wide |
+| ≤820px | 132px | 22px | 6px | 158 wide |
+| ≤480px | 128px | 22px | 6px | 150 wide |
+
+Covers get **wider** under a finger, because a book you have to hit exactly is a
+book you miss. Hover is switched off entirely below 820px, and the footer's Open
+action becomes a 44px target — still inside the footer, under the object, never
+a pill over the cover.

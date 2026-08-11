@@ -71,7 +71,7 @@ test('resting: last-opened is an ORDER, never an appearance', () => {
 test('pull: first activation pulls, second opens, and neither changes the route', () => {
   /* Measured, Books shelf: click → "Training" pulled, hash still #library;
    * click the Open control → the Book opened with the matching cover. */
-  assert.match(shelf, /if \(obj === pulled \|\| e\.target\.closest\('\.lib-obj-pull'\)\) onOpen\?\.\(obj\);\s*\n\s*else pullForward\(obj\);/);
+  assert.match(shelf, /if \(obj === pulled \|\| e\.target\.closest\('\.lib-foot-a'\)\) onOpen\?\.\(obj\);\s*\n\s*else pullForward\(obj\);/);
   // Keyboard uses the SAME two stages, so the models cannot drift apart.
   assert.match(shelf, /if \(obj === pulled\) onOpen\?\.\(obj\);\s*\n\s*else pullForward\(obj\);/);
   // Nothing in the pull path touches the hash (§22).
@@ -144,7 +144,9 @@ test('touch: a swipe is never a tap, and a tap is never dead', () => {
   assert.match(shelf, /const scrolled = Math\.abs\(rail\.scrollLeft - downAt\.left\);/);
   /* And it is a REAL control where it is the primary route: 44px tall, not a
    * 30px hint. Measured at 390px before the fix: 117x30. */
-  assert.match(html, /@media \(max-width:820px\)[\s\S]*?\.lib-obj-pull\{padding:0 16px;height:44px/);
+  /* And it is a real 44px target where it is the primary route - inside the
+   * FOOTER, under the object, rather than a pill over the cover (L3.2 S8). */
+  assert.match(html, /@media \(max-width:820px\)[\s\S]*?\.lib-foot-a\{min-height:44px/);
   // No hover affordance on a finger.
   assert.match(html, /@media \(max-width:820px\)[\s\S]*?\.lib-obj:hover\{transform:none\}/);
 });
@@ -180,11 +182,12 @@ test('title: under the pulled object, never stranded at the shelf edge', () => {
   assert.ok(!/\.lib-shelf-cap\s*\{/.test(html), 'the detached shelf caption is back');
   assert.ok(!shelf.includes('lib-shelf-cap'), 'the shelf still renders a caption');
   // It lives on the object, and appears only when that object is pulled.
-  assert.match(html, /\.lib-obj-label\{position:absolute;left:50%;top:100%/);
-  assert.match(html, /\.lib-obj\.is-pulled \.lib-obj-label\{opacity:1/);
-  // Absolutely positioned, so revealing it cannot shift the row.
-  assert.match(html, /\.lib-obj-label\{[^}]*position:absolute/);
-  assert.match(shelf, /<span class="lib-obj-label" aria-hidden="true">/);
+  /* L3.2 folded the label into the object's FOOTER, alongside the Open action,
+   * so one attached element carries everything the pulled state reveals - and
+   * nothing at all is drawn over the cover. */
+  assert.match(html, /\.lib-foot\{position:absolute;left:0;right:0;top:100%/);
+  assert.match(html, /\.lib-obj\.is-pulled \.lib-foot\{opacity:1/);
+  assert.match(shelf, /<span class="lib-foot" aria-hidden="true">/);
 });
 
 /* ── §8/§9  The spine ────────────────────────────────────────────────── */
@@ -201,7 +204,7 @@ test('spine: a title that fits, cut at a word, with the full one kept elsewhere'
   // The full title is never lost: cover, tooltip, accessible name, pulled label.
   assert.match(shelf, /<span class="lib-cover-title">\$\{esc\(item\.title\)\}<\/span>/);
   assert.match(shelf, /title="\$\{esc\(item\.title\)\}"/);
-  assert.match(shelf, /<span class="lib-obj-label-t">\$\{esc\(item\.title\)\}<\/span>/);
+  assert.match(shelf, /<span class="lib-foot-t">\$\{esc\(title\)\}<\/span>/);
 });
 
 test('spine: one object with the cover, not a strip beside it', () => {
@@ -210,12 +213,16 @@ test('spine: one object with the cover, not a strip beside it', () => {
    * cannot drift apart. */
   assert.match(html, /\.lib-spine\{[^}]*height:calc\(var\(--bw\) \* 297 \/ 210\)/);
   // The lit edge runs across the spine and falls away toward the cover…
-  assert.match(html, /\.lib-spine\{[\s\S]*?box-shadow:inset 1\.5px 0 0 rgba\(255,255,255,\.16\)/);
+  assert.match(html, /\.lib-spine\{[\s\S]*?box-shadow:inset 1\.5px 0 0 rgba\(255,255,255,\.15\)/);
   // …and the gutter shadow is drawn on the COVER, so the junction is a fold.
-  assert.match(html, /\.lib-cover::before\{content:'';position:absolute;left:0;top:0;bottom:0;width:11px/);
+  assert.match(html, /\.lib-cover::before\{content:'';position:absolute;left:0;top:0;bottom:0;width:10px/);
+  /* And the third part L3.1 was missing: the FORE-EDGE, the page block. A card
+   * has no page block, which is most of why the old object read as one. */
+  assert.match(html, /\.lib-block\{flex:0 0 auto;width:var\(--edge-w\)/);
+  assert.match(shelf, /<span class="lib-block" aria-hidden="true"><\/span>/);
   // Radii meet: the spine rounds on its left, the cover on its right.
-  assert.match(html, /\.lib-spine\{[^}]*border-radius:3px 0 0 3px/);
-  assert.match(html, /\.lib-cover\{[^}]*border-radius:0 5px 5px 0/);
+  assert.match(html, /\.lib-spine\{[^}]*border-radius:2px 0 0 2px/);
+  assert.match(html, /\.lib-block\{[^}]*border-radius:0 2px 2px 0/);
 });
 
 /* ── §21  Crispness outranks novelty ─────────────────────────────────── */
@@ -240,24 +247,35 @@ test('shelf: a back plane, a lit ledge edge, a floor wash, and a contact shadow'
   const rail = html.slice(html.indexOf('.lib-rail{'), html.indexOf('.lib-rail::-webkit'));
   assert.equal((rail.match(/linear-gradient/g) ?? []).length, 3,
     'the shelf should be exactly three drawn layers');
-  assert.match(rail, /rgba\(255,255,255,\.10\) calc\(100% - 32px\)/); // the lit edge
+  assert.match(rail, /rgba\(255,255,255,\.13\) calc\(100% - var\(--shelf-drop\)\)/); // the lit edge
   // And one contact shadow per object, which is what says "resting on".
   assert.match(html, /\.lib-obj::after\{content:'';position:absolute[\s\S]*?radial-gradient/);
-  assert.match(html, /\.lib-obj\.is-pulled::after\{transform:scaleX\(\.82\)/);
+  /* Two shadows, two meanings (L3.2 S12): the CONTACT ellipse tightens and
+   * fades as the object lifts, while a separate DEPTH shadow appears on the
+   * face. That is how a real object leaving a surface behaves, and it is why
+   * this is not an elevation scale - a resting object here casts nothing. */
+  assert.match(html, /\.lib-obj\.is-pulled::after\{transform:scaleX\(\.84\) scaleY\(1\.5\)/);
+  assert.match(html, /--obj-edge:0 2px 4px -2px/);
+  assert.match(html, /--obj-lift:0 18px 30px -14px/);
+  assert.match(html, /\.lib-obj\.is-pulled \.lib-cover\{box-shadow:var\(--obj-lift\)\}/);
 });
 
 test('density: books overlap, so a dozen read as a collection', () => {
   /* Measured at 1280 with the full sample: step per book 150px → 86px, rail
    * scrollWidth 1739 → 1030, books visible across a 933px shelf 6 → 10. */
-  assert.match(html, /\.lib-shelf-book\{--overlap:64px\}/);
-  assert.match(html, /\.lib-shelf-book \.lib-slot \+ \.lib-slot\{margin-left:calc\(var\(--overlap\) \* -1\)\}/);
-  assert.match(html, /\.lib-shelf-book \.lib-row\{column-gap:0\}/);
+  /* Superseded by L3.2. The 64px overlap is gone entirely: tucking each book's
+   * fore-edge behind its neighbour's spine hid the strongest "this is bound"
+   * cue, and a dark spine landing mid-cover is what made a shelf read as a
+   * deck of cards. Books TOUCH when a shelf is dense and sit 16px apart when it
+   * is not - density by collection size, not one formula for both. */
+  assert.match(html, /\.lib-rail\.is-dense \.lib-row\{column-gap:0\}/);
+  assert.match(html, /\.lib-shelf-book \.lib-row\{column-gap:16px\}/);
+  assert.match(shelf, /const dense = n >= 4;/);
   /* `--overlap` MUST be declared on the shelf, not the book. A custom property
    * inherits downward only and the element that consumes it is `.lib-slot` —
    * the book's parent. Declared on `.lib-book` it resolved to nothing and every
    * shelf measured 0px of overlap while looking correct in the source. */
-  assert.ok(!/\.lib-book\{[^}]*--overlap/.test(html),
-    '--overlap is declared where the slot cannot inherit it');
+  assert.ok(!/--overlap/.test(html), 'the overlap token is back');
 });
 
 /* ── §11/§12  Diary ──────────────────────────────────────────────────── */
@@ -270,8 +288,7 @@ test('diary: the same interaction as every other object', () => {
   const diary = shelf.slice(shelf.indexOf('export function diaryObjectHtml'));
   const body = diary.slice(0, diary.indexOf('\n}'));
   assert.match(body, /role="button" tabindex="-1" aria-expanded="false"/);
-  assert.match(body, /openControl\('Open Diary'\)/);
-  assert.match(body, /class="lib-obj-label"/);
+  assert.match(body, /objectFoot\('My Diary', 'System journal', 'Open Diary'\)/);
   assert.match(body, /class="lib-spine-band"/);
   // Still not a Library item, and still no ordinary Book menu.
   assert.ok(!body.includes('data-item='), 'the Diary object carries a library item id');
@@ -292,7 +309,7 @@ test('diary: the system mark is material, never a control', () => {
   // What marks it instead: the cloth, the spine edge, and words.
   assert.match(html, /\.lib-book-system \.lib-cover\{background:/);
   assert.match(html, /\.lib-book-system \.lib-spine\{box-shadow:inset 1\.5px 0 0 rgba\(182,155,240/);
-  assert.match(shelf, /<span class="lib-obj-label-s">System journal<\/span>/);
+  assert.match(shelf, /objectFoot\('My Diary', 'System journal', 'Open Diary'\)/);
   assert.match(shelf, /aria-label="My Diary, system journal, opens Diary"/);
 });
 
@@ -304,11 +321,16 @@ test('document: a folio — a stack of sheets in a tabbed jacket', () => {
    * one, a tab down the jacket edge, and PAPER stock rather than surface stock
    * — the same `--paper` the Book cover and the Diary page are made of, so a
    * Document is visibly the same material as a Book without imitating one. */
-  assert.match(html, /\.lib-res-document \.lib-res-face\{\s*\n?\s*background:linear-gradient\(160deg,var\(--paper\)/);
-  assert.match(html, /\.lib-res-document \.lib-res-face::before,\s*\n\.lib-res-document \.lib-res-face::after\{content:''/);
-  assert.match(html, /\.lib-res-document \.lib-res-face\{border-left:3px solid var\(--a-blue\)\}/);
-  // It says what it is, and shows a little of what it holds.
-  assert.match(shelf, /item\.type === 'document' \? '<span class="lib-res-kind">Document<\/span>' : ''/);
+  /* Rebuilt again in L3.2: L3.1's version still had a card radius and an
+   * ambient shadow, which is dashboard-tile language whatever is drawn inside.
+   * A folio now - paper stock, a 2-3px radius, a visible SHEET EDGE matching
+   * the book's fore-edge, and a filed tab. */
+  assert.match(html, /\.lib-res-face\{position:relative;display:flex;width:100%;height:118px;\s*\n?\s*border-radius:2px 3px 3px 2px/);
+  assert.match(html, /background:linear-gradient\(158deg,var\(--paper\) 0%,var\(--paper-2\) 100%\)/);
+  assert.match(html, /\.lib-res-edge\{position:absolute;right:0/);
+  assert.match(html, /\.lib-res-tab\{position:absolute;left:0;top:0;bottom:0;width:4px/);
+  // It carries its own title, so it needs no detached resting label.
+  assert.match(shelf, /<span class="lib-res-name">\$\{esc\(item\.title\)\}<\/span>/);
   assert.match(shelf, /class="lib-res-excerpt"/);
   // And it has no spine, because it is not bound.
   assert.ok(!/lib-res-document[\s\S]{0,300}lib-spine/.test(html),
@@ -316,14 +338,16 @@ test('document: a folio — a stack of sheets in a tabbed jacket', () => {
 });
 
 test('document: every resource pulls forward, so nothing on the shelf is inert', () => {
-  assert.match(html, /\.lib-res\.is-pulled\{transform:translateY\(-16px\) scale\(1\.05\)\}/);
-  assert.match(html, /\.lib-res\.is-pulled \.lib-res-face,\.lib-res\.is-pulled \.lib-frame\{/);
+  /* The SAME physics as a Book since L3.2: the same travel, no scale, the same
+   * footer. A Document that lifted by a different amount is a second physical
+   * system on one shelf. */
+  assert.match(html, /\.lib-res\.is-pulled\{transform:translateY\(-32px\)\}/);
+  assert.match(html, /\.lib-obj\.is-pulled \.lib-res-face\{box-shadow:var\(--obj-lift\)\}/);
   // Resources carry the same affordances as a Book.
   const res = shelf.slice(shelf.indexOf('export function resourceObjectHtml'));
   const body = res.slice(0, res.indexOf('\n}'));
   assert.match(body, /aria-expanded="false"/);
-  assert.match(body, /openControl\(/);
-  assert.match(body, /class="lib-obj-label"/);
+  assert.match(body, /objectFoot\(item\.title, sub,/);
 });
 
 test('document: the open view is composed, and honest about what it holds', () => {

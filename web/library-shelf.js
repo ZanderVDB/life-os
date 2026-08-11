@@ -112,16 +112,33 @@ export function recencyLabel(item) {
  * crispness outranks novelty. Depth is carried by overlap, shadow, scale and
  * translation — all of which leave text on the pixel grid.
  *
- * `lib-obj-pull` is the explicit Open control that appears in the pulled state,
- * so a second click is never a mystery: there is a labelled button saying what
- * happens next. It is also what makes this work on a phone and for a screen
- * reader (§27).
+ * `lib-foot` is the object's footer: the full title, the subtitle and a quiet
+ * Open action, revealed together when the object is pulled forward. A second
+ * click is never a mystery, and nothing is ever drawn over the cover (§8).
  */
-const openControl = (label) => `<span class="lib-obj-pull" aria-hidden="true">
-    <span class="lib-obj-pull-t">${label}</span>
-    <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor"
-      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      ><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+/**
+ * The object footer (L3.2 §8, option C).
+ *
+ * L3.1 put a bright purple pill over the cover. The review called it a debug
+ * badge, and it was: a saturated UI chip floating on top of the artwork, in the
+ * same corner region as the overflow menu, belonging to neither the object nor
+ * the page.
+ *
+ * The title, the subtitle and the Open action now share one compact footer
+ * BENEATH the object, at the object's own width. Nothing covers the cover, the
+ * label is spatially attached to the thing it names, and the second activation
+ * has an obvious target that is part of the object rather than pasted on it.
+ *
+ * Absolutely positioned, so revealing it can never shift the row.
+ */
+const objectFoot = (title, sub, action) => `<span class="lib-foot" aria-hidden="true">
+    <span class="lib-foot-t">${esc(title)}</span>
+    ${sub ? `<span class="lib-foot-s">${esc(sub)}</span>` : ''}
+    <span class="lib-foot-a">${esc(action)}
+      <svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor"
+        stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+        ><path d="M6 10h8M10.5 6.5 14 10l-3.5 3.5"/></svg>
+    </span>
   </span>`;
 
 export function bookObjectHtml(item, index, total) {
@@ -140,6 +157,7 @@ export function bookObjectHtml(item, index, total) {
       <span class="lib-spine-t">${esc(spineTitle(item.title))}</span>
       <span class="lib-spine-band"></span>
     </span>
+    <span class="lib-block" aria-hidden="true"></span>
     <span class="lib-cover">
       <span class="lib-cover-mark" aria-hidden="true">Life OS</span>
       <span class="lib-cover-pre" aria-hidden="true">Notebook</span>
@@ -149,16 +167,12 @@ export function bookObjectHtml(item, index, total) {
       <span class="lib-cover-author">${esc(b.authorLabel || 'Life OS')} · ${year}</span>
     </span>
     ${archived ? '<span class="lib-obj-flag">Archived</span>' : ''}
-    ${openControl('Open book')}
     <button type="button" class="lib-obj-more" data-more="${esc(item.id)}"
       aria-label="Actions for ${esc(item.title)}" aria-haspopup="menu" tabindex="-1">
       <svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor" aria-hidden="true"
         ><circle cx="5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="15" cy="10" r="1.4"/></svg>
     </button>
-    <span class="lib-obj-label" aria-hidden="true">
-      <span class="lib-obj-label-t">${esc(item.title)}</span>
-      ${b.subtitle ? `<span class="lib-obj-label-s">${esc(b.subtitle)}</span>` : ''}
-    </span>
+    ${objectFoot(item.title, b.subtitle, 'Open book')}
   </article>`;
 }
 
@@ -198,6 +212,7 @@ export function diaryObjectHtml() {
       <span class="lib-spine-t">My Diary</span>
       <span class="lib-spine-band"></span>
     </span>
+    <span class="lib-block" aria-hidden="true"></span>
     <span class="lib-cover">
       <span class="lib-cover-mark" aria-hidden="true">Life OS</span>
       <span class="lib-cover-pre" aria-hidden="true">Journal</span>
@@ -205,11 +220,7 @@ export function diaryObjectHtml() {
       <span class="lib-cover-rule" aria-hidden="true"></span>
       <span class="lib-cover-author">Every day</span>
     </span>
-    ${openControl('Open Diary')}
-    <span class="lib-obj-label" aria-hidden="true">
-      <span class="lib-obj-label-t">My Diary</span>
-      <span class="lib-obj-label-s">System journal</span>
-    </span>
+    ${objectFoot('My Diary', 'System journal', 'Open Diary')}
   </article>`;
 }
 
@@ -307,28 +318,25 @@ export function resourceObjectHtml(item, index, total) {
   index + 1} of ${total}${archived ? ', archived' : ''}"
     title="${esc(item.title)}">
     ${visual ? previewHtml(item) : `<span class="lib-res-face" aria-hidden="true">
-      <span class="lib-res-glyph">${glyph(item.type, 18)}</span>
-      ${item.type === 'document' && item.description
-    ? `<span class="lib-res-excerpt">${esc(item.description)}</span>` : ''}
-      ${item.type === 'document' ? '<span class="lib-res-kind">Document</span>' : ''}
-      ${item.type === 'file' ? `<span class="lib-res-kind">${esc(fileKind(item))}</span>` : ''}
-      ${item.type === 'link' ? `<span class="lib-res-domain">${esc(domainOf(item.sourceUrl))}</span>` : ''}
+      <span class="lib-res-edge"></span>
+      <span class="lib-res-tab"></span>
+      <span class="lib-res-sheet">
+        <span class="lib-res-kind">${esc(item.type === 'document' ? 'Document'
+    : item.type === 'file' ? fileKind(item) : 'Link')}</span>
+        <span class="lib-res-name">${esc(item.title)}</span>
+        ${item.type === 'link'
+    ? `<span class="lib-res-domain">${esc(domainOf(item.sourceUrl))}</span>`
+    : item.description
+      ? `<span class="lib-res-excerpt">${esc(item.description)}</span>` : ''}
+      </span>
     </span>`}
-    <span class="lib-res-body">
-      <span class="lib-res-title">${esc(item.title)}</span>
-      ${sub ? `<span class="lib-res-sub">${esc(sub)}</span>` : ''}
-    </span>
     ${archived ? '<span class="lib-obj-flag">Archived</span>' : ''}
-    ${openControl(item.type === 'link' ? 'Open link' : 'Open')}
     <button type="button" class="lib-obj-more" data-more="${esc(item.id)}"
       aria-label="Actions for ${esc(item.title)}" aria-haspopup="menu" tabindex="-1">
       <svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor" aria-hidden="true"
         ><circle cx="5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="15" cy="10" r="1.4"/></svg>
     </button>
-    <span class="lib-obj-label" aria-hidden="true">
-      <span class="lib-obj-label-t">${esc(item.title)}</span>
-      ${item.description ? `<span class="lib-obj-label-s">${esc(item.description)}</span>` : ''}
-    </span>
+    ${objectFoot(item.title, sub, item.type === 'link' ? 'Open link' : 'Open')}
   </article>`;
 }
 
@@ -353,6 +361,13 @@ export const objectHtml = (item, i, n) =>
 export function shelfHtml({ id, title, items, extraLead = '', note = '', kind = 'book' }) {
   const n = items.length + (extraLead ? 1 : 0);
   const hid = `lib-sh-${id}`;
+  /* ADAPTIVE DENSITY (§23/§24). Two or three books must read as two or three
+   * separate objects, with a gap between them; a dozen should read as a shelf,
+   * with the books touching. One overlap formula for both sizes is what made
+   * two Books look like a deck of cards. Four is the threshold because three
+   * objects still read individually at any spacing, and four is where a row
+   * starts wanting rhythm. */
+  const dense = n >= 4;
   return `<section class="lib-shelf lib-shelf-${esc(kind)}" data-shelf="${esc(id)}"
     role="group" aria-labelledby="${hid}">
     <div class="lib-shelf-head">
@@ -370,7 +385,7 @@ export function shelfHtml({ id, title, items, extraLead = '', note = '', kind = 
           stroke-linejoin="round"><path d="m8 4 6 6-6 6"/></svg></button>
       </div>
     </div>
-    <div class="lib-rail" data-rail="${esc(id)}">
+    <div class="lib-rail${dense ? ' is-dense' : ''}" data-rail="${esc(id)}">
       <ul class="lib-row" role="list">
         ${extraLead ? `<li class="lib-slot">${extraLead}</li>` : ''}
         ${items.map((it, i) => `<li class="lib-slot">${objectHtml(it, i, n)}</li>`).join('')}
@@ -627,7 +642,7 @@ export function wireRail(rail, { onOpen, onMenu, onScrollChange } = {}) {
     /* Two stages. The first is "let me look at this", the second is "open it",
      * and the second is also reachable from the labelled Open control — which
      * is the route a phone and a screen reader actually take. */
-    if (obj === pulled || e.target.closest('.lib-obj-pull')) onOpen?.(obj);
+    if (obj === pulled || e.target.closest('.lib-foot-a')) onOpen?.(obj);
     else pullForward(obj);
   });
 

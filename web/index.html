@@ -2759,51 +2759,94 @@ body:has(.lib-page) .rail{display:none}
    edge so it reads as sitting ON the shelf rather than jammed against the frame.
    Snap is PROXIMITY, never mandatory (§22): mandatory snap fights trackpad
    momentum and turns a flick into a fight. */
-.lib-rail{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;
+/* ---- ONE SHELF PLANE (L3.2 S10) --------------------------------------
+   Measured before this change: contact gap Diary -6px, Book +36px,
+   Document +36px. The Diary hung 42px lower than everything else relative to
+   its own shelf, because the personal rail carried different padding and the
+   ledge is drawn from the rail's bottom edge.
+
+   There is now ONE formula, and every rail obeys it:
+
+       ledge line   = rail bottom - var(--shelf-drop)
+       object bottom = ledge line - var(--shelf-contact)
+
+   Objects may be any height ABOVE that line. They may not sit at arbitrary
+   heights below it. A Document is shorter than a Book and rests on the same
+   plane, which is what a shelf means. */
+:root{
+  --shelf-drop:30px;      /* ledge line, measured up from the rail's bottom  */
+  --shelf-contact:4px;    /* object bottom to ledge: touching, not floating  */
+  --shelf-head:26px;      /* breathing room above the tallest object         */
+  --shelf-label:34px;     /* the label zone below the ledge                  */
+}
+/* `scroll`, not `auto`.
+   A horizontal scrollbar lives inside the rail's border box, so a shelf that
+   overflows loses 10px of height that a shelf which fits does not -- and the
+   ledge is drawn from that bottom edge. Measured: books rail offsetHeight 287
+   against clientHeight 277, personal rail 242 against 242, which put the Diary
+   10px off every other object's plane. `scrollbar-gutter: stable` does not fix
+   it: that property reserves the INLINE gutter, not the block-end one.
+   Reserving it on every rail is what makes one baseline formula true. The track
+   is transparent and the thumb does not render when there is nothing to
+   scroll, so a shelf that fits shows nothing. */
+.lib-rail{overflow-x:scroll;overflow-y:hidden;scroll-snap-type:x proximity;
   scroll-padding-inline:10px;overscroll-behavior-x:contain;
-  padding:30px 0 58px;margin:0 -4px;
+  padding:var(--shelf-head) 0 calc(var(--shelf-drop) + var(--shelf-contact));
+  margin:0 -4px;
   scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent;
-  /* THE SHELF ITSELF (L3.1 S15). Three layers, drawn as backgrounds so they
-     belong to the shelf and stay put while the books scroll over them:
 
-       1. a back plane, one shade deeper than the page, that the books stand in
-          front of. This is what stops them reading as objects on a divider;
-       2. the ledge front edge -- a 3px band lit along its top, which is the
-          part your eye reads as "a surface with thickness";
-       3. the floor wash beneath it, where the shadow gathers.
-
-     No wood, no grain, no furniture. In a dark UI those read as decoration;
-     what makes something look like a shelf is a lit edge and a shadow. */
+  /* THE SHELF ITSELF (S22). A back plane the objects stand in front of, a lit
+     front edge with thickness, and the floor wash where shadow gathers. Quiet
+     enough that the objects stay the focal point -- the back plane is 1.4% white,
+     which reads as depth rather than as a section band. */
   background-image:
-    linear-gradient(to bottom,rgba(255,255,255,.018) 0,rgba(255,255,255,.018) calc(100% - 32px),
-      transparent calc(100% - 32px)),
-    linear-gradient(to bottom,transparent calc(100% - 32px),
-      rgba(255,255,255,.10) calc(100% - 32px),rgba(255,255,255,.10) calc(100% - 31px),
-      rgba(255,255,255,.035) calc(100% - 31px),rgba(255,255,255,.035) calc(100% - 28px),
-      transparent calc(100% - 28px)),
-    linear-gradient(to bottom,transparent calc(100% - 28px),rgba(0,0,0,.26) 100%)}
+    linear-gradient(to bottom,rgba(255,255,255,.014) 0,
+      rgba(255,255,255,.014) calc(100% - var(--shelf-drop)),
+      transparent calc(100% - var(--shelf-drop))),
+    linear-gradient(to bottom,transparent calc(100% - var(--shelf-drop)),
+      rgba(255,255,255,.13) calc(100% - var(--shelf-drop)),
+      rgba(255,255,255,.13) calc(100% - var(--shelf-drop) + 1px),
+      rgba(255,255,255,.04) calc(100% - var(--shelf-drop) + 1px),
+      rgba(255,255,255,.04) calc(100% - var(--shelf-drop) + 4px),
+      transparent calc(100% - var(--shelf-drop) + 4px)),
+    linear-gradient(to bottom,transparent calc(100% - var(--shelf-drop) + 4px),
+      rgba(0,0,0,.22) 100%)}
 .lib-rail::-webkit-scrollbar{height:8px}
 .lib-rail::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
 .lib-rail::-webkit-scrollbar-track{background:transparent}
 
-/* DENSITY (S16). Books overlap; everything else sits in a tight row. A shelf
-   whose books are spaced like product cards is a display case, and the review
-   said so. The overlap is what makes a dozen books read as a collection. */
+/* ---- DENSITY, BY COLLECTION SIZE (L3.2 S23/S24) ----------------------
+   Two Books must read as two Books. A dozen should read as a shelf.
+
+   L3.1 used one formula for both: 64px of overlap on a 150px object, so each
+   book showed 86px and the NEXT book's dark spine landed in the middle of the
+   previous cover. The review is right that this reads as layered cards -- a
+   spine is a dark vertical band, and cover/band/cover/band is a card stack.
+
+   The overlap is now exactly the FORE-EDGE. Books touch: each one's page block
+   tucks behind its neighbour's spine, which is what books on a shelf actually
+   do, and every cover stays whole. Below four objects they do not even touch --
+   they sit apart with a real gap. */
 .lib-row{list-style:none;margin:0;padding:0 10px;display:flex;align-items:flex-end;
   column-gap:14px;width:max-content;min-width:100%}
-/* `--overlap` is declared HERE, on the shelf, not on `.lib-book`.
-   A custom property inherits DOWNWARD only, and the element that consumes this
-   one is `.lib-slot` -- the book's parent. Declared on the book it resolved to
-   nothing and every shelf measured 0px of overlap while looking correct in the
-   source. */
-.lib-shelf-book{--overlap:64px}
-.lib-shelf-book .lib-row{column-gap:0}
-.lib-shelf-book .lib-slot + .lib-slot{margin-left:calc(var(--overlap) * -1)}
-.lib-slot{scroll-snap-align:start;flex:0 0 auto;position:relative}
+.lib-shelf-book .lib-row{column-gap:16px}
+/* Dense means TOUCHING, not overlapping.
+   A negative margin was drafted here and then removed: tucking each book's
+   fore-edge behind its neighbour's spine hides the single strongest "this is a
+   bound object" cue on the shelf, to buy 6px. Books that simply touch already
+   read as a shelf -- each page block sits against the next spine, which is what
+   a real shelf looks like -- and every cover stays whole. */
+.lib-rail.is-dense .lib-row{column-gap:0}
+.lib-slot{scroll-snap-align:start;flex:0 0 auto;position:relative;
+  transition:transform var(--t-select)}
 
-/* Small collections are centred rather than pinned left (S26). `auto` margins
-   on a flex row do nothing until there is slack, so this is inert the moment
-   the shelf overflows -- one rule, both cases, no measuring. */
+/* PULLED-FORWARD BREATHING ROOM (S7). The neighbours step aside rather than
+   the rail reflowing -- a transform, so nothing is measured and nothing moves
+   that is not adjacent. */
+.lib-slot:has(.is-pulled) + .lib-slot{transform:translateX(16px)}
+.lib-slot:has(+ .lib-slot .is-pulled){transform:translateX(-16px)}
+
+/* Small collections are centred rather than pinned left (S26). */
 .lib-row{justify-content:flex-start}
 .lib-rail:not(.is-full) .lib-row{justify-content:center}
 
@@ -2814,108 +2857,139 @@ body:has(.lib-page) .rail{display:none}
 .lib-rail:not(.is-full) .lib-row{justify-content:center}
 
 /* ── The object, and its five states (§23) ───────────────────────────── */
-/* ---- Resting, hover, focus, pulled, opening, returned (L3.1 S3) -------
-   SIX states, six mechanisms, and -- the L3.1 correction -- NONE of them
-   happens on its own. A shelf nobody has touched has no raised object at all. */
+/* ---- Resting, hover, focus, pulled, opening, returned ----------------
+   Six states, and NONE happens on its own. A shelf nobody has touched has no
+   raised object at all. */
 .lib-obj{position:relative;display:flex;align-items:flex-end;cursor:pointer;
   border:0;background:none;padding:0;font-family:inherit;text-align:left;
-  transition:transform var(--t-select),filter var(--t-hover);
-  will-change:transform}
-/* 1. RESTING -- nothing. Stated explicitly so it cannot be quietly given a
-      look later; the whole defect this phase corrects was a resting state that
-      had one. */
-/* 2. HOVER -- a small lift, pointer only, never required for anything. */
-.lib-obj:hover{transform:translateY(-5px);z-index:3}
-/* 3. FOCUS -- the app accent, from :focus-visible only, and never a fill. */
+  margin-bottom:var(--shelf-contact);
+  transition:transform var(--t-select)}
+/* 1. RESTING -- nothing, stated explicitly so it cannot be given a look later. */
+/* 2. HOVER -- deliberately SMALLER than a pull (S21): 3px, and no reveal.
+      Hover says "this responds"; pulling says "this one". */
+.lib-obj:hover{transform:translateY(-3px);z-index:3}
+/* 3. FOCUS -- the app accent, :focus-visible only, and the only state with an outline. */
 .lib-obj:focus{outline:none}
 .lib-obj:focus-visible{outline:2px solid var(--accent);outline-offset:4px;
   border-radius:3px;z-index:4}
-/* 4. PULLED FORWARD -- out of the shelf, above its neighbours, whole cover
-      visible. No rotation: S21 is explicit that crispness outranks novelty, and
-      a rotated cover is where the type stopped being crisp. Depth comes from
-      overlap, translate, scale and shadow, all of which leave glyphs on the
-      pixel grid. */
-.lib-obj.is-pulled{transform:translateY(-22px) scale(1.06);z-index:6}
-.lib-obj.is-pulled .lib-cover{box-shadow:0 26px 40px -16px rgba(0,0,0,.72),
-  inset 0 0 0 1px rgba(255,255,255,.10)}
-.lib-obj.is-pulled .lib-obj-pull{opacity:1;transform:translateY(0)}
-.lib-obj.is-pulled .lib-obj-label{opacity:1;transform:translateY(0)}
+/* 4. PULLED FORWARD -- ONE depth cue, not three (S6).
+      32px of travel, NO SCALE at all, and a deeper shadow. About a sixth of the
+      object's height: unmistakably out of the row, still plainly on the shelf.
+
+      32 rather than 30, and the reason is arithmetic. The translate must land
+      on a whole DEVICE pixel at every supported ratio or the pulled object
+      rasterises on a different subpixel phase from the resting one -- which is
+      the blur the review saw. 30 x 1.25 = 37.5, half a device pixel out. Any
+      multiple of 4 is exact at 1, 1.25, 1.5 and 2; 32 is the smallest one in
+      S6's list that also reads unmistakably as pulled. */
+.lib-obj.is-pulled{transform:translateY(-32px);z-index:6}
+.lib-obj.is-pulled .lib-foot{opacity:1;transform:translateY(0);pointer-events:auto}
 /* 5. OPENING -- the handoff, only ever on a node the next paint destroys. */
-.lib-obj.is-opening{transform:translateY(-30px) scale(1.12);opacity:.12;z-index:7;
+.lib-obj.is-opening{transform:translateY(-48px);opacity:.1;z-index:7;
   transition:transform var(--d-slower) var(--e-out),opacity var(--d-slower) var(--e-out)}
-/* 6. RETURNED -- a soft glow in the object's OWN accent for 320ms, never an
-      accent outline. An outline is what focus looks like, and L3 leaving one
-      behind for 1400ms is exactly why the Library did not feel calm after
-      coming back. */
+/* 6. RETURNED -- a soft glow in the object's own accent, never an outline. */
 .lib-obj.is-returned .lib-cover,.lib-obj.is-returned .lib-res-face,
 .lib-obj.is-returned .lib-frame{
   box-shadow:0 0 18px -2px color-mix(in srgb,var(--accent-c,var(--a-peach)) 55%,transparent),
-    0 14px 24px -14px rgba(0,0,0,.6)}
+    var(--obj-edge)}
 
-/* The contact shadow (S15). One soft ellipse under each object, which is the
-   single cheapest thing that makes something look like it is RESTING ON
-   rather than FLOATING ABOVE. It shrinks and softens as the object lifts. */
-.lib-obj::after{content:'';position:absolute;left:8%;right:8%;bottom:-9px;height:10px;
-  border-radius:50%;background:radial-gradient(ellipse at center,
-    rgba(0,0,0,.55) 0%,rgba(0,0,0,.28)45%,transparent 72%);
+/* ---- ONE CONTACT-SHADOW GRAMMAR (L3.2 S12) ---------------------------
+   Two shadows, and they mean different things:
+
+     CONTACT  a tight dark ellipse where the object meets the shelf. It is
+              narrow, close, and it is what says "this is touching".
+     DEPTH    a soft cast shadow that only appears when the object LIFTS.
+
+   Resting = contact, no depth. Pulled = contact weakens and shrinks, depth
+   appears. That is how a real object leaving a surface behaves, and it is why
+   this is not an elevation scale: a resting object here has no cast shadow at
+   all, whereas Material elevation gives everything one. */
+.lib-obj::after{content:'';position:absolute;left:6%;right:6%;bottom:-3px;height:7px;
+  border-radius:50%;
+  background:radial-gradient(ellipse at center,
+    rgba(0,0,0,.62) 0%,rgba(0,0,0,.30) 50%,transparent 74%);
   pointer-events:none;transition:opacity var(--t-select),transform var(--t-select)}
-.lib-obj:hover::after{transform:scaleX(.94);opacity:.8}
-.lib-obj.is-pulled::after{transform:scaleX(.82) translateY(4px);opacity:.62}
+.lib-obj:hover::after{transform:scaleX(.96) scaleY(1.1);opacity:.85}
+.lib-obj.is-pulled::after{transform:scaleX(.84) scaleY(1.5) translateY(6px);opacity:.5}
+
+/* The edge shadow every face shares -- a hairline that gives the object an
+   edge, NOT a card elevation. One token, so a Document and a Book cannot drift
+   apart stylistically. */
+:root{--obj-edge:0 2px 4px -2px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.05);
+      --obj-lift:0 18px 30px -14px rgba(0,0,0,.68),inset 0 0 0 1px rgba(255,255,255,.10)}
 
 .lib-obj.is-archived{opacity:.5}
 
 /* The spine. A gradient strip, not a rotated face: the title on it is small,
    optional and decorative, and the accessible name lives on the cover. */
-/* ---- The spine (L3.1 S8/S9) ------------------------------------------
-   The review called the old one poor, and it was: a 13px strip with the whole
-   title crammed vertically at 8.5px, reading as a coloured stripe printed
-   beside a card rather than as part of a book.
+/* ---- THE BOOK AS ONE SOLID OBJECT (L3.2 S3/S4) -----------------------
+   Three parts in one silhouette, left to right:
 
-   What changed: 24px wide instead of 13 (so the type can be 10px and legible),
-   a title truncated at a word boundary rather than crushed, two accent bands
-   at head and tail the way a bound spine actually has, and a cloth gradient
-   that runs ACROSS the spine and continues into the cover -- which is what
-   makes the two read as one object rather than two. */
-.lib-book{--bw:126px;--spine-w:24px}
+       spine  22px   bound edge, lit along its outer face
+       cover  126px  the approved Book identity
+       block   6px   the FORE-EDGE -- the page block, finely lined
+
+   The fore-edge is the piece L3.1 was missing, and it is what most makes the
+   thing read as a bound book rather than a card: a card has no page block. It
+   also gives the overlap something physical to do -- in a dense shelf each
+   book's block tucks behind its neighbour's spine, which is how books touch.
+
+   No rotation, no perspective, no photographic texture. */
+.lib-book{--bw:126px;--spine-w:22px;--edge-w:6px}
 .lib-spine{flex:0 0 auto;width:var(--spine-w);
-  height:calc(var(--bw) * 297 / 210);border-radius:3px 0 0 3px;
+  height:calc(var(--bw) * 297 / 210);border-radius:2px 0 0 2px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:7px;padding:9px 0;overflow:hidden;position:relative;
-  /* Lit on the left edge, falling away toward the cover: one light source for
-     the whole object, which is the other half of reading as one thing. */
   background:linear-gradient(90deg,
-    color-mix(in srgb,var(--accent-c,var(--a-peach)) 34%,#0E0B15) 0%,
-    color-mix(in srgb,var(--accent-c,var(--a-peach)) 52%,#15111F) 24%,
-    color-mix(in srgb,var(--accent-c,var(--a-peach)) 30%,#120E1B) 76%,
-    rgba(0,0,0,.55) 100%);
-  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.16),inset -1px 0 2px rgba(0,0,0,.4);
-  transition:width var(--t-select)}
-/* Head and tail bands, in the accent. Small, and the thing that most makes a
-   strip look bound rather than printed. */
-.lib-spine-band{flex:0 0 auto;width:calc(100% - 9px);height:1.5px;border-radius:1px;
-  background:color-mix(in srgb,var(--accent-c,var(--a-peach)) 78%,#fff);
-  opacity:.55}
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 30%,#0D0A13) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 50%,#161220) 26%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 28%,#110D19) 78%,
+    rgba(0,0,0,.5) 100%);
+  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.15)}
+.lib-spine-band{flex:0 0 auto;width:calc(100% - 8px);height:1.5px;border-radius:1px;
+  background:color-mix(in srgb,var(--accent-c,var(--a-peach)) 78%,#fff);opacity:.5}
+/* OPTION C (S4). The spine carries a SHORT title, not the full one crammed in.
+   At 22px there is room for about twenty-two characters at 10px, and beyond
+   that the honest thing is an ellipsis plus a cover and a footer that carry the
+   whole title. Vertical, reading bottom-to-top, which is the convention on
+   English-language spines. */
 .lib-spine-t{flex:1 1 auto;min-height:0;writing-mode:vertical-rl;
   transform:rotate(180deg);
   display:flex;align-items:center;justify-content:center;
-  font-size:10px;font-weight:600;letter-spacing:.04em;
-  color:rgba(255,255,255,.9);text-shadow:0 1px 2px rgba(0,0,0,.55);
+  font-size:10px;font-weight:600;letter-spacing:.03em;
+  color:rgba(255,255,255,.92);text-shadow:0 1px 2px rgba(0,0,0,.5);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* The cover. The approved Book identity at shelf scale -- same marks, same
-   order, same proportion -- so the object you press and the cover that opens
-   are recognisably one thing (S8). */
-.lib-cover{position:relative;flex:0 0 auto;width:var(--bw);aspect-ratio:210/297;
+/* THE FORE-EDGE. Finely lined so it reads as paper rather than as a bar, and
+   lit from the same side as everything else. */
+.lib-block{flex:0 0 auto;width:var(--edge-w);
+  height:calc(var(--bw) * 297 / 210 - 4px);border-radius:0 2px 2px 0;
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(255,255,255,.10) 0 1px,transparent 1px 2px),
+    linear-gradient(90deg,#3A3348 0%,#2A2437 60%,#1B1725 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -1px 0 rgba(0,0,0,.4)}
+
+/* The cover, between them. */
+/* HEIGHT, not aspect-ratio (L3.2 S14).
+   `aspect-ratio` yields to content: a cover with a long title, a subtitle, a
+   rule and an author line grew past its ratio, so books were different heights
+   depending on how much was printed on them. Measured: a sample Book 212.7px
+   tall against the Diary's 178.2 -- an accidental size mismatch, and it broke
+   the shared silhouette. The height now comes from the same expression the
+   spine and the fore-edge use, so all three cannot drift, and anything that
+   does not fit is clipped rather than allowed to stretch the object. */
+.lib-cover{position:relative;flex:0 0 auto;width:var(--bw);
+  height:calc(var(--bw) * 297 / 210);overflow:hidden;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:3px;padding:14px 12px;border-radius:0 5px 5px 0;
+  gap:3px;padding:14px 12px;
   background:linear-gradient(150deg,var(--paper) 0%,var(--paper-2) 100%);
-  box-shadow:0 12px 22px -12px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.045);
-  transition:box-shadow var(--t-select)}
-/* The gutter, where the cover meets the spine. Drawn on the COVER and lit to
-   match the spine's own falloff, so the junction is a fold rather than a seam
-   between two separate things (S9). */
-.lib-cover::before{content:'';position:absolute;left:0;top:0;bottom:0;width:11px;
-  background:linear-gradient(90deg,rgba(0,0,0,.42) 0%,rgba(0,0,0,.14) 55%,transparent 100%);
+  box-shadow:var(--obj-edge);transition:box-shadow var(--t-select)}
+.lib-obj.is-pulled .lib-cover{box-shadow:var(--obj-lift)}
+/* The hinge, where the cover meets the spine. Drawn on the cover and lit to
+   match the spine's own falloff, so the junction reads as a fold. */
+.lib-cover::before{content:'';position:absolute;left:0;top:0;bottom:0;width:10px;
+  background:linear-gradient(90deg,rgba(0,0,0,.40) 0%,rgba(0,0,0,.12) 60%,transparent 100%);
   pointer-events:none}
 .lib-cover-mark{font-family:'Playfair Display',Georgia,serif;font-size:8px;
   letter-spacing:.14em;color:var(--paper-ink-2);opacity:.72}
@@ -2945,129 +3019,126 @@ body:has(.lib-page) .rail{display:none}
   box-shadow:0 12px 22px -12px rgba(0,0,0,.6),inset 0 0 0 1px rgba(182,155,240,.22)}
 .lib-book-system .lib-spine{box-shadow:inset 1.5px 0 0 rgba(182,155,240,.5),
   inset -1px 0 2px rgba(0,0,0,.45)}
-/* The Open control, revealed only in the pulled state (S6/S27). A LABELLED
-   control, so the second activation is never a guess -- and on a phone this is
-   the whole interaction: tap once to pull forward, then press Open. */
-.lib-obj-pull{position:absolute;left:50%;bottom:12px;translate:-50% 0;
-  display:flex;align-items:center;gap:5px;white-space:nowrap;
-  padding:5px 10px;border-radius:999px;
-  background:var(--accent);color:#fff;font-size:11px;font-weight:600;
-  box-shadow:0 6px 14px -6px rgba(0,0,0,.7);
-  opacity:0;transform:translateY(6px);pointer-events:none;
-  transition:opacity var(--t-hover),transform var(--t-select)}
-.lib-obj-pull-t{line-height:1}
+/* ---- THE OBJECT FOOTER (L3.2 S8, option C) ---------------------------
+   L3.1 floated a bright purple pill over the cover, in the same corner region
+   as the overflow menu. The review called it a debug badge. It was: a saturated
+   UI chip sitting on top of the artwork, belonging to neither the object nor
+   the page.
 
-/* The full title, under the object it belongs to (S10).
-   L3 put this at the far LEFT of the shelf, detached from everything, showing
-   whichever book the scroll happened to be near. The review called it
-   confusing and it was: a label that belongs to an object has to be under that
-   object. Absolutely positioned so revealing it cannot shift the row. */
-.lib-obj-label{position:absolute;left:50%;top:100%;translate:-50% 0;margin-top:10px;
-  width:max(100%,150px);display:flex;flex-direction:column;gap:1px;align-items:center;
-  text-align:center;opacity:0;transform:translateY(-4px);pointer-events:none;
+   The title, the subtitle and the Open action now share one footer BENEATH the
+   object, at the object's own width, inside the shelf's label zone. Nothing
+   covers the cover, the label is attached to what it names, and the second
+   activation has a target that is part of the object.
+
+   Absolutely positioned, so revealing it cannot shift the row. */
+.lib-foot{position:absolute;left:0;right:0;top:100%;margin-top:calc(var(--shelf-drop) - 16px);
+  display:flex;flex-direction:column;gap:1px;align-items:flex-start;text-align:left;
+  opacity:0;transform:translateY(-5px);pointer-events:none;
   transition:opacity var(--t-hover),transform var(--t-select)}
-.lib-obj-label-t{font-size:12px;font-weight:600;color:var(--text);line-height:1.25;
+.lib-foot-t{font-size:12px;font-weight:600;color:var(--text);line-height:1.25;
   display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;
   overflow:hidden}
-.lib-obj-label-s{font-size:10.5px;color:var(--muted);line-height:1.3;
-  display:-webkit-box;-webkit-line-clamp:1;line-clamp:1;-webkit-box-orient:vertical;
-  overflow:hidden}
+.lib-foot-s{font-size:10.5px;color:var(--muted);line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+/* The action reads as text with an arrow, not as a button sitting on a shelf.
+   Quiet by design: it is the only thing here that can be pressed, so it does
+   not also have to shout. */
+.lib-foot-a{display:inline-flex;align-items:center;gap:4px;margin-top:5px;
+  font-size:11.5px;font-weight:600;color:var(--accent);
+  letter-spacing:.01em;cursor:pointer}
+.lib-obj.is-pulled .lib-foot-a:hover{text-decoration:underline}
 
 .lib-obj-flag{position:absolute;left:calc(var(--spine-w,0px) + 7px);top:7px;
   font-size:8px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
   color:var(--muted);background:rgba(0,0,0,.5);border-radius:4px;padding:2px 5px}
-.lib-obj-more{position:absolute;right:5px;bottom:5px;width:24px;height:24px;
-  display:grid;place-items:center;border:0;border-radius:7px;cursor:pointer;
-  background:rgba(0,0,0,.5);color:var(--text-2);opacity:0;
+/* The overflow menu lives at the TOP of the object; the Open action lives in
+   the footer at the bottom (L3.2 S9). Opposite ends, so they cannot compete for
+   the same press, and the menu can never cover the title. */
+.lib-obj-more{position:absolute;right:4px;top:5px;width:24px;height:24px;
+  display:grid;place-items:center;border:0;border-radius:6px;cursor:pointer;
+  background:rgba(10,8,16,.62);color:var(--text-2);opacity:0;z-index:2;
   transition:opacity var(--t-hover),background var(--t-hover),color var(--t-hover)}
 .lib-obj:hover .lib-obj-more,.lib-obj.is-pulled .lib-obj-more,
 .lib-obj:focus-within .lib-obj-more{opacity:1}
-.lib-obj-more:hover{background:rgba(0,0,0,.72);color:var(--text)}
+.lib-obj-more:hover{background:rgba(10,8,16,.85);color:var(--text)}
 .lib-obj-more:focus-visible{opacity:1;outline:2px solid var(--accent);outline-offset:1px}
 
 /* ── The non-Book family (§10) ────────────────────────────────────────
    Same shelf, same states, same type scale — a different object. A folio is
    not a book with the spine removed; it is shorter, wider and made of paper
    that lies flat. */
-.lib-res{--rw:172px;flex-direction:column;align-items:stretch;width:var(--rw);
-  gap:8px;border-radius:10px}
-.lib-res-face{position:relative;display:flex;flex-direction:column;gap:6px;
-  height:104px;padding:11px 12px;border-radius:9px;overflow:hidden;
-  background:linear-gradient(155deg,var(--surface-2) 0%,var(--surface) 100%);
-  box-shadow:0 10px 18px -12px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.05)}
-.lib-res-glyph{color:var(--text-2);display:flex}
-.lib-res-excerpt{font-size:9.5px;line-height:1.45;color:var(--muted);
-  display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;-webkit-box-orient:vertical;
-  overflow:hidden}
-.lib-res-kind,.lib-res-domain{margin-top:auto;font-size:9px;font-weight:700;
-  letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
-.lib-res-domain{text-transform:none;letter-spacing:.02em;font-weight:600;font-size:10px}
-/* ---- The Document folio (L3.1 S17) -----------------------------------
-   The review called the old Document underdesigned, and it was a rounded
-   rectangle with a glyph in it.
+/* ---- THE DOCUMENT AS A STORED FOLIO (L3.2 S15) -----------------------
+   The review is right that it still read as a UI card: an 18px-ish radius, a
+   soft ambient shadow and a glyph on a tinted panel is the visual language of
+   a dashboard tile, whatever is drawn inside it.
 
-   A Document is now a FOLIO: a stack of sheets in a jacket. Three things carry
-   that and nothing else is needed --
+   What it is now, and every part earns its place:
 
-     1. two paper edges peeking out behind the front sheet, offset by 3px and
-        4px, which is what makes it a stack rather than a card;
-     2. an accent tab down the left edge of the jacket, the way a filed folio
-        is tabbed;
-     3. paper stock, not surface stock -- the same `--paper` the Book cover and
-        the Diary page are made of, so a Document is visibly the same material
-        as a Book without pretending to be one.
+     - FLATTER than a book, and landscape, because a folio lies down;
+     - a 2px radius, not a card radius. Paper corners are square-ish;
+     - a visible SHEET EDGE down the right, the folio's own page block, which
+       is the folio equivalent of a book's fore-edge;
+     - a small accent TAB at the top left, the way a filed folio is tabbed;
+     - paper stock, not surface stock -- the same `--paper` the Book cover and
+       the Diary page are made of;
+     - the same edge shadow, the same contact shadow, the same baseline.
 
-   It gets the same depth, the same contact shadow and the same interaction as
-   a Book. What it does not get is a spine, because it is not bound. */
-.lib-res-document .lib-res-face{
-  background:linear-gradient(160deg,var(--paper) 0%,var(--paper-2) 100%);
-  border-radius:3px 8px 8px 3px;
-  box-shadow:0 10px 18px -12px rgba(0,0,0,.65),inset 0 0 0 1px rgba(255,255,255,.055)}
-/* The sheets underneath. Drawn on the OBJECT rather than the face so they sit
-   behind it without needing a wrapper. */
-.lib-res-document .lib-res-face::before,
-.lib-res-document .lib-res-face::after{content:'';position:absolute;
-  right:-3px;top:5px;bottom:7px;width:10px;border-radius:0 7px 7px 0;
-  background:linear-gradient(160deg,var(--paper-2) 0%,#1D1929 100%);
-  box-shadow:inset -1px 0 0 rgba(255,255,255,.05);z-index:-1}
-.lib-res-document .lib-res-face::after{right:-6px;top:9px;bottom:11px;opacity:.7}
-/* The jacket tab. */
-.lib-res-document .lib-res-face{border-left:3px solid var(--a-blue)}
-.lib-res-document .lib-res-glyph{color:var(--a-blue)}
-.lib-res-document .lib-res-excerpt{color:var(--paper-ink-2)}
-.lib-res-document .lib-res-kind{color:var(--paper-ink-2);opacity:.75}
-.lib-res-link .lib-res-face{border-left:3px solid var(--a-sage)}
-.lib-res-file .lib-res-glyph{color:var(--muted)}
+   It carries its own title, so it needs no detached resting label (S19). */
+.lib-res{--rw:178px;flex-direction:row;align-items:flex-end;width:var(--rw)}
+.lib-res-face{position:relative;display:flex;width:100%;height:118px;
+  border-radius:2px 3px 3px 2px;overflow:hidden;
+  background:linear-gradient(158deg,var(--paper) 0%,var(--paper-2) 100%);
+  box-shadow:var(--obj-edge);transition:box-shadow var(--t-select)}
+.lib-obj.is-pulled .lib-res-face{box-shadow:var(--obj-lift)}
+/* The sheet edge: the folio's page block, on the right, matching the book. */
+.lib-res-edge{position:absolute;right:0;top:3px;bottom:3px;width:5px;
+  background:
+    repeating-linear-gradient(0deg,rgba(255,255,255,.09) 0 1px,transparent 1px 2px),
+    linear-gradient(90deg,#2A2437 0%,#1B1725 100%);
+  box-shadow:inset 1px 0 0 rgba(0,0,0,.35)}
+/* The tab. Small, and the single clearest "this is filed" cue. */
+.lib-res-tab{position:absolute;left:0;top:0;bottom:0;width:4px;
+  background:var(--a-blue);opacity:.85}
+.lib-res-sheet{display:flex;flex-direction:column;gap:5px;
+  padding:12px 14px 12px 13px;min-width:0;flex:1}
+.lib-res-kind{font-size:8.5px;font-weight:700;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--accent-c,var(--a-blue));opacity:.85}
+.lib-res-name{font-size:12.5px;font-weight:600;line-height:1.28;color:var(--paper-ink);
+  display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;
+  overflow:hidden;overflow-wrap:anywhere}
+.lib-res-excerpt{margin-top:auto;font-size:9.5px;line-height:1.4;color:var(--paper-ink-2);
+  opacity:.85;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden}
+.lib-res-domain{margin-top:auto;font-size:10px;font-weight:600;color:var(--paper-ink-2)}
+.lib-res-link .lib-res-tab{background:var(--a-sage)}
+.lib-res-link .lib-res-kind{color:var(--a-sage)}
+.lib-res-file .lib-res-tab{background:var(--muted)}
+.lib-res-file .lib-res-kind{color:var(--paper-ink-2)}
 
 /* Images and video: a FRAME with a drawn floor. The floor is the default and
    the picture sits on top, so a dead URL leaves a frame rather than a hole
    (§28). `--ratio` is only set when the row actually knows the dimensions. */
-.lib-frame{position:relative;display:block;height:104px;border-radius:9px;overflow:hidden;
-  background:linear-gradient(155deg,var(--surface-2) 0%,var(--surface) 100%);
-  box-shadow:0 10px 18px -12px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.05)}
+/* Images and video: the same physical rules, a different object. A frame with
+   a drawn floor, the same edge shadow, the same height as a folio so the whole
+   Media shelf sits on one line. */
+.lib-frame{position:relative;display:block;width:100%;height:118px;
+  border-radius:2px;overflow:hidden;
+  background:linear-gradient(158deg,var(--surface-2) 0%,var(--surface) 100%);
+  box-shadow:var(--obj-edge);transition:box-shadow var(--t-select)}
+.lib-obj.is-pulled .lib-frame{box-shadow:var(--obj-lift)}
 .lib-frame-fallback{position:absolute;inset:0;display:grid;place-items:center;
   color:var(--muted);opacity:.55}
 .lib-frame-img{position:relative;width:100%;height:100%;object-fit:cover;display:block}
 .lib-frame-badge{position:absolute;right:6px;bottom:6px;font-size:9.5px;font-weight:700;
-  color:#fff;background:rgba(0,0,0,.66);border-radius:4px;padding:1px 5px;
+  color:#fff;background:rgba(0,0,0,.66);border-radius:3px;padding:1px 5px;
   font-variant-numeric:tabular-nums}
 .lib-frame-play{position:absolute;left:6px;bottom:6px;width:20px;height:20px;
   display:grid;place-items:center;border-radius:999px;background:rgba(0,0,0,.6);color:#fff}
 
-.lib-res-body{display:flex;flex-direction:column;gap:2px;padding:0 2px}
-.lib-res-title{font-size:12px;font-weight:600;color:var(--text);line-height:1.3;
-  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;
-  overflow:hidden}
-.lib-res-sub{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis}
-/* Nothing on the shelf is inert (S20). A Document, an image, a link and a file
-   all pull forward, with the same grammar and the same timings as a Book --
-   only the object differs. */
-.lib-res.is-pulled{transform:translateY(-16px) scale(1.05)}
-.lib-res.is-pulled .lib-res-face,.lib-res.is-pulled .lib-frame{
-  box-shadow:0 22px 32px -14px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,255,255,.11)}
-.lib-res .lib-obj-pull{bottom:auto;top:78px}
-.lib-res .lib-obj-label{margin-top:6px}
+/* Every resource pulls forward with the SAME grammar as a Book -- travel, no
+   scale, and the footer. Nothing on the shelf is inert, and nothing gets a
+   different physics. */
+.lib-res.is-pulled{transform:translateY(-32px)}
 
 /* The search result surface (§13). One wrapped set, not four rails: a result
    is an answer, and an answer should be visible rather than somewhere to
@@ -3084,19 +3155,27 @@ body:has(.lib-page) .rail{display:none}
 /* The personal ledge (§30 B). Shorter than a Books shelf and set apart by a
    hairline above it, so a system-owned Book is visibly on its own shelf rather
    than first in somebody's collection. */
-.lib-shelf-personal .lib-rail{padding-top:14px;padding-bottom:26px}
+/* The personal ledge keeps its own HEADING treatment and nothing else.
+   It used to set its own rail padding, and because the ledge line is drawn from
+   the rail's bottom edge, that put the Diary on a different plane from every
+   other object: measured contact gap Diary -6px against Book +36px, a 42px
+   discrepancy that read exactly as the review described it -- objects floating
+   at arbitrary heights. One plane, one padding, no exceptions (L3.2 S13). */
 .lib-shelf-personal .lib-row{justify-content:flex-start}
 .lib-shelf-personal .lib-shelf-note{font-style:italic}
 
 /* An empty Library keeps ONE faint ledge, so the room is still a room without
    showing you the size of the gap (§25). */
-.lib-shelf-blank .lib-rail{overflow:hidden;padding-bottom:24px}
+/* The empty-Library placeholder keeps the shared plane. It carries no objects,
+   so its padding could not misalign anything -- but a shelf that opts out of
+   the formula is a shelf someone later puts an object on. */
+.lib-shelf-blank .lib-rail{overflow:hidden}
 .lib-blank{height:96px;opacity:.5}
 
 /* `.lib-shelf-cap` is gone. It was a persistent label at the far left of every
    shelf naming whichever object the scroll happened to be near -- detached
    from the object, and describing a state (prominence) that no longer exists.
-   The title now lives under the pulled-forward object: see `.lib-obj-label`. */
+   The title now lives in the object's own footer: see `.lib-foot`. */
 
 /* Shelf-shaped waiting (§32). Book-shaped, on a ledge — the shape that is
    coming, not a grey slab. */
@@ -3116,7 +3195,7 @@ body:has(.lib-page) .rail{display:none}
   .lib-obj,.lib-obj:hover,.lib-obj.is-pulled,.lib-res.is-pulled{transform:none}
   .lib-obj.is-opening{transform:none;opacity:.12}
   .lib-obj::after,.lib-obj:hover::after,.lib-obj.is-pulled::after{transform:none}
-  .lib-obj.is-pulled .lib-obj-pull,.lib-obj.is-pulled .lib-obj-label{transform:none}
+  .lib-obj.is-pulled .lib-foot{transform:none}
   .lib-obj.is-pulled .lib-cover{box-shadow:0 0 0 2px var(--accent-c,var(--a-peach)),
     0 26px 40px -16px rgba(0,0,0,.72)}
   .lib-rail{scroll-behavior:auto}
@@ -3166,8 +3245,7 @@ body:has(.lib-page) .rail{display:none}
 /* The object is a specimen here, not a control: it is the same component the
    shelf draws, at rest, with nothing to press. */
 .lib-open-object .lib-obj{cursor:default;pointer-events:none}
-.lib-open-object .lib-obj-more,.lib-open-object .lib-obj-pull,
-.lib-open-object .lib-obj-label{display:none}
+.lib-open-object .lib-obj-more,.lib-open-object .lib-foot{display:none}
 .lib-open-object .lib-book{--bw:150px}
 .lib-open-object .lib-res{--rw:200px}
 .lib-open-body{display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -4236,7 +4314,6 @@ body:has(.dia-page) .rail{display:none}
    whatever you last touched, and turning it is noise. */
 @media (max-width:1024px){
   .lib-book{--bw:124px}
-  .lib-shelf-book{--overlap:60px}
   .lib-res{--rw:164px}
   .lib-shelves{gap:22px}
 }
@@ -4245,10 +4322,9 @@ body:has(.dia-page) .rail{display:none}
    the path to opening something (§35/§36). The overflow menu stops hiding
    behind hover because there is no hover to reveal it with. */
 @media (max-width:820px){
-  /* Less overlap under a finger: a book you have to hit exactly is a book you
-     miss. 44px of each cover stays clear of its neighbour. */
+  /* Wider covers under a finger, and no overlap at any width since L3.2 -- a
+     book you have to hit exactly is a book you miss. */
   .lib-book{--bw:132px;--spine-w:22px}
-  .lib-shelf-book{--overlap:44px}
   .lib-res{--rw:158px}
   .lib-rail{padding:16px 0 26px;scroll-padding-inline:16px}
   .lib-row{padding:0 16px;column-gap:14px}
@@ -4262,8 +4338,10 @@ body:has(.dia-page) .rail{display:none}
      control is bigger here because it is the primary route on a phone. */
   /* 44px tall, not 30. On a phone this is the PRIMARY route to opening
      anything, so it is sized as a real control rather than as a hint. */
-  .lib-obj-pull{padding:0 16px;height:44px;font-size:13px;bottom:8px;
-    border-radius:22px}
+  /* TOUCH (L3.2 S26). The footer action is the primary route on a phone, so
+     it is a 44px target rather than a line of text -- but it is still part of
+     the footer, under the object, and not a pill over the cover. */
+  .lib-foot-a{min-height:44px;align-items:center;font-size:13px;margin-top:2px}
   .lib-obj:hover{transform:none}
   .lib-obj:hover::after{transform:none;opacity:1}
 
@@ -4289,7 +4367,6 @@ body:has(.dia-page) .rail{display:none}
    clears the global composer (§35). */
 @media (max-width:480px){
   .lib-book{--bw:128px}
-  .lib-shelf-book{--overlap:40px}
   .lib-res{--rw:150px}
   .lib-shelves{gap:18px;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
   .lib-open{grid-template-columns:minmax(0,1fr);gap:22px;justify-items:center}

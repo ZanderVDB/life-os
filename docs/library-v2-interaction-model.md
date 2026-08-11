@@ -27,9 +27,9 @@ somebody raises it**.
 | State | Caused by | Owns | Never |
 |---|---|---|---|
 | **Resting** | — | nothing at all | any transform |
-| **Hover** | a pointer | `translateY(-5px)` + contact shadow | required for anything |
+| **Hover** | a pointer | `translateY(-3px)` + contact shadow | required for anything |
 | **Focus** | the keyboard | a 2px accent outline | the group colour |
-| **Pulled forward** | a click, Enter/Space or a tap | lift, `scale(1.06)`, deeper shadow, the whole cover clear of its neighbours, an **Open** control and the full title | a selection, or the route |
+| **Pulled forward** | a click, Enter/Space or a tap | `translateY(-32px)` (no scale), a deeper shadow, neighbours stepping aside, and a footer carrying the full title and **Open** | a selection, or the route |
 | **Opening** | activating a pulled object | the handoff | surviving the paint |
 | **Returned** | coming back from an object | a 320ms glow in the object's own accent | an outline |
 
@@ -41,9 +41,9 @@ every `.lib-obj` rule in the stylesheet.
 
 | | First activation | Second |
 |---|---|---|
-| pointer | pulls forward | click the object again, or its **Open** control |
+| pointer | pulls forward | click the object again, or **Open** in its footer |
 | keyboard | pulls forward, `aria-expanded="true"` | Enter/Space again |
-| touch | pulls forward | press the labelled **Open** button |
+| touch | pulls forward | press **Open** in the footer (a 44px target) |
 
 The second stage is never a mystery, because the first one produces a control
 that says what happens next. That single decision is what makes the model work
@@ -108,3 +108,30 @@ that caused it. Measured: the last book on the Books shelf pulled and vanished
 in the same gesture. Making that one reveal instant removes timing from the
 question entirely; arrow-key browsing keeps its smooth scroll, where the travel
 is the point.
+
+---
+
+## L3.2 corrections
+
+The grammar is unchanged — `RESTING → PULLED FORWARD → OPEN` — but three
+parts of how it looks were wrong.
+
+**The pull no longer scales.** `translateY(-22px) scale(1.06)` resampled every
+glyph inside the object: a 126px cover became 133.56px. Now `translateY(-32px)`
+and nothing else. Measured resting against pulled: identical widths to four
+decimal places and an identical subpixel phase.
+
+**32px, not 30.** The travel must land on a whole device pixel at every
+supported ratio. 30 x 1.25 = 37.5; any multiple of four is exact at 1, 1.25, 1.5
+and 2.
+
+**The Open control became a footer.** L3.1 put a purple pill over the cover, in
+the same corner as the overflow menu. The title, the subtitle and the Open
+action now share one footer beneath the object at its own width; the overflow
+menu moved to the object's top. Opposite ends, so neither can cover the other.
+
+**Hover shrank to 3px.** It was 5px against a 22px pull, which was close enough
+to read as the same gesture. 3 against 32 is not.
+
+**Neighbours step aside.** Pulling an object translates its two immediate
+siblings 16px apart — local, transform-only, and the rail never reflows.

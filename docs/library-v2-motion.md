@@ -131,3 +131,24 @@ Travel goes, information stays. Pulled-forward keeps its shadow, its Open
 control and its label; hover keeps its surface; focus keeps its outline; the
 return glow does not play at all. Nothing in the shelf was ever *only* movement,
 which is why turning the movement off costs nothing.
+
+---
+
+## L3.2 — the numbers, corrected
+
+| | |
+|---|---|
+| hover lift | 140ms, **3px** |
+| pull forward | 200ms, **32px**, no scale |
+| neighbours stepping aside | 200ms, 16px |
+| open handoff | 320ms, 48px |
+| return glow | 320ms |
+
+Every distance is a multiple of four, so every state lands on a whole device
+pixel at DPR 1, 1.25, 1.5 and 2. That is not a stylistic choice: a transform
+that lands on a half device pixel resamples the type inside it, which is what
+made the pulled Book look soft.
+
+**One depth cue, not three.** The distance is the cue; the shadow supports it;
+the scale does not exist. A test fails if any shelf state introduces a
+`scale()` or a `filter`.

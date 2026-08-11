@@ -68,7 +68,11 @@ test('shelf: the rail is an ordinary scroller, and works before the script does'
    * adds — prominence, keys, arrows — is an enhancement of an element that
    * already scrolls, so a failure in any of it degrades to a plain scroller
    * rather than to a shelf that cannot be moved. */
-  assert.match(html, /\.lib-rail\{[^}]*overflow-x:auto/,
+  /* `scroll`, not `auto`, since L3.2: a horizontal scrollbar lives inside the
+   * rail's border box, so a shelf that overflows loses 10px that one which
+   * fits does not -- and the ledge is drawn from that edge. Reserving it on
+   * every rail is what makes one baseline formula true for every shelf. */
+  assert.match(html, /\.lib-rail\{[^}]*overflow-x:scroll/,
     'the rail is not a native horizontal scroller');
   assert.match(html, /\.lib-rail\{[^}]*scroll-snap-type:x proximity/,
     'snap must be proximity — mandatory snap fights trackpad momentum (§22)');
@@ -151,7 +155,9 @@ test('states: resting, hover, focus, pulled, opening and returned are all distin
   assert.ok(!/\.lib-obj\{[^}]*transform:(?!\s*none)/.test(html),
     'the resting object has a transform, which is how permanent prominence returns');
   // HOVER owns a lift and a surface. It never fills anything.
-  assert.match(html, /\.lib-obj:hover\{transform:translateY\(-5px\);z-index:3\}/);
+  /* Hover is deliberately SMALLER than a pull (L3.2 S21): 3px against 32.
+   * Hover says "this responds"; pulling says "this one". */
+  assert.match(html, /\.lib-obj:hover\{transform:translateY\(-3px\);z-index:3\}/);
   // FOCUS owns an outline, from :focus-visible only...
   assert.match(html, /\.lib-obj:focus-visible\{outline:2px solid var\(--accent\)/);
   // ...and it is the ONLY state that owns one, which is what keeps it from
@@ -161,11 +167,12 @@ test('states: resting, hover, focus, pulled, opening and returned are all distin
   assert.ok(withOutline.every((r) => /focus/.test(r)),
     `a non-focus state declares an outline: ${withOutline.find((r) => !/focus/.test(r))}`);
   // PULLED owns lift + scale + depth, and reveals its Open control and label.
-  assert.match(html, /\.lib-obj\.is-pulled\{transform:translateY\(-22px\) scale\(1\.06\);z-index:6\}/);
-  assert.match(html, /\.lib-obj\.is-pulled \.lib-obj-pull\{opacity:1/);
-  assert.match(html, /\.lib-obj\.is-pulled \.lib-obj-label\{opacity:1/);
+  /* No scale at all since L3.2, and 32px rather than 22 -- see the crispness
+   * test below for why the number is a multiple of four. */
+  assert.match(html, /\.lib-obj\.is-pulled\{transform:translateY\(-32px\);z-index:6\}/);
+  assert.match(html, /\.lib-obj\.is-pulled \.lib-foot\{opacity:1/);
   // OPENING owns the handoff.
-  assert.match(html, /\.lib-obj\.is-opening\{transform:translateY\(-30px\) scale\(1\.12\);opacity:\.12/);
+  assert.match(html, /\.lib-obj\.is-opening\{transform:translateY\(-48px\);opacity:\.1/);
   // RETURNED owns a glow, never an outline (L3.1 4).
   assert.match(html, /\.lib-obj\.is-returned \.lib-cover[^{]*\{\s*box-shadow:0 0 18px/);
   assert.ok(!/is-returned[^{]*\{[^}]*outline/.test(html),
@@ -250,7 +257,7 @@ test('motion: reduced motion removes travel, not information', () => {
    * its Open control and label are unaffected — the state has to stay
    * distinguishable, which is the whole point. */
   assert.match(reduced, /\.lib-obj\.is-pulled \.lib-cover\{box-shadow:0 0 0 2px/);
-  assert.match(reduced, /\.lib-obj\.is-pulled \.lib-obj-pull,\.lib-obj\.is-pulled \.lib-obj-label\{transform:none\}/);
+  assert.match(reduced, /\.lib-obj\.is-pulled \.lib-foot\{transform:none\}/);
   // And the return glow simply does not play.
   assert.match(shelf, /if \(prefersReduced\(\)\) return;\s*\n\s*obj\.classList\.add\('is-returned'\)/);
 });
@@ -261,7 +268,11 @@ test('cover: the shelf object carries the approved Book identity', () => {
   /* §8 — the cover on the shelf must correspond to the Book that opens. Same
    * marks in the same order, and the same 210:297 proportion. Measured at
    * 1280×900: cover 128×181, ratio 1.414 against 297/210 = 1.414. */
-  assert.match(html, /\.lib-cover\{position:relative;flex:0 0 auto;width:var\(--bw\);aspect-ratio:210\/297/);
+  /* Height, not `aspect-ratio`: the ratio yielded to content, so a cover with
+   * a subtitle grew and books ended up different heights (measured 212.7px
+   * against 178.2). The height now comes from the same expression the spine
+   * and the fore-edge use. */
+  assert.match(html, /\.lib-cover\{position:relative;flex:0 0 auto;width:var\(--bw\);\s*\n?\s*height:calc\(var\(--bw\) \* 297 \/ 210\)/);
   for (const mark of ['lib-cover-mark', 'lib-cover-pre', 'lib-cover-title',
     'lib-cover-rule', 'lib-cover-author']) {
     assert.ok(shelf.includes(mark), `the shelf cover is missing ${mark}`);
@@ -278,7 +289,7 @@ test('spine: wide enough to be read, and flush with the cover', () => {
    * 24px, 10px type, a title cut at a word boundary with an ellipsis, and two
    * accent bands at head and tail. Measured flush with the cover: spine and
    * cover both 178.2px tall, gap between them 0.00px. */
-  assert.match(html, /\.lib-book\{--bw:126px;--spine-w:24px\}/);
+  assert.match(html, /\.lib-book\{--bw:126px;--spine-w:22px;--edge-w:6px\}/);
   assert.match(html, /\.lib-spine-t\{[^}]*font-size:10px/);
   assert.match(html, /\.lib-spine-band\{/);
   assert.match(shelf, /export function spineTitle\(title, max = 22\)/);
@@ -304,7 +315,14 @@ test('depth is drawn, not rendered in 3D', () => {
   const shelfCss = html.slice(html.indexOf('.lib-obj{'), html.indexOf('.lib-hits'));
   assert.ok(!/rotateY|rotate3d|perspective:|preserve-3d/.test(shelfCss),
     'a 3D transform is back on the shelf');
-  assert.match(html, /\.lib-shelf-book \.lib-slot \+ \.lib-slot\{margin-left:calc\(var\(--overlap\) \* -1\)\}/);
+  /* L3.1 overlapped books by 64px. L3.2 removed the overlap entirely: tucking
+   * each fore-edge behind the next spine hid the strongest "this is bound"
+   * cue, and a dark spine landing mid-cover is what made a shelf read as a
+   * deck of cards. Books TOUCH when the shelf is dense and sit apart when it
+   * is not -- density by collection size, not one formula for both. */
+  assert.match(html, /\.lib-rail\.is-dense \.lib-row\{column-gap:0\}/);
+  assert.match(html, /\.lib-shelf-book \.lib-row\{column-gap:16px\}/);
+  assert.ok(!/margin-left:calc\(var\(--overlap\)/.test(html), 'the book overlap is back');
   assert.match(html, /\.lib-obj::after\{content:'';position:absolute/);
 });
 
@@ -314,9 +332,11 @@ test('depth is drawn, not rendered in 3D', () => {
 test('resources: honest per type, and never forced onto a spine', () => {
   assert.ok(!/lib-res[\s\S]{0,400}lib-spine/.test(shelf),
     'a non-Book object was given a book spine');
-  for (const cls of ['lib-res-document', 'lib-res-link', 'lib-res-file']) {
-    assert.ok(html.includes(cls), `${cls} has no visual of its own`);
+  for (const cls of ['lib-res-tab', 'lib-res-edge', 'lib-res-sheet']) {
+    assert.ok(html.includes(cls), `the folio is missing ${cls}`);
   }
+  assert.match(html, /\.lib-res-link \.lib-res-tab\{background:var\(--a-sage\)\}/);
+  assert.match(html, /\.lib-res-file \.lib-res-tab\{background:var\(--muted\)\}/);
   // A video says how long it is; a file says what it is and how big.
   assert.match(shelf, /class="lib-frame-badge"/);
   assert.match(shelf, /function fileKind\(item\)/);
@@ -333,7 +353,7 @@ test('previews: the fallback is the floor, and a dead URL cannot move anything',
   assert.match(shelf, /onerror="this\.remove\(\)"/);
   assert.match(shelf, /loading="lazy"\s*\n?\s*decoding="async"/);
   // The frame's height is fixed, so nothing depends on the image arriving.
-  assert.match(html, /\.lib-frame\{position:relative;display:block;height:104px/);
+  assert.match(html, /\.lib-frame\{position:relative;display:block;width:100%;height:118px/);
 });
 
 test('formatters: sizes and durations never lie about their units', () => {
@@ -553,8 +573,10 @@ test('responsive: the shelf stays a shelf and the objects get bigger', () => {
    * further apart under a finger, because a book you have to hit exactly is a
    * book you miss. */
   assert.ok(!/rotateY/.test(html), 'a 3D rotation is back on the shelf');
-  assert.match(html, /\.lib-shelf-book\{--overlap:64px\}/);
-  assert.match(html, /@media \(max-width:820px\)[\s\S]*?\.lib-shelf-book\{--overlap:44px\}/);
+  /* Overlap tokens are gone with the overlap (L3.2). What varies by width is
+   * the object size and the gap, never how much of a book is hidden. */
+  assert.ok(!/--overlap/.test(html), 'the overlap token is back');
+  assert.match(html, /@media \(max-width:820px\)[\s\S]*?\.lib-book\{--bw:132px/);
   // The last shelf clears the fixed composer. Measured at 375×667: 173px spare.
   assert.match(html, /\.lib-shelves\{gap:18px;padding-bottom:calc\(84px \+ env\(safe-area-inset-bottom,0px\)\)\}/);
 });

@@ -2111,3 +2111,82 @@ one reveal instant; arrow-key browsing keeps its smooth scroll.
 
 **1082 tests pass, 22 new**, and 10 L3 assertions rewritten with the reversal
 recorded in place. TypeScript clean.
+
+---
+
+## L3.2 — Library physicality, crisp pull state, baseline consistency
+
+L3.1 fixed what the shelf DID. L3.2 fixed what it LOOKED LIKE. Everything below
+was found by measurement, and most of it was one class of mistake: geometry that
+depended on state.
+
+### One plane (the biggest one)
+
+Measured before: contact gap **Diary −6px, Book +36px, Document +36px** — the
+Diary hanging 42px lower than everything else relative to its own shelf. Two
+causes, both invisible in the source:
+
+1. the personal rail carried **its own padding**, and the ledge is drawn from
+   the rail's bottom edge;
+2. a horizontal scrollbar lives inside the border box, so a shelf that
+   **overflows** is 10px shorter in content than one that fits. Measured: books
+   rail offsetHeight 287 / clientHeight 277; personal rail 242 / 242.
+   `scrollbar-gutter: stable` does not help — it reserves the inline gutter, not
+   the block-end one. `overflow-x: scroll` on every rail does.
+
+Measured after: **Diary, Book, Document, Media, Clippings and Recently opened
+all at exactly 18px.**
+
+### Books read as books
+
+A **fore-edge** — the page block — was added: 6px of finely lined paper on the
+right of every cover. A card has no page block, and that is most of why the old
+object read as one. Spine 22, cover 126, block 6, all three heights from one
+expression so they cannot drift.
+
+`aspect-ratio` used to size the cover and **it yields to content**: a sample
+Book measured **212.7px** against the Diary's 178.2 because its cover had a
+subtitle. Every book is 178.19px now.
+
+**The overlap is gone entirely.** 64px of it put each book's dark spine in the
+middle of the previous cover, which is a card stack. Books touch on a dense
+shelf and sit 16px apart below four objects — so two Books read as two Books,
+which matters because the real Library has two.
+
+### The pulled state is now the best state
+
+**Root cause of the blur, measured:** `scale(1.06)` turned a 126px cover into
+133.56px and resampled every glyph. Removed entirely rather than reduced.
+Resting against pulled now: cover 126.000 both, title box 45.4844 x 17.3906
+both, horizontal position identical, vertical offset exactly 30.0000, subpixel
+phase identical in both axes.
+
+**32px rather than 30**, because the travel must land on a whole DEVICE pixel at
+every ratio: 30 x 1.25 = 37.5. Multiples of four are exact at 1, 1.25, 1.5, 2.
+
+Hover shrank 5 → 3px, so it cannot be mistaken for a pull. Neighbours step
+aside 16px, transform-only, no reflow.
+
+### The Open action
+
+The purple pill over the cover is gone. Title, subtitle and Open share one
+**footer** beneath the object at its own width; the overflow menu moved to the
+object's top. Measured: menu 5px from the top edge, footer 163px below it,
+footer width 154 against an object width of 154.
+
+### Documents
+
+A **folio**: 118px tall and landscape, paper stock, a 2—3px radius rather than a
+card radius, a lined sheet edge matching the book's fore-edge, a filed tab, and
+its own title so it needs no detached label. Same baseline, same two shadows,
+same 32px lift, no scale.
+
+### Two shadows, two meanings
+
+**Contact** — a tight ellipse where the object meets the shelf. **Depth** — a cast
+shadow that appears only when it lifts. A resting object casts nothing, which is
+what separates shelf contact from an elevation scale. Both are tokens shared by
+the cover, the folio and the media frame.
+
+**1100 tests pass, 18 new**, and 20 superseded L3/L3.1 assertions rewritten with
+the reversal recorded in place. TypeScript clean.

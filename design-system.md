@@ -478,6 +478,37 @@ that is visible as blur. Depth that costs nothing to legibility: **overlap,
 translation, scale, z-index and shadow.** Reach for a real 3D transform only
 when nothing inside it is text.
 
+### Objects that rest on something *(added L3.2)*
+For any surface that presents things as physical objects rather than as cards:
+
+- **One plane.** Every object's bottom sits the same distance from the surface
+  it rests on. Different heights are fine; different contact is not. If a
+  container can opt out of the shared formula, one eventually will — and the
+  measured symptom is objects floating at arbitrary heights.
+- **Beware geometry that depends on state.** A horizontal scrollbar exists only
+  when a container overflows, and it lives inside the border box — so a full
+  container is ~10px shorter in content than an empty one. Reserve it always, or
+  a baseline formula is true only for the containers that happen to be full.
+- **`aspect-ratio` yields to content.** An object sized by a ratio grows when
+  its contents do, so two objects of the same nominal size end up different. Use
+  an explicit height derived from the same expression its siblings use, and clip.
+- **Two shadows, two meanings.** CONTACT is a tight mark where an object meets
+  a surface; DEPTH is a cast shadow that appears only when it lifts. A resting
+  object casts nothing. That is what separates physical contact from an
+  elevation scale, where everything has a shadow whether it has left the
+  surface or not.
+
+### Transforms and type *(added L3.2)*
+**Never scale live typography to suggest depth.** A non-integer scale resamples
+every glyph inside: measured, `scale(1.06)` turned a 126px cover into 133.56px
+and softened all of it.
+
+And when translating, **use multiples of 4px**. The transform must land on a
+whole DEVICE pixel at every supported ratio or the moved element rasterises on a
+different subpixel phase from the resting one. 30 x 1.25 = 37.5; 32 x 1.25 = 40.
+Verify by comparing box positions before and after: identical widths and an
+identical fractional part mean identical rasterisation.
+
 ---
 
 ## Changelog
@@ -518,3 +549,10 @@ when nothing inside it is text.
   Both came from correcting the Library shelf, where a scroll-derived raised
   book read as a selection, a return highlight read as focus, and a decorative
   star read as a favourite button.
+- **2026-08-11 — L3.2** adds **objects that rest on something** (one plane;
+  beware geometry that depends on state; `aspect-ratio` yields to content; two
+  shadows with two meanings) and **transforms and type** (never scale live
+  typography; translate in multiples of 4px so every state lands on a whole
+  device pixel). Both came from making the Library shelf physical: a scrollbar
+  that only existed on full shelves put the Diary 10px off everything else, and
+  a 1.06 scale on the pulled Book was the softness the review saw.

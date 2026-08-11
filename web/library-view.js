@@ -335,7 +335,7 @@ function wireOverview(scroll) {
       if (more) { e.stopPropagation(); openItemMenu(more, more.dataset.more); return; }
       const obj = e.target.closest('.lib-obj');
       if (!obj) { clearPulled(); return; }
-      if (obj === pulledObject() || e.target.closest('.lib-obj-pull')) openShelfObject(obj);
+      if (obj === pulledObject() || e.target.closest('.lib-foot-a')) openShelfObject(obj);
       else pullForward(obj);
     });
     found.addEventListener('keydown', (e) => {

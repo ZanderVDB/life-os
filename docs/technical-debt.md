@@ -987,3 +987,46 @@ only. Worth a look on a real phone.
 - **A `.click()` on an already-pulled object OPENS it**, which navigates away
   and makes every later query in the same probe return null. Reset to a known
   state between interaction probes.
+
+---
+
+## L3.2
+
+### Fixed
+
+- **Geometry that depended on state.** A rail reserved its scrollbar only when
+  full, so the shared baseline formula was true only for full shelves. Every
+  rail now uses `overflow-x: scroll`.
+- **`aspect-ratio` on the Book cover.** It yields to content, so books with
+  fuller covers grew. Replaced with an explicit height plus `overflow:hidden`.
+- **`scale()` on the pulled object.** The measured cause of the softness.
+- **A per-shelf padding override.** The personal ledge set its own, which is
+  what put the Diary on a different plane.
+
+### Carried, with the reason
+
+- **`overflow-x: scroll` shows an empty scrollbar track on shelves that fit.**
+  With `scrollbar-width: thin` and a transparent track it is invisible in
+  practice, and it buys a baseline that is true everywhere. The alternative —
+  measuring the scrollbar and compensating — is a layout read on every paint.
+- **`:has()` drives the neighbour step-aside.** Modern Chrome only; older
+  engines simply do not step aside, which degrades to the previous behaviour
+  rather than breaking.
+- **The footer is `aria-hidden`.** Its content duplicates the object's own
+  accessible name and the Open action is reachable by activating the object
+  again, so announcing it twice would be noise. If the footer ever gains
+  something not in the accessible name, that decision has to change.
+
+### Measurement notes worth not relearning
+
+- **Compare subpixel PHASE, not just size, when checking crispness.** Identical
+  widths are not enough: two boxes of the same width at different fractional
+  offsets rasterise differently. Take the fractional part of each coordinate in
+  both states and compare.
+- **Transform distances should be multiples of 4px.** DPR 1.25 is the one that
+  catches odd values, and it is common on Windows.
+- **A `.click()` on an already-pulled object OPENS it**, navigating away and
+  making every later query in the same probe return null.
+- **`scroll-snap` can refuse a programmatic `scrollLeft`.** A request for 70px
+  landed at 0 and made a correct clear-on-scroll rule look broken. Always read
+  back the actual value.
