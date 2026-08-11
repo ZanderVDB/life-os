@@ -45,3 +45,54 @@ The schema, API and document model are width-independent and complete. The
 responsive **rules** are recorded here and the Legacy breakpoints are carried
 forward; the client that implements them is the next step, and the dedicated
 mobile refinement remains a later phase.
+
+---
+
+## L3 — the shelf, narrower
+
+The shelf does not collapse into a list, and the objects get **bigger** as the
+screen gets smaller. That is the opposite of what a squeezed desktop layout does,
+and it is the reason a phone Library reads as designed rather than as left over.
+
+| Width | Book cover | What changes |
+|---|---|---|
+| desktop | 128px | full treatment, 7° turn on the prominent object |
+| ≤1024px | 124px | **the 3D turn is dropped** — under a finger, turning the item you touched is noise |
+| ≤820px | 132px | rails bleed edge to edge, arrows removed, overflow menu always visible |
+| ≤480px | 128px | tighter shelf gaps, composer clearance, safe-area aware |
+
+### Measured, full sample, unscrolled
+
+| Viewport | rail | resting book | books in view | clipped cover titles | horizontal page scroll |
+|---|---|---|---|---|---|
+| 1440×900 | 1085 | 128×181 | 6 | 0 | 0 |
+| 1024×768 | 701 | 124×176 | 3 | 0 | 0 |
+| 768×1024 | 739 | 132×186 | 4 | 0 | 0 |
+| 390×844 | 376 | 132×186 | 2 | 0 | 0 |
+| 375×667 | 361 | 140×181 | 2 | 0 | 0 |
+
+At 375×667 scrolled to the bottom, the last shelf clears the fixed composer by
+**173px**.
+
+### The edge-to-edge bleed
+
+Below 820px the rails are pulled out to the screen edges with `margin-inline:
+-16px` — `.main-wrap`'s own padding at that breakpoint, cancelled and then
+reapplied to the heading and the row so that only the **scrolling** part
+bleeds.
+
+That is not decoration. A shelf that stops at a margin looks finished; a shelf
+that runs off the edge of the screen tells you there is more to the right
+without an arrow having to say so.
+
+### Touch targets
+
+The overflow menu stays 30px of ink and gains a **44px hit area** through a
+`::before`. A control sized to its ink on a 132px cover would take a third of
+the cover; a control measured by its ink is measured wrong. Verified with
+`elementFromPoint` at ±20px in all four directions.
+
+> **A measurement note.** The `.lib-rail` is deliberately 4px wider than its
+> section on each side, so an overflow check written against its parent reports
+> overflow on every shelf, always. Check `document.documentElement.scrollWidth`
+> instead — that is the number that means something.

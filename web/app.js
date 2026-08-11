@@ -361,6 +361,12 @@ async function boot() {
     openSurface: openUtilitySurface,
     closeSurface: closeUtility,
     choose: openChoiceDialog,
+    /* Leaving for ANOTHER section. A surface can route inside itself by writing
+     * its own hash, but crossing a section boundary is the shell's job: `go`
+     * flushes pending writes, claims the navigation token, moves the sidebar
+     * indicator and closes any open utility. Library's Diary shortcut is the
+     * first caller — a shelf object that opens a different section entirely. */
+    goRoute: (id) => void go(id),
   };
   initLibrary(surfaceCtx);
   initDiary(surfaceCtx);

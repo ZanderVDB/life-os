@@ -20,13 +20,16 @@ import {
   lib, initLibraryApi, loadItems, createItem, updateItem, archiveItem, restoreItem,
   createBook, loadBook, createSection, updateSection, createPages,
   archivePage, restorePage, archiveSection,
-  currentSection, currentSpread, spreadCount, findPage, search,
+  currentSection, currentSpread, spreadCount, findPage, search, markOpened,
   sampleCheck, sampleAdd, sampleRemove,
 } from './library-api.js';
 import {
   headerHtml, bodyHtml, cardHtml, addMenuHtml, itemMenuHtml, visibleItems,
   pageHitsHtml, TYPE_LABEL, typeIcon, metaLine, when, esc,
 } from './library-overview.js';
+import {
+  wireRail, restoreShelfScroll, captureShelfScroll, markReturn, syncSteps,
+} from './library-shelf.js';
 import {
   coverHtml, spreadHtml, toolbarHtml, mountSpread, wireToolbar, wireSaveStatus,
   searchBook, searchPanelHtml, locateHit, canGoNext, ACCENTS,
@@ -246,8 +249,22 @@ async function renderOverview(head, scroll, nav = navToken()) {
 
 function paintOverview(scroll = document.getElementById('main-scroll')) {
   if (!scroll) return;
+  /* Capture BEFORE the rails are destroyed. Every repaint of this page throws
+   * the shelves away — a filter change, the archive toggle, a search being
+   * cleared — and §14 asks that filtering preserve horizontal scroll. Doing it
+   * here means every one of those paths keeps its place without each having to
+   * remember to, which is the difference between a rule and a habit. */
+  captureShelfScroll(scroll);
   scroll.innerHTML = bodyHtml();
   wireOverview(scroll);
+  /* Position first, THEN identify. Restoring the scroll and then highlighting
+   * means the highlight happens on a shelf that is already where it should be,
+   * so nothing has to travel across the screen to find it (§18). */
+  restoreShelfScroll(scroll);
+  if (lib.cameFrom) {
+    markReturn(scroll, lib.cameFrom, lib.cameFromShelf);
+    lib.cameFrom = null; lib.cameFromShelf = null;
+  }
 }
 
 function wireOverview(scroll) {
@@ -294,26 +311,72 @@ function wireOverview(scroll) {
     paintOverview(scroll);
   }));
 
-  scroll.querySelectorAll('.lib-card').forEach((card) => {
-    const id = card.dataset.item;
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('[data-more]')) return;
-      openLibraryItem(id);
+  /* Every shelf is wired the same way, including the personal ledge and the
+   * search results — one behaviour, so a Book on the Books shelf and the same
+   * Book in a result set cannot drift apart. */
+  scroll.querySelectorAll('.lib-rail').forEach((rail) => {
+    wireRail(rail, { onOpen: openShelfObject, onMenu: (anchor, id) => openItemMenu(anchor, id) });
+  });
+  scroll.querySelectorAll('.lib-found').forEach((found) => {
+    found.querySelectorAll('.lib-obj').forEach((o) => { o.tabIndex = 0; });
+    found.addEventListener('click', (e) => {
+      const more = e.target.closest('[data-more]');
+      if (more) { e.stopPropagation(); openItemMenu(more, more.dataset.more); return; }
+      const obj = e.target.closest('.lib-obj');
+      if (obj) openShelfObject(obj);
     });
-    card.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLibraryItem(id); }
+    found.addEventListener('keydown', (e) => {
+      const obj = e.target.closest('.lib-obj');
+      if (obj && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openShelfObject(obj); }
     });
   });
-  scroll.querySelectorAll('[data-more]').forEach((b) => {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openItemMenu(b, b.dataset.more);
+
+  /* Shelves are sized by their own width, and the arrows and the centring rule
+   * both depend on whether one overflows. A sidebar collapse changes that
+   * without changing the window, so this listens to the ELEMENT. */
+  if (typeof ResizeObserver === 'function') {
+    shelfSizer?.disconnect();
+    shelfSizer = new ResizeObserver((entries) => {
+      entries.forEach((en) => syncSteps(en.target));
     });
-  });
+    scroll.querySelectorAll('.lib-rail').forEach((r) => shelfSizer.observe(r));
+  }
+}
+
+/** Watches shelf widths. One observer for the page, replaced on every paint. */
+let shelfSizer = null;
+
+/**
+ * Opening something from a shelf (§17).
+ *
+ * The object is marked `is-opening` and the route changes on the next frame.
+ * That single frame is what makes the handoff read as the shelf giving the Book
+ * up rather than the page being replaced — and because the class only ever
+ * lives on a node that is about to be discarded, no animation here can own a
+ * final state.
+ */
+function openShelfObject(obj) {
+  /* The Diary ledge leaves Library entirely, so the SHELL routes it. Writing
+   * `#diary` from here would change the URL without telling the shell, leaving
+   * the sidebar pointing at Library and any pending Library write unflushed. */
+  if (obj.dataset.system === 'diary') { ctx.goRoute('diary'); return; }
+  const id = obj.dataset.item;
+  const item = lib.items.find((i) => i.id === id);
+  if (!item) return;
+
+  /* Where every shelf is, captured BEFORE the route changes and the page is
+   * replaced. This is the snapshot §18 restores from. */
+  captureShelfScroll(obj.closest('#main-scroll') ?? document);
+  lib.cameFrom = id;
+  lib.cameFromShelf = obj.closest('.lib-rail')?.dataset.rail ?? null;
+  markOpened(id);
+  if (!reducedMotion()) obj.classList.add('is-opening');
+  openLibraryItem(id);
 }
 
 /** Repaints only the sections, keeping the filter bar (and its caret) intact. */
 function paintResults(scroll) {
+  captureShelfScroll(scroll);
   const bar = scroll.querySelector('.lib-bar');
   const html = bodyHtml();
   const holder = document.createElement('div');
@@ -322,6 +385,11 @@ function paintResults(scroll) {
   [...scroll.children].forEach((c) => { if (c !== bar) c.remove(); });
   while (holder.firstChild) scroll.appendChild(holder.firstChild);
   wireOverview(scroll);
+  /* Deleting the last character of a search brings the shelves back, and they
+   * come back where they were (§13). `lib.shelfScroll` survived the search
+   * because nothing cleared it — a search is a view of the Library, not a
+   * different Library. */
+  restoreShelfScroll(scroll);
 }
 
 /**
@@ -980,13 +1048,21 @@ function wireHits(panel) {
 
 /* ── Leaving (§16) ───────────────────────────────────────────────────── */
 
-/** Flush, then go. Never leaves typed text behind. */
+/**
+ * Flush, then go. Never leaves typed text behind.
+ *
+ * The item id is remembered on the way out (§18) so the shelf can put itself
+ * back where it was and say which book you came from. The ID, never the node —
+ * the node is about to be destroyed, and holding a reference to it would keep a
+ * whole discarded page alive to answer one question.
+ */
 export async function leaveBook(next) {
   const ok = await flushAll();
   if (!ok && hasUnsaved()) {
     ctx.toast('Some changes did not save. They are still here — try again.', true);
     return;
   }
+  if (lib.book?.item?.id) lib.cameFrom = lib.book.item.id;
   forgetAll();
   lib.book = null; lib.bookId = null;
   setHashAndRender(next);
@@ -994,6 +1070,10 @@ export async function leaveBook(next) {
 
 /** Called by app.js when the route changes away from Library. */
 export async function libraryWillLeave() {
+  /* Leaving Library for another section. The shelves are captured whether or
+   * not a Book is open, because coming back to Library from Today should also
+   * land where you were. */
+  captureShelfScroll();
   if (!lib.bookId) return true;
   await flushAll();
   forgetAll();
@@ -1081,8 +1161,11 @@ async function copyText(doc) {
 function installSampleHooks() {
   window.__sampleLibrary = {
     check: () => sampleCheck(),
-    add: async () => {
-      const r = await sampleAdd();
+    /* `size` is 'solo' | 'small' | 'full' (L3 §38). The shelf has to be judged
+     * at one Book, at three and at many, and only the last of those can be
+     * seen in a collection of many. */
+    add: async (size = 'full') => {
+      const r = await sampleAdd(size);
       lib.itemsLoaded = false;
       if (document.getElementById('main-scroll') && !lib.bookId) await renderLibrary();
       return r;

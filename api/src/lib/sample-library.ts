@@ -175,7 +175,68 @@ const BOOK = {
   ],
 };
 
-/** The non-book sample resources, one of each remaining type. */
+/**
+ * The rest of the shelf (L3 §37).
+ *
+ * `BOOK` above is the deep one — real sections, an empty page, an odd page
+ * count — and it stays the book the EDITOR is reviewed against. These are
+ * shallow by design: one section and two pages each, because what they exist to
+ * exercise is the SHELF, and eleven deep books would make seeding slow and the
+ * cleanup harder to reason about for no extra coverage.
+ *
+ * Deliberately varied, because a shelf of similar titles proves nothing:
+ * one-word titles next to titles that must truncate, some with subtitles and
+ * some without, and every accent in the palette represented.
+ */
+const SHELF_BOOKS = [
+  { key: 'atlas', title: 'Atlas', subtitle: null, accent: 'blue' as const,
+    description: 'Places, routes and the reasons for going.' },
+  { key: 'systems', title: 'Systems That Survive Contact With A Tuesday',
+    subtitle: 'Notes on routines that do not need me to be at my best',
+    accent: 'sage' as const,
+    description: 'A long title, on purpose: the shelf has to cope with one.' },
+  { key: 'recipes', title: 'Recipes', subtitle: 'Things worth cooking twice',
+    accent: 'peach' as const, description: null },
+  { key: 'reading', title: 'Reading Log', subtitle: null, accent: 'gold' as const,
+    description: 'What I read, and whether it was worth it.' },
+  { key: 'money', title: 'Money', subtitle: 'Plain arithmetic, written down',
+    accent: 'rose' as const, description: null },
+  { key: 'garden', title: 'The Garden Book', subtitle: 'Seasons, failures, one success',
+    accent: 'sage' as const, description: 'Mostly failures. The success was rocket.' },
+  { key: 'letters', title: 'Letters I Did Not Send', subtitle: null,
+    accent: 'lavender' as const, description: null },
+  { key: 'training', title: 'Training', subtitle: 'Sets, weeks, and honest numbers',
+    accent: 'blue' as const, description: null },
+  { key: 'house', title: 'House Notes', subtitle: null, accent: 'peach' as const,
+    description: 'Where the stopcock is, and eleven other things I forget.' },
+  { key: 'quotes', title: 'Kept Lines', subtitle: 'Sentences I wanted to keep',
+    accent: 'gold' as const, description: null },
+  { key: 'archive-book', title: 'Old Project Notes', subtitle: 'Finished, kept',
+    accent: 'rose' as const, archived: true,
+    description: 'Archived on purpose, so the archived state has something in it.' },
+];
+
+/** One section, two pages. Enough that every sample Book actually opens. */
+const shelfBookPages = (title: string): { title: string | null; content: Doc }[] => ([
+  {
+    title: 'Beginning',
+    content: doc(
+      h(2, title),
+      p('A sample Book, seeded so the shelf can be judged with something on it.'),
+      p('Nothing here is real. It exists to be looked at, scrolled past, '
+        + 'searched for and then removed.'),
+    ),
+  },
+  {
+    title: null,
+    content: doc(
+      p('The second page, so this Book opens onto a spread rather than a '
+        + 'page and a blank.'),
+    ),
+  },
+]);
+
+/** The non-book sample resources — several of each remaining type (§37). */
 const OTHER_ITEMS = [
   {
     key: 'link-1', type: 'link' as const,
@@ -209,6 +270,165 @@ const OTHER_ITEMS = [
     description: 'The v2 palette, for reference outside the app.',
     mimeType: 'application/json', sizeBytes: 8_412,
   },
+
+  /* ── The rest of the shelf ──────────────────────────────────────────── */
+
+  {
+    key: 'doc-2', type: 'document' as const,
+    title: 'Weekly review — the four questions',
+    description: 'What moved, what stalled, what I am pretending about, what is next.',
+  },
+  {
+    key: 'doc-3', type: 'document' as const,
+    title: 'Moving checklist',
+    description: 'Meters, keys, redirects, and the box that always gets lost.',
+  },
+  {
+    key: 'doc-4', type: 'document' as const,
+    title: 'Interview notes — platform role',
+    description: null,
+  },
+  {
+    key: 'doc-5', type: 'document' as const,
+    title: 'A Very Long Document Title That Exists To Prove Truncation Behaves',
+    description: 'If this wraps to four lines the folio is wrong.',
+  },
+  {
+    key: 'doc-6', type: 'document' as const,
+    title: 'Warranty details',
+    description: 'Dates and reference numbers, kept where I can find them.',
+  },
+  {
+    key: 'doc-7', type: 'document' as const,
+    title: 'Sourdough',
+    description: 'Timings that actually worked, after eleven that did not.',
+  },
+
+  {
+    key: 'image-2', type: 'image' as const,
+    title: 'Shelf study — spine spacing',
+    description: 'Pencil, then measured.',
+    mimeType: 'image/jpeg', sizeBytes: 1_204_880,
+    metadata: { width: 1600, height: 1200 },
+  },
+  {
+    key: 'image-3', type: 'image' as const,
+    title: 'Panorama — long and thin',
+    description: 'An extreme aspect ratio, so the frame has to cope.',
+    mimeType: 'image/jpeg', sizeBytes: 2_930_112,
+    metadata: { width: 4000, height: 900 },
+  },
+  {
+    /* No dimensions, no thumbnail: §38 asks for a missing thumbnail, and this
+     * is what one actually looks like — an image row that knows nothing about
+     * how the image is shaped. The frame must not collapse. */
+    key: 'image-4', type: 'image' as const,
+    title: 'Scan with no preview',
+    description: 'Deliberately missing its thumbnail and its dimensions.',
+    mimeType: 'image/png', sizeBytes: 331_004,
+  },
+  {
+    /* §38 asks for a BROKEN external preview. `.invalid` is reserved by RFC
+     * 2606 and can never resolve, so this tests the failure path without
+     * pointing a load at somebody else's server. */
+    key: 'image-5', type: 'image' as const,
+    title: 'Remote image that will not load',
+    description: 'Points at a host that cannot exist. The fallback has to hold.',
+    sourceUrl: 'https://never.invalid/photo.jpg',
+    mimeType: 'image/jpeg',
+    metadata: { width: 1200, height: 800 },
+  },
+
+  {
+    key: 'video-2', type: 'video' as const,
+    title: 'Bench test — scroll performance',
+    description: null,
+    mimeType: 'video/mp4', sizeBytes: 18_446_848,
+    metadata: { durationSeconds: 96 },
+  },
+  {
+    key: 'video-3', type: 'video' as const,
+    title: 'Long recording — full design review',
+    description: 'Over an hour. The duration badge has to cope with three parts.',
+    mimeType: 'video/mp4', sizeBytes: 512_000_000,
+    metadata: { durationSeconds: 4_517 },
+  },
+  {
+    key: 'video-4', type: 'video' as const,
+    title: 'Clip with no duration recorded',
+    description: 'Metadata missing on purpose.',
+    mimeType: 'video/quicktime', sizeBytes: 7_340_032,
+  },
+
+  {
+    key: 'link-2', type: 'link' as const,
+    title: 'Container queries — the part I keep forgetting',
+    description: 'Sizing against the container, not the window.',
+    sourceUrl: 'https://example.com/css/container-queries',
+    metadata: { domain: 'example.com' },
+  },
+  {
+    key: 'link-3', type: 'link' as const,
+    title: 'Scroll snap without fighting momentum',
+    description: 'Proximity, not mandatory.',
+    sourceUrl: 'https://example.org/articles/scroll-snap-proximity',
+    metadata: { domain: 'example.org' },
+  },
+  {
+    key: 'link-4', type: 'link' as const,
+    title: 'A deep link with a very long path indeed',
+    description: null,
+    sourceUrl: 'https://example.net/2026/03/notes/on/the/design/of/everyday/shelves',
+    metadata: { domain: 'example.net' },
+  },
+  {
+    key: 'link-5', type: 'link' as const,
+    title: 'Kerning',
+    description: 'One word, so the short case is covered too.',
+    sourceUrl: 'https://example.com/type/kerning',
+    metadata: { domain: 'example.com' },
+  },
+  {
+    /* The distinctive word §38 wants for search: `quokka` appears in exactly
+     * one place in the whole sample, so a search for it has exactly one
+     * correct answer and a wrong result set is unmissable. */
+    key: 'link-6', type: 'link' as const,
+    title: 'Quokka — the search needle',
+    description: 'This word appears nowhere else in the sample.',
+    sourceUrl: 'https://example.org/wildlife/quokka',
+    metadata: { domain: 'example.org' },
+  },
+
+  {
+    key: 'file-2', type: 'file' as const,
+    title: 'Lease agreement',
+    description: null,
+    mimeType: 'application/pdf', sizeBytes: 2_216_960,
+  },
+  {
+    key: 'file-3', type: 'file' as const,
+    title: 'Budget workbook',
+    description: 'Numbers I revisit every month.',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    sizeBytes: 96_540,
+  },
+  {
+    /* 1.8 GB, not 3: `library_items.size_bytes` is an `integer`, so 2,147,483,647
+     * is the largest size the column can hold and a 3 GB sample fails to insert.
+     * Recorded in technical-debt.md — no real row can hit it yet because uploads
+     * are not built, and widening the column is not L3's business. This value
+     * still exercises the gigabyte branch of the formatter, which is the point. */
+    key: 'file-4', type: 'file' as const,
+    title: 'Backup archive',
+    description: 'Large, so the size formatter has to reach gigabytes.',
+    mimeType: 'application/zip', sizeBytes: 1_932_735_283,
+  },
+  {
+    key: 'file-5', type: 'file' as const,
+    title: 'Font licence',
+    description: null,
+    mimeType: 'text/plain', sizeBytes: 3_104,
+  },
 ];
 
 export type SampleResult = {
@@ -216,7 +436,27 @@ export type SampleResult = {
   sectionsCreated: number; pagesCreated: number; alreadyPresent: number;
 };
 
-export async function seedSampleLibrary(db: Db, workspaceId: string): Promise<SampleResult> {
+/**
+ * How much shelf to seed (L3 §38).
+ *
+ * The phase asks the design to be judged at one Book, at three, and at many,
+ * and those are three different screens: one Book must not look like a mistake,
+ * three must not hug the far left, and many must scroll well. A collection of
+ * "many" cannot demonstrate any of the first two, so the seeder takes a size.
+ *
+ * All three sizes write the SAME `sample:f1:` prefix and are removed by the
+ * same cleanup. This is one sample system with a dial on it, not three.
+ */
+export type SampleSize = 'solo' | 'small' | 'full';
+
+/** Which shelf books each size includes. `full` is everything. */
+const SIZE_BOOKS: Record<SampleSize, number> = { solo: 0, small: 2, full: SHELF_BOOKS.length };
+/** How many non-Book resources each size includes. */
+const SIZE_OTHERS: Record<SampleSize, number> = { solo: 0, small: 3, full: OTHER_ITEMS.length };
+
+export async function seedSampleLibrary(
+  db: Db, workspaceId: string, size: SampleSize = 'full',
+): Promise<SampleResult> {
   const existing = await db.select({ legacyId: libraryItems.legacyId }).from(libraryItems)
     .where(and(eq(libraryItems.workspaceId, workspaceId),
       like(libraryItems.legacyId, `${SAMPLE_PREFIX}%`)));
@@ -263,8 +503,49 @@ export async function seedSampleLibrary(db: Db, workspaceId: string): Promise<Sa
     });
   }
 
+  // ── The rest of the shelf ──
+  for (const spec of SHELF_BOOKS.slice(0, SIZE_BOOKS[size])) {
+    const legacyId = `${SAMPLE_PREFIX}book:${spec.key}`;
+    if (have.has(legacyId)) continue;
+    await db.transaction(async (tx) => {
+      const [item] = await tx.insert(libraryItems).values({
+        workspaceId, type: 'book', title: spec.title,
+        description: spec.description ?? null,
+        legacyId,
+        /* §38 wants an archived item on the shelf. Seeded archived rather than
+         * archived afterwards, so the state is reproducible and the archived
+         * view is never empty during a review. */
+        ...(spec.archived
+          ? { status: 'archived', archivedAt: new Date() }
+          : {}),
+      }).returning();
+      const [book] = await tx.insert(libraryBooks).values({
+        workspaceId, libraryItemId: item!.id, subtitle: spec.subtitle ?? null,
+        authorLabel: BOOK.author,
+      }).returning();
+      out.itemsCreated++; out.booksCreated++;
+
+      const [section] = await tx.insert(bookSections).values({
+        workspaceId, bookId: book!.id, title: 'Notes',
+        accent: spec.accent, position: 0,
+      }).returning();
+      out.sectionsCreated++;
+
+      for (const [pi, page] of shelfBookPages(spec.title).entries()) {
+        await tx.insert(bookPages).values({
+          workspaceId, sectionId: section!.id,
+          title: page.title ?? null,
+          content: page.content,
+          contentText: docToText(page.content),
+          position: pi * GAP,
+        });
+        out.pagesCreated++;
+      }
+    });
+  }
+
   // ── The other resource types ──
-  for (const spec of OTHER_ITEMS) {
+  for (const spec of OTHER_ITEMS.slice(0, SIZE_OTHERS[size])) {
     const legacyId = `${SAMPLE_PREFIX}${spec.key}`;
     if (have.has(legacyId)) continue;
     await db.insert(libraryItems).values({

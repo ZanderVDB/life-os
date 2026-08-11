@@ -365,3 +365,42 @@ statistics, Brain summary or weekly review can read without re-deriving it.
 
 **Still blocking Library L3:** nothing new. The shelf redesign was deliberately
 not begun; D2.2 only restored the existing one and rebuilt its loading states.
+
+---
+
+## L3 — what it consumed and what it unblocked
+
+**Consumed** (all pre-existing, none changed by L3):
+
+- the D2.2 Library loading lifecycle — the watchdog that makes a permanent
+  `Opening…` impossible is intact and asserted by an L3 test;
+- `nav.js` as the sole hash owner, and latest-navigation-wins. L3 adds no
+  private hash flag and the shelf module never writes a hash at all;
+- the approved Book cover identity and its 210:297 proportion, reused verbatim
+  at shelf scale;
+- the F1 sample prefix `sample:f1:` and its cascade-based cleanup;
+- the six section accents.
+
+**Added**:
+
+- `library_items.last_opened_at` (migration `0009`), the first schema change to
+  Library since F1, justified in `library-v2-l3-spatial-design.md` §12;
+- `surfaceCtx.goRoute(id)` — the shell's own navigation, exposed to surfaces so
+  a shelf object can leave Library without writing a hash behind the shell's
+  back. Available to any future surface with the same need;
+- `library-shelf.js`, reusable by anything that wants a labelled horizontal
+  collection with prominence and keyboard browsing.
+
+**Unblocked**:
+
+- Brain, which was always gated on Library L3 rather than on Diary;
+- pinned / favourite items, which now have an obvious home (one more shelf) and
+  need only a column;
+- upload types in the Add menu, which stay absent until upload infrastructure
+  is real — §15's rule is unchanged.
+
+**Still blocked, deliberately**:
+
+- virtualisation, which needs evidence and does not have any yet — see
+  `library-v2-performance.md` for the trigger;
+- permanent deletion, unchanged since F1.

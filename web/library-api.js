@@ -29,6 +29,19 @@ export const lib = {
   /** Page matches from the server for the shelf search — §22. */
   pageHits: [],
 
+  /**
+   * Where each shelf was scrolled to, keyed by shelf id (L3 §16/§18).
+   *
+   * Lives here rather than in the DOM because the DOM is thrown away when a
+   * Book opens. Returning to the shelf you left, at the place you left it, is
+   * the difference between a Library and a list that resets.
+   */
+  shelfScroll: {},
+  /** The item the shelf should re-identify on return — id only, never a node. */
+  cameFrom: null,
+  /** Which shelf it was opened from, so the return lands on the right one. */
+  cameFromShelf: null,
+
   /** The open book, by id. `null` when the overview is showing. */
   book: null,          // { item, book, sections: [{...,pages:[]}] }
   bookId: null,
@@ -116,6 +129,31 @@ function applyItem(item) {
   if (at > -1) Object.assign(lib.items[at], item);
 }
 
+/**
+ * Records that something was opened (L3 §12).
+ *
+ * The local copy is written FIRST and the request is not awaited. Opening a
+ * Book is a navigation; making it wait on a bookkeeping write would put a
+ * network round trip between a click and a page turning, to update a list the
+ * user is in the act of leaving. A rejected promise is swallowed for the same
+ * reason: a lost recency mark is not worth a toast.
+ */
+export function markOpened(itemId) {
+  const item = lib.items.find((i) => i.id === itemId);
+  if (item) item.lastOpenedAt = new Date().toISOString();
+  void call(`/library/items/${itemId}/opened`, { method: 'POST' }).catch(() => {});
+}
+
+/**
+ * When something was last opened, or null.
+ *
+ * `updatedAt` is NOT a fallback here. It is a fallback for ORDERING, where any
+ * stable recent-ish order beats none — but a date shown next to the word
+ * "opened" has to be an opening. Callers that display it say "edited" when this
+ * returns null, which is what actually happened.
+ */
+export const openedAt = (item) => item.lastOpenedAt ?? null;
+
 /* ── Books ───────────────────────────────────────────────────────────── */
 
 export const createBook = (body) => call('/library/books', { method: 'POST', body });
@@ -173,5 +211,6 @@ export const search = (q, bookId = null) =>
 /* ── Sample tooling ──────────────────────────────────────────────────── */
 
 export const sampleCheck = () => call('/library/sample');
-export const sampleAdd = () => call('/library/sample', { method: 'POST' });
+export const sampleAdd = (size = 'full') =>
+  call('/library/sample', { method: 'POST', body: { size } });
 export const sampleRemove = () => call('/library/sample/remove', { method: 'POST' });

@@ -1911,3 +1911,105 @@ horizontal scroll on both the right page and the document. At 1024 the core rows
 wrap to two lines by design — §9's rule is compact rows, not a taller Diary.
 
 **1021 tests pass, 19 new.** TypeScript clean.
+
+---
+
+## L3 — Library spatial redesign, shelf browsing, resource-safe visual system
+
+    A SHELF IS A SCROLLABLE COLLECTION. IT IS NOT A CAROUSEL.
+
+The overview stopped being a card grid and became a room. A grid answers "what
+do I have"; a shelf also answers "where is it" — you remember a position on a
+shelf in a way you never remember a cell in a grid that reflows.
+
+Full design in `library-v2-l3-spatial-design.md`. The short version:
+
+### The shelf
+
+Six labelled shelves — Recently opened, Personal, Books, Documents, Media,
+Links & Files — and **only the ones with something on them are drawn**. Media
+and Clippings group two types each: six shelves for six types would be a
+taxonomy, four is a room.
+
+Each rail is a plain `overflow-x: auto` element with proximity snap. It scrolls
+before any script has run and keeps scrolling if that script fails; prominence,
+keys and arrows are all enhancement on top.
+
+### The gating question, answered before anything was drawn
+
+`library-v2-future-l3.md` refused to allow a shelf until somebody answered how
+the five non-Book types live on one. The answer: a related-but-honest family —
+same shelf, same ledge, same five states, same type scale, and **no spine on
+anything that is not a book**. A folio, a frame, a clipping, a slab.
+
+### The book object
+
+Cover 128px at 210:297, carrying the approved Book identity verbatim; a drawn
+gradient spine beside it. Measured cover ratio **1.414** against 297/210 =
+1.414. The accent is the book's OWN — the API now sends its first section's
+accent — so the colour on the shelf is the colour inside.
+
+Not drawn in 3D. `perspective` sits on the slot and only the prominent object
+rotates, at 7°: **6 composited elements out of 45**, rather than 45 subtrees of
+rotated glyphs.
+
+### Five states, five mechanisms
+
+Hover owns surface and a 4px lift. Focus owns the accent outline. **Prominent**
+owns lift, 1.045 scale, a 7° turn and a narrower spine. Open owns the handoff.
+Returned owns a brief re-identification. Prominence is not selection: nothing is
+chosen by scrolling past it and the route never changes because a shelf moved.
+
+### The defect the read line had
+
+Pinned a third of the way in, a shelf at rest made the **second** book prominent
+— first book 185px from the line, second 26px — and since a rail cannot scroll
+left of zero, book one could never become prominent at all. The line now travels
+with scroll progress: index 0 at rest, index 10 of 11 at the end, monotonic
+between.
+
+### Scrolling that cannot become a trap
+
+Wheel translation with two release rules: **release at the ends** so the page
+scrolls when the shelf is exhausted, and **latch out for 220ms** after the page
+starts moving, so a fast flick down the page is not caught by each shelf in
+turn. Horizontal intent is never touched. Snap is proximity, never mandatory.
+
+### Coming back
+
+Shelf positions are **captured at the moment of leaving**, not trusted to a
+scroll listener — a position remembered only by having observed every event is
+wrong whenever one was missed, and they are missed exactly when a Book is taking
+over the screen. On return: position first, then identify, and the shelf id
+travels with the item id so a Book on two shelves lights up on the one you left.
+
+### Diary
+
+A system Book on its own **Personal** ledge. No `library_items` row, no item id,
+no overflow menu, no archive, absent from search by construction, and opening it
+calls the shell's `goRoute` rather than writing a hash from Library.
+
+### One column, justified first
+
+`library_items.last_opened_at`. `updated_at` is an EDIT time — it moves when a
+page autosaves and stays still while you read for an hour. Nullable, never
+backfilled, written by a fire-and-forget route that does **not** touch
+`updated_at`, and the UI says "Edited" rather than "Opened" wherever the fallback
+is in use.
+
+### Measured
+
+| | |
+|---|---|
+| full overview repaint, 45 objects, 6 shelves | 23.5 ms |
+| `nearestIndex` per scroll frame | 0.03 ms |
+| all six shelves recomputing prominence | 0.35 ms |
+| 3D-composited elements at rest | 6 of 45 |
+| tab stops across 45 objects | 6 |
+| broken external preview | frame, object, rail width and all nine siblings unchanged |
+
+Verified at 1440 / 1280 / 1024 / 768 / 390 / 375: no clipped cover titles, no
+horizontal page scroll, and the last shelf clearing the composer by 173px at
+375×667.
+
+**1061 tests pass, 40 new.** TypeScript clean.

@@ -825,6 +825,12 @@ export const libraryItems = pgTable('library_items', {
   legacyId: text('legacy_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  /* When this was last OPENED, which `updated_at` cannot answer: that one moves
+   * when a page autosaves or a title is renamed and stays still when somebody
+   * reads for an hour. Nullable, and deliberately not backfilled — NULL means
+   * "not opened since L3", and inventing an opening from an edit time is the
+   * fake behavioural tracking L3 §12 forbids. */
+  lastOpenedAt: timestamp('last_opened_at', { withTimezone: true }),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
 }, (t) => ({
   byWorkspace: index('library_items_ws_idx').on(t.workspaceId, t.type, t.updatedAt),

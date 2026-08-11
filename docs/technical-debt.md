@@ -896,3 +896,49 @@ only. Worth a look on a real phone.
 - **`requestAnimationFrame` never fires while the harness browser pane is
   hidden.** Any measurement that awaits rAF hangs until the tool times out. Use
   `setTimeout` (throttled to ~1s, but it does fire) or a `MutationObserver`.
+
+---
+
+## L3
+
+### Found and recorded, not fixed
+
+- **`library_items.size_bytes` is an `integer`.** The largest size it can hold
+  is 2,147,483,647, so a 3 GB file cannot be recorded — the L3 sample hit this
+  and the value was reduced to 1.8 GB. No real row can reach it today because
+  uploads are not built. Widening it is a schema change that belongs to whoever
+  builds uploads, alongside the rest of that work.
+
+### Carried, with the reason
+
+- **`last_opened_at` is deliberately not backfilled.** NULL means "not opened
+  since L3", which is true. Anything that orders by it must fall back to
+  `updated_at`, and anything that DISPLAYS it must say "Edited" when it is using
+  that fallback — `recencyLabel()` is the one place that decides.
+- **The overview repaints with `innerHTML` on every filter change.** 23.5 ms for
+  45 objects. It is the largest single cost in the Library and the first thing
+  to fix if the collection grows, ahead of virtualising the rails.
+- **No virtualisation, on purpose.** See `library-v2-performance.md` for the
+  measurements and the trigger to revisit (~200+ objects, or a repaint over
+  100 ms). Adding it now would cost measured item sizes, a scroll-position
+  mapping, keyboard order surviving recycling, and `markReturn` having to find
+  an object that may not be in the DOM.
+- **The on-screen keyboard on a real phone is still unverified.** Geometry only;
+  the harness browser has no keyboard. Unchanged since D1.
+
+### Measurement notes worth not relearning
+
+- **CSS transitions do not advance while the Browser pane is not compositing.**
+  `getComputedStyle` returns the transition's START value, so a correct
+  `.is-prominent` rule reads back as `matrix(1,0,0,1,0,0)`. Insert
+  `*{transition:none!important}` before reading geometry, or every polish
+  measurement in a phase like this one is wrong in the same direction.
+- **`requestAnimationFrame` never fires, and neither do scroll events**, in a
+  non-rendering pane. Anything rAF-coalesced cannot be driven by a real scroll;
+  call the geometry function directly instead.
+- **A dynamic `import('/module.js?v=2')` is a DIFFERENT module instance.** The
+  cache-buster gives you a fresh copy with fresh state, so probing app state
+  through it reads an empty object. Import the exact specifier the app used.
+- **`.lib-rail` is deliberately 4px wider than its section on each side**, so an
+  overflow check against its parent reports overflow on every shelf, always.
+  Check `document.documentElement.scrollWidth` instead.

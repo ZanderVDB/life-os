@@ -124,6 +124,12 @@ export function registerLibraryRoutes(
         bookId: bookSections.bookId,
         sections: sql<number>`count(distinct ${bookSections.id})::int`,
         pages: sql<number>`count(${bookPages.id})::int`,
+        /* The FIRST section's accent, which is the colour the book actually
+         * opens onto. L3 §8 requires the cover on the shelf to correspond to
+         * the book that opens; deriving a colour from the id instead would be
+         * stable but arbitrary, and would disagree with the book itself. */
+        accent: sql<string | null>`(array_agg(${bookSections.accent}
+          order by ${bookSections.position}, ${bookSections.id}))[1]`,
       }).from(bookSections)
         .leftJoin(bookPages, and(eq(bookPages.sectionId, bookSections.id),
           isNull(bookPages.archivedAt)))
@@ -145,6 +151,7 @@ export function registerLibraryRoutes(
             id: book.id, subtitle: book.subtitle, authorLabel: book.authorLabel,
             coverStyle: book.coverStyle, pageStyle: book.pageStyle,
             sectionCount: c?.sections ?? 0, pageCount: c?.pages ?? 0,
+            accent: c?.accent ?? null,
           },
         };
       }),
@@ -220,6 +227,30 @@ export function registerLibraryRoutes(
       .set({ archivedAt: null, status: 'active', updatedAt: new Date() })
       .where(and(eq(libraryItems.workspaceId, ws), eq(libraryItems.id, id))).returning();
     return { item: row };
+  });
+
+  /**
+   * "I opened this" (L3 §12).
+   *
+   * Deliberately does NOT touch `updated_at`. Opening a Book is not editing it,
+   * and if reading moved the edit time then "Recently opened" and "recently
+   * changed" would collapse into one number that answers neither question. That
+   * separation is the whole reason the column exists.
+   *
+   * Returns the timestamp rather than the row: the caller is a fire-and-forget
+   * call made while a Book is opening, and it must not be able to cause a
+   * re-render by handing back a fresher copy of an item the client is already
+   * animating. A failure here is silent by design — losing a recency mark is
+   * not worth interrupting somebody who is trying to read.
+   */
+  app.post(`${base}/library/items/:id/opened`, pre, async (req) => {
+    const ws = wsId(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    await loadItem(ws, id);
+    const at = new Date();
+    await db.update(libraryItems).set({ lastOpenedAt: at })
+      .where(and(eq(libraryItems.workspaceId, ws), eq(libraryItems.id, id)));
+    return { lastOpenedAt: at.toISOString() };
   });
 
   /* ── Books ─────────────────────────────────────────────────────────── */
@@ -577,11 +608,18 @@ export function registerLibraryRoutes(
     allowed: isLibrarySampleAllowed(env.NODE_ENV),
   }));
 
+  /* `size` picks how much shelf to seed — solo / small / full (L3 §38). One
+   * sample system with a dial, not three: every size writes the same prefix
+   * and is removed by the same cleanup. Defaults to the full collection, so an
+   * existing caller that sends no body is unchanged. */
   app.post(`${base}/library/sample`, pre, async (req) => {
     if (!isLibrarySampleAllowed(env.NODE_ENV)) {
       throw forbidden('Sample data is not available in production.');
     }
-    return seedSampleLibrary(db, wsId(req));
+    const { size } = z.object({
+      size: z.enum(['solo', 'small', 'full']).default('full'),
+    }).parse(req.body ?? {});
+    return seedSampleLibrary(db, wsId(req), size);
   });
 
   app.post(`${base}/library/sample/remove`, pre, async (req) => {

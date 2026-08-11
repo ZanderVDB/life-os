@@ -546,11 +546,20 @@ test('the Life OS lockup uses an inline self-contained gradient', () => {
    * page is still Inter, because a handwriting-adjacent serif at 15px on ruled
    * lines is harder to read, not more charming. Anything else that reaches for
    * Playfair is still wrong. */
+  /* `.lib-cover-*` joins the allowlist in L3, and it is not a loosening.
+   *
+   * The shelf cover IS a Book cover — the same marks in the same order at the
+   * same 210:297 proportion — and §8 requires the object you press to match the
+   * cover that opens. Setting the shelf title in Inter while the Book it opens
+   * is set in Playfair would break exactly the correspondence the rule exists
+   * to protect. The confinement is unchanged: the cover, never body text. */
   const playfairRules = html.match(/[^}]*Playfair Display[^}]*\}/g) ?? [];
   for (const rule of playfairRules) {
-    assert.ok(/logo-word|m-title|\.bk-|\.dia-/.test(rule),
-      `Playfair used outside the wordmark, the Book and the Diary: ${rule.slice(0, 60)}`);
+    assert.ok(/logo-word|m-title|\.bk-|\.dia-|\.lib-cover/.test(rule),
+      `Playfair used outside the wordmark, the Book, the Diary and the shelf cover: ${rule.slice(0, 60)}`);
   }
+  assert.ok(!/\.lib-res-title\{[^}]*Playfair/.test(html),
+    'a Document folio is not a Book and must not borrow the Book serif');
   // And neither surface puts it on the body text you write in.
   assert.ok(!/\.bk-editor\{[^}]*Playfair/.test(html), 'Book body text is set in Playfair');
   assert.ok(!/\.dia-editor\{[^}]*Playfair/.test(html), 'Diary body text is set in Playfair');

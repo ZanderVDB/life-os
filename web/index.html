@@ -2687,17 +2687,20 @@ body:has(.lib-page) .rail{display:none}
   transition:transform var(--t-hover),box-shadow var(--t-hover),border-color var(--t-hover)}
 .lib-card:hover{transform:translateY(-2px);box-shadow:var(--e3);border-color:var(--border)}
 .lib-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-/* The spine. A shelf of books should look like one. */
-.lib-spine{position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--a-lavender);
+/* The card's flat edge. Renamed from `.lib-spine` in L3: a real spine is now
+   an object on a shelf with width and a gradient, and two different things
+   must not answer to one selector. This is the ITEM VIEW's card only — the
+   overview has no cards left. */
+.lib-spine-flat{position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--a-lavender);
   opacity:.75}
-.lib-card[data-type="book"] .lib-spine{background:var(--a-peach)}
-.lib-card[data-type="document"] .lib-spine{background:var(--a-blue)}
-.lib-card[data-type="link"] .lib-spine{background:var(--a-sage)}
-.lib-card[data-type="image"] .lib-spine{background:var(--a-rose)}
-.lib-card[data-type="video"] .lib-spine{background:var(--a-gold)}
-.lib-card[data-type="file"] .lib-spine{background:var(--muted)}
+.lib-card[data-type="book"] .lib-spine-flat{background:var(--a-peach)}
+.lib-card[data-type="document"] .lib-spine-flat{background:var(--a-blue)}
+.lib-card[data-type="link"] .lib-spine-flat{background:var(--a-sage)}
+.lib-card[data-type="image"] .lib-spine-flat{background:var(--a-rose)}
+.lib-card[data-type="video"] .lib-spine-flat{background:var(--a-gold)}
+.lib-card[data-type="file"] .lib-spine-flat{background:var(--muted)}
 .lib-card.is-archived{opacity:.62}
-.lib-card.is-archived .lib-spine{opacity:.3}
+.lib-card.is-archived .lib-spine-flat{opacity:.3}
 
 .lib-card-top{display:flex;align-items:center;gap:8px}
 .lib-card-icon{color:var(--text-2);display:flex}
@@ -2718,6 +2721,265 @@ body:has(.lib-page) .rail{display:none}
 .lib-card-foot{margin-top:auto;display:flex;align-items:center;gap:8px;
   font-size:11.5px;color:var(--muted);padding-top:6px}
 .lib-card-when{margin-left:auto;font-variant-numeric:tabular-nums}
+
+/* ── The shelf (Phase L3) ───────────────────────────────────────────────
+   A SHELF IS A SCROLLABLE COLLECTION, NOT A CAROUSEL. Everything here is an
+   ordinary `overflow-x` list that would work with no JavaScript at all; the
+   script adds prominence, keys and arrows on top of something already usable.
+
+   The room is made from three things and no more: a ledge line, a shadow the
+   objects sit in, and a back wall one shade darker than the page. No wood, no
+   furniture, no wallpaper — in a dark UI those read as decoration, and §20 asks
+   for structure instead. */
+.lib-shelves{display:flex;flex-direction:column;gap:26px}
+
+.lib-shelf{margin:0}
+.lib-shelf-head{display:flex;align-items:center;gap:10px;margin:0 0 6px;min-height:26px}
+.lib-shelf-h{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--label);margin:0}
+.lib-shelf-n{font-size:11px;font-weight:700;color:var(--muted);
+  font-variant-numeric:tabular-nums;background:var(--surface);border-radius:999px;
+  padding:1px 7px;line-height:17px}
+.lib-shelf-note{font-size:11.5px;color:var(--muted)}
+
+/* The arrows are SECONDARY (§7). Hidden until the shelf actually overflows,
+   never a tab stop, and disabled at each end rather than looping — a control
+   that wraps a shelf around is a carousel wearing arrows. */
+.lib-shelf-nav{margin-left:auto;display:none;gap:4px}
+.lib-shelf-nav.is-live{display:flex}
+.lib-step{width:26px;height:26px;display:grid;place-items:center;border-radius:8px;
+  background:var(--surface);border:1px solid var(--border);color:var(--text-2);
+  cursor:pointer;transition:background var(--t-hover),color var(--t-hover),
+  border-color var(--t-hover),opacity var(--t-hover)}
+.lib-step:hover:not(:disabled){background:var(--surface-2);color:var(--text);
+  border-color:var(--border-strong)}
+.lib-step:disabled{opacity:.3;cursor:default}
+
+/* The rail. `scroll-padding-inline` keeps a snapped object clear of the left
+   edge so it reads as sitting ON the shelf rather than jammed against the frame.
+   Snap is PROXIMITY, never mandatory (§22): mandatory snap fights trackpad
+   momentum and turns a flick into a fight. */
+.lib-rail{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;
+  scroll-padding-inline:4px;overscroll-behavior-x:contain;
+  padding:18px 0 30px;margin:0 -4px;
+  scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent;
+  /* The ledge, drawn as a background so it belongs to the SHELF and does not
+     travel with the books. A 1px line, a hairline highlight above it, and a
+     wash below where the shadow gathers. */
+  background-image:
+    linear-gradient(to bottom,transparent calc(100% - 30px),
+      rgba(255,255,255,.055) calc(100% - 30px),rgba(255,255,255,.055) calc(100% - 29px),
+      transparent calc(100% - 29px)),
+    linear-gradient(to bottom,transparent calc(100% - 29px),rgba(0,0,0,.20) 100%)}
+.lib-rail::-webkit-scrollbar{height:8px}
+.lib-rail::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.lib-rail::-webkit-scrollbar-track{background:transparent}
+.lib-row{list-style:none;margin:0;padding:0 4px;display:flex;align-items:flex-end;
+  column-gap:18px;width:max-content;min-width:100%}
+.lib-slot{scroll-snap-align:start;flex:0 0 auto;
+  /* Perspective lives on the SLOT, not the row: one small stacking context per
+     object instead of one enormous one, and the prominent item is then the only
+     element in the whole shelf that is composited in 3D. */
+  perspective:900px}
+
+/* Small collections are centred rather than pinned left (§26). `auto` margins
+   on a flex row do nothing until there is slack, so this is inert the moment
+   the shelf overflows — one rule, both cases, no measuring. */
+.lib-row{justify-content:flex-start}
+.lib-rail:not(.is-full) .lib-row{justify-content:center}
+
+/* ── The object, and its five states (§23) ───────────────────────────── */
+.lib-obj{position:relative;display:flex;align-items:flex-end;cursor:pointer;
+  border:0;background:none;padding:0;font-family:inherit;text-align:left;
+  transition:transform var(--t-select),filter var(--t-hover);
+  transform-style:preserve-3d}
+/* 1. HOVER — surface only. Never required for anything (§36). */
+.lib-obj:hover{transform:translateY(-4px)}
+/* 2. FOCUS — the app accent, on the object, from :focus-visible only. */
+.lib-obj:focus{outline:none}
+.lib-obj:focus-visible{outline:2px solid var(--accent);outline-offset:5px;border-radius:4px}
+/* 3. PROMINENT — the one the shelf is about. Raised, turned very slightly
+   toward the viewer, and its spine narrows as a cover would when it turns.
+   7 degrees, not 25: past about ten the type stops being crisp and the shelf
+   starts being a diorama. */
+.lib-obj.is-prominent{transform:translateY(-10px) scale(1.045) rotateY(-7deg)}
+.lib-obj.is-prominent .lib-cover{box-shadow:0 20px 34px -14px rgba(0,0,0,.62),
+  inset 0 0 0 1px rgba(255,255,255,.07)}
+.lib-obj.is-prominent .lib-spine{--spine-w:9px}
+/* 4. OPEN — handed over to the Book view. Rises and fades as the book takes
+   the screen; the class is removed by the code that set it. */
+.lib-obj.is-opening{transform:translateY(-16px) scale(1.09);opacity:.15;
+  transition:transform var(--d-slower) var(--e-out),opacity var(--d-slower) var(--e-out)}
+/* 5. RETURNED — a brief re-identification, nothing more (§18). */
+.lib-obj.is-returned .lib-cover{box-shadow:0 0 0 2px var(--accent),
+  0 20px 34px -14px rgba(0,0,0,.62)}
+.lib-obj.is-archived{opacity:.5}
+
+/* The spine. A gradient strip, not a rotated face: the title on it is small,
+   optional and decorative, and the accessible name lives on the cover. */
+.lib-book{--bw:128px;--spine-w:13px}
+.lib-spine{flex:0 0 auto;width:var(--spine-w);
+  height:calc(var(--bw) * 297 / 210 - 6px);border-radius:3px 0 0 3px;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 55%,#100D18) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 26%,#100D18) 62%,
+    rgba(0,0,0,.42) 100%);
+  box-shadow:inset 1px 0 0 rgba(255,255,255,.12);
+  overflow:hidden;transition:width var(--t-select);position:relative}
+.lib-spine-t{position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%) rotate(180deg);writing-mode:vertical-rl;
+  font-size:8.5px;font-weight:600;letter-spacing:.06em;color:rgba(255,255,255,.5);
+  white-space:nowrap;max-height:calc(100% - 18px);overflow:hidden}
+
+/* The cover. The approved Book identity at shelf scale — same marks, same
+   order, same proportion — so the object you press and the cover that opens are
+   recognisably one thing (§8). */
+.lib-cover{position:relative;flex:0 0 auto;width:var(--bw);aspect-ratio:210/297;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;padding:14px 12px;border-radius:2px 5px 5px 2px;
+  background:linear-gradient(150deg,var(--paper) 0%,var(--paper-2) 100%);
+  box-shadow:0 12px 22px -12px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.045);
+  transition:box-shadow var(--t-select)}
+/* The gutter shadow where the cover meets the spine. This is what stops the
+   two from reading as a coloured stripe printed on a card. */
+.lib-cover::before{content:'';position:absolute;left:0;top:0;bottom:0;width:8px;
+  background:linear-gradient(90deg,rgba(0,0,0,.30),transparent);pointer-events:none;
+  border-radius:2px 0 0 2px}
+.lib-cover-mark{font-family:'Playfair Display',Georgia,serif;font-size:8px;
+  letter-spacing:.14em;color:var(--paper-ink-2);opacity:.72}
+.lib-cover-pre{font-size:6.5px;font-weight:700;letter-spacing:.26em;text-transform:uppercase;
+  color:var(--accent-c,var(--a-peach));opacity:.9}
+.lib-cover-title{font-family:'Playfair Display',Georgia,serif;font-weight:500;
+  font-size:15px;line-height:1.16;color:var(--paper-ink);text-align:center;
+  margin-top:6px;display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;
+  -webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.lib-cover-sub{font-family:'Playfair Display',Georgia,serif;font-style:italic;
+  font-size:8.5px;line-height:1.3;color:var(--paper-ink-2);text-align:center;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden}
+.lib-cover-rule{width:34px;height:1px;background:var(--paper-ink-2);opacity:.35;margin:7px 0 5px}
+.lib-cover-author{font-size:6.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--paper-ink-2);opacity:.8;text-align:center}
+
+/* The system Book (§19). Marked, not merely tinted: colour alone would be a
+   colour-only distinction, which §36 forbids. */
+.lib-book-system .lib-cover{background:
+  linear-gradient(150deg,#2C2740 0%,#241F33 100%);
+  box-shadow:0 12px 22px -12px rgba(0,0,0,.6),inset 0 0 0 1px rgba(182,155,240,.22)}
+.lib-obj-sys{position:absolute;top:7px;right:7px;color:var(--a-lavender);
+  display:grid;place-items:center;width:16px;height:16px;border-radius:5px;
+  background:rgba(182,155,240,.14)}
+
+.lib-obj-flag{position:absolute;left:calc(var(--spine-w,0px) + 7px);top:7px;
+  font-size:8px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);background:rgba(0,0,0,.5);border-radius:4px;padding:2px 5px}
+.lib-obj-more{position:absolute;right:5px;bottom:5px;width:24px;height:24px;
+  display:grid;place-items:center;border:0;border-radius:7px;cursor:pointer;
+  background:rgba(0,0,0,.5);color:var(--text-2);opacity:0;
+  transition:opacity var(--t-hover),background var(--t-hover),color var(--t-hover)}
+.lib-obj:hover .lib-obj-more,.lib-obj.is-prominent .lib-obj-more,
+.lib-obj:focus-within .lib-obj-more{opacity:1}
+.lib-obj-more:hover{background:rgba(0,0,0,.72);color:var(--text)}
+.lib-obj-more:focus-visible{opacity:1;outline:2px solid var(--accent);outline-offset:1px}
+
+/* ── The non-Book family (§10) ────────────────────────────────────────
+   Same shelf, same states, same type scale — a different object. A folio is
+   not a book with the spine removed; it is shorter, wider and made of paper
+   that lies flat. */
+.lib-res{--rw:172px;flex-direction:column;align-items:stretch;width:var(--rw);
+  gap:8px;border-radius:10px}
+.lib-res-face{position:relative;display:flex;flex-direction:column;gap:6px;
+  height:104px;padding:11px 12px;border-radius:9px;overflow:hidden;
+  background:linear-gradient(155deg,var(--surface-2) 0%,var(--surface) 100%);
+  box-shadow:0 10px 18px -12px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.05)}
+.lib-res-glyph{color:var(--text-2);display:flex}
+.lib-res-excerpt{font-size:9.5px;line-height:1.45;color:var(--muted);
+  display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;-webkit-box-orient:vertical;
+  overflow:hidden}
+.lib-res-kind,.lib-res-domain{margin-top:auto;font-size:9px;font-weight:700;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.lib-res-domain{text-transform:none;letter-spacing:.02em;font-weight:600;font-size:10px}
+/* A document is paper: a ruled edge and a folded corner, both drawn. */
+.lib-res-document .lib-res-face{background:linear-gradient(155deg,var(--paper) 0%,var(--paper-2) 100%)}
+.lib-res-document .lib-res-glyph{color:var(--a-blue)}
+.lib-res-document .lib-res-excerpt{color:var(--paper-ink-2)}
+.lib-res-link .lib-res-face{border-left:3px solid var(--a-sage)}
+.lib-res-file .lib-res-glyph{color:var(--muted)}
+
+/* Images and video: a FRAME with a drawn floor. The floor is the default and
+   the picture sits on top, so a dead URL leaves a frame rather than a hole
+   (§28). `--ratio` is only set when the row actually knows the dimensions. */
+.lib-frame{position:relative;display:block;height:104px;border-radius:9px;overflow:hidden;
+  background:linear-gradient(155deg,var(--surface-2) 0%,var(--surface) 100%);
+  box-shadow:0 10px 18px -12px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.05)}
+.lib-frame-fallback{position:absolute;inset:0;display:grid;place-items:center;
+  color:var(--muted);opacity:.55}
+.lib-frame-img{position:relative;width:100%;height:100%;object-fit:cover;display:block}
+.lib-frame-badge{position:absolute;right:6px;bottom:6px;font-size:9.5px;font-weight:700;
+  color:#fff;background:rgba(0,0,0,.66);border-radius:4px;padding:1px 5px;
+  font-variant-numeric:tabular-nums}
+.lib-frame-play{position:absolute;left:6px;bottom:6px;width:20px;height:20px;
+  display:grid;place-items:center;border-radius:999px;background:rgba(0,0,0,.6);color:#fff}
+
+.lib-res-body{display:flex;flex-direction:column;gap:2px;padding:0 2px}
+.lib-res-title{font-size:12px;font-weight:600;color:var(--text);line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden}
+.lib-res-sub{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.lib-res.is-prominent{transform:translateY(-8px) scale(1.035)}
+.lib-res.is-prominent .lib-res-face,.lib-res.is-prominent .lib-frame{
+  box-shadow:0 18px 28px -14px rgba(0,0,0,.62),inset 0 0 0 1px rgba(255,255,255,.09)}
+
+/* The search result surface (§13). One wrapped set, not four rails: a result
+   is an answer, and an answer should be visible rather than somewhere to
+   scroll to. Objects keep their own type's visual, so a Book still arrives as
+   a cover. */
+.lib-results{margin:0 0 26px}
+.lib-results .lib-shelf-h{margin:0 0 14px}
+.lib-found{display:flex;flex-wrap:wrap;align-items:flex-end;gap:20px 18px;
+  padding:8px 4px 26px;
+  background-image:linear-gradient(to bottom,transparent calc(100% - 22px),
+    rgba(255,255,255,.045) calc(100% - 22px),rgba(255,255,255,.045) calc(100% - 21px),
+    transparent calc(100% - 21px))}
+.lib-found .lib-obj{perspective:900px}
+
+/* The personal ledge (§30 B). Shorter than a Books shelf and set apart by a
+   hairline above it, so a system-owned Book is visibly on its own shelf rather
+   than first in somebody's collection. */
+.lib-shelf-personal .lib-rail{padding-top:14px;padding-bottom:26px}
+.lib-shelf-personal .lib-row{justify-content:flex-start}
+.lib-shelf-personal .lib-shelf-note{font-style:italic}
+
+/* An empty Library keeps ONE faint ledge, so the room is still a room without
+   showing you the size of the gap (§25). */
+.lib-shelf-blank .lib-rail{overflow:hidden;padding-bottom:24px}
+.lib-blank{height:96px;opacity:.5}
+
+/* The title under a prominent Book (§24). Books carry their title on the cover;
+   this is the full one, unclamped, for the object the shelf is about. */
+.lib-shelf-cap{min-height:17px;margin:2px 0 0;font-size:12px;color:var(--text-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:opacity var(--t-hover)}
+.lib-shelf-cap:empty{opacity:0}
+
+/* Shelf-shaped waiting (§32). Book-shaped, on a ledge — the shape that is
+   coming, not a grey slab. */
+.lib-skel-shelf{display:flex;column-gap:18px;padding:18px 4px 30px;overflow:hidden}
+.lib-skel-book{flex:0 0 auto;width:141px;height:181px;border-radius:2px 5px 5px 2px}
+.lib-skel-res{flex:0 0 auto;width:172px;height:132px;border-radius:9px}
+
+/* Reduced motion (§31): no spatial movement anywhere. The states stay
+   distinguishable because none of them was ONLY movement — prominence still
+   brightens its shadow, focus still outlines, hover still lifts its surface
+   colour. What goes is the travel. */
+@media (prefers-reduced-motion: reduce){
+  .lib-obj,.lib-obj:hover,.lib-obj.is-prominent,.lib-res.is-prominent{transform:none}
+  .lib-obj.is-opening{transform:none;opacity:.15}
+  .lib-obj.is-prominent .lib-cover{box-shadow:0 0 0 1.5px var(--accent-c,var(--a-peach)),
+    0 20px 34px -14px rgba(0,0,0,.62)}
+  .lib-rail{scroll-behavior:auto}
+}
 
 /* Page matches — the half of a Library search that lives inside a book. */
 .lib-hits{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
@@ -3783,6 +4045,61 @@ body:has(.dia-page) .rail{display:none}
 /* ── Library responsive (§27) ─────────────────────────────────────────── */
 @media (max-width:1180px){
   .bk-tabs,.bk-foot,.bk-head{padding-left:0;padding-right:0}
+}
+
+/* ── The shelf, narrower (L3 §34/§35) ───────────────────────────────────
+   The shelf does not collapse into a list. It stays a shelf and the objects
+   get BIGGER, which is the opposite of what a squeezed desktop layout does and
+   the reason a phone Library reads as designed rather than as left over. */
+
+/* Tablet: fewer books across, and the depth effect simplified. A 7-degree
+   rotation is a mouse-hover refinement; under a finger the prominent item is
+   whatever you last touched, and turning it is noise. */
+@media (max-width:1024px){
+  .lib-obj.is-prominent{transform:translateY(-8px) scale(1.03)}
+  .lib-book{--bw:124px}
+  .lib-res{--rw:164px}
+  .lib-shelves{gap:22px}
+}
+
+/* Phone: touch-sized covers, always-visible titles, and no hover anywhere in
+   the path to opening something (§35/§36). The overflow menu stops hiding
+   behind hover because there is no hover to reveal it with. */
+@media (max-width:820px){
+  .lib-book{--bw:132px;--spine-w:12px}
+  .lib-res{--rw:158px}
+  .lib-rail{padding:16px 0 26px;scroll-padding-inline:16px}
+  .lib-row{padding:0 16px;column-gap:14px}
+  /* Always visible, because there is no hover to reveal it with (§36), and a
+     44px hit area without a 44px button: the drawn control stays 30px so it
+     does not take a third of a cover, and `::before` extends what a finger
+     actually hits. A target measured by its ink is a target measured wrong. */
+  .lib-obj-more{opacity:1;width:30px;height:30px}
+  .lib-obj-more::before{content:'';position:absolute;top:50%;left:50%;
+    width:44px;height:44px;transform:translate(-50%,-50%)}
+  .lib-shelf-nav{display:none !important}
+  .lib-shelf-cap{padding:0 16px}
+  .lib-bar{gap:10px}
+  .lib-bar-right{margin-left:0;width:100%}
+  .lib-search{flex:1}
+  .lib-search input{width:100%}
+  /* The rails run edge to edge, so the shelf reads as continuing past the
+     screen rather than stopping at a margin — which is what tells you there is
+     more to the right without an arrow saying so. -16px is `.main-wrap`'s own
+     padding at this breakpoint, cancelled and then reapplied to the head and
+     the row so only the SCROLLING part bleeds. */
+  .lib-shelf{margin-inline:-16px}
+  .lib-shelf-head{padding-inline:16px}
+  .lib-found{padding-inline:16px}
+}
+
+/* Small phone: one column of shelves, larger touch targets, and the last shelf
+   clears the global composer (§35). */
+@media (max-width:480px){
+  .lib-book{--bw:128px}
+  .lib-res{--rw:150px}
+  .lib-shelves{gap:18px;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+  .lib-obj:focus-visible{outline-offset:3px}
 }
 @media (max-width:1024px){
   .bk-stage{gap:6px}

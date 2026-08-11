@@ -138,3 +138,43 @@ Two things in this file are now out of date in a good way:
   into it yet.
 - **No mobile refinement.** The Book is responsive but the dedicated mobile
   design remains deferred.
+
+---
+
+## L3 — Library became a room
+
+The overview is no longer a card grid. It is a set of labelled shelves, and the
+change is a product one rather than a decorative one: a grid answers *what do I
+have*, a shelf also answers *where is it*. You remember a position on a shelf in
+a way you never remember a cell in a grid that reflows.
+
+Everything spatial is in `library-v2-l3-spatial-design.md`. What belongs here is
+what changed about the **product**:
+
+### The data model did not move
+
+`library_items`, `library_books`, `book_sections`, `book_pages`, `item_links`,
+archive/restore, the page document model, autosave and conflict handling are all
+exactly as F1 left them. L3 is client and product design.
+
+**One column was added**, and it was justified before it was written:
+`library_items.last_opened_at`. "Recently opened" cannot be answered by
+`updated_at`, which is an edit time — see §12 in the spatial-design document.
+Nothing else in the schema changed, and no `shelf_item` ownership table was
+invented to hold a layout.
+
+### Diary is on the shelf, and is still not a Library item
+
+A system-owned Book on its own **Personal** ledge. It cannot be archived,
+renamed, filed or found in Library search, it has no `library_items` row, and
+opening it hands over to the shell rather than writing a hash from Library.
+
+This is the boundary `library-v2-future-l3.md` predicted would come under
+pressure — *"a diary that looks like a book on a shelf is a diary somebody will
+try to rename"* — so the shortcut carries no rename affordance at all rather
+than a disabled one.
+
+### What Library still does not do
+
+Uploads, permanent deletion, semantic search, folders, and a right rail. All
+unchanged, all for the reasons already recorded.

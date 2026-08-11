@@ -1,7 +1,14 @@
-# Library L3 — the bookshelf (future, not built)
+# Library L3 — the bookshelf (BUILT)
 
-Approved direction, recorded so it is not re-derived later. **Nothing in this
-document is implemented.**
+> **Status: implemented.** This was the approved direction, kept here as the
+> record of what was intended and what the gating question was. The design as
+> shipped is in **`library-v2-l3-spatial-design.md`**; read that one first.
+>
+> The gating question below — *how do the five non-Book types live on a shelf?*
+> — was answered before any shelf was drawn, which is why it is still the first
+> heading. The answer is a related-but-honest visual family: same shelf, same
+> ledge, same five states, same type scale, and **no spine on anything that is
+> not a book**. A spine on a JPEG is a lie about what the thing is.
 
 Library should feel like a library, not a badge grid.
 
@@ -38,3 +45,32 @@ diary somebody will try to rename.
 
 Month-as-tabs, the month overview spread and the year jump are recorded in
 `diary-v2-direction-d2.md`.
+
+---
+
+## What was decided, against what was written above
+
+| Written here | Shipped |
+|---|---|
+| covers and spines on a shelf | both — cover face plus a drawn spine strip |
+| scrolling rather than side-clicks | native `overflow-x`, arrows secondary and hidden when useless |
+| a selected Book comes forward, neighbours stay visible | `.is-prominent`: lift, 1.045 scale, a 7° turn; nothing is ever hidden |
+| **a curve, tested for usability before committing** | **not built** — see below |
+| Diary as a system shortcut | built, on its own "Personal" ledge |
+
+### The curve was tried on paper and rejected
+
+§6 permitted a very shallow arc "only if scroll remains predictable, titles
+remain readable, keyboard focus remains logical, and Book positions do not feel
+like a carousel trap". Every one of those is a cost, and the benefit is
+atmosphere.
+
+Two of them are hard failures rather than trade-offs: an arc means each object
+sits at a different rotation, so **every** object needs its own 3D transform
+(45 composited subtrees instead of 6), and objects at the ends of the arc are
+rotated far enough that their titles stop being crisp — which §24 forbids.
+
+The prominent-object turn keeps the part of the idea that was worth having: the
+shelf has depth, and the thing you are looking at is turned toward you. Recorded
+here rather than silently dropped, because a shallow arc is exactly the kind of
+idea that comes back.

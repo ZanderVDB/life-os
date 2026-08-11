@@ -1,22 +1,30 @@
 /**
- * The Library overview — the shelf.
+ * The Library overview — a room, composed of shelves (Phase L3).
  *
- * Two groupings, deliberately: **Recent** (what you touched last) and **All**.
- * Not a folder tree. Library's premise is that a resource exists once and is
- * pointed at from everywhere else; a hierarchy would immediately ask the user
- * to decide which single place a thing belongs to, which is the question
- * Library exists to avoid.
+ * Not a folder tree, and now not a card grid either. Library's premise is that
+ * a resource exists once and is pointed at from everywhere else; a hierarchy
+ * would immediately ask which single place a thing belongs to, which is the
+ * question Library exists to avoid. What replaced the grid is a set of labelled
+ * shelves, because a grid answers "what do I have" and a shelf also answers
+ * "where is it" — you remember a position on a shelf in a way you never
+ * remember a cell in a reflowing grid.
  *
- * There is no right rail. Item details, backlinks and activity would fill one —
- * none of them exist yet, and an empty rail is worse than no rail.
+ * ── The composition rule ─────────────────────────────────────────────────
+ *
+ * ONLY SHELVES THAT HAVE SOMETHING ON THEM ARE DRAWN (§11). Four empty
+ * category headings is a filing cabinet showing you its dividers. The room
+ * adapts to what actually exists: one Book gets a centred shelf, forty get a
+ * scrolling one, and nothing gets a calm empty state rather than a rack of
+ * labelled nothing.
  */
 
 import { lib, ACCENT_FALLBACK } from './library-api.js';
+import {
+  shelfHtml, objectHtml, diaryObjectHtml, recencyLabel, TYPE_LABEL,
+  fileSize, duration, domainOf, esc,
+} from './library-shelf.js';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
-  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-/** Only the types F1 gave a complete endpoint. §9: absent, not disabled. */
+/** Only the types F1 gave a complete endpoint. §15: absent, not disabled. */
 export const CREATABLE = [
   { type: 'book', label: 'New Book', hint: 'Sections and pages you write in' },
   { type: 'document', label: 'New Document', hint: 'Written information, no book needed' },
@@ -27,19 +35,28 @@ export const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'book', label: 'Books' },
   { id: 'document', label: 'Documents' },
-  { id: 'link', label: 'Links' },
   { id: 'image', label: 'Images' },
   { id: 'video', label: 'Videos' },
+  { id: 'link', label: 'Links' },
   { id: 'file', label: 'Files' },
 ];
 
-const TYPE_LABEL = {
-  book: 'Book', document: 'Document', image: 'Image',
-  video: 'Video', link: 'Link', file: 'File',
-};
+/**
+ * The shelves, in reading order, and what each one collects.
+ *
+ * Media and Clippings deliberately group two types each. Six shelves for six
+ * types would be a taxonomy; four is a room. Images and videos are both "things
+ * you look at", links and files are both "things you kept from elsewhere", and
+ * grouping them means a Library with two videos does not get a shelf of its own
+ * with two videos on it.
+ */
+export const SHELVES = [
+  { id: 'books', title: 'Books', types: ['book'], kind: 'book' },
+  { id: 'documents', title: 'Documents', types: ['document'], kind: 'res' },
+  { id: 'media', title: 'Media', types: ['image', 'video'], kind: 'res' },
+  { id: 'clippings', title: 'Links & Files', types: ['link', 'file'], kind: 'res' },
+];
 
-/* A distinct mark per type. A Library of identical cards is a list that has
- * given up on being scanned. */
 const TYPE_ICON = {
   book: '<path d="M4 4h2.6v13H4zM8 4h2.6v13H8z"/><path d="m12.6 4.6 2.5.7-2.8 12-2.5-.7z"/>',
   document: '<path d="M5.5 3h6L15 6.5V17H5.5z"/><path d="M11.5 3v3.5H15M8 10h4M8 13h4"/>',
@@ -61,13 +78,11 @@ function metaLine(item) {
     const p = item.book.pageCount ?? 0;
     return `${s} section${s === 1 ? '' : 's'} · ${p} page${p === 1 ? '' : 's'}`;
   }
-  if (item.type === 'link' && item.sourceUrl) {
-    try { return new URL(item.sourceUrl).hostname.replace(/^www\./, ''); } catch { return 'Link'; }
+  if (item.type === 'link' && item.sourceUrl) return domainOf(item.sourceUrl) || 'Link';
+  if (item.type === 'video' && Number.isFinite(item.metadata?.durationSeconds)) {
+    return duration(item.metadata.durationSeconds);
   }
-  if (item.sizeBytes) {
-    const kb = item.sizeBytes / 1024;
-    return kb < 1024 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`;
-  }
+  if (item.sizeBytes) return fileSize(item.sizeBytes);
   return TYPE_LABEL[item.type] ?? 'Item';
 }
 
@@ -144,78 +159,108 @@ export function visibleItems() {
   });
 }
 
+/**
+ * Recently opened (§12).
+ *
+ * Ordered by `lastOpenedAt` where it exists and `updatedAt` where it does not,
+ * which is a fallback for ORDERING only — each object still says which of the
+ * two it is showing, so nothing here claims an opening that did not happen.
+ *
+ * Capped at six and hidden below a Library of eight, because a "recent" shelf
+ * that lists most of what you own is a second copy of the room.
+ */
+export function recentItems(items) {
+  if (items.length < 8) return [];
+  return [...items]
+    .sort((a, b) => new Date(b.lastOpenedAt ?? b.updatedAt) - new Date(a.lastOpenedAt ?? a.updatedAt))
+    .slice(0, 6);
+}
+
 export function bodyHtml() {
-  if (lib.loading && !lib.itemsLoaded) {
-    return `${filtersHtml()}<div class="lib-grid">${
-      '<div class="skeleton lib-skel"></div>'.repeat(6)}</div>`;
-  }
+  if (lib.loading && !lib.itemsLoaded) return shelfSkeletonHtml();
   if (lib.error && !lib.itemsLoaded) {
     return `<div class="state"><b>Library did not load</b>${esc(lib.error)}
       <div style="margin-top:16px"><button class="btn" id="lib-retry">Try again</button></div></div>`;
   }
 
   const items = visibleItems();
-  if (!items.length) {
-    // Not empty if the words are inside a book — §22. Saying "nothing matched"
-    // over a list of matches is the worst version of this screen.
-    return `${filtersHtml()}${lib.pageHits?.length ? pageHitsHtml(lib.pageHits) : emptyHtml()}`;
-  }
+  const searching = !!lib.query.trim();
 
-  /* Recent is the last five touched, and they ALSO appear in All. A shortcut
-   * that removes things from where you expect to find them is not a shortcut. */
-  const recent = [...items]
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-    .slice(0, 5);
-  const showRecent = items.length > 6 && !lib.query.trim();
+  /* Search replaces the shelves with a focused result surface (§13). Making
+   * somebody scroll four shelves to find what they just searched for is the
+   * one thing a search must never do. */
+  if (searching) return `${filtersHtml()}${resultsHtml(items)}${pageHitsHtml(lib.pageHits)}`;
+
+  if (!items.length) return `${filtersHtml()}${emptyHtml()}`;
+
+  const recent = recentItems(items);
+  const shelves = SHELVES.map((s) => {
+    const own = items.filter((i) => s.types.includes(i.type));
+    /* The Diary ledge rides above the Books shelf and is drawn even when there
+     * are no Books — it is not a Library item and its presence does not depend
+     * on owning any (§19). */
+    if (!own.length && s.id !== 'books') return '';
+    if (!own.length && s.id === 'books' && lib.filter !== 'all') return '';
+    return shelfHtml({ id: s.id, title: s.title, items: own, kind: s.kind });
+  }).filter(Boolean).join('');
 
   return `${filtersHtml()}
-    ${showRecent ? `<section class="lib-sec" aria-labelledby="lib-recent-h">
-      <h2 class="lib-sec-h" id="lib-recent-h">Recent</h2>
-      <div class="lib-grid lib-grid-recent">${recent.map(cardHtml).join('')}</div>
-    </section>` : ''}
-    <section class="lib-sec" aria-labelledby="lib-all-h">
-      <h2 class="lib-sec-h" id="lib-all-h">${showRecent ? 'All' : `${items.length} item${
-  items.length === 1 ? '' : 's'}`}</h2>
-      <div class="lib-grid">${items.map(cardHtml).join('')}</div>
-    </section>
+    <div class="lib-shelves">
+      ${recent.length ? shelfHtml({
+    id: 'recent', title: 'Recently opened', items: recent, kind: 'res',
+    note: recent.every((i) => !i.lastOpenedAt) ? 'by last edit' : '',
+  }) : ''}
+      ${lib.filter === 'all' || lib.filter === 'book' ? personalShelfHtml() : ''}
+      ${shelves}
+    </div>
     ${pageHitsHtml(lib.pageHits)}`;
 }
 
 /**
- * One card.
+ * The personal ledge (§19/§30, treatment B).
  *
- * A book shows a spine — a slim coloured edge — so the shelf reads as a shelf
- * at a glance rather than as six identical rectangles.
+ * Its own small shelf above the Books, so a system-owned Book never has to
+ * pretend to be one of yours. Nothing on this ledge has a `library_items` row,
+ * an overflow menu, an archive action or a place in Library search.
  */
-export function cardHtml(item) {
-  const archived = !!item.archivedAt;
-  return `<article class="lib-card ${archived ? 'is-archived' : ''}" data-item="${item.id}"
-    data-type="${esc(item.type)}" tabindex="0" role="button"
-    aria-label="${esc(item.title)}, ${TYPE_LABEL[item.type] ?? 'item'}">
-    <span class="lib-spine" aria-hidden="true"></span>
-    <div class="lib-card-top">
-      <span class="lib-card-icon">${typeIcon(item.type)}</span>
-      <span class="lib-card-type">${TYPE_LABEL[item.type] ?? 'Item'}</span>
-      ${archived ? '<span class="lib-card-arch">Archived</span>' : ''}
-      <button type="button" class="lib-card-more" data-more="${item.id}"
-        aria-label="Actions for ${esc(item.title)}" aria-haspopup="menu">
-        <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor" aria-hidden="true"
-          ><circle cx="5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="15" cy="10" r="1.4"/></svg>
-      </button>
+export function personalShelfHtml() {
+  return `<section class="lib-shelf lib-shelf-personal" data-shelf="personal"
+    role="group" aria-labelledby="lib-sh-personal">
+    <div class="lib-shelf-head">
+      <h2 class="lib-shelf-h" id="lib-sh-personal">Personal</h2>
+      <span class="lib-shelf-note">Part of Life OS, not a Library item</span>
     </div>
-    <h3 class="lib-card-title">${esc(item.title)}</h3>
-    ${item.description ? `<p class="lib-card-desc">${esc(item.description)}</p>` : ''}
-    <div class="lib-card-foot">
-      <span class="lib-card-meta">${esc(metaLine(item))}</span>
-      <span class="lib-card-when">${esc(when(item.updatedAt))}</span>
+    <div class="lib-rail" data-rail="personal">
+      <ul class="lib-row" role="list"><li class="lib-slot">${diaryObjectHtml()}</li></ul>
     </div>
-  </article>`;
+  </section>`;
 }
 
 /**
- * Pages inside books that match the shelf search (§22).
+ * The search result surface (§13).
  *
- * The card filter above is instant and local; this is the half that reaches
+ * One wrapped set rather than four rails: results are a temporary answer to a
+ * question, and a question deserves everything visible at once rather than four
+ * more places to look. Each result keeps its own type's visual, so a Book still
+ * arrives as a cover and a link still arrives as a clipping.
+ */
+export function resultsHtml(items) {
+  if (!items.length) {
+    return lib.pageHits?.length ? '' : `<div class="state lib-empty">
+      <b>Nothing matched “${esc(lib.query)}”</b>
+      Try a shorter word, or clear the search.
+      <div style="margin-top:16px"><button class="btn btn-sm" id="lib-clear-q">Clear search</button></div></div>`;
+  }
+  return `<section class="lib-results" aria-label="Search results">
+    <h2 class="lib-shelf-h">${items.length} match${items.length === 1 ? '' : 'es'}</h2>
+    <div class="lib-found">${items.map((it, i) => objectHtml(it, i, items.length)).join('')}</div>
+  </section>`;
+}
+
+/**
+ * Pages inside books that match the shelf search (§13).
+ *
+ * The item filter above is instant and local; this is the half that reaches
  * into content. Both are shown, because "search my Library" means the thing you
  * are looking for might be a book, or might be a sentence on page four of one —
  * and only one of those is answerable without asking the server.
@@ -236,12 +281,43 @@ export function pageHitsHtml(hits) {
   </section>`;
 }
 
+/**
+ * Waiting (§32).
+ *
+ * A shelf shape on a ledge, not a grey slab, and four objects rather than
+ * twelve: a placeholder that promises more than arrives is its own small
+ * dishonesty, and four already reads as "a shelf".
+ */
+export function shelfSkeletonHtml() {
+  return `<div data-loading="shelf">
+    <div class="lib-skel-bar" aria-hidden="true">
+      ${'<span class="skeleton lib-skel-pill"></span>'.repeat(4)}
+    </div>
+    <div class="lib-shelves">
+      <section class="lib-shelf"><div class="lib-shelf-head">
+        <span class="skeleton lib-skel-pill" style="width:64px;height:14px"></span></div>
+        <div class="lib-rail"><div class="lib-skel-shelf" aria-hidden="true">
+          ${'<span class="skeleton lib-skel-book"></span>'.repeat(4)}
+        </div></div></section>
+      <section class="lib-shelf"><div class="lib-shelf-head">
+        <span class="skeleton lib-skel-pill" style="width:88px;height:14px"></span></div>
+        <div class="lib-rail"><div class="lib-skel-shelf" aria-hidden="true">
+          ${'<span class="skeleton lib-skel-res"></span>'.repeat(4)}
+        </div></div></section>
+    </div>
+    <p class="sr-only" role="status">Loading your Library</p>
+  </div>`;
+}
+
+/**
+ * An empty Library (§25).
+ *
+ * No rack of empty shelves stretching across the page — a Library you have not
+ * filled should not show you the size of the gap. One faint ledge with nothing
+ * on it, so the room is still legible as a room, and the three things you can
+ * actually do.
+ */
 function emptyHtml() {
-  if (lib.query.trim()) {
-    return `<div class="state lib-empty"><b>Nothing matched “${esc(lib.query)}”</b>
-      Try a shorter word, or clear the search.
-      <div style="margin-top:16px"><button class="btn btn-sm" id="lib-clear-q">Clear search</button></div></div>`;
-  }
   if (lib.filter !== 'all') {
     return `<div class="state lib-empty"><b>No ${
       esc((FILTERS.find((f) => f.id === lib.filter)?.label ?? '').toLowerCase())} yet</b>
@@ -250,19 +326,25 @@ function emptyHtml() {
   if (lib.showArchived) {
     return '<div class="state lib-empty"><b>Nothing archived</b>Archived items are kept, not deleted.</div>';
   }
-  return `<div class="state lib-empty lib-empty-first">
-    <b>Your Library is empty</b>
-    Library is where a resource lives once — a book you write, a document, a link
-    worth keeping — so everything else in Life OS can point at it.
-    <div class="lib-empty-acts">
-      <button class="btn btn-primary" data-new="book">Create your first Book</button>
-      <button class="btn" data-new="document">New Document</button>
-      <button class="btn" data-new="link">Save a Link</button>
-    </div>
+  return `<div class="lib-shelves">
+    ${personalShelfHtml()}
+    <section class="lib-shelf lib-shelf-blank" aria-label="Your Library">
+      <div class="lib-rail"><div class="lib-blank" aria-hidden="true"></div></div>
+      <div class="state lib-empty lib-empty-first">
+        <b>Your Library is empty</b>
+        Library is where a resource lives once — a book you write, a document, a link
+        worth keeping — so everything else in Life OS can point at it.
+        <div class="lib-empty-acts">
+          <button class="btn btn-primary" data-new="book">Create your first Book</button>
+          <button class="btn" data-new="document">New Document</button>
+          <button class="btn" data-new="link">Save a Link</button>
+        </div>
+      </div>
+    </section>
   </div>`;
 }
 
-/* ── Add menu (§9) ───────────────────────────────────────────────────── */
+/* ── Add menu (§15) ──────────────────────────────────────────────────── */
 
 export function addMenuHtml() {
   return `<div class="lib-menu" role="menu" aria-label="Add to Library">
@@ -273,7 +355,7 @@ export function addMenuHtml() {
   </div>`;
 }
 
-/* ── Item actions (§24) ──────────────────────────────────────────────── */
+/* ── Item actions (§29) ──────────────────────────────────────────────── */
 
 export const itemMenuHtml = (item) => `<div class="lib-menu lib-menu-sm" role="menu"
   aria-label="Actions for ${esc(item.title)}">
@@ -286,4 +368,30 @@ export const itemMenuHtml = (item) => `<div class="lib-menu lib-menu-sm" role="m
     : '<button type="button" role="menuitem" data-act="archive">Archive</button>'}
 </div>`;
 
-export { esc, TYPE_LABEL, typeIcon, metaLine, when, ACCENT_FALLBACK };
+/**
+ * Still exported for the item view, which is a page rather than a shelf.
+ *
+ * The overview no longer renders cards — an item opened on its own still needs
+ * a card-shaped summary, and that is the only thing left using this.
+ */
+export function cardHtml(item) {
+  const archived = !!item.archivedAt;
+  return `<article class="lib-card ${archived ? 'is-archived' : ''}" data-item="${item.id}"
+    data-type="${esc(item.type)}" tabindex="0" role="button"
+    aria-label="${esc(item.title)}, ${TYPE_LABEL[item.type] ?? 'item'}">
+    <span class="lib-spine-flat" aria-hidden="true"></span>
+    <div class="lib-card-top">
+      <span class="lib-card-icon">${typeIcon(item.type)}</span>
+      <span class="lib-card-type">${TYPE_LABEL[item.type] ?? 'Item'}</span>
+      ${archived ? '<span class="lib-card-arch">Archived</span>' : ''}
+    </div>
+    <h3 class="lib-card-title">${esc(item.title)}</h3>
+    ${item.description ? `<p class="lib-card-desc">${esc(item.description)}</p>` : ''}
+    <div class="lib-card-foot">
+      <span class="lib-card-meta">${esc(metaLine(item))}</span>
+      <span class="lib-card-when">${esc(when(item.updatedAt))}</span>
+    </div>
+  </article>`;
+}
+
+export { esc, TYPE_LABEL, typeIcon, metaLine, when, recencyLabel, ACCENT_FALLBACK };

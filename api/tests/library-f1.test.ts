@@ -69,17 +69,36 @@ test('legacy: nothing in this phase reads or writes Legacy content', () => {
   const routes = readFileSync(join(here, '..', 'src', 'routes', 'library.ts'), 'utf8');
   assert.ok(!/legacyId\s*:/.test(routes), 'the Library routes write legacy_id');
 
-  const seeder = readFileSync(join(here, '..', 'src', 'lib', 'sample-library.ts'), 'utf8');
+  const seeder = readFileSync(join(here, '..', 'src', 'lib', 'sample-library.ts'), 'utf8')
+    /* Comments stripped first — this check is about code, and prose written
+     * near an assignment is not an assignment. */
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.match(seeder, /SAMPLE_PREFIX = 'sample:f1:'/);
-  // Every value it assigns is built from that prefix.
-  for (const value of [...seeder.matchAll(/legacyId[,:]\s*([^,\n}]*)/g)].map((m) => (m[1] ?? '').trim())) {
+
+  /* Two checks, because there are two ways to write this column.
+   *
+   * The single "whatever follows the word legacyId" scan this replaced could
+   * not tell an assignment from the next property after a shorthand. L3 put a
+   * conditional spread after `legacyId,` and the test reported
+   * `...(spec.archived` as a suspicious legacy_id source. Property shorthand
+   * has no value at that position — its value is the DECLARATION — so the
+   * declaration is what gets checked. */
+
+  // (a) every explicit `legacyId: <value>` is built from the prefix
+  for (const value of [...seeder.matchAll(/legacyId\s*:\s*([^,\n}]*)/g)].map((m) => (m[1] ?? '').trim())) {
     assert.ok(
-      value === ''                              // shorthand `legacyId,`
-      || /legacyId|bookLegacyId/.test(value)    // a local built from the prefix
-      || value.includes('SAMPLE_PREFIX')        // the prefix itself
-      || value.includes('libraryItems.legacyId'), // a column reference, not a write
+      /^(bookLegacyId|legacyId)$/.test(value)      // a local, checked in (b)
+      || value.includes('SAMPLE_PREFIX')           // the prefix itself
+      || value.includes('libraryItems.legacyId'),  // a column reference, not a write
       `legacy_id assigned from something unexpected: ${value}`,
     );
+  }
+  // (b) and every local that a shorthand can refer to is built from the prefix
+  const locals = [...seeder.matchAll(/const\s+(\w*[lL]egacyId)\s*=\s*([^;\n]*)/g)];
+  assert.ok(locals.length, 'no legacy_id local found — has the seeder changed shape?');
+  for (const [, name, value] of locals) {
+    assert.ok(value.includes('SAMPLE_PREFIX'),
+      `${name} is not built from the sample prefix: ${value.trim()}`);
   }
 });
 
@@ -464,28 +483,79 @@ test('isolation: one workspace cannot see or touch another’s Library', async (
 
 /* ── §24  Sample tooling ─────────────────────────────────────────────── */
 
-test('sample: seeds a reviewable book plus one of every other type', async () => {
+/* F1 asserted ONE book and one of every other type, because F1 was reviewing
+ * the Book editor and one deep book was the whole requirement.
+ *
+ * L3 reviews a SHELF, and a shelf of one proves nothing about a shelf: not the
+ * scrolling, not the prominence, not whether a long title sits next to a short
+ * one without looking like a mistake. §37 therefore asks for 10–14 Books and
+ * several of each other type. The old counts are not wrong, they are the counts
+ * for a different question — so they are replaced by ranges that state what the
+ * shelf actually needs. */
+test('sample: seeds a full shelf — many books and several of every other type', async () => {
   const h = await setup();
   const r = (await h.post('/library/sample')).json();
-  assert.equal(r.booksCreated, 1);
-  assert.equal(r.sectionsCreated, 3);
+  assert.ok(r.booksCreated >= 10 && r.booksCreated <= 14,
+    `L3 §37 wants 10–14 books, got ${r.booksCreated}`);
+  // The deep book still has its three sections; the shelf books add one each.
+  assert.ok(r.sectionsCreated >= 3 + 10, `only ${r.sectionsCreated} sections seeded`);
   assert.ok(r.pagesCreated >= 6, `only ${r.pagesCreated} pages seeded`);
 
-  const items = (await h.get('/library/items')).json().items;
-  const types = new Set(items.map((i: any) => i.type));
+  const items = (await h.get('/library/items?includeArchived=true')).json().items;
+  const byType: Record<string, number> = {};
+  for (const i of items) byType[i.type] = (byType[i.type] ?? 0) + 1;
   for (const t of ['book', 'document', 'image', 'video', 'link', 'file']) {
-    assert.ok(types.has(t), `the sample set has no ${t}`);
+    assert.ok(byType[t], `the sample set has no ${t}`);
   }
+  /* The §37 minimums, so a future trim to the sample cannot quietly leave the
+   * shelf too thin to judge. */
+  assert.ok(byType.document >= 5, `only ${byType.document} documents`);
+  assert.ok(byType.image >= 4, `only ${byType.image} images`);
+  assert.ok(byType.video >= 3, `only ${byType.video} videos`);
+  assert.ok(byType.link >= 5, `only ${byType.link} links`);
+  assert.ok(byType.file >= 4, `only ${byType.file} files`);
+
+  /* §38's deliberate awkward cases. Each one is a state the shelf has to
+   * survive, and each is unmissable in review only if it is actually present. */
+  assert.ok(items.some((i: any) => i.archivedAt), 'nothing archived — §38 wants one');
+  assert.ok(items.some((i: any) => i.type === 'image' && !i.metadata && !i.thumbnailKey),
+    'no image with a missing preview');
+  assert.ok(items.some((i: any) => i.sourceUrl?.includes('.invalid')),
+    'no deliberately broken external preview');
+  assert.ok(items.some((i: any) => i.title.length > 40), 'no long title');
+  assert.ok(items.some((i: any) => i.title.length <= 8), 'no short title');
+  assert.ok(items.filter((i: any) => /quokka/i.test(`${i.title} ${i.description ?? ''}`)).length === 1,
+    'the search needle must appear exactly once');
+});
+
+test('sample: the size dial seeds one shelf, a small one, or the lot', async () => {
+  /* §38 asks for one Book, three Books and many Books, and those are three
+   * different screens — a collection of many cannot demonstrate the first two.
+   * One prefix, one cleanup, one system with a dial on it. */
+  const solo = await setup();
+  const s = (await solo.post('/library/sample', { size: 'solo' })).json();
+  assert.equal(s.booksCreated, 1, 'solo is the one deep book and nothing else');
+  assert.equal((await solo.get('/library/items')).json().items.length, 1);
+
+  const small = await setup();
+  const m = (await small.post('/library/sample', { size: 'small' })).json();
+  assert.equal(m.booksCreated, 3, 'small is three books');
+  assert.ok(m.itemsCreated > 3, 'small still has a few non-books to sit beside them');
 });
 
 test('sample: seeding twice does not duplicate', async () => {
   const h = await setup();
   await h.post('/library/sample');
+  const list = () => h.get('/library/items?type=book&includeArchived=true')
+    .then((r) => r.json().items.length);
+  const afterFirst = await list();
+
   const second = (await h.post('/library/sample')).json();
   assert.equal(second.itemsCreated, 0);
   assert.equal(second.booksCreated, 0);
-  const books = (await h.get('/library/items?type=book')).json().items;
-  assert.equal(books.length, 1);
+  assert.ok(second.alreadyPresent > 0, 'the second seed did not recognise the first');
+  // The count is COMPARED, not restated: a second seed must change nothing.
+  assert.equal(await list(), afterFirst);
 });
 
 test('sample: cleanup matches the exact prefix and nothing else', async () => {
@@ -526,9 +596,14 @@ test('sample: production refuses to seed or remove', () => {
 test('sample: removing a book cascades to its sections and pages', async () => {
   const h = await setup();
   await h.post('/library/sample');
-  const book = (await h.get('/library/items?type=book')).json().items[0];
+  /* The DEEP book by name, not `items[0]`. The list is ordered by `updatedAt`
+   * and L3 seeds eleven more books after it, so "the first book" stopped being
+   * the one with three sections — the test was reading position as identity. */
+  const books = (await h.get('/library/items?type=book')).json().items;
+  const book = books.find((i: any) => i.title === 'Life OS Field Notes');
+  assert.ok(book, 'the deep sample book is missing');
   const full = (await h.get(`/library/books/${book.book.id}`)).json();
-  assert.ok(full.sections.length === 3);
+  assert.equal(full.sections.length, 3);
 
   await h.post('/library/sample/remove');
   // The cascade is what removes sections and pages — they carry no prefix of

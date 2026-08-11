@@ -54,3 +54,46 @@ animation genuinely finishes, or skip the animation — not guess at 220ms.
 Positions update immediately; opacity feedback and every status message remain;
 functionality is identical. Handled by the existing `motion.js` helpers rather
 than a Library-specific path.
+
+---
+
+## L3 — the shelf's motion
+
+| | |
+|---|---|
+| object hover | 140ms — `translateY(-4px)` |
+| prominent settle | 200ms — lift, scale, 7° turn, spine narrowing |
+| Book open handoff | 320ms — rise, scale, fade |
+| return highlight | 1400ms class, then removed |
+| shelf step (arrow / keyboard) | native smooth scroll |
+
+Nothing loops. Nothing auto-rotates. No shelf moves on its own, ever — which is
+the motion half of "a shelf is not a carousel".
+
+### The house rule, applied to a handoff
+
+*Animations illustrate state changes; DOM and CSS own the final state.*
+
+The open handoff is the interesting case, because a shared-element transition is
+exactly where that rule usually gets broken. It is not broken here for a
+structural reason rather than a careful one: **`is-opening` is only ever applied
+to an element the next paint destroys.** There is no `classList.remove` to
+forget, no timer that has to fire, and no state for the animation to own —
+asserted by a test that fails if the class is ever removed by hand, because a
+class that has to be removed is a class that can be left behind.
+
+Under reduced motion the class is not applied at all and the route simply
+changes.
+
+### Reduced motion removes travel, not information
+
+Every transform is dropped. Prominence survives as a ring on the cover; focus
+still outlines; the archived flag, the system mark and the duration badge are
+unaffected. Nothing in the shelf was ever *only* movement, which is why turning
+the movement off costs nothing.
+
+### The return highlight is not an animation that owns anything
+
+`is-returned` is a class with a timer, added to an object that is already in its
+final position. If the timer never fires the worst case is a permanently
+highlighted book — visible, harmless, and corrected by the next repaint.

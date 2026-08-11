@@ -136,3 +136,50 @@ defects: the frozen page turn (F2) and, found during D2.2, an entrance
 animation that a throttled timeline held at `opacity: 0` indefinitely. Both
 `turn()`'s leave class and `enterOnce()`'s enter class come off on a timer, so
 the stylesheet owns the final state whatever the timeline does.
+
+---
+
+## L3 — `library-shelf.js`
+
+A fourth module joins the Library client, and it owns exactly one thing: **what
+a shelf is and how it behaves**.
+
+| Module | Owns |
+|---|---|
+| `library-api.js` | the API surface and the one authoritative state |
+| `library-overview.js` | what the room is composed of |
+| **`library-shelf.js`** | **objects, rails, prominence, keys, scroll memory** |
+| `library-view.js` | routing between shelf, item and book |
+| `library-book.js` | the open Book |
+| `library-save.js` | writes and conflicts |
+
+### Why it is its own module
+
+The overview decides *which shelves exist and what is on them*. The shelf module
+decides *how a shelf behaves*. Those change for different reasons: adding a
+"Pinned" shelf is a composition change, and fixing wheel translation is a
+behaviour change. Keeping them apart is what let the search result surface reuse
+the same objects without inheriting rail behaviour it does not want.
+
+It imports `lib` for one purpose only — remembering scroll positions across a
+page it does not own — and imports nothing else from the Library client. It does
+not know about routes, the API, or what opening something means: `wireRail` takes
+an `onOpen` callback and the caller decides.
+
+### The rules it enforces
+
+- **Everything is an enhancement of an element that already scrolls.** A failure
+  anywhere in this module degrades to a plain horizontal scroller.
+- **It never writes the hash.** Asserted by test, including no private
+  `suppressHash`-style flag — the D2.2 defect, in a new file.
+- **It holds ids, never nodes.** `lib.cameFrom` is an item id and
+  `lib.cameFromShelf` a shelf id; keeping a node would hold a whole discarded
+  page alive to answer one question.
+
+### One addition to the shell context
+
+`surfaceCtx.goRoute(id)` — a surface routing to **another section**. A surface
+routes inside itself by writing its own hash; crossing a section boundary is the
+shell's job, because `go()` flushes pending writes, claims the navigation token,
+moves the sidebar indicator and closes any open utility. Library's Diary
+shortcut is the first caller.
