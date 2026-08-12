@@ -305,8 +305,12 @@ test('concepts: every object is named, focusable and keyboard-activated', () => 
 test('lab: it all lives in one folder that can be deleted in one move', () => {
   const files = readdirSync(LAB).sort();
   assert.deepEqual(files, [
-    'concept-a.js', 'concept-b.js', 'concept-c.js', 'concept-d.js',
+    /* L3.4 added C2 — the refinement of the chosen direction — and the shared
+     * cover renderer it uses. Both live in the same disposable folder, so the
+     * property this test protects is unchanged: one `rm -r` removes the lab. */
+    'concept-a.js', 'concept-b.js', 'concept-c.js', 'concept-c2.js', 'concept-d.js',
     'concept-e.js', 'concept-f.js', 'lab-data.js', 'lab-view.js', 'lab.css',
+    'shared-cover.js',
   ]);
   // Nothing outside the lab imports a concept.
   assert.ok(!libView.includes('concept-'), 'the real Library imports a concept directly');

@@ -152,3 +152,36 @@ made the pulled Book look soft.
 **One depth cue, not three.** The distance is the cue; the shadow supports it;
 the scale does not exist. A test fails if any shelf state introduces a
 `scale()` or a `filter`.
+
+---
+
+## L3.4 — the turn (Concept C2, lab only)
+
+| | |
+|---|---|
+| spine to cover | **300ms** `cubic-bezier(.2,.7,.2,1)` |
+| the neighbour reflow | **300ms**, the same curve, on `width` |
+| hover lift | 140ms, 4px |
+| `Open` appearing inside the cover | 140ms opacity |
+
+The turn is `rotateY(-90deg)` on a box hinged at `left center` -- the point a
+real book pivots on when you pull it out of a row. The rotation and the reflow
+share a duration and a curve, so the Book and the space it is making arrive
+together.
+
+**Nothing writes a transform from script.** `is-cover` is a class; the transform
+is a rule. There is no `requestAnimationFrame`, no `setTimeout`, no
+`transitionend` in the concept -- a test fails if one appears. That is what makes
+an interrupted turn safe: there is no in-flight value to be stranded at, because
+the state was never the animation.
+
+**Reduced motion** removes the travel and keeps the state. The Book still faces
+you; it simply arrives. The rotation is *not* cancelled -- cancelling it would
+remove the information -- and the turned Book gains an accent outline so the
+state is still visible without the movement that announced it.
+
+Rotation is allowed here, where L3.2 banned it, because it is a change of
+**state** rather than a resting appearance. A resting Book at 7 degrees is
+permanently resampled type; a Book that rotates for 300ms and stops at 90 degrees
+is a flat, axis-aligned cover for as long as you are reading it. Measured after
+the turn: cover 126 x 172, no fractional geometry.

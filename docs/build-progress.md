@@ -2249,3 +2249,36 @@ Every book on that template inherited `width:30px;height:1px` for its whole
 cover. Measured as a 30px cover in a 126px face. Namespaced to `tpl-*`.
 
 **1117 tests pass, 17 new.** TypeScript clean. The real Library is untouched.
+
+## L3.4 -- Concept C2, the refinement of the chosen direction
+
+C was chosen. C2 is C plus the three things the choice came with: a real
+physical turn, front-facing non-Book objects, and a shelf that is built rather
+than implied.
+
+**Built:** `shared-cover.js` (one cover renderer plus the physical rules --
+`bookHeight`, `bookThickness`, `coverDepth`), `concept-c2.js`, the C2 stylesheet,
+page counts on every sample Book, and three starter Books. C2 is registered first
+in the lab and is the default mount.
+
+**The turn.** Spine, cover and page block are three faces of one box hinged at
+the spine's outer edge. `is-cover` is a class and `rotateY(-90deg)` is a rule --
+no transform is ever written from script, and there is no timer or
+`transitionend` in the concept.
+
+**Neighbours make room by layout.** The slot's width is the Book's thickness;
+a turning Book's slot widens and the row reflows. Measured at 1280: a 53px Book
+widened its slot to 136px and the three Books to its right moved exactly +83px,
+while the five to its left did not move -- because the hinge is on the left.
+
+**Measured at 1280:** nine Books on **one baseline (505.03px)**, thickness
+26-58px from page count, five height steps 172-208px, a uniform 3px gap, and a
+9px ledge in all four bays. Turned cover 126 x 172, page block 10px, cover title
+15.04px from a single `--cv: 0.235`. 40 Books give a 1824px row that scrolls;
+3 starter Books occupy 116px of an 897px shelf and nothing stretches.
+
+**The real Library is untouched.** `git diff` over `library-shelf.js`,
+`library-book.js`, `library-view.js` and `index.html` is empty, and a test fails
+if any of them mentions C2 or imports the shared cover.
+
+**1146 tests pass, 24 new.** TypeScript clean.

@@ -323,3 +323,28 @@ All rotation and all `perspective` are gone. A 7-degree `rotateY` puts glyphs on
 a plane that no longer aligns with the pixel grid, and at 15px Playfair that is
 visible — which is what the review meant by "slightly blurred". Depth is now
 overlap, translation, scale, z-index and shadow, none of which resamples text.
+
+---
+
+## L3.4 — the direction changed
+
+The shelf described above is the **real** Library's, and it is unchanged. But
+the visual direction chosen in L3.3 was Concept C, and L3.4 refined it into C2
+in the lab. Where C2 disagrees with this document, C2 is the direction and this
+document is the current shipped state.
+
+The three substantive disagreements:
+
+- **The spine-to-cover change is a turn, not an in-place widen.** One box, three
+  faces, hinged at the spine's outer edge.
+- **Neighbours make room by layout**, not by transform: the slot widens and the
+  row reflows. Measured at 1280 — a 53px Book widened its slot to 136px and the
+  Books to its right moved exactly +83px.
+- **Thickness comes from page count**, by square root, clamped to 26-58px. It is
+  no longer decorative.
+
+What survives unchanged into C2: one baseline per shelf (measured at 505.03px
+across all four bays), no scaling of live type, spine-on resting, and depth
+expressed as translation and shadow rather than as blur.
+
+See [the C2 direction](library-v2-l3-c2-direction.md).

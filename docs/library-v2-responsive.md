@@ -139,3 +139,30 @@ Covers get **wider** under a finger, because a book you have to hit exactly is a
 book you miss. Hover is switched off entirely below 820px, and the footer's Open
 action becomes a 44px target — still inside the footer, under the object, never
 a pill over the cover.
+
+---
+
+## L3.4 -- Concept C2 (lab only)
+
+Verified at 1440, 1280, 1024 and 768. At every width: **one baseline**, and no
+page-level horizontal overflow.
+
+| | perspective | gap | niche padding |
+|---|---|---|---|
+| >1024px | 1500px | 3px | 14px |
+| <=1024px | **1900px** | 3px | 14px |
+| <=820px | 1900px | **2px** | **10px** |
+
+The perspective flattens as the viewport narrows because a shallower row makes a
+strong perspective read as a fisheye. The gap and the padding tighten so the same
+number of Books stays reachable.
+
+**The cover is 126 x 172 at every width.** It is never scaled -- scaling live
+type is what blurred the shelf in L3.2, and the fix does not get undone for a
+breakpoint. A narrow viewport gets fewer Books on screen, not smaller ones.
+
+At 768 the turned cover ends 350px from the left of a 679px shelf, comfortably
+inside it, so a Book turned near the right edge still shows its whole cover.
+
+768 is verified as **viable**, not designed. C2 is a desktop-first prototype and
+a designed mobile Library is a later phase.

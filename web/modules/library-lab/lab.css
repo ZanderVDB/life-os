@@ -517,3 +517,256 @@
   .cF-clipboard .cF-unit-in,.cE-wall{flex-wrap:nowrap;overflow-x:auto}
   .lab-pick small{display:none}
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CONCEPT C2 — Modern Library, refined  (L3.4)
+
+   C's architecture and spine browsing, a real spine→cover turn, D's
+   front-facing objects for everything that is not a Book, and a shelf that is
+   actually BUILT rather than implied.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.c2{display:flex;flex-direction:column;gap:14px}      /* tight vertical rhythm (§30) */
+.c2-label{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 7px}
+
+/* ── The shelf, built from four layers (§19) ──────────────────────────────
+   A. BACK PANEL   a graphite niche, marginally lighter at the top so the bay
+                   reads as recessed rather than as a flat band;
+   B. UPRIGHTS     narrow structural verticals at the BOUNDARIES only — never
+                   between books, which would turn a shelf into a rack;
+   C. LEDGE        a real top surface with a lit front arris;
+   D. FRONT FACE   8px of darker material below it, with the shadow it casts.
+
+   No wood, no moulding, no fantasy. The whole thing is graphite, one highlight
+   and one shadow — which is what a modern built-in shelf actually is. */
+.c2-niche{position:relative;padding:0 14px;
+  /* §20 — light from the top of the bay. Very restrained: enough that the book
+     shoulders read brighter than their lower edges, never enough to be noticed
+     as a lighting effect. */
+  background:
+    radial-gradient(120% 78% at 50% -8%,rgba(206,199,232,.075) 0%,transparent 60%),
+    linear-gradient(180deg,#1E1928 0%,#171320 44%,#131020 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.055),
+    inset 0 -18px 26px -22px rgba(0,0,0,.9)}
+/* B — boundary uprights. */
+.c2-niche::before,.c2-niche::after{content:'';position:absolute;top:0;bottom:9px;width:5px;
+  background:linear-gradient(90deg,#2C2539 0%,#1B1626 60%,#100D18 100%);
+  box-shadow:inset 1px 0 0 rgba(255,255,255,.075);pointer-events:none;z-index:2}
+.c2-niche::before{left:0}
+.c2-niche::after{right:0;transform:scaleX(-1)}
+/* C + D — the ledge: a lit arris, a stone top, then the front face and its shadow. */
+.c2-ledge{position:absolute;left:0;right:0;bottom:0;height:9px;pointer-events:none;
+  background:linear-gradient(180deg,
+    rgba(232,226,246,.34) 0,rgba(232,226,246,.34) 1px,
+    #2A2437 1px,#221D2F 4px,
+    #16121F 4px,#0D0A14 100%);
+  box-shadow:0 9px 17px -8px rgba(0,0,0,.85)}
+
+.c2-scroll{overflow-x:scroll;overflow-y:hidden;padding:26px 0 9px;
+  scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+  scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.c2-scroll::-webkit-scrollbar{height:7px}
+.c2-scroll::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.c2-row{list-style:none;margin:0;padding:0;display:flex;align-items:flex-end;
+  width:max-content;min-width:100%;perspective:1500px}
+
+/* ── The volume ──────────────────────────────────────────────────────────
+   The SLOT owns the width, and that is how neighbours make room (§13): a
+   turning book widens its slot to the cover's width and the row reflows, so the
+   books beside it slide rather than being shoved by transforms that would then
+   have to be undone. One property, one transition, and two books can never end
+   up in the same place. */
+.c2-slot{flex:0 0 auto;width:var(--t);height:var(--h);position:relative;
+  scroll-snap-align:start;
+  margin-right:3px;                      /* close, but not touching (§3) */
+  transition:width 300ms var(--e-out)}
+.c2-slot:has(.is-cover){width:calc(126px + var(--d))}
+
+.c2-vol{position:absolute;inset:0;cursor:pointer;transform-style:preserve-3d}
+.c2-box{position:absolute;inset:0;transform-style:preserve-3d;
+  /* The hinge: the spine's OUTER edge, which is where a book actually pivots
+     when you turn it out of a row. */
+  transform-origin:left center;
+  transition:transform 300ms var(--e-out)}
+.c2-face{position:absolute;top:0;height:100%;backface-visibility:hidden}
+.c2-spine{left:0;width:var(--t);overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:15px 0;
+  /* §41 — texture. Fine vertical ridges plus a matte cloth wash, procedural and
+     faint: enough that a spine is not a flat rectangle, not enough to read as a
+     pattern. */
+  background:
+    repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px),
+    linear-gradient(90deg,
+      color-mix(in srgb,var(--accent-c,var(--a-peach)) 15%,#191422) 0%,
+      color-mix(in srgb,var(--accent-c,var(--a-peach)) 31%,#241E31) 34%,
+      color-mix(in srgb,var(--accent-c,var(--a-peach)) 26%,#1E1929) 72%,
+      color-mix(in srgb,var(--accent-c,var(--a-peach)) 12%,#120E1A) 100%);
+  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.13),
+    inset -2px 0 5px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.10)}
+.c2-rule{width:56%;height:1px;background:var(--accent-c,var(--a-peach));opacity:.8}
+.c2-spine-t{flex:1 1 auto;min-height:0;writing-mode:vertical-rl;transform:rotate(180deg);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11.5px;font-weight:500;letter-spacing:.075em;color:#F1EDF9;
+  text-shadow:0 1px 2px rgba(0,0,0,.5);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c2-imprint{font-size:7.5px;font-weight:700;letter-spacing:.14em;
+  color:rgba(241,237,249,.45);font-variant-numeric:tabular-nums}
+
+/* The cover face, hinged out to the right of the spine. */
+.c2-front{left:0;width:126px;transform:rotateY(90deg);transform-origin:left center;
+  overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+/* The page block seen edge-on once the book has turned (§9): the narrow face
+   that stops a turned book reading as a flat card. */
+.c2-edge{left:126px;width:var(--d);transform:rotateY(90deg);transform-origin:left center;
+  background:
+    repeating-linear-gradient(0deg,rgba(255,255,255,.09) 0 1px,transparent 1px 2px),
+    linear-gradient(90deg,#332C42 0%,#241E31 55%,#171320 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -1px 0 rgba(0,0,0,.45)}
+
+/* THE TURN (§5). One object rotating on its own hinge, 300ms. */
+.c2-vol.is-cover .c2-box{transform:rotateY(-90deg)}
+.c2-vol.is-cover{z-index:6}
+.c2-vol.is-cover .c2-front{box-shadow:0 20px 34px -16px rgba(0,0,0,.75),
+  inset 0 0 0 1px rgba(255,255,255,.07)}
+/* Hover is a preparation, not a turn: the volume eases up a little. 140ms. */
+.c2-vol:not(.is-cover):hover .c2-box{transform:translateY(-4px)}
+.c2-vol:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+/* Contact: tight at rest, softer once the book has come out. */
+.c2-vol::after{content:'';position:absolute;left:1px;right:1px;bottom:-3px;height:5px;
+  border-radius:50%;background:radial-gradient(ellipse at center,rgba(0,0,0,.65),transparent 72%);
+  transition:opacity 300ms var(--e-out)}
+.c2-vol.is-cover::after{opacity:.45}
+
+/* The cover, at shelf scale. The MARKUP and the class names are the Book view's
+   own (see shared-cover.js); only the scale is restated here, through one
+   variable, so there is no second set of type sizes to drift (§10). */
+.c2-cover{--cv:0.235;position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;padding:14px 12px;
+  background:linear-gradient(150deg,var(--paper) 0%,var(--paper-2) 100%);
+  box-shadow:inset 3px 0 0 0 var(--accent-c,var(--a-peach))}
+.c2-cover .bk-cover-mark{font-family:'Playfair Display',Georgia,serif;
+  font-size:calc(34px * var(--cv));letter-spacing:.16em;color:var(--paper-ink-2);opacity:.72}
+.c2-cover .bk-cover-pre{font-size:calc(28px * var(--cv));font-weight:700;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--accent-c,var(--a-peach))}
+.c2-cover .bk-cover-title{font-family:'Playfair Display',Georgia,serif;font-weight:500;
+  font-size:calc(64px * var(--cv));line-height:1.14;color:var(--paper-ink);text-align:center;
+  margin-top:6px;display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;
+  -webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.c2-cover .bk-cover-sub{font-family:'Playfair Display',Georgia,serif;font-style:italic;
+  font-size:calc(36px * var(--cv));line-height:1.3;color:var(--paper-ink-2);text-align:center;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.c2-cover .bk-cover-rule{width:34px;height:1px;background:var(--paper-ink-2);opacity:.4;
+  margin:7px 0 5px}
+.c2-cover .bk-cover-author{font-size:calc(28px * var(--cv));font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--paper-ink-2);opacity:.8;text-align:center}
+
+/* The only affordance on the cover, and it lives INSIDE it (§11). No title
+   repeated underneath, no metadata block, no product card. */
+.c2-open{position:absolute;left:0;right:0;bottom:0;padding:7px 0 8px;text-align:center;
+  font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:#F4F2FA;background:linear-gradient(180deg,transparent,rgba(10,8,16,.82) 45%);
+  opacity:0;transition:opacity 140ms var(--e-out)}
+.c2-vol.is-cover:hover .c2-open,.c2-vol.is-cover:focus-visible .c2-open{opacity:1}
+
+/* The system Book (§14). It sits first among the ordinary Books and is marked
+   by MATERIAL, not by being set apart: a lavender edge and a deeper cloth.
+   Nothing here is a control, and nothing makes it alien. */
+.c2-vol.is-system .c2-spine{box-shadow:inset 1.5px 0 0 rgba(182,155,240,.55),
+  inset -2px 0 5px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10)}
+.c2-vol.is-system .c2-cover{box-shadow:inset 3px 0 0 0 var(--a-lavender)}
+
+/* ── Non-Book objects: front-facing modern archive (§22–§27) ────────────
+   Books look like Books. These look like things kept in a drawer: a portfolio,
+   a sleeve, a card, a jacket. None borrows a spine and none borrows the Book's
+   physics — they come forward, they do not rotate, because a folder does not
+   turn round (§24). */
+.c2-bay-flat .c2-scroll{padding-top:20px}
+.c2-bay-flat .c2-row{align-items:flex-end;gap:11px;perspective:none}
+
+.c2-port,.c2-media,.c2-clip,.c2-file{flex:0 0 auto;cursor:pointer;position:relative;
+  transition:transform 140ms var(--e-out),box-shadow 140ms var(--e-out)}
+.c2-port:hover,.c2-media:hover,.c2-clip:hover,.c2-file:hover{transform:translateY(-4px)}
+.c2-port:focus-visible,.c2-media:focus-visible,.c2-clip:focus-visible,
+.c2-file:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.c2-port::after,.c2-media::after,.c2-clip::after,.c2-file::after{content:'';
+  position:absolute;left:6%;right:6%;bottom:-3px;height:5px;border-radius:50%;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,.6),transparent 72%)}
+
+/* Documents — a slim presentation portfolio, seen face-on. */
+.c2-port{width:158px;height:132px}
+.c2-port-body{position:absolute;inset:0;overflow:hidden;border-radius:1px 3px 3px 1px;
+  display:flex;flex-direction:column;gap:5px;padding:14px 15px 15px 18px;
+  background:linear-gradient(158deg,#2E2740 0%,#211B2E 62%,#1A1526 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 3px 8px -4px rgba(0,0,0,.65)}
+.c2-port-tab{position:absolute;left:0;top:0;bottom:0;width:5px;
+  background:var(--accent-c,var(--a-blue));opacity:.9}
+.c2-port-kind{font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-c,var(--a-blue))}
+.c2-port-t{font-size:12.5px;font-weight:600;color:#EFEAF8;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.c2-port-x{font-size:9.5px;line-height:1.45;color:rgba(214,203,240,.62);
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* The flap: the fold that makes it a portfolio rather than a panel. */
+.c2-port-flap{position:absolute;left:0;right:0;bottom:0;height:30px;
+  background:linear-gradient(180deg,transparent,rgba(8,6,12,.55));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09)}
+
+/* Media — an archival sleeve with a window cut in it. */
+.c2-media{width:150px}
+.c2-media-win{position:relative;display:block;height:100px;border-radius:1px;
+  background:linear-gradient(158deg,#272132 0%,#171320 100%);
+  box-shadow:inset 0 0 0 5px #131020,inset 0 0 0 6px rgba(255,255,255,.07),
+    0 3px 8px -4px rgba(0,0,0,.65)}
+.c2-play{position:absolute;left:11px;bottom:9px;color:#F4F2FA;opacity:.85;display:flex}
+.c2-media-meta{position:absolute;right:10px;bottom:9px;font-size:9px;
+  color:rgba(244,242,250,.6);font-variant-numeric:tabular-nums}
+.c2-media-t{display:block;margin-top:7px;font-size:11px;color:var(--text-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Links — a reference card in the tray. */
+.c2-clip{width:184px;height:66px;display:flex;align-items:center;gap:11px;
+  padding:11px 13px;border-radius:2px;
+  background:linear-gradient(158deg,#262031 0%,#1A1524 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 3px 8px -4px rgba(0,0,0,.65)}
+.c2-clip-mark{flex:0 0 auto;width:26px;height:26px;border-radius:3px;display:grid;
+  place-items:center;font-size:12px;font-weight:700;color:#1A1624;
+  background:var(--accent-c,var(--a-sage))}
+.c2-clip-body{min-width:0;display:flex;flex-direction:column;gap:2px}
+.c2-clip-t{font-size:11.5px;font-weight:600;color:#EFEAF8;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.c2-clip-m{font-size:9.5px;color:var(--muted)}
+
+/* Files — a labelled jacket. */
+.c2-file{width:134px;height:66px}
+.c2-file-body{position:absolute;inset:0;display:flex;flex-direction:column;gap:2px;
+  padding:11px 13px;border-radius:2px 2px 2px 8px;
+  background:linear-gradient(158deg,#2B2437 0%,#1C1727 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 3px 8px -4px rgba(0,0,0,.65)}
+.c2-file-kind{font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-c,var(--a-peach))}
+.c2-file-t{font-size:11.5px;font-weight:600;color:#EFEAF8;line-height:1.25;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c2-file-m{margin-top:auto;font-size:9.5px;color:var(--muted)}
+
+/* ── Reduced motion (§40) ─────────────────────────────────────────────────
+   The turn arrives instantly at its committed state. Nothing is stranded
+   mid-rotation, because the state was never the animation. */
+@media (prefers-reduced-motion: reduce){
+  .c2-slot,.c2-box,.c2-vol::after,.c2-port,.c2-media,.c2-clip,.c2-file{transition:none !important}
+  .c2-vol:not(.is-cover):hover .c2-box{transform:none}
+  .c2-port:hover,.c2-media:hover,.c2-clip:hover,.c2-file:hover{transform:none}
+  .c2-vol.is-cover .c2-front{box-shadow:0 0 0 2px var(--accent-c,var(--a-peach)),
+    0 20px 34px -16px rgba(0,0,0,.75)}
+}
+
+/* ── Narrower (§38: viability, not a finished mobile design) ───────────── */
+@media (max-width:1024px){
+  .c2-row{perspective:1900px}          /* flatter, so the turn stays legible */
+}
+@media (max-width:820px){
+  .c2-niche{padding:0 10px}
+  .c2-slot{margin-right:2px}
+}

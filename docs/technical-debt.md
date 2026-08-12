@@ -1062,3 +1062,35 @@ only. Worth a look on a real phone.
 - **A banned-word list in a test reads the dictionary, not the code.** Banning
   the string `archive` flagged Concept F's "personal archive" prose. Ban call
   shapes — `createItem(`, `method: 'POST'` — not English words.
+
+### L3.4 -- Concept C2
+
+- **`shared-cover.js` lives in the lab, and the dependency is backwards.** The
+  Book view owns the cover design; the lab currently re-emits its markup. If C2
+  is adopted the function must move to the web root and be exported *by*
+  `library-book.js`, with the Library importing it. Until then the two can still
+  drift -- the test asserts the element order, not the typography.
+- **C2 is not integrated.** The real Library still renders its L3.2 shelf, so
+  the Library has one shipped design and one better one sitting beside it. That
+  is a deliberate pause, not an oversight, but it is a fork that should not be
+  left open for long.
+- **Page counts are sample literals.** `bookThickness` takes a page count the
+  real Library does not yet supply. Integrating C2 means a real count on the
+  Book record -- and deciding what "pages" means for a Book that is one long
+  document.
+- **`:has()` carries the neighbour reflow.** `.c2-slot:has(.is-cover)` is how the
+  row makes room. It is supported everywhere Life OS targets, but it is a single
+  point of failure for the most physical thing in the design; the fallback is a
+  Book that turns into its neighbour.
+- **Five of the six frozen concepts are still shipped to staging.** A, B, D, E
+  and F get no further work but still cost download and maintenance. They should
+  go when the direction is confirmed.
+
+### Worth not relearning
+
+- **A bash heredoc breaks on an apostrophe in the content.** Appending the C2
+  stylesheet failed with `unexpected EOF while looking for matching '`. Write
+  the block to a file and append it with a script; do not fight the shell.
+- **A test that walks a literal array must be told where it ends.** Slicing
+  `lab-data.js` from `export const BOOKS` to the end of the file made the page
+  count assertion read the Documents too.

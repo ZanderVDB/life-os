@@ -25,6 +25,11 @@
 import { navToken, navStale } from '../../nav.js';
 
 const CONCEPTS = [
+  /* C2 leads the list. C was chosen as the base direction in L3.4 and C2 is the
+   * only concept receiving new design work; A, B, D, E and F stay reachable so
+   * the comparison that produced the choice can still be re-made, but they are
+   * frozen. */
+  { id: 'c2', label: 'C2', desc: 'Modern Library refined', mod: () => import('./concept-c2.js') },
   { id: 'a', label: 'A', desc: 'Spine-first', mod: () => import('./concept-a.js') },
   { id: 'b', label: 'B', desc: 'Fantasy shelf', mod: () => import('./concept-b.js') },
   { id: 'c', label: 'C', desc: 'Modern library', mod: () => import('./concept-c.js') },
@@ -129,7 +134,7 @@ export async function renderLab(head, scroll, nav = navToken()) {
    * way to show the handoff without the lab owning a Book view of its own. */
   stage.addEventListener('lab-open', () => { window.location.hash = '#library'; });
 
-  await mount(stage, current ?? 'a', nav);
+  await mount(stage, current ?? 'c2', nav);
   return true;
 }
 

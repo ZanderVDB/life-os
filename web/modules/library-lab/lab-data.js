@@ -21,20 +21,46 @@ export const ACCENTS = ['peach', 'sage', 'lavender', 'gold', 'blue', 'rose'];
  * a one-word title, a very long one, a subject spread, subtitles present and
  * absent, and every accent represented.
  */
+/* `pages` drives thickness (L3.4 S8/S42). Deliberately spread across the whole
+ * clamped range so the formula can be judged: a brand-new Book, a thin one, and
+ * one past the clamp. */
 export const BOOKS = [
-  { id: 'b1', title: 'Notes', sub: null, accent: 'peach', author: 'Zander', year: 2026 },
-  { id: 'b2', title: 'The Laws of Gravity', sub: 'What falls, and why it keeps falling', accent: 'blue', author: 'Zander', year: 2025 },
-  { id: 'b3', title: 'Letters I Did Not Send', sub: null, accent: 'lavender', author: 'Zander', year: 2024 },
-  { id: 'b4', title: 'Systems That Survive Contact With A Tuesday', sub: 'Routines that do not need me at my best', accent: 'sage', author: 'Zander', year: 2026 },
-  { id: 'b5', title: 'Market Notes', sub: 'Quarterly, and mostly wrong', accent: 'gold', author: 'Zander', year: 2025 },
-  { id: 'b6', title: 'Atlas', sub: null, accent: 'rose', author: 'Zander', year: 2023 },
-  { id: 'b7', title: 'On Sleep', sub: 'Eight months of honest numbers', accent: 'blue', author: 'Zander', year: 2026 },
-  { id: 'b8', title: 'The Garden Book', sub: 'Seasons, failures, one success', accent: 'sage', author: 'Zander', year: 2024 },
+  { id: 'b1', title: 'Notes', sub: null, accent: 'peach', author: 'Zander', year: 2026, pages: 0 },
+  { id: 'b2', title: 'The Laws of Gravity', sub: 'What falls, and why it keeps falling', accent: 'blue', author: 'Zander', year: 2025, pages: 25 },
+  { id: 'b3', title: 'Letters I Did Not Send', sub: null, accent: 'lavender', author: 'Zander', year: 2024, pages: 60 },
+  { id: 'b4', title: 'Systems That Survive Contact With A Tuesday', sub: 'Routines that do not need me at my best', accent: 'sage', author: 'Zander', year: 2026, pages: 8 },
+  { id: 'b5', title: 'Market Notes', sub: 'Quarterly, and mostly wrong', accent: 'gold', author: 'Zander', year: 2025, pages: 150 },
+  { id: 'b6', title: 'Atlas', sub: null, accent: 'rose', author: 'Zander', year: 2023, pages: 540 },
+  { id: 'b7', title: 'On Sleep', sub: 'Eight months of honest numbers', accent: 'blue', author: 'Zander', year: 2026, pages: 42 },
+  { id: 'b8', title: 'The Garden Book', sub: 'Seasons, failures, one success', accent: 'sage', author: 'Zander', year: 2024, pages: 96 },
 ];
 
+/**
+ * STARTER BOOKS (L3.4 S16/S17) - designed, not wired.
+ *
+ * Three, not eight. A new account should be shown what a Book is FOR, and three
+ * examples do that; a shelf somebody else filled is a shelf they have to clear
+ * before it is theirs.
+ *
+ * These are ORDINARY Books. The user owns them, renames them, archives them,
+ * deletes them. They are not onboarding cards and must not look like any: three
+ * different accents, three different cover templates, one small page each.
+ * See `library-v2-starter-books.md`.
+ */
+export const STARTER_BOOKS = [
+  { id: 's1', title: 'Notes', sub: 'Anything worth keeping', accent: 'peach', author: 'You', year: 2026, pages: 1 },
+  { id: 's2', title: 'Ideas', sub: 'Before they are decisions', accent: 'sage', author: 'You', year: 2026, pages: 1 },
+  { id: 's3', title: 'Learning', sub: 'What you are working through', accent: 'blue', author: 'You', year: 2026, pages: 1 },
+];
+
+/* The Diary is a SYSTEM Book: no library_items row, no rename, no archive, no
+ * delete, and it opens Diary rather than a Book. In C2 it is the first volume
+ * on the Books shelf rather than alone on a bay of its own (S14) - the separate
+ * Personal shelf was mostly empty space. `pages` is nominal; its thickness
+ * should read as a well-used journal. */
 export const DIARY = {
   id: 'diary', title: 'My Diary', sub: 'System journal',
-  accent: 'lavender', author: 'Every day', year: 2026, system: true,
+  accent: 'lavender', author: 'Every day', year: 2026, system: true, pages: 120,
 };
 
 export const DOCUMENTS = [
