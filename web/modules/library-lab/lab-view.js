@@ -25,10 +25,12 @@
 import { navToken, navStale } from '../../nav.js';
 
 const CONCEPTS = [
-  /* C2 leads the list. C was chosen as the base direction in L3.4 and C2 is the
-   * only concept receiving new design work; A, B, D, E and F stay reachable so
-   * the comparison that produced the choice can still be re-made, but they are
-   * frozen. */
+  /* The component lab leads, because from L3.5 the open questions are no longer
+   * about whole Libraries. C2 stays as the baseline it is measured against, and
+   * A, B, D, E and F stay reachable so the comparison that produced the
+   * direction can still be re-made — but they are frozen. */
+  { id: 'cb', label: 'Components', desc: 'One decision at a time', group: 'components',
+    mod: () => import('./component-lab.js') },
   { id: 'c2', label: 'C2', desc: 'Modern Library refined', mod: () => import('./concept-c2.js') },
   { id: 'a', label: 'A', desc: 'Spine-first', mod: () => import('./concept-a.js') },
   { id: 'b', label: 'B', desc: 'Fantasy shelf', mod: () => import('./concept-b.js') },
@@ -109,13 +111,13 @@ export async function renderLab(head, scroll, nav = navToken()) {
 
   head.innerHTML = `<p class="eyebrow lib-page">Life OS · staging</p>
     <h1>Library design lab</h1>
-    <p class="sub">Six directions, one set of objects. Nothing here is live
-      — the lab reads a fixed sample and never writes.</p>`;
+    <p class="sub">A component comparison and the concepts it came from. Nothing
+      here is live — the lab reads a fixed sample and never writes.</p>`;
 
   scroll.innerHTML = `<div class="lab">
     <div class="lab-bar" role="group" aria-label="Choose a concept">
-      ${CONCEPTS.map((c) => `<button type="button" class="lab-pick" data-concept="${c.id}"
-        aria-pressed="false"><b>${c.label}</b><small>${c.desc}</small></button>`).join('')}
+      ${CONCEPTS.map((c) => `<button type="button" class="lab-pick${c.group ? ' is-lead' : ''}"
+        data-concept="${c.id}" aria-pressed="false"><b>${c.label}</b><small>${c.desc}</small></button>`).join('')}
       <span class="lab-current" id="lab-current"></span>
     </div>
     <details class="lab-notes">
@@ -134,7 +136,7 @@ export async function renderLab(head, scroll, nav = navToken()) {
    * way to show the handoff without the lab owning a Book view of its own. */
   stage.addEventListener('lab-open', () => { window.location.hash = '#library'; });
 
-  await mount(stage, current ?? 'c2', nav);
+  await mount(stage, current ?? 'cb', nav);
   return true;
 }
 

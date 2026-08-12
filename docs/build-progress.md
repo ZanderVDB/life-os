@@ -2282,3 +2282,47 @@ while the five to its left did not move -- because the hinge is on the left.
 if any of them mentions C2 or imports the shared cover.
 
 **1146 tests pass, 24 new.** TypeScript clean.
+
+## L3.5 — the component lab
+
+C2 answered its question and produced a narrower one: the resting shelf is
+right, several specific things standing on it are not. So the lab stopped
+comparing whole Libraries and started comparing one decision at a time.
+
+**Built:** `component-lab.js` (the shell), `book-physics.js`, `lab-books.js`,
+`lab-furniture.js`, `lab-resources.js`, and the component-lab stylesheet.
+**32 treatments** across eight pages: resting Books x4, pulled Book x5, shelf x5,
+Documents x5, Media x5, Links x4, Files x4, plus the one-room-or-five comparison.
+Row sizes 9 / 20 / 40, and an optional side-by-side.
+
+**The interaction bug, root-caused.** C2 placed the page block with
+`left: 126px`. `left` is layout, and the box rotation maps layout-x into Z — so
+126px of layout became 126px of depth toward the viewer, and perspective threw
+the face sideways. Measured: it rendered at x 432–439 while its own slot was
+458–590, i.e. 26px over the left neighbour, which it then swallowed for pointer
+input. The page block had been on the wrong side of the Book all along; at 10px
+wide nobody saw it. Depth is now `translateZ`.
+
+**The hit rule.** Nothing inside a volume takes pointer input — not the faces and
+not the box, which is itself transformed and reached 3px past the slot even after
+the faces were disabled. `.cb-vol` is the only target, never transformed, exactly
+its slot. Measured across all five pulled treatments at 1280: hit width equals
+slot width to the pixel (52/52, 90/90, 72/72, 90/90, 105/105) with the 3px margin
+intact between every pair. Left and right neighbours selectable directly, after
+scroll, and by keyboard.
+
+**The height pattern, root-caused.** The old hash did not avalanche, so
+sequential ids gave sequential buckets — the ascending-then-reset silhouette.
+Replaced with FNV-1a plus murmur3 fmix32 and a curated 16-rung ladder. Over 40
+Books: longest ascending run 5 → 3, distinct heights 5 → 9, range 170–210,
+7/39 identical neighbours.
+
+**Verified:** shelf positions byte-identical across all five architectures;
+scroll and selected Book preserved across variant switches; zero node drift over
+three full concept cycles; one baseline and no page overflow at 1440/1280/1024/768.
+
+**The real Library is untouched.** `git diff` over `library-shelf.js`,
+`library-book.js`, `library-view.js`, `index.html`, the Diary, Today, Calendar,
+Projects and the whole API is empty.
+
+**1175 tests pass, 29 new.** TypeScript clean.

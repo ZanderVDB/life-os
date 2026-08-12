@@ -1094,3 +1094,44 @@ only. Worth a look on a real phone.
 - **A test that walks a literal array must be told where it ends.** Slicing
   `lab-data.js` from `export const BOOKS` to the end of the file made the page
   count assertion read the Documents too.
+
+### L3.5 — the component lab
+
+- **Two Book implementations in the lab.** `concept-c2.js` keeps the old box
+  (with the `left: 126px` page block still in it) and `lab-books.js` has the
+  corrected one. C2 is deliberately frozen as the baseline being measured
+  against, so the bug stays visible there — but it means the lab now contains a
+  known-wrong geometry that must not be the one anybody copies.
+- **32 treatments will not all survive.** Whatever is chosen, the rest should be
+  deleted rather than left as options nobody picked.
+- **The six frozen full concepts still ship.** A, B, D, E and F cost download and
+  maintenance and get no further work.
+- **`:has()` is no longer load-bearing** — the slot width is now set from script
+  when a Book turns, so the neighbour reflow does not depend on it. That is a
+  small robustness gain over C2 and worth not undoing.
+- **Page counts are still sample literals.** `bookThickness` takes a count the
+  real Library does not supply. Integration means a real count on the Book
+  record, and deciding what "pages" means for a Book that is one long document.
+- **The height ladder is a design artefact in a physics module.** It is the right
+  place for now, but if the real Library adopts it the table should be reviewed
+  against real collections — sixteen rungs tuned against a 40-Book sample is not
+  the same as sixteen rungs tuned against somebody's actual shelf.
+
+### Worth not relearning
+
+- **`left` is not depth.** Inside a `preserve-3d` box that rotates, a layout
+  offset becomes a Z offset and then gets projected sideways by perspective. Use
+  `translateZ` for depth. This cost a 26px invisible hit region that ate a
+  neighbour, and put a visible face on the wrong side of the Book for a whole
+  phase.
+- **A transformed element's hit box is its projected quad.** Disabling pointer
+  events on the leaves is not enough if an ancestor is the thing being
+  transformed. Make the hit target an untransformed box and put the geometry
+  inside it.
+- **A hash for lookup is not a hash for appearance.** `(n * 31 + ch) % 997` does
+  not avalanche, so sequential ids produce sequential outputs and any small
+  modulus turns that into a visible cycle. Finalise the hash before using it for
+  anything a person will look at.
+- **A region assertion needs both ends.** `css.slice(css.indexOf('CONCEPT C2'))`
+  ran to end-of-file, so appending the component lab silently changed what three
+  L3.4 tests were reading. Slice to the next section, not to the end.

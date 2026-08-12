@@ -72,3 +72,23 @@ it**: `library-book.js` exports the cover, and the Library imports it. Not the
 reverse. The Book view is where the design belongs; everything else renders it.
 
 See [the C2 direction](library-v2-l3-c2-direction.md).
+
+---
+
+## L3.5 — unchanged, and now used by two things
+
+The cover system is not under comparison. Every resting treatment and every
+pulled treatment in the component lab renders `bookCoverHtml()` from
+`shared-cover.js` — the Book view's own `bk-cover-*` markup — and restates only
+scale, through the same single `--cv: 0.235`. A test fails on a hard-coded size
+in that block.
+
+Nothing is printed beneath a pulled Book in any of the five treatments: no
+repeated title, no subtitle, no card footer. The one affordance is `Open`, inside
+the lower edge of the cover, visible only on hover or focus. It does not even
+need its own pointer target — the click lands on the slot, and the slot knows the
+Book is already selected (see [Book physics](library-v2-l3-book-physics.md)).
+
+The move that still has to happen on adoption is unchanged: `shared-cover.js`
+goes to the web root and the **Book view exports it**, with the Library
+importing. Not the reverse.

@@ -46,9 +46,12 @@ const libShelf = code(readFileSync(join(WEB, 'library-shelf.js'), 'utf8'));
 const libView = code(readFileSync(join(WEB, 'library-view.js'), 'utf8'));
 const indexHtml = readFileSync(join(WEB, 'index.html'), 'utf8');
 
-/* The C2 region of the stylesheet. Scanning the whole file would let a rule
- * belonging to one of the six frozen concepts satisfy a C2 assertion. */
-const C2CSS = css.slice(css.indexOf('CONCEPT C2'));
+/* The C2 region of the stylesheet, bounded at BOTH ends. Open-ended at the top
+ * let a rule from one of the six
+ * frozen concepts satisfy a C2 assertion; open-ended at the bottom did the same
+ * once L3.5 appended the component lab, and three tests here started passing or
+ * failing on rules that were never C2's. A region assertion needs a region. */
+const C2CSS = css.slice(css.indexOf('CONCEPT C2'), css.indexOf('THE COMPONENT LAB'));
 
 /* ── §1  C2 is isolated ──────────────────────────────────────────────── */
 
@@ -68,8 +71,11 @@ test('c2: it reaches the browser only through the lab route', () => {
    * only runs after the server has said the lab is allowed. */
   assert.match(view, /id: 'c2',[\s\S]*?mod: \(\) => import\('\.\/concept-c2\.js'\)/);
   assert.match(view, /if \(!\(await labAllowed\(\)\)\) return false;/);
-  // C2 is the default mount, because it is the concept under development.
-  assert.match(view, /await mount\(stage, current \?\? 'c2', nav\);/);
+  /* No longer the default mount: from L3.5 the lab opens on the component
+   * comparison and C2 is the baseline it is measured against. Still registered,
+   * still reachable. */
+  assert.match(view, /await mount\(stage, current \?\? 'cb', nav\);/);
+  assert.match(view, /id: 'cb',[\s\S]*?import\('\.\/component-lab\.js'\)/);
 });
 
 test('c2: the lab still writes nothing', () => {

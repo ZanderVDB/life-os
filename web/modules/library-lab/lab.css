@@ -770,3 +770,493 @@
   .c2-niche{padding:0 10px}
   .c2-slot{margin-right:2px}
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE COMPONENT LAB (L3.5)
+
+   One decision per page. Everything not under comparison is held identical —
+   same Books, same order, same sizes, same positions, same bay.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cb{display:flex;flex-direction:column;gap:14px}
+.cb-nav{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:12px;
+  border-bottom:1px solid var(--border)}
+.cb-cat{appearance:none;border:1px solid var(--border);background:var(--surface-2);
+  color:var(--text-2);font:inherit;font-size:12px;font-weight:600;padding:7px 12px;
+  border-radius:7px;cursor:pointer;transition:background 140ms var(--e-out),color 140ms var(--e-out)}
+.cb-cat:hover{background:var(--surface-3);color:var(--text)}
+.cb-cat.on{background:var(--accent);border-color:var(--accent);color:#1A1624}
+.cb-cat:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.cb-controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.cb-blurb{flex:1 1 260px;margin:0;font-size:12px;color:var(--muted);line-height:1.5}
+.cb-tabs{display:flex;gap:4px}
+.cb-tab{appearance:none;width:34px;height:32px;border:1px solid var(--border);
+  background:var(--surface-2);color:var(--text-2);font:inherit;font-size:12px;font-weight:700;
+  border-radius:6px;cursor:pointer}
+.cb-tab:hover{background:var(--surface-3);color:var(--text)}
+.cb-tab.on{background:var(--accent-soft);border-color:var(--accent);color:var(--text)}
+.cb-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cb-rows,.cb-cmp{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted)}
+.cb-controls select{background:var(--surface-2);color:var(--text-2);border:1px solid var(--border);
+  border-radius:6px;font:inherit;font-size:11.5px;padding:5px 7px}
+
+.cb-stage{display:flex;flex-direction:column;gap:18px}
+.cb-panel{display:flex;flex-direction:column;gap:8px;min-width:0}
+.cb-panel-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.cb-panel-h b{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--text)}
+.cb-panel-h span{font-size:11px;color:var(--muted);line-height:1.45}
+/* Side by side is optional (§32) and it is the one place the lab may make the
+   objects smaller — two shelves at full size do not fit and comparing two
+   half-visible shelves is worse than comparing two smaller whole ones. */
+.cb-side{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.cb-side .cb-panel{min-width:0}
+
+/* ── The bay: five architectures over one construction (§16) ──────────────
+   Every layer exists in every variant; a variant that wants no uprights hides
+   them. That is what keeps the Books in identical positions across all five. */
+.cb-bay{min-width:0}
+.cb-label{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 7px}
+.cb-niche{position:relative;padding:0 14px;isolation:isolate}
+.cb-wall{position:absolute;inset:0;z-index:0;pointer-events:none}
+.cb-post{position:absolute;top:0;bottom:9px;width:5px;z-index:2;pointer-events:none}
+.cb-post-l{left:0}
+.cb-post-r{right:0}
+.cb-ledge{position:absolute;left:0;right:0;bottom:0;height:9px;z-index:3;pointer-events:none}
+.cb-scroll{position:relative;z-index:1;overflow-x:scroll;overflow-y:hidden;padding:26px 0 9px;
+  overscroll-behavior-x:contain;scrollbar-width:thin;
+  scrollbar-color:var(--border-strong) transparent}
+.cb-scroll::-webkit-scrollbar{height:7px}
+.cb-scroll::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.cb-row{list-style:none;margin:0;padding:0;display:flex;align-items:flex-end;
+  width:max-content;min-width:100%;perspective:1500px}
+.cb-bay.is-flat .cb-row{gap:11px;perspective:none;align-items:flex-end}
+.cb-bay.is-flat .cb-scroll{padding-top:20px}
+.cb-cell{flex:0 0 auto;list-style:none}
+
+/* A — GRAPHITE BUILT-IN (§17). A recessed niche: back panel, defined side
+   boundaries, solid ledge, restrained top light, cast shadow. */
+.cb-s-a .cb-wall{background:
+  radial-gradient(120% 78% at 50% -8%,rgba(206,199,232,.075) 0%,transparent 60%),
+  linear-gradient(180deg,#1E1928 0%,#171320 44%,#131020 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.055),inset 0 -18px 26px -22px rgba(0,0,0,.9)}
+.cb-s-a .cb-post{background:linear-gradient(90deg,#2C2539 0%,#1B1626 60%,#100D18 100%);
+  box-shadow:inset 1px 0 0 rgba(255,255,255,.075)}
+.cb-s-a .cb-post-r{transform:scaleX(-1)}
+.cb-s-a .cb-ledge{background:linear-gradient(180deg,
+  rgba(232,226,246,.34) 0,rgba(232,226,246,.34) 1px,#2A2437 1px,#221D2F 4px,
+  #16121F 4px,#0D0A14 100%);box-shadow:0 9px 17px -8px rgba(0,0,0,.85)}
+
+/* B — FLOATING STONE (§18). A heavy slab. Thick front face, almost no frame,
+   Books strongly grounded. Architectural, not decorative. */
+.cb-s-b .cb-wall{background:linear-gradient(180deg,#15111D 0%,#100D18 100%)}
+.cb-s-b .cb-post{opacity:0}
+.cb-s-b .cb-niche{padding:0 6px}
+.cb-s-b .cb-scroll{padding-bottom:17px}
+.cb-s-b .cb-ledge{height:17px;border-radius:0 0 2px 2px;background:linear-gradient(180deg,
+  rgba(226,220,242,.30) 0,rgba(226,220,242,.30) 1px,
+  #352D45 1px,#2A2338 5px,#1F1A2B 5px,#151122 100%);
+  box-shadow:0 16px 26px -12px rgba(0,0,0,.9),inset 0 -1px 0 rgba(0,0,0,.6)}
+
+/* C — METAL FRAME (§19). Thin structural uprights at the ends only, a slim
+   plane, a recessed backing. Restrained: a frame, not a rack. */
+.cb-s-c .cb-wall{background:linear-gradient(180deg,#191524 0%,#121020 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+.cb-s-c .cb-post{width:3px;top:-4px;bottom:-2px;
+  background:linear-gradient(90deg,#4A4358 0%,#2E2840 45%,#191424 100%);
+  box-shadow:inset 1px 0 0 rgba(255,255,255,.16),0 2px 6px -2px rgba(0,0,0,.8)}
+.cb-s-c .cb-post-r{transform:scaleX(-1)}
+.cb-s-c .cb-ledge{height:5px;background:linear-gradient(180deg,
+  rgba(210,204,230,.42) 0,rgba(210,204,230,.42) 1px,#3A3349 1px,#241E31 100%);
+  box-shadow:0 6px 12px -6px rgba(0,0,0,.8)}
+
+/* D — RECESSED LIGHT NICHE (§20). A deeper opening, lit from above. The light
+   is architectural: a gradient falling down the back panel, no visible fitting,
+   and the depth read from the shadowed head and jambs. */
+.cb-s-d .cb-niche{padding:0 18px}
+.cb-s-d .cb-wall{background:
+  linear-gradient(180deg,rgba(214,206,240,.16) 0%,rgba(180,170,214,.05) 22%,transparent 52%),
+  linear-gradient(180deg,#221C2E 0%,#171320 46%,#110E1B 100%);
+  box-shadow:inset 0 12px 20px -14px rgba(0,0,0,.95),
+    inset 14px 0 20px -18px rgba(0,0,0,.95),inset -14px 0 20px -18px rgba(0,0,0,.95)}
+.cb-s-d .cb-post{width:9px;background:linear-gradient(90deg,#0C0A12 0%,#191424 78%,transparent 100%)}
+.cb-s-d .cb-post-r{transform:scaleX(-1)}
+.cb-s-d .cb-scroll{padding-top:32px}
+.cb-s-d .cb-ledge{height:11px;background:linear-gradient(180deg,
+  rgba(236,230,250,.26) 0,rgba(236,230,250,.26) 1px,#282132 1px,#1C1727 5px,#0E0B16 100%);
+  box-shadow:0 11px 20px -10px rgba(0,0,0,.85)}
+
+/* E — MONOLITH (§21). One substantial ledge and a shadowed recess. Almost no
+   frame at all; the silhouette does the work. */
+.cb-s-e .cb-wall{background:linear-gradient(180deg,#131019 0%,#0D0B13 100%);
+  box-shadow:inset 0 -34px 40px -34px rgba(0,0,0,1)}
+.cb-s-e .cb-post{opacity:0}
+.cb-s-e .cb-niche{padding:0 4px}
+.cb-s-e .cb-scroll{padding-bottom:24px}
+.cb-s-e .cb-ledge{height:24px;background:linear-gradient(180deg,
+  rgba(222,216,238,.22) 0,rgba(222,216,238,.22) 1px,#2E2740 1px,#241E32 9px,
+  #191423 9px,#0B0912 100%);
+  box-shadow:0 22px 34px -14px rgba(0,0,0,.95)}
+
+/* ── The Book as a solid (§12) ────────────────────────────────────────────
+   Four faces in the box's own frame, spine facing you at rest:
+
+       back board   x = 0          spine       z = 0
+       front cover  x = t          fore-edge   z = -126
+
+   Depth is translateZ, never `left`. A layout offset would be turned into depth
+   by the box rotation and then thrown sideways by perspective — which is
+   exactly the bug this replaces. */
+.cb-slot{flex:0 0 auto;width:var(--t);height:var(--h);position:relative;margin-right:3px;
+  transition:width 300ms var(--e-out)}
+.cb-vol{position:absolute;inset:0;cursor:pointer;transform-style:preserve-3d}
+.cb-box{position:absolute;inset:0;transform-style:preserve-3d;transform-origin:left center;
+  transition:transform 300ms var(--e-out);pointer-events:none}
+/* THE HIT RULE (§14). NOTHING inside the volume takes pointer input — not the
+   faces and not the box that carries them. `.cb-vol` is the only target, it is
+   never transformed, and it fills its slot exactly. So a Book's hit area is the
+   space it occupies on the shelf, in every state and at every angle, and it is
+   checkable with `elementFromPoint` rather than being argued from z-indexes.
+
+   Measured before this rule: the box is transformed, so its own hit box is the
+   PROJECTED quad, which at a 62 degree turn with a forward translate reached 3px
+   past the slot and swallowed the margin. Small, and the same class of defect as
+   the 26px one it replaced. */
+.cb-face{position:absolute;top:0;height:100%;pointer-events:none}
+.cb-spine{left:0;width:var(--t);overflow:hidden;display:flex;flex-direction:column;
+  align-items:center;justify-content:space-between;padding:11px 0}
+.cb-edge{left:0;width:var(--t);transform:translateZ(-126px);overflow:hidden;
+  background:linear-gradient(90deg,#332C42 0%,#241E31 55%,#171320 100%)}
+.cb-pages{position:absolute;inset:2px 3px;background:
+  repeating-linear-gradient(0deg,rgba(236,231,248,.16) 0 1px,rgba(20,16,28,.5) 1px 2px)}
+.cb-board{left:0;width:126px;transform-origin:left center;backface-visibility:hidden;
+  overflow:hidden}
+.cb-back{transform:rotateY(90deg);background:linear-gradient(120deg,#221C2F,#15111E);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.cb-front{transform:translateX(var(--t)) rotateY(90deg)}
+
+/* ── §3  Resting finishes ────────────────────────────────────────────────
+   All four spine-first, compact, physical, modern. What differs is how much
+   material detail the spine carries. */
+.cb-rule{width:56%;height:1px;background:var(--accent-c,var(--a-peach));opacity:.8}
+.cb-band{width:100%;height:3px;flex:0 0 auto;opacity:0}
+.cb-spine-t{flex:1 1 auto;min-height:0;writing-mode:vertical-rl;transform:rotate(180deg);
+  display:flex;align-items:center;justify-content:center;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+  font-size:11.5px;font-weight:500;letter-spacing:.075em;color:#F1EDF9;
+  text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.cb-plate{font-size:7.5px;font-weight:700;letter-spacing:.14em;
+  color:rgba(241,237,249,.45);font-variant-numeric:tabular-nums}
+
+/* A — CLOTH HARDBACK. Fine grain, two bands, a thin foil rule, matte. */
+[data-resting="a"] .cb-spine{background:
+  repeating-linear-gradient(90deg,rgba(255,255,255,.03) 0 1px,transparent 1px 2px),
+  repeating-linear-gradient(0deg,rgba(0,0,0,.06) 0 1px,transparent 1px 3px),
+  linear-gradient(90deg,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 15%,#191422) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 31%,#241E31) 34%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 24%,#1D1828) 74%,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 11%,#120E1A) 100%);
+  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.13),inset -2px 0 5px rgba(0,0,0,.5)}
+[data-resting="a"] .cb-band{opacity:1;height:4px;
+  background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(0,0,0,.3));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+[data-resting="a"] .cb-rule{height:1px;background:linear-gradient(90deg,
+  transparent,color-mix(in srgb,var(--accent-c,var(--a-peach)) 70%,#F6EBD2),transparent);
+  opacity:.95;width:70%}
+
+/* B — MODERN MATTE. Very clean. Stronger type, a whisper of grain, one line. */
+[data-resting="b"] .cb-spine{background:
+  linear-gradient(90deg,#1B1626 0%,#252030 42%,#1E1929 78%,#141020 100%);
+  box-shadow:inset 1px 0 0 rgba(255,255,255,.09),inset -1px 0 4px rgba(0,0,0,.45)}
+[data-resting="b"] .cb-spine-t{font-weight:600;font-size:12px;letter-spacing:.03em;
+  color:#F7F4FC}
+[data-resting="b"] .cb-rule{width:22%;height:2px;border-radius:1px}
+[data-resting="b"] .cb-plate{opacity:.5}
+
+/* C — ARCHIVAL. Binding ridges, a muted label plate, more tactile edges. */
+[data-resting="c"] .cb-spine{background:
+  repeating-linear-gradient(0deg,rgba(255,255,255,.07) 0 1px,transparent 1px 9px),
+  linear-gradient(90deg,#171321 0%,#282133 30%,#1F1A2B 70%,#110E19 100%);
+  box-shadow:inset 2px 0 0 rgba(255,255,255,.10),inset -2px 0 6px rgba(0,0,0,.6),
+    inset 0 0 0 1px rgba(0,0,0,.35)}
+[data-resting="c"] .cb-spine-t{font-size:11px;letter-spacing:.1em;color:#E7E1F3}
+[data-resting="c"] .cb-plate{background:rgba(233,227,246,.14);color:#EDE8F7;
+  padding:3px 4px;border-radius:1px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+[data-resting="c"] .cb-rule{width:64%;opacity:.55}
+
+/* D — PREMIUM NOTEBOOK. Refined edges, minimal debossing, softer corners.
+   Still bound — the rounded corner is 3px, not a pill. */
+[data-resting="d"] .cb-spine{border-radius:3px 0 0 3px;background:
+  linear-gradient(90deg,#161222 0%,#221D2E 38%,#1A1626 100%);
+  box-shadow:inset 1px 0 0 rgba(255,255,255,.11),inset -2px 0 6px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.06),inset 0 -1px 0 rgba(0,0,0,.5)}
+[data-resting="d"] .cb-spine-t{font-size:11px;letter-spacing:.11em;
+  color:rgba(240,236,250,.86);text-shadow:0 1px 0 rgba(0,0,0,.75)}
+[data-resting="d"] .cb-rule{width:30%;height:1px;opacity:.5;
+  box-shadow:0 1px 0 rgba(0,0,0,.6)}
+[data-resting="d"] .cb-board{border-radius:2px}
+[data-resting="d"] .cb-plate{opacity:.38}
+
+/* The system Book: material, never a control (§28). */
+.cb-vol.is-system .cb-spine{box-shadow:inset 2px 0 0 rgba(182,155,240,.6),
+  inset -2px 0 6px rgba(0,0,0,.55)}
+.cb-vol.is-system .cb-cover{box-shadow:inset 3px 0 0 0 var(--a-lavender)}
+
+/* Contact, hover, focus. */
+.cb-vol::after{content:'';position:absolute;left:1px;right:1px;bottom:-3px;height:5px;
+  border-radius:50%;pointer-events:none;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,.65),transparent 72%)}
+.cb-vol:not(.is-out):hover .cb-box{transform:translateY(-4px)}
+.cb-vol:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+/* ── §6–§11  The five pulled treatments ──────────────────────────────────
+   None ends at 90°. At exactly 90° the cover is axis-aligned, the spine and the
+   page block vanish to nothing, and the Book stops being a solid — which is the
+   criticism this component exists to answer. */
+[data-pulled="a"] .cb-vol.is-out .cb-box{transform:translateZ(20px) rotateY(-82deg)}
+[data-pulled="b"] .cb-vol.is-out .cb-box{transform:translateZ(14px) rotateY(-62deg)}
+[data-pulled="c"] .cb-vol.is-out .cb-box{transform:translateZ(18px) rotateY(-72deg)}
+/* C only: the front board lifts on the spine hinge. 12° says bound; more would
+   promise an interior this state does not have (§9). */
+[data-pulled="c"] .cb-vol.is-out .cb-front{transform:translateX(var(--t)) rotateY(102deg)}
+[data-pulled="d"] .cb-vol.is-out .cb-box{transform:translateZ(46px) rotateX(-2deg) rotateY(-70deg)}
+[data-pulled="e"] .cb-box{transform-origin:left bottom}
+[data-pulled="e"] .cb-vol.is-out .cb-box{transform:rotateY(-52deg) rotateX(1.5deg)}
+
+.cb-vol.is-out{z-index:6}
+.cb-vol.is-out .cb-front{box-shadow:0 20px 34px -16px rgba(0,0,0,.75),
+  inset 0 0 0 1px rgba(255,255,255,.07)}
+.cb-vol.is-out::after{opacity:.5;filter:blur(1px)}
+
+/* The cover: the Book view's own markup, restated only in scale (§13). */
+.cb-cover{--cv:0.235;position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;padding:14px 12px;
+  background:linear-gradient(150deg,var(--paper) 0%,var(--paper-2) 100%);
+  box-shadow:inset 3px 0 0 0 var(--accent-c,var(--a-peach))}
+.cb-cover .bk-cover-mark{font-family:'Playfair Display',Georgia,serif;
+  font-size:calc(34px * var(--cv));letter-spacing:.16em;color:var(--paper-ink-2);opacity:.72}
+.cb-cover .bk-cover-pre{font-size:calc(28px * var(--cv));font-weight:700;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--accent-c,var(--a-peach))}
+.cb-cover .bk-cover-title{font-family:'Playfair Display',Georgia,serif;font-weight:500;
+  font-size:calc(64px * var(--cv));line-height:1.14;color:var(--paper-ink);text-align:center;
+  margin-top:6px;display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;
+  -webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.cb-cover .bk-cover-sub{font-family:'Playfair Display',Georgia,serif;font-style:italic;
+  font-size:calc(36px * var(--cv));line-height:1.3;color:var(--paper-ink-2);text-align:center;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cb-cover .bk-cover-rule{width:34px;height:1px;background:var(--paper-ink-2);opacity:.4;
+  margin:7px 0 5px}
+.cb-cover .bk-cover-author{font-size:calc(28px * var(--cv));font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--paper-ink-2);opacity:.8;text-align:center}
+
+/* §15 — the only thing added to a pulled Book, and it is inside it. No title
+   beneath, no subtitle block, no card footer. */
+.cb-open{position:absolute;left:0;right:0;bottom:0;padding:6px 0 7px;text-align:center;
+  font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:#F4F2FA;background:linear-gradient(180deg,transparent,rgba(10,8,16,.82) 45%);
+  opacity:0;transition:opacity 140ms var(--e-out)}
+.cb-vol.is-out:hover .cb-open,.cb-vol.is-out:focus-visible .cb-open{opacity:1}
+
+/* ── §23  Documents ─────────────────────────────────────────────────────── */
+.cb-doc,.cb-med,.cb-lnk,.cb-fil{position:relative;display:block;cursor:pointer;
+  transition:transform 140ms var(--e-out),box-shadow 140ms var(--e-out)}
+.cb-doc:hover,.cb-med:hover,.cb-lnk:hover,.cb-fil:hover{transform:translateY(-4px)}
+.cb-doc:focus-visible,.cb-med:focus-visible,.cb-lnk:focus-visible,
+.cb-fil:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.cb-doc::after,.cb-med::after,.cb-lnk::after,.cb-fil::after{content:'';position:absolute;
+  left:6%;right:6%;bottom:-3px;height:5px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,.6),transparent 72%)}
+.cb-doc{width:158px;height:132px;padding:14px 15px 15px 18px;
+  display:flex;flex-direction:column;gap:5px;
+  background:linear-gradient(158deg,#2E2740 0%,#211B2E 62%,#1A1526 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 3px 8px -4px rgba(0,0,0,.65)}
+.cb-d-kind{font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-c,var(--a-blue))}
+.cb-d-t{font-size:12.5px;font-weight:600;color:#EFEAF8;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cb-d-x,.cb-d-m{font-size:9.5px;line-height:1.45;color:rgba(214,203,240,.62);
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* A — portfolio: a visible binding edge down the left. */
+.cb-d-a{border-radius:1px 3px 3px 1px}
+.cb-d-bind{position:absolute;left:0;top:0;bottom:0;width:6px;
+  background:linear-gradient(90deg,var(--accent-c,var(--a-blue)) 0%,
+    color-mix(in srgb,var(--accent-c,var(--a-blue)) 40%,#100D18) 100%);
+  box-shadow:inset -1px 0 2px rgba(0,0,0,.5)}
+/* B — folder: a tab, and papers layered behind. */
+.cb-d-b{border-radius:2px;padding-top:20px}
+.cb-d-tab{position:absolute;left:16px;top:-7px;width:52px;height:9px;border-radius:2px 2px 0 0;
+  background:var(--accent-c,var(--a-blue));opacity:.85}
+.cb-d-leaf{position:absolute;left:6px;right:10px;top:-4px;height:14px;border-radius:2px;
+  background:#3A3350;box-shadow:0 -1px 0 rgba(255,255,255,.06)}
+.cb-d-leaf2{left:10px;right:6px;top:-8px;background:#2C2640}
+/* C — jacket: a title plate on rigid stock. */
+.cb-d-c{border-radius:2px;justify-content:flex-end;
+  background:linear-gradient(158deg,#241E31 0%,#191424 100%)}
+.cb-d-plate{display:flex;flex-direction:column;gap:3px;padding:9px 11px;border-radius:1px;
+  background:rgba(238,233,250,.09);box-shadow:inset 0 0 0 1px rgba(255,255,255,.13)}
+/* D — folio: half open, pages showing behind the lid. */
+.cb-d-d{border-radius:2px;padding:0;overflow:visible}
+.cb-d-sheet{position:absolute;left:9px;right:13px;top:-6px;bottom:22px;border-radius:1px;
+  background:linear-gradient(180deg,#463E5C,#332C45)}
+.cb-d-sheet2{left:13px;right:9px;top:-10px;background:linear-gradient(180deg,#564D6E,#3D3552)}
+.cb-d-lid{position:absolute;left:0;right:0;bottom:0;height:78px;padding:13px 15px;
+  display:flex;flex-direction:column;gap:5px;border-radius:0 0 2px 2px;
+  background:linear-gradient(180deg,#2B2439 0%,#1B1627 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.11),0 -3px 9px -4px rgba(0,0,0,.8)}
+/* E — stack under a front sheet. */
+.cb-d-e{border-radius:2px;padding:0;background:none;box-shadow:none}
+.cb-d-stack{position:absolute;left:5px;right:5px;top:6px;bottom:-5px;border-radius:2px;
+  background:#241E31;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.cb-d-stack2{left:2px;right:8px;top:3px;bottom:-2px;background:#1C1727}
+.cb-d-top{position:absolute;inset:0 8px 4px 0;padding:14px 15px;border-radius:2px;
+  display:flex;flex-direction:column;gap:6px;
+  background:linear-gradient(158deg,#332B45 0%,#221C2F 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),0 4px 10px -5px rgba(0,0,0,.7)}
+
+/* ── §24  Media ─────────────────────────────────────────────────────────── */
+.cb-med{width:150px}
+.cb-m-win{position:relative;display:block;height:100px;border-radius:1px;
+  background:linear-gradient(146deg,#3A3350 0%,#231D31 55%,#171320 100%)}
+.cb-m-t{display:block;margin-top:7px;font-size:11px;color:var(--text-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cb-play{position:absolute;left:9px;bottom:8px;display:flex;color:#F4F2FA;
+  width:20px;height:20px;align-items:center;justify-content:center;border-radius:50%;
+  background:rgba(12,9,18,.72);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}
+.cb-m-meta{position:absolute;right:8px;bottom:8px;font-size:9px;color:#F0ECF8;
+  padding:1px 5px;border-radius:2px;background:rgba(12,9,18,.72);
+  font-variant-numeric:tabular-nums}
+/* A — contact print: a wide lower margin, like a printed border. */
+.cb-m-a .cb-m-win{height:96px;box-shadow:inset 0 0 0 7px #14111E,inset 0 0 0 8px rgba(255,255,255,.09),
+  0 3px 9px -4px rgba(0,0,0,.7)}
+.cb-m-a{padding-bottom:12px;background:#14111E;padding:7px 7px 16px;
+  box-shadow:0 3px 9px -4px rgba(0,0,0,.7)}
+.cb-m-a .cb-m-t{margin-top:9px;text-align:center;font-size:10px}
+/* B — sleeve with a window cut through it. */
+.cb-m-sleeve{display:block;padding:9px 9px 14px;border-radius:2px;
+  background:linear-gradient(158deg,#241E31,#161220);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 3px 9px -4px rgba(0,0,0,.7)}
+.cb-m-b .cb-m-win{height:92px}
+/* C — framed tile. */
+.cb-m-frame{display:block;padding:5px;border-radius:2px;
+  background:linear-gradient(158deg,#453D5A,#251F33);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 4px 10px -5px rgba(0,0,0,.75)}
+/* D — film archive: perforated rails top and bottom. */
+.cb-m-strip{display:block;background:#0E0B15;padding:0;border-radius:1px;
+  box-shadow:0 3px 9px -4px rgba(0,0,0,.75)}
+.cb-m-perf{display:block;height:9px;background:
+  repeating-linear-gradient(90deg,transparent 0 5px,rgba(226,220,242,.34) 5px 9px,transparent 9px 14px)}
+.cb-m-d .cb-m-win{height:88px;border-radius:0}
+/* E — display tray: sitting slightly forward on a shallow ledge. */
+.cb-m-e{padding-bottom:10px}
+.cb-m-e .cb-m-win{box-shadow:0 6px 12px -6px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07)}
+.cb-m-tray{position:absolute;left:-6px;right:-6px;bottom:-2px;height:7px;border-radius:1px;
+  background:linear-gradient(180deg,rgba(226,220,242,.28) 0 1px,#2A2338 1px,#141020 100%)}
+
+/* ── §25  Links ─────────────────────────────────────────────────────────── */
+.cb-lnk{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:2px;
+  width:184px;height:66px;
+  background:linear-gradient(158deg,#262031 0%,#1A1524 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 3px 8px -4px rgba(0,0,0,.65)}
+.cb-l-mark{flex:0 0 auto;width:26px;height:26px;border-radius:3px;display:grid;
+  place-items:center;font-size:12px;font-weight:700;color:#1A1624;
+  background:var(--accent-c,var(--a-sage))}
+.cb-l-body{min-width:0;display:flex;flex-direction:column;gap:2px}
+.cb-l-t{font-size:11.5px;font-weight:600;color:#EFEAF8;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cb-l-m{font-size:9.5px;color:var(--muted)}
+/* B — a narrow strip with a coloured tail. */
+.cb-l-b{width:196px;height:52px;padding-left:20px}
+.cb-l-tail{position:absolute;left:0;top:0;bottom:0;width:9px;
+  background:var(--accent-c,var(--a-sage));
+  clip-path:polygon(0 0,100% 0,100% 100%,0 100%,45% 50%)}
+.cb-l-b .cb-l-mark{width:20px;height:20px;font-size:10px;opacity:.85}
+/* C — a filing slip: a rule above, domain beneath. */
+.cb-l-c{flex-direction:column;align-items:stretch;justify-content:center;gap:5px;
+  width:170px;height:62px;border-radius:1px;background:linear-gradient(158deg,#221C2F,#15111F)}
+.cb-l-rule{height:2px;width:28px;background:var(--accent-c,var(--a-sage))}
+/* D — pinned under a rail. */
+.cb-l-d{padding-top:16px;height:72px;border-radius:0 0 2px 2px}
+.cb-l-rail{position:absolute;left:-4px;right:-4px;top:0;height:7px;border-radius:1px;
+  background:linear-gradient(180deg,#4A4259 0%,#2A2438 60%,#171320 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 3px 6px -3px rgba(0,0,0,.8)}
+
+/* ── §26  Files ─────────────────────────────────────────────────────────── */
+.cb-fil{width:134px;height:66px}
+.cb-f-body{position:absolute;inset:0;display:flex;flex-direction:column;gap:2px;
+  padding:11px 13px;border-radius:2px;
+  background:linear-gradient(158deg,#2B2437 0%,#1C1727 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 3px 8px -4px rgba(0,0,0,.65)}
+.cb-f-kind{font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-c,var(--a-peach))}
+.cb-f-t{font-size:11.5px;font-weight:600;color:#EFEAF8;line-height:1.25;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cb-f-m{margin-top:auto;font-size:9.5px;color:var(--muted)}
+/* A — a clipped corner is the whole difference between a jacket and a card. */
+.cb-f-a .cb-f-body{clip-path:polygon(0 0,100% 0,100% 100%,11px 100%,0 calc(100% - 11px))}
+.cb-f-corner{position:absolute;left:0;bottom:0;width:11px;height:11px;
+  background:linear-gradient(45deg,#100D18 50%,transparent 50%)}
+/* B — a printed label across the front. */
+.cb-f-b{height:74px}
+.cb-f-b .cb-f-body{padding:9px}
+.cb-f-label{display:flex;flex-direction:column;gap:2px;padding:8px 9px;border-radius:1px;
+  background:rgba(238,233,250,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+/* C — a drawer face with a recessed pull. */
+.cb-f-c{height:72px}
+.cb-f-c .cb-f-body{border-radius:2px;padding-right:34px;
+  background:linear-gradient(180deg,#332C43 0%,#221C2F 46%,#181322 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.13),inset 0 -2px 4px rgba(0,0,0,.6),
+    0 3px 8px -4px rgba(0,0,0,.7)}
+.cb-f-pull{position:absolute;right:11px;top:50%;transform:translateY(-50%);
+  width:16px;height:24px;border-radius:2px;background:#100D18;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.1)}
+/* D — an envelope: the flap seam is the identity. */
+.cb-f-d .cb-f-body{border-radius:1px;padding-top:20px}
+.cb-f-flap{position:absolute;left:0;right:0;top:0;height:26px;
+  background:linear-gradient(180deg,#39314A,#251F33);
+  clip-path:polygon(0 0,100% 0,100% 42%,50% 100%,0 42%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+
+/* ── §27  Five structures instead of one ────────────────────────────────── */
+.cb-fx-tray .cb-post,.cb-fx-display .cb-post,.cb-fx-rail .cb-post{opacity:0}
+.cb-fx-tray .cb-ledge{height:5px;background:linear-gradient(180deg,
+  rgba(214,208,236,.2) 0 1px,#221D2E 1px,#12101C 100%)}
+.cb-fx-tray .cb-wall{background:linear-gradient(180deg,#191524,#121020)}
+.cb-fx-display .cb-ledge{height:13px;background:linear-gradient(180deg,
+  rgba(238,232,252,.34) 0 1px,#2E2740 1px,#1A1525 7px,#0D0A14 100%);
+  box-shadow:0 12px 20px -10px rgba(0,0,0,.9)}
+.cb-fx-display .cb-wall{background:linear-gradient(180deg,#1C1728,#100D19)}
+.cb-fx-rail .cb-wall{background:linear-gradient(180deg,#171322,#111019)}
+.cb-fx-rail .cb-niche{padding-top:9px}
+.cb-fx-rail .cb-niche::before{content:'';position:absolute;left:0;right:0;top:0;height:6px;
+  z-index:4;background:linear-gradient(180deg,#4A4259,#241E32);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 3px 7px -3px rgba(0,0,0,.85)}
+.cb-fx-rail .cb-ledge{height:3px;background:#181322}
+.cb-fx-slot .cb-wall{background:linear-gradient(180deg,#0F0C16 0%,#15111F 40%,#0B0912 100%);
+  box-shadow:inset 0 14px 22px -14px rgba(0,0,0,1),inset 0 -14px 22px -14px rgba(0,0,0,1)}
+.cb-fx-slot .cb-post{width:8px;background:linear-gradient(90deg,#0A0810,#1B1627)}
+.cb-fx-slot .cb-ledge{height:19px;background:linear-gradient(180deg,
+  rgba(206,200,228,.18) 0 1px,#241E31 1px,#151121 8px,#08060D 100%)}
+
+/* ── §33  Reduced motion ────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce){
+  .cb-slot,.cb-box,.cb-doc,.cb-med,.cb-lnk,.cb-fil,.cb-open{transition:none !important}
+  .cb-vol:not(.is-out):hover .cb-box{transform:none}
+  .cb-doc:hover,.cb-med:hover,.cb-lnk:hover,.cb-fil:hover{transform:none}
+  /* The turn still arrives — only the travel is removed. */
+  .cb-vol.is-out .cb-front{box-shadow:0 0 0 2px var(--accent-c,var(--a-peach)),
+    0 20px 34px -16px rgba(0,0,0,.75)}
+}
+
+/* ── §35  Narrower ──────────────────────────────────────────────────────── */
+@media (max-width:1100px){
+  .cb-side{grid-template-columns:1fr}
+}
+@media (max-width:1024px){
+  .cb-row{perspective:1900px}
+}
+@media (max-width:820px){
+  .cb-niche{padding:0 10px}
+  .cb-slot{margin-right:2px}
+}
