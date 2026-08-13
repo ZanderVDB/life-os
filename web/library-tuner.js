@@ -42,6 +42,8 @@ const CONTROLS = [
     min: 0, max: 16, step: 1, def: 0, group: 'primary' },
   { key: 'grain', css: '--lib-page-grain', label: 'Page grain', unit: 'deg',
     min: 0, max: 90, step: 90, def: 90, group: 'advanced' },
+  { key: 'flat', css: '--lib-flat-lift', label: 'Document lift', unit: 'px',
+    min: 0, max: 40, step: 2, def: 14, group: 'advanced' },
   { key: 'hover', css: '--lib-book-hover', label: 'Hover lift', unit: 'px',
     min: 0, max: 14, step: 1, def: 8, group: 'advanced' },
   { key: 'pull', css: '--lib-book-pull', label: 'Pull distance', unit: 'px',

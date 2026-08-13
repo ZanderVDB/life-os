@@ -770,20 +770,40 @@ async function renderItem(id, head, scroll, nav = navToken()) {
 async function renderBook(route, head, scroll, nav = navToken()) {
   if (lib.bookId !== route.bookId || !lib.book) {
     // Keep whatever is on screen until the replacement is ready — no blank book.
-    if (!scroll.querySelector('.bk-book')) scroll.innerHTML = bookLoadingHtml();
     /* The title the shelf already showed, not the word "Opening…". The shelf
      * knows what this book is called before the book itself arrives, and a
      * stable header is what makes the wait read as loading rather than as
      * having landed somewhere unnamed. */
     const known = lib.items.find((i) => i.book?.id === route.bookId);
     head.innerHTML = `<p class="eyebrow lib-page">Library · Book</p>
-      <h1>${esc(known?.title ?? 'Opening…')}</h1>
-      <p class="sub">Opening…</p>`;
-    beginLoading(known?.title ?? 'This book', () => void renderLibrary());
+      <h1>${esc(known?.title ?? 'Opening…')}</h1>`;
+
+    /* THE SKELETON WAITS (S2.5).
+     *
+     * A Book usually arrives in well under a tenth of a second, and painting a
+     * skeleton first meant every open went shelf → grey pages → Book. Three
+     * paints for one action, and the middle one on screen just long enough to
+     * register as a glitch — which is exactly what the review reported.
+     *
+     * So the skeleton is DEFERRED. If the Book beats the timer, nothing but the
+     * Book is ever drawn; if it does not, the wait is real and the skeleton is
+     * honest. 180ms is about the threshold at which a delay stops feeling like
+     * the same gesture. */
+    let skeleton = setTimeout(() => {
+      skeleton = 0;
+      if (navStale(nav) || !scroll.isConnected) return;
+      if (!scroll.querySelector('.bk-book')) scroll.innerHTML = bookLoadingHtml();
+      head.querySelector('h1')?.insertAdjacentHTML('afterend', '<p class="sub">Opening…</p>');
+      beginLoading(known?.title ?? 'This book', () => void renderLibrary());
+    }, 180);
+    const settled = () => { if (skeleton) { clearTimeout(skeleton); skeleton = 0; } };
+
     forgetAll();
     try {
       await loadBook(route.bookId);
+      settled();
     } catch (e) {
+      settled();
       if (navStale(nav)) return;
       endLoading();
       head.innerHTML = '<p class="eyebrow lib-page">Library</p><h1>Not found</h1>';

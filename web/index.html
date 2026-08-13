@@ -2937,8 +2937,11 @@ body:has(.lib-page) .rail{display:none}
    the 10-18px §14 asks for. */
 /* Both sides read the SAME token, so they can never drift apart and there is no
    second 16 hiding anywhere (§21). */
+/* The left neighbour only has to become readable; the right side has to get out
+   from under a 126px cover. `--lib-book-clear` is the cover's overhang past the
+   Book's own spine, measured per Book when it is pulled. */
 .lib-slot.is-nudge-l{transform:translateX(calc(-1 * var(--lib-book-neighbour)))}
-.lib-slot.is-nudge-r{transform:translateX(var(--lib-book-neighbour))}
+.lib-slot.is-nudge-r{transform:translateX(calc(var(--lib-book-clear, 0px) + var(--lib-book-neighbour)))}
 /* THE PULLED BOOK DOES NOT CHANGE THE LAYOUT.
    Widening it to its cover looked right and reflowed the whole rail: measured,
    the neighbours moved 48.5px when §14 asks for 10-18, because a centred row
@@ -3026,6 +3029,9 @@ body:has(.lib-page) .rail{display:none}
   --lib-book-depth:0px;       /* how far it stands proud             0-16px  */
   --lib-page-grain:90deg;     /* which way the page edges run                */
   /* RETRIEVAL */
+  --lib-flat-lift:14px;       /* how far Documents, Media, Links and Files sit
+                                 above the ledge. Books stay ON it — they are
+                                 standing on a shelf; a folio in a tray is not. */
   --lib-book-hover:8px;       /* hover lift  — must stay under pull          */
   --lib-book-pull:32px;       /* pull travel                                 */
   --lib-book-neighbour:16px;  /* how far each immediate neighbour steps aside */
@@ -3317,7 +3323,8 @@ body:has(.lib-page) .rail{display:none}
    Chosen from the component lab. Each is a different physical object, not the
    same rectangle in three tints, and none of them borrows the Book's spine or
    the Book's turn. A folder does not turn round: they come forward. */
-.lib-res{--rw:178px;display:block;width:var(--rw);position:relative}
+.lib-res{--rw:178px;display:block;width:var(--rw);position:relative;
+  margin-bottom:calc(var(--shelf-contact) + var(--lib-flat-lift))}
 
 /* DOCUMENT -- a file folio, half open. The sheets standing behind the lid are
    what make it a folio rather than a card, and they are why it needs no spine. */

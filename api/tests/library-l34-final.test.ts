@@ -188,26 +188,41 @@ test('final: perspective is safe at both ends of the turn', () => {
 
 /* ── §14  Neighbours ────────────────────────────────────────────────────── */
 
-test('final: only the two immediate neighbours move, and the rail never reflows', () => {
-  /* One token, read by both sides, so they cannot drift and there is no second
-   * 16 hiding anywhere (S2.1 §21). */
+test('final: the two sides make room differently, because the cover is not centred', () => {
+  /* The Book is hinged at its spine, on the LEFT, so the cover swings out to the
+   * RIGHT and ends up 126px wide against a 24–52px spine. The two sides
+   * therefore have different jobs, and treating them the same was a real defect:
+   * a symmetric 16px nudge left the right neighbour underneath the cover, which
+   * the review saw as a Book opening "in front of the books to its right".
+   *
+   * Left: a token's worth, enough to be readable.
+   * Right: the cover's OVERHANG past the spine, so it actually clears. */
   assert.match(css, /\.lib-slot\.is-nudge-l\{transform:translateX\(calc\(-1 \* var\(--lib-book-neighbour\)\)\)\}/);
-  assert.match(css, /\.lib-slot\.is-nudge-r\{transform:translateX\(var\(--lib-book-neighbour\)\)\}/);
+  assert.match(css, /\.lib-slot\.is-nudge-r\{transform:translateX\(calc\(var\(--lib-book-clear, 0px\) \+ var\(--lib-book-neighbour\)\)\)\}/);
   const nudge = Number(css.match(/--lib-book-neighbour:\s*(\d+)px/)![1]);
   assert.ok(nudge >= 10 && nudge <= 18, `neighbour clearance is ${nudge}px, §14 asks for 10-18`);
-  /* And it must be a multiple of four, so it lands on a whole device pixel at
-   * DPR 1, 1.25, 1.5 and 2. 14 x 1.25 is 17.5 — half a device pixel out, which
-   * is exactly the phase error L3.2 traced the shelf blur to. */
+  /* A multiple of four, so it lands on a whole device pixel at DPR 1, 1.25, 1.5
+   * and 2. 14 x 1.25 is 17.5 — half a device pixel out, which is exactly the
+   * phase error L3.2 traced the shelf blur to. */
   assert.equal(nudge % 4, 0, `${nudge}px is not device-pixel exact`);
 
+  // The overhang is measured from the Book itself, not written down.
+  assert.match(shelf, /const cover = parseFloat\(getComputedStyle\(obj\)\.getPropertyValue\('--bw'\)\)/);
+  assert.match(shelf, /const spine = parseFloat\(getComputedStyle\(obj\)\.getPropertyValue\('--bt'\)\)/);
+  assert.match(shelf, /Math\.max\(0, Math\.round\(cover - spine\)\)/);
   assert.match(shelf, /slot\.previousElementSibling\?\.classList\.toggle\('is-nudge-l', on\)/);
-  assert.match(shelf, /slot\.nextElementSibling\?\.classList\.toggle\('is-nudge-r', on\)/);
+  /* EVERY following slot moves by the same amount, which keeps their spacing
+   * exactly as it was. Moving only the immediate one would have opened a hole
+   * and then buried the next Book instead. */
+  assert.match(shelf, /for \(let n = slot\.nextElementSibling; n; n = n\.nextElementSibling\)/);
   // Applied on pull and removed on return, so nothing can be left standing aside.
   assert.match(shelf, /setNeighbours\(obj, true\)/);
   assert.match(shelf, /setNeighbours\(obj, false\)/);
-  /* Measured at 1280: exactly [-14, 0, +14]. The earlier version widened the
-   * pulled Book to its cover, which reflowed a centred row and moved the
-   * neighbours 48.5px — a whole-shelf reflow §14 forbids. */
+  assert.match(shelf, /slot\.style\.removeProperty\('--lib-book-clear'\)/);
+  /* Measured at 1280, pulling the FIRST Book: the pulled Book does not move, the
+   * two to its right move +108px each, the cover ends at x=814 and the next Book
+   * begins at x=830 — clear. It is a transform, so no layout reflows and the
+   * row's centring cannot redistribute it. */
   assert.ok(!/:has\(\.is-pulled\) \+ \.lib-slot\{transform/.test(css),
     'the old whole-row :has() nudge is back');
 });

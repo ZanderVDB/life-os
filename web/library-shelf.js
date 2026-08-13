@@ -282,7 +282,6 @@ export function bookObjectHtml(item, index, total) {
       <svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor" aria-hidden="true"
         ><circle cx="5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="15" cy="10" r="1.4"/></svg>
     </button>
-    ${objectFoot(item.title, b.subtitle, 'Open')}
   </article>`;
 }
 
@@ -323,7 +322,6 @@ export function diaryObjectHtml() {
     role="button" tabindex="-1" aria-expanded="false"
     aria-label="My Diary, Life OS Journal, opens Diary" title="My Diary">
     ${volumeHtml('My Diary', null, 'Journal', 'Life OS Journal', 'My Diary')}
-    ${objectFoot('My Diary', null, 'Open Diary')}
   </article>`;
 }
 
@@ -639,12 +637,38 @@ function scheduleCommit(obj) {
     turnMs() + COMMIT_MARGIN);
 }
 
-/** Only the immediate neighbours move (§14). The rest of the shelf holds still. */
+/**
+ * Making room for a turned Book — and the two sides are not symmetrical.
+ *
+ * The Book is hinged at its spine, on the LEFT, so its cover swings out to the
+ * RIGHT and ends up 126px wide against a spine of 24–52px. The left neighbour
+ * therefore only has to step back a token's worth to be readable, but
+ * everything to the RIGHT is underneath the cover: a 16px nudge left the right
+ * neighbour hidden behind it, which is what the review saw as "it opens in
+ * front of the books to its right".
+ *
+ * So the right side clears the cover's OVERHANG — the part of it that sticks
+ * out past the Book's own spine — and every following slot moves by the same
+ * amount, which keeps their spacing exactly as it was. Nothing to the left
+ * moves at all. It is a transform, so no layout reflows and the row's centring
+ * cannot redistribute it.
+ */
 function setNeighbours(obj, on) {
   const slot = obj?.closest('.lib-slot');
   if (!slot) return;
   slot.previousElementSibling?.classList.toggle('is-nudge-l', on);
-  slot.nextElementSibling?.classList.toggle('is-nudge-r', on);
+  if (on) {
+    const cover = parseFloat(getComputedStyle(obj).getPropertyValue('--bw')) || 126;
+    const spine = parseFloat(getComputedStyle(obj).getPropertyValue('--bt')) || 30;
+    slot.style.setProperty('--lib-book-clear', `${Math.max(0, Math.round(cover - spine))}px`);
+  } else {
+    slot.style.removeProperty('--lib-book-clear');
+  }
+  for (let n = slot.nextElementSibling; n; n = n.nextElementSibling) {
+    n.classList.toggle('is-nudge-r', on);
+    if (on) n.style.setProperty('--lib-book-clear', slot.style.getPropertyValue('--lib-book-clear'));
+    else n.style.removeProperty('--lib-book-clear');
+  }
 }
 
 /** Puts the pulled object back on the shelf. Safe to call at any time. */

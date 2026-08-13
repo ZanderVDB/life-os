@@ -315,3 +315,33 @@ the full depth and the normal comes out facing the eye: `(0, -1, 0)` up for the
 head, `(0, +1, 0)` down for the tail. Re-measured after: head sits exactly on
 the spine's top edge, 9.97px of it projected at 4° of tilt, with the grain
 running front-to-back.
+
+### S2.5 — four corrections from the real shelf
+
+**Books stand on the ledge; flat resources sit above it.** A Book is standing on
+a shelf and a folio in a tray is not, and putting both on the same line made the
+trays look like they had fallen to the bottom of their bay. `--lib-flat-lift`
+(14px, tunable) lifts Documents, Media, Links and Files. Measured: Book 0px from
+the ledge, Document 14px above it.
+
+**A Book carries no label beneath it.** The cover already says what the Book is,
+and by the time the footer was readable the title was set across the middle of
+the cover anyway. The second click on the cover still opens it. Flat resources
+keep theirs — they have no cover to read.
+
+**The two sides make room differently.** The Book is hinged at its spine, on the
+LEFT, so the cover swings out to the RIGHT and ends up 126px wide against a
+24–52px spine. A symmetric 16px nudge therefore left the right neighbour
+*underneath* the cover — a Book opening in front of the Books to its right. The
+right side now clears the cover's **overhang past the spine**, measured per Book
+when it is pulled, and every following slot moves by the same amount so their
+spacing is unchanged. Nothing to the left moves. Measured pulling the first
+Book: the pulled Book stays put, the two to its right move +108px, the cover
+ends at x=814 and the next Book begins at x=830.
+
+**The skeleton waits.** A Book usually arrives in well under a tenth of a
+second, so painting a skeleton first made every open go shelf → grey pages →
+Book: three paints for one action, the middle one on screen just long enough to
+register as a glitch. The skeleton is now deferred by 180ms and cancelled if the
+Book beats it. Measured across a full open with a mutation observer: the
+skeleton painted **0 times** and "Opening…" **0 times**.

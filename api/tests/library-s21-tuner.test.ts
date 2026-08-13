@@ -40,6 +40,7 @@ const CONTROLS: Array<[string, string]> = [
   ['yaw', '--lib-book-yaw'],
   ['depth', '--lib-book-depth'],
   ['grain', '--lib-page-grain'],
+  ['flat', '--lib-flat-lift'],
   ['hover', '--lib-book-hover'],
   ['pull', '--lib-book-pull'],
   ['turn', '--d-turn'],
@@ -114,12 +115,12 @@ test('tuner: it never rebuilds the shelf', () => {
 
 /* ── §5/§6  The eight controls ─────────────────────────────────────────── */
 
-test('tuner: five resting controls, five advanced, and not thirty', () => {
+test('tuner: five resting controls, six advanced, and not thirty', () => {
   const primary = (tuner.match(/group: 'primary'/g) ?? []).length;
   const advanced = (tuner.match(/group: 'advanced'/g) ?? []).length;
   assert.equal(primary, 5, `${primary} primary controls`);
-  assert.equal(advanced, 5, `${advanced} advanced controls`);
-  assert.equal((tuner.match(/\{ key: '/g) ?? []).length, 10);
+  assert.equal(advanced, 6, `${advanced} advanced controls`);
+  assert.equal((tuner.match(/\{ key: '/g) ?? []).length, 11);
 });
 
 test('tuner: every control names the property it drives', () => {
@@ -141,6 +142,7 @@ test('tuner: the ranges are the ones that were asked for', () => {
   assert.deepEqual(range('tilt'), { min: -10, max: 10, step: 0.5, def: -4 });
   assert.deepEqual(range('yaw'), { min: -12, max: 12, step: 0.5, def: -6 });
   assert.deepEqual(range('depth'), { min: 0, max: 16, step: 1, def: 0 });
+  assert.deepEqual(range('flat'), { min: 0, max: 40, step: 2, def: 14 });
   assert.deepEqual(range('hover'), { min: 0, max: 14, step: 1, def: 8 });
   assert.deepEqual(range('pull'), { min: 20, max: 48, step: 2, def: 32 });
   assert.deepEqual(range('turn'), { min: 250, max: 650, step: 25, def: 400 });
@@ -180,8 +182,11 @@ test('tuner: turn duration drives BOTH the CSS turn and the commit timer', () =>
 });
 
 test('tuner: neighbour clearance drives both sides from one token', () => {
+  /* Both sides read `--lib-book-neighbour`; the right side ADDS the cover's
+   * overhang on top, because it is the side the cover swings onto. One tunable
+   * number, two different jobs. */
   assert.match(css, /\.lib-slot\.is-nudge-l\{transform:translateX\(calc\(-1 \* var\(--lib-book-neighbour\)\)\)\}/);
-  assert.match(css, /\.lib-slot\.is-nudge-r\{transform:translateX\(var\(--lib-book-neighbour\)\)\}/);
+  assert.match(css, /\.lib-slot\.is-nudge-r\{transform:translateX\(calc\(var\(--lib-book-clear, 0px\) \+ var\(--lib-book-neighbour\)\)\)\}/);
   // No stale literal anywhere in the Library region.
   assert.ok(!/is-nudge-[lr]\{transform:translateX\(-?\d+px\)/.test(css),
     'a hard-coded neighbour distance survives');
@@ -252,4 +257,49 @@ test('tuner: leaving Library takes the panel and every override with it', () => 
   assert.match(tuner, /CONTROLS\.forEach\(\(c\) => document\.documentElement\.style\.removeProperty\(c\.css\)\);/);
   // Mounting twice is a no-op, so a re-render cannot leave two panels behind.
   assert.match(tuner, /if \(panel\?\.isConnected\) return;/);
+});
+
+/* ── S2.5  Four things the review asked for ────────────────────────────── */
+
+test('s25: a Book that opens quickly never shows a skeleton', () => {
+  /* A Book usually arrives in well under a tenth of a second, and painting the
+   * skeleton first meant every open went shelf → grey pages → Book. Three paints
+   * for one action, the middle one on screen just long enough to register as a
+   * glitch. The skeleton is now DEFERRED: if the Book beats the timer nothing
+   * but the Book is ever drawn. Measured on the real Library — a mutation
+   * observer across a full open saw the skeleton 0 times and "Opening…" 0
+   * times. */
+  assert.match(view, /let skeleton = setTimeout\(\(\) => \{/);
+  assert.match(view, /if \(!scroll\.querySelector\('\.bk-book'\)\) scroll\.innerHTML = bookLoadingHtml\(\);/);
+  assert.match(view, /\}, 180\);/);
+  assert.match(view, /const settled = \(\) => \{ if \(skeleton\) \{ clearTimeout\(skeleton\); skeleton = 0; \} \};/);
+  // Cancelled on success AND on failure, so an error state cannot be raced.
+  assert.equal((view.match(/settled\(\);/g) ?? []).length, 2);
+  // And the deferred paint still checks it is current before touching the page.
+  assert.match(view, /if \(navStale\(nav\) \|\| !scroll\.isConnected\) return;/);
+});
+
+test('s25: a Book carries no label beneath it', () => {
+  /* The cover already says what the Book is, and by the time the footer would
+   * be readable the title is set in Playfair across the middle of it. The
+   * second click on the cover still opens. Flat resources keep theirs — they
+   * have no cover to read. */
+  const bookHtml = shelf.slice(shelf.indexOf('export function bookObjectHtml'),
+    shelf.indexOf('export function spineTitle'));
+  assert.ok(!bookHtml.includes('objectFoot'), 'the Book grew its footer back');
+  const diary = shelf.slice(shelf.indexOf('export function diaryObjectHtml'),
+    shelf.indexOf('const TYPE_GLYPH'));
+  assert.ok(!diary.includes('objectFoot'), 'the Diary grew a footer');
+  // Resources still have one.
+  assert.match(shelf, /objectFoot\(item\.title, sub, item\.type === 'link' \? 'Open link' : 'Open'\)/);
+});
+
+test('s25: Books stand on the ledge, flat resources sit above it', () => {
+  /* A Book is standing on a shelf; a folio in a tray is not, and putting both
+   * on the same line made the trays look like they had fallen to the bottom.
+   * Measured: Book 0px from the ledge, Document 14px above it. */
+  assert.match(css, /--lib-flat-lift:14px;/);
+  assert.match(css, /\.lib-res\{[^}]*margin-bottom:calc\(var\(--shelf-contact\) \+ var\(--lib-flat-lift\)\)/);
+  // The Book's own contact is untouched.
+  assert.match(css, /--shelf-contact:4px;/);
 });
