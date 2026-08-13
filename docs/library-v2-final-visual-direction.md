@@ -261,3 +261,32 @@ leave a Book committing mid-rotation.
 Shelf headroom is 52px so a Book still clears its rail at the **maximum** pull
 distance, not merely the current one — verified at 48px: 3px of clearance, no
 clipping.
+
+### Three axes, and the page grain
+
+The resting pose is three rotations about the base, not one:
+
+| token | axis | current | range |
+|---|---|---|---|
+| `--lib-book-lean` | `rotateZ` — leans left or right | 2deg | −6…6 |
+| `--lib-book-top-tilt` | `rotateX` — tips back (head) or forward (tail) | 4deg | −10…10 |
+| `--lib-book-yaw` | `rotateY` — swings the back edge toward you | 0deg | −12…12 |
+| `--lib-book-depth` | `translateZ` — stands it proud | 6px | 0…16 |
+
+Lean and tilt are symmetric so either side can be looked at; yaw is the one
+that brings the back round and shows the side. All three pivot at the bottom of
+the spine, and shelf contact measured **0px at every extreme** of all three.
+
+Tipping forward needed something to show, so the box gained a **tail** — the
+bottom face, built like the head and darker because the shelf is right under it.
+Without it, a negative tilt showed the inside of an open box.
+
+**The page grain was wrong on the fore-edge.** Pages stack from the front board
+to the back board — across the Book's *thickness* — so on both page faces the
+grain repeats across the element's width, and each line runs the other way: down
+the height on the fore-edge, away from you on the head. The fore-edge had been
+running horizontal lines stacked vertically, which is ruled paper seen face-on
+rather than a page block seen edge-on, on the one face you see most.
+
+`--lib-page-grain` (90deg / 0deg) flips both together, so the direction can be
+settled by looking rather than by arguing about which way a book faces.

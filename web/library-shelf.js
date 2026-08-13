@@ -240,6 +240,7 @@ function volumeHtml(title, sub, pre, author, spine) {
     <span class="lib-face lib-back" aria-hidden="true"></span>
     <span class="lib-face lib-edge" aria-hidden="true"><span class="lib-leaves"></span></span>
     <span class="lib-face lib-head" aria-hidden="true"><span class="lib-leaves"></span></span>
+    <span class="lib-face lib-tail" aria-hidden="true"><span class="lib-leaves"></span></span>
     <span class="lib-face lib-spine" aria-hidden="true">
       <span class="lib-spine-band"></span>
       <span class="lib-spine-t">${esc(spine)}</span>

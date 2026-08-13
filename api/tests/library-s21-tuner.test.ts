@@ -37,7 +37,9 @@ const CONTROLS: Array<[string, string]> = [
   ['gap', '--lib-book-gap'],
   ['lean', '--lib-book-lean'],
   ['tilt', '--lib-book-top-tilt'],
+  ['yaw', '--lib-book-yaw'],
   ['depth', '--lib-book-depth'],
+  ['grain', '--lib-page-grain'],
   ['hover', '--lib-book-hover'],
   ['pull', '--lib-book-pull'],
   ['turn', '--d-turn'],
@@ -112,13 +114,12 @@ test('tuner: it never rebuilds the shelf', () => {
 
 /* ── §5/§6  The eight controls ─────────────────────────────────────────── */
 
-test('tuner: eight controls, four primary and four advanced', () => {
+test('tuner: five resting controls, five advanced, and not thirty', () => {
   const primary = (tuner.match(/group: 'primary'/g) ?? []).length;
   const advanced = (tuner.match(/group: 'advanced'/g) ?? []).length;
-  assert.equal(primary, 4, `${primary} primary controls`);
-  assert.equal(advanced, 4, `${advanced} advanced controls`);
-  // And not thirty: the list is the whole surface.
-  assert.equal((tuner.match(/\{ key: '/g) ?? []).length, 8);
+  assert.equal(primary, 5, `${primary} primary controls`);
+  assert.equal(advanced, 5, `${advanced} advanced controls`);
+  assert.equal((tuner.match(/\{ key: '/g) ?? []).length, 10);
 });
 
 test('tuner: every control names the property it drives', () => {
@@ -134,8 +135,11 @@ test('tuner: the ranges are the ones that were asked for', () => {
     return { min: Number(m[1]), max: Number(m[2]), step: Number(m[3]), def: Number(m[4]) };
   };
   assert.deepEqual(range('gap'), { min: 0, max: 14, step: 1, def: 5 });
-  assert.deepEqual(range('lean'), { min: -2, max: 6, step: 0.5, def: 2 });
-  assert.deepEqual(range('tilt'), { min: 0, max: 10, step: 0.5, def: 4 });
+  /* Both of these read symmetrically now: lean goes left as well as right, and
+   * tilt goes forward (showing the tail) as well as back (showing the head). */
+  assert.deepEqual(range('lean'), { min: -6, max: 6, step: 0.5, def: 2 });
+  assert.deepEqual(range('tilt'), { min: -10, max: 10, step: 0.5, def: 4 });
+  assert.deepEqual(range('yaw'), { min: -12, max: 12, step: 0.5, def: 0 });
   assert.deepEqual(range('depth'), { min: 0, max: 16, step: 1, def: 6 });
   assert.deepEqual(range('hover'), { min: 0, max: 14, step: 1, def: 8 });
   assert.deepEqual(range('pull'), { min: 20, max: 48, step: 2, def: 32 });

@@ -7,8 +7,8 @@
  *
  * ── What it is ───────────────────────────────────────────────────────────
  *
- * Eight `<input type=range>` controls that each write ONE custom property onto
- * `document.documentElement`. That is the whole mechanism. The tokens are
+ * A handful of `<input type=range>` controls that each write ONE custom property
+ * onto `document.documentElement`. That is the whole mechanism. The tokens are
  * declared on `:root` in the stylesheet, so an inline style on the same element
  * wins, and every rule that consumes them updates on the next frame without any
  * JavaScript touching the shelf.
@@ -25,16 +25,23 @@
  * the values that survive are the ones the user sends back to be committed.
  */
 
-/** The eight controls. `css` is the property each one drives. */
+/** The controls. `css` is the property each one drives. */
 const CONTROLS = [
   { key: 'gap', css: '--lib-book-gap', label: 'Gap', unit: 'px',
     min: 0, max: 14, step: 1, def: 5, group: 'primary' },
-  { key: 'lean', css: '--lib-book-lean', label: 'Right lean', unit: 'deg',
-    min: -2, max: 6, step: 0.5, def: 2, group: 'primary' },
-  { key: 'tilt', css: '--lib-book-top-tilt', label: 'Top tilt', unit: 'deg',
-    min: 0, max: 10, step: 0.5, def: 4, group: 'primary' },
+  { key: 'lean', css: '--lib-book-lean', label: 'Lean  ← →', unit: 'deg',
+    min: -6, max: 6, step: 0.5, def: 2, group: 'primary' },
+  /* Negative tips the Book FORWARD instead of back, showing its tail rather
+   * than its head — the other side of the same control. */
+  { key: 'tilt', css: '--lib-book-top-tilt', label: 'Tilt  ↑ ↓', unit: 'deg',
+    min: -10, max: 10, step: 0.5, def: 4, group: 'primary' },
+  /* The one that swings the back edge round toward you. */
+  { key: 'yaw', css: '--lib-book-yaw', label: 'Turn out  ↻', unit: 'deg',
+    min: -12, max: 12, step: 0.5, def: 0, group: 'primary' },
   { key: 'depth', css: '--lib-book-depth', label: 'Book depth', unit: 'px',
     min: 0, max: 16, step: 1, def: 6, group: 'primary' },
+  { key: 'grain', css: '--lib-page-grain', label: 'Page grain', unit: 'deg',
+    min: 0, max: 90, step: 90, def: 90, group: 'advanced' },
   { key: 'hover', css: '--lib-book-hover', label: 'Hover lift', unit: 'px',
     min: 0, max: 14, step: 1, def: 8, group: 'advanced' },
   { key: 'pull', css: '--lib-book-pull', label: 'Pull distance', unit: 'px',
@@ -47,9 +54,9 @@ const CONTROLS = [
 
 /** Starting points, not recommendations (§12). Advanced values are untouched. */
 const PRESETS = {
-  Subtle: { gap: 4, lean: 1, tilt: 2, depth: 4 },
-  Current: { gap: 5, lean: 2, tilt: 4, depth: 6 },
-  Physical: { gap: 7, lean: 3, tilt: 6, depth: 9 },
+  Subtle: { gap: 4, lean: 1, tilt: 2, yaw: 0, depth: 4 },
+  Current: { gap: 5, lean: 2, tilt: 4, yaw: 0, depth: 6 },
+  Physical: { gap: 7, lean: 3, tilt: 6, yaw: 4, depth: 9 },
 };
 
 const value = {};
@@ -89,6 +96,7 @@ function notes() {
   if (value.tilt >= 8) out.push('High tilt may soften spine text.');
   if (value.gap >= 11) out.push('This may read more like a display than a shelf.');
   if (value.depth === 0) out.push('Book will appear flatter.');
+  if (Math.abs(value.yaw) >= 9) out.push('At this turn the spine title foreshortens sharply.');
   if (value.neighbours === 0) out.push('Neighbours will not make room for a pulled Book.');
   return out;
 }
