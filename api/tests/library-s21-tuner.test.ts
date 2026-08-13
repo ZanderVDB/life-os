@@ -131,16 +131,16 @@ test('tuner: every control names the property it drives', () => {
 
 test('tuner: the ranges are the ones that were asked for', () => {
   const range = (k: string) => {
-    const m = tuner.match(new RegExp(`key: '${k}',[\\s\\S]*?min: (-?[\\d.]+), max: ([\\d.]+), step: ([\\d.]+), def: ([\\d.]+)`))!;
+    const m = tuner.match(new RegExp(`key: '${k}',[\\s\\S]*?min: (-?[\\d.]+), max: (-?[\\d.]+), step: ([\\d.]+), def: (-?[\\d.]+)`))!;
     return { min: Number(m[1]), max: Number(m[2]), step: Number(m[3]), def: Number(m[4]) };
   };
-  assert.deepEqual(range('gap'), { min: 0, max: 14, step: 1, def: 5 });
+  assert.deepEqual(range('gap'), { min: 0, max: 14, step: 1, def: 0 });
   /* Both of these read symmetrically now: lean goes left as well as right, and
    * tilt goes forward (showing the tail) as well as back (showing the head). */
-  assert.deepEqual(range('lean'), { min: -6, max: 6, step: 0.5, def: 2 });
-  assert.deepEqual(range('tilt'), { min: -10, max: 10, step: 0.5, def: 4 });
-  assert.deepEqual(range('yaw'), { min: -12, max: 12, step: 0.5, def: 0 });
-  assert.deepEqual(range('depth'), { min: 0, max: 16, step: 1, def: 6 });
+  assert.deepEqual(range('lean'), { min: -6, max: 6, step: 0.5, def: 0 });
+  assert.deepEqual(range('tilt'), { min: -10, max: 10, step: 0.5, def: -4 });
+  assert.deepEqual(range('yaw'), { min: -12, max: 12, step: 0.5, def: -6 });
+  assert.deepEqual(range('depth'), { min: 0, max: 16, step: 1, def: 0 });
   assert.deepEqual(range('hover'), { min: 0, max: 14, step: 1, def: 8 });
   assert.deepEqual(range('pull'), { min: 20, max: 48, step: 2, def: 32 });
   assert.deepEqual(range('turn'), { min: 250, max: 650, step: 25, def: 400 });
@@ -207,8 +207,8 @@ test('tuner: the configuration is readable and copyable without DevTools', () =>
 test('tuner: reset restores the committed defaults', () => {
   assert.match(tuner, /CONTROLS\.forEach\(\(c\) => set\(c\.key, c\.def\)\);/);
   // And the defaults in the panel are the defaults in the stylesheet.
-  const def = (k: string) => Number(tuner.match(new RegExp(`key: '${k}',[\\s\\S]*?def: ([\\d.]+)`))![1]);
-  const token = (t: string) => Number(tokenIn(t).match(new RegExp(`\\s${t}:\\s*([\\d.]+)`))![1]);
+  const def = (k: string) => Number(tuner.match(new RegExp(`key: '${k}',[\\s\\S]*?def: (-?[\\d.]+)`))![1]);
+  const token = (t: string) => Number(tokenIn(t).match(new RegExp(`\\s${t}:\\s*(-?[\\d.]+)`))![1]);
   for (const [key, prop] of CONTROLS) {
     assert.equal(def(key), token(prop), `${key} default disagrees with ${prop}`);
   }

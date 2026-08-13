@@ -3014,12 +3014,16 @@ body:has(.lib-page) .rail{display:none}
    Safe ranges and what each one does are in
    docs/library-v2-final-visual-direction.md → "Resting Book tuning". */
 :root{
-  /* RESTING POSE */
-  --lib-book-gap:5px;         /* air between neighbouring Books      2-10px  */
-  --lib-book-lean:2deg;       /* rightward lean                      0-4deg  */
-  --lib-book-top-tilt:4deg;   /* how far it tips back, exposing head 0-7deg  */
-  --lib-book-depth:6px;       /* how far it stands proud             0-14px  */
-  --lib-book-yaw:0deg;        /* turns the back edge toward you    -12-12deg */
+  /* RESTING POSE — chosen on the real shelf with the Book Tuner (S2.4).
+     Books touching, standing square, tipped slightly FORWARD so you read the
+     tail rather than the head, and turned a little to the left so the front
+     board catches the eye. Nothing stands proud: the yaw does that work now,
+     and the depth nudge only softened it. */
+  --lib-book-gap:0px;         /* air between neighbouring Books      0-14px  */
+  --lib-book-lean:0deg;       /* lean, left or right               -6- 6deg  */
+  --lib-book-top-tilt:-4deg;  /* tips back (head) or forward (tail) -10-10deg */
+  --lib-book-yaw:-6deg;       /* turns the back edge toward you    -12-12deg */
+  --lib-book-depth:0px;       /* how far it stands proud             0-16px  */
   --lib-page-grain:90deg;     /* which way the page edges run                */
   /* RETRIEVAL */
   --lib-book-hover:8px;       /* hover lift  — must stay under pull          */

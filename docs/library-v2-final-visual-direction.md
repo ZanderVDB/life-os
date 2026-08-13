@@ -173,18 +173,26 @@ the `RESTING BOOK TUNING` block in `web/index.html`, on
 `.lib-shelf-book, .lib-shelf-personal, .lib-results` — and nothing below
 restates them. To change the look, change these and nothing else.
 
-| token | current | safe range | larger means |
+| token | committed | range | larger means |
 |---|---|---|---|
-| `--lib-book-gap` | **5px** | 2–10px | more air between Books |
-| `--lib-book-lean` | **2deg** | 0–4deg | stronger rightward lean |
-| `--lib-book-top-tilt` | **4deg** | 0–7deg | more of the top edge visible |
-| `--lib-book-depth` | **6px** | 0–14px | Book stands further proud, more side visible |
+| `--lib-book-gap` | **0px** | 0–14px | more air between Books |
+| `--lib-book-lean` | **0deg** | −6–6deg | leans further right (negative: left) |
+| `--lib-book-top-tilt` | **−4deg** | −10–10deg | tips further back, showing the head (negative: forward, showing the tail) |
+| `--lib-book-yaw` | **−6deg** | −12–12deg | swings the back edge further round toward you |
+| `--lib-book-depth` | **0px** | 0–16px | Book stands further proud |
+| `--lib-page-grain` | **90deg** | 90 / 0 | flips which way the page edges run |
 
-Measured at the current values, on the real `#library` with three Books:
+**These are the authenticated choices**, made on the real shelf with the Book
+Tuner rather than guessed. The pose that came out of it: Books touching, standing
+square, tipped slightly **forward** so you read the tail rather than the head,
+and turned a little to the **left** so the front board catches the eye. Nothing
+stands proud — the yaw does that work now, and the depth nudge only softened it.
 
-- gap between Books: **exactly 5px**
-- top edge (the head face) exposed: **9.9–10.0px**
-- side (front board) visible: **6.3–7.5px**
+Measured after committing, on the real `#library` with three Books:
+
+- gap between Books: **exactly 0px** — they touch
+- tail exposed (tipped forward): **8.99px**
+- side (front board) visible: **13.17px** — the yaw doing the work
 - every object bottoms **exactly on the ledge** — 0px, on all five shelves
 - spine title unchanged at 11.5px
 

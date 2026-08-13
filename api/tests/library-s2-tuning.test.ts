@@ -41,17 +41,22 @@ test('s2: the tokens are declared together, in the tuning block', () => {
   for (const t of TOKENS) assert.ok(block.includes(t), `${t} is not in the tuning block`);
   // Values are readable, and each carries a unit that matches its job.
   assert.match(block, /--lib-book-gap:\s*\d+px/);
-  assert.match(block, /--lib-book-lean:\s*[\d.]+deg/);
-  assert.match(block, /--lib-book-top-tilt:\s*[\d.]+deg/);
+  assert.match(block, /--lib-book-lean:\s*-?[\d.]+deg/);
+  assert.match(block, /--lib-book-top-tilt:\s*-?[\d.]+deg/);
+  assert.match(block, /--lib-book-yaw:\s*-?[\d.]+deg/);
   assert.match(block, /--lib-book-depth:\s*\d+px/);
 });
 
-test('s2: the starting values are inside their documented safe ranges', () => {
-  const num = (t: string) => Number(css.match(new RegExp(`${t}:\\s*([\\d.]+)`))![1]);
-  assert.ok(num('--lib-book-gap') >= 2 && num('--lib-book-gap') <= 10);
-  assert.ok(num('--lib-book-lean') >= 0 && num('--lib-book-lean') <= 4);
-  assert.ok(num('--lib-book-top-tilt') >= 0 && num('--lib-book-top-tilt') <= 7);
-  assert.ok(num('--lib-book-depth') >= 0 && num('--lib-book-depth') <= 14);
+test('s2: the committed values are inside the tuner ranges', () => {
+  /* The ranges are the tuner's, because the tuner is where these were chosen —
+   * a committed value the tuner could not reach would be one nobody could get
+   * back to. Negatives are ordinary now: tilt and yaw both go either way. */
+  const num = (t: string) => Number(css.match(new RegExp(`${t}:\\s*(-?[\\d.]+)`))![1]);
+  assert.ok(num('--lib-book-gap') >= 0 && num('--lib-book-gap') <= 14);
+  assert.ok(num('--lib-book-lean') >= -6 && num('--lib-book-lean') <= 6);
+  assert.ok(num('--lib-book-top-tilt') >= -10 && num('--lib-book-top-tilt') <= 10);
+  assert.ok(num('--lib-book-yaw') >= -12 && num('--lib-book-yaw') <= 12);
+  assert.ok(num('--lib-book-depth') >= 0 && num('--lib-book-depth') <= 16);
 });
 
 /* ── §4–§7  Each token drives the thing it names ───────────────────────── */
