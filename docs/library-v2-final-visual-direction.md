@@ -290,3 +290,20 @@ rather than a page block seen edge-on, on the one face you see most.
 
 `--lib-page-grain` (90deg / 0deg) flips both together, so the direction can be
 settled by looking rather than by arguing about which way a book faces.
+
+#### The head and tail were inside-out
+
+The first version of both faces swept from the FRONT edge backward, and the
+direction of the sweep is what decides which way the painted side ends up
+pointing. Measured: the head's normal came out `(0, +1, 0)` — facing **down**,
+into the Book — and with `backface-visibility: hidden` inherited from
+`.lib-face`, the only side you can look at it from was the culled one. Tilting
+back therefore showed a hollow box rather than paper, which is exactly what the
+review described. The tail had the same fault mirrored.
+
+Both now sweep from the back edge forward — `translateZ(-126px) rotateX(±90deg)`
+— which rotates first and pushes the plane back after, so the sweep still spans
+the full depth and the normal comes out facing the eye: `(0, -1, 0)` up for the
+head, `(0, +1, 0)` down for the tail. Re-measured after: head sits exactly on
+the spine's top edge, 9.97px of it projected at 4° of tilt, with the grain
+running front-to-back.

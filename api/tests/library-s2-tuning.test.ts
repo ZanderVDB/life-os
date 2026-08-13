@@ -72,10 +72,24 @@ test('s2: lean, tilt and depth all come from tokens, in one transform', () => {
     'the tilt must be applied before the lean');
 });
 
-test('s2: the tilt has a top to expose', () => {
-  // A real face of the same box, not a drawn edge: t across, 126 deep.
+test('s2: the tilt has a top AND a bottom to expose, both facing outward', () => {
+  // Real faces of the same box, not drawn edges: t across, 126 deep, each.
   assert.match(shelf, /<span class="lib-face lib-head" aria-hidden="true"><span class="lib-leaves">/);
-  assert.match(css, /\.lib-head\{top:0;left:0;width:var\(--bt\);height:var\(--bw\);\s*\n\s*transform:rotateX\(-90deg\);transform-origin:center top/);
+  assert.match(shelf, /<span class="lib-face lib-tail" aria-hidden="true"><span class="lib-leaves">/);
+  for (const f of ['lib-head', 'lib-tail']) {
+    const rule = css.match(new RegExp(`\\.${f}\\{[^}]*\\}`))![0];
+    assert.match(rule, /width:var\(--bt\);height:var\(--bw\)/, `${f} is not a face of the box`);
+    /* Both sweep from the BACK edge forward. The direction of the sweep decides
+     * which way the painted side ends up pointing, and the first version had
+     * both faces inside-out: measured, the head's normal was (0, +1, 0) — facing
+     * DOWN, into the Book — so with backface culling on, tilting back showed a
+     * hollow box rather than paper. Now the head faces up and the tail faces
+     * down, which is the only side either can be seen from. */
+    assert.match(rule, /translateZ\(calc\(-1 \* var\(--bw\)\)\)/,
+      `${f} does not sweep from the back edge, so it faces inward`);
+  }
+  assert.match(css, /\.lib-head\{[^}]*rotateX\(90deg\)/);
+  assert.match(css, /\.lib-tail\{[^}]*rotateX\(-90deg\)/);
 });
 
 /* ── §11/§12  It leans while standing on the shelf ─────────────────────── */

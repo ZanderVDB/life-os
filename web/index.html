@@ -3132,16 +3132,28 @@ body:has(.lib-page) .rail{display:none}
    A real face of the same box: t across, 126 deep, hinged at the top edge and
    sweeping backwards. What you see on it is the head of the page block, which
    is what the top of a closed book actually is. */
+/* Both sweep from the BACK edge forward, not from the front edge back.
+   The direction decides which way the painted side ends up pointing, and the
+   first version had both faces inside-out: the head's normal pointed DOWN and
+   the tail's pointed UP, so each was culled from the only side you can look at
+   it from. Measured — head normal (0, +1, 0) with `backface-visibility: hidden`,
+   which is why tilting back showed a hollow box instead of paper.
+
+   `translateZ(-126) rotateX(...)` rotates first and then pushes the plane back,
+   so the sweep still spans the full depth and the normal comes out facing the
+   eye: up for the head, down for the tail. */
 .lib-head{top:0;left:0;width:var(--bt);height:var(--bw);
-  transform:rotateX(-90deg);transform-origin:center top;overflow:hidden;
-  background:linear-gradient(180deg,#3A3247 0%,#2A2337 60%,#1B1626 100%)}
+  transform:translateZ(calc(-1 * var(--bw))) rotateX(90deg);
+  transform-origin:center top;overflow:hidden;
+  background:linear-gradient(0deg,#3A3247 0%,#2A2337 60%,#1B1626 100%)}
 /* THE TAIL — the bottom of the book, and what a NEGATIVE tilt exposes.
    Without it, tipping the Book forward showed the inside of an open box. Same
    construction as the head, hinged at the bottom edge and sweeping back, and it
    is darker because the shelf is right underneath it. */
 .lib-tail{bottom:0;top:auto;left:0;width:var(--bt);height:var(--bw);
-  transform:rotateX(90deg);transform-origin:center bottom;overflow:hidden;
-  background:linear-gradient(0deg,#241E31 0%,#1B1626 60%,#120F1A 100%)}
+  transform:translateZ(calc(-1 * var(--bw))) rotateX(-90deg);
+  transform-origin:center bottom;overflow:hidden;
+  background:linear-gradient(180deg,#241E31 0%,#1B1626 60%,#120F1A 100%)}
 /* Head and tail inherit the grain and only soften it — both are further from
    the eye than the fore-edge and catch less light. */
 .lib-head .lib-leaves,.lib-tail .lib-leaves{inset:1px 2px;opacity:.8}
