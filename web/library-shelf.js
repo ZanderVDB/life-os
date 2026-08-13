@@ -223,9 +223,23 @@ export function bookMetrics(item) {
  * the Book is doing.
  */
 function volumeHtml(title, sub, pre, author, spine) {
-  return `<span class="lib-vol">
+  /* TWO NESTED FRAMES, because they pivot about different points.
+   *
+   *   .lib-stand   the RESTING pose — the rightward lean and the top tilt.
+   *                Origin at the bottom of the spine, so the Book leans while
+   *                standing on the shelf rather than rotating about its middle
+   *                and floating.
+   *   .lib-vol     the TURN. Origin at the spine's outer edge, which is where a
+   *                book pivots when you pull it out of a row.
+   *
+   * Separating them is what lets the pull begin from the real resting
+   * orientation: the stand unwinds its lean over the same duration and curve as
+   * the volume turns, so there is one coordinated motion and no snap to flat
+   * before the turn starts. */
+  return `<span class="lib-stand"><span class="lib-vol">
     <span class="lib-face lib-back" aria-hidden="true"></span>
     <span class="lib-face lib-edge" aria-hidden="true"><span class="lib-leaves"></span></span>
+    <span class="lib-face lib-head" aria-hidden="true"><span class="lib-leaves"></span></span>
     <span class="lib-face lib-spine" aria-hidden="true">
       <span class="lib-spine-band"></span>
       <span class="lib-spine-t">${esc(spine)}</span>
@@ -242,7 +256,7 @@ function volumeHtml(title, sub, pre, author, spine) {
         <span class="lib-cover-author">${esc(author)}</span>
       </span>
     </span>
-  </span>`;
+  </span></span>`;
 }
 
 export function bookObjectHtml(item, index, total) {

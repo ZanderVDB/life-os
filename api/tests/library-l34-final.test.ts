@@ -138,7 +138,13 @@ test('final: the turn finishes front-facing and hands off to flat DOM', () => {
    * flat cover is 126px wide at x=721. The handoff is seamless because the
    * compensating translateZ puts the cover back in the screen plane. */
   assert.match(css, /\.lib-obj\.is-front \.lib-vol\{transform:none;transform-style:flat\}/);
-  assert.match(css, /\.lib-obj\.is-front \.lib-spine,\.lib-obj\.is-front \.lib-edge,\s*\n\.lib-obj\.is-front \.lib-back\{display:none\}/);
+  /* Every depth face stops painting, the head included — it was added in S2 so
+   * the resting tilt has a top to expose, and a face that only exists to be
+   * seen in 3D has no business surviving into the flat state. */
+  const hidden = css.match(/\.lib-obj\.is-front \.lib-spine,[\s\S]*?\{display:none\}/)![0];
+  for (const f of ['lib-spine', 'lib-edge', 'lib-back', 'lib-head']) {
+    assert.ok(hidden.includes(f), `${f} still paints in the committed state`);
+  }
   assert.match(css, /\.lib-obj\.is-front \.lib-board\{transform:none;left:0\}/);
 });
 

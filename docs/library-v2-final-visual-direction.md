@@ -163,3 +163,68 @@ arrives at the committed front-facing state; every state semantic is identical.
   cloth until Books are written in.
 - **Screenshots still needed.** The harness cannot composite, so everything here
   is geometry and computed style, not appearance.
+
+---
+
+## Resting Book tuning
+
+Four numbers decide how a Book stands on the shelf. They live in **one place** —
+the `RESTING BOOK TUNING` block in `web/index.html`, on
+`.lib-shelf-book, .lib-shelf-personal, .lib-results` — and nothing below
+restates them. To change the look, change these and nothing else.
+
+| token | current | safe range | larger means |
+|---|---|---|---|
+| `--lib-book-gap` | **5px** | 2–10px | more air between Books |
+| `--lib-book-lean` | **2deg** | 0–4deg | stronger rightward lean |
+| `--lib-book-top-tilt` | **4deg** | 0–7deg | more of the top edge visible |
+| `--lib-book-depth` | **6px** | 0–14px | Book stands further proud, more side visible |
+
+Measured at the current values, on the real `#library` with three Books:
+
+- gap between Books: **exactly 5px**
+- top edge (the head face) exposed: **9.9–10.0px**
+- side (front board) visible: **6.3–7.5px**
+- every object bottoms **exactly on the ledge** — 0px, on all five shelves
+- spine title unchanged at 11.5px
+
+### How it is built
+
+Two nested frames, because they pivot about different points:
+
+- **`.lib-stand`** owns the resting pose — `rotateX(top-tilt)` then
+  `rotateZ(lean)` then `translateZ(depth)`, with `transform-origin: left bottom`
+  so the Book leans *while standing on the shelf*. A centre origin would swing
+  the base off the ledge and the Book would read as floating.
+- **`.lib-vol`** owns the turn, hinged at `left center` — the spine's outer
+  edge, where a book pivots when you pull it from a row.
+
+The order inside the stand is load-bearing: tilt back about the base first, then
+lean the standing Book. The other way round tips it along the already-leaned
+axis and the bottom corner lifts.
+
+The tilt has something to reveal because the box gained a **head** — a real
+fifth face, `t` across and 126 deep, showing the head of the page block. It is a
+face of the same box, not a drawn edge, and it stops painting when the cover
+commits.
+
+### How it behaves
+
+Pulling unwinds the pose over the **same 400ms and the same curve** as the turn,
+so the two read as one motion and the pull begins from the Book's actual resting
+orientation — there is no snap to square before anything rotates. Measured after
+commit: cover **126px, flat, `transform: none`**. Escape restores the resting
+pose exactly.
+
+The stand and the volume take **no pointer input**. Both are transformed, so
+their hit boxes are projected quads that overhang the neighbours — the first
+thing that cost was a click on one Book pulling the one beside it. `.lib-obj`
+stays the only target: untransformed, and exactly its own space on the shelf.
+Verified: each of the three Books owns its own centre.
+
+### Known limitation
+
+The spine title now sits on a plane tilted 4° and leaned 2°, so it is resampled
+rather than pixel-aligned. It is still 11.5px and its geometry is unchanged, but
+whether it reads as crisp enough is a judgement only the eye can make — if it
+looks soft, **reduce `--lib-book-top-tilt` first**; it costs the least.

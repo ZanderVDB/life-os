@@ -2814,7 +2814,12 @@ body:has(.lib-page) .rail{display:none}
      pulled object cannot escape the rail; it has to have somewhere to go within
      it. 48px clears the 32px lift plus the folio sheets that stand 12px proud
      of their lid, and it is a multiple of four. */
-  padding:var(--shelf-head) 0 calc(var(--shelf-drop) + var(--shelf-contact));
+  /* The ledge is drawn at `100% - var(--shelf-drop)`, and the object carries its
+     own `margin-bottom: var(--shelf-contact)`. So the rail must reserve
+     drop MINUS contact — reserving drop PLUS contact counts the contact gap
+     twice and floats every object 2 x contact above its own shelf. Measured
+     before: objects 8px above the ledge line at 1280. */
+  padding:var(--shelf-head) 0 calc(var(--shelf-drop) - var(--shelf-contact));
   margin:0 -4px;
   /* `scrollbar-width` is declared ONCE, at the top of this block. It used to
      be set to `thin` here as well, later in the same declaration block, which
@@ -2866,7 +2871,9 @@ body:has(.lib-page) .rail{display:none}
    opposite is true, and a 16px gap between three Books is what the review meant
    by "not touching one another". Two Books leaning together are the start of a
    collection; two Books 16px apart are two objects on display. */
-.lib-shelf-book .lib-row,.lib-shelf-personal .lib-row{column-gap:0}
+/* Touching was too tight to read as separate volumes; widely spaced read as
+   objects on display. One token, one number (§4). */
+.lib-shelf-book .lib-row,.lib-shelf-personal .lib-row{column-gap:var(--lib-book-gap)}
 .lib-slot{scroll-snap-align:start;flex:0 0 auto;position:relative;
   transition:transform var(--t-select)}
 
@@ -2992,8 +2999,51 @@ body:has(.lib-page) .rail{display:none}
 
    `--bt` is the thickness, from the Book's content. `--bh` is its height, from
    a sixteen-rung ladder. Both are set per Book on the element. */
+/* ══ RESTING BOOK TUNING ═══════════════════════════════════════════════
+   The four numbers that decide how a Book stands on the shelf. They live here
+   and ONLY here — nothing below restates them — so the resting look can be
+   tuned without touching geometry, and without another redesign.
+
+     --lib-book-gap        5px    air between neighbouring resting Books
+     --lib-book-lean       2deg   rightward lean (rotateZ)
+     --lib-book-top-tilt   4deg   how far the Book tips back, exposing its head
+     --lib-book-depth      6px    how far it stands proud, revealing its side
+
+   Safe ranges and what each one does are in
+   docs/library-v2-final-visual-direction.md → "Resting Book tuning". */
+.lib-shelf-book,.lib-shelf-personal,.lib-results{
+  --lib-book-gap:5px;
+  --lib-book-lean:2deg;
+  --lib-book-top-tilt:4deg;
+  --lib-book-depth:6px;
+}
+
 .lib-book{--bw:126px;--bh:190px;--bt:32px;
   width:var(--bt);height:var(--bh);display:block;position:relative}
+
+/* THE RESTING POSE.
+   `.lib-stand` pivots at the BOTTOM of the spine, so the Book leans while
+   standing on the shelf — a centre origin would swing the bottom edge off the
+   ledge and the Book would read as floating and rotating (§11/§12).
+
+   The order matters. `rotateX` first tips the Book back about its base, which
+   is what brings the head into view; `rotateZ` then leans the standing Book to
+   the right. Doing it the other way round tips it back along the already-leaned
+   axis and the bottom corner lifts. `translateZ` stands it slightly proud, and
+   the row's perspective turns that into a sliver of its side — a real
+   projection of the real box, not a drawn edge. */
+/* Like the volume and the faces, the stand takes NO pointer input. It is
+   transformed, so its hit box is its projected quad — which after a lean and a
+   tilt overhangs the neighbours, and the first thing that cost was a click on
+   one Book pulling the one beside it. `.lib-obj` stays the only target. */
+.lib-stand{position:absolute;inset:0;transform-style:preserve-3d;
+  pointer-events:none;transform-origin:left bottom;
+  transform:rotateX(var(--lib-book-top-tilt)) rotateZ(var(--lib-book-lean))
+    translateZ(var(--lib-book-depth));
+  transition:transform var(--d-turn) var(--e-out)}
+/* Pulled and arrived: the pose unwinds over the SAME duration and curve as the
+   turn, so the two read as one motion and the cover still commits dead flat. */
+.lib-obj.is-pulled .lib-stand,.lib-obj.is-front .lib-stand{transform:none}
 /* Perspective belongs to the ROW, so every Book on a shelf is seen from the
    same eye. It is safe at both ends of the turn precisely because of the
    compensating translateZ: the spine sits at z=0 at rest and the cover sits at
@@ -3002,8 +3052,8 @@ body:has(.lib-page) .rail{display:none}
 .lib-shelf-book .lib-row,.lib-shelf-personal .lib-row,
 .lib-results .lib-row{perspective:1400px}
 .lib-vol{position:absolute;inset:0;transform-style:preserve-3d;
-  transform-origin:left center;
-  transition:transform var(--d-turn,300ms) var(--e-out)}
+  transform-origin:left center;pointer-events:none;
+  transition:transform var(--d-turn) var(--e-out)}
 /* THE HIT RULE. Nothing inside the volume takes pointer input: every face is
    transformed, and a transformed element's hit box is its PROJECTED quad, which
    is not where the Book looks like it is. `.lib-obj` is the only target, it is
@@ -3042,6 +3092,16 @@ body:has(.lib-page) .rail{display:none}
 .lib-leaves{position:absolute;inset:2px 2px;background:
   repeating-linear-gradient(0deg,rgba(238,233,250,.17) 0 1px,rgba(18,15,26,.55) 1px 2px)}
 
+/* THE HEAD — the top of the book, and the face the tilt exposes (§6).
+   A real face of the same box: t across, 126 deep, hinged at the top edge and
+   sweeping backwards. What you see on it is the head of the page block, which
+   is what the top of a closed book actually is. */
+.lib-head{top:0;left:0;width:var(--bt);height:var(--bw);
+  transform:rotateX(-90deg);transform-origin:center top;overflow:hidden;
+  background:linear-gradient(180deg,#3A3247 0%,#2A2337 60%,#1B1626 100%)}
+.lib-head .lib-leaves{inset:1px 2px;background:
+  repeating-linear-gradient(90deg,rgba(238,233,250,.13) 0 1px,rgba(18,15,26,.5) 1px 2px)}
+
 /* The two boards. The back one is plain cloth; the front one carries the cover. */
 .lib-board,.lib-back{left:0;width:var(--bw);transform-origin:left center;overflow:hidden}
 .lib-back{transform:rotateY(90deg);
@@ -3075,7 +3135,7 @@ body:has(.lib-page) .rail{display:none}
    untransformed element with its title on the pixel grid. */
 .lib-obj.is-front .lib-vol{transform:none;transform-style:flat}
 .lib-obj.is-front .lib-spine,.lib-obj.is-front .lib-edge,
-.lib-obj.is-front .lib-back{display:none}
+.lib-obj.is-front .lib-back,.lib-obj.is-front .lib-head{display:none}
 .lib-obj.is-front .lib-board{transform:none;left:0}
 
 .lib-cover{position:absolute;inset:0;display:flex;flex-direction:column;
@@ -4471,7 +4531,7 @@ body:has(.dia-page) .rail{display:none}
      book you have to hit exactly is a book you miss. */
   .lib-book{--bw:132px;--spine-w:22px}
   .lib-res{--rw:158px}
-  .lib-rail{padding:48px 0 26px;scroll-padding-inline:16px}
+  .lib-rail{padding:48px 0 calc(var(--shelf-drop) - var(--shelf-contact));scroll-padding-inline:16px}
   .lib-row{padding:0 16px;column-gap:14px}
   /* Always visible, because there is no hover to reveal it with (§36), and a
      44px hit area without a 44px button: the drawn control stays 30px so it
