@@ -192,3 +192,54 @@ Same cover width, same spine, same fore-edge, same height, same baseline —
 measured 154 × 178.2 with an identical 18px contact gap. What makes it distinct
 is **material and words**: a deeper cloth, a lavender spine edge, and "System
 journal" in its footer. Never geometry.
+
+---
+
+## L3.4 — the measured object
+
+The Book is a solid with four faces in one coordinate system:
+
+| face | position | size |
+|---|---|---|
+| back board | `x = 0` | 126 x h |
+| spine | `z = 0` | t x h |
+| front cover | `x = t` | 126 x h |
+| page block | `z = -126` | t x h |
+
+`t` is the thickness (24-52px, from `pageCount`), `h` the height (170-215px, from
+a sixteen-rung ladder), 126px the cover width. **Depth is `translateZ`, never a
+layout offset** — inside a rotating `preserve-3d` box, `left` becomes depth and
+is then thrown sideways by perspective.
+
+### Measured through the turn (29px-thick Book, 1280px viewport)
+
+| angle | cover | spine | page block | total span |
+|---|---|---|---|---|
+| 0 deg | 0 | 29 | 29 | 29 |
+| 22.5 | 48.22 | 26.79 | 26.79 | 75.0 |
+| 45 | 89.10 | 20.51 | 20.51 | 109.6 |
+| 67.5 | 116.41 | 11.10 | 11.10 | 127.5 |
+| 90 | 126 | 0 | 0 | 126 |
+
+Exactly `126 sin(theta)` and `29 cos(theta)`. Every face foreshortens together,
+which is what a rotating solid does; the 1.5px span excursion at ~77 degrees is
+the honest geometry of a solid turning, not an interpolated width.
+
+### The commit
+
+| | cover width | cover left |
+|---|---|---|
+| arrived (-90 deg, 3D) | 126 | 721 |
+| committed (flat DOM) | 126 | 721 |
+
+Identical, because the compensating `translateZ(-t)` returns the cover to the
+screen plane. Perspective (1400px, on the row) therefore magnifies neither
+terminal state — verified with perspective enabled.
+
+### The hit rule
+
+Nothing inside a volume takes pointer input: every face is transformed, and a
+transformed element's hit box is its projected quad, which is not where the Book
+looks like it is. `.lib-obj` is the only target and is never rotated. When a Book
+is pulled, an untransformed `::before` at the cover's footprint extends the
+target to match what you can see.

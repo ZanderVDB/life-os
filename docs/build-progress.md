@@ -2326,3 +2326,44 @@ three full concept cycles; one baseline and no page overflow at 1440/1280/1024/7
 Projects and the whole API is empty.
 
 **1175 tests pass, 29 new.** TypeScript clean.
+
+## L3.4 — the final Library hybrid
+
+The bake-off is over. The authenticated user chose component by component, and
+this phase built that choice into the REAL `#library`:
+
+| Resting Book | A | Pulled Book | E | Shelf | A |
+|---|---|---|---|---|---|
+| **Document** | **D** | **Media** | **E** | **Links / Files** | **A** |
+
+**The Book is now a solid.** Four faces in one coordinate system — back board,
+spine, front cover, page block — so every face turns together and every printed
+line turns with the face it is on. Measured across the turn: exactly
+`126 sin(theta)` and `29 cos(theta)`, terminals at exactly 29px and 126px. No
+scale, no width interpolation, no stationary filler standing in for depth.
+
+**The commit is seamless.** A compensating `translateZ(-t)` puts the cover back
+in the screen plane at -90 degrees, so the arrived cover (126px at x=721) and the
+committed flat cover (126px at x=721) are the same pixels. `transitionend`
+optimises; a 380ms timer guarantees.
+
+**Hover 3px to 8px**, with the cloth brightening — the review called 3px too
+quiet. The hierarchy stays 0 < 8 < 32.
+
+**Neighbours move 16px, and only the two of them.** An earlier version widened
+the pulled Book to its cover, which reflowed a centred row and moved the
+neighbours 48.5px. The Book now keeps its shelf width and the cover overhangs
+onto an untransformed hit shim. 16 rather than 14 because 14 x 1.25 is half a
+device pixel.
+
+**Thickness curve corrected.** A square root put every sample Book between 25 and
+30px, because real Books start at one or two pages. `6 * pages^0.35` separates
+short Books, which is where a Library actually lives.
+
+**Verified:** small (Diary + 3 Books + Document + Image + Link), full (45 objects
+across six shelves), search and filters keep the final families, filtering away a
+pulled Book clears it safely, and 390 works with one tap and a 44px target.
+
+**1172 tests pass, 24 new.** TypeScript clean. 27 tests that asserted the
+superseded flat Book were retired with a note, and every property they protected
+is re-asserted against the new model in `library-l34-final.test.ts`.

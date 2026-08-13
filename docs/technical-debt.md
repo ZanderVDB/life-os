@@ -1135,3 +1135,35 @@ only. Worth a look on a real phone.
 - **A region assertion needs both ends.** `css.slice(css.indexOf('CONCEPT C2'))`
   ran to end-of-file, so appending the component lab silently changed what three
   L3.4 tests were reading. Slice to the next section, not to the end.
+
+### L3.4 — the final Library
+
+- **The design lab still ships to staging.** Six full concepts, the component lab
+  and sixteen files in `web/modules/library-lab/`. Kept for reference during
+  final verification; it must be deleted in the next housekeeping pass and must
+  never reach production. The route is server-gated, so it cannot.
+- **`shared-cover.js` still lives in the lab** and the real Library now has its
+  own cover markup again. Two implementations of one identity is the drift risk
+  L3.4 named. When the lab is deleted, the Book view should export the cover and
+  the Library should import it.
+- **The shelf was accepted, not solved.** §20 took Concept A as sufficient and
+  §21 explicitly deferred the atmosphere work. That is a known, deliberate gap.
+- **Thickness is only as varied as the data.** Sample Books hold 1-3 pages and
+  measure 30-36px. Honest, but it means the shelf silhouette leans on height and
+  cloth until Books are actually written in.
+- **The commit timer is a second source of truth.** 380ms must stay longer than
+  `--d-turn` (300ms). If the turn is ever slowed, the timer has to move with it,
+  or the Book will commit mid-rotation.
+
+### Worth not relearning
+
+- **Widening an object inside a centred flex row reflows the whole row.** The
+  pulled Book grew from 29px to 126px and its neighbours moved 48.5px, not the
+  16 that was asked for. If only the neighbours should move, only the neighbours
+  should move — give the overhang a hit shim instead.
+- **`transform-origin` plus a compensating `translateZ` is how you make a 3D
+  turn commit seamlessly.** Without it the cover ends at depth `t` and is
+  magnified by perspective, which is the "Book appears to inflate" defect.
+- **A test region needs an end marker that survives comment stripping.** Slicing
+  from `diaryObjectHtml` to a comment banner ran to end-of-file and read the
+  resource markup instead.

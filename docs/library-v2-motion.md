@@ -185,3 +185,37 @@ Rotation is allowed here, where L3.2 banned it, because it is a change of
 permanently resampled type; a Book that rotates for 300ms and stops at 90 degrees
 is a flat, axis-aligned cover for as long as you are reading it. Measured after
 the turn: cover 126 x 172, no fractional geometry.
+
+---
+
+## L3.4 — the final motion table
+
+| | |
+|---|---|
+| hover | 140ms, 8px |
+| pull | 200ms, 32px up |
+| **Book turn** | **300ms**, `--d-turn` |
+| neighbour clearance | 200ms, 16px, with the pull |
+| open handoff | 320ms |
+| return | 200ms |
+
+No springs, no overshoot, no bounce, nothing looping.
+
+**The turn is one rotation** about the spine's outer edge, with a compensating
+`translateZ(-t)` that puts the cover back in the screen plane on arrival. Nothing
+scales and no width is interpolated, so both terminal states are device-pixel
+exact: measured, the resting spine is 29px and the arrived cover is 126px, with
+perspective on.
+
+**The commit.** Animation illustrates state; DOM and CSS own the final state. At
+the end of the turn the 3D is dropped — the box transform goes, the three depth
+faces stop painting, and the cover becomes an ordinary untransformed element with
+its title on the pixel grid. `transitionend` is the optimisation; a 380ms timer
+is the guarantee, so a throttled or interrupted turn cannot strand a Book.
+
+**Reduced motion** commits synchronously. The Book arrives front-facing without
+ever rotating, and every state semantic is identical.
+
+**Every travel is a multiple of four**, so it lands on a whole device pixel at
+DPR 1, 1.25, 1.5 and 2. The neighbour clearance is 16px and not 14 for exactly
+this reason: 14 x 1.25 is 17.5, half a device pixel out.

@@ -135,3 +135,35 @@ to read as the same gesture. 3 against 32 is not.
 
 **Neighbours step aside.** Pulling an object translates its two immediate
 siblings 16px apart — local, transform-only, and the rail never reflows.
+
+---
+
+## L3.4 — the final interaction
+
+```
+RESTING  spine on the shelf
+  hover  8px up, cloth brightens          — nothing revealed
+  press  pull 32px up, turn 90 degrees    — neighbours step aside 16px
+FRONT    crisp flat cover, quiet Title / Open beneath
+  press  opens the Book
+```
+
+- **First activation pulls and turns. Second opens.** Clicking the cover works;
+  the `Open` label beneath is a convenience, not the only way through.
+- **Clicking another Book** returns the first, resets its neighbours, and pulls
+  the new one — there is no close-first step.
+- **Clicking the shelf** returns the Book. **Escape** returns it and restores
+  focus. **Scrolling the shelf** returns it, because a Book held open over a
+  shelf that has moved on is in the wrong place.
+- **Keyboard**: first Enter/Space pulls, second opens.
+- **Mobile**: one tap turns, one tap opens. No double-tap anywhere, and the
+  `Open` action is a 44px target. The swipe-vs-tap threshold is unchanged.
+- **Management** (Rename / Archive) appears only when a Book is front-facing,
+  and is `pointer-events: none` until then — never painted onto a resting spine.
+- **The Diary** does all of this and opens Diary. It has no overflow menu because
+  it has nothing to rename or archive.
+- **Flat resources** — Documents, Media, Links, Files — lift 4px on hover, come
+  forward on the first activation and open on the second. **They never rotate.**
+
+Reduced motion reaches every one of these states immediately, with identical
+semantics and no rotation.

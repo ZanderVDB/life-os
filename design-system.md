@@ -556,3 +556,30 @@ identical fractional part mean identical rasterisation.
   device pixel). Both came from making the Library shelf physical: a scrollbar
   that only existed on full shelves put the Diary 10px off everything else, and
   a 1.06 scale on the pulled Book was the softness the review saw.
+
+---
+
+## Library — the final object language (L3.4)
+
+The Library has its own physical vocabulary, and it is settled. See
+[the final visual direction](library-v2-final-visual-direction.md).
+
+**Book cloths.** Seven muted materials — plum, navy, slate, moss, walnut, claret,
+graphite — assigned deterministically per Book. These are BOOK MATERIALS, not app
+colours: they never appear outside a Library spine or board, and **Life OS purple
+is not among them**. The interface accent stays the interface accent, and a test
+fails if a cloth uses it.
+
+**One depth grammar.** Contact shadow when an object is touching the shelf; a
+cast shadow only when it lifts. Never both at full strength, and never an
+elevation scale where a resting object already has a shadow.
+
+**Travel is always a multiple of four.** Hover 8, pull 32, neighbour clearance
+16. That is not a stylistic rhythm — it is what puts every moved object on a
+whole device pixel at DPR 1, 1.25, 1.5 and 2, and it is the difference between
+crisp type and soft type in a moved state.
+
+**Animation illustrates state; DOM and CSS own the final state.** The Book turn
+is the strongest case in the product: it rotates in 3D for 300ms and then hands
+off to a flat, untransformed cover, so the arrived state is ordinary DOM with
+its title on the pixel grid.

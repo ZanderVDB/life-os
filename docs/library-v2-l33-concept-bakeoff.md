@@ -191,3 +191,23 @@ inherited `width:30px;height:1px` for its whole cover, and the title wrapped one
 character per line. Measured as a 30px cover inside a 126px face.
 
 Namespaced to `tpl-*`, and a test now fails if an unprefixed name returns.
+
+---
+
+## L3.4 — superseded by the final direction
+
+The bake-off is closed. C was chosen in L3.4, refined into C2, then broken into
+components in L3.5 and chosen piece by piece:
+
+| | |
+|---|---|
+| Resting Book | A — cloth hardback |
+| Pulled Book | E — shelf resting turn, completed to front |
+| Shelf | A — graphite built-in |
+| Document | D · Media | E · Links | A · Files | A |
+
+The six full concepts and the component lab remain reachable on staging for
+reference only. They are marked for removal in the next housekeeping pass and
+must never ship to production.
+
+See [the final visual direction](library-v2-final-visual-direction.md).

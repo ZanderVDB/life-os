@@ -56,6 +56,7 @@
   --e-out:cubic-bezier(.2,.7,.2,1); --e-inout:cubic-bezier(.4,0,.2,1);
   --t-hover:var(--d-fast) var(--e-out);
   --t-select:var(--d-base) var(--e-out);
+  --d-turn:300ms;          /* the Book turn (L3.4 §39: 280-320ms) */
   --t-page:var(--d-slow) var(--e-out);
   /* Layout tokens — Expanded / Compact / Drawer plug in here (§11) */
   /* Ported verbatim from Legacy v244. These numbers ARE the approved design;
@@ -2843,8 +2844,8 @@ body:has(.lib-page) .rail{display:none}
 /* PULLED-FORWARD BREATHING ROOM (S7). The neighbours step aside rather than
    the rail reflowing -- a transform, so nothing is measured and nothing moves
    that is not adjacent. */
-.lib-slot:has(.is-pulled) + .lib-slot{transform:translateX(16px)}
-.lib-slot:has(+ .lib-slot .is-pulled){transform:translateX(-16px)}
+/* Superseded by the explicit `is-nudge-*` classes below: only the two immediate
+   neighbours move, and the code that pulls a Book is what says which two. */
 
 /* Small collections are centred rather than pinned left (S26). */
 .lib-row{justify-content:flex-start}
@@ -2860,14 +2861,22 @@ body:has(.lib-page) .rail{display:none}
 /* ---- Resting, hover, focus, pulled, opening, returned ----------------
    Six states, and NONE happens on its own. A shelf nobody has touched has no
    raised object at all. */
-.lib-obj{position:relative;display:flex;align-items:flex-end;cursor:pointer;
+.lib-obj{position:relative;display:block;cursor:pointer;
   border:0;background:none;padding:0;font-family:inherit;text-align:left;
   margin-bottom:var(--shelf-contact);
   transition:transform var(--t-select)}
 /* 1. RESTING -- nothing, stated explicitly so it cannot be given a look later. */
 /* 2. HOVER -- deliberately SMALLER than a pull (S21): 3px, and no reveal.
       Hover says "this responds"; pulling says "this one". */
-.lib-obj:hover{transform:translateY(-3px);z-index:3}
+/* HOVER (L3.4 §6). 3px was too quiet to answer "which Book am I over?", and the
+   authenticated review said so. 8px, plus the cloth lifting a shade and a
+   deeper contact shadow -- but still no reveal and still nothing that could be
+   mistaken for the pulled state. The hierarchy has to stay
+   RESTING < HOVER < PULLED, and 8px against 32px keeps it. */
+.lib-obj:hover{transform:translateY(-8px);z-index:3}
+.lib-obj:hover .lib-spine{filter:brightness(1.16)}
+.lib-obj:hover .lib-folio-lid,.lib-obj:hover .lib-clip,
+.lib-obj:hover .lib-jacket-body,.lib-obj:hover .lib-frame{filter:brightness(1.1)}
 /* 3. FOCUS -- the app accent, :focus-visible only, and the only state with an outline. */
 .lib-obj:focus{outline:none}
 .lib-obj:focus-visible{outline:2px solid var(--accent);outline-offset:4px;
@@ -2883,6 +2892,26 @@ body:has(.lib-page) .rail{display:none}
       multiple of 4 is exact at 1, 1.25, 1.5 and 2; 32 is the smallest one in
       S6's list that also reads unmistakably as pulled. */
 .lib-obj.is-pulled{transform:translateY(-32px);z-index:6}
+/* NEIGHBOUR CLEARANCE (§14). Only the two Books either side, and by transform,
+   so the rest of the shelf never reflows and no hole opens. */
+/* 16, not 14. Every travel on this shelf must land on a whole DEVICE pixel at
+   1, 1.25, 1.5 and 2, or the moved object rasterises on a different subpixel
+   phase from its neighbours -- which is the blur L3.2 chased down. 14 x 1.25 is
+   17.5, half a device pixel out; any multiple of 4 is exact, and 16 is inside
+   the 10-18px §14 asks for. */
+.lib-slot.is-nudge-l{transform:translateX(-16px)}
+.lib-slot.is-nudge-r{transform:translateX(16px)}
+/* THE PULLED BOOK DOES NOT CHANGE THE LAYOUT.
+   Widening it to its cover looked right and reflowed the whole rail: measured,
+   the neighbours moved 48.5px when §14 asks for 10-18, because a centred row
+   redistributes every time one child grows. So the Book keeps its shelf width,
+   the cover simply overhangs, and the two nudge classes are the ONLY thing that
+   moves. What the cover needs instead is somewhere to be clicked -- an
+   untransformed shim at the cover's own footprint, because the faces
+   themselves take no pointer input. */
+.lib-obj.lib-book.is-pulled::before{content:'';position:absolute;left:0;top:0;
+  width:var(--bw);height:100%}
+.lib-obj.lib-book.is-pulled::after{left:0;right:calc(100% - var(--bw))}
 .lib-obj.is-pulled .lib-foot{opacity:1;transform:translateY(0);pointer-events:auto}
 /* 5. OPENING -- the handoff, only ever on a node the next paint destroys. */
 .lib-obj.is-opening{transform:translateY(-48px);opacity:.1;z-index:7;
@@ -2920,105 +2949,138 @@ body:has(.lib-page) .rail{display:none}
 
 .lib-obj.is-archived{opacity:.5}
 
-/* The spine. A gradient strip, not a rotated face: the title on it is small,
-   optional and decorative, and the accessible name lives on the cover. */
-/* ---- THE BOOK AS ONE SOLID OBJECT (L3.2 S3/S4) -----------------------
-   Three parts in one silhouette, left to right:
+/* ══ THE BOOK AS A SOLID (L3.4 §9-§13) ═════════════════════════════════
+   Four faces in ONE coordinate system, so when the Book turns every face turns
+   with it and every printed line turns with the face it is printed on:
 
-       spine  22px   bound edge, lit along its outer face
-       cover  126px  the approved Book identity
-       block   6px   the FORE-EDGE -- the page block, finely lined
+       back board   x = 0        spine        z = 0
+       front cover  x = t        page block   z = -126
 
-   The fore-edge is the piece L3.1 was missing, and it is what most makes the
-   thing read as a bound book rather than a card: a card has no page block. It
-   also gives the overlap something physical to do -- in a dense shelf each
-   book's block tucks behind its neighbour's spine, which is how books touch.
+   The dimensions are real and they do not change. There is no width
+   interpolation, no scale, and no stationary coloured filler standing in for
+   depth -- the page block is a face of the box with page striations on it, at
+   the end of the box opposite the spine.
 
-   No rotation, no perspective, no photographic texture. */
-.lib-book{--bw:126px;--spine-w:22px;--edge-w:6px}
-.lib-spine{flex:0 0 auto;width:var(--spine-w);
-  height:calc(var(--bw) * 297 / 210);border-radius:2px 0 0 2px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:7px;padding:9px 0;overflow:hidden;position:relative;
-  background:linear-gradient(90deg,
-    color-mix(in srgb,var(--accent-c,var(--a-peach)) 30%,#0D0A13) 0%,
-    color-mix(in srgb,var(--accent-c,var(--a-peach)) 50%,#161220) 26%,
-    color-mix(in srgb,var(--accent-c,var(--a-peach)) 28%,#110D19) 78%,
-    rgba(0,0,0,.5) 100%);
-  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.15)}
-.lib-spine-band{flex:0 0 auto;width:calc(100% - 8px);height:1.5px;border-radius:1px;
-  background:color-mix(in srgb,var(--accent-c,var(--a-peach)) 78%,#fff);opacity:.5}
-/* OPTION C (S4). The spine carries a SHORT title, not the full one crammed in.
-   At 22px there is room for about twenty-two characters at 10px, and beyond
-   that the honest thing is an ellipsis plus a cover and a footer that carry the
-   whole title. Vertical, reading bottom-to-top, which is the convention on
-   English-language spines. */
-.lib-spine-t{flex:1 1 auto;min-height:0;writing-mode:vertical-rl;
-  transform:rotate(180deg);
-  display:flex;align-items:center;justify-content:center;
-  font-size:10px;font-weight:600;letter-spacing:.03em;
-  color:rgba(255,255,255,.92);text-shadow:0 1px 2px rgba(0,0,0,.5);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+   `--bt` is the thickness, from the Book's content. `--bh` is its height, from
+   a sixteen-rung ladder. Both are set per Book on the element. */
+.lib-book{--bw:126px;--bh:190px;--bt:32px;
+  width:var(--bt);height:var(--bh);display:block;position:relative}
+/* Perspective belongs to the ROW, so every Book on a shelf is seen from the
+   same eye. It is safe at both ends of the turn precisely because of the
+   compensating translateZ: the spine sits at z=0 at rest and the cover sits at
+   z=0 when it arrives, so neither terminal state is magnified. Only the middle
+   of the turn is projected, which is where depth is supposed to be visible. */
+.lib-shelf-book .lib-row,.lib-shelf-personal .lib-row,
+.lib-results .lib-row{perspective:1400px}
+.lib-vol{position:absolute;inset:0;transform-style:preserve-3d;
+  transform-origin:left center;
+  transition:transform var(--d-turn,300ms) var(--e-out)}
+/* THE HIT RULE. Nothing inside the volume takes pointer input: every face is
+   transformed, and a transformed element's hit box is its PROJECTED quad, which
+   is not where the Book looks like it is. `.lib-obj` is the only target, it is
+   never rotated, and it covers exactly the space the Book occupies -- so a
+   neighbour is always clickable, with no close-first step. */
+.lib-face{position:absolute;top:0;height:100%;pointer-events:none;
+  backface-visibility:hidden}
 
-/* THE FORE-EDGE. Finely lined so it reads as paper rather than as a bar, and
-   lit from the same side as everything else. */
-.lib-block{flex:0 0 auto;width:var(--edge-w);
-  height:calc(var(--bw) * 297 / 210 - 4px);border-radius:0 2px 2px 0;
+/* The spine: the face you read on a shelf. Its bands and its rule are CHILDREN
+   of it, so they rotate away with it rather than floating free (§9). */
+.lib-spine{left:0;width:var(--bt);border-radius:2px 0 0 2px;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:11px 0;
   background:
-    repeating-linear-gradient(90deg,
-      rgba(255,255,255,.10) 0 1px,transparent 1px 2px),
-    linear-gradient(90deg,#3A3348 0%,#2A2437 60%,#1B1725 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -1px 0 rgba(0,0,0,.4)}
+    repeating-linear-gradient(90deg,rgba(255,255,255,.030) 0 1px,transparent 1px 2px),
+    repeating-linear-gradient(0deg,rgba(0,0,0,.055) 0 1px,transparent 1px 3px),
+    linear-gradient(90deg,var(--cl-1) 0%,var(--cl-2) 34%,var(--cl-3) 74%,var(--cl-4) 100%);
+  box-shadow:inset 1.5px 0 0 rgba(255,255,255,.14),inset -2px 0 5px rgba(0,0,0,.5)}
+.lib-spine-band{flex:0 0 auto;width:100%;height:4px;
+  background:linear-gradient(180deg,rgba(255,255,255,.17),rgba(0,0,0,.32));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+.lib-spine-rule{flex:0 0 auto;width:66%;height:1px;
+  background:linear-gradient(90deg,transparent,
+    color-mix(in srgb,var(--accent-c,var(--a-peach)) 72%,#F6EBD2),transparent);
+  opacity:.9;margin-bottom:9px}
+.lib-spine-t{flex:1 1 auto;min-height:0;writing-mode:vertical-rl;transform:rotate(180deg);
+  display:flex;align-items:center;justify-content:center;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+  font-size:11.5px;font-weight:500;letter-spacing:.06em;color:#F3EFFA;
+  text-shadow:0 1px 2px rgba(0,0,0,.55)}
 
-/* The cover, between them. */
-/* HEIGHT, not aspect-ratio (L3.2 S14).
-   `aspect-ratio` yields to content: a cover with a long title, a subtitle, a
-   rule and an author line grew past its ratio, so books were different heights
-   depending on how much was printed on them. Measured: a sample Book 212.7px
-   tall against the Diary's 178.2 -- an accidental size mismatch, and it broke
-   the shared silhouette. The height now comes from the same expression the
-   spine and the fore-edge use, so all three cannot drift, and anything that
-   does not fit is clipped rather than allowed to stretch the object. */
-.lib-cover{position:relative;flex:0 0 auto;width:var(--bw);
-  height:calc(var(--bw) * 297 / 210);overflow:hidden;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:3px;padding:14px 12px;
+/* The page block. A real face at the far end of the box, finely lined, with the
+   boards overhanging it slightly the way a hardcover's squares do. */
+.lib-edge{left:0;width:var(--bt);transform:translateZ(calc(-1 * var(--bw)));
+  overflow:hidden;background:linear-gradient(90deg,#332C42 0%,#241E31 55%,#171320 100%)}
+.lib-leaves{position:absolute;inset:2px 2px;background:
+  repeating-linear-gradient(0deg,rgba(238,233,250,.17) 0 1px,rgba(18,15,26,.55) 1px 2px)}
+
+/* The two boards. The back one is plain cloth; the front one carries the cover. */
+.lib-board,.lib-back{left:0;width:var(--bw);transform-origin:left center;overflow:hidden}
+.lib-back{transform:rotateY(90deg);
+  background:linear-gradient(120deg,var(--cl-2),var(--cl-4));
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.lib-board{transform:translateX(var(--bt)) rotateY(90deg)}
+
+/* ---- THE MATERIALS (§5) ----------------------------------------------
+   Muted Book cloths, deterministic per Book. These are materials, not brand
+   colours -- Life OS purple stays the interface accent and is not among them. */
+.lib-book{--cl-1:#191422;--cl-2:#272134;--cl-3:#1F1A2B;--cl-4:#120E1A}
+.lib-book[data-material="plum"]{--cl-1:#241A2E;--cl-2:#3A2A46;--cl-3:#2C2038;--cl-4:#170F1E}
+.lib-book[data-material="navy"]{--cl-1:#151C2E;--cl-2:#243149;--cl-3:#1B2439;--cl-4:#0D1220}
+.lib-book[data-material="slate"]{--cl-1:#1B2028;--cl-2:#2C3540;--cl-3:#212932;--cl-4:#11151B}
+.lib-book[data-material="moss"]{--cl-1:#17231D;--cl-2:#26382D;--cl-3:#1D2B23;--cl-4:#0E1712}
+.lib-book[data-material="walnut"]{--cl-1:#241A15;--cl-2:#3A2A21;--cl-3:#2B1F19;--cl-4:#160F0B}
+.lib-book[data-material="claret"]{--cl-1:#26161C;--cl-2:#3D232C;--cl-3:#2D1A21;--cl-4:#170D11}
+.lib-book[data-material="graphite"]{--cl-1:#17171B;--cl-2:#282830;--cl-3:#1E1E25;--cl-4:#0F0F13}
+
+/* ---- THE TURN (§7/§8/§10) ---------------------------------------------
+   One rotation about the spine's outer edge -- the point a real book pivots on
+   when you pull it out of a row. The compensating `translateZ(-t)` is what
+   makes the arrival exact: at -90 degrees it puts the cover back in the screen
+   plane, so its projected width there is precisely its layout width. No
+   inflation, no shrink, nothing to settle. */
+.lib-obj.is-pulled .lib-vol{
+  transform:translateZ(calc(-1 * var(--bt))) rotateY(-90deg)}
+
+/* THE COMMIT (§12/§13). Once round, the 3D is gone: the box transform is
+   dropped, the depth faces stop painting, and the cover becomes an ordinary
+   untransformed element with its title on the pixel grid. */
+.lib-obj.is-front .lib-vol{transform:none;transform-style:flat}
+.lib-obj.is-front .lib-spine,.lib-obj.is-front .lib-edge,
+.lib-obj.is-front .lib-back{display:none}
+.lib-obj.is-front .lib-board{transform:none;left:0}
+
+.lib-cover{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;padding:15px 13px;
+  border-radius:0 3px 3px 0;
   background:linear-gradient(150deg,var(--paper) 0%,var(--paper-2) 100%);
-  box-shadow:var(--obj-edge);transition:box-shadow var(--t-select)}
-.lib-obj.is-pulled .lib-cover{box-shadow:var(--obj-lift)}
-/* The hinge, where the cover meets the spine. Drawn on the cover and lit to
-   match the spine's own falloff, so the junction reads as a fold. */
-.lib-cover::before{content:'';position:absolute;left:0;top:0;bottom:0;width:10px;
-  background:linear-gradient(90deg,rgba(0,0,0,.40) 0%,rgba(0,0,0,.12) 60%,transparent 100%);
-  pointer-events:none}
+  box-shadow:inset 3px 0 0 0 var(--accent-c,var(--a-peach)),var(--obj-edge);
+  transition:box-shadow var(--t-select)}
+.lib-obj.is-pulled .lib-cover{box-shadow:inset 3px 0 0 0 var(--accent-c,var(--a-peach)),
+  var(--obj-lift)}
 .lib-cover-mark{font-family:'Playfair Display',Georgia,serif;font-size:8px;
-  letter-spacing:.14em;color:var(--paper-ink-2);opacity:.72}
-.lib-cover-pre{font-size:6.5px;font-weight:700;letter-spacing:.26em;text-transform:uppercase;
-  color:var(--accent-c,var(--a-peach));opacity:.9}
+  letter-spacing:.16em;color:var(--paper-ink-2);opacity:.72}
+.lib-cover-pre{font-size:6.5px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--accent-c,var(--a-peach))}
 .lib-cover-title{font-family:'Playfair Display',Georgia,serif;font-weight:500;
-  font-size:15px;line-height:1.16;color:var(--paper-ink);text-align:center;
-  margin-top:6px;display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;
-  -webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+  font-size:15px;line-height:1.14;color:var(--paper-ink);text-align:center;margin-top:6px;
+  display:-webkit-box;-webkit-line-clamp:4;line-clamp:4;-webkit-box-orient:vertical;
+  overflow:hidden;overflow-wrap:anywhere}
 .lib-cover-sub{font-family:'Playfair Display',Georgia,serif;font-style:italic;
   font-size:8.5px;line-height:1.3;color:var(--paper-ink-2);text-align:center;
-  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;
-  overflow:hidden}
-.lib-cover-rule{width:34px;height:1px;background:var(--paper-ink-2);opacity:.35;margin:7px 0 5px}
-;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.lib-cover-rule{width:34px;height:1px;background:var(--paper-ink-2);opacity:.4;margin:7px 0 5px}
+.lib-cover-author{font-size:6.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
   color:var(--paper-ink-2);opacity:.8;text-align:center}
 
-/* The system Book (S19/S12).
-   The old mark was a STAR in a rounded tinted box in the corner -- which looks
-   exactly like a favourite button, and did nothing when pressed. The review
-   caught it. There is no favourite feature yet, so nothing here may imply one.
-   What distinguishes it now is the book itself: a deeper cloth, a lavender
-   edge, and the words "System journal" under it when pulled forward. All of it
-   is material, none of it is a control. */
-.lib-book-system .lib-cover{background:
-  linear-gradient(150deg,#2C2740 0%,#241F33 100%);
-  box-shadow:0 12px 22px -12px rgba(0,0,0,.6),inset 0 0 0 1px rgba(182,155,240,.22)}
-.lib-book-system .lib-spine{box-shadow:inset 1.5px 0 0 rgba(182,155,240,.5),
-  inset -1px 0 2px rgba(0,0,0,.45)}
+/* The Diary: lavender cloth and JOURNAL on the cover. Material and wording, not
+   a badge and not a system button (§30). */
+.lib-book-system{--cl-1:#251B33;--cl-2:#3C2C52;--cl-3:#2E2140;--cl-4:#170F22}
+.lib-book-system .lib-spine{box-shadow:inset 2px 0 0 rgba(182,155,240,.6),
+  inset -2px 0 5px rgba(0,0,0,.55)}
+.lib-book-system .lib-cover{box-shadow:inset 3px 0 0 0 var(--a-lavender),var(--obj-edge)}
+.lib-book-system.is-pulled .lib-cover{box-shadow:inset 3px 0 0 0 var(--a-lavender),
+  var(--obj-lift)}
+
 /* ---- THE OBJECT FOOTER (L3.2 S8, option C) ---------------------------
    L3.1 floated a bright purple pill over the cover, in the same corner region
    as the overflow menu. The review called it a debug badge. It was: a saturated
@@ -3031,6 +3093,11 @@ body:has(.lib-page) .rail{display:none}
    activation has a target that is part of the object.
 
    Absolutely positioned, so revealing it cannot shift the row. */
+/* §18 -- no floating purple pill, and no large CTA. Beneath the arrived Book:
+   its title, optionally its subtitle, and a quiet `Open`. The second click on
+   the cover still opens, so this is a label that happens to be actionable
+   rather than a button the interaction depends on. */
+.lib-foot.is-quiet .lib-foot-a{margin-top:0}
 .lib-foot{position:absolute;left:0;right:0;top:100%;margin-top:calc(var(--shelf-drop) - 16px);
   display:flex;flex-direction:column;gap:1px;align-items:flex-start;text-align:left;
   opacity:0;transform:translateY(-5px);pointer-events:none;
@@ -3058,8 +3125,19 @@ body:has(.lib-page) .rail{display:none}
   display:grid;place-items:center;border:0;border-radius:6px;cursor:pointer;
   background:rgba(10,8,16,.62);color:var(--text-2);opacity:0;z-index:2;
   transition:opacity var(--t-hover),background var(--t-hover),color var(--t-hover)}
-.lib-obj:hover .lib-obj-more,.lib-obj.is-pulled .lib-obj-more,
-.lib-obj:focus-within .lib-obj-more{opacity:1}
+/* §19 -- management is secondary and it never paints onto a resting object.
+   A Book shows it only once it is FRONT-FACING: a 24px menu cannot sit on a
+   29px spine without becoming the spine, and a control that appears mid-turn is
+   a control you will hit by accident. Flat objects, which have a face at rest,
+   keep the hover/focus reveal. */
+.lib-res:hover .lib-obj-more,.lib-res.is-pulled .lib-obj-more,
+.lib-res:focus-within .lib-obj-more,
+.lib-book.is-front .lib-obj-more,
+.lib-book.is-front:focus-within .lib-obj-more{opacity:1}
+.lib-book .lib-obj-more{pointer-events:none}
+.lib-book.is-front .lib-obj-more{pointer-events:auto}
+/* Clear of the Open action beneath, and clear of the turn. */
+.lib-book.is-front .lib-obj-more{right:5px;top:6px}
 .lib-obj-more:hover{background:rgba(10,8,16,.85);color:var(--text)}
 .lib-obj-more:focus-visible{opacity:1;outline:2px solid var(--accent);outline-offset:1px}
 
@@ -3084,36 +3162,62 @@ body:has(.lib-page) .rail{display:none}
      - the same edge shadow, the same contact shadow, the same baseline.
 
    It carries its own title, so it needs no detached resting label (S19). */
-.lib-res{--rw:178px;flex-direction:row;align-items:flex-end;width:var(--rw)}
-.lib-res-face{position:relative;display:flex;width:100%;height:118px;
-  border-radius:2px 3px 3px 2px;overflow:hidden;
-  background:linear-gradient(158deg,var(--paper) 0%,var(--paper-2) 100%);
+/* ══ THE FLAT FAMILIES (L3.4 §22/§28/§29) ══════════════════════════════
+   Chosen from the component lab. Each is a different physical object, not the
+   same rectangle in three tints, and none of them borrows the Book's spine or
+   the Book's turn. A folder does not turn round: they come forward. */
+.lib-res{--rw:178px;display:block;width:var(--rw);position:relative}
+
+/* DOCUMENT -- a file folio, half open. The sheets standing behind the lid are
+   what make it a folio rather than a card, and they are why it needs no spine. */
+.lib-folio{position:relative;display:block;width:100%;height:132px}
+.lib-folio-sheet{position:absolute;left:9px;right:13px;top:-7px;bottom:26px;border-radius:1px;
+  background:linear-gradient(180deg,var(--paper) 0%,var(--paper-2) 100%);
+  box-shadow:0 -1px 0 rgba(0,0,0,.3),inset 0 0 0 1px rgba(0,0,0,.06)}
+.lib-folio-sheet2{left:14px;right:8px;top:-12px;opacity:.72}
+.lib-folio-lid{position:absolute;left:0;right:0;bottom:0;height:104px;
+  display:flex;flex-direction:column;gap:5px;padding:13px 15px;
+  border-radius:2px 2px 2px 6px;
+  background:linear-gradient(158deg,#2E2740 0%,#211B2E 62%,#1A1526 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.11),var(--obj-edge);
+  transition:box-shadow var(--t-select)}
+.lib-obj.is-pulled .lib-folio-lid{box-shadow:inset 0 1px 0 rgba(255,255,255,.11),
+  var(--obj-lift)}
+
+/* LINK -- a clipping card. Source mark, title, domain. Never a browser tab. */
+.lib-clip{position:relative;display:flex;align-items:center;gap:11px;
+  width:100%;height:76px;padding:12px 14px;border-radius:2px;
+  background:linear-gradient(158deg,#262031 0%,#1A1524 100%);
   box-shadow:var(--obj-edge);transition:box-shadow var(--t-select)}
-.lib-obj.is-pulled .lib-res-face{box-shadow:var(--obj-lift)}
-/* The sheet edge: the folio's page block, on the right, matching the book. */
-.lib-res-edge{position:absolute;right:0;top:3px;bottom:3px;width:5px;
-  background:
-    repeating-linear-gradient(0deg,rgba(255,255,255,.09) 0 1px,transparent 1px 2px),
-    linear-gradient(90deg,#2A2437 0%,#1B1725 100%);
-  box-shadow:inset 1px 0 0 rgba(0,0,0,.35)}
-/* The tab. Small, and the single clearest "this is filed" cue. */
-.lib-res-tab{position:absolute;left:0;top:0;bottom:0;width:4px;
-  background:var(--a-blue);opacity:.85}
-.lib-res-sheet{display:flex;flex-direction:column;gap:5px;
-  padding:12px 14px 12px 13px;min-width:0;flex:1}
+.lib-obj.is-pulled .lib-clip{box-shadow:var(--obj-lift)}
+.lib-clip-mark{flex:0 0 auto;width:28px;height:28px;border-radius:3px;display:grid;
+  place-items:center;font-size:13px;font-weight:700;color:#1A1624;
+  background:var(--a-sage)}
+.lib-clip-body{min-width:0;display:flex;flex-direction:column;gap:3px}
+
+/* FILE -- a jacket. The clipped lower corner is the whole difference between a
+   jacket and a card. */
+.lib-jacket{position:relative;display:block;width:100%;height:76px}
+.lib-jacket-body{position:absolute;inset:0;display:flex;flex-direction:column;gap:3px;
+  padding:12px 14px;border-radius:2px;
+  background:linear-gradient(158deg,#2B2437 0%,#1C1727 100%);
+  box-shadow:var(--obj-edge);transition:box-shadow var(--t-select);
+  clip-path:polygon(0 0,100% 0,100% 100%,12px 100%,0 calc(100% - 12px))}
+.lib-obj.is-pulled .lib-jacket-body{box-shadow:var(--obj-lift)}
+.lib-jacket-corner{position:absolute;left:0;bottom:0;width:12px;height:12px;
+  background:linear-gradient(45deg,rgba(255,255,255,.08) 50%,transparent 50%)}
+
 .lib-res-kind{font-size:8.5px;font-weight:700;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--accent-c,var(--a-blue));opacity:.85}
-.lib-res-name{font-size:12.5px;font-weight:600;line-height:1.28;color:var(--paper-ink);
-  display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;
+  text-transform:uppercase;color:var(--accent-c,var(--a-blue))}
+.lib-res-name{font-size:12.5px;font-weight:600;line-height:1.28;color:#EFEAF8;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;
   overflow:hidden;overflow-wrap:anywhere}
-.lib-res-excerpt{margin-top:auto;font-size:9.5px;line-height:1.4;color:var(--paper-ink-2);
-  opacity:.85;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;
+.lib-res-excerpt{font-size:9.5px;line-height:1.4;color:rgba(214,203,240,.62);
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;
   -webkit-box-orient:vertical;overflow:hidden}
-.lib-res-domain{margin-top:auto;font-size:10px;font-weight:600;color:var(--paper-ink-2)}
-.lib-res-link .lib-res-tab{background:var(--a-sage)}
-.lib-res-link .lib-res-kind{color:var(--a-sage)}
-.lib-res-file .lib-res-tab{background:var(--muted)}
-.lib-res-file .lib-res-kind{color:var(--paper-ink-2)}
+.lib-res-domain{margin-top:auto;font-size:10px;font-weight:600;color:var(--muted)}
+.lib-res-link .lib-res-name{-webkit-line-clamp:2;line-clamp:2}
+.lib-res-file .lib-res-kind{color:var(--accent-c,var(--a-peach))}
 
 /* Images and video: a FRAME with a drawn floor. The floor is the default and
    the picture sits on top, so a dead URL leaves a frame rather than a hole
@@ -3126,6 +3230,14 @@ body:has(.lib-page) .rail{display:none}
   background:linear-gradient(158deg,var(--surface-2) 0%,var(--surface) 100%);
   box-shadow:var(--obj-edge);transition:box-shadow var(--t-select)}
 .lib-obj.is-pulled .lib-frame{box-shadow:var(--obj-lift)}
+/* §26 -- the content dominates. The caption is plain text beneath the picture,
+   always visible, with no bar behind it; only the Open action is revealed. */
+.lib-cap{display:block;margin-top:8px;min-width:0}
+.lib-cap-t{display:block;font-size:11.5px;font-weight:600;color:var(--text-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-cap-m{display:block;margin-top:2px;font-size:9.5px;color:var(--muted)}
+.lib-foot.is-quiet{gap:0}
+.lib-foot.is-quiet .lib-foot-a{margin-top:0}
 .lib-frame-fallback{position:absolute;inset:0;display:grid;place-items:center;
   color:var(--muted);opacity:.55}
 .lib-frame-img{position:relative;width:100%;height:100%;object-fit:cover;display:block}
@@ -3196,6 +3308,10 @@ body:has(.lib-page) .rail{display:none}
   .lib-obj.is-opening{transform:none;opacity:.12}
   .lib-obj::after,.lib-obj:hover::after,.lib-obj.is-pulled::after{transform:none}
   .lib-obj.is-pulled .lib-foot{transform:none}
+  /* The turn is not shortened, it is skipped: `scheduleCommit` commits
+     synchronously under reduced motion, so the Book arrives front-facing
+     without ever rotating. Every state semantic is identical. */
+  .lib-vol{transition:none}
   .lib-obj.is-pulled .lib-cover{box-shadow:0 0 0 2px var(--accent-c,var(--a-peach)),
     0 26px 40px -16px rgba(0,0,0,.72)}
   .lib-rail{scroll-behavior:auto}

@@ -134,45 +134,140 @@ export function recencyLabel(item) {
 const objectFoot = (title, sub, action) => `<span class="lib-foot" aria-hidden="true">
     <span class="lib-foot-t">${esc(title)}</span>
     ${sub ? `<span class="lib-foot-s">${esc(sub)}</span>` : ''}
-    <span class="lib-foot-a">${esc(action)}
-      <svg viewBox="0 0 20 20" width="11" height="11" fill="none" stroke="currentColor"
-        stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
-        ><path d="M6 10h8M10.5 6.5 14 10l-3.5 3.5"/></svg>
+    <span class="lib-foot-a">${esc(action)}</span>
+  </span>`;
+
+/* ── The physical Book (L3.4 §9/§10) ─────────────────────────────────────
+ *
+ * A closed hardcover is a solid, and the shelf builds it as one: four faces in
+ * one coordinate system, so when the Book turns, every face turns with it and
+ * every decorative line turns with the face it is printed on.
+ *
+ *     back board   x = 0        spine        z = 0
+ *     front cover  x = t        page block   z = −126
+ *
+ * The dimensions are REAL and they do not change. There is no width
+ * interpolation and no scale anywhere in the turn — the only thing that
+ * animates is a rotation about the spine's outer edge, and a compensating
+ * `translateZ` that puts the cover back in the screen plane when it arrives.
+ * That is what makes both terminal states device-pixel exact.
+ */
+
+/** A hash that avalanches, so two adjacent ids do not give adjacent results. */
+function hash32(str) {
+  let h = 2166136261 >>> 0;
+  const s = String(str);
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  h ^= h >>> 16; h = Math.imul(h, 2246822507) >>> 0;
+  h ^= h >>> 13; h = Math.imul(h, 3266489909) >>> 0;
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+/**
+ * Height: sixteen rungs, hand-weighted (170–215px).
+ *
+ * A table rather than arithmetic, because what is being controlled is a
+ * distribution and a table is the version of it you can read and argue with.
+ * Middle-weighted, so most Books are ordinary and about one in sixteen is tall
+ * enough to notice; the order of the entries is itself irregular so no
+ * arrangement of ids can walk it in steps.
+ */
+const HEIGHTS = [190, 200, 180, 195, 210, 185, 175, 200,
+  190, 215, 185, 195, 170, 205, 190, 180];
+
+/**
+ * The Book's cloth (§5). Muted materials — never brand colours, never a
+ * rainbow. Life OS purple stays the interface accent and is not in this list.
+ */
+export const MATERIALS = ['plum', 'navy', 'slate', 'moss', 'walnut', 'claret', 'graphite'];
+
+/**
+ * Thickness from content, with a small deterministic binding offset.
+ *
+ *     clamp(24, 24 + round(6 · pages^0.35) + bind(id), 52)
+ *
+ * The exponent matters more than it looks. A square root was tried first and it
+ * produced a shelf of near-identical Books — measured across the full sample,
+ * every spine landed between 25 and 30px — because real Books start at one or
+ * two pages and √2 and √8 are only 3px apart. Most of a Library lives in the
+ * first dozen pages, so that is where the curve has to do its work: 1 page is
+ * 30px, 8 is 37, 100 is at the ceiling.
+ *
+ * `bind` is −2 … +2 so two Books of the same length are not pixel-identical
+ * twins, which reads as a duplicated render. It is small enough that it can
+ * never reorder two Books by apparent volume: thicker still means more inside.
+ */
+function thicknessOf(item) {
+  const p = Math.max(0, Number(item.book?.pageCount ?? item.book?.pages ?? 0) || 0);
+  const bind = (hash32(`bind:${item.id}`) % 5) - 2;
+  const body = p > 0 ? Math.round(6 * (p ** 0.35)) : 0;
+  return Math.min(52, Math.max(24, 24 + body + bind));
+}
+
+export function bookMetrics(item) {
+  const h = hash32(item.id ?? item.title ?? '');
+  return {
+    height: HEIGHTS[h % HEIGHTS.length],
+    thickness: thicknessOf(item),
+    material: MATERIALS[hash32(`mat:${item.id ?? item.title ?? ''}`) % MATERIALS.length],
+  };
+}
+
+/**
+ * The four faces, plus the cover that lives on the front board.
+ *
+ * `lib-vol` is the box. Everything inside it is `aria-hidden` scenery except the
+ * cover, which carries the real title — the object itself is the control and it
+ * is never transformed, so its hit area is its own space on the shelf whatever
+ * the Book is doing.
+ */
+function volumeHtml(title, sub, pre, author, spine) {
+  return `<span class="lib-vol">
+    <span class="lib-face lib-back" aria-hidden="true"></span>
+    <span class="lib-face lib-edge" aria-hidden="true"><span class="lib-leaves"></span></span>
+    <span class="lib-face lib-spine" aria-hidden="true">
+      <span class="lib-spine-band"></span>
+      <span class="lib-spine-t">${esc(spine)}</span>
+      <span class="lib-spine-rule"></span>
+      <span class="lib-spine-band"></span>
+    </span>
+    <span class="lib-face lib-board">
+      <span class="lib-cover">
+        <span class="lib-cover-mark" aria-hidden="true">Life OS</span>
+        <span class="lib-cover-pre" aria-hidden="true">${esc(pre)}</span>
+        <span class="lib-cover-title">${esc(title)}</span>
+        ${sub ? `<span class="lib-cover-sub">${esc(sub)}</span>` : ''}
+        <span class="lib-cover-rule" aria-hidden="true"></span>
+        <span class="lib-cover-author">${esc(author)}</span>
+      </span>
     </span>
   </span>`;
+}
 
 export function bookObjectHtml(item, index, total) {
   const b = item.book ?? {};
   const archived = !!item.archivedAt;
   const accent = accentOf(item);
   const year = new Date(item.createdAt).getFullYear();
+  const m = bookMetrics(item);
   return `<article class="lib-obj lib-book${archived ? ' is-archived' : ''}"
     data-item="${esc(item.id)}" data-type="book" data-book="${esc(b.id ?? '')}"
-    data-accent="${accent}" role="button" tabindex="-1" aria-expanded="false"
-    aria-label="${esc(item.title)}${b.subtitle ? `. ${esc(b.subtitle)}` : ''}, Book, ${
-  index + 1} of ${total}${archived ? ', archived' : ''}"
+    data-accent="${accent}" data-material="${m.material}"
+    style="--bt:${m.thickness}px;--bh:${m.height}px"
+    role="button" tabindex="-1" aria-expanded="false"
+    aria-label="${esc(item.title)}${b.subtitle ? `. ${esc(b.subtitle)}` : ''}, Book${
+  archived ? ', archived' : ''}"
     title="${esc(item.title)}">
-    <span class="lib-spine" aria-hidden="true">
-      <span class="lib-spine-band"></span>
-      <span class="lib-spine-t">${esc(spineTitle(item.title))}</span>
-      <span class="lib-spine-band"></span>
-    </span>
-    <span class="lib-block" aria-hidden="true"></span>
-    <span class="lib-cover">
-      <span class="lib-cover-mark" aria-hidden="true">Life OS</span>
-      <span class="lib-cover-pre" aria-hidden="true">Notebook</span>
-      <span class="lib-cover-title">${esc(item.title)}</span>
-      ${b.subtitle ? `<span class="lib-cover-sub">${esc(b.subtitle)}</span>` : ''}
-      <span class="lib-cover-rule" aria-hidden="true"></span>
-      <span class="lib-cover-author">${esc(b.authorLabel || 'Life OS')} · ${year}</span>
-    </span>
+    ${volumeHtml(item.title, b.subtitle, 'Notebook',
+    `${b.authorLabel || 'Life OS'} · ${year}`, spineTitle(item.title))}
     ${archived ? '<span class="lib-obj-flag">Archived</span>' : ''}
     <button type="button" class="lib-obj-more" data-more="${esc(item.id)}"
       aria-label="Actions for ${esc(item.title)}" aria-haspopup="menu" tabindex="-1">
       <svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor" aria-hidden="true"
         ><circle cx="5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="15" cy="10" r="1.4"/></svg>
     </button>
-    ${objectFoot(item.title, b.subtitle, 'Open book')}
+    ${objectFoot(item.title, b.subtitle, 'Open')}
   </article>`;
 }
 
@@ -204,23 +299,16 @@ export function spineTitle(title, max = 22) {
  * mark so the difference is on screen and not only in the code.
  */
 export function diaryObjectHtml() {
+  /* Same Book, same turn, same open (§30). What makes it the Diary is the
+   * lavender cloth, the word JOURNAL on the cover and the fact that it carries
+   * no overflow menu — because there is nothing to rename or archive. The
+   * distinction is material and behavioural, never a badge or a system button. */
   return `<article class="lib-obj lib-book lib-book-system" data-system="diary"
-    data-accent="lavender" role="button" tabindex="-1" aria-expanded="false"
-    aria-label="My Diary, system journal, opens Diary" title="My Diary">
-    <span class="lib-spine" aria-hidden="true">
-      <span class="lib-spine-band"></span>
-      <span class="lib-spine-t">My Diary</span>
-      <span class="lib-spine-band"></span>
-    </span>
-    <span class="lib-block" aria-hidden="true"></span>
-    <span class="lib-cover">
-      <span class="lib-cover-mark" aria-hidden="true">Life OS</span>
-      <span class="lib-cover-pre" aria-hidden="true">Journal</span>
-      <span class="lib-cover-title">My Diary</span>
-      <span class="lib-cover-rule" aria-hidden="true"></span>
-      <span class="lib-cover-author">Every day</span>
-    </span>
-    ${objectFoot('My Diary', 'System journal', 'Open Diary')}
+    data-accent="lavender" data-material="plum" style="--bt:38px;--bh:205px"
+    role="button" tabindex="-1" aria-expanded="false"
+    aria-label="My Diary, Life OS Journal, opens Diary" title="My Diary">
+    ${volumeHtml('My Diary', null, 'Journal', 'Life OS Journal', 'My Diary')}
+    ${objectFoot('My Diary', null, 'Open Diary')}
   </article>`;
 }
 
@@ -306,6 +394,51 @@ function subLine(item) {
   return item.description ? '' : 'Document';
 }
 
+/* ── The three flat families (L3.4 §22/§28/§29) ──────────────────────────
+ *
+ * Chosen from the component lab, and each one is a different physical object
+ * rather than the same rectangle in three tints:
+ *
+ *   DOCUMENT  a file folio, half open — sheets standing behind a lid that
+ *             carries the title. The sheets are what make it a folio and not a
+ *             card, and they are why it does not need a Book's spine.
+ *   LINK      a clipping card, source mark at the left, domain beneath.
+ *   FILE      a jacket with a clipped lower corner, kind and size.
+ *
+ * None of them rotates. A folder does not turn round: they come forward.
+ */
+function resourceFace(item) {
+  if (item.type === 'document') {
+    return `<span class="lib-folio" aria-hidden="true">
+      <span class="lib-folio-sheet"></span>
+      <span class="lib-folio-sheet lib-folio-sheet2"></span>
+      <span class="lib-folio-lid">
+        <span class="lib-res-kind">Document</span>
+        <span class="lib-res-name">${esc(item.title)}</span>
+        ${item.description ? `<span class="lib-res-excerpt">${esc(item.description)}</span>` : ''}
+      </span>
+    </span>`;
+  }
+  if (item.type === 'link') {
+    const host = domainOf(item.sourceUrl);
+    return `<span class="lib-clip" aria-hidden="true">
+      <span class="lib-clip-mark">${esc((host || 'L').replace(/^www\./, '').slice(0, 1).toUpperCase())}</span>
+      <span class="lib-clip-body">
+        <span class="lib-res-name">${esc(item.title)}</span>
+        <span class="lib-res-domain">${esc(host || 'Link')}</span>
+      </span>
+    </span>`;
+  }
+  return `<span class="lib-jacket" aria-hidden="true">
+    <span class="lib-jacket-body">
+      <span class="lib-res-kind">${esc(fileKind(item))}</span>
+      <span class="lib-res-name">${esc(item.title)}</span>
+      <span class="lib-res-domain">${esc(fileSize(item.sizeBytes) || 'File')}</span>
+    </span>
+    <span class="lib-jacket-corner"></span>
+  </span>`;
+}
+
 export function resourceObjectHtml(item, index, total) {
   const archived = !!item.archivedAt;
   const visual = item.type === 'image' || item.type === 'video';
@@ -317,26 +450,22 @@ export function resourceObjectHtml(item, index, total) {
     aria-label="${esc(item.title)}, ${TYPE_LABEL[item.type] ?? 'item'}, ${
   index + 1} of ${total}${archived ? ', archived' : ''}"
     title="${esc(item.title)}">
-    ${visual ? previewHtml(item) : `<span class="lib-res-face" aria-hidden="true">
-      <span class="lib-res-edge"></span>
-      <span class="lib-res-tab"></span>
-      <span class="lib-res-sheet">
-        <span class="lib-res-kind">${esc(item.type === 'document' ? 'Document'
-    : item.type === 'file' ? fileKind(item) : 'Link')}</span>
-        <span class="lib-res-name">${esc(item.title)}</span>
-        ${item.type === 'link'
-    ? `<span class="lib-res-domain">${esc(domainOf(item.sourceUrl))}</span>`
-    : item.description
-      ? `<span class="lib-res-excerpt">${esc(item.description)}</span>` : ''}
-      </span>
-    </span>`}
+    ${visual ? previewHtml(item) : resourceFace(item)}
     ${archived ? '<span class="lib-obj-flag">Archived</span>' : ''}
+    ${visual ? `<span class="lib-cap" aria-hidden="true">
+      <span class="lib-cap-t">${esc(item.title)}</span>
+      ${sub ? `<span class="lib-cap-m">${esc(sub)}</span>` : ''}
+    </span>` : ''}
     <button type="button" class="lib-obj-more" data-more="${esc(item.id)}"
       aria-label="Actions for ${esc(item.title)}" aria-haspopup="menu" tabindex="-1">
       <svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor" aria-hidden="true"
         ><circle cx="5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="15" cy="10" r="1.4"/></svg>
     </button>
-    ${objectFoot(item.title, sub, item.type === 'link' ? 'Open link' : 'Open')}
+    ${visual
+    /* §26 — no heavy footer bar under a picture. The content dominates and the
+     * caption is plain text; only the action needs revealing. */
+    ? `<span class="lib-foot is-quiet" aria-hidden="true"><span class="lib-foot-a">Open</span></span>`
+    : objectFoot(item.title, sub, item.type === 'link' ? 'Open link' : 'Open')}
   </article>`;
 }
 
@@ -442,12 +571,58 @@ function setCursor(rail, index, { focus = false } = {}) {
  */
 let pulled = null;
 
+/**
+ * The commit (§12/§13).
+ *
+ * The turn is 3D; the arrived state is not. Once the Book has come round, the
+ * box transform is dropped, the three depth faces stop being painted, and the
+ * front cover becomes an ordinary untransformed element — so the title is set
+ * on the pixel grid rather than on a rotated plane, which is the difference
+ * between a crisp cover and a soft one.
+ *
+ * The handoff is seamless because the animation ends where the flat state
+ * begins: a compensating `translateZ(-t)` puts the cover back in the screen
+ * plane at −90°, so its projected width there is exactly its layout width. No
+ * pop, no scale, no width interpolation.
+ *
+ * `transitionend` is the optimisation and the timer is the guarantee. A
+ * throttled or interrupted transition must not be able to strand a Book
+ * half-turned, and a browser that never fires the event must still arrive.
+ */
+let commitTimer = 0;
+function commitFront(obj) {
+  if (!obj?.isConnected || !obj.classList.contains('is-pulled')) return;
+  obj.classList.add('is-front');
+}
+function scheduleCommit(obj) {
+  clearTimeout(commitTimer);
+  const vol = obj.querySelector('.lib-vol');
+  if (prefersReduced()) { commitFront(obj); return; }
+  const done = (e) => {
+    if (e.target !== vol || e.propertyName !== 'transform') return;
+    vol.removeEventListener('transitionend', done);
+    commitFront(obj);
+  };
+  vol?.addEventListener('transitionend', done);
+  commitTimer = setTimeout(() => { vol?.removeEventListener('transitionend', done); commitFront(obj); }, 380);
+}
+
+/** Only the immediate neighbours move (§14). The rest of the shelf holds still. */
+function setNeighbours(obj, on) {
+  const slot = obj?.closest('.lib-slot');
+  if (!slot) return;
+  slot.previousElementSibling?.classList.toggle('is-nudge-l', on);
+  slot.nextElementSibling?.classList.toggle('is-nudge-r', on);
+}
+
 /** Puts the pulled object back on the shelf. Safe to call at any time. */
 export function clearPulled({ restoreFocus = false } = {}) {
   if (!pulled) return;
   const obj = pulled;
   pulled = null;
-  obj.classList.remove('is-pulled');
+  clearTimeout(commitTimer);
+  setNeighbours(obj, false);
+  obj.classList.remove('is-pulled', 'is-front');
   obj.setAttribute('aria-expanded', 'false');
   if (restoreFocus && obj.isConnected) obj.focus({ preventScroll: true });
 }
@@ -468,6 +643,8 @@ export function pullForward(obj) {
   pulled = obj;
   obj.classList.add('is-pulled');
   obj.setAttribute('aria-expanded', 'true');
+  setNeighbours(obj, true);
+  if (obj.classList.contains('lib-book')) scheduleCommit(obj);
   const rail = obj.closest('.lib-rail');
   if (rail) {
     const at = [...rail.querySelectorAll('.lib-obj')].indexOf(obj);

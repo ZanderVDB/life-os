@@ -166,3 +166,20 @@ inside it, so a Book turned near the right edge still shows its whole cover.
 
 768 is verified as **viable**, not designed. C2 is a desktop-first prototype and
 a designed mobile Library is a later phase.
+
+---
+
+## L3.4 — the final Library
+
+Verified at 1440, 1280, 1024, 768 and 390.
+
+At every width: one baseline per shelf, no page-level horizontal overflow, the
+rails scroll where they overflow, and the pulled cover stays inside its rail.
+
+**Mobile (390).** One tap turns the Book, a second opens it — no double-tap
+anywhere. The cover measured 128px inside a rail that scrolls, and the quiet
+`Open` action beneath it is a 44px tap target. The spines stay wide enough to
+hit: they are 24-52px, which is a comfortable target height-wise since the whole
+190px spine is the control.
+
+The old floating purple `Open book` pill is gone at every width.

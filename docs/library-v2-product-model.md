@@ -246,3 +246,20 @@ Two Books must read as two Books; a dozen should read as a shelf. One overlap
 value for both is what made a small Library look like a deck of cards, and the
 real Library currently HAS two books. Below four objects they sit apart; at four
 or more they touch.
+
+---
+
+## L3.4 — the visual model is settled
+
+The product model is unchanged: Books, Documents, Images, Videos, Links, Files,
+plus the Diary, which is a Book to the person reading it and not a
+`library_items` record.
+
+What settled in L3.4 is how each one LOOKS and BEHAVES, and it is now
+authoritative — see [the final visual direction](library-v2-final-visual-direction.md).
+
+One product-level consequence worth recording: **a Book's thickness is a
+statement about its content**. It reads `book.pageCount`, so a Book that gets
+written in visibly grows on the shelf. That makes the shelf a picture of the
+work rather than of the filing, and it is the one place where the Library shows
+you something you did not type.

@@ -348,3 +348,18 @@ across all four bays), no scaling of live type, spine-on resting, and depth
 expressed as translation and shadow rather than as blur.
 
 See [the C2 direction](library-v2-l3-c2-direction.md).
+
+---
+
+## L3.4 — superseded by the final direction
+
+The Book model described above — a spine strip laid beside a cover, depth drawn
+rather than rotated — was replaced by the authenticated hybrid. The Book is now
+a solid with four faces that turns on its spine hinge.
+
+What survives unchanged: one baseline per shelf, scroll-first browsing, no scale
+in any state, and the shelf construction itself (Concept A — back plane, ledge
+line, lit edge, floor wash), which §20 accepted as sufficient rather than solved.
+
+The authority is now [the final visual direction](library-v2-final-visual-direction.md)
+and [the physical object model](library-v2-physical-object-model.md).

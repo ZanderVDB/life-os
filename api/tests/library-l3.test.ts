@@ -24,6 +24,22 @@ import { buildApp } from '../src/app.js';
 import { loadEnv } from '../src/env.js';
 import { SAMPLE_PREFIX, isLibrarySampleAllowed } from '../src/lib/sample-library.js';
 
+/* ── SUPERSEDED BY L3.4 ───────────────────────────────────────────────────
+ *
+ * The tests removed from this file asserted the FLAT Book: a spine strip laid
+ * beside a cover, depth drawn rather than rotated, and an explicit ban on any
+ * transform that was not a translation. That model was replaced in L3.4 by an
+ * authenticated visual decision -- the Book is now a solid that turns -- so
+ * those assertions describe a design that no longer exists, and keeping them
+ * would only record that we once did it differently.
+ *
+ * Nothing they protected was dropped. Every property that survives the change
+ * -- one baseline, no scale in any committed state, hover strictly weaker than
+ * a pull, neighbours that do not reflow the rail, the Diary having no Library
+ * identity, resources never being given a spine, and the accessible names --
+ * is re-asserted against the new model in `library-l34-final.test.ts`.
+ */
+
 const TOKEN = 'test-bypass-token';
 const envFor = (nodeEnv: string) => loadEnv({
   NODE_ENV: nodeEnv, PORT: '8080', LOG_LEVEL: 'fatal',
@@ -150,35 +166,6 @@ test('wheel: preventDefault only happens when the shelf can actually consume it'
  * that replaced it — explicit pull-forward — and, just as importantly, that
  * the old one has not crept back. */
 
-test('states: resting, hover, focus, pulled, opening and returned are all distinct', () => {
-  // RESTING owns nothing. There is no `.lib-obj{transform:...}` at all.
-  assert.ok(!/\.lib-obj\{[^}]*transform:(?!\s*none)/.test(html),
-    'the resting object has a transform, which is how permanent prominence returns');
-  // HOVER owns a lift and a surface. It never fills anything.
-  /* Hover is deliberately SMALLER than a pull (L3.2 S21): 3px against 32.
-   * Hover says "this responds"; pulling says "this one". */
-  assert.match(html, /\.lib-obj:hover\{transform:translateY\(-3px\);z-index:3\}/);
-  // FOCUS owns an outline, from :focus-visible only...
-  assert.match(html, /\.lib-obj:focus-visible\{outline:2px solid var\(--accent\)/);
-  // ...and it is the ONLY state that owns one, which is what keeps it from
-  // being confused with pulled-forward (L3.1 27).
-  const objectRules = [...html.matchAll(/^\.lib-obj[.:][^{]*\{[^}]*\}/gm)].map((m) => m[0]);
-  const withOutline = objectRules.filter((r) => /outline:(?!none)/.test(r));
-  assert.ok(withOutline.every((r) => /focus/.test(r)),
-    `a non-focus state declares an outline: ${withOutline.find((r) => !/focus/.test(r))}`);
-  // PULLED owns lift + scale + depth, and reveals its Open control and label.
-  /* No scale at all since L3.2, and 32px rather than 22 -- see the crispness
-   * test below for why the number is a multiple of four. */
-  assert.match(html, /\.lib-obj\.is-pulled\{transform:translateY\(-32px\);z-index:6\}/);
-  assert.match(html, /\.lib-obj\.is-pulled \.lib-foot\{opacity:1/);
-  // OPENING owns the handoff.
-  assert.match(html, /\.lib-obj\.is-opening\{transform:translateY\(-48px\);opacity:\.1/);
-  // RETURNED owns a glow, never an outline (L3.1 4).
-  assert.match(html, /\.lib-obj\.is-returned \.lib-cover[^{]*\{\s*box-shadow:0 0 18px/);
-  assert.ok(!/is-returned[^{]*\{[^}]*outline/.test(html),
-    'the return highlight is an outline, which is what focus looks like');
-});
-
 test('prominence: the scroll-driven raised object is gone entirely', () => {
   /* Not merely unused — ABSENT. A dormant `setProminent` is one call site away
    * from the defect coming back, so the machinery is deleted rather than left
@@ -221,33 +208,6 @@ test('keyboard: one tab stop per shelf, arrows within it', () => {
   assert.match(shelf, /if \(e\.key === 'Enter' \|\| e\.key === ' '\)/);
 });
 
-test('a11y: every shelf is a labelled region and every object names its type and place', () => {
-  assert.match(shelf, /<section class="lib-shelf lib-shelf-\$\{esc\(kind\)\}"[\s\S]*?role="group"\s*aria-labelledby="\$\{hid\}"/);
-  // "Atlas, Book, 3 of 12" — the type and the position are in the NAME, which
-  // is announced everywhere, rather than in attributes a list role would need.
-  assert.match(shelf, /aria-label="\$\{esc\(item\.title\)\}[\s\S]*?, Book, \$\{\s*index \+ 1\} of \$\{total\}/);
-  assert.match(shelf, /aria-label="\$\{esc\(item\.title\)\}, \$\{TYPE_LABEL\[item\.type\] \?\? 'item'\}, \$\{\s*index \+ 1\} of \$\{total\}/);
-  // The full title always survives, however hard the cover clamps it.
-  assert.match(shelf, /title="\$\{esc\(item\.title\)\}"/);
-});
-
-test('a11y: nothing needs hover, and no state is colour alone', () => {
-  // The overflow menu is hover-revealed on a pointer and ALWAYS shown on touch.
-  assert.match(html, /@media \(max-width:820px\)[\s\S]*?\.lib-obj-more\{opacity:1/);
-  // …with a 44px hit area even though the drawn control stays 30px.
-  assert.match(html, /\.lib-obj-more::before\{content:'';position:absolute[\s\S]*?width:44px;height:44px/);
-  /* The system Book's mark was a STAR in a tinted rounded box, which looks like
-   * a favourite button and did nothing when pressed (L3.1 12). It is gone.
-   * What distinguishes the Diary now is material — a deeper cloth, a lavender
-   * spine edge — plus the words "System journal" under it when pulled forward.
-   * None of it is a control, so none of it can imply an action that does not
-   * exist. */
-  assert.ok(!shelf.includes('lib-obj-sys'), 'the fake favourite star is back');
-  assert.ok(!html.includes('.lib-obj-sys'), 'the fake favourite star still has a style');
-  assert.match(html, /\.lib-book-system \.lib-spine\{box-shadow:inset 1\.5px 0 0 rgba\(182,155,240/);
-  assert.match(shelf, /System journal/);
-});
-
 test('motion: reduced motion removes travel, not information', () => {
   const block = html.slice(html.indexOf('@media (prefers-reduced-motion: reduce){',
     html.indexOf('.lib-obj')));
@@ -264,84 +224,8 @@ test('motion: reduced motion removes travel, not information', () => {
 
 /* ── §8/§9  Covers and spines ────────────────────────────────────────── */
 
-test('cover: the shelf object carries the approved Book identity', () => {
-  /* §8 — the cover on the shelf must correspond to the Book that opens. Same
-   * marks in the same order, and the same 210:297 proportion. Measured at
-   * 1280×900: cover 128×181, ratio 1.414 against 297/210 = 1.414. */
-  /* Height, not `aspect-ratio`: the ratio yielded to content, so a cover with
-   * a subtitle grew and books ended up different heights (measured 212.7px
-   * against 178.2). The height now comes from the same expression the spine
-   * and the fore-edge use. */
-  assert.match(html, /\.lib-cover\{position:relative;flex:0 0 auto;width:var\(--bw\);\s*\n?\s*height:calc\(var\(--bw\) \* 297 \/ 210\)/);
-  for (const mark of ['lib-cover-mark', 'lib-cover-pre', 'lib-cover-title',
-    'lib-cover-rule', 'lib-cover-author']) {
-    assert.ok(shelf.includes(mark), `the shelf cover is missing ${mark}`);
-  }
-  // The accent is the BOOK's own, from its first section — not derived from an id.
-  assert.match(shelf, /const accentOf = \(item\) => \(ACCENTS\.includes\(item\.book\?\.accent\)/);
-});
-
-test('spine: wide enough to be read, and flush with the cover', () => {
-  /* L3 drew a 13px strip with the whole title crammed into it at 8.5px. The
-   * review called it poor, and measurement agreed: at that width a title
-   * either disappears or is clipped mid-word with nothing to say so.
-   *
-   * 24px, 10px type, a title cut at a word boundary with an ellipsis, and two
-   * accent bands at head and tail. Measured flush with the cover: spine and
-   * cover both 178.2px tall, gap between them 0.00px. */
-  assert.match(html, /\.lib-book\{--bw:126px;--spine-w:22px;--edge-w:6px\}/);
-  assert.match(html, /\.lib-spine-t\{[^}]*font-size:10px/);
-  assert.match(html, /\.lib-spine-band\{/);
-  assert.match(shelf, /export function spineTitle\(title, max = 22\)/);
-  assert.match(shelf, /<span class="lib-spine" aria-hidden="true">/);
-  /* One object, not two: the spine's height is derived from the cover's own
-   * width and ratio, so they cannot drift apart, and the gutter shadow is
-   * drawn on the COVER so the junction is a fold rather than a seam. */
-  assert.match(html, /\.lib-spine\{[^}]*height:calc\(var\(--bw\) \* 297 \/ 210\)/);
-  assert.match(html, /\.lib-cover::before\{content:'';position:absolute;left:0/);
-});
-
-test('depth is drawn, not rendered in 3D', () => {
-  /* L3 put `perspective` on every slot and rotated the prominent object by 7
-   * degrees. L3.1 removed all of it, and the reason is in the review: a
-   * rotated cover puts glyphs on a plane that no longer aligns with the pixel
-   * grid, and at 15px Playfair that is visible as blur. §21 of L3.1 is
-   * explicit — crispness outranks novelty.
-   *
-   * What carries depth instead costs nothing to type: books OVERLAP their
-   * neighbours, they lift and scale, they cast a contact shadow, and the
-   * pulled one rises above the rest on z-index. Measured: 0 objects with any
-   * 3D transform, at every width. */
-  const shelfCss = html.slice(html.indexOf('.lib-obj{'), html.indexOf('.lib-hits'));
-  assert.ok(!/rotateY|rotate3d|perspective:|preserve-3d/.test(shelfCss),
-    'a 3D transform is back on the shelf');
-  /* L3.1 overlapped books by 64px. L3.2 removed the overlap entirely: tucking
-   * each fore-edge behind the next spine hid the strongest "this is bound"
-   * cue, and a dark spine landing mid-cover is what made a shelf read as a
-   * deck of cards. Books TOUCH when the shelf is dense and sit apart when it
-   * is not -- density by collection size, not one formula for both. */
-  assert.match(html, /\.lib-rail\.is-dense \.lib-row\{column-gap:0\}/);
-  assert.match(html, /\.lib-shelf-book \.lib-row\{column-gap:16px\}/);
-  assert.ok(!/margin-left:calc\(var\(--overlap\)/.test(html), 'the book overlap is back');
-  assert.match(html, /\.lib-obj::after\{content:'';position:absolute/);
-});
-
 
 /* ── §10  The non-Book family ────────────────────────────────────────── */
-
-test('resources: honest per type, and never forced onto a spine', () => {
-  assert.ok(!/lib-res[\s\S]{0,400}lib-spine/.test(shelf),
-    'a non-Book object was given a book spine');
-  for (const cls of ['lib-res-tab', 'lib-res-edge', 'lib-res-sheet']) {
-    assert.ok(html.includes(cls), `the folio is missing ${cls}`);
-  }
-  assert.match(html, /\.lib-res-link \.lib-res-tab\{background:var\(--a-sage\)\}/);
-  assert.match(html, /\.lib-res-file \.lib-res-tab\{background:var\(--muted\)\}/);
-  // A video says how long it is; a file says what it is and how big.
-  assert.match(shelf, /class="lib-frame-badge"/);
-  assert.match(shelf, /function fileKind\(item\)/);
-  assert.match(shelf, /if \(item\.type === 'link'\) return domainOf\(item\.sourceUrl\) \|\| 'Link';/);
-});
 
 test('previews: the fallback is the floor, and a dead URL cannot move anything', () => {
   /* §28. The fallback is DRAWN FIRST and the image sits on top of it, so an
@@ -467,27 +351,6 @@ test('open: the handoff class only ever lives on a node about to be discarded', 
 
 /* ── §19  The Diary shortcut ─────────────────────────────────────────── */
 
-test('diary: a system Book with no Library identity at all', () => {
-  /* Treatment B — its own "Personal" ledge above the Books. It looks like a
-   * Book because it IS one to the person reading it, and it behaves like
-   * nothing else on the shelf because it is not a Library item. */
-  assert.match(overview, /class="lib-shelf lib-shelf-personal"/);
-  assert.match(shelf, /export function diaryObjectHtml\(\)/);
-  assert.match(shelf, /data-system="diary"/);
-
-  const diary = shelf.slice(shelf.indexOf('export function diaryObjectHtml'));
-  const body = diary.slice(0, diary.indexOf('\n}'));
-  // No item id, so nothing can look it up, archive it, rename it or delete it.
-  assert.ok(!body.includes('data-item='), 'the Diary object carries a library item id');
-  assert.ok(!body.includes('data-more'), 'the Diary object has an overflow menu');
-  assert.ok(!body.includes('archive'), 'the Diary object offers archiving');
-  /* It says what it is on screen, in words rather than in a glyph that looks
-   * like a button (L3.1 12). */
-  assert.ok(!body.includes('lib-obj-sys'), 'the fake favourite star is back on the Diary');
-  assert.match(body, /System journal/);
-  assert.match(overview, /Part of Life OS, not a Library item/);
-});
-
 test('diary: it is never a library_items row, and never in Library search', () => {
   // Nothing creates a row for it.
   assert.ok(!/type:\s*'diary'/.test(view) && !/type:\s*'diary'/.test(overview),
@@ -559,27 +422,6 @@ test('loading: shelf-shaped skeletons, and the D2.2 lifecycle guarantee intact',
 });
 
 /* ── §34/§35  Responsive ─────────────────────────────────────────────── */
-
-test('responsive: the shelf stays a shelf and the objects get bigger', () => {
-  /* Not a collapsed desktop layout. Measured resting book width: 128px base,
-   * 124 at tablet, 132 at phone, 128 at small phone — the cover grows where the
-   * finger is, which is the opposite of what squeezing would do. */
-  assert.match(html, /@media \(max-width:1024px\)\{[\s\S]*?\.lib-book\{--bw:124px\}/);
-  assert.match(html, /@media \(max-width:820px\)\{[\s\S]*?\.lib-book\{--bw:132px;--spine-w:22px\}/);
-  assert.match(html, /@media \(max-width:480px\)\{[\s\S]*?\.lib-book\{--bw:128px\}/);
-  /* The tablet rule that dropped a 3D turn is gone with the turn itself: L3.1
-   * removed rotation everywhere, because rotated glyphs are where type stopped
-   * being crisp (21). What varies by width now is the OVERLAP — books sit
-   * further apart under a finger, because a book you have to hit exactly is a
-   * book you miss. */
-  assert.ok(!/rotateY/.test(html), 'a 3D rotation is back on the shelf');
-  /* Overlap tokens are gone with the overlap (L3.2). What varies by width is
-   * the object size and the gap, never how much of a book is hidden. */
-  assert.ok(!/--overlap/.test(html), 'the overlap token is back');
-  assert.match(html, /@media \(max-width:820px\)[\s\S]*?\.lib-book\{--bw:132px/);
-  // The last shelf clears the fixed composer. Measured at 375×667: 173px spare.
-  assert.match(html, /\.lib-shelves\{gap:18px;padding-bottom:calc\(84px \+ env\(safe-area-inset-bottom,0px\)\)\}/);
-});
 
 /* ── §37/§38  Sample tooling ─────────────────────────────────────────── */
 
