@@ -29,7 +29,7 @@ import {
 } from './library-overview.js';
 import {
   wireRail, restoreShelfScroll, captureShelfScroll, markReturn, syncSteps,
-  clearPulled, pulledObject, pullForward, objectHtml, fileSize, domainOf,
+  clearPulled, releasePulled, pulledObject, pullForward, objectHtml, fileSize, domainOf,
 } from './library-shelf.js';
 import {
   coverHtml, spreadHtml, toolbarHtml, mountSpread, wireToolbar, wireSaveStatus,
@@ -442,7 +442,13 @@ function openShelfObject(obj) {
   /* Where every shelf is, captured BEFORE the route changes and the page is
    * replaced. This is the snapshot §18 restores from. */
   captureShelfScroll(obj.closest('#main-scroll') ?? document);
-  clearPulled();
+  /* RELEASE, not clear (S1 §12). `clearPulled()` would take the Book back to
+   * its spine — restoring the depth faces and re-hinging the cover — and only
+   * then would `is-opening` carry it away. One activation, two transitions, the
+   * second undoing the first. The node is about to be destroyed by the route
+   * change, so it does not need putting back; only the module's claim on it
+   * has to go. */
+  releasePulled();
   lib.cameFrom = id;
   lib.cameFromShelf = obj.closest('.lib-rail')?.dataset.rail ?? null;
   markOpened(id);

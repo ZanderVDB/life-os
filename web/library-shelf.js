@@ -604,7 +604,9 @@ function scheduleCommit(obj) {
     commitFront(obj);
   };
   vol?.addEventListener('transitionend', done);
-  commitTimer = setTimeout(() => { vol?.removeEventListener('transitionend', done); commitFront(obj); }, 380);
+  /* Longer than `--d-turn` (400ms) with room for a slow frame. If the turn is
+   * ever re-timed, this moves with it or a Book commits mid-rotation. */
+  commitTimer = setTimeout(() => { vol?.removeEventListener('transitionend', done); commitFront(obj); }, 520);
 }
 
 /** Only the immediate neighbours move (§14). The rest of the shelf holds still. */
@@ -625,6 +627,28 @@ export function clearPulled({ restoreFocus = false } = {}) {
   obj.classList.remove('is-pulled', 'is-front');
   obj.setAttribute('aria-expanded', 'false');
   if (restoreFocus && obj.isConnected) obj.focus({ preventScroll: true });
+}
+
+/**
+ * Drops the shelf's claim on the pulled object WITHOUT putting it back (S1 §12).
+ *
+ * ── The defect ───────────────────────────────────────────────────────────
+ *
+ * Opening went `clearPulled()` and then `is-opening`. `clearPulled` removes
+ * `is-pulled` and `is-front`, which restores the three depth faces and puts the
+ * cover back on its 90° hinge — so a Book that had just finished turning to
+ * face you turned back to its spine, and only then flew away. One activation,
+ * two visible transitions, the second of them a reversal of the first. That is
+ * the flash the review reported as "it turns, then it seems to turn again".
+ *
+ * The object is about to be destroyed by the route change, so it does not need
+ * putting back. What has to be released is the MODULE's claim on it: the
+ * `pulled` reference and the pending commit timer, both of which would
+ * otherwise outlive the node.
+ */
+export function releasePulled() {
+  pulled = null;
+  clearTimeout(commitTimer);
 }
 
 export const pulledObject = () => (pulled?.isConnected ? pulled : null);

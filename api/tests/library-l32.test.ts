@@ -154,7 +154,37 @@ test('shelf: a real ledge, and no blank stage above it', () => {
     'the shelf should be exactly three drawn layers');
   assert.match(rail, /rgba\(255,255,255,\.014\)/);          // back plane
   assert.match(rail, /rgba\(255,255,255,\.13\) calc\(100% - var\(--shelf-drop\)\)/); // lit edge
-  assert.match(html, /--shelf-head:26px;/);
+  /* The headroom above the objects. It was 26px, which is LESS than the 32px a
+   * pulled object rises — so a retrieved object was clipped by its own rail
+   * (S1 §34). `overflow-y` cannot be visible while `overflow-x` is scroll, so
+   * the room has to exist inside the scroll box; the rule is therefore that the
+   * head clears the lift, not that it is any particular number. */
+  const head = Number(html.match(/--shelf-head:(\d+)px;/)![1]);
+  const lift = Number(html.match(/\.lib-obj\.is-pulled\{transform:translateY\(-(\d+)px\)/)![1]);
+  assert.ok(head > lift, `head ${head}px does not clear a ${lift}px lift`);
+  assert.equal(head % 4, 0, `${head}px is not device-pixel exact`);
+});
+
+test('shelf: the objects stand ON the ledge, not above it', () => {
+  /* S1 §33. The ledge is painted on the rail, and `overflow-x: scroll` keeps a
+   * scrollbar gutter INSIDE that rail's border box — so the drawn contact plane
+   * sat one gutter below the plane the objects actually stand on. Measured on
+   * the real Library: exactly 10px of daylight under every object, on every one
+   * of the five shelves, which is what the review saw as "the Books are not
+   * touching the shelf".
+   *
+   * Measuring the gutter and subtracting it was tried first and is fragile — the
+   * measurement has to happen after layout, and a physical alignment should not
+   * depend on when a script ran. Removing the gutter removes the discrepancy.
+   * Re-measured after: 0px on all five. */
+  assert.match(html, /\.lib-rail\{[^}]*scrollbar-width:none/);
+  assert.match(html, /\.lib-rail::-webkit-scrollbar\{display:none\}/);
+  // Declared once: a second `scrollbar-width` later in the same block silently won.
+  const rail = html.slice(html.indexOf('.lib-rail{'), html.indexOf('.lib-rail::-webkit'));
+  assert.equal((rail.match(/scrollbar-width:/g) ?? []).length, 1,
+    'scrollbar-width is declared twice in one block');
+  // The rail still scrolls; only its gutter is gone.
+  assert.match(rail, /overflow-x:scroll/);
 });
 
 /* ── §13/§14  Diary ──────────────────────────────────────────────────── */

@@ -56,7 +56,11 @@
   --e-out:cubic-bezier(.2,.7,.2,1); --e-inout:cubic-bezier(.4,0,.2,1);
   --t-hover:var(--d-fast) var(--e-out);
   --t-select:var(--d-base) var(--e-out);
-  --d-turn:300ms;          /* the Book turn (L3.4 §39: 280-320ms) */
+  /* S1 §35 — 400ms. 300 was measured as correct and reported as too quick to
+     read: the turn is now a core product interaction and it has to be legible,
+     not merely fast. Still no spring, no bounce, and the committed DOM still
+     owns the final state. */
+  --d-turn:400ms;
   --t-page:var(--d-slow) var(--e-out);
   /* Layout tokens — Expanded / Compact / Drawer plug in here (§11) */
   /* Ported verbatim from Legacy v244. These numbers ARE the approved design;
@@ -2777,7 +2781,7 @@ body:has(.lib-page) .rail{display:none}
 :root{
   --shelf-drop:30px;      /* ledge line, measured up from the rail's bottom  */
   --shelf-contact:4px;    /* object bottom to ledge: touching, not floating  */
-  --shelf-head:26px;      /* breathing room above the tallest object         */
+  --shelf-head:48px;      /* breathing room above the tallest object         */
   --shelf-label:34px;     /* the label zone below the ledge                  */
 }
 /* `scroll`, not `auto`.
@@ -2790,11 +2794,32 @@ body:has(.lib-page) .rail{display:none}
    Reserving it on every rail is what makes one baseline formula true. The track
    is transparent and the thumb does not render when there is nothing to
    scroll, so a shelf that fits shows nothing. */
-.lib-rail{overflow-x:scroll;overflow-y:hidden;scroll-snap-type:x proximity;
+/* NO VISIBLE GUTTER (S1 §33).
+   `overflow-x: scroll` keeps a scrollbar gutter inside the border box, and the
+   ledge is painted on the rail — so the drawn contact plane sat one gutter below
+   the plane the Books actually stand on. Measured: exactly 10px of daylight
+   under every object, on every shelf, which is what the review saw as "the Books
+   are not touching the shelf".
+
+   Measuring the gutter and subtracting it was tried and is fragile: the measure
+   has to happen after layout, and a physical alignment should not depend on when
+   a script ran. Removing the gutter removes the discrepancy — the rail still
+   scrolls natively, still has its arrows, and every shelf still reserves exactly
+   the same nothing, so the six baselines stay identical. */
+.lib-rail{overflow-x:scroll;overflow-y:hidden;scrollbar-width:none;
+  scroll-snap-type:x proximity;
   scroll-padding-inline:10px;overscroll-behavior-x:contain;
+  /* §34 — headroom for the lift, INSIDE the scroll box. `overflow-y` cannot be
+     visible while `overflow-x` is scroll (the browser forces it to auto), so a
+     pulled object cannot escape the rail; it has to have somewhere to go within
+     it. 48px clears the 32px lift plus the folio sheets that stand 12px proud
+     of their lid, and it is a multiple of four. */
   padding:var(--shelf-head) 0 calc(var(--shelf-drop) + var(--shelf-contact));
   margin:0 -4px;
-  scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent;
+  /* `scrollbar-width` is declared ONCE, at the top of this block. It used to
+     be set to `thin` here as well, later in the same declaration block, which
+     silently won — the rail kept its 10px gutter and the ledge kept sitting
+     that far below the Books. */
 
   /* THE SHELF ITSELF (S22). A back plane the objects stand in front of, a lit
      front edge with thickness, and the floor wash where shadow gathers. Quiet
@@ -2812,9 +2837,7 @@ body:has(.lib-page) .rail{display:none}
       transparent calc(100% - var(--shelf-drop) + 4px)),
     linear-gradient(to bottom,transparent calc(100% - var(--shelf-drop) + 4px),
       rgba(0,0,0,.22) 100%)}
-.lib-rail::-webkit-scrollbar{height:8px}
-.lib-rail::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
-.lib-rail::-webkit-scrollbar-track{background:transparent}
+.lib-rail::-webkit-scrollbar{display:none}
 
 /* ---- DENSITY, BY COLLECTION SIZE (L3.2 S23/S24) ----------------------
    Two Books must read as two Books. A dozen should read as a shelf.
@@ -2838,6 +2861,12 @@ body:has(.lib-page) .rail{display:none}
    read as a shelf -- each page block sits against the next spine, which is what
    a real shelf looks like -- and every cover stays whole. */
 .lib-rail.is-dense .lib-row{column-gap:0}
+/* §33 — Books touch, always. The adaptive density rule was written for the old
+   flat cover-cards, where three touching covers read as a deck; with spines the
+   opposite is true, and a 16px gap between three Books is what the review meant
+   by "not touching one another". Two Books leaning together are the start of a
+   collection; two Books 16px apart are two objects on display. */
+.lib-shelf-book .lib-row,.lib-shelf-personal .lib-row{column-gap:0}
 .lib-slot{scroll-snap-align:start;flex:0 0 auto;position:relative;
   transition:transform var(--t-select)}
 
@@ -4442,7 +4471,7 @@ body:has(.dia-page) .rail{display:none}
      book you have to hit exactly is a book you miss. */
   .lib-book{--bw:132px;--spine-w:22px}
   .lib-res{--rw:158px}
-  .lib-rail{padding:16px 0 26px;scroll-padding-inline:16px}
+  .lib-rail{padding:48px 0 26px;scroll-padding-inline:16px}
   .lib-row{padding:0 16px;column-gap:14px}
   /* Always visible, because there is no hover to reveal it with (§36), and a
      44px hit area without a 44px button: the drawn control stays 30px so it
