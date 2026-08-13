@@ -60,7 +60,7 @@ test('baseline: one formula, and no shelf may opt out of it', () => {
    * exactly 18px. One distinct value across six shelves and four object types. */
   assert.match(html, /--shelf-drop:30px;/);
   assert.match(html, /--shelf-contact:4px;/);
-  assert.match(html, /padding:var\(--shelf-head\) 0 calc\(var\(--shelf-drop\) \+ var\(--shelf-contact\)\)/);
+  assert.match(html, /padding:var\(--shelf-head\) 0 calc\(var\(--shelf-drop\) - var\(--shelf-contact\)\)/);
   // No shelf sets its own rail padding. That is what broke it.
   assert.ok(!/\.lib-shelf-\w+ \.lib-rail\{[^}]*padding/.test(html),
     'a shelf overrides the rail padding, which puts its objects on another plane');
@@ -118,7 +118,7 @@ test('depth: one strong cue, not three competing ones', () => {
   const pulled = html.match(/\.lib-obj\.is-pulled\{[^}]*\}/)![0];
   assert.ok(!/scale\(/.test(pulled), 'the pulled state scales');
   assert.ok(!/rotate/.test(pulled), 'the pulled state rotates');
-  assert.match(pulled, /translateY\(-32px\)/);
+  assert.match(pulled, /translateY\(calc\(-1 \* var\(--lib-book-pull\)\)\)/);
 });
 
 /* ── §7  Local breathing room ────────────────────────────────────────── */
@@ -160,8 +160,13 @@ test('shelf: a real ledge, and no blank stage above it', () => {
    * the room has to exist inside the scroll box; the rule is therefore that the
    * head clears the lift, not that it is any particular number. */
   const head = Number(html.match(/--shelf-head:(\d+)px;/)![1]);
-  const lift = Number(html.match(/\.lib-obj\.is-pulled\{transform:translateY\(-(\d+)px\)/)![1]);
+  /* The lift is a token from S2.1, and the tuner can raise it as far as 48px —
+   * so the headroom must clear the token's MAXIMUM, not its current value, or a
+   * Book clips the moment somebody drags Pull distance up. */
+  const lift = Number(html.match(/--lib-book-pull:\s*(\d+)px/)![1]);
+  const liftMax = 48;
   assert.ok(head > lift, `head ${head}px does not clear a ${lift}px lift`);
+  assert.ok(head >= liftMax, `head ${head}px does not clear the ${liftMax}px maximum lift`);
   assert.equal(head % 4, 0, `${head}px is not device-pixel exact`);
 });
 

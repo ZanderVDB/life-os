@@ -604,6 +604,18 @@ let pulled = null;
  * half-turned, and a browser that never fires the event must still arrive.
  */
 let commitTimer = 0;
+
+/** Enough for one slow frame after the turn has finished. */
+const COMMIT_MARGIN = 120;
+
+/** The turn duration, read from the token so a live change is picked up. */
+export function turnMs() {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue('--d-turn').trim();
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n)) return 400;
+  return raw.endsWith('ms') ? n : n * 1000;
+}
 function commitFront(obj) {
   if (!obj?.isConnected || !obj.classList.contains('is-pulled')) return;
   obj.classList.add('is-front');
@@ -618,9 +630,12 @@ function scheduleCommit(obj) {
     commitFront(obj);
   };
   vol?.addEventListener('transitionend', done);
-  /* Longer than `--d-turn` (400ms) with room for a slow frame. If the turn is
-   * ever re-timed, this moves with it or a Book commits mid-rotation. */
-  commitTimer = setTimeout(() => { vol?.removeEventListener('transitionend', done); commitFront(obj); }, 520);
+  /* ONE authoritative duration (S2.1 §20). The commit must always land behind
+   * the turn, so it is DERIVED from `--d-turn` rather than written down beside
+   * it — a fixed timer left behind a live-tuned duration is a Book that commits
+   * mid-rotation the moment the turn is slowed. */
+  commitTimer = setTimeout(() => { vol?.removeEventListener('transitionend', done); commitFront(obj); },
+    turnMs() + COMMIT_MARGIN);
 }
 
 /** Only the immediate neighbours move (§14). The rest of the shelf holds still. */

@@ -107,8 +107,14 @@ test('final: the materials are muted Book cloths, not brand colours (§5)', () =
 /* ── §6  Hover ──────────────────────────────────────────────────────────── */
 
 test('final: hover is obvious, and still strictly weaker than a pull', () => {
-  const hov = Number(css.match(/\.lib-obj:hover\{transform:translateY\(-(\d+)px\)/)![1]);
-  const pull = Number(css.match(/\.lib-obj\.is-pulled\{transform:translateY\(-(\d+)px\)/)![1]);
+  /* Both are tokens now (S2.1), so the numbers are read from the token block
+   * rather than from the rules — but the RELATIONSHIP is still the thing that
+   * matters, and it is still enforced here. */
+  const token = (t: string) => Number(css.match(new RegExp(`${t}:\\s*([\\d.]+)`))![1]);
+  const hov = token('--lib-book-hover');
+  const pull = token('--lib-book-pull');
+  assert.match(css, /\.lib-obj:hover\{transform:translateY\(calc\(-1 \* var\(--lib-book-hover\)\)\)/);
+  assert.match(css, /\.lib-obj\.is-pulled\{transform:translateY\(calc\(-1 \* var\(--lib-book-pull\)\)\)/);
   assert.ok(hov >= 5 && hov <= 8, `hover travel is ${hov}px, §6 asks for 5–8`);
   assert.ok(hov < pull, 'hover is not weaker than a pull');
   assert.ok(pull >= hov * 3, 'hover and pull are too close to tell apart');
@@ -183,15 +189,17 @@ test('final: perspective is safe at both ends of the turn', () => {
 /* ── §14  Neighbours ────────────────────────────────────────────────────── */
 
 test('final: only the two immediate neighbours move, and the rail never reflows', () => {
-  const nudge = Number(css.match(/\.lib-slot\.is-nudge-r\{transform:translateX\((\d+)px\)\}/)![1]);
+  /* One token, read by both sides, so they cannot drift and there is no second
+   * 16 hiding anywhere (S2.1 §21). */
+  assert.match(css, /\.lib-slot\.is-nudge-l\{transform:translateX\(calc\(-1 \* var\(--lib-book-neighbour\)\)\)\}/);
+  assert.match(css, /\.lib-slot\.is-nudge-r\{transform:translateX\(var\(--lib-book-neighbour\)\)\}/);
+  const nudge = Number(css.match(/--lib-book-neighbour:\s*(\d+)px/)![1]);
   assert.ok(nudge >= 10 && nudge <= 18, `neighbour clearance is ${nudge}px, §14 asks for 10-18`);
   /* And it must be a multiple of four, so it lands on a whole device pixel at
    * DPR 1, 1.25, 1.5 and 2. 14 x 1.25 is 17.5 — half a device pixel out, which
    * is exactly the phase error L3.2 traced the shelf blur to. */
   assert.equal(nudge % 4, 0, `${nudge}px is not device-pixel exact`);
-  // Symmetric: the two sides step apart by the same amount.
-  assert.ok(css.includes(`.lib-slot.is-nudge-l{transform:translateX(-${nudge}px)}`),
-    'the two neighbours move by different amounts');
+
   assert.match(shelf, /slot\.previousElementSibling\?\.classList\.toggle\('is-nudge-l', on\)/);
   assert.match(shelf, /slot\.nextElementSibling\?\.classList\.toggle\('is-nudge-r', on\)/);
   // Applied on pull and removed on return, so nothing can be left standing aside.

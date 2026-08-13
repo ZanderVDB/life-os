@@ -262,6 +262,7 @@ async function renderOverview(head, scroll, nav = navToken()) {
   lib.pageHits = [];         // results belong to a query, not to the route
   head.innerHTML = headerHtml();
   head.querySelector('#lib-add').addEventListener('click', (e) => openAddMenu(e.currentTarget));
+  void offerTuner(head);
 
   if (!lib.itemsLoaded) {
     /* The filter bar and the card shapes, not a giant rectangle — §2. The
@@ -281,6 +282,52 @@ async function renderOverview(head, scroll, nav = navToken()) {
    * results, not on "nothing matched". The query survives the round trip, so
    * the half of it that lives on the server has to be asked again. */
   if (lib.query.trim()) queueLibrarySearch(lib.query);
+}
+
+/* ── The Book Tuner trigger (S2.1 §2) ────────────────────────────────────
+ *
+ * Staging only, and the SERVER decides. `GET /library/sample` already reports
+ * `allowed`, which is exactly `NODE_ENV !== 'production'` — the same authority
+ * the sample tooling and the design lab use. Reusing it means the tuner cannot
+ * appear in production without the sample endpoints appearing too, and there is
+ * no new query flag anybody could set.
+ *
+ * Cached for the session: it cannot change under a running page.
+ */
+let tunerAllowed = null;
+async function tunerIsAllowed() {
+  if (tunerAllowed !== null) return tunerAllowed;
+  try {
+    const r = await ctx.api('/library/sample');
+    tunerAllowed = r?.allowed === true;
+  } catch {
+    tunerAllowed = false;          // a failure to ask is not permission
+  }
+  return tunerAllowed;
+}
+
+/** A quiet trigger beside the Library title. Never in product navigation. */
+async function offerTuner(head) {
+  if (!(await tunerIsAllowed()) || !head.isConnected) return;
+  if (head.querySelector('#lib-tuner-open')) return;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = 'lib-tuner-open';
+  btn.className = 'lib-tuner-open';
+  btn.textContent = 'Book Tuner';
+  btn.title = 'Staging only — live Book geometry';
+  btn.addEventListener('click', async () => {
+    const m = await import('./library-tuner.js');
+    if (m.tunerOpen()) m.unmountTuner(); else m.mountTuner();
+  });
+  head.querySelector('.lib-head-row, .head-row, h1')?.after(btn) ?? head.appendChild(btn);
+}
+
+/** Called when Library leaves, so the panel and its overrides do not survive. */
+export async function closeTuner() {
+  if (tunerAllowed !== true) return;
+  const m = await import('./library-tuner.js');
+  m.unmountTuner();
 }
 
 function paintOverview(scroll = document.getElementById('main-scroll')) {
@@ -1193,6 +1240,9 @@ export async function libraryWillLeave() {
   /* The lab holds listeners and timers of its own. Tearing it down here means
    * leaving Library by any route stops it, not only switching concepts. */
   void import('./modules/library-lab/lab-view.js').then((m) => m.leaveLab()).catch(() => {});
+  /* The tuner is a Library utility. Leaving Library takes the panel AND every
+   * token override with it, so a tuned shelf cannot follow you to Today. */
+  void closeTuner().catch(() => {});
   /* Leaving Library for another section. The shelves are captured whether or
    * not a Book is open, because coming back to Library from Today should also
    * land where you were. */

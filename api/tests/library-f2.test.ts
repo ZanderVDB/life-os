@@ -372,7 +372,7 @@ test('the save baseline is captured before anything is typed', () => {
 test('anything that takes the editor away flushes first', () => {
   const nav = viewCode.slice(viewCode.indexOf('async function navigate'));
   assert.match(nav.slice(0, 600), /await flushAll\(\)/);
-  assert.match(viewCode, /export async function libraryWillLeave[\s\S]{0,200}await flushAll\(\)/);
+  assert.match(viewCode, /export async function libraryWillLeave[\s\S]{0,400}await flushAll\(\)/);
   assert.match(code(app), /if \(state\.route === 'library'\) await libraryWillLeave\(\)/);
 });
 

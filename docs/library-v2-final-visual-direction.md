@@ -228,3 +228,36 @@ The spine title now sits on a plane tilted 4° and leaned 2°, so it is resample
 rather than pixel-aligned. It is still 11.5px and its geometry is unchanged, but
 whether it reads as crisp enough is a judgement only the eye can make — if it
 looks soft, **reduce `--lib-book-top-tilt` first**; it costs the least.
+
+### The Book Tuner (staging only)
+
+Rather than sending numbers back and forth, the eight values are adjustable
+live on the real shelf. Open **Library** on staging and press **Book Tuner**
+beside the title; move a slider and the real Books change immediately.
+
+It exists only where `GET /library/sample` reports `allowed` — the same
+authority the sample tooling and the design lab use, which is exactly
+`NODE_ENV !== 'production'`. There is no query flag to set.
+
+It writes **nothing**: no request, no database, no stored preference. Each
+control sets one custom property on `document.documentElement`; a reload
+returns to the committed defaults, and leaving Library removes the panel and
+every override with it. `Copy configuration` gives both the one-line summary and
+the CSS declarations, ready to be committed as the new defaults.
+
+Two numbers that used to be literals became tokens so the tuner could reach
+them: `--lib-book-hover`, `--lib-book-pull` and `--lib-book-neighbour`. The turn
+duration is now **one authoritative value** — the JS commit timer is derived
+from `--d-turn` rather than written down beside it, so slowing the turn cannot
+leave a Book committing mid-rotation.
+
+| token | current | range |
+|---|---|---|
+| `--lib-book-hover` | 8px | 0–14px |
+| `--lib-book-pull` | 32px | 20–48px |
+| `--d-turn` | 400ms | 250–650ms |
+| `--lib-book-neighbour` | 16px | 0–28px |
+
+Shelf headroom is 52px so a Book still clears its rail at the **maximum** pull
+distance, not merely the current one — verified at 48px: 3px of clearance, no
+clipping.
