@@ -104,15 +104,17 @@ test('shelf: no carousel machinery anywhere', () => {
   /* Looping is the specific failure §7 names: an arrow that wraps a shelf
    * around turns browsing into a ride you cannot get off. `syncSteps` DISABLES
    * at each end instead. */
-  assert.match(shelf, /prev\.disabled = rail\.scrollLeft <= 1/);
-  assert.match(shelf, /next\.disabled = rail\.scrollLeft >= max - 1/);
+  assert.match(shelf, /const wantPrev = rail\.scrollLeft <= 1;/);
+  assert.match(shelf, /const wantNext = rail\.scrollLeft >= max - 1;/);
+  assert.match(shelf, /prev\.disabled !== wantPrev\) prev\.disabled = wantPrev/);
+  assert.match(shelf, /next\.disabled !== wantNext\) next\.disabled = wantNext/);
 });
 
 test('shelf: arrows are secondary — hidden when useless, never a tab stop', () => {
   assert.match(html, /\.lib-shelf-nav\{[^}]*display:none/,
     'arrows are shown by default rather than only when the shelf overflows');
   assert.match(html, /\.lib-shelf-nav\.is-live\{display:flex\}/);
-  assert.match(shelf, /nav\.classList\.toggle\('is-live', max > 1\)/);
+  assert.match(shelf, /nav\.classList\.toggle\('is-live', full\)/);
   // Not reachable by keyboard: the keyboard already has a better route.
   assert.match(shelf, /class="lib-shelf-nav" aria-hidden="true"/);
   assert.match(shelf, /class="lib-step" data-shelf-step="-1" tabindex="-1"/);
@@ -260,7 +262,12 @@ test('composition: a small collection is centred, and the rule is inert once it 
    * three books at 1280: is-full false, justify-content center, first slot at
    * x=509 in a rail starting at x=272. */
   assert.match(html, /\.lib-rail:not\(\.is-full\) \.lib-row\{justify-content:center\}/);
-  assert.match(shelf, /rail\.classList\.toggle\('is-full', max > 1\)/);
+  /* Still driven by overflow and nothing else — but written only when it
+   * actually changes (S3 §10). syncSteps is a ResizeObserver callback writing
+   * to the element it observes, so an unconditional write is a loop waiting for
+   * a stylesheet change to arm it. */
+  assert.match(shelf, /const full = max > 1;/);
+  assert.match(shelf, /rail\.classList\.toggle\('is-full', full\)/);
 });
 
 test('composition: an empty Library shows one faint ledge, not a rack of nothing', () => {

@@ -908,14 +908,28 @@ const isNarrow = () => window.matchMedia('(max-width: 820px)').matches;
  * Read after `spreadIdx` and `sectionIdx` have been moved.
  */
 const narrowLandingHalf = () => (isNarrow() && currentSpread().right ? 1 : 0);
+/**
+ * Commits which half is showing. Writes only what is not already true.
+ *
+ * This runs from four places — the mount, both narrow page turns, and the
+ * window resize listener — so it is called far more often than it changes
+ * anything. Every one of those writes is a style invalidation, and a function
+ * that writes the value it just read is the shape a layout loop is built from
+ * even when it is not looping yet. Comparing first makes the repeats free and
+ * takes this permanently off the list of things a resize could feed back into.
+ */
 function applyHalf(scroll = document) {
   const book = scroll.querySelector?.('#bk-book') ?? document.getElementById('bk-book');
-  book?.classList.toggle('show-right', isNarrow() && lib.half === 1);
+  const wantRight = isNarrow() && lib.half === 1;
+  if (book && book.classList.contains('show-right') !== wantRight) {
+    book.classList.toggle('show-right', wantRight);
+  }
   /* Showing the other half is a move, so the forward arrow's availability
    * changes with it. Without this the arrow keeps whatever state the last full
    * repaint gave it and goes stale on the final spread. */
   const next = document.getElementById('bk-next');
-  if (next) next.disabled = !canGoNext();
+  const wantDisabled = !canGoNext();
+  if (next && next.disabled !== wantDisabled) next.disabled = wantDisabled;
 }
 
 /* ── Navigation ──────────────────────────────────────────────────────── */

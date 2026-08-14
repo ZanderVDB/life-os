@@ -3184,6 +3184,11 @@ function wireProjectsHeader() {
  */
 function setProjectFilter(filter) {
   if (filter === pj.filter) return;
+  // The open menu describes a row that is about to be replaced. A popover that
+  // outlives the thing it described is worse than no popover, because it now
+  // describes something else — and the rows it pointed at are removed by the
+  // repaint below, which would leave it anchored to a detached node.
+  closeUtility();
   pj.filter = filter;
 
   // The indicator responds to the click, not to the network.
@@ -3223,15 +3228,19 @@ function wireProjectRows() {
   document.querySelectorAll('[data-pj-menu]').forEach((b) => {
     b.onclick = (e) => {
       e.stopPropagation();
-      const id = b.dataset.pjMenu;
-      const project = (pj.data?.groups ?? []).flatMap((g) => g.projects).find((p) => p.id === id);
-      openProjectMenu(b, project);
+      openProjectMenu(b, findProject(b.dataset.pjMenu));
     };
   });
   // Keyboard: a row is focusable, and Enter opens it.
   document.querySelectorAll('.pj-row').forEach((row) => {
     row.onkeydown = (e) => {
       if (e.key !== 'Enter') return;
+      // Only when the ROW itself has focus. The row contains buttons — the
+      // title and the overflow trigger — and Enter on a button already fires
+      // its click. Without this guard that keystroke did the button's job and
+      // then bubbled to here and navigated as well, so Enter on the three-dot
+      // opened the menu and left the project detail underneath it.
+      if (e.target !== row) return;
       e.preventDefault();
       openProjectDetail(row.dataset.id);
     };
@@ -3239,15 +3248,59 @@ function wireProjectRows() {
   document.getElementById('pj-empty-new')?.addEventListener('click', () => newProject());
 }
 
-/** The row and header overflow. One shared component, same as everywhere. */
+/**
+ * Finds a project by id, wherever it is currently filed.
+ *
+ * This is the phase's actual bug. The list renders from `views[pj.filter]` —
+ * one of six lifecycle views — but the menu used to look the project up in
+ * `pj.data.groups`, and `groups` is only ever the WORKING view: the client
+ * fetches the overview without a filter, so the server fills `groups` with
+ * `views.working` for older clients and the six real views alongside it.
+ *
+ * So the lookup only found a project that also happened to be working. Someday
+ * is explicitly excluded from working, archived rows are built from a different
+ * list entirely, and a project completed more than thirty days ago has dropped
+ * out of "Recently completed". For all of those, `find` returned undefined,
+ * `openProjectMenu` hit its `if (!project) return`, and the button did nothing
+ * at all — no error, no menu. That silence is why this read as "never wired".
+ *
+ * Searching every view instead of one means the menu opens wherever the row
+ * can be seen, which is the only rule that can stay true as views change.
+ */
+function findProject(id) {
+  const views = pj.data?.views;
+  const pools = views ? Object.values(views) : [pj.data?.groups ?? []];
+  for (const groups of pools) {
+    for (const g of groups ?? []) {
+      const hit = g.projects.find((p) => p.id === id);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/**
+ * The row and header overflow. One shared component, same as everywhere.
+ *
+ * The actions offered are the ones the API will actually accept. Archived is
+ * genuinely a different set: the server refuses any patch to an archived
+ * project until it is restored, so offering Edit there would be offering a
+ * button that returns a conflict.
+ */
 function openProjectMenu(anchor, project) {
   if (!project) return;
   const archived = !!project.archivedAt;
+  const completed = project.status === 'completed';
   const items = archived
     ? [{ id: 'restore', label: 'Restore' }, { id: 'delete', label: 'Delete project' }]
     : [
       { id: 'edit', label: 'Edit project' },
-      ...(project.status === 'completed' ? [] : [{ id: 'complete', label: 'Mark complete' }]),
+      // Completed projects get the way back out. PATCH clears `completedAt`
+      // itself when the status leaves completed, so this is one call, not a
+      // status change plus a second one to tidy up after it.
+      ...(completed
+        ? [{ id: 'reopen', label: 'Reopen project' }]
+        : [{ id: 'complete', label: 'Mark complete' }]),
       { id: 'top', label: 'Move to top' },
       { id: 'archive', label: 'Archive' },
       { id: 'delete', label: 'Delete project' },
@@ -3255,6 +3308,7 @@ function openProjectMenu(anchor, project) {
   openUtilityMenu(anchor, items, (id) => {
     if (id === 'edit') return editProject(project);
     if (id === 'complete') return completeProject(project);
+    if (id === 'reopen') return reopenProject(project);
     if (id === 'archive') return archiveProject(project);
     if (id === 'restore') return restoreProject(project);
     if (id === 'top') return moveProjectToTop(project);
@@ -3423,6 +3477,23 @@ async function restoreProject(project) {
       if (row) { row.classList.add('is-new'); setTimeout(() => row.classList.remove('is-new'), 1400); }
     });
     saved('Restored');
+  } catch (e) { toast(e.message, true); }
+}
+
+/**
+ * Out of Completed and back into work.
+ *
+ * `active` rather than `planning`: a project you are reopening is one you have
+ * decided to do again, and planning would quietly move it to a filter the user
+ * was not looking at. The API clears `completedAt` on any status that leaves
+ * completed, so nothing here has to remember to.
+ */
+async function reopenProject(project) {
+  try {
+    await projectWrite(`/${project.id}`, {
+      method: 'PATCH', body: { status: 'active', expectedUpdatedAt: project.updatedAt },
+    });
+    saved('Reopened');
   } catch (e) { toast(e.message, true); }
 }
 

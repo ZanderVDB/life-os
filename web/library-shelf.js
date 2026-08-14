@@ -957,19 +957,38 @@ export function wireRail(rail, { onOpen, onPull, onMenu, onScrollChange } = {}) 
  * the buttons keep them out of the keyboard path entirely — arrows are the
  * secondary route, and the keyboard already has a better one.
  */
+/**
+ * Reads first, then writes only what changed.
+ *
+ * This is a ResizeObserver callback, and it writes a class to the very element
+ * the observer is watching — read size, write class — which is the exact shape
+ * of a ResizeObserver feedback loop. It does not loop today: `is-full` only
+ * changes the child row's `justify-content`, and measured on a real shelf both
+ * states agree about whether the rail overflows, so the decision is stable in
+ * both regimes. But "does not loop today" is a property of the stylesheet, not
+ * of this function, and it would be silently lost the first time `is-full`
+ * grew a rule that touched the rail's own box.
+ *
+ * Comparing before writing makes that impossible rather than unlikely: a
+ * callback that writes nothing cannot feed its own observer, whatever the CSS
+ * later decides `is-full` means.
+ */
 export function syncSteps(rail) {
   const max = rail.scrollWidth - rail.clientWidth;
+  const full = max > 1;
   /* `is-full` means "this shelf overflows". The stylesheet centres a row that
    * does NOT, so one to three objects sit in the middle of the shelf rather
    * than hugging the far left (§26) — and the rule is inert the moment there is
    * anything to scroll. */
-  rail.classList.toggle('is-full', max > 1);
+  if (rail.classList.contains('is-full') !== full) rail.classList.toggle('is-full', full);
   const nav = rail.parentElement?.querySelector('.lib-shelf-nav');
   if (!nav) return;
-  nav.classList.toggle('is-live', max > 1);
+  if (nav.classList.contains('is-live') !== full) nav.classList.toggle('is-live', full);
   const [prev, next] = nav.querySelectorAll('[data-shelf-step]');
-  if (prev) prev.disabled = rail.scrollLeft <= 1;
-  if (next) next.disabled = rail.scrollLeft >= max - 1;
+  const wantPrev = rail.scrollLeft <= 1;
+  const wantNext = rail.scrollLeft >= max - 1;
+  if (prev && prev.disabled !== wantPrev) prev.disabled = wantPrev;
+  if (next && next.disabled !== wantNext) next.disabled = wantNext;
 }
 
 /**

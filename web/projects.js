@@ -140,7 +140,7 @@ export function projectRowHtml(p, areaName) {
     </div>
 
     <button class="util-btn pj-more" data-pj-menu="${p.id}" aria-haspopup="menu"
-      aria-expanded="false" aria-label="Actions for ${esc(p.title)}">
+      aria-expanded="false" aria-label="Project actions for ${esc(p.title)}">
       <svg viewBox="0 0 20 20" aria-hidden="true">
         <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
         <circle cx="15.5" cy="10" r="1.5"/></svg>
@@ -257,7 +257,7 @@ export function projectDetailHeaderHtml(p, areaName) {
       </div>
       <div class="pj-head-side">
         <button class="util-btn" id="pjd-menu" aria-haspopup="menu" aria-expanded="false"
-          aria-label="Project actions">
+          aria-label="Project actions for ${esc(p.title)}">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
             <circle cx="15.5" cy="10" r="1.5"/></svg>
