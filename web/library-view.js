@@ -457,6 +457,20 @@ function openShelfObject(obj) {
   /* Where every shelf is, captured BEFORE the route changes and the page is
    * replaced. This is the snapshot §18 restores from. */
   captureShelfScroll(obj.closest('#main-scroll') ?? document);
+  /* WHERE THE COVER IS RIGHT NOW (S2.8).
+   *
+   * The same cover is about to be drawn again, much larger and somewhere else:
+   * measured, 125x195 at (688, 297) on the shelf and 402x707 at (537, 11) in the
+   * Book view. Nothing connected the two, so the Book you were looking at was
+   * replaced by a bigger copy of itself in a different place — which is what the
+   * review kept reporting as the Book "re-shooting" itself. It was never timing;
+   * it was two pictures of one object with a cut between them.
+   *
+   * This is the FIRST half of a FLIP: the rect it is leaving from. */
+  const face = obj.querySelector('.lib-board');
+  lib.openFrom = face && !reducedMotion()
+    ? (({ left, top, width, height }) => ({ left, top, width, height }))(face.getBoundingClientRect())
+    : null;
   /* RELEASE, not clear (S1 §12). `clearPulled()` would take the Book back to
    * its spine — restoring the depth faces and re-hinging the cover — and only
    * then would `is-opening` carry it away. One activation, two transitions, the
@@ -845,6 +859,70 @@ function paintBookHead(head = document.getElementById('page-head')) {
 
 let stopSaveWatch = null;
 
+/**
+ * The second half of the FLIP: the arriving cover starts where the shelf cover
+ * was, and grows into place.
+ *
+ * One object, one continuous movement — the rule the rest of the Library already
+ * follows. Mid-flight the cover is scaled, so its type is briefly resampled;
+ * that is acceptable and it is the only part of the interaction that is. The
+ * transform is cleared on a timer as well as on `transitionend`, so a throttled
+ * or interrupted flight cannot leave the cover stranded at the wrong size —
+ * animations illustrate the change, the DOM owns the final state.
+ */
+function growFromShelf() {
+  const from = lib.openFrom;
+  lib.openFrom = null;
+  if (!from || reducedMotion()) return;
+  const to = document.querySelector('.bk-cover') ?? document.querySelector('.bk-book');
+  if (!to) return;
+  const now = to.getBoundingClientRect();
+  if (!now.width || !now.height) return;
+
+  const sx = from.width / now.width;
+  const sy = from.height / now.height;
+  const dx = from.left - now.left;
+  const dy = from.top - now.top;
+  // Nothing worth animating if it barely moved.
+  if (Math.abs(dx) < 2 && Math.abs(dy) < 2 && Math.abs(sx - 1) < 0.02) return;
+
+  const clear = () => {
+    to.style.transition = ''; to.style.transform = '';
+    to.style.transformOrigin = ''; to.style.willChange = '';
+  };
+
+  /* INVERT, then PLAY — with a forced reflow between them rather than a
+   * `requestAnimationFrame`.
+   *
+   * rAF is the usual way to separate the two, and it is the wrong one here: it
+   * does not fire in a background tab, and it does not fire at all in the
+   * harness this was verified in. A frame callback that never runs would leave
+   * the cover sitting at the shelf's size until a cleanup timer rescued it,
+   * which is a worse bug than the one being fixed. Reading `offsetWidth` forces
+   * the browser to apply the inverted transform synchronously, so the
+   * transition below always has something to move from. */
+  to.style.transformOrigin = 'top left';
+  to.style.transition = 'none';
+  to.style.willChange = 'transform';
+  to.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+  void to.offsetWidth;
+
+  to.style.transition = 'transform var(--d-turn, 400ms) var(--e-out)';
+  to.style.transform = 'none';
+
+  /* `transitionend` tidies up; the timer guarantees it. The committed state is
+   * already `transform: none` in the inline style, so even a timeline that
+   * never finishes resolves to the right place — this only removes the leftover
+   * inline properties. */
+  const done = (e) => {
+    if (e.target !== to || e.propertyName !== 'transform') return;
+    to.removeEventListener('transitionend', done);
+    clear();
+  };
+  to.addEventListener('transitionend', done);
+  setTimeout(() => { to.removeEventListener('transitionend', done); clear(); }, 800);
+}
+
 function paintBookBody(scroll = document.getElementById('main-scroll')) {
   stopSaveWatch?.();
   if (lib.cover) {
@@ -856,6 +934,10 @@ function paintBookBody(scroll = document.getElementById('main-scroll')) {
       setHash(bookHash());
       document.querySelector('.bk-editor')?.focus();
     });
+    /* The COVER stage is where opening from the shelf actually lands, so the
+     * grow has to happen on this branch as well as the spread one. It was only
+     * on the spread at first, and never ran — the cover branch returns here. */
+    growFromShelf();
     return;
   }
 
@@ -865,6 +947,10 @@ function paintBookBody(scroll = document.getElementById('main-scroll')) {
   </div>`;
   wireBook(scroll);
   setHash(bookHash());
+  /* `growFromShelf` consumes the recorded rect, so page turns and repaints
+   * inside the Book are untouched — only the paint that follows an open from
+   * the shelf ever animates. */
+  growFromShelf();
 }
 
 function wireBook(scroll) {
