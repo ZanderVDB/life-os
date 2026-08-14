@@ -467,6 +467,7 @@ function openShelfObject(obj) {
    * it was two pictures of one object with a cut between them.
    *
    * This is the FIRST half of a FLIP: the rect it is leaving from. */
+  lib.fromShelf = true;              // you have already seen this cover
   const face = obj.querySelector('.lib-board');
   lib.openFrom = face && !reducedMotion()
     ? (({ left, top, width, height }) => ({ left, top, width, height }))(face.getBoundingClientRect())
@@ -817,7 +818,22 @@ async function renderBook(route, head, scroll, nav = navToken()) {
       return;
     }
     if (navStale(nav)) return;
-    lib.sectionIdx = 0; lib.spreadIdx = 0; lib.cover = true; lib.half = 0;
+    lib.sectionIdx = 0; lib.spreadIdx = 0; lib.half = 0;
+    /* THE COVER IS NOT SHOWN TWICE (S2.9).
+     *
+     * Opening from the shelf already IS the cover: you turned the Book round,
+     * looked at it, and pressed it again. Landing on a second, larger copy of
+     * that same cover — with its own `Open book` button — meant the Book
+     * presented itself twice and took three clicks to read. That is what kept
+     * being reported as the Book "re-shooting" itself, and it is why removing
+     * animations and prefetching data never touched it: it was never a glitch,
+     * it was a redundant step.
+     *
+     * The cover stage still exists for arriving COLD — a deep link, a pasted
+     * URL, a reload straight into a Book — where you have not seen the cover
+     * and the Book should introduce itself. */
+    lib.cover = !lib.fromShelf;
+    lib.fromShelf = false;
   }
   /* Painting from here would replace whatever the person navigated to, and
    * `setHash` inside paintBookBody would rewrite the URL back into this Book. */

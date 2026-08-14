@@ -360,3 +360,24 @@ test('open: the cover grows out of the shelf rather than reappearing (S2.8)', ()
   assert.match(view, /to\.style\.transform = 'none';/);
   assert.match(view, /setTimeout\(\(\) => \{ to\.removeEventListener\('transitionend', done\); clear\(\); \}, 800\);/);
 });
+
+test('open: a Book opened from the shelf does not show its cover twice (S2.9)', () => {
+  /* SEEN, finally, rather than inferred. Opening a Book landed on a second,
+   * larger copy of the cover you had just turned round to look at, with its own
+   * purple `Open book` button — so the Book presented itself twice and took
+   * three clicks to read. That is what was being reported as the Book
+   * "re-shooting" itself. It was never a rendering glitch, which is why
+   * removing animations, prefetching data and adding a FLIP all failed to
+   * touch it. It was a redundant step in the flow.
+   *
+   * Opening from the shelf already IS the cover. The cover stage survives for
+   * arriving COLD — a deep link, a pasted URL, a reload straight into a Book —
+   * where the Book has not introduced itself yet. */
+  assert.match(view, /lib\.fromShelf = true;/);
+  assert.match(view, /lib\.cover = !lib\.fromShelf;/);
+  assert.match(view, /lib\.fromShelf = false;/);
+  // The flag is consumed, so a later reload of the same Book still gets a cover.
+  const at = view.indexOf('lib.cover = !lib.fromShelf;');
+  assert.ok(view.indexOf('lib.fromShelf = false;', at) > at,
+    'the shelf flag is never cleared, so a cold open would skip its cover too');
+});
