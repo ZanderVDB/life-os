@@ -3200,11 +3200,19 @@ body:has(.lib-page) .rail{display:none}
 /* THE COMMIT (§12/§13). Once round, the 3D is gone: the box transform is
    dropped, the depth faces stop painting, and the cover becomes an ordinary
    untransformed element with its title on the pixel grid. */
-.lib-obj.is-front .lib-vol{transform:none;transform-style:flat}
+/* THE COMMIT IS A HANDOFF, NOT A MOVEMENT (S2.11).
+   Both of these carry `transition: transform`, so dropping the 3D animated it:
+   the turn played over 400ms, and 520ms later the commit UNWOUND the same
+   rotation over another 400ms, landing on a state that looks identical. One
+   click, two turns — the second of them the Book appearing to turn all over
+   again. That is the replay that has been reported since S2.5.
+   Animation illustrates the transition; the DOM owns the final state, and
+   arriving at the final state is not itself a transition. */
+.lib-obj.is-front .lib-vol{transform:none;transform-style:flat;transition:none}
 .lib-obj.is-front .lib-spine,.lib-obj.is-front .lib-edge,
 .lib-obj.is-front .lib-back,.lib-obj.is-front .lib-head,
 .lib-obj.is-front .lib-tail{display:none}
-.lib-obj.is-front .lib-board{transform:none;left:0}
+.lib-obj.is-front .lib-board{transform:none;left:0;transition:none}
 
 .lib-cover{position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:2px;padding:15px 13px;

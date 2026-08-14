@@ -143,7 +143,12 @@ test('final: the turn finishes front-facing and hands off to flat DOM', () => {
   /* Measured: at -90 degrees the cover is 126px wide at x=721, and the committed
    * flat cover is 126px wide at x=721. The handoff is seamless because the
    * compensating translateZ puts the cover back in the screen plane. */
-  assert.match(css, /\.lib-obj\.is-front \.lib-vol\{transform:none;transform-style:flat\}/);
+  /* And it ARRIVES rather than travels. Both of these carry
+   * `transition: transform`, so dropping the 3D used to animate: the turn played
+   * over 400ms and the commit unwound the same rotation 520ms later over another
+   * 400ms, landing somewhere that looks identical. One click, two turns. */
+  assert.match(css, /\.lib-obj\.is-front \.lib-vol\{transform:none;transform-style:flat;transition:none\}/);
+  assert.match(css, /\.lib-obj\.is-front \.lib-board\{transform:none;left:0;transition:none\}/);
   /* Every depth face stops painting, the head included — it was added in S2 so
    * the resting tilt has a top to expose, and a face that only exists to be
    * seen in 3D has no business surviving into the flat state. */
@@ -151,7 +156,7 @@ test('final: the turn finishes front-facing and hands off to flat DOM', () => {
   for (const f of ['lib-spine', 'lib-edge', 'lib-back', 'lib-head']) {
     assert.ok(hidden.includes(f), `${f} still paints in the committed state`);
   }
-  assert.match(css, /\.lib-obj\.is-front \.lib-board\{transform:none;left:0\}/);
+
 });
 
 test('final: the commit is guaranteed, not hoped for', () => {
