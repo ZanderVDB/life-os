@@ -322,44 +322,14 @@ test('pull: a slow Book keeps the shelf, never grey pages', () => {
   assert.match(view, /if \(scroll\.querySelector\('\.lib-shelf'\)\) return;/);
 });
 
-test('open: the cover grows out of the shelf rather than reappearing (S2.8)', () => {
-  /* THE ACTUAL DEFECT, after two wrong diagnoses. It was never timing.
-   *
-   * Measured: the same cover is drawn twice — 125x195 at (688, 297) on the
-   * shelf, then 402x707 at (537, 11) in the Book view. 3.2x bigger, 286px up
-   * and 151px left, with nothing connecting them. The Book you were looking at
-   * was replaced by a larger copy of itself somewhere else, which is what kept
-   * being reported as the Book "re-shooting" itself.
-   *
-   * A FLIP joins them: the arriving cover starts at the rect the shelf cover
-   * was occupying and grows into place. One object, one movement. */
-  assert.match(view, /lib\.openFrom = face && !reducedMotion\(\)/);
-  assert.match(view, /function growFromShelf\(\)/);
-  assert.match(view, /const sx = from\.width \/ now\.width;/);
-  assert.match(view, /to\.style\.transform = `translate\(\$\{dx\}px, \$\{dy\}px\) scale\(\$\{sx\}, \$\{sy\}\)`;/);
-
-  /* Both paint branches run it. Opening from the shelf lands on the COVER
-   * stage, which returns early — hooking only the spread meant it never ran at
-   * all, and the first attempt did exactly that. */
-  const paint = view.slice(view.indexOf('function paintBookBody'));
-  const body = paint.slice(0, paint.indexOf('\n}'));
-  assert.equal((body.match(/growFromShelf\(\)/g) ?? []).length, 2,
-    'the cover stage and the spread must both grow');
-
-  /* INVERT and PLAY are separated by a forced reflow, not a frame callback.
-   * `requestAnimationFrame` does not fire in a background tab — measured, it
-   * does not fire in the verification harness either — and a frame callback
-   * that never runs would strand the cover at the shelf's size. */
-  assert.match(view, /void to\.offsetWidth;/);
-  assert.ok(!/requestAnimationFrame/.test(view.slice(view.indexOf('function growFromShelf'),
-    view.indexOf('function paintBookBody'))), 'the grow depends on a frame callback');
-
-  // Reduced motion never records a rect, so it never animates.
-  assert.match(view, /if \(!from \|\| reducedMotion\(\)\) return;/);
-  // And the committed state is `transform: none`, cleaned up on a guarantee.
-  assert.match(view, /to\.style\.transform = 'none';/);
-  assert.match(view, /setTimeout\(\(\) => \{ to\.removeEventListener\('transitionend', done\); clear\(\); \}, 800\);/);
-});
+/* The S2.8 "grow the cover out of the shelf" FLIP was REMOVED in S2.10.
+ * It was built for a misdiagnosis — the real fault was the duplicated cover
+ * stage below — and once that was fixed there was no cover in the Book view to
+ * grow into. It ended up scaling the entire two-page spread instead: a 420:297
+ * surface distorted out of a 210:297 rect, with `will-change: transform` on a
+ * large subtree. Measured after: a screenshot of the opening frame timed out
+ * with "the renderer may be frozen or unresponsive". A transition that blocks
+ * the main thread is worse than no transition. */
 
 test('open: a Book opened from the shelf does not show its cover twice (S2.9)', () => {
   /* SEEN, finally, rather than inferred. Opening a Book landed on a second,
