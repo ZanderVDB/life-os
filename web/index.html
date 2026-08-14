@@ -2954,9 +2954,9 @@ body:has(.lib-page) .rail{display:none}
   width:var(--bw);height:100%}
 .lib-obj.lib-book.is-pulled::after{left:0;right:calc(100% - var(--bw))}
 .lib-obj.is-pulled .lib-foot{opacity:1;transform:translateY(0);pointer-events:auto}
-/* 5. OPENING -- the handoff, only ever on a node the next paint destroys. */
-.lib-obj.is-opening{transform:translateY(-48px);opacity:.1;z-index:7;
-  transition:transform var(--d-slower) var(--e-out),opacity var(--d-slower) var(--e-out)}
+/* 5. OPENING -- there is no opening state. The Book view arrives in 18ms, so a
+      320ms fly-away got one frame and read as the Book moving twice for one
+      click. The committed front-facing cover simply hands over. */
 /* 6. RETURNED -- a soft glow in the object's own accent, never an outline. */
 .lib-obj.is-returned .lib-cover,.lib-obj.is-returned .lib-res-face,
 .lib-obj.is-returned .lib-frame{
@@ -3463,7 +3463,6 @@ body:has(.lib-page) .rail{display:none}
      shadow, its Open control and its label; hover keeps its shadow; focus
      keeps its outline; the return glow simply does not play (S25). */
   .lib-obj,.lib-obj:hover,.lib-obj.is-pulled,.lib-res.is-pulled{transform:none}
-  .lib-obj.is-opening{transform:none;opacity:.12}
   .lib-obj::after,.lib-obj:hover::after,.lib-obj.is-pulled::after{transform:none}
   .lib-obj.is-pulled .lib-foot{transform:none}
   /* The turn is not shortened, it is skipped: `scheduleCommit` commits
@@ -4705,86 +4704,6 @@ body:has(.dia-page) .rail{display:none}
 }
 html[data-motion="reduced"] *{animation-duration:1ms!important;transition-duration:1ms!important}
 
-/* ══ BOOK TUNER — staging only (S2.1) ═══════════════════════════════════
-   A development utility, so: functional, compact, and unmistakably not part of
-   the product. It never appears unless the server says sample tooling is
-   allowed, and it is mounted by `library-tuner.js` on demand. */
-.lib-tuner-open{margin-left:auto;appearance:none;border:1px dashed var(--border-strong);
-  background:transparent;color:var(--muted);font:inherit;font-size:11px;
-  padding:4px 9px;border-radius:6px;cursor:pointer}
-.lib-tuner-open:hover{color:var(--text-2);border-color:var(--accent)}
-.lib-tuner-open:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-
-.tn{position:fixed;right:14px;top:74px;width:280px;z-index:80;
-  display:flex;flex-direction:column;
-  background:linear-gradient(180deg,#1C1826 0%,#141019 100%);
-  border:1px solid var(--border-strong);border-radius:10px;
-  box-shadow:0 20px 44px -18px rgba(0,0,0,.85);
-  font-size:12px;color:var(--text-2);
-  /* It must never sit over the Books it is tuning, and it must never take a
-     pointer event meant for the shelf. The panel owns only its own box. */
-  max-height:calc(100vh - 96px);overflow:auto}
-.tn-head{display:flex;align-items:center;gap:7px;padding:9px 11px;
-  border-bottom:1px solid var(--border);position:sticky;top:0;
-  background:#1C1826;border-radius:10px 10px 0 0}
-.tn-head b{font-size:12px;color:var(--text)}
-.tn-tag{font-size:9px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 5px}
-.tn-x{margin-left:auto;appearance:none;border:0;background:transparent;
-  color:var(--muted);font-size:15px;line-height:1;cursor:pointer;padding:2px 5px}
-.tn-x:hover{color:var(--text)}
-.tn.is-shut .tn-body{display:none}
-.tn-body{padding:10px 11px 12px;display:flex;flex-direction:column;gap:9px}
-
-.tn-presets{display:flex;gap:5px}
-.tn-preset{flex:1;appearance:none;border:1px solid var(--border);background:var(--surface-2);
-  color:var(--text-2);font:inherit;font-size:11px;padding:4px 0;border-radius:5px;cursor:pointer}
-.tn-preset:hover{background:var(--surface-3);color:var(--text)}
-
-.tn-row{display:grid;grid-template-columns:1fr;gap:3px}
-.tn-name{font-size:11px;color:var(--muted)}
-.tn-row:has(.tn-slide){grid-template-columns:1fr;align-items:center}
-.tn-slide{width:100%;accent-color:var(--accent);cursor:pointer;margin:0}
-.tn-num{display:flex;align-items:center;gap:4px;justify-self:end;margin-top:-19px}
-.tn-input{width:52px;background:var(--surface-2);border:1px solid var(--border);
-  color:var(--text);font:inherit;font-size:11px;padding:2px 5px;border-radius:4px;
-  text-align:right}
-.tn-num em{font-style:normal;font-size:10px;color:var(--muted);width:20px}
-
-.tn-adv summary{cursor:pointer;font-size:11px;color:var(--muted);
-  padding:4px 0;border-top:1px solid var(--border)}
-.tn-adv summary:hover{color:var(--text-2)}
-.tn-adv[open]{display:flex;flex-direction:column;gap:9px}
-
-.tn-note{margin:0;font-size:10.5px;line-height:1.45;color:var(--a-peach)}
-.tn-note[hidden]{display:none}
-.tn-help{margin:0;font-size:10px;line-height:1.45;color:var(--muted)}
-
-.tn-out{display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);
-  padding-top:9px}
-.tn-out b{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
-.tn-copy{width:100%;resize:vertical;background:var(--surface-2);border:1px solid var(--border);
-  color:var(--text);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;
-  padding:5px 6px;border-radius:5px;line-height:1.45}
-.tn-css{margin:0;white-space:pre;overflow-x:auto;background:var(--surface-2);
-  border:1px solid var(--border);border-radius:5px;padding:5px 6px;
-  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;line-height:1.5;
-  color:var(--text-2)}
-.tn-acts{display:flex;gap:5px}
-.tn-btn{flex:1;appearance:none;border:1px solid var(--border-strong);background:var(--surface-2);
-  color:var(--text-2);font:inherit;font-size:11px;padding:5px 0;border-radius:5px;cursor:pointer}
-.tn-btn:hover{background:var(--surface-3);color:var(--text)}
-.tn-btn:focus-visible,.tn-preset:focus-visible,.tn-x:focus-visible{outline:2px solid var(--accent);
-  outline-offset:2px}
-.tn-said{font-size:10px;color:var(--muted);min-height:12px}
-
-/* Narrow: the Library stays usable, which matters more than the tuner does. */
-@media (max-width:900px){
-  .tn{right:8px;left:8px;width:auto;top:auto;bottom:8px;max-height:56vh}
-}
-@media (prefers-reduced-motion: reduce){
-  .tn{box-shadow:0 0 0 1px var(--border-strong)}
-}
 </style>
 </head>
 <body>

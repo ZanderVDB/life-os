@@ -340,13 +340,21 @@ test('return: an object on two shelves is re-identified on the one you left', ()
   assert.match(view, /lib\.cameFromShelf = obj\.closest\('\.lib-rail'\)\?\.dataset\.rail \?\? null;/);
 });
 
-test('open: the handoff class only ever lives on a node about to be discarded', () => {
-  /* The house rule — animations illustrate state changes; DOM and CSS own the
-   * final state. `is-opening` is applied to an element that the next paint
-   * destroys, so it cannot survive to own anything. */
-  assert.match(view, /if \(!reducedMotion\(\)\) obj\.classList\.add\('is-opening'\);/);
-  assert.ok(!/is-opening[\s\S]{0,200}classList\.remove/.test(view),
-    'is-opening is removed by hand, which means it can also be left behind');
+test('open: the Book hands over without a second movement', () => {
+  /* THERE IS NO HANDOFF ANIMATION ANY MORE (S2.6).
+   *
+   * `is-opening` flew the object up 48px and faded it to 10% over 320ms, to
+   * cover a wait that does not exist: measured, the Book view replaces the shelf
+   * 18ms after the click. The animation got about one frame — just enough for
+   * the Book you had turned to face you to jerk upward and start vanishing
+   * before the screen swapped, which read as the Book moving twice for one
+   * click. The committed front-facing cover now simply hands over.
+   *
+   * The rule it was there to satisfy still holds, more strictly: nothing is
+   * applied to the object on the way out, so there is nothing that could be
+   * left behind. */
+  assert.ok(!view.includes("classList.add('is-opening')"), 'the handoff animation is back');
+  assert.ok(!/\.lib-obj\.is-opening\{/.test(html), 'the handoff class still has a look');
 });
 
 /* ── §19  The Diary shortcut ─────────────────────────────────────────── */

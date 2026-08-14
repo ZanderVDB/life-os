@@ -280,8 +280,8 @@ test('motion: nothing moves unless somebody moved it', () => {
   }
   // No animation on the shelf at all: every state is a transition to a class.
   assert.ok(!/@keyframes\s+lib-/.test(html), 'the shelf defines a keyframe animation');
-  // And the one class applied during a handoff dies with the node it is on.
-  assert.match(view, /if \(!reducedMotion\(\)\) obj\.classList\.add\('is-opening'\);/);
-  assert.ok(!/is-opening[\s\S]{0,200}classList\.remove/.test(view),
-    'is-opening is removed by hand, which means it can also be left behind');
+  /* And nothing is applied to an object on its way out at all: the 320ms
+   * handoff was removed in S2.6 because the Book view arrives in 18ms, so it
+   * only ever played one frame and read as a second, stray movement. */
+  assert.ok(!view.includes("classList.add('is-opening')"), 'the handoff animation is back');
 });

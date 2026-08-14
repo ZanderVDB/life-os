@@ -169,9 +169,8 @@ arrives at the committed front-facing state; every state semantic is identical.
 ## Resting Book tuning
 
 Four numbers decide how a Book stands on the shelf. They live in **one place** —
-the `RESTING BOOK TUNING` block in `web/index.html`, on
-`.lib-shelf-book, .lib-shelf-personal, .lib-results` — and nothing below
-restates them. To change the look, change these and nothing else.
+the `RESTING BOOK TUNING` block on `:root` in `web/index.html` — and nothing
+below restates them. To change the look, change these and nothing else.
 
 | token | committed | range | larger means |
 |---|---|---|---|
@@ -345,3 +344,31 @@ Book: three paints for one action, the middle one on screen just long enough to
 register as a glitch. The skeleton is now deferred by 180ms and cancelled if the
 Book beats it. Measured across a full open with a mutation observer: the
 skeleton painted **0 times** and "Opening…" **0 times**.
+
+### S2.6 — the Book was not reloading
+
+The reported symptom was the Book "re-shooting" itself every time the side view
+opened, assumed to be a reload for the page content and the overflow menu.
+
+**It was not a reload.** Measured with a mutation observer across a full open:
+the Book body is written to `#main-scroll` exactly **once**, 18ms after the
+click. Nothing re-fetches and nothing repaints.
+
+What was actually happening: `is-opening` flew the shelf object up 48px and
+faded it to 10% over 320ms, to cover a wait that does not exist. At 18ms it got
+about one frame — just enough for the Book you had carefully turned to face you
+to jerk upward and start vanishing before the screen swapped. One activation,
+two movements, the second a stub of an animation that never finished.
+
+The hand-off is gone. The committed front-facing cover simply hands over.
+Re-measured: the object is already detached by the first 33ms sample, with no
+intermediate position or opacity, and the body still paints once. If a Book ever
+is slow to arrive, the shelf stays on screen until it does — the same rule
+everywhere else.
+
+### The Book Tuner has been removed
+
+It did its job: the resting pose was chosen on the real shelf and committed in
+S2.4. `web/library-tuner.js`, its stylesheet, its trigger, its staging gate and
+its test file are all deleted. The tokens it drove remain, in one block, and can
+still be changed by editing them.
