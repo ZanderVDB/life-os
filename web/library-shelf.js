@@ -847,7 +847,7 @@ function wireWheel(rail) {
  * `onOpen(itemId | {system})` is called for a click or Enter/Space on an
  * object. The shelf does not decide what opening means.
  */
-export function wireRail(rail, { onOpen, onMenu, onScrollChange } = {}) {
+export function wireRail(rail, { onOpen, onPull, onMenu, onScrollChange } = {}) {
   const objs = () => [...rail.querySelectorAll('.lib-obj')];
 
   setCursor(rail, Number(rail.dataset.cursor ?? 0));
@@ -898,7 +898,7 @@ export function wireRail(rail, { onOpen, onMenu, onScrollChange } = {}) {
      * and the second is also reachable from the labelled Open control — which
      * is the route a phone and a screen reader actually take. */
     if (obj === pulled || e.target.closest('.lib-foot-a')) onOpen?.(obj);
-    else pullForward(obj);
+    else { pullForward(obj); onPull?.(obj); }
   });
 
   rail.addEventListener('keydown', (e) => {
@@ -924,7 +924,7 @@ export function wireRail(rail, { onOpen, onMenu, onScrollChange } = {}) {
       e.preventDefault();
       // Same two stages as the pointer, so the models cannot drift apart.
       if (obj === pulled) onOpen?.(obj);
-      else pullForward(obj);
+      else { pullForward(obj); onPull?.(obj); }
     }
   });
 

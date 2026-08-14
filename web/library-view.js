@@ -20,7 +20,7 @@ import {
   lib, initLibraryApi, loadItems, createItem, updateItem, archiveItem, restoreItem,
   createBook, loadBook, createSection, updateSection, createPages,
   archivePage, restorePage, archiveSection,
-  currentSection, currentSpread, spreadCount, findPage, search, markOpened,
+  currentSection, currentSpread, spreadCount, findPage, search, markOpened, prefetchBook,
   sampleCheck, sampleAdd, sampleRemove,
 } from './library-api.js';
 import {
@@ -356,7 +356,8 @@ function wireOverview(scroll) {
    * search results — one behaviour, so a Book on the Books shelf and the same
    * Book in a result set cannot drift apart. */
   scroll.querySelectorAll('.lib-rail').forEach((rail) => {
-    wireRail(rail, { onOpen: openShelfObject, onMenu: (anchor, id) => openItemMenu(anchor, id) });
+    wireRail(rail, { onOpen: openShelfObject, onPull: prefetchShelfObject,
+      onMenu: (anchor, id) => openItemMenu(anchor, id) });
   });
   /* The result surface is not a rail, but it uses the SAME two stages: a
    * result that behaved differently from the same object on its shelf would be
@@ -430,6 +431,20 @@ function bindPullDismiss() {
  * lives on a node that is about to be discarded, no animation here can own a
  * final state.
  */
+/**
+ * Pulling a Book forward starts loading it (S2.7).
+ *
+ * The second click is typically half a second later — the whole point of the
+ * pulled state is that you look at the cover — so the 324ms is spent while you
+ * are looking, and the Book is there when you ask for it.
+ */
+function prefetchShelfObject(obj) {
+  const id = obj?.dataset?.item;
+  if (!id) return;                                   // the Diary is not a Book
+  const item = lib.items.find((i) => i.id === id);
+  if (item?.type === 'book' && item.book?.id) prefetchBook(item.book.id);
+}
+
 function openShelfObject(obj) {
   /* The Diary ledge leaves Library entirely, so the SHELL routes it. Writing
    * `#diary` from here would change the URL without telling the shell, leaving
@@ -758,6 +773,12 @@ async function renderBook(route, head, scroll, nav = navToken()) {
     let skeleton = setTimeout(() => {
       skeleton = 0;
       if (navStale(nav) || !scroll.isConnected) return;
+      /* KEEP WHAT IS ON SCREEN. Replacing the shelf with grey pages is the
+       * worse of the two waits: the shelf is real, it is what you were just
+       * looking at, and swapping it for a placeholder makes one action look
+       * like two. The skeleton is only for arriving with nothing to show —
+       * a deep link, or a reload straight into a Book. */
+      if (scroll.querySelector('.lib-shelf')) return;
       if (!scroll.querySelector('.bk-book')) scroll.innerHTML = bookLoadingHtml();
       head.querySelector('h1')?.insertAdjacentHTML('afterend', '<p class="sub">Opening…</p>');
       beginLoading(known?.title ?? 'This book', () => void renderLibrary());

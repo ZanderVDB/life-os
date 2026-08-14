@@ -372,3 +372,37 @@ It did its job: the resting pose was chosen on the real shelf and committed in
 S2.4. `web/library-tuner.js`, its stylesheet, its trigger, its staging gate and
 its test file are all deleted. The tokens it drove remain, in one block, and can
 still be changed by editing them.
+
+### S2.7 — the lag was real, and it was the network
+
+S2.6 removed a truncated hand-off animation and reported the Book "paints
+once". That reading was wrong, and the mistake is worth recording: the loading
+skeleton and the real Book body **share the class `bk`**, so a mutation observer
+watching `#main-scroll` could not tell them apart. One `bk` was added, so it
+looked like one paint.
+
+Watching for `.bk-book` specifically told the real story: the outer container
+arrives at 18ms and the Book itself not until **375ms**. Timing the request:
+
+| | |
+|---|---|
+| first open of a Book | **324ms** |
+| every open after it | **15ms** |
+
+So the first open of any Book genuinely waited a third of a second, the deferred
+skeleton fired at 180ms, and you saw shelf → grey pages → Book.
+
+**Two changes.** Pulling a Book forward now starts loading it: pulling is an
+unambiguous statement of intent, and the second click is typically half a second
+later, because the whole point of the pulled state is that you look at the
+cover. Measured after — the request begins **1.9ms after the pull**, and the
+open reaches the Book in **26.9ms with no skeleton at all**.
+
+And if a Book is ever still not ready, the **shelf stays on screen** rather than
+being replaced by a placeholder. The skeleton is now only for arriving with
+nothing to show: a deep link, or a reload straight into a Book.
+
+This is the one prefetch the measurements justify. It holds one promise per id
+and drops it the moment the Book is taken, so an edited Book is never served
+from it, and a failed prefetch drops out so the real open can ask again and
+report the error properly.

@@ -87,9 +87,9 @@ test('resting: last-opened is an ORDER, never an appearance', () => {
 test('pull: first activation pulls, second opens, and neither changes the route', () => {
   /* Measured, Books shelf: click → "Training" pulled, hash still #library;
    * click the Open control → the Book opened with the matching cover. */
-  assert.match(shelf, /if \(obj === pulled \|\| e\.target\.closest\('\.lib-foot-a'\)\) onOpen\?\.\(obj\);\s*\n\s*else pullForward\(obj\);/);
+  assert.match(shelf, /if \(obj === pulled \|\| e\.target\.closest\('\.lib-foot-a'\)\) onOpen\?\.\(obj\);\s*\n\s*else \{ pullForward\(obj\); onPull\?\.\(obj\); \}/);
   // Keyboard uses the SAME two stages, so the models cannot drift apart.
-  assert.match(shelf, /if \(obj === pulled\) onOpen\?\.\(obj\);\s*\n\s*else pullForward\(obj\);/);
+  assert.match(shelf, /if \(obj === pulled\) onOpen\?\.\(obj\);\s*\n\s*else \{ pullForward\(obj\); onPull\?\.\(obj\); \}/);
   // Nothing in the pull path touches the hash (§22).
   const pull = shelf.slice(shelf.indexOf('export function pullForward'));
   const body = pull.slice(0, pull.indexOf('\n}'));
@@ -284,4 +284,40 @@ test('motion: nothing moves unless somebody moved it', () => {
    * handoff was removed in S2.6 because the Book view arrives in 18ms, so it
    * only ever played one frame and read as a second, stray movement. */
   assert.ok(!view.includes("classList.add('is-opening')"), 'the handoff animation is back');
+});
+
+test('pull: pulling a Book starts loading it (S2.7)', () => {
+  /* MEASURED. The first open of a Book costs 324ms of network and every one
+   * after it costs 15ms. That 324ms was the whole of the reported "lag": long
+   * enough for the deferred skeleton to fire and put grey pages between the
+   * shelf and the Book.
+   *
+   * Pulling a Book forward is an unambiguous statement of intent, and the
+   * second click is typically half a second later — the point of the pulled
+   * state is that you look at the cover. So the fetch starts there. Measured
+   * after: the request begins 1.9ms after the pull, and the open reaches the
+   * Book in 26.9ms with no skeleton at all.
+   *
+   * This is the one prefetch the measurements justify. It caches ONE promise
+   * per id and drops it as soon as the Book is taken, so an edited Book is
+   * never served from it. */
+  assert.match(shelf, /else \{ pullForward\(obj\); onPull\?\.\(obj\); \}/);
+  assert.match(view, /onPull: prefetchShelfObject/);
+  assert.match(view, /if \(item\?\.type === 'book' && item\.book\?\.id\) prefetchBook\(item\.book\.id\)/);
+
+  const api = code(read('library-api.js'));
+  assert.match(api, /export function prefetchBook\(bookId\)/);
+  assert.match(api, /if \(!bookId \|\| bookCache\.has\(bookId\)\) return;/);
+  // The cache is a head start for one opening, never a copy that can go stale.
+  assert.match(api, /bookCache\.delete\(bookId\);\s*\n\s*lib\.book = r;/);
+  // A failed prefetch drops out, so the real open can ask again and report it.
+  assert.match(api, /\.catch\(\(e\) => \{ bookCache\.delete\(bookId\); throw e; \}\)/);
+});
+
+test('pull: a slow Book keeps the shelf, never grey pages', () => {
+  /* Replacing the shelf with a skeleton is the worse of the two waits: the
+   * shelf is real and is what you were just looking at, so swapping it for a
+   * placeholder makes one action look like two. The skeleton is only for
+   * arriving with nothing to show — a deep link, or a reload into a Book. */
+  assert.match(view, /if \(scroll\.querySelector\('\.lib-shelf'\)\) return;/);
 });
