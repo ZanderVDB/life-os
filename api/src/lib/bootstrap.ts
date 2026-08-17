@@ -12,6 +12,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { users, workspaces, workspaceMemberships, areas } from '../db/schema.js';
 import type { VerifiedIdentity } from '../auth/firebase.js';
+import { seedStarterBooks } from './starter-library.js';
 
 export const DEFAULT_AREAS = [
   { name: 'Personal', color: 'sage', position: 0 },
@@ -83,6 +84,13 @@ export async function ensureUserAndWorkspace(db: Db, identity: VerifiedIdentity)
           position: a.position, isSystem: true,
         })),
       ).onConflictDoNothing();
+
+      /* And a Library that is not empty. An empty Library asks you to invent a
+       * filing system before you have anything to file; these four are the
+       * Books that fill up whoever you are. They are ORDINARY Books — nothing
+       * marks them as system, so every one can be renamed, archived or deleted
+       * like any other. */
+      await seedStarterBooks(tx, ws.id);
     } else {
       // Repair path: a workspace with no membership row would lock the owner out.
       const member = (await tx.select().from(workspaceMemberships).where(and(

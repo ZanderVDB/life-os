@@ -164,6 +164,11 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
       total,
       projects: Object.fromEntries(projectRows.map((p) => [p.id, {
         id: p.id, title: p.title, status: p.status, focus: p.focus,
+        /* Whether the project is filed away. The board holds back the tasks of
+         * projects that are not being worked on — archived, on hold, someday —
+         * and it needs this to know. Read-time only: nothing about the task is
+         * written, so un-filing restores the board exactly. */
+        archived: !!p.archivedAt,
         nextActionId: nextActionFor(p, siblings.filter((t) => t.projectId === p.id)).task?.id ?? null,
       }])),
     };

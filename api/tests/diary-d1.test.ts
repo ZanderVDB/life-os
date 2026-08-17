@@ -595,8 +595,14 @@ test('the sample content is invented, not borrowed or personal', () => {
 test('Diary entries are not Library items', async () => {
   const h = await setup();
   await h.put('/diary/entries/2026-08-05', { document: doc('A diary day.') });
+  /* A new account now arrives with starter Books, so "empty" is no longer the
+   * test — "no diary in it" is. What matters is that writing a Diary day
+   * creates nothing in Library, whatever else is already on the shelf. */
+  const before = (await h.get('/library/items')).json().items.length;
+  await h.put('/diary/entries/2026-08-06', { document: doc('Another diary day.') });
   const items = (await h.get('/library/items')).json();
-  assert.equal(items.items.length, 0, 'a diary entry appeared on the Library shelf');
+  assert.equal(items.items.length, before, 'a diary entry appeared on the Library shelf');
+  assert.ok(!items.items.some((i: any) => /diary day/i.test(i.title)));
   const found = (await h.get('/library/search?q=diary day')).json();
   assert.equal(found.items.length, 0);
   assert.equal(found.pages.length, 0);

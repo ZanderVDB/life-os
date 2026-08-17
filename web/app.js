@@ -69,6 +69,9 @@ const state = {
   me: null, prefs: {}, token: null,
   tasks: [], history: [], historyTotal: 0,
   route: 'today', areaFilter: null, menu: null, settingsTab: 'account',
+  /* Whether the board is showing the work of projects that are paused, filed
+   * or archived. Off by default; the notice above the buckets says so. */
+  showHeld: false,
   todayResume: null,   // scroll, filter and focused card, for the way back
   habits: [], habitsLoaded: false, habitsError: null,
   /** The computed `Write in Diary` row, or null when the setting is off. */
@@ -454,10 +457,51 @@ async function loadHistory(reset = false) {
  * grouping, not a second sort: within each group, `position` still decides, so
  * a drag that changes `position` still lands where the user dropped it.
  */
+/**
+ * Why a task is not asking for your attention today.
+ *
+ * A project you are NOT working on should not keep sending work to the board.
+ * Putting a project on hold, filing it as someday or archiving it are all
+ * explicit statements that it is not now — and leaving its tasks on Today
+ * contradicts the statement the moment it is made.
+ *
+ * Two rules make this safe rather than surprising.
+ *
+ * NOTHING IS WRITTEN. The bucket, the date and the position are untouched, so
+ * un-holding the project restores the board exactly as it was. This is the same
+ * read-time rule the Project Book shelves use, and it is what keeps the product
+ * model's promise that a project change never moves a task.
+ *
+ * A COMMITMENT OUTRANKS THE PROJECT. A task with a due date, a scheduled time,
+ * or one that IS the project's next action is never held back — "a task that is
+ * due appears because it is due, whatever its project says" is the rule, and a
+ * bill does not stop being due because you paused the renovation.
+ *
+ * Completed projects are deliberately NOT here: completing a project asks
+ * explicitly whether to leave its open tasks open, and hiding them seconds
+ * after the user said "leave them" would answer their question for them.
+ */
+export function heldBackBy(task, projectsById = state.projectsById) {
+  if (!task.projectId) return null;
+  const p = projectsById[task.projectId];
+  if (!p) return null;
+  if (task.dueDate || task.scheduledAt || p.nextActionId === task.id) return null;
+  if (p.archived) return { project: p, reason: 'archived', word: 'archived' };
+  if (p.status === 'on_hold') return { project: p, reason: 'on_hold', word: 'on hold' };
+  if (p.focus === 'someday') return { project: p, reason: 'someday', word: 'someday' };
+  return null;
+}
+
+/** Everything the board is holding back right now, across every bucket. */
+export const heldBackTasks = () => state.tasks.filter((t) => t.status !== 'done'
+  && (!state.areaFilter || t.areaId === state.areaFilter)
+  && heldBackBy(t));
+
 const inBucket = (b) => {
   const list = state.tasks
     .filter((t) => t.bucket === b && t.status !== 'done'
-      && (!state.areaFilter || t.areaId === state.areaFilter))
+      && (!state.areaFilter || t.areaId === state.areaFilter)
+      && (state.showHeld || !heldBackBy(t)))
     .sort((x, y) => x.position - y.position);
   const { standalone, project } = partition(list, state.projectsById);
   return [...standalone, ...project];
@@ -932,8 +976,34 @@ function todayHtml() {
           aria-pressed="${state.areaFilter === a.id}">${esc(a.name)}</button>`).join('')}
       </div>
     </div>
+    ${heldNoticeHtml()}
     <div class="buckets">${BUCKETS.map(bucketHtml).join('')}</div>
 `;
+}
+
+/**
+ * What the board is holding back, and why — said out loud.
+ *
+ * A task that vanishes without explanation is a task the user goes looking for.
+ * This names the count, names the projects, and offers to show them, so the
+ * suppression is something the app told you about rather than something you
+ * discovered.
+ */
+function heldNoticeHtml() {
+  const held = heldBackTasks();
+  if (!held.length) return '';
+  const projects = [...new Map(held.map((t) => {
+    const h = heldBackBy(t);
+    return [h.project.id, h];
+  })).values()];
+  const names = projects.slice(0, 2).map((h) => `${esc(h.project.title)} (${h.word})`).join(', ');
+  const more = projects.length > 2 ? ` and ${projects.length - 2} more` : '';
+  return `<div class="held-note${state.showHeld ? ' is-open' : ''}">
+    <span class="held-note-t">${held.length} task${held.length === 1 ? '' : 's'}
+      held back — ${names}${more}.</span>
+    <button type="button" class="btn btn-ghost btn-sm" id="held-toggle">${
+  state.showHeld ? 'Hide them' : 'Show them'}</button>
+  </div>`;
 }
 
 function bucketHtml(b) {
@@ -1204,6 +1274,7 @@ function wireToday() {
   document.querySelectorAll('[data-area]').forEach((el) => {
     el.onclick = () => setAreaFilter(el.dataset.area || null);
   });
+  document.getElementById('held-toggle')?.addEventListener('click', () => toggleHeld());
   wireBoard();
 }
 
@@ -1220,6 +1291,25 @@ function setAreaFilter(id) {
   flip(document.querySelectorAll('.task'), () => {
     for (const b of BUCKETS) rebuildBucket(b.id);
   });
+  wireBoard();
+  renderRail();
+}
+
+/**
+ * Show or hide the work of projects that are not being worked on.
+ *
+ * The same FLIP the area filter uses, for the same reason: the held-back cards
+ * arrive by moving into place rather than by the board blinking. Nothing is
+ * saved — this is a view, and reloading returns to hidden.
+ */
+function toggleHeld() {
+  state.showHeld = !state.showHeld;
+  flip(document.querySelectorAll('.task'), () => {
+    for (const b of BUCKETS) rebuildBucket(b.id);
+  });
+  const note = document.querySelector('.held-note');
+  if (note) note.outerHTML = heldNoticeHtml();
+  document.getElementById('held-toggle')?.addEventListener('click', () => toggleHeld());
   wireBoard();
   renderRail();
 }

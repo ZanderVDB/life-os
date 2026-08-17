@@ -517,7 +517,12 @@ test('isolation: one workspace cannot see or touch another’s Library', async (
   const theirs = await setup();
   const theirBook = await aBook(theirs, 'Private');
 
-  assert.equal((await mine.get('/library/items')).json().items.length, 0);
+  /* Not "my Library is empty" — it has starter Books now — but "THEIR book is
+   * not in it", which is the thing isolation is actually about. */
+  const seen = (await mine.get('/library/items')).json().items;
+  assert.ok(!seen.some((i: any) => i.book?.id === theirBook.book.id),
+    'another workspace’s book appeared on this shelf');
+  assert.ok(!seen.some((i: any) => i.title === 'Private'));
   assert.equal((await mine.get(`/library/books/${theirBook.book.id}`)).statusCode, 404);
   assert.equal((await mine.patch(`/library/books/${theirBook.book.id}`, { title: 'Hijacked' })).statusCode, 404);
   const page = theirBook.full.sections[0].pages[0];
@@ -577,9 +582,12 @@ test('sample: the size dial seeds one shelf, a small one, or the lot', async () 
    * different screens — a collection of many cannot demonstrate the first two.
    * One prefix, one cleanup, one system with a dial on it. */
   const solo = await setup();
+  /* Measured as a DELTA. A new account arrives with starter Books, so the
+   * absolute count no longer says anything about what the sample seeded. */
+  const before = (await solo.get('/library/items')).json().items.length;
   const s = (await solo.post('/library/sample', { size: 'solo' })).json();
   assert.equal(s.booksCreated, 1, 'solo is the one deep book and nothing else');
-  assert.equal((await solo.get('/library/items')).json().items.length, 1);
+  assert.equal((await solo.get('/library/items')).json().items.length - before, 1);
 
   const small = await setup();
   const m = (await small.post('/library/sample', { size: 'small' })).json();

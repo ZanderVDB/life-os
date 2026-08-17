@@ -472,6 +472,30 @@ and never touches a schedule. A task that is due appears because it is due —
 whatever its project says. This is the line that stops Projects becoming a
 second, competing task-bucket system, and it is asserted by test.
 
+### Today eligibility — held back, never moved
+
+A project you are **not working on** stops sending work to Today. On hold,
+someday, or archived are explicit statements that it is not now, and leaving
+their tasks on the board contradicts the statement the moment it is made.
+
+Two rules keep that from breaking the promise above:
+
+- **Nothing is written.** The bucket, the date and the position are untouched.
+  This is a read-time view, so un-holding the project restores the board
+  exactly — the same rule the Project Book shelves use. The stored task is
+  unchanged, which is why the rule above still holds in full.
+- **A commitment outranks the project.** A due date, a scheduled time, or being
+  the project's explicit next action all keep a task on the board. A bill does
+  not stop being due because you paused the renovation.
+
+**Completed projects are deliberately excluded.** Completing a project asks
+whether to leave its open tasks open; hiding them seconds after the user says
+"leave them" would answer their question for them.
+
+Nothing disappears quietly: the board shows what it is holding back, names the
+projects responsible, and offers to show them. The toggle is a view — it is not
+saved, and a reload returns to hidden.
+
 ## Archive, precisely
 
 Archive is an **overlay**, not a fifth status: `archived_at` plus
