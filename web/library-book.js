@@ -259,6 +259,7 @@ function pinboardPageHtml(page, section) {
       <div class="bk-pin-tools">
         <button type="button" class="btn btn-ghost btn-sm" data-pin-add="text">Add note</button>
         <button type="button" class="btn btn-ghost btn-sm" data-pin-add="link">Add link</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-pin-add="image">Add image</button>
         <button type="button" class="bk-page-more" data-page-more="${page.id}"
           aria-label="Actions for this page" aria-haspopup="menu">${dots()}</button>
       </div>
@@ -295,16 +296,24 @@ function pinHtml(item) {
        * make again. */
       return `<span class="bk-pin-k">${item.kind === 'video' ? 'Video' : 'Link'}</span>
         <span class="bk-pin-t" data-pin-text contenteditable="true" role="textbox"
-          aria-label="Link address">${esc(item.text ?? '')}</span>
+          data-placeholder="Paste a web address" aria-label="Link address"
+          >${esc(item.text ?? '')}</span>
         ${item.href ? `<a class="bk-pin-go" href="${esc(item.href)}" target="_blank"
-          rel="noopener noreferrer">Open</a>` : ''}`;
+          rel="noopener noreferrer">Open link</a>` : ''}`;
     }
     if (item.kind === 'image') {
-      return `<img class="bk-pin-img" src="${esc(item.href ?? '')}" alt="${esc(item.text ?? '')}"
-        loading="lazy" decoding="async" onerror="this.remove()">`;
+      /* The address stays editable underneath the picture. An image pin whose
+       * URL you cannot correct is one you have to delete and re-make, and the
+       * address is exactly the thing that gets pasted wrong. */
+      return `${item.href ? `<img class="bk-pin-img" src="${esc(item.href)}"
+        alt="${esc(item.text ?? '')}" loading="lazy" decoding="async">`
+    : '<span class="bk-pin-k">Image</span>'}
+        <span class="bk-pin-t bk-pin-src" data-pin-text contenteditable="true" role="textbox"
+          data-placeholder="Paste an image address" aria-label="Image address"
+          >${esc(item.text ?? '')}</span>`;
     }
-    return `<span class="bk-pin-t" data-pin-text contenteditable="true"
-      role="textbox" aria-label="Note">${esc(item.text ?? '')}</span>`;
+    return `<span class="bk-pin-t" data-pin-text contenteditable="true" role="textbox"
+      data-placeholder="Write a note" aria-label="Note">${esc(item.text ?? '')}</span>`;
   };
 
   /* The element carries everything needed to RECONSTRUCT the item — its kind
@@ -371,7 +380,7 @@ function mountPinboards(root, { onDirty }) {
         const kind = el.dataset.kind || prev.kind;
         const text = el.querySelector('[data-pin-text]');
         const typed = text ? (text.textContent ?? '') : null;
-        const href = kind === 'link' || kind === 'video'
+        const href = kind === 'link' || kind === 'video' || kind === 'image'
           ? (hrefFrom(typed ?? prev.text) ?? prev.href) : prev.href;
         const REF_ATTR = { task: 'taskId', project: 'projectId', resource: 'itemId', page: 'pageId' };
         const refAttr = REF_ATTR[kind];
@@ -390,6 +399,27 @@ function mountPinboards(root, { onDirty }) {
       queueSave(page, next);
       page.content = next;
       onDirty?.();
+      return items;
+    };
+
+    /* A pin that has just BECOME something — an image address typed into an
+     * empty image pin — has to be redrawn to show it. Only that pin, and only
+     * when it crossed the line, so typing never yanks the caret mid-word. */
+    const refresh = (items) => {
+      for (const item of items) {
+        if (item.kind !== 'image' && item.kind !== 'link' && item.kind !== 'video') continue;
+        const el = board.querySelector(`[data-pin="${item.id}"]`);
+        if (!el) continue;
+        const shows = item.kind === 'image' ? !!el.querySelector('.bk-pin-img')
+          : !!el.querySelector('.bk-pin-go');
+        if (!!item.href === shows) continue;
+        const focused = el.contains(document.activeElement);
+        el.outerHTML = pinHtml(item);
+        if (focused) {
+          const t = board.querySelector(`[data-pin="${item.id}"] [data-pin-text]`);
+          if (t) { t.focus(); getSelection()?.selectAllChildren(t); getSelection()?.collapseToEnd(); }
+        }
+      }
     };
 
     /* Moving a pin. Percentages of the board, so an arrangement made on a wide
@@ -425,8 +455,14 @@ function mountPinboards(root, { onDirty }) {
       x.closest('[data-pin]')?.remove();
       commit();
     });
+    /* Typing saves as you go; the redraw waits until you stop, so a pin never
+     * re-renders under the caret while a word is still being typed. */
+    let settle = 0;
     board.addEventListener('input', (e) => {
-      if (e.target.closest('[data-pin-text]')) commit();
+      if (!e.target.closest('[data-pin-text]')) return;
+      const items = commit();
+      clearTimeout(settle);
+      settle = setTimeout(() => refresh(items), 600);
     });
 
     // A Task dropped onto the board becomes a positioned card where it landed.
@@ -464,7 +500,7 @@ function mountPinboards(root, { onDirty }) {
     root.querySelectorAll('[data-pin-add]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const kind = btn.dataset.pinAdd;
-        const item = { id: newBlockId(), kind, x: 6, y: 8, w: 26, h: 16, text: '' };
+        const item = { id: newBlockId(), kind, ...freeSpot(board), w: 26, h: 16, text: '' };
         board.querySelector('.bk-board-empty')?.remove();
         board.insertAdjacentHTML('beforeend', pinHtml(item));
         commit();
@@ -472,6 +508,32 @@ function mountPinboards(root, { onDirty }) {
       });
     });
   });
+}
+
+/**
+ * Somewhere to put a new pin that is not on top of an existing one.
+ *
+ * Every new pin used to start at the same corner, so the second one landed
+ * exactly over the first and the first simply disappeared — it was still
+ * there, still saved, and completely unreachable.
+ *
+ * Walks the board in reading order and takes the first cell that does not
+ * overlap anything. If the board is genuinely full it cascades instead, which
+ * at least leaves a visible edge to grab.
+ */
+function freeSpot(board) {
+  const taken = [...board.querySelectorAll('[data-pin]')].map((el) => ({
+    x: pct(el.style.left, 0), y: pct(el.style.top, 0),
+    w: pct(el.style.width, 26), h: (el.getBoundingClientRect().height
+      / Math.max(1, board.getBoundingClientRect().height)) * 100,
+  }));
+  const clear = (x, y) => !taken.some((t) => x < t.x + t.w + 1 && x + 27 > t.x
+    && y < t.y + Math.max(t.h, 8) + 1 && y + 17 > t.y);
+  for (let y = 5; y <= 70; y += 9) {
+    for (let x = 4; x <= 68; x += 30) if (clear(x, y)) return { x, y };
+  }
+  const n = taken.length;
+  return { x: Math.min(66, 4 + n * 3), y: Math.min(76, 5 + n * 3) };
 }
 
 /** A pin's text is its address once it parses as one. Nothing else is a link. */

@@ -1272,14 +1272,58 @@ async function addSection() {
  * same list as a page of notes because it is the same thing: a page with a
  * layout.
  */
+/**
+ * The layout list, drawn the way every other menu in this app draws a choice:
+ * a bold label with a quiet line under it, stacked.
+ *
+ * `.lib-menu button` is a flex ROW with `align-items:center` — the label and
+ * the description were landing side by side in it, and the longer descriptions
+ * then wrapped while the label stayed vertically centred. That is what made the
+ * list look ragged and the titles look wrong. The `<b>`/`<small>` pair inside
+ * one text cell is the existing house structure and needs no new rules.
+ */
+function layoutItemsHtml(current, attr = 'data-layout') {
+  return LAYOUTS.map((l) => `<button type="button" role="menuitem" ${attr}="${l.id}"
+    class="lib-menu-layout${l.id === current ? ' is-on' : ''}"
+    ${l.id === current ? 'aria-current="true"' : ''}>
+    <span class="lib-menu-i" aria-hidden="true">${LAYOUT_GLYPH[l.id] ?? LAYOUT_GLYPH.notes}</span>
+    <span class="lib-menu-tx"><b>${esc(l.label)}</b><small>${esc(l.hint)}</small></span>
+  </button>`).join('');
+}
+
+/**
+ * A glyph per layout — the shape of the page, drawn.
+ *
+ * Not decoration: eleven similarly-worded options read as a wall of text, and
+ * the thing that actually distinguishes them is their SHAPE. Two columns, a
+ * 2×2, a ruled page and a board are instantly separable as pictures and
+ * take a sentence each to separate as words.
+ */
+const g = (body) => `<svg viewBox="0 0 20 20" width="17" height="17" fill="none"
+  stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"
+  aria-hidden="true">${body}</svg>`;
+const FRAME = '<rect x="3" y="3.5" width="14" height="13" rx="2"/>';
+const LAYOUT_GLYPH = {
+  notes: g(`${FRAME}<path d="M6 8h8M6 11h8M6 14h5"/>`),
+  blank: g(FRAME),
+  checklist: g(`${FRAME}<path d="m5.8 8 1 1 1.8-2M5.8 13l1 1 1.8-2M11 8.5h4M11 13.5h4"/>`),
+  two_columns: g(`${FRAME}<path d="M10 3.5v13"/>`),
+  quad: g(`${FRAME}<path d="M10 3.5v13M3 10h14"/>`),
+  comparison: g(`${FRAME}<path d="M10 3.5v13M5.5 7.5h3M11.5 7.5h3"/>`),
+  ideas: g(`<path d="M10 3.2a4.4 4.4 0 0 0-2.6 7.9c.5.4.8 1 .8 1.6v.6h3.6v-.6c0-.6.3-1.2.8-1.6A4.4 4.4 0 0 0 10 3.2Z"/><path d="M8.4 16.2h3.2"/>`),
+  research: g(`<circle cx="9" cy="9" r="5"/><path d="m12.8 12.8 3.4 3.4"/>`),
+  learning: g(`<path d="M10 3.6 17 7l-7 3.4L3 7l7-3.4Z"/><path d="M6 8.9v3.5c0 1.2 1.8 2.2 4 2.2s4-1 4-2.2V8.9"/>`),
+  meeting: g(`<circle cx="7.4" cy="8" r="2.1"/><circle cx="13" cy="8.4" r="1.7"/><path d="M3.6 15.4c.5-2 1.9-3 3.8-3s3.3 1 3.8 3M12.6 12.6c1.6.1 2.7 1 3.1 2.8"/>`),
+  pinboard: g(`${FRAME}<rect x="5.4" y="6" width="4" height="3.4" rx=".8"/><rect x="11" y="6" width="3.6" height="5" rx=".8"/><rect x="5.4" y="11.4" width="4" height="3" rx=".8"/>`),
+};
+
 function openAddPageMenu(anchor) {
   ctx.openSurface(anchor, {
     kind: 'library-add-page',
     label: 'Add a page',
-    html: `<div class="lib-menu lib-menu-sm" role="menu">
-      <p class="lib-menu-note lib-menu-hd">Add a page</p>
-      ${LAYOUTS.map((l) => `<button type="button" role="menuitem" data-new-layout="${l.id}">
-        ${esc(l.label)}<span class="lib-menu-hint">${esc(l.hint)}</span></button>`).join('')}
+    html: `<div class="lib-menu lib-menu-layouts" role="menu">
+      <p class="lib-menu-hd">Add a page</p>
+      ${layoutItemsHtml(null, 'data-new-layout')}
     </div>`,
     wire: (el) => el.querySelectorAll('[data-new-layout]').forEach((b) => {
       b.addEventListener('click', () => {
@@ -1405,16 +1449,17 @@ function openPageMenu(anchor, pageId) {
   ctx.openSurface(anchor, {
     kind: 'library-page-menu',
     label: 'Actions for this page',
-    html: `<div class="lib-menu lib-menu-sm" role="menu">
-      <button type="button" role="menuitem" data-act="${marked ? 'unbookmark' : 'bookmark'}">${
-  marked ? 'Remove bookmark' : 'Bookmark this page'}</button>
-      <p class="lib-menu-note lib-menu-hd">Page layout</p>
-      ${LAYOUTS.map((l) => `<button type="button" role="menuitem" data-layout="${l.id}"
-        class="${l.id === (page.layout ?? 'notes') ? 'is-on' : ''}">
-        ${esc(l.label)}<span class="lib-menu-hint">${esc(l.hint)}</span></button>`).join('')}
+    html: `<div class="lib-menu lib-menu-layouts" role="menu">
+      <button type="button" role="menuitem" data-act="${marked ? 'unbookmark' : 'bookmark'}">
+        <span class="lib-menu-tx"><b>${marked ? 'Remove bookmark' : 'Bookmark this page'}</b></span>
+      </button>
+      <p class="lib-menu-hd">Page layout</p>
+      ${layoutItemsHtml(page.layout ?? 'notes')}
+      <p class="lib-menu-hd">Page</p>
       ${onlyOne
     ? '<p class="lib-menu-note">The only page of a section cannot be archived.</p>'
-    : '<button type="button" role="menuitem" data-act="archive">Archive page</button>'}
+    : `<button type="button" role="menuitem" data-act="archive">
+        <span class="lib-menu-tx"><b>Archive page</b></span></button>`}
     </div>`,
     wire: (el) => {
       el.querySelectorAll('[data-act]').forEach((b) => {
@@ -1448,8 +1493,21 @@ async function changeLayout(page, layout) {
     const r = await setPageLayout(page.id, layout);
     Object.assign(page, r.page);
     forgetPage(page.id);          // the baseline changed underneath the editor
+    /* A pinboard occupies the whole spread and a flowed page does not, so the
+     * page that was beside this one either joins it or is displaced. Re-read
+     * the book rather than guess which. */
+    await loadBook(lib.bookId);
+    const section = lib.book.sections.find((s) => s.pages.some((p) => p.id === page.id));
+    if (section) {
+      lib.sectionIdx = lib.book.sections.indexOf(section);
+      lib.spreadIdx = Math.max(0, spreadIndexOfPage(section, page.id));
+    }
+    paintBookHead();
     paintBookBody();
-    ctx.toast(`Page layout: ${layoutLabel(layout)}`);
+    /* What actually happened, said plainly. The server returns a sentence when
+     * the change moved content between shapes — that is the answer to "what
+     * happens to my pins if I make this a page of notes?". */
+    ctx.toast(r.note ? `${layoutLabel(layout)}. ${r.note}` : `Page layout: ${layoutLabel(layout)}`);
   });
 }
 

@@ -445,6 +445,94 @@ const check = (text = ''): Block => ({
   content: text ? [{ type: 'text', text }] : [],
 });
 
+/* ── Changing a page's layout ───────────────────────────────────────────
+ *
+ * Flowed layouts share the block grammar, so moving between them keeps every
+ * block untouched and is not a conversion at all.
+ *
+ * Crossing to or from a pinboard IS one, and the honest answer is not to
+ * refuse: a note becomes a paragraph, a link becomes a paragraph with a link
+ * in it, and a pinned Task becomes a Task reference block — the same
+ * relationship, drawn in a line instead of at a position. Nothing is dropped.
+ *
+ * What IS lost is the arrangement: where things sat on the board. That is real
+ * and the caller is told so plainly, because it is the one thing the user
+ * cannot get back by undoing.
+ */
+const PIN_TO_REF: Record<string, string> = {
+  task: 'taskRef', project: 'projectRef', resource: 'resourceRef', page: 'pageRef',
+};
+const REF_TO_PIN: Record<string, string> = {
+  taskRef: 'task', projectRef: 'project', resourceRef: 'resource', pageRef: 'page',
+};
+
+const textBlock = (text: string, href?: string): Block => ({
+  type: 'paragraph',
+  attrs: { id: blockId() },
+  content: text
+    ? [href ? { type: 'text', text, marks: [{ type: 'link', attrs: { href } }] }
+      : { type: 'text', text }]
+    : [],
+});
+
+export type Conversion = { content: Doc | Pinboard; note: string | null };
+
+export function convertContent(from: string, to: string, raw: unknown): Conversion {
+  const wasBoard = from === 'pinboard';
+  const willBoard = to === 'pinboard';
+  if (wasBoard === willBoard) return { content: raw as Doc | Pinboard, note: null };
+
+  if (wasBoard) {
+    const items = ((raw as Pinboard)?.items ?? []);
+    const content: Block[] = [];
+    for (const item of items) {
+      const refType = PIN_TO_REF[item.kind];
+      if (refType) {
+        const attr = REF_ID_ATTR[refType]!;
+        const id = (item as any)[attr];
+        if (isUuid(id)) { content.push({ type: refType, attrs: { id: blockId(), [attr]: id } }); }
+        continue;
+      }
+      const text = (item.text ?? '').trim() || item.href || '';
+      if (text) content.push(textBlock(text, item.href));
+    }
+    return {
+      content: { type: 'doc', content },
+      note: items.length
+        ? `${items.length} pinned item${items.length === 1 ? '' : 's'} became lines on the page. Where they sat on the board is not kept.`
+        : null,
+    };
+  }
+
+  // Flowed → pinboard. Laid out in a simple grid; nothing overlaps, and the
+  // user can arrange from there.
+  const blocks = ((raw as Doc)?.content ?? []);
+  const items: PinItem[] = [];
+  let col = 0; let row = 0;
+  const place = () => {
+    const pos = { x: 4 + col * 32, y: 4 + row * 22, w: 28, h: 18 };
+    col += 1; if (col > 2) { col = 0; row += 1; }
+    return pos;
+  };
+  for (const b of blocks) {
+    const pinKind = REF_TO_PIN[b.type];
+    if (pinKind) {
+      const attr = REF_ID_ATTR[b.type]!;
+      const id = (b.attrs as any)?.[attr];
+      if (isUuid(id)) items.push({ id: blockId(), kind: pinKind, ...place(), [attr]: id } as PinItem);
+      continue;
+    }
+    const text = docToText({ type: 'doc', content: [b] }).trim();
+    if (text) items.push({ id: blockId(), kind: 'text', ...place(), text });
+  }
+  return {
+    content: { type: 'pinboard', items },
+    note: blocks.length
+      ? `${items.length} block${items.length === 1 ? '' : 's'} became pins. Drag them where you want them.`
+      : null,
+  };
+}
+
 export function starterContent(layout: string): Doc | Pinboard {
   switch (layout) {
     case 'pinboard':

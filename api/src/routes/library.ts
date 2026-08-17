@@ -32,6 +32,7 @@ import {
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import {
   docToText, validateDoc, validatePageContent, pageToText, starterContent, extractRefs,
+  convertContent,
 } from '../lib/book-doc.js';
 import {
   syncPageRefs, projectBookIndex, linksToPages, PAGE_TARGET, pageLabel,
@@ -715,12 +716,18 @@ export function registerLibraryRoutes(
    * can LOSE something, and §32 is explicit that a conversion must never
    * silently drop content.
    *
-   * Two rules decide it. Flowed layouts all share the block grammar, so moving
-   * between them keeps every block and only changes how it is drawn — free, and
-   * always allowed. A pinboard is the other shape entirely: positioned items on
-   * one side, blocks on the other, with no honest mapping between them. So that
-   * crossing is refused while there is anything to lose, and the caller is told
-   * what would go rather than being asked to trust a `force` flag.
+   * Flowed layouts share the block grammar, so moving between them keeps every
+   * block and only changes how it is drawn — free, and never a conversion.
+   *
+   * Crossing to or from a pinboard IS one, and it CONVERTS rather than refuses.
+   * A note becomes a paragraph, a link becomes a paragraph with a link in it,
+   * and a pinned Task becomes a Task reference — the same relationship, drawn
+   * in a line instead of at a position. No content is dropped, so refusing
+   * would only have forced the user to retype it.
+   *
+   * The one thing that genuinely does not survive is the ARRANGEMENT, and the
+   * response says so in a sentence the client shows. That is the honest shape
+   * of §32: warn about what is actually lost, do not block what is not.
    */
   app.post(`${base}/library/pages/:id/layout`, pre, async (req) => {
     const ws = wsId(req);
@@ -730,33 +737,38 @@ export function registerLibraryRoutes(
     const [page] = await db.select().from(bookPages)
       .where(and(eq(bookPages.workspaceId, ws), eq(bookPages.id, id))).limit(1);
     if (!page) throw notFound('That page does not exist.');
-    if (page.layout === body.layout) return { page, converted: false };
+    if (page.layout === body.layout) return { page, converted: false, note: null };
 
-    const wasBoard = page.layout === 'pinboard';
     const willBoard = body.layout === 'pinboard';
-    const content: any = page.content;
+    const { content: next, note } = convertContent(page.layout, body.layout, page.content);
 
-    if (wasBoard !== willBoard) {
-      const pinned = wasBoard ? (content?.items?.length ?? 0) : 0;
-      const blocks = wasBoard ? 0 : (content?.content?.length ?? 0);
-      const has = wasBoard ? pinned : blocks;
-      if (has > 0) {
-        throw badRequest(wasBoard
-          ? `This pinboard has ${pinned} item${pinned === 1 ? '' : 's'}. A page of notes has nowhere to put them — clear the board first, or add a new page instead.`
-          : `This page has ${blocks} block${blocks === 1 ? '' : 's'} of writing. A pinboard has nowhere to put them — clear the page first, or add a new pinboard instead.`);
+    const [section] = await db.select({ bookId: bookSections.bookId }).from(bookSections)
+      .where(eq(bookSections.id, page.sectionId)).limit(1);
+
+    const row = await db.transaction(async (tx) => {
+      const [updated] = await tx.update(bookPages).set({
+        layout: body.layout,
+        spansSpread: willBoard,
+        content: next,
+        contentText: pageToText(body.layout, next),
+        updatedAt: new Date(),
+      }).where(eq(bookPages.id, id)).returning();
+
+      /* References survive the conversion, so the edges must follow them into
+       * the new shape — a Task pinned to a board and the same Task written on
+       * a page are one relationship, and it must not blink out because the
+       * page changed how it draws. */
+      if (section) {
+        const [pb] = await tx.select({ projectId: projectBooks.projectId }).from(projectBooks)
+          .where(eq(projectBooks.bookId, section.bookId)).limit(1);
+        await syncPageRefs(tx, ws, page, section.bookId, body.layout, next, {
+          projectId: pb?.projectId ?? null,
+          userId: (req as any).user?.id ?? null,
+        });
       }
-    }
-
-    // Same family, or an empty page: the content carries over untouched.
-    const next = wasBoard === willBoard ? content : starterContent(body.layout);
-    const [row] = await db.update(bookPages).set({
-      layout: body.layout,
-      spansSpread: willBoard,
-      content: next,
-      contentText: pageToText(body.layout, next),
-      updatedAt: new Date(),
-    }).where(eq(bookPages.id, id)).returning();
-    return { page: row, converted: true };
+      return updated;
+    });
+    return { page: row, converted: true, note };
   });
 
   /**

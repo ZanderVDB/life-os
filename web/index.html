@@ -3622,42 +3622,74 @@ body:has(.lib-page) .rail{display:none}
    Eleven templates, one page model. Most differ only in their ruling and
    their starter blocks, which is why moving between them can never lose a
    block — see the layout route. */
-.bk-regions{display:grid;gap:14px;flex:1;min-height:0}
+/* `.bk-page-body{display:flex}` is declared LATER in this stylesheet at equal
+   specificity, so a single-class rule here loses and the regions become flex
+   items with `min-width:0` and no grow — which measured 0px wide and made the
+   two-column, four-section and comparison pages impossible to type into. Two
+   classes, so the grid wins wherever this block happens to sit. */
+.bk-page-body.bk-regions{display:grid;flex:1;min-height:0;column-gap:26px;row-gap:0}
 .bk-regions-2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .bk-regions-4{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
+/* A RULE between columns, not a box around each. A dashed outline per region
+   reads as a wireframe; a printed page divides its columns with a hairline and
+   lets the writing sit on the same ruling it would use anywhere else. */
+.bk-regions .bk-region + .bk-region{border-left:1px solid var(--paper-line);
+  padding-left:26px;margin-left:-13px}
+.bk-regions-4 .bk-region:nth-child(3),.bk-regions-4 .bk-region:nth-child(4){
+  border-top:1px solid var(--paper-line)}
+.bk-regions-4 .bk-region:nth-child(3){border-left:0;padding-left:0;margin-left:0}
 /* `display:flex` on the region rather than a second `.bk-editor` rule: the
    30px ruling and the whole-rows height are stated ONCE, on .bk-editor below,
    and a rule here that also matched `.bk-editor{` would shadow them. */
-.bk-region{min-width:0;min-height:0;display:flex;flex-direction:column;border-radius:8px;
-  outline:1px dashed var(--line,rgba(255,255,255,.10));outline-offset:4px}
-/* Blank and pinboard have no rules; the ruled families keep theirs. */
-.bk-l-blank .bk-page-body,.bk-l-ideas .bk-page-body,.bk-l-quad .bk-page-body,
-.bk-l-comparison .bk-page-body,.bk-l-two_columns .bk-page-body{--bk-rule:transparent}
+.bk-region{min-width:0;min-height:0;display:flex;flex-direction:column}
+/* A blank page is blank. The editor draws its ruling from `--paper-line`, so
+   that is the variable to clear — `--bk-rule` was a name I invented and
+   nothing read it, which is why Blank still arrived ruled.
+   Set on the PAGE and inherited, rather than on `.bk-editor`: the whole page is
+   unruled, and a selector containing the exact text `.bk-editor{` earlier in
+   this file shadows the real one for anything reading the sheet by substring. */
+.bk-l-blank{--paper-line:transparent}
 
-/* Checklist items. The box is not editable, the words are. */
-.bk-check{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;
-  margin:0 0 6px}
-.bk-check-box{width:16px;height:16px;margin-top:3px;border-radius:5px;cursor:pointer;
-  border:1.5px solid var(--line,rgba(0,0,0,.28));flex:none}
-.bk-check.is-on .bk-check-box{background:var(--accent-c,var(--a-peach));border-color:transparent}
-.bk-check.is-on .bk-check-t{text-decoration:line-through;opacity:.55}
+/* ── On-paper components ──────────────────────────────────────────────
+   Everything below sits on the PAGE, not on the app shell, so it is drawn
+   from the paper token family (`--paper`, `--paper-ink`, `--paper-line`).
+   Shell tokens and hard-coded rgba() do not know which theme the paper is:
+   the first version used `rgba(0,0,0,.28)` and `#22201f`, which on the dark
+   paper (`#262233`) was black on near-black — visible in neither. */
+
+/* Checklist items. The box is not editable, the words are, and the row keeps
+   the 30px writing rhythm so a checklist still sits on its ruling. */
+.bk-check{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;
+  align-items:start;margin:0;line-height:30px}
+.bk-check-box{width:16px;height:16px;margin-top:7px;border-radius:5px;cursor:pointer;
+  border:1.5px solid var(--paper-ink-2);flex:none;
+  transition:background var(--t-hover),border-color var(--t-hover)}
+.bk-check-box:hover{border-color:var(--accent-c,var(--a-peach))}
+.bk-check-t{min-width:0}
+.bk-check.is-on .bk-check-box{background:var(--accent-c,var(--a-peach));
+  border-color:transparent}
+.bk-check.is-on .bk-check-t{text-decoration:line-through;color:var(--paper-ink-2)}
 
 /* ── References ───────────────────────────────────────────────────────
    A card showing a LIVE entity. It stores an id; everything it displays is
    read from the canonical row, so ticking a task in Projects changes what
    this says. */
-.bk-ref{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;
-  margin:8px 0;padding:8px 10px;border-radius:10px;cursor:pointer;
-  background:var(--surface-3,rgba(0,0,0,.04));
-  border:1px solid var(--line,rgba(0,0,0,.10))}
-.bk-ref-k{font-size:10px;letter-spacing:.07em;text-transform:uppercase;opacity:.6}
-.bk-ref-t{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bk-ref-m{grid-column:2;font-size:11px;opacity:.6}
-.bk-ref.is-done .bk-ref-t{text-decoration:line-through;opacity:.55}
-.bk-ref-gone{opacity:.55;font-style:italic}
-.bk-ref-x{background:none;border:0;cursor:pointer;color:inherit;opacity:.4;font-size:16px;
-  line-height:1;padding:2px 4px}
-.bk-ref-x:hover{opacity:1}
+.bk-ref{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;
+  align-items:center;margin:0;height:60px;padding:0 10px;border-radius:10px;cursor:pointer;
+  color:var(--paper-ink);
+  background:color-mix(in srgb,var(--paper-ink) 5%,transparent);
+  border:1px solid color-mix(in srgb,var(--paper-ink) 14%,transparent)}
+.bk-ref:hover{border-color:var(--accent-c,var(--a-peach))}
+.bk-ref-k{font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--paper-ink-2);line-height:1.2}
+.bk-ref-t{font-size:13px;line-height:1.3;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.bk-ref-m{grid-column:2;font-size:11px;color:var(--paper-ink-2);line-height:1.2}
+.bk-ref.is-done .bk-ref-t{text-decoration:line-through;color:var(--paper-ink-2)}
+.bk-ref-gone{font-style:italic;color:var(--paper-ink-2)}
+.bk-ref-x{background:none;border:0;cursor:pointer;color:var(--paper-ink-2);
+  font-size:17px;line-height:1;padding:2px 4px;border-radius:6px}
+.bk-ref-x:hover{color:var(--paper-ink);background:color-mix(in srgb,var(--paper-ink) 10%,transparent)}
 /* Where a drop would land. */
 .bk-editor.is-drop{outline:2px dashed var(--accent-c,var(--a-peach));outline-offset:3px}
 
@@ -3689,26 +3721,49 @@ body:has(.lib-page) .rail{display:none}
 .bk-page-full{padding:22px 26px 18px}
 .bk-page-full::before{display:none}
 .bk-board{position:relative;flex:1;min-height:420px;border-radius:10px;
-  background-image:radial-gradient(circle,var(--line,rgba(0,0,0,.10)) 1px,transparent 1px);
-  background-size:22px 22px}
+  background-image:radial-gradient(circle,var(--paper-line) 1.5px,transparent 1.5px);
+  background-size:24px 24px}
 .bk-board.is-drop{outline:2px dashed var(--accent-c,var(--a-peach));outline-offset:2px}
-.bk-board-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  text-align:center;padding:0 18%;opacity:.55;font-size:13px;line-height:1.5;margin:0}
-.bk-pin{position:absolute;display:flex;flex-direction:column;gap:4px;padding:10px 12px;
-  border-radius:10px;background:var(--paper-2,rgba(255,255,255,.92));color:#22201f;
-  box-shadow:0 6px 18px rgba(0,0,0,.18);font-size:12px}
-.bk-pin.is-dragging{box-shadow:0 14px 30px rgba(0,0,0,.28);z-index:5}
-.bk-pin-grip{position:absolute;inset:0 0 auto 0;height:16px;cursor:grab;
-  border-radius:10px 10px 0 0}
+.bk-board-empty{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;text-align:center;padding:0 18%;color:var(--paper-ink-2);
+  font-size:13px;line-height:1.5;margin:0}
+
+/* A pin is a card ON the paper — drawn from the paper ink, so it is legible on
+   whichever paper the theme gives it. The first version pinned near-black text
+   to a near-black card and the pin, its words and its delete button were all
+   invisible, which is why a pin could not be removed once made. */
+.bk-pin{position:absolute;display:flex;flex-direction:column;gap:3px;
+  padding:18px 26px 10px 12px;border-radius:10px;font-size:12px;
+  color:var(--paper-ink);
+  background:color-mix(in srgb,var(--paper-ink) 8%,var(--paper));
+  border:1px solid color-mix(in srgb,var(--paper-ink) 16%,transparent);
+  box-shadow:0 6px 18px rgba(0,0,0,.22)}
+.bk-pin:hover{border-color:color-mix(in srgb,var(--paper-ink) 30%,transparent)}
+.bk-pin.is-dragging{box-shadow:0 14px 30px rgba(0,0,0,.34);z-index:5}
+/* The grab strip. It stops short of the delete button so the two never fight
+   over the same pointer. */
+.bk-pin-grip{position:absolute;top:0;left:0;right:26px;height:16px;cursor:grab;
+  border-radius:10px 0 0 0}
+.bk-pin-grip::before{content:'';position:absolute;left:10px;top:6px;width:18px;height:3px;
+  border-radius:2px;background:var(--paper-ink-2);opacity:.5}
+.bk-pin:hover .bk-pin-grip::before{opacity:.9}
 .bk-pin-grip:active{cursor:grabbing}
-.bk-pin-k{font-size:9px;letter-spacing:.08em;text-transform:uppercase;opacity:.5;margin-top:4px}
-.bk-pin-t{line-height:1.35;word-break:break-word}
-.bk-pin-t.is-done{text-decoration:line-through;opacity:.55}
-.bk-pin-m{font-size:10px;opacity:.6}
+.bk-pin-k{font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--paper-ink-2)}
+.bk-pin-t{line-height:1.4;word-break:break-word;min-height:18px;outline:0}
+.bk-pin-t:empty::before{content:attr(data-placeholder);color:var(--paper-ink-2)}
+.bk-pin-t.is-done{text-decoration:line-through;color:var(--paper-ink-2)}
+.bk-pin-m{font-size:10px;color:var(--paper-ink-2)}
+.bk-pin-go{font-size:10.5px;color:var(--accent-c,var(--a-peach));text-decoration:underline;
+  text-underline-offset:2px;align-self:flex-start}
 .bk-pin-img{max-width:100%;border-radius:6px;display:block}
-.bk-pin-x{position:absolute;top:2px;right:4px;background:none;border:0;cursor:pointer;
-  color:inherit;opacity:.35;font-size:15px;line-height:1}
-.bk-pin-x:hover{opacity:1}
+/* Always visible, never a hover secret — a control you cannot find is a
+   control you do not have. */
+.bk-pin-x{position:absolute;top:3px;right:3px;width:20px;height:20px;background:none;
+  border:0;cursor:pointer;color:var(--paper-ink-2);font-size:16px;line-height:1;
+  border-radius:6px;display:flex;align-items:center;justify-content:center}
+.bk-pin-x:hover{color:var(--paper-ink);
+  background:color-mix(in srgb,var(--paper-ink) 14%,transparent)}
 .bk-pin-tools{display:flex;gap:6px;align-items:center}
 
 /* A folded shelf keeps its heading and its count — nothing is hidden, only
@@ -3770,6 +3825,31 @@ body:has(.lib-page) .rail{display:none}
 .bk-tab-wrap:hover .bk-tab-more{opacity:.9}
 .bk-tab-wrap:has(.bk-tab.on) .bk-tab{padding-right:28px}
 .lib-menu-note{margin:0;padding:9px 11px;font-size:12px;color:var(--muted);line-height:1.5}
+
+/* ── The layout picker ────────────────────────────────────────────────
+   Eleven options with a sentence each. Two things make that readable: the
+   label and its description STACK rather than sitting side by side in the
+   flex row, and each option carries the shape of the page it makes. */
+.lib-menu-layouts{min-width:288px;max-height:min(70vh,560px);overflow-y:auto;
+  scrollbar-width:thin}
+.lib-menu-hd{margin:8px 0 2px;padding:0 11px;font-size:10.5px;font-weight:650;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.lib-menu-hd:first-child{margin-top:2px}
+/* The text cell. `align-items:flex-start` because a two-line description must
+   sit under its label, not straddle the icon. */
+.lib-menu-layouts button{align-items:flex-start}
+.lib-menu-tx{display:block;min-width:0}
+.lib-menu-tx b{display:block;font-weight:600;line-height:1.35}
+.lib-menu-tx small{display:block;font-size:11.5px;line-height:1.4;color:var(--muted);
+  margin-top:1px;white-space:normal}
+.lib-menu-layout .lib-menu-i{margin-top:1px;flex:none}
+/* The layout this page already uses. Marked, not disabled — re-picking it is
+   harmless and being told which one you are on is the useful part. */
+.lib-menu-layout.is-on{background:var(--surface-3)}
+.lib-menu-layout.is-on .lib-menu-i{color:var(--accent)}
+.lib-menu-layout.is-on .lib-menu-tx b::after{content:'Current';float:right;
+  font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--accent);margin-left:10px}
 
 .bk-page-title{flex:1;min-width:0;background:none;border:0;outline:0;
   font-family:'Playfair Display',Georgia,serif;font-size:19px;color:var(--paper-ink);

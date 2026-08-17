@@ -205,27 +205,71 @@ test('changing layout within the flowed family keeps every block', async () => {
   assert.equal(after.content.content[0].content[0].text, 'Keep me');
 });
 
-test('a layout change that would lose content is refused, and says what', async () => {
+test('crossing to a pinboard converts content rather than refusing it', async () => {
   const h = await setup();
-  const { book } = await aProject(h);
+  const { project, book } = await aProject(h);
+  const task = await aTaskOn(h, project.id);
   const section = (await h.get(`/library/books/${book.bookId}`)).json().sections[0];
   const page = section.pages[0];
 
   await h.patch(`/library/pages/${page.id}`, { content: { type: 'doc', content: [
-    { type: 'paragraph', content: [{ type: 'text', text: 'Bank details' }] },
+    { type: 'heading', attrs: { id: 'h', level: 2 }, content: [{ type: 'text', text: 'Payments' }] },
+    { type: 'paragraph', attrs: { id: 'a' }, content: [{ type: 'text', text: 'Deposit first' }] },
+    { type: 'taskRef', attrs: { id: 't', taskId: task.id } },
+    { type: 'paragraph', attrs: { id: 'e' }, content: [] },
   ] } });
 
-  /* Refused rather than converted. There is no honest mapping from flowed
-   * blocks to positioned pins, and §32 forbids dropping them quietly. */
-  const bad = await h.post(`/library/pages/${page.id}/layout`, { layout: 'pinboard' });
-  assert.equal(bad.statusCode, 400);
-  assert.match(bad.json().error.message, /1 block of writing/);
+  /* Nothing is dropped. Writing becomes notes, and a Task reference becomes a
+   * Task PIN — the same relationship, drawn at a position instead of in a
+   * line. Refusing would only have forced the user to retype it. */
+  const r = await h.post(`/library/pages/${page.id}/layout`, { layout: 'pinboard' });
+  assert.equal(r.statusCode, 200, r.body);
+  const items = r.json().page.content.items;
+  assert.deepEqual(items.map((i: any) => i.kind), ['text', 'text', 'task']);
+  assert.equal(items[0].text, 'Payments');
+  assert.equal(items[2].taskId, task.id);
+  // The empty paragraph is not carried across as an empty pin.
+  assert.equal(items.length, 3);
+  // Laid out so nothing lands on top of anything else.
+  assert.equal(new Set(items.map((i: any) => `${i.x},${i.y}`)).size, 3);
 
-  // Untouched by the refusal.
-  const still = (await h.get(`/library/books/${book.bookId}`)).json()
-    .sections[0].pages.find((p: any) => p.id === page.id);
-  assert.equal(still.layout, 'notes');
-  assert.equal(still.content.content.length, 1);
+  /* What is genuinely lost is the arrangement, and the caller is told so —
+   * that is the honest reading of §32: warn about what goes, do not block
+   * what does not. */
+  assert.match(r.json().note, /became pins/);
+
+  // And the relationship followed the content into the new shape.
+  const links = (await h.get(`/library/links?sourceType=task&sourceId=${task.id}`)).json().links;
+  assert.equal(links.length, 1);
+  assert.equal(links[0].pageId, page.id);
+});
+
+test('and back again, with the Task relationship intact', async () => {
+  const h = await setup();
+  const { project, book } = await aProject(h);
+  const task = await aTaskOn(h, project.id);
+  const section = (await h.get(`/library/books/${book.bookId}`)).json().sections[0];
+  const board = (await h.post(`/library/sections/${section.id}/pages`,
+    { layout: 'pinboard' })).json().pages[0];
+
+  await h.patch(`/library/pages/${board.id}`, { content: { type: 'pinboard', items: [
+    { id: 'p1', kind: 'text', x: 6, y: 8, w: 26, h: 16, text: 'Deposit before materials' },
+    { id: 'p2', kind: 'link', x: 40, y: 8, w: 26, h: 16, text: 'Quote', href: 'https://example.com/q' },
+    { id: 'p3', kind: 'task', x: 6, y: 40, w: 26, h: 14, taskId: task.id },
+  ] } });
+
+  const r = await h.post(`/library/pages/${board.id}/layout`, { layout: 'two_columns' });
+  assert.equal(r.statusCode, 200, r.body);
+  const blocks = r.json().page.content.content;
+  assert.deepEqual(blocks.map((b: any) => b.type), ['paragraph', 'paragraph', 'taskRef']);
+  assert.equal(blocks[2].attrs.taskId, task.id);
+  // A link pin keeps its address, as a link on the words.
+  assert.equal(blocks[1].content[0].marks[0].attrs.href, 'https://example.com/q');
+  assert.equal(r.json().page.spansSpread, false);
+  assert.match(r.json().note, /is not kept/);
+
+  const links = (await h.get(`/library/links?sourceType=task&sourceId=${task.id}`)).json().links;
+  assert.equal(links.length, 1, 'the Task link did not survive the conversion');
 });
 
 /* ── §11/§12/§15/§21  Task ↔ Page ─────────────────────────────────────── */
