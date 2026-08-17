@@ -32,24 +32,48 @@ library_items ──1:1── library_books ──┬── book_sections ──
 item_links: (source_type, source_id) ──▶ (target_type='book_page', target_id)
 ```
 
+### Shape and purpose are two different questions
+
+The first version answered both with one `layout` column and it did not survive
+contact with a user. Lined notes, Checklist, Ideas, Research, Learning and
+Meeting notes were **the same page** — they differed only in the headings they
+started with. Calling that a layout meant six of eleven options were
+indistinguishable the moment anything was typed, and that a research page could
+not also be two columns.
+
+| field | question | values |
+|---|---|---|
+| `layout` | **how** the page is divided | notes, blank, two_columns, quad, comparison, pinboard |
+| `purpose` | **what** the page is for | null, checklist, ideas, research, learning, meeting |
+
+They are independent. A research page can be two columns. The purpose is a
+**label plus a starter** — it names the page in its header and, on an empty
+page, writes the headings you were going to write anyway. It never changes
+structure and never overwrites anything already written.
+
 ### One page table, one content document
 
-Eleven layouts share one `book_pages` row and one `content` column. A `layout`
-discriminator decides how it renders and which grammar validates it. There is
+One `book_pages` row and one `content` column for every shape. There is
 deliberately **no table per template** — a schema that grows a table for every
-layout is a schema that can never have user-defined layouts.
+layout can never have user-defined layouts.
 
 Three rendering families:
 
-| family | layouts | mechanism |
+| family | shapes | mechanism |
 |---|---|---|
-| single flow | notes, blank, ideas, research, learning, checklist, meeting | one editor over all blocks |
+| single flow | notes, blank | one editor over all blocks |
 | regions | two_columns, quad, comparison | blocks carry `attrs.region`; one editor per region |
 | pinboard | pinboard | positioned items, `spans_spread = true` |
 
-Moving between flowed layouts is free and cannot lose a block — they share the
-grammar. Crossing into or out of a pinboard is **refused** while there is
-anything to lose, and the refusal names what would have gone.
+Moving between flowed shapes is free and cannot lose a block — they share the
+grammar, and block ids are preserved so bookmarks and links stay valid.
+
+Crossing into or out of a pinboard **converts**, losing nothing: a note becomes
+a paragraph, a link becomes a paragraph with a link on it, and a pinned Task
+becomes a Task reference — the same relationship drawn in a line instead of at a
+position. What does not survive is the **arrangement**, and the response says so
+in a sentence the client shows. Refusing would only have forced the user to
+retype what the system could convert.
 
 ### References are ids, resolved live
 

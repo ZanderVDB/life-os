@@ -533,39 +533,65 @@ export function convertContent(from: string, to: string, raw: unknown): Conversi
   };
 }
 
-export function starterContent(layout: string): Doc | Pinboard {
-  switch (layout) {
-    case 'pinboard':
-      return EMPTY_PINBOARD;
+/**
+ * The blocks a PURPOSE starts a page with.
+ *
+ * This is the whole of what a purpose does to content: it writes the headings
+ * you were going to write anyway. It is not a structure and it is not
+ * exclusive with a shape — a research page can be two columns, and its
+ * headings land in the first column like any other block.
+ *
+ * They are ordinary blocks. Every one of them can be deleted.
+ */
+export function purposeStarter(purpose: string | null | undefined, region?: string): Block[] {
+  const r = region;
+  switch (purpose) {
     case 'checklist':
-      return { type: 'doc', content: [check(), check(), check()] };
+      return [check(), check(), check()];
+    case 'ideas':
+      return [heading('Ideas', r), para(r)];
+    case 'research':
+      return [heading('Question', r), para(r), heading('What I found', r), para(r),
+        heading('Sources', r), para(r)];
+    case 'learning':
+      return [heading('What I am learning', r), para(r), heading('Key points', r), para(r),
+        heading('Still unclear', r), para(r)];
+    case 'meeting':
+      return [heading('Who was there', r), para(r), heading('Decisions', r), para(r),
+        heading('Actions', r), check(), check()];
+    default:
+      return [];
+  }
+}
+
+/**
+ * What a new page opens with: the SHAPE's skeleton, filled by the PURPOSE.
+ *
+ * A page with neither is empty, which is correct — a blank page that arrives
+ * pre-filled is a page arguing with you.
+ */
+export function starterContent(layout: string, purpose?: string | null): Doc | Pinboard {
+  if (layout === 'pinboard') return EMPTY_PINBOARD;
+
+  const opening = purposeStarter(purpose);
+  switch (layout) {
     case 'two_columns':
-      return { type: 'doc', content: [para('a'), para('b')] };
+      return {
+        type: 'doc',
+        content: [...purposeStarter(purpose, 'a'), ...(opening.length ? [] : [para('a')]), para('b')],
+      };
     case 'comparison':
       return {
         type: 'doc',
         content: [heading('Option A', 'a'), para('a'), heading('Option B', 'b'), para('b')],
       };
     case 'quad':
-      return { type: 'doc', content: [para('a'), para('b'), para('c'), para('d')] };
-    case 'ideas':
-      return { type: 'doc', content: [heading('Ideas'), para()] };
-    case 'research':
       return {
         type: 'doc',
-        content: [heading('Question'), para(), heading('What I found'), para(), heading('Sources'), para()],
-      };
-    case 'learning':
-      return {
-        type: 'doc',
-        content: [heading('What I am learning'), para(), heading('Key points'), para(), heading('Still unclear'), para()],
-      };
-    case 'meeting':
-      return {
-        type: 'doc',
-        content: [heading('Who was there'), para(), heading('Decisions'), para(), heading('Actions'), check(), check()],
+        content: [...purposeStarter(purpose, 'a'), ...(opening.length ? [] : [para('a')]),
+          para('b'), para('c'), para('d')],
       };
     default:
-      return EMPTY_DOC;
+      return { type: 'doc', content: opening };
   }
 }

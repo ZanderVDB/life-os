@@ -171,12 +171,18 @@ test('pages carry a layout, and a pinboard is one page across the spread', async
   const section = (await h.get(`/library/books/${book.bookId}`)).json().sections[0];
 
   const notes = (await h.post(`/library/sections/${section.id}/pages`,
-    { count: 2, layout: 'research' })).json();
+    { count: 2, layout: 'notes', purpose: 'research' })).json();
   assert.equal(notes.pages.length, 2);
-  assert.equal(notes.pages[0].layout, 'research');
+  /* Shape and purpose are independent fields. A research page IS a page of
+   * notes — the purpose names it and starts it, and changes nothing else. */
+  assert.equal(notes.pages[0].layout, 'notes');
+  assert.equal(notes.pages[0].purpose, 'research');
   assert.equal(notes.pages[0].spansSpread, false);
-  // A template that promises structure arrives with it.
+  // A purpose that promises headings arrives with them.
   assert.ok(notes.pages[0].contentText.includes('Question'));
+  // On the FIRST page only — two pages of the same headings is the template
+  // arguing with itself.
+  assert.equal(notes.pages[1].contentText, '');
 
   /* A pinboard IS the spread. Asking for two would make a second board behind
    * the first, which is unreachable. */
@@ -197,12 +203,68 @@ test('changing layout within the flowed family keeps every block', async () => {
   ] };
   await h.patch(`/library/pages/${page.id}`, { content });
 
-  const r = await h.post(`/library/pages/${page.id}/layout`, { layout: 'checklist' });
+  const r = await h.post(`/library/pages/${page.id}/layout`, { layout: 'blank' });
   assert.equal(r.statusCode, 200, r.body);
   const after = r.json().page;
-  assert.equal(after.layout, 'checklist');
+  assert.equal(after.layout, 'blank');
   assert.equal(after.content.content[0].attrs.id, 'p1', 'the block did not survive');
   assert.equal(after.content.content[0].content[0].text, 'Keep me');
+});
+
+/* ── Shape and purpose are two questions ──────────────────────────────── */
+
+test('a purpose is a label, not a structure — and works with any shape', async () => {
+  const h = await setup();
+  const { book } = await aProject(h);
+  const section = (await h.get(`/library/books/${book.bookId}`)).json().sections[0];
+
+  /* The combination the old single-field model could not express at all: a
+   * research page that is also two columns. Six of the eleven old "layouts"
+   * were this same page wearing different headings. */
+  const made = (await h.post(`/library/sections/${section.id}/pages`,
+    { count: 1, layout: 'two_columns', purpose: 'research' })).json().pages[0];
+  assert.equal(made.layout, 'two_columns');
+  assert.equal(made.purpose, 'research');
+  assert.ok(made.contentText.includes('Question'));
+  // The headings land in the first column like any other block.
+  assert.equal(made.content.content[0].attrs.region, 'a');
+});
+
+test('the old layout names are no longer shapes', async () => {
+  const h = await setup();
+  const { book } = await aProject(h);
+  const section = (await h.get(`/library/books/${book.bookId}`)).json().sections[0];
+  for (const gone of ['research', 'checklist', 'ideas', 'learning', 'meeting']) {
+    const r = await h.post(`/library/sections/${section.id}/pages`, { layout: gone });
+    assert.equal(r.statusCode, 400, `${gone} is still accepted as a shape`);
+  }
+});
+
+test('setting a purpose fills an empty page, and never one with writing on it', async () => {
+  const h = await setup();
+  const { book } = await aProject(h);
+  const page = (await h.get(`/library/books/${book.bookId}`)).json().sections[0].pages[0];
+
+  const filled = (await h.post(`/library/pages/${page.id}/purpose`, { purpose: 'meeting' })).json();
+  assert.equal(filled.page.purpose, 'meeting');
+  assert.ok(filled.page.contentText.includes('Decisions'));
+  assert.match(filled.note, /page was empty/);
+
+  // Now write something, then change the purpose again.
+  await h.patch(`/library/pages/${page.id}`, { content: { type: 'doc', content: [
+    { type: 'paragraph', attrs: { id: 'mine' }, content: [{ type: 'text', text: 'My own words' }] },
+  ] } });
+  const kept = (await h.post(`/library/pages/${page.id}/purpose`, { purpose: 'research' })).json();
+  assert.equal(kept.page.purpose, 'research', 'the label did not change');
+  assert.equal(kept.note, null, 'it claimed to add headings to a written page');
+  assert.equal(kept.page.content.content.length, 1);
+  assert.equal(kept.page.content.content[0].attrs.id, 'mine',
+    'a template overwrote what was written');
+
+  // And it can be taken off again.
+  const cleared = (await h.post(`/library/pages/${page.id}/purpose`, { purpose: null })).json();
+  assert.equal(cleared.page.purpose, null);
+  assert.equal(cleared.page.content.content[0].attrs.id, 'mine');
 });
 
 test('crossing to a pinboard converts content rather than refusing it', async () => {

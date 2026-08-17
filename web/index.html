@@ -3633,10 +3633,17 @@ body:has(.lib-page) .rail{display:none}
 /* A RULE between columns, not a box around each. A dashed outline per region
    reads as a wireframe; a printed page divides its columns with a hairline and
    lets the writing sit on the same ruling it would use anywhere else. */
-.bk-regions .bk-region + .bk-region{border-left:1px solid var(--paper-line);
+/* The divider is deliberately STRONGER than `--paper-line`. A horizontal
+   hairline the same colour as the ruling is invisible by construction — the
+   page is already full of horizontal lines that exact colour, which is why
+   the four-section split read as two columns and no rows. The vertical one
+   looked fine only because nothing competes with it. Same weight both ways
+   now, so the quarters read as quarters. */
+.bk-regions{--bk-divider:color-mix(in srgb,var(--paper-ink) 22%,transparent)}
+.bk-regions .bk-region + .bk-region{border-left:1px solid var(--bk-divider);
   padding-left:26px;margin-left:-13px}
 .bk-regions-4 .bk-region:nth-child(3),.bk-regions-4 .bk-region:nth-child(4){
-  border-top:1px solid var(--paper-line)}
+  border-top:1px solid var(--bk-divider);padding-top:15px;margin-top:15px}
 .bk-regions-4 .bk-region:nth-child(3){border-left:0;padding-left:0;margin-left:0}
 /* `display:flex` on the region rather than a second `.bk-editor` rule: the
    30px ruling and the whole-rows height are stated ONCE, on .bk-editor below,
@@ -3827,11 +3834,30 @@ body:has(.lib-page) .rail{display:none}
 .lib-menu-note{margin:0;padding:9px 11px;font-size:12px;color:var(--muted);line-height:1.5}
 
 /* ── The layout picker ────────────────────────────────────────────────
-   Eleven options with a sentence each. Two things make that readable: the
-   label and its description STACK rather than sitting side by side in the
-   flex row, and each option carries the shape of the page it makes. */
-.lib-menu-layouts{min-width:288px;max-height:min(70vh,560px);overflow-y:auto;
-  scrollbar-width:thin}
+   The label and its description STACK rather than sitting side by side in
+   the flex row, and each option carries the shape of the page it makes. */
+
+/* ONE panel, not two.
+   `.util-surface` already is a bordered, shadowed, padded box; putting a
+   `.lib-menu` inside it drew a second identical box within the first, which
+   is the "list inside a list" this looked like. Inside a surface the menu is
+   just its contents. */
+.util-surface .lib-menu{background:none;border:0;box-shadow:none;padding:0;
+  min-width:0;border-radius:0}
+.util-surface:has(.lib-menu){padding:6px}
+.util-surface:has(.lib-menu-layouts){width:302px}
+
+.lib-menu-layouts{max-height:min(68vh,520px);overflow-y:auto;overscroll-behavior:contain;
+  /* A quiet scrollbar. The default one is a system slab across the corner of
+     a small panel and reads as another edge. */
+  scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent;
+  padding-right:2px}
+.lib-menu-layouts::-webkit-scrollbar{width:8px}
+.lib-menu-layouts::-webkit-scrollbar-track{background:transparent}
+.lib-menu-layouts::-webkit-scrollbar-thumb{background:var(--border-strong);
+  border-radius:99px;border:2px solid transparent;background-clip:content-box}
+.lib-menu-layouts::-webkit-scrollbar-thumb:hover{background:var(--text-2);
+  border:2px solid transparent;background-clip:content-box}
 .lib-menu-hd{margin:8px 0 2px;padding:0 11px;font-size:10.5px;font-weight:650;
   letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
 .lib-menu-hd:first-child{margin-top:2px}
@@ -3850,6 +3876,33 @@ body:has(.lib-page) .rail{display:none}
 .lib-menu-layout.is-on .lib-menu-tx b::after{content:'Current';float:right;
   font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
   color:var(--accent);margin-left:10px}
+
+/* ── What a page is FOR ───────────────────────────────────────────────
+   Chips, not a second stacked list. These are all the SAME page — six
+   entries with a sentence each said the opposite, that they were six
+   different kinds of thing. A row of peers says what is true, and takes a
+   fifth of the height, which is most of the reason the menu had to scroll. */
+.lib-menu-sub{margin:0 0 8px;padding:0 11px;font-size:11.5px;line-height:1.45;
+  color:var(--muted)}
+.lib-purposes{display:flex;flex-wrap:wrap;gap:6px;padding:0 11px 4px}
+/* `.lib-menu .lib-purpose`, not `.lib-purpose`: `.lib-menu button` is (0,1,1)
+   and sets `width:100%`, which beat a single class and turned every chip into a
+   full-width bar — the stacked list this was meant to replace. */
+.lib-menu .lib-purpose{width:auto;flex:0 0 auto;display:inline-flex;align-items:center;
+  font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;
+  font-family:inherit;color:var(--text-2);background:var(--surface-3);
+  border:1px solid transparent;transition:background var(--t-hover),color var(--t-hover)}
+.lib-menu .lib-purpose:hover{color:var(--text);border-color:var(--border-strong)}
+.lib-menu .lib-purpose.is-on{background:var(--accent);color:var(--on-accent,#1b1726);
+  font-weight:600}
+
+/* The label on the page itself. Small, quiet, and the only visible difference
+   between a research page and a page of notes — which is the honest amount of
+   difference there is. */
+.bk-page-purpose{font-size:10px;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--paper-ink-2);white-space:nowrap;
+  padding:2px 8px;border-radius:999px;
+  border:1px solid color-mix(in srgb,var(--paper-ink) 18%,transparent)}
 
 .bk-page-title{flex:1;min-width:0;background:none;border:0;outline:0;
   font-family:'Playfair Display',Georgia,serif;font-size:19px;color:var(--paper-ink);

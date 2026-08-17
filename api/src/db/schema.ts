@@ -894,22 +894,33 @@ export const bookSections = pgTable('book_sections', {
 }));
 
 /**
- * Page layouts.
+ * Shape and purpose are two different questions, and a page answers both.
  *
- * ONE page table, a `layout` discriminator, and one `content` document — not a
- * table per template. A schema that grows a table every time a layout is added
- * is a schema that cannot have user-defined layouts later, which is exactly
- * where this is going.
- *
- * The layouts fall into three rendering families, and only the last two cost
- * anything structurally:
- *   · single flow   notes, blank, ideas, research, learning, checklist, meeting
+ * `layout` is HOW the page is divided. These genuinely restructure it, and the
+ * three rendering families are the whole of it:
+ *   · single flow   notes, blank
  *   · regions       two_columns, quad, comparison — blocks carry `attrs.region`
  *   · pinboard      free positioning, and it spans the whole spread
+ *
+ * `purpose` is WHAT the page is for. It is a label and a set of starter
+ * headings — it changes nothing structural, because a research page and a page
+ * of notes ARE the same page.
+ *
+ * The first version made these one column, and six of eleven "layouts" were
+ * indistinguishable the moment anything was typed on them. Splitting them also
+ * makes the combinations expressible: a research page CAN be two columns now,
+ * which it could not be when the two ideas fought over one field.
+ *
+ * ONE page table either way, and one `content` document — never a table per
+ * template. A schema that grows a table per layout cannot have user-defined
+ * layouts later, which is where this is going.
  */
 export const PAGE_LAYOUTS = [
-  'notes', 'blank', 'two_columns', 'quad', 'checklist',
-  'ideas', 'research', 'learning', 'comparison', 'meeting', 'pinboard',
+  'notes', 'blank', 'two_columns', 'quad', 'comparison', 'pinboard',
+] as const;
+
+export const PAGE_PURPOSES = [
+  'checklist', 'ideas', 'research', 'learning', 'meeting',
 ] as const;
 
 export const bookPages = pgTable('book_pages', {
@@ -927,9 +938,12 @@ export const bookPages = pgTable('book_pages', {
   /* The plain text of `content`, maintained on write, so search is one indexed
    * query rather than parsing every document in the workspace. */
   contentText: text('content_text').notNull().default(''),
-  /* Which template renders this page. Everything already stored is a page of
-   * ruled notes, so that is the default and the backfill is a no-op. */
+  /* How the page is divided. Everything already stored is a page of ruled
+   * notes, so that is the default and the backfill is a no-op. */
   layout: text('layout').notNull().default('notes'),
+  /* What the page is FOR. Null is an ordinary page with nothing to declare —
+   * the common case, and never shown as a label when absent. */
+  purpose: text('purpose'),
   /* Whether this page occupies BOTH visible halves. Only a pinboard does today.
    * Stored rather than derived from `layout` because the spread question is
    * about presentation and a later layout may want either answer. */
@@ -944,8 +958,14 @@ export const bookPages = pgTable('book_pages', {
   /* Search reaches page titles as well as bodies, so a bookmark or an AI
    * citation can name a page rather than a position. */
   byTitle: index('book_pages_title_idx').on(t.workspaceId, t.title),
+  /* Purpose is a thing you filter and search by — "my research pages" — so it
+   * earns an index the moment it exists. */
+  byPurpose: index('book_pages_purpose_idx').on(t.workspaceId, t.purpose)
+    .where(sql`${t.purpose} is not null`),
   layoutCheck: check('book_pages_layout_check',
-    sql`${t.layout} in ('notes','blank','two_columns','quad','checklist','ideas','research','learning','comparison','meeting','pinboard')`),
+    sql`${t.layout} in ('notes','blank','two_columns','quad','comparison','pinboard')`),
+  purposeCheck: check('book_pages_purpose_check',
+    sql`${t.purpose} is null or ${t.purpose} in ('checklist','ideas','research','learning','meeting')`),
 }));
 
 /**

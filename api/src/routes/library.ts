@@ -27,7 +27,7 @@ import type { Db } from '../db/client.js';
 import {
   libraryItems, libraryBooks, bookSections, bookPages, bookBookmarks, projectBooks,
   projects, tasks, itemLinks,
-  LIBRARY_TYPES, SECTION_ACCENTS, PAGE_LAYOUTS,
+  LIBRARY_TYPES, SECTION_ACCENTS, PAGE_LAYOUTS, PAGE_PURPOSES,
 } from '../db/schema.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import {
@@ -675,6 +675,7 @@ export function registerLibraryRoutes(
     const body = z.object({
       count: z.number().int().min(1).max(2).default(2),
       layout: z.enum(PAGE_LAYOUTS).default('notes'),
+      purpose: z.enum(PAGE_PURPOSES).nullish(),
       title: z.string().max(200).nullish(),
     }).strict().parse(req.body ?? {});
 
@@ -694,10 +695,13 @@ export function registerLibraryRoutes(
       .map((_, i) => i)
       .reduce(async (prev, i) => {
         const acc = await prev;
-        const content = starterContent(body.layout);
+        /* The purpose's starter goes on the FIRST page only. Two pages of the
+         * same headings is the template arguing with itself. */
+        const purpose = i === 0 ? (body.purpose ?? null) : null;
+        const content = starterContent(body.layout, purpose);
         const [row] = await tx.insert(bookPages).values({
           workspaceId: ws, sectionId: id, position: start + i * GAP,
-          layout: body.layout, spansSpread: isSpread,
+          layout: body.layout, purpose: body.purpose ?? null, spansSpread: isSpread,
           title: (i === 0 ? body.title : null) ?? null,
           content, contentText: pageToText(body.layout, content),
         }).returning();
@@ -769,6 +773,53 @@ export function registerLibraryRoutes(
       return updated;
     });
     return { page: row, converted: true, note };
+  });
+
+  /**
+   * POST …/library/pages/:id/purpose — what the page is FOR.
+   *
+   * Independent of its shape, because a research page and a page of notes are
+   * the same page. Setting a purpose relabels it and, if the page is still
+   * empty, writes the headings you were about to write anyway.
+   *
+   * It never touches a page that has something on it. A template that
+   * overwrites your writing is not a template.
+   */
+  app.post(`${base}/library/pages/:id/purpose`, pre, async (req) => {
+    const ws = wsId(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = z.object({
+      purpose: z.enum(PAGE_PURPOSES).nullable(),
+      applyStarter: z.boolean().default(true),
+    }).strict().parse(req.body ?? {});
+
+    const [page] = await db.select().from(bookPages)
+      .where(and(eq(bookPages.workspaceId, ws), eq(bookPages.id, id))).limit(1);
+    if (!page) throw notFound('That page does not exist.');
+
+    const patch: Record<string, unknown> = { purpose: body.purpose, updatedAt: new Date() };
+    let note: string | null = null;
+
+    /* "Empty" means nothing a person put there. Starter headings from a
+     * PREVIOUS purpose count as empty — swapping Research for Meeting on an
+     * untouched page should give you meeting headings, not both sets. */
+    const blocks = ((page.content as any)?.content ?? []) as any[];
+    const written = page.layout === 'pinboard'
+      ? ((page.content as any)?.items?.length ?? 0) > 0
+      : blocks.some((b) => (b.type ?? '').endsWith('Ref')
+        || (b.type === 'checkItem' && docToText({ type: 'doc', content: [b] }).trim())
+        || (b.type === 'paragraph' && docToText({ type: 'doc', content: [b] }).trim()));
+
+    if (body.purpose && body.applyStarter && !written && page.layout !== 'pinboard') {
+      const content = starterContent(page.layout, body.purpose);
+      patch['content'] = content;
+      patch['contentText'] = pageToText(page.layout, content);
+      note = 'Added its headings — the page was empty.';
+    }
+
+    const [row] = await db.update(bookPages).set(patch)
+      .where(eq(bookPages.id, id)).returning();
+    return { page: row, note };
   });
 
   /**

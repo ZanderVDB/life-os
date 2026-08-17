@@ -22,7 +22,8 @@ import {
   archivePage, restorePage, archiveSection,
   currentSection, currentSpread, spreadCount, findPage, search, markOpened, prefetchBook,
   sampleCheck, sampleAdd, sampleRemove,
-  loadProjectContext, setPageLayout, addBookmark, removeBookmark, spreadIndexOfPage,
+  loadProjectContext, setPageLayout, setPagePurpose, addBookmark, removeBookmark,
+  spreadIndexOfPage,
 } from './library-api.js';
 import {
   headerHtml, bodyHtml, cardHtml, addMenuHtml, itemMenuHtml, visibleItems,
@@ -35,7 +36,7 @@ import {
 import {
   coverHtml, spreadHtml, toolbarHtml, mountSpread, wireToolbar, wireSaveStatus,
   searchBook, searchPanelHtml, locateHit, canGoNext, ACCENTS, LAYOUTS, layoutLabel,
-  lookupRef,
+  PURPOSES, purposeLabel, lookupRef,
 } from './library-book.js';
 import { setRefLookup } from './editor-doc.js';
 import {
@@ -1317,24 +1318,47 @@ const LAYOUT_GLYPH = {
   pinboard: g(`${FRAME}<rect x="5.4" y="6" width="4" height="3.4" rx=".8"/><rect x="11" y="6" width="3.6" height="5" rx=".8"/><rect x="5.4" y="11.4" width="4" height="3" rx=".8"/>`),
 };
 
+/**
+ * Adding a page: pick what it is FOR, then pick its shape.
+ *
+ * The purpose is chosen first and stays selected while you choose a shape,
+ * because that is the order people think in — "a research page… in two
+ * columns" — and because the shape click is what commits, so it has to be
+ * last. Choosing no purpose is a normal outcome and needs no click at all.
+ */
 function openAddPageMenu(anchor) {
+  let purpose = null;
+  const render = (el) => {
+    el.querySelector('.lib-purposes')?.replaceWith(
+      new DOMParser().parseFromString(purposeChipsHtml(purpose), 'text/html').body.firstElementChild,
+    );
+    wire(el);
+  };
+  const wire = (el) => {
+    el.querySelectorAll('[data-new-layout]').forEach((b) => {
+      b.onclick = () => { ctx.closeSurface(); void addPages(b.dataset.newLayout, purpose); };
+    });
+    el.querySelectorAll('[data-purpose]').forEach((b) => {
+      b.onclick = () => { purpose = b.dataset.purpose || null; render(el); };
+    });
+  };
+
   ctx.openSurface(anchor, {
     kind: 'library-add-page',
     label: 'Add a page',
     html: `<div class="lib-menu lib-menu-layouts" role="menu">
-      <p class="lib-menu-hd">Add a page</p>
+      <p class="lib-menu-hd">What it is for</p>
+      <p class="lib-menu-sub">Optional. Names the page and starts it with its
+        headings.</p>
+      ${purposeChipsHtml(null)}
+      <p class="lib-menu-hd">Shape — pick one to add the page</p>
       ${layoutItemsHtml(null, 'data-new-layout')}
     </div>`,
-    wire: (el) => el.querySelectorAll('[data-new-layout]').forEach((b) => {
-      b.addEventListener('click', () => {
-        ctx.closeSurface();
-        void addPages(b.dataset.newLayout);
-      });
-    }),
+    wire,
   });
 }
 
-async function addPages(layout = 'notes') {
+async function addPages(layout = 'notes', purpose = null) {
   await ctx.run(async () => {
     await flushAll();
     const section = currentSection();
@@ -1346,7 +1370,7 @@ async function addPages(layout = 'notes') {
      * A pinboard ignores all of that: it IS the spread, so it is always one
      * page and the server enforces it too. */
     const count = layout === 'pinboard' ? 1 : (section.pages.length % 2 === 1 ? 1 : 2);
-    const r = await createPages(section.id, count, layout);
+    const r = await createPages(section.id, count, layout, purpose);
     section.pages.push(...r.pages);
     lib.spreadIdx = spreadCount(section) - 1;
     lib.half = 0;
@@ -1450,15 +1474,23 @@ function openPageMenu(anchor, pageId) {
     kind: 'library-page-menu',
     label: 'Actions for this page',
     html: `<div class="lib-menu lib-menu-layouts" role="menu">
+      <p class="lib-menu-hd">Page shape</p>
+      ${layoutItemsHtml(page.layout ?? 'notes')}
+
+      <p class="lib-menu-hd">What this page is for</p>
+      <p class="lib-menu-sub">Same page either way — this only names it and
+        offers its headings.</p>
+      ${purposeChipsHtml(page.purpose ?? null)}
+
+      <p class="lib-menu-hd">Page</p>
       <button type="button" role="menuitem" data-act="${marked ? 'unbookmark' : 'bookmark'}">
+        <span class="lib-menu-i" aria-hidden="true">${MARK_GLYPH}</span>
         <span class="lib-menu-tx"><b>${marked ? 'Remove bookmark' : 'Bookmark this page'}</b></span>
       </button>
-      <p class="lib-menu-hd">Page layout</p>
-      ${layoutItemsHtml(page.layout ?? 'notes')}
-      <p class="lib-menu-hd">Page</p>
       ${onlyOne
     ? '<p class="lib-menu-note">The only page of a section cannot be archived.</p>'
     : `<button type="button" role="menuitem" data-act="archive">
+        <span class="lib-menu-i" aria-hidden="true">${ARCHIVE_GLYPH}</span>
         <span class="lib-menu-tx"><b>Archive page</b></span></button>`}
     </div>`,
     wire: (el) => {
@@ -1474,7 +1506,60 @@ function openPageMenu(anchor, pageId) {
           void changeLayout(page, b.dataset.layout);
         });
       });
+      el.querySelectorAll('[data-purpose]').forEach((b) => {
+        b.addEventListener('click', () => {
+          ctx.closeSurface();
+          void changePurpose(page, b.dataset.purpose || null);
+        });
+      });
     },
+  });
+}
+
+/**
+ * The purposes, as a row of chips rather than a second list.
+ *
+ * They belong TOGETHER and they are all the same page — a stacked list with a
+ * sentence each said the opposite, that these were six different kinds of
+ * thing. Chips read as one choice among peers, and they take a fifth of the
+ * height, which is most of why the menu had to scroll at all.
+ */
+function purposeChipsHtml(current) {
+  return `<div class="lib-purposes" role="group" aria-label="What this page is for">
+    ${PURPOSES.map((p) => `<button type="button" class="lib-purpose${
+  (p.id ?? null) === current ? ' is-on' : ''}" data-purpose="${p.id ?? ''}"
+      title="${esc(p.hint)}" ${(p.id ?? null) === current ? 'aria-current="true"' : ''}
+      >${esc(p.label)}</button>`).join('')}
+  </div>`;
+}
+
+const MARK_GLYPH = `<svg viewBox="0 0 20 20" width="17" height="17" fill="none"
+  stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"
+  aria-hidden="true"><path d="M6 3.5h8v13l-4-3.2-4 3.2z"/></svg>`;
+const ARCHIVE_GLYPH = `<svg viewBox="0 0 20 20" width="17" height="17" fill="none"
+  stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"
+  aria-hidden="true"><rect x="3" y="4" width="14" height="3.5" rx="1"/>
+  <path d="M4.5 7.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-8M8.2 11h3.6"/></svg>`;
+
+/**
+ * Setting what a page is for.
+ *
+ * The server relabels it, and fills in the headings ONLY if the page is still
+ * empty — it never writes over anything. Nothing structural changes, which is
+ * the entire point of the distinction.
+ */
+async function changePurpose(page, purpose) {
+  if ((page.purpose ?? null) === purpose) return;
+  await ctx.run(async () => {
+    await flushAll();
+    const r = await setPagePurpose(page.id, purpose);
+    Object.assign(page, r.page);
+    forgetPage(page.id);
+    paintBookBody();
+    const name = purposeLabel(purpose);
+    ctx.toast(purpose
+      ? `${name}.${r.note ? ` ${r.note}` : ''}`
+      : 'Page label removed.');
   });
 }
 

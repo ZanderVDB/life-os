@@ -251,16 +251,21 @@ export const updateSection = (id, body) =>
 export const archiveSection = (id) =>
   call(`/library/sections/${id}/archive`, { method: 'POST' });
 
-export const createPages = (sectionId, count = 2, layout = 'notes', title = null) =>
+export const createPages = (sectionId, count = 2, layout = 'notes', purpose = null, title = null) =>
   call(`/library/sections/${sectionId}/pages`, {
-    method: 'POST', body: { count, layout, ...(title ? { title } : {}) },
+    method: 'POST',
+    body: { count, layout, ...(purpose ? { purpose } : {}), ...(title ? { title } : {}) },
   });
 export const archivePage = (id) => call(`/library/pages/${id}/archive`, { method: 'POST' });
 export const restorePage = (id) => call(`/library/pages/${id}/restore`, { method: 'POST' });
 
-/** Changing a page's template. Refuses rather than losing content — see §32. */
+/** How the page is divided. Converts across shapes; never silently drops. */
 export const setPageLayout = (id, layout) =>
   call(`/library/pages/${id}/layout`, { method: 'POST', body: { layout } });
+
+/** What the page is FOR — a label and, on an empty page, its headings. */
+export const setPagePurpose = (id, purpose) =>
+  call(`/library/pages/${id}/purpose`, { method: 'POST', body: { purpose } });
 
 /* ── Bookmarks ───────────────────────────────────────────────────────── */
 

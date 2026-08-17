@@ -102,19 +102,45 @@ export function canGoNext() {
  * and a research page differ in their ruling and their starter headings and in
  * nothing else, so moving between them is free and can never lose a block.
  */
+/**
+ * SHAPE — how the page is divided. Six, and every one of them genuinely
+ * changes the page.
+ *
+ * The first version had eleven, and six of those were the same page with
+ * different starter headings. Once you had typed anything, Lined notes,
+ * Checklist, Ideas, Research, Learning and Meeting notes were
+ * indistinguishable — because they were the same thing. Those are purposes,
+ * and they live below.
+ */
 export const LAYOUTS = [
-  { id: 'notes', label: 'Lined notes', hint: 'Ruled writing, the default' },
-  { id: 'blank', label: 'Blank', hint: 'No rules, no prompts' },
-  { id: 'checklist', label: 'Checklist', hint: 'Things to tick off' },
-  { id: 'two_columns', label: 'Two columns', hint: 'Side by side' },
+  { id: 'notes', label: 'Lined page', hint: 'Ruled writing, the default' },
+  { id: 'blank', label: 'Blank page', hint: 'No rules at all' },
+  { id: 'two_columns', label: 'Two columns', hint: 'Split down the middle' },
   { id: 'quad', label: 'Four sections', hint: 'A 2×2 grid' },
   { id: 'comparison', label: 'Comparison', hint: 'Option A against option B' },
-  { id: 'ideas', label: 'Ideas', hint: 'Somewhere to put a thought' },
-  { id: 'research', label: 'Research', hint: 'Question, findings, sources' },
-  { id: 'learning', label: 'Learning', hint: 'What you know and what is unclear' },
-  { id: 'meeting', label: 'Meeting notes', hint: 'Who, decisions, actions' },
   { id: 'pinboard', label: 'Pinboard spread', hint: 'A whole spread you can pin to' },
 ];
+
+/**
+ * PURPOSE — what the page is for.
+ *
+ * A label and a set of starter headings. It changes NOTHING structural, which
+ * is the point: a research page and a page of notes are the same page, and the
+ * app should say so rather than pretend they are different objects.
+ *
+ * Independent of shape, so a research page can be two columns — a combination
+ * the old single-field model could not express at all.
+ */
+export const PURPOSES = [
+  { id: null, label: 'Just a page', hint: 'No heading, no label' },
+  { id: 'checklist', label: 'Checklist', hint: 'Starts with things to tick off' },
+  { id: 'ideas', label: 'Ideas', hint: 'Somewhere to put a thought' },
+  { id: 'research', label: 'Research', hint: 'Question, findings, sources' },
+  { id: 'learning', label: 'Learning', hint: 'What you know, what is unclear' },
+  { id: 'meeting', label: 'Meeting notes', hint: 'Who, decisions, actions' },
+];
+
+export const purposeLabel = (id) => PURPOSES.find((p) => p.id === id)?.label ?? null;
 
 /** How many editable regions a layout draws, and what each is called. */
 const REGIONS_FOR = {
@@ -198,12 +224,21 @@ function pageHtml(page, side, section, isLast = false) {
     </div>`;
   }
   const layout = page.layout ?? 'notes';
+  /* Only a page that HAS a purpose says so. `purposeLabel(null)` is the menu's
+   * word for the absence — "Just a page" — and stamping that on every ordinary
+   * page is the app narrating its own defaults back at you. */
+  const purpose = page.purpose ? purposeLabel(page.purpose) : null;
   return `<div class="bk-page bk-page-${side} bk-l-${esc(layout)}" data-accent="${esc(accent)}"
-      data-page="${page.id}" data-layout="${esc(layout)}">
+      data-page="${page.id}" data-layout="${esc(layout)}"
+      ${page.purpose ? `data-purpose="${esc(page.purpose)}"` : ''}>
     <div class="bk-page-hdr">
       <input class="bk-page-title" data-page-title="${page.id}"
         value="${esc(page.title ?? '')}" placeholder="${esc(section?.title ?? '')}"
         aria-label="Page title">
+      ${/* What the page is FOR, said on the page rather than encoded in its
+          structure. This is the whole visible difference between a research
+          page and a page of notes, and it is the honest one. */
+  purpose ? `<span class="bk-page-purpose">${esc(purpose)}</span>` : ''}
       <button type="button" class="bk-page-more" data-page-more="${page.id}"
         aria-label="Actions for this page" aria-haspopup="menu">${dots()}</button>
     </div>
