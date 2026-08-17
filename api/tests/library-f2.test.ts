@@ -51,9 +51,14 @@ test('#library routes: shelf, item, book, and a book at a page', () => {
   assert.deepEqual(view.parseLibraryHash('#library'), { view: 'overview' });
   assert.deepEqual(view.parseLibraryHash('#library/item/abc'), { view: 'item', id: 'abc' });
   assert.deepEqual(view.parseLibraryHash('#library/book/b1'),
-    { view: 'book', bookId: 'b1', sectionId: null, pageId: null });
+    { view: 'book', bookId: 'b1', sectionId: null, pageId: null, blockId: null });
   assert.deepEqual(view.parseLibraryHash('#library/book/b1?s=s9&p=p4'),
-    { view: 'book', bookId: 'b1', sectionId: 's9', pageId: 'p4' });
+    { view: 'book', bookId: 'b1', sectionId: 's9', pageId: 'p4', blockId: null });
+  /* `b` addresses a BLOCK, so a backlink or a future AI citation can land on
+   * the paragraph it meant rather than on the page containing it. Optional
+   * everywhere — a link without it behaves exactly as it always did. */
+  assert.deepEqual(view.parseLibraryHash('#library/book/b1?p=p4&b=blk7'),
+    { view: 'book', bookId: 'b1', sectionId: null, pageId: 'p4', blockId: 'blk7' });
 });
 
 test('a hash for another route is not a Library route', () => {

@@ -3577,8 +3577,160 @@ body:has(.lib-page) .rail{display:none}
 .lf-err{margin:0;font-size:12.5px;color:var(--danger)}
 
 /* ── The Book ─────────────────────────────────────────────────────────── */
-.bk{display:flex;flex-direction:column;gap:14px;align-items:center}
+.bk{display:flex;flex-direction:column;gap:14px;align-items:center;min-width:0}
 .bk-stage{display:flex;align-items:center;justify-content:center;gap:12px;width:100%}
+
+/* Book and Project Rail. Two columns that are two RENDER OWNERS — the rail
+   repaints when a task changes and the book does not, which is what keeps a
+   cursor alive while the panel updates beside it (§33). */
+.bk-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}
+.bk-layout.has-rail{grid-template-columns:minmax(0,1fr) 300px}
+
+.bk-rail{position:sticky;top:12px;background:var(--surface-2,rgba(255,255,255,.03));
+  border:1px solid var(--line,rgba(255,255,255,.08));border-radius:16px;padding:16px;
+  max-height:calc(100vh - 140px);overflow:auto;scrollbar-width:thin}
+.bk-rail-eyebrow{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  opacity:.6;margin-bottom:4px}
+.bk-rail-title{display:block;width:100%;text-align:left;background:none;border:0;padding:0;
+  color:inherit;font:inherit;font-weight:650;font-size:16px;cursor:pointer;line-height:1.3}
+.bk-rail-title:hover{text-decoration:underline}
+.bk-rail-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.bk-rail-prog{display:flex;flex-direction:column;gap:6px;margin-top:10px;font-size:12px;opacity:.8}
+.bk-rail-next{margin-top:14px;padding:10px 12px;border-radius:10px;
+  background:var(--surface-3,rgba(255,255,255,.04))}
+.bk-rail-lbl{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  opacity:.55;margin-bottom:6px}
+.bk-rail-nt{font-size:13px;line-height:1.4}
+.bk-rail-tasks{margin-top:16px;display:flex;flex-direction:column;gap:6px}
+.bk-rail-empty,.bk-rail-hint{font-size:12px;opacity:.6;line-height:1.45;margin:8px 0 0}
+
+/* A task in the rail. `grab` is a promise the drop targets keep. */
+.bk-rt{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:start;
+  padding:8px 10px;border-radius:10px;cursor:grab;
+  background:var(--surface-3,rgba(255,255,255,.03));border:1px solid transparent}
+.bk-rt:hover{border-color:var(--line,rgba(255,255,255,.12))}
+.bk-rt.is-dragging{opacity:.5;cursor:grabbing}
+.bk-rt-tick{width:14px;height:14px;border-radius:5px;margin-top:2px;
+  border:1.5px solid var(--line,rgba(255,255,255,.28))}
+.bk-rt.is-done .bk-rt-tick{background:var(--a-sage,#7aa88a);border-color:transparent}
+.bk-rt.is-done .bk-rt-t{text-decoration:line-through;opacity:.55}
+.bk-rt-t{font-size:13px;line-height:1.35}
+.bk-rt-m{grid-column:2;display:flex;flex-wrap:wrap;gap:6px;font-size:11px;opacity:.65}
+.bk-rt-link{opacity:.85}
+
+/* ── Page layouts ─────────────────────────────────────────────────────
+   Eleven templates, one page model. Most differ only in their ruling and
+   their starter blocks, which is why moving between them can never lose a
+   block — see the layout route. */
+.bk-regions{display:grid;gap:14px;flex:1;min-height:0}
+.bk-regions-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bk-regions-4{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
+/* `display:flex` on the region rather than a second `.bk-editor` rule: the
+   30px ruling and the whole-rows height are stated ONCE, on .bk-editor below,
+   and a rule here that also matched `.bk-editor{` would shadow them. */
+.bk-region{min-width:0;min-height:0;display:flex;flex-direction:column;border-radius:8px;
+  outline:1px dashed var(--line,rgba(255,255,255,.10));outline-offset:4px}
+/* Blank and pinboard have no rules; the ruled families keep theirs. */
+.bk-l-blank .bk-page-body,.bk-l-ideas .bk-page-body,.bk-l-quad .bk-page-body,
+.bk-l-comparison .bk-page-body,.bk-l-two_columns .bk-page-body{--bk-rule:transparent}
+
+/* Checklist items. The box is not editable, the words are. */
+.bk-check{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;
+  margin:0 0 6px}
+.bk-check-box{width:16px;height:16px;margin-top:3px;border-radius:5px;cursor:pointer;
+  border:1.5px solid var(--line,rgba(0,0,0,.28));flex:none}
+.bk-check.is-on .bk-check-box{background:var(--accent-c,var(--a-peach));border-color:transparent}
+.bk-check.is-on .bk-check-t{text-decoration:line-through;opacity:.55}
+
+/* ── References ───────────────────────────────────────────────────────
+   A card showing a LIVE entity. It stores an id; everything it displays is
+   read from the canonical row, so ticking a task in Projects changes what
+   this says. */
+.bk-ref{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;
+  margin:8px 0;padding:8px 10px;border-radius:10px;cursor:pointer;
+  background:var(--surface-3,rgba(0,0,0,.04));
+  border:1px solid var(--line,rgba(0,0,0,.10))}
+.bk-ref-k{font-size:10px;letter-spacing:.07em;text-transform:uppercase;opacity:.6}
+.bk-ref-t{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk-ref-m{grid-column:2;font-size:11px;opacity:.6}
+.bk-ref.is-done .bk-ref-t{text-decoration:line-through;opacity:.55}
+.bk-ref-gone{opacity:.55;font-style:italic}
+.bk-ref-x{background:none;border:0;cursor:pointer;color:inherit;opacity:.4;font-size:16px;
+  line-height:1;padding:2px 4px}
+.bk-ref-x:hover{opacity:1}
+/* Where a drop would land. */
+.bk-editor.is-drop{outline:2px dashed var(--accent-c,var(--a-peach));outline-offset:3px}
+
+/* A cited block, after following a backlink. Long enough to find, short
+   enough not to become decoration. */
+.is-cited{animation:bkCite 2.4s ease-out}
+@keyframes bkCite{
+  0%,60%{background:color-mix(in srgb,var(--a-gold,#d9b464) 30%,transparent)}
+  100%{background:transparent}}
+@media (prefers-reduced-motion:reduce){.is-cited{animation:none;
+  background:color-mix(in srgb,var(--a-gold,#d9b464) 22%,transparent)}}
+
+/* ── Bookmarks ────────────────────────────────────────────────────────
+   Shortcuts, never structure. They cannot move a page. */
+.bk-marks{display:flex;flex-wrap:wrap;gap:6px;width:100%;max-width:1320px}
+.bk-mark{font-size:12px;padding:4px 10px;border-radius:999px;cursor:pointer;color:inherit;
+  background:var(--surface-3,rgba(255,255,255,.04));
+  border:1px solid var(--line,rgba(255,255,255,.10))}
+.bk-mark:hover{border-color:var(--accent-c,var(--a-gold))}
+
+/* ── Pinboard ─────────────────────────────────────────────────────────
+   One page across the whole spread. Positions are percentages, so a board
+   arranged on a wide screen is the same board on a narrow one. */
+/* Three classes, not two. `.bk-book.bk-spread` sets two columns and is declared
+   LATER in this stylesheet at equal specificity, so a two-class selector here
+   loses and the board draws at half width with an empty column beside it —
+   which is precisely what a spread-spanning page must not do. */
+.bk-book.bk-spread.bk-spread-full{grid-template-columns:minmax(0,1fr)}
+.bk-page-full{padding:22px 26px 18px}
+.bk-page-full::before{display:none}
+.bk-board{position:relative;flex:1;min-height:420px;border-radius:10px;
+  background-image:radial-gradient(circle,var(--line,rgba(0,0,0,.10)) 1px,transparent 1px);
+  background-size:22px 22px}
+.bk-board.is-drop{outline:2px dashed var(--accent-c,var(--a-peach));outline-offset:2px}
+.bk-board-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  text-align:center;padding:0 18%;opacity:.55;font-size:13px;line-height:1.5;margin:0}
+.bk-pin{position:absolute;display:flex;flex-direction:column;gap:4px;padding:10px 12px;
+  border-radius:10px;background:var(--paper-2,rgba(255,255,255,.92));color:#22201f;
+  box-shadow:0 6px 18px rgba(0,0,0,.18);font-size:12px}
+.bk-pin.is-dragging{box-shadow:0 14px 30px rgba(0,0,0,.28);z-index:5}
+.bk-pin-grip{position:absolute;inset:0 0 auto 0;height:16px;cursor:grab;
+  border-radius:10px 10px 0 0}
+.bk-pin-grip:active{cursor:grabbing}
+.bk-pin-k{font-size:9px;letter-spacing:.08em;text-transform:uppercase;opacity:.5;margin-top:4px}
+.bk-pin-t{line-height:1.35;word-break:break-word}
+.bk-pin-t.is-done{text-decoration:line-through;opacity:.55}
+.bk-pin-m{font-size:10px;opacity:.6}
+.bk-pin-img{max-width:100%;border-radius:6px;display:block}
+.bk-pin-x{position:absolute;top:2px;right:4px;background:none;border:0;cursor:pointer;
+  color:inherit;opacity:.35;font-size:15px;line-height:1}
+.bk-pin-x:hover{opacity:1}
+.bk-pin-tools{display:flex;gap:6px;align-items:center}
+
+/* A folded shelf keeps its heading and its count — nothing is hidden, only
+   the rack of covers is put away. Click the heading to open it. */
+.lib-shelf.is-folded .lib-rail{display:none}
+.lib-shelf.is-folded .lib-shelf-head{opacity:.7;cursor:pointer}
+.lib-shelf.is-folded .lib-shelf-head::after{content:'Show';font-size:11px;opacity:.7;
+  letter-spacing:.04em}
+
+/* The rail drops below the Book rather than beside it when there is not
+   genuinely room for both (§34).
+
+   1360px, not 1100px: the sidebar already takes ~210px and the rail takes 300,
+   so a 1100px window leaves the spread about 570px — measured, that is two
+   224px pages, which is narrower than the Book is readable at. The threshold is
+   the width at which the spread still gets ~800px, not the width at which two
+   columns technically fit. */
+@media (max-width:1360px){
+  .bk-layout.has-rail{grid-template-columns:minmax(0,1fr)}
+  .bk-rail{position:static;max-height:none;order:2;width:100%;max-width:720px;
+    justify-self:center}
+}
 
 /* GEOMETRY — audit §2. Do not adjust these to taste. */
 .bk-book{position:relative;display:grid;gap:6px;width:100%;

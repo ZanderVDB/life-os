@@ -289,9 +289,13 @@ test('the permanent Diary toolbar is gone, and storage is untouched', () => {
   // Existing formatted entries must still RENDER — docToHtml is untouched.
   assert.match(entry, /docToHtml\(e\?\.document\)/);
   const doc = code(read('editor-doc.js'));
-  assert.match(doc, /return `<h\$\{level\}>/);
+  /* Still real elements. They now carry a stable block id as an ATTRIBUTE —
+   * the heading is an `h2` exactly as before — which is what a bookmark, a
+   * Task link and a future AI citation address. Diary shares this renderer and
+   * is unaffected: a block with no id renders with no attribute. */
+  assert.match(doc, /return `<h\$\{level\}\$\{bid\}>/);
   assert.match(doc, /type === 'bulletList' \? 'ul' : 'ol'/);
-  assert.match(doc, /return `<blockquote>/);
+  assert.match(doc, /return `<blockquote\$\{bid\}>/);
 });
 
 test('a prompt response is a surface, not an underline', () => {

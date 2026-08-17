@@ -56,6 +56,18 @@ export const lib = {
   cover: true,         // showing the cover rather than a spread
   searchOpen: false,
   results: null,
+
+  /**
+   * The Project this Book belongs to, and its live tasks — the Project Rail.
+   *
+   * Kept beside the book rather than inside it because it has a DIFFERENT
+   * lifetime: the rail refreshes when a task changes and the book does not, and
+   * §33 requires that refresh to leave the editor and its cursor alone. Two
+   * pieces of state, two paint functions, one screen.
+   */
+  project: null,       // the linked project row, or null for an ordinary Book
+  projectTasks: [],
+  railOpen: true,
 };
 
 /** The accent a section falls back to when it has none. */
@@ -79,15 +91,45 @@ export const currentSection = () => lib.book?.sections[lib.sectionIdx] ?? null;
  * last spread. That blank is a RENDERING decision — §20 forbids creating a
  * database row merely to fill a layout.
  */
-export function currentSpread() {
-  const s = currentSection();
-  if (!s) return { left: null, right: null };
-  const i = lib.spreadIdx * 2;
-  return { left: s.pages[i] ?? null, right: s.pages[i + 1] ?? null };
+/**
+ * A section's pages, grouped into the spreads they are actually shown in.
+ *
+ * Not simply pairs any more. A pinboard IS the spread — one page occupying both
+ * halves — so the grouping has to be walked rather than divided. Pairing by
+ * index would put an ordinary page alongside a pinboard and draw the two on top
+ * of each other.
+ *
+ * Computed on demand rather than cached: a section gains and loses pages, and a
+ * stale spread map is a spread map that opens the wrong page.
+ */
+export function spreadsOf(section) {
+  const pages = section?.pages ?? [];
+  const out = [];
+  for (let i = 0; i < pages.length;) {
+    const page = pages[i];
+    if (page.spansSpread) { out.push({ full: page, left: null, right: null }); i += 1; continue; }
+    const next = pages[i + 1];
+    const right = next && !next.spansSpread ? next : null;
+    out.push({ full: null, left: page, right });
+    i += right ? 2 : 1;
+  }
+  return out.length ? out : [{ full: null, left: null, right: null }];
 }
 
-export const spreadCount = (section) =>
-  Math.max(1, Math.ceil((section?.pages.length ?? 0) / 2));
+export function currentSpread() {
+  const s = currentSection();
+  if (!s) return { full: null, left: null, right: null };
+  return spreadsOf(s)[lib.spreadIdx] ?? { full: null, left: null, right: null };
+}
+
+export const spreadCount = (section) => spreadsOf(section).length;
+
+/** Which spread a given page falls in — how a bookmark or a backlink lands. */
+export function spreadIndexOfPage(section, pageId) {
+  const list = spreadsOf(section);
+  return list.findIndex((s) => s.full?.id === pageId
+    || s.left?.id === pageId || s.right?.id === pageId);
+}
 
 /* ── Items ───────────────────────────────────────────────────────────── */
 
@@ -209,10 +251,34 @@ export const updateSection = (id, body) =>
 export const archiveSection = (id) =>
   call(`/library/sections/${id}/archive`, { method: 'POST' });
 
-export const createPages = (sectionId, count = 2) =>
-  call(`/library/sections/${sectionId}/pages`, { method: 'POST', body: { count } });
+export const createPages = (sectionId, count = 2, layout = 'notes', title = null) =>
+  call(`/library/sections/${sectionId}/pages`, {
+    method: 'POST', body: { count, layout, ...(title ? { title } : {}) },
+  });
 export const archivePage = (id) => call(`/library/pages/${id}/archive`, { method: 'POST' });
 export const restorePage = (id) => call(`/library/pages/${id}/restore`, { method: 'POST' });
+
+/** Changing a page's template. Refuses rather than losing content — see §32. */
+export const setPageLayout = (id, layout) =>
+  call(`/library/pages/${id}/layout`, { method: 'POST', body: { layout } });
+
+/* ── Bookmarks ───────────────────────────────────────────────────────── */
+
+export const addBookmark = (bookId, body) =>
+  call(`/library/books/${bookId}/bookmarks`, { method: 'POST', body });
+export const updateBookmark = (id, body) =>
+  call(`/library/bookmarks/${id}`, { method: 'PATCH', body });
+export const removeBookmark = (id) =>
+  call(`/library/bookmarks/${id}`, { method: 'DELETE' });
+
+/* ── Links ───────────────────────────────────────────────────────────── */
+
+/** Every Book page a Task (or Project, or item) has been linked to. */
+export const linksFor = (sourceType, sourceId) =>
+  call(`/library/links?sourceType=${sourceType}&sourceId=${sourceId}`);
+
+/** Removes the LINK. Never the Task — see §15. */
+export const removeLink = (id) => call(`/library/links/${id}`, { method: 'DELETE' });
 
 /**
  * Saves one page.
@@ -236,6 +302,24 @@ export async function savePage(pageId, { content, title, expectedUpdatedAt }) {
     }
     throw e;
   }
+}
+
+/* ── Project context ─────────────────────────────────────────────────── */
+
+/**
+ * The Project behind a Project Book, with its live tasks.
+ *
+ * A second request rather than more fields on the book payload, deliberately:
+ * the rail refreshes on its own whenever a task changes, and folding it into
+ * the book response would mean re-reading every section and page to find out
+ * that one checkbox moved.
+ */
+export async function loadProjectContext(projectId) {
+  if (!projectId) { lib.project = null; lib.projectTasks = []; return null; }
+  const r = await call(`/projects/${projectId}`);
+  lib.project = r.project;
+  lib.projectTasks = r.tasks ?? [];
+  return r;
 }
 
 /* ── Search ──────────────────────────────────────────────────────────── */

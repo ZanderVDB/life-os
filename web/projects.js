@@ -256,6 +256,14 @@ export function projectDetailHeaderHtml(p, areaName) {
         <h1>${esc(p.title)}</h1>
       </div>
       <div class="pj-head-side">
+        ${p.book ? `<button class="btn btn-ghost pjd-book" id="pjd-book"
+          data-book="${esc(p.book.bookId)}">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 4.5h5.5a2 2 0 0 1 2 2V16a1.6 1.6 0 0 0-1.6-1.5H4z"/>
+            <path d="M16 4.5h-4.5a2 2 0 0 0-2 2V16a1.6 1.6 0 0 1 1.6-1.5H16z"/></svg>
+          <span>Project Book</span>
+        </button>` : ''}
         <button class="util-btn" id="pjd-menu" aria-haspopup="menu" aria-expanded="false"
           aria-label="Project actions for ${esc(p.title)}">
           <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -298,6 +306,29 @@ const WHY = {
 export const nextActionWhy = (p) => (p.nextAction
   ? (WHY[p.nextAction.reason] ?? 'From due date and priority')
   : '');
+
+/**
+ * A Task's Book context — the Project side of the relationship (§13).
+ *
+ * The link is the same row the Book wrote when the Task was dropped on a page,
+ * read from the other end. Clicking it opens the Book at that page and
+ * highlights the block, which is what makes the relationship two-way rather
+ * than a note the Book keeps to itself.
+ *
+ * Rendered from live link rows, so removing the reference from the page makes
+ * this disappear on the next read — and deleting the Task never touches the
+ * page it was mentioned on.
+ */
+export function taskContextHtml(task) {
+  const links = task.pageLinks ?? [];
+  if (!links.length) return '';
+  return `<div class="pjd-ctx">
+    <span class="pjd-ctx-l">Linked context</span>
+    ${links.map((l) => `<button type="button" class="pjd-ctx-b" data-open-page="${esc(l.pageId)}"
+      data-book="${esc(l.bookId ?? '')}" data-block="${esc(l.blockId ?? '')}">
+      ${esc(l.label || 'Book page')}</button>`).join('')}
+  </div>`;
+}
 
 /**
  * The next-action slot, rendered on its own.
@@ -375,7 +406,7 @@ export function projectDetailBodyHtml(p, tasks, taskHtml) {
       <div class="pjd-tasks drop${open.length ? '' : ' is-empty'}" id="pjd-tasks"
         data-bucket="project">
         ${open.length
-    ? open.map((t) => taskHtml(t)).join('')
+    ? open.map((t) => `${taskHtml(t)}${taskContextHtml(t)}`).join('')
     : '<div class="pj-empty pj-empty-inline"><span class="pj-empty-t">Nothing planned yet</span>'
       + '<span class="pj-empty-s">Add the first thing that has to happen.</span></div>'}
       </div>

@@ -785,6 +785,16 @@ export const itemLinks = pgTable('item_links', {
   targetType: text('target_type').notNull(),   // task | project | library | diary
   targetId: uuid('target_id').notNull(),
   note: text('note'),
+  /* Where inside the target the edge actually lands, and any context worth
+   * carrying with it: `bookId`, `sectionId`, `blockId`, `pinboardItemId`,
+   * `projectId`. The IDs an edge needs to be NAVIGABLE — a Task linked to a
+   * page has to be able to say which book and which block, or following it back
+   * means searching for it.
+   *
+   * These are addresses, never facts. Nothing here is a copy of a title or a
+   * status; those are read from the canonical row every time. */
+  metadata: jsonb('metadata'),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   byWorkspace: index('item_links_ws_idx').on(t.workspaceId),
@@ -883,6 +893,25 @@ export const bookSections = pgTable('book_sections', {
     sql`${t.accent} in ('peach','sage','lavender','gold','blue','rose')`),
 }));
 
+/**
+ * Page layouts.
+ *
+ * ONE page table, a `layout` discriminator, and one `content` document — not a
+ * table per template. A schema that grows a table every time a layout is added
+ * is a schema that cannot have user-defined layouts later, which is exactly
+ * where this is going.
+ *
+ * The layouts fall into three rendering families, and only the last two cost
+ * anything structurally:
+ *   · single flow   notes, blank, ideas, research, learning, checklist, meeting
+ *   · regions       two_columns, quad, comparison — blocks carry `attrs.region`
+ *   · pinboard      free positioning, and it spans the whole spread
+ */
+export const PAGE_LAYOUTS = [
+  'notes', 'blank', 'two_columns', 'quad', 'checklist',
+  'ideas', 'research', 'learning', 'comparison', 'meeting', 'pinboard',
+] as const;
+
 export const bookPages = pgTable('book_pages', {
   id: uuid('id').primaryKey().defaultRandom(),
   workspaceId: uuid('workspace_id').notNull()
@@ -898,6 +927,13 @@ export const bookPages = pgTable('book_pages', {
   /* The plain text of `content`, maintained on write, so search is one indexed
    * query rather than parsing every document in the workspace. */
   contentText: text('content_text').notNull().default(''),
+  /* Which template renders this page. Everything already stored is a page of
+   * ruled notes, so that is the default and the backfill is a no-op. */
+  layout: text('layout').notNull().default('notes'),
+  /* Whether this page occupies BOTH visible halves. Only a pinboard does today.
+   * Stored rather than derived from `layout` because the spread question is
+   * about presentation and a later layout may want either answer. */
+  spansSpread: boolean('spans_spread').notNull().default(false),
   position: integer('position').notNull().default(0),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -905,6 +941,76 @@ export const bookPages = pgTable('book_pages', {
 }, (t) => ({
   bySection: index('book_pages_section_idx').on(t.sectionId, t.position),
   byWorkspace: index('book_pages_ws_idx').on(t.workspaceId),
+  /* Search reaches page titles as well as bodies, so a bookmark or an AI
+   * citation can name a page rather than a position. */
+  byTitle: index('book_pages_title_idx').on(t.workspaceId, t.title),
+  layoutCheck: check('book_pages_layout_check',
+    sql`${t.layout} in ('notes','blank','two_columns','quad','checklist','ideas','research','learning','comparison','meeting','pinboard')`),
+}));
+
+/**
+ * Bookmarks — shortcuts, not structure.
+ *
+ * Sections and pages already carry order; a bookmark deliberately carries none
+ * of that. It says "this matters", and it must never change where a page sits,
+ * which is why it is its own row rather than a flag on the page. `blockId` is
+ * nullable and unused by the current UI: block-level bookmarks are the obvious
+ * next step and the column costs nothing now.
+ */
+export const bookBookmarks = pgTable('book_bookmarks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  bookId: uuid('book_id').notNull()
+    .references(() => libraryBooks.id, { onDelete: 'cascade' }),
+  /* CASCADE: a bookmark to a deleted page is a shortcut to nowhere. */
+  pageId: uuid('page_id').notNull()
+    .references(() => bookPages.id, { onDelete: 'cascade' }),
+  blockId: text('block_id'),
+  label: text('label').notNull(),
+  accent: text('accent').notNull().default('gold'),
+  position: integer('position').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byBook: index('book_bookmarks_book_idx').on(t.bookId, t.position),
+  oneePerTarget: uniqueIndex('book_bookmarks_target_idx').on(t.bookId, t.pageId, t.blockId),
+  accentCheck: check('book_bookmarks_accent_check',
+    sql`${t.accent} in ('peach','sage','lavender','gold','blue','rose')`),
+}));
+
+/**
+ * Project ↔ Book.
+ *
+ * A typed join rather than a `project_id` column on the book, because a Project
+ * is meant to gain further Books later (a research book, a handover book) and a
+ * column can only ever hold one. `role` is what distinguishes them; today only
+ * `primary` is issued.
+ *
+ * Deleting a Project deletes this ROW and nothing else. The Book is a Library
+ * item and survives its Project — see the delete semantics in projects.ts. That
+ * is the safe default: losing a Project should never lose what was written.
+ */
+export const PROJECT_BOOK_ROLES = ['primary', 'research', 'reference'] as const;
+
+export const projectBooks = pgTable('project_books', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  bookId: uuid('book_id').notNull()
+    .references(() => libraryBooks.id, { onDelete: 'cascade' }),
+  role: text('role').notNull().default('primary'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byProject: index('project_books_project_idx').on(t.workspaceId, t.projectId),
+  /* A Book belongs to at most one Project. Without this a backfill run twice
+   * would quietly attach a second Project to the same Book. */
+  oneProjectPerBook: uniqueIndex('project_books_book_idx').on(t.bookId),
+  oneRolePerProject: uniqueIndex('project_books_role_idx').on(t.projectId, t.role),
+  roleCheck: check('project_books_role_check',
+    sql`${t.role} in ('primary','research','reference')`),
 }));
 
 

@@ -3160,6 +3160,25 @@ function wireProjectsHeader() {
     b.onclick = () => setProjectFilter(b.dataset.pjFilter);
   });
   document.getElementById('pjd-back')?.addEventListener('click', () => closeProjectDetail());
+  /* The Project's Book. The Project screen stays about execution (§8) — this is
+   * a door to the information, not the information moved into the Project.
+   *
+   * `setHash`, never a raw `location.hash`: every hash this app writes goes
+   * through the one record the shell consults, or the write is counted as a
+   * navigation and invalidates the render that just made it. See nav.js. */
+  document.getElementById('pjd-book')?.addEventListener('click', (e) => {
+    setHash(`#library/book/${e.currentTarget.dataset.book}`);
+  });
+  /* A Task's linked Book context, followed to the exact page and block (§13).
+   * Page and block travel as IDS: a stored page NUMBER stops being true the
+   * moment a page is inserted in front of it. */
+  document.querySelectorAll('[data-open-page]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const { book, openPage, block } = b.dataset;
+      if (!book) return;
+      setHash(`#library/book/${book}?p=${openPage}${block ? `&b=${block}` : ''}`);
+    });
+  });
   document.getElementById('pjd-menu')?.addEventListener('click', (e) =>
     openProjectMenu(e.currentTarget, pj.detail?.project));
 }

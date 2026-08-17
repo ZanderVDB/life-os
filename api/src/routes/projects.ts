@@ -24,9 +24,11 @@ import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
-  projects, tasks, taskSteps, areas, PROJECT_STATUSES, PROJECT_FOCUSES,
+  projects, tasks, taskSteps, areas, projectBooks, libraryBooks, libraryItems, itemLinks,
+  PROJECT_STATUSES, PROJECT_FOCUSES,
   type ProjectStatus,
 } from '../db/schema.js';
+import { ensureProjectBook, PAGE_TARGET } from '../lib/book-links.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 // TEMPORARY — sample data for E2 review. Delete with src/lib/sample-projects.ts.
 import {
@@ -396,7 +398,21 @@ export function registerProjectRoutes(
     }
 
     const today = todayIso();
-    const shaped = all.map((p) => shape(p, byProject.get(p.id) ?? [], today));
+    /* Every Project's Book, in one query. The overview is where the "Open Book"
+     * affordance lives, so the id has to be here — going and asking per row
+     * would be one request per project on the busiest screen in the app. */
+    const bookRows = await db.select({
+      projectId: projectBooks.projectId, bookId: projectBooks.bookId,
+      itemId: libraryBooks.libraryItemId,
+    }).from(projectBooks)
+      .innerJoin(libraryBooks, eq(libraryBooks.id, projectBooks.bookId))
+      .where(and(eq(projectBooks.workspaceId, ws), eq(projectBooks.role, 'primary')));
+    const bookByProject = new Map(bookRows.map((b) => [b.projectId, b]));
+
+    const shaped = all.map((p) => ({
+      ...shape(p, byProject.get(p.id) ?? [], today),
+      book: bookByProject.get(p.id) ?? null,
+    }));
     const live = shaped.filter((p) => !p.archivedAt);
     const nonEmpty = (groups: any[]) => groups.filter((g) => g.projects.length > 0);
 
@@ -456,12 +472,83 @@ export function registerProjectRoutes(
 
   /* ── Read ──────────────────────────────────────────────────────────── */
 
+  /**
+   * POST …/projects/:id/book — the Book for a Project that has none.
+   *
+   * The safety net behind the migration backfill. A Project can reach this
+   * state two ways: it was imported by a path that predates §6, or the backfill
+   * has not run against this database yet. Rather than have every read quietly
+   * create rows, the client asks explicitly and once.
+   *
+   * Idempotent: a Project that already has a Book gets the one it has.
+   */
+  app.post(`${base}/projects/:id/book`, pre, async (req) => {
+    const ws = wsId(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const project = await load(ws, id);
+    const made = await db.transaction((tx) => ensureProjectBook(tx, ws, project));
+    return { book: await bookFor(ws, id), created: made.created };
+  });
+
+  /**
+   * The Project's Primary Book, as much of it as a caller needs to open it.
+   *
+   * Returns null rather than creating one. Creation belongs to the places that
+   * own it — project creation, the migration backfill, and the explicit route
+   * above — so a plain read can never have the side effect of writing a Book.
+   */
+  async function bookFor(ws: string, projectId: string) {
+    const [row] = await db.select({
+      bookId: projectBooks.bookId, role: projectBooks.role,
+      itemId: libraryBooks.libraryItemId, title: libraryItems.title,
+    }).from(projectBooks)
+      .innerJoin(libraryBooks, eq(libraryBooks.id, projectBooks.bookId))
+      .innerJoin(libraryItems, eq(libraryItems.id, libraryBooks.libraryItemId))
+      .where(and(eq(projectBooks.workspaceId, ws), eq(projectBooks.projectId, projectId),
+        eq(projectBooks.role, 'primary')))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Which of these Tasks have Book context, and where it points.
+   *
+   * One query for the whole list rather than one per Task. The Project screen
+   * shows a "linked context" line on any Task that has one, and a request per
+   * row would make that line cost more than the rest of the page.
+   */
+  async function pageLinksFor(ws: string, taskIds: string[]) {
+    if (!taskIds.length) return new Map<string, any[]>();
+    const links = await db.select().from(itemLinks).where(and(
+      eq(itemLinks.workspaceId, ws),
+      eq(itemLinks.sourceType, 'task'),
+      inArray(itemLinks.sourceId, taskIds),
+      eq(itemLinks.targetType, PAGE_TARGET),
+    ));
+    const byTask = new Map<string, any[]>();
+    for (const l of links) {
+      const list = byTask.get(l.sourceId) ?? [];
+      list.push({
+        id: l.id, pageId: l.targetId, kind: l.kind,
+        bookId: (l.metadata as any)?.bookId ?? null,
+        blockId: (l.metadata as any)?.blockId ?? null,
+      });
+      byTask.set(l.sourceId, list);
+    }
+    return byTask;
+  }
+
   app.get(`${base}/projects/:id`, pre, async (req) => {
     const ws = wsId(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
     const project = await load(ws, id);
     const list = await tasksWithSteps(ws, id);
-    return { project: shape(project, list), tasks: list };
+    const links = await pageLinksFor(ws, list.map((t: any) => t.id));
+    return {
+      project: shape(project, list),
+      tasks: list.map((t: any) => ({ ...t, pageLinks: links.get(t.id) ?? [] })),
+      book: await bookFor(ws, id),
+    };
   });
 
   /* ── Create ────────────────────────────────────────────────────────── */
@@ -521,12 +608,19 @@ export function registerProjectRoutes(
           position: Number(maxPos) + GAP,
         });
       }
+
+      /* Every Project gets a Book, at the moment it is created and in the same
+       * transaction (§6). Not lazily on first open: a Project whose Book only
+       * exists once somebody looks for it is a Project that AI cannot be told
+       * about, and half the point of this model is that the relationship is
+       * always there to be asked about. */
+      await ensureProjectBook(tx, ws, project!);
       return project!;
     });
 
     const list = await tasksWithSteps(ws, created.id);
     reply.code(201);
-    return { project: shape(created, list), tasks: list };
+    return { project: shape(created, list), tasks: list, book: await bookFor(ws, created.id) };
   });
 
   /* ── Update ────────────────────────────────────────────────────────── */
@@ -963,15 +1057,51 @@ export function registerProjectRoutes(
    * `on delete set null`, so its tasks survive with everything intact and
    * simply stop belonging to it.
    */
+  /**
+   * Deleting a Project keeps everything that is not the Project.
+   *
+   * Tasks are orphaned rather than destroyed — that rule predates this phase —
+   * and the Book now follows the same principle for the same reason. Deleting a
+   * project is a statement about the PLAN; the notes, research and payment
+   * details written in its Book are not part of the plan, and they are usually
+   * the part nobody can reconstruct.
+   *
+   * So the default is `keep`: the join row goes with the project (it cascades),
+   * the Book stays in Library as an ordinary Book, and its Project shelf
+   * membership simply stops applying. `archive` and `delete` are available for
+   * a caller that means it, but no path in the UI chooses them silently.
+   */
   app.delete(`${base}/projects/:id`, pre, async (req) => {
     const { id } = z.object({ id: uuid }).parse(req.params);
     const ws = wsId(req);
+    const q = z.object({ book: z.enum(['keep', 'archive', 'delete']).default('keep') })
+      .parse(req.query ?? {});
     await load(ws, id);
+    const book = await bookFor(ws, id);
+
     const orphaned = await db.update(tasks)
       .set({ projectId: null, updatedAt: new Date() })
       .where(and(eq(tasks.workspaceId, ws), eq(tasks.projectId, id)))
       .returning({ id: tasks.id });
+
+    if (book && q.book !== 'keep') {
+      await db.update(libraryItems).set({
+        ...(q.book === 'archive'
+          ? { archivedAt: new Date(), status: 'archived' }
+          : {}),
+        updatedAt: new Date(),
+      }).where(eq(libraryItems.id, book.itemId));
+      // `delete` removes the item; library_books and its sections cascade.
+      if (q.book === 'delete') {
+        await db.delete(libraryItems).where(and(eq(libraryItems.workspaceId, ws),
+          eq(libraryItems.id, book.itemId)));
+      }
+    }
+
     await db.delete(projects).where(and(eq(projects.workspaceId, ws), eq(projects.id, id)));
-    return { deleted: true, tasksKept: orphaned.length };
+    return {
+      deleted: true, tasksKept: orphaned.length,
+      book: book ? { itemId: book.itemId, disposition: q.book } : null,
+    };
   });
 }

@@ -25,11 +25,17 @@ import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
-  libraryItems, libraryBooks, bookSections, bookPages,
-  LIBRARY_TYPES, SECTION_ACCENTS,
+  libraryItems, libraryBooks, bookSections, bookPages, bookBookmarks, projectBooks,
+  projects, tasks, itemLinks,
+  LIBRARY_TYPES, SECTION_ACCENTS, PAGE_LAYOUTS,
 } from '../db/schema.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
-import { docToText, validateDoc } from '../lib/book-doc.js';
+import {
+  docToText, validateDoc, validatePageContent, pageToText, starterContent, extractRefs,
+} from '../lib/book-doc.js';
+import {
+  syncPageRefs, projectBookIndex, linksToPages, PAGE_TARGET, pageLabel,
+} from '../lib/book-links.js';
 import {
   seedSampleLibrary, removeSampleLibrary, sampleLibraryFootprint, isLibrarySampleAllowed,
 } from '../lib/sample-library.js';
@@ -140,13 +146,46 @@ export function registerLibraryRoutes(
     const countBy = new Map(counts.map((c) => [c.bookId, c]));
     const bookByItem = new Map(bookRows.map((b) => [b.libraryItemId, b]));
 
+    /* Which Books belong to Projects, and what state those Projects are in.
+     *
+     * §16: a Project Book is never MOVED because its Project changed. The shelf
+     * it appears on is derived here, at read time, from the Project's lifecycle
+     * — so completing a Project, and reopening it, cost no write to the Book at
+     * all and cannot get out of step with it. */
+    const { byItem } = await projectBookIndex(db, ws);
+    const linkedProjectIds = [...new Set(rows.map((r) => byItem.get(r.id)?.projectId).filter(Boolean))] as string[];
+    const projectRows = linkedProjectIds.length
+      ? await db.select({
+        id: projects.id, title: projects.title, status: projects.status,
+        focus: projects.focus, archivedAt: projects.archivedAt, completedAt: projects.completedAt,
+      }).from(projects)
+        .where(and(eq(projects.workspaceId, ws), inArray(projects.id, linkedProjectIds)))
+      : [];
+    const projectById = new Map(projectRows.map((p) => [p.id, p]));
+
     return {
       items: rows.map((r) => {
+        const link = byItem.get(r.id);
+        const project = link ? projectById.get(link.projectId) : null;
+        const withProject = project
+          ? {
+            ...r,
+            project: {
+              id: project.id, title: project.title, status: project.status,
+              archived: !!project.archivedAt, role: link!.role,
+              /* The shelf this Book belongs on. One computed word, so the
+               * client does not re-derive the lifecycle rules a second time. */
+              shelf: project.archivedAt ? 'projects_archived'
+                : project.status === 'completed' ? 'projects_completed'
+                  : 'projects_active',
+            },
+          }
+          : r;
         const book = bookByItem.get(r.id);
-        if (!book) return r;
+        if (!book) return withProject;
         const c = countBy.get(book.id);
         return {
-          ...r,
+          ...withProject,
           book: {
             id: book.id, subtitle: book.subtitle, authorLabel: book.authorLabel,
             coverStyle: book.coverStyle, pageStyle: book.pageStyle,
@@ -318,10 +357,205 @@ export function registerLibraryRoutes(
       list.push(p); bySection.set(p.sectionId, list);
     }
 
+    const bookmarks = await db.select().from(bookBookmarks)
+      .where(eq(bookBookmarks.bookId, book.id))
+      .orderBy(asc(bookBookmarks.position), asc(bookBookmarks.createdAt));
+
+    /* Is this a Project Book? The whole Project Rail hangs off this one row,
+     * and a Book with no row is an ordinary Library Book that shows no rail. */
+    const [link] = await db.select().from(projectBooks)
+      .where(and(eq(projectBooks.workspaceId, ws), eq(projectBooks.bookId, book.id))).limit(1);
+    let project = null;
+    if (link) {
+      const [p] = await db.select().from(projects)
+        .where(and(eq(projects.workspaceId, ws), eq(projects.id, link.projectId))).limit(1);
+      project = p ?? null;
+    }
+
+    /* Every entity the pages point at, resolved ONCE and sent alongside. The
+     * page stores ids only (§20), so without this the client would fire a
+     * request per reference — and a page with eight Task cards would open in
+     * eight round trips. */
+    const refs = pages.flatMap((p) => extractRefs(p.layout, p.content));
+    const taskIds = [...new Set(refs.filter((r) => r.type === 'task').map((r) => r.id))];
+    const itemIds = [...new Set(refs.filter((r) => r.type === 'resource' || r.type === 'book').map((r) => r.id))];
+    const projectIds = [...new Set(refs.filter((r) => r.type === 'project').map((r) => r.id))];
+
+    const [refTasks, refItems, refProjects] = await Promise.all([
+      taskIds.length
+        ? db.select({
+          id: tasks.id, title: tasks.title, status: tasks.status, priority: tasks.priority,
+          dueDate: tasks.dueDate, scheduledAt: tasks.scheduledAt, projectId: tasks.projectId,
+        }).from(tasks).where(and(eq(tasks.workspaceId, ws), inArray(tasks.id, taskIds)))
+        : Promise.resolve([]),
+      itemIds.length
+        ? db.select({
+          id: libraryItems.id, title: libraryItems.title, type: libraryItems.type,
+          sourceUrl: libraryItems.sourceUrl, thumbnailKey: libraryItems.thumbnailKey,
+        }).from(libraryItems).where(and(eq(libraryItems.workspaceId, ws), inArray(libraryItems.id, itemIds)))
+        : Promise.resolve([]),
+      projectIds.length
+        ? db.select({ id: projects.id, title: projects.title, status: projects.status })
+          .from(projects).where(and(eq(projects.workspaceId, ws), inArray(projects.id, projectIds)))
+        : Promise.resolve([]),
+    ]);
+
     return {
-      item, book,
+      item, book, bookmarks, project,
+      projectRole: link?.role ?? null,
       sections: sections.map((s) => ({ ...s, pages: bySection.get(s.id) ?? [] })),
+      /* Referenced entities, by id. A reference that resolves to nothing here
+       * is one whose target was deleted — the block stays and renders as
+       * unavailable (§15). Book content is never removed because a Task was. */
+      refs: { tasks: refTasks, items: refItems, projects: refProjects },
     };
+  });
+
+  /* ── Bookmarks ─────────────────────────────────────────────────────────
+   *
+   * Shortcuts, not structure (§5). A bookmark never changes where a page sits,
+   * which is why it is a row of its own rather than a flag on the page.
+   */
+
+  app.post(`${base}/library/books/:id/bookmarks`, pre, async (req, reply) => {
+    const ws = wsId(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = z.object({
+      pageId: uuid,
+      blockId: z.string().max(40).nullish(),
+      label: z.string().trim().min(1).max(120),
+      accent: z.enum(SECTION_ACCENTS).default('gold'),
+    }).strict().parse(req.body ?? {});
+    const { book } = await loadBook(ws, id);
+
+    const [page] = await db.select({ id: bookPages.id }).from(bookPages)
+      .innerJoin(bookSections, eq(bookSections.id, bookPages.sectionId))
+      .where(and(eq(bookPages.id, body.pageId), eq(bookSections.bookId, book.id))).limit(1);
+    if (!page) throw badRequest('That page is not in this book.');
+
+    const position = await nextPosition(bookBookmarks.position, bookBookmarks,
+      eq(bookBookmarks.bookId, book.id));
+    const [row] = await db.insert(bookBookmarks).values({
+      workspaceId: ws, bookId: book.id, pageId: body.pageId,
+      blockId: body.blockId ?? null, label: body.label, accent: body.accent, position,
+    }).onConflictDoNothing().returning();
+    // Already bookmarked: the outcome the caller wanted is already true.
+    if (!row) {
+      const [existing] = await db.select().from(bookBookmarks)
+        .where(and(eq(bookBookmarks.bookId, book.id), eq(bookBookmarks.pageId, body.pageId))).limit(1);
+      return { bookmark: existing, created: false };
+    }
+    reply.code(201);
+    return { bookmark: row, created: true };
+  });
+
+  app.patch(`${base}/library/bookmarks/:id`, pre, async (req) => {
+    const ws = wsId(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = z.object({
+      label: z.string().trim().min(1).max(120).optional(),
+      accent: z.enum(SECTION_ACCENTS).optional(),
+      position: z.number().int().optional(),
+    }).strict().parse(req.body ?? {});
+    if (!Object.keys(body).length) throw badRequest('No fields to update.');
+    const [row] = await db.update(bookBookmarks).set({ ...body, updatedAt: new Date() })
+      .where(and(eq(bookBookmarks.workspaceId, ws), eq(bookBookmarks.id, id))).returning();
+    if (!row) throw notFound('That bookmark does not exist.');
+    return { bookmark: row };
+  });
+
+  /* Bookmarks are the one thing here that DELETES rather than archives. A
+   * bookmark holds no content — removing it loses a shortcut, not work. */
+  app.delete(`${base}/library/bookmarks/:id`, pre, async (req) => {
+    const ws = wsId(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    await db.delete(bookBookmarks)
+      .where(and(eq(bookBookmarks.workspaceId, ws), eq(bookBookmarks.id, id)));
+    return { ok: true };
+  });
+
+  /* ── Links and backlinks ───────────────────────────────────────────────
+   *
+   * The generic "what references me?" of §21. Edges are authored inside page
+   * documents and mirrored into `item_links` on save, so this answers from one
+   * indexed query rather than by walking every document.
+   */
+
+  /**
+   * GET …/library/links?sourceType=task&sourceId=…
+   *
+   * Every page a Task (or Project, or item) has been linked to, with the
+   * readable address of each — "Payments → Contractor Deposit". Built from
+   * stored titles, never from a page number: "page 12" stops being true the
+   * moment a page is inserted in front of it.
+   */
+  app.get(`${base}/library/links`, pre, async (req) => {
+    const ws = wsId(req);
+    const q = z.object({
+      sourceType: z.enum(['task', 'project', 'library', 'book_page']),
+      sourceId: uuid,
+    }).parse(req.query);
+
+    const links = await db.select().from(itemLinks).where(and(
+      eq(itemLinks.workspaceId, ws),
+      eq(itemLinks.sourceType, q.sourceType),
+      eq(itemLinks.sourceId, q.sourceId),
+      eq(itemLinks.targetType, PAGE_TARGET),
+    ));
+    if (!links.length) return { links: [] };
+
+    const pageIds = links.map((l) => l.targetId);
+    const rows = await db.select({
+      pageId: bookPages.id, pageTitle: bookPages.title, layout: bookPages.layout,
+      position: bookPages.position,
+      sectionId: bookSections.id, sectionTitle: bookSections.title,
+      bookId: bookSections.bookId, itemId: libraryBooks.libraryItemId,
+      bookTitle: libraryItems.title,
+    }).from(bookPages)
+      .innerJoin(bookSections, eq(bookSections.id, bookPages.sectionId))
+      .innerJoin(libraryBooks, eq(libraryBooks.id, bookSections.bookId))
+      .innerJoin(libraryItems, eq(libraryItems.id, libraryBooks.libraryItemId))
+      .where(and(eq(bookPages.workspaceId, ws), inArray(bookPages.id, pageIds),
+        isNull(bookPages.archivedAt)));
+
+    const byPage = new Map(rows.map((r) => [r.pageId, r]));
+    // Index within its section, so a page with no title still has an address.
+    const order = new Map<string, number>();
+    for (const r of rows) {
+      const seen = [...byPage.values()].filter((x) => x.sectionId === r.sectionId)
+        .sort((a, b) => a.position - b.position);
+      order.set(r.pageId, seen.findIndex((x) => x.pageId === r.pageId));
+    }
+
+    return {
+      links: links.map((l) => {
+        const p = byPage.get(l.targetId);
+        if (!p) return null;   // page archived or gone: not a live link
+        return {
+          id: l.id, kind: l.kind, createdAt: l.createdAt,
+          bookId: p.bookId, itemId: p.itemId, bookTitle: p.bookTitle,
+          sectionId: p.sectionId, sectionTitle: p.sectionTitle,
+          pageId: p.pageId, pageTitle: p.pageTitle, layout: p.layout,
+          blockId: (l.metadata as any)?.blockId ?? null,
+          label: pageLabel(p.sectionTitle, p.pageTitle, order.get(p.pageId) ?? 0),
+        };
+      }).filter(Boolean),
+    };
+  });
+
+  /**
+   * DELETE …/library/links/:id — remove the LINK, never the Task (§15).
+   *
+   * The reference block stays in the page until the page is saved without it;
+   * this is the edge, and removing it is what "Remove link" means on the
+   * Project side, where there is no page open to edit.
+   */
+  app.delete(`${base}/library/links/:id`, pre, async (req) => {
+    const ws = wsId(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    await db.delete(itemLinks)
+      .where(and(eq(itemLinks.workspaceId, ws), eq(itemLinks.id, id)));
+    return { ok: true };
   });
 
   app.patch(`${base}/library/books/:id`, pre, async (req) => {
@@ -439,6 +673,8 @@ export function registerLibraryRoutes(
     const { id } = z.object({ id: uuid }).parse(req.params);
     const body = z.object({
       count: z.number().int().min(1).max(2).default(2),
+      layout: z.enum(PAGE_LAYOUTS).default('notes'),
+      title: z.string().max(200).nullish(),
     }).strict().parse(req.body ?? {});
 
     const [section] = await db.select().from(bookSections)
@@ -446,16 +682,81 @@ export function registerLibraryRoutes(
     if (!section) throw notFound('That section does not exist.');
     if (section.archivedAt) throw badRequest('That section is archived.');
 
+    /* A pinboard IS the spread — it is one page that occupies both halves, not
+     * two pages that happen to be next to each other. Asking for two would
+     * produce a second, unreachable board behind the first. */
+    const isSpread = body.layout === 'pinboard';
+    const count = isSpread ? 1 : body.count;
+
     const start = await nextPosition(bookPages.position, bookPages, eq(bookPages.sectionId, id));
-    const created = await db.transaction(async (tx) => {
-      return tx.insert(bookPages).values(
-        Array.from({ length: body.count }, (_, i) => ({
+    const created = await db.transaction(async (tx) => Array.from({ length: count })
+      .map((_, i) => i)
+      .reduce(async (prev, i) => {
+        const acc = await prev;
+        const content = starterContent(body.layout);
+        const [row] = await tx.insert(bookPages).values({
           workspaceId: ws, sectionId: id, position: start + i * GAP,
-        })),
-      ).returning();
-    });
+          layout: body.layout, spansSpread: isSpread,
+          title: (i === 0 ? body.title : null) ?? null,
+          content, contentText: pageToText(body.layout, content),
+        }).returning();
+        acc.push(row!);
+        return acc;
+      }, Promise.resolve([] as any[])));
+
     reply.code(201);
     return { pages: created };
+  });
+
+  /**
+   * Changing a page's layout.
+   *
+   * Separate from the ordinary save because it is the one page operation that
+   * can LOSE something, and §32 is explicit that a conversion must never
+   * silently drop content.
+   *
+   * Two rules decide it. Flowed layouts all share the block grammar, so moving
+   * between them keeps every block and only changes how it is drawn — free, and
+   * always allowed. A pinboard is the other shape entirely: positioned items on
+   * one side, blocks on the other, with no honest mapping between them. So that
+   * crossing is refused while there is anything to lose, and the caller is told
+   * what would go rather than being asked to trust a `force` flag.
+   */
+  app.post(`${base}/library/pages/:id/layout`, pre, async (req) => {
+    const ws = wsId(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = z.object({ layout: z.enum(PAGE_LAYOUTS) }).strict().parse(req.body ?? {});
+
+    const [page] = await db.select().from(bookPages)
+      .where(and(eq(bookPages.workspaceId, ws), eq(bookPages.id, id))).limit(1);
+    if (!page) throw notFound('That page does not exist.');
+    if (page.layout === body.layout) return { page, converted: false };
+
+    const wasBoard = page.layout === 'pinboard';
+    const willBoard = body.layout === 'pinboard';
+    const content: any = page.content;
+
+    if (wasBoard !== willBoard) {
+      const pinned = wasBoard ? (content?.items?.length ?? 0) : 0;
+      const blocks = wasBoard ? 0 : (content?.content?.length ?? 0);
+      const has = wasBoard ? pinned : blocks;
+      if (has > 0) {
+        throw badRequest(wasBoard
+          ? `This pinboard has ${pinned} item${pinned === 1 ? '' : 's'}. A page of notes has nowhere to put them — clear the board first, or add a new page instead.`
+          : `This page has ${blocks} block${blocks === 1 ? '' : 's'} of writing. A pinboard has nowhere to put them — clear the page first, or add a new pinboard instead.`);
+      }
+    }
+
+    // Same family, or an empty page: the content carries over untouched.
+    const next = wasBoard === willBoard ? content : starterContent(body.layout);
+    const [row] = await db.update(bookPages).set({
+      layout: body.layout,
+      spansSpread: willBoard,
+      content: next,
+      contentText: pageToText(body.layout, next),
+      updatedAt: new Date(),
+    }).where(eq(bookPages.id, id)).returning();
+    return { page: row, converted: true };
   });
 
   /**
@@ -485,19 +786,37 @@ export function registerLibraryRoutes(
 
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.title !== undefined) patch['title'] = body.title ?? null;
+    let nextContent: unknown;
     if (body.content !== undefined) {
-      // Validated against the node grammar, never trusted as-is. An unknown
-      // node type is a rejection, not something to store and hope about.
-      const doc = validateDoc(body.content);
-      patch['content'] = doc;
-      patch['contentText'] = docToText(doc);
+      // Validated against the grammar the LAYOUT uses, never trusted as-is. An
+      // unknown node type is dropped, not stored and hoped about.
+      nextContent = validatePageContent(existing.layout, body.content);
+      patch['content'] = nextContent;
+      patch['contentText'] = pageToText(existing.layout, nextContent);
     }
-    const [row] = await db.update(bookPages).set(patch)
-      .where(and(eq(bookPages.workspaceId, ws), eq(bookPages.id, id))).returning();
 
-    // The book's shelf entry should show when it was last written in.
     const [section] = await db.select({ bookId: bookSections.bookId }).from(bookSections)
       .where(eq(bookSections.id, existing.sectionId)).limit(1);
+
+    const row = await db.transaction(async (tx) => {
+      const [updated] = await tx.update(bookPages).set(patch)
+        .where(and(eq(bookPages.workspaceId, ws), eq(bookPages.id, id))).returning();
+
+      /* The edge table follows the document, in the SAME transaction. A page
+       * that saved but whose links did not is a page whose backlinks lie, and
+       * the lie would survive until the next edit. */
+      if (nextContent !== undefined && section) {
+        const [pb] = await tx.select({ projectId: projectBooks.projectId }).from(projectBooks)
+          .where(eq(projectBooks.bookId, section.bookId)).limit(1);
+        await syncPageRefs(tx, ws, existing, section.bookId, existing.layout, nextContent, {
+          projectId: pb?.projectId ?? null,
+          userId: (req as any).user?.id ?? null,
+        });
+      }
+      return updated;
+    });
+
+    // The book's shelf entry should show when it was last written in.
     if (section) {
       const [b] = await db.select({ itemId: libraryBooks.libraryItemId }).from(libraryBooks)
         .where(eq(libraryBooks.id, section.bookId)).limit(1);

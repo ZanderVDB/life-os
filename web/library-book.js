@@ -15,7 +15,9 @@
  * typed into — see `mountSpread`.
  */
 
-import { docToHtml, htmlToDoc, docToText } from './editor-doc.js';
+import {
+  docToHtml, htmlToDoc, docToText, regionsToDoc, newBlockId, setRefLookup,
+} from './editor-doc.js';
 import {
   lib, currentSection, currentSpread, spreadCount,
   createSection, updateSection, archiveSection, createPages, archivePage, search,
@@ -88,18 +90,76 @@ export function canGoNext() {
   return lib.sectionIdx < (lib.book?.sections.length ?? 0) - 1;
 }
 
+/* ══ Page layouts ════════════════════════════════════════════════════════
+ *
+ * Eleven templates, three rendering families, ONE page model.
+ *
+ *   single flow   notes, blank, ideas, research, learning, checklist, meeting
+ *   regions       two_columns, quad, comparison — blocks carry `attrs.region`
+ *   pinboard      free positioning, and it occupies the whole spread
+ *
+ * The families matter because only the last two cost anything. A page of notes
+ * and a research page differ in their ruling and their starter headings and in
+ * nothing else, so moving between them is free and can never lose a block.
+ */
+export const LAYOUTS = [
+  { id: 'notes', label: 'Lined notes', hint: 'Ruled writing, the default' },
+  { id: 'blank', label: 'Blank', hint: 'No rules, no prompts' },
+  { id: 'checklist', label: 'Checklist', hint: 'Things to tick off' },
+  { id: 'two_columns', label: 'Two columns', hint: 'Side by side' },
+  { id: 'quad', label: 'Four sections', hint: 'A 2×2 grid' },
+  { id: 'comparison', label: 'Comparison', hint: 'Option A against option B' },
+  { id: 'ideas', label: 'Ideas', hint: 'Somewhere to put a thought' },
+  { id: 'research', label: 'Research', hint: 'Question, findings, sources' },
+  { id: 'learning', label: 'Learning', hint: 'What you know and what is unclear' },
+  { id: 'meeting', label: 'Meeting notes', hint: 'Who, decisions, actions' },
+  { id: 'pinboard', label: 'Pinboard spread', hint: 'A whole spread you can pin to' },
+];
+
+/** How many editable regions a layout draws, and what each is called. */
+const REGIONS_FOR = {
+  two_columns: [{ region: 'a', label: '' }, { region: 'b', label: '' }],
+  comparison: [{ region: 'a', label: '' }, { region: 'b', label: '' }],
+  quad: [{ region: 'a' }, { region: 'b' }, { region: 'c' }, { region: 'd' }],
+};
+export const regionsOf = (layout) => REGIONS_FOR[layout] ?? null;
+export const layoutLabel = (id) => LAYOUTS.find((l) => l.id === id)?.label ?? 'Lined notes';
+
 export function spreadHtml() {
   const section = currentSection();
-  const { left, right } = currentSpread();
+  const spread = currentSpread();
+  const { left, right, full } = spread;
   const total = spreadCount(section);
   const last = lib.spreadIdx >= total - 1;
+
+  /* A pinboard is ONE page across both halves. Rendering it as a left page and
+   * leaving the right blank would be drawing a spread-wide surface at half
+   * width with an empty leaf beside it. */
+  if (full) {
+    return `${tabsHtml()}${bookmarksHtml()}
+    <div class="bk-stage">
+      <button type="button" class="bk-arrow" id="bk-prev"
+        aria-label="Previous page">${chev('left')}</button>
+      <div class="bk-book bk-spread bk-spread-full" id="bk-book"
+        data-accent="${esc(section?.accent ?? 'peach')}">
+        ${pinboardPageHtml(full, section)}
+      </div>
+      <button type="button" class="bk-arrow" id="bk-next" ${canGoNext() ? '' : 'disabled'}
+        aria-label="Next page">${chev('right')}</button>
+    </div>
+    <div class="bk-foot">
+      <span class="bk-context" id="bk-context" role="status">${esc(section?.title ?? '')} ·
+        spread ${lib.spreadIdx + 1} of ${total}</span>
+      <span class="bk-save" id="bk-save" role="status"></span>
+    </div>`;
+  }
 
   /* `prev` is never disabled while a spread is showing: there is always
    * somewhere back to go, and on the very first page that somewhere is the
    * cover. It used to be disabled on the first spread, which made the cover
    * unreachable by arrow and, below 820px, made the left-hand page of the
    * first spread unreachable at all once you had stepped onto the right. */
-  return `${tabsHtml()}
+  return `${tabsHtml()}${bookmarksHtml()}
   <div class="bk-stage">
     <button type="button" class="bk-arrow" id="bk-prev"
       aria-label="Previous page">${chev('left')}</button>
@@ -137,7 +197,9 @@ function pageHtml(page, side, section, isLast = false) {
       </div>
     </div>`;
   }
-  return `<div class="bk-page bk-page-${side}" data-accent="${esc(accent)}" data-page="${page.id}">
+  const layout = page.layout ?? 'notes';
+  return `<div class="bk-page bk-page-${side} bk-l-${esc(layout)}" data-accent="${esc(accent)}"
+      data-page="${page.id}" data-layout="${esc(layout)}">
     <div class="bk-page-hdr">
       <input class="bk-page-title" data-page-title="${page.id}"
         value="${esc(page.title ?? '')}" placeholder="${esc(section?.title ?? '')}"
@@ -145,12 +207,309 @@ function pageHtml(page, side, section, isLast = false) {
       <button type="button" class="bk-page-more" data-page-more="${page.id}"
         aria-label="Actions for this page" aria-haspopup="menu">${dots()}</button>
     </div>
-    <div class="bk-page-body">
+    ${pageBodyHtml(page, layout)}
+  </div>`;
+}
+
+/**
+ * The body of a page, in whichever family its layout belongs to.
+ *
+ * A region is an ordinary editor over a SUBSET of the same document, filtered by
+ * `attrs.region`. That is the whole mechanism: no second document model, no
+ * per-template table, and a page keeps one save, one search index and one
+ * conflict guard however many columns it happens to draw.
+ */
+function pageBodyHtml(page, layout) {
+  const regions = regionsOf(layout);
+  if (!regions) {
+    return `<div class="bk-page-body">
       <div class="bk-editor" data-editor="${page.id}" contenteditable="true"
         spellcheck="true" role="textbox" aria-multiline="true"
         aria-label="Page content">${docToHtml(page.content)}</div>
+    </div>`;
+  }
+  return `<div class="bk-page-body bk-regions bk-regions-${regions.length}">
+    ${regions.map((r, i) => `<div class="bk-region" data-region="${r.region}">
+      <div class="bk-editor" data-editor="${page.id}" data-region-editor="${r.region}"
+        contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true"
+        aria-label="Page content, area ${i + 1}">${docToHtml(page.content, r.region)}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+/* ══ Pinboard ════════════════════════════════════════════════════════════
+ *
+ * A spread you can pin things to. Positions are PERCENTAGES of the board, not
+ * pixels: a board arranged on a 2560px monitor has to be the same board on a
+ * laptop, and pixels would make the arrangement a property of the screen it was
+ * made on.
+ *
+ * Reference pins store an id and read their title live, exactly like reference
+ * blocks — ticking a Task in Projects changes what its pin says here, because
+ * there is only ever one copy of that fact.
+ */
+function pinboardPageHtml(page, section) {
+  const accent = section?.accent ?? 'peach';
+  const items = page.content?.items ?? [];
+  return `<div class="bk-page bk-page-full bk-l-pinboard" data-accent="${esc(accent)}"
+      data-page="${page.id}" data-layout="pinboard">
+    <div class="bk-page-hdr">
+      <input class="bk-page-title" data-page-title="${page.id}"
+        value="${esc(page.title ?? '')}" placeholder="Pinboard" aria-label="Page title">
+      <div class="bk-pin-tools">
+        <button type="button" class="btn btn-ghost btn-sm" data-pin-add="text">Add note</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-pin-add="link">Add link</button>
+        <button type="button" class="bk-page-more" data-page-more="${page.id}"
+          aria-label="Actions for this page" aria-haspopup="menu">${dots()}</button>
+      </div>
+    </div>
+    <div class="bk-board" data-board="${page.id}">
+      ${items.map(pinHtml).join('')}
+      ${items.length ? '' : `<p class="bk-board-empty">Nothing pinned yet. Add a note,
+        or drag a task in from the project on the right.</p>`}
     </div>
   </div>`;
+}
+
+function pinHtml(item) {
+  const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;min-height:${item.h}%`;
+  const live = item.taskId || item.projectId || item.itemId || item.pageId
+    ? lookupRef(item.kind === 'task' ? 'taskRef' : `${item.kind}Ref`,
+      item.taskId || item.projectId || item.itemId || item.pageId)
+    : null;
+
+  const body = () => {
+    if (item.kind === 'task' || item.kind === 'project' || item.kind === 'resource' || item.kind === 'page') {
+      if (!live) {
+        return `<span class="bk-pin-k">${esc(item.kind)}</span>
+          <span class="bk-pin-t">No longer available</span>`;
+      }
+      const done = live.status === 'done' || live.status === 'completed';
+      return `<span class="bk-pin-k">${esc(live.kindLabel ?? item.kind)}</span>
+        <span class="bk-pin-t${done ? ' is-done' : ''}">${esc(live.title ?? '')}</span>
+        ${live.dueDate ? `<span class="bk-pin-m">Due ${esc(String(live.dueDate).slice(5))}</span>` : ''}`;
+    }
+    if (item.kind === 'link' || item.kind === 'video') {
+      /* Editable until it IS a link, then a link with an editable address
+       * beside it. A pin you cannot correct is a pin you have to delete and
+       * make again. */
+      return `<span class="bk-pin-k">${item.kind === 'video' ? 'Video' : 'Link'}</span>
+        <span class="bk-pin-t" data-pin-text contenteditable="true" role="textbox"
+          aria-label="Link address">${esc(item.text ?? '')}</span>
+        ${item.href ? `<a class="bk-pin-go" href="${esc(item.href)}" target="_blank"
+          rel="noopener noreferrer">Open</a>` : ''}`;
+    }
+    if (item.kind === 'image') {
+      return `<img class="bk-pin-img" src="${esc(item.href ?? '')}" alt="${esc(item.text ?? '')}"
+        loading="lazy" decoding="async" onerror="this.remove()">`;
+    }
+    return `<span class="bk-pin-t" data-pin-text contenteditable="true"
+      role="textbox" aria-label="Note">${esc(item.text ?? '')}</span>`;
+  };
+
+  /* The element carries everything needed to RECONSTRUCT the item — its kind
+   * and the id of whatever it references — exactly as a reference block does.
+   * Reading a pin back from its previous stored record instead is what silently
+   * lost a pin the moment it was created, because a new pin has no previous
+   * record to read from. */
+  const ref = item.taskId || item.projectId || item.itemId || item.pageId || '';
+  return `<div class="bk-pin bk-pin-${esc(item.kind)}" data-pin="${esc(item.id)}"
+    data-kind="${esc(item.kind)}"${ref ? ` data-ref-id="${esc(ref)}"` : ''}
+    style="${style}"${item.accent ? ` data-accent="${esc(item.accent)}"` : ''}>
+    <span class="bk-pin-grip" data-pin-grip aria-hidden="true"></span>
+    ${body()}
+    <button type="button" class="bk-pin-x" data-pin-remove
+      aria-label="Remove this pin">×</button>
+  </div>`;
+}
+
+/* ══ Bookmarks ═══════════════════════════════════════════════════════════
+ *
+ * Shortcuts, never structure (§5). A bookmark cannot move a page — it is a row
+ * of its own precisely so that saying "this matters" and deciding "this comes
+ * fourth" stay separate decisions.
+ */
+function bookmarksHtml() {
+  const marks = lib.book?.bookmarks ?? [];
+  if (!marks.length) return '';
+  return `<div class="bk-marks" role="navigation" aria-label="Bookmarks">
+    ${marks.map((m) => `<button type="button" class="bk-mark" data-bookmark="${esc(m.id)}"
+      data-page="${esc(m.pageId)}" data-accent="${esc(m.accent)}"
+      title="${esc(m.label)}">${esc(m.label)}</button>`).join('')}
+  </div>`;
+}
+
+/** The markup for a fresh Task reference card, before the next save. */
+function refCardHtml(taskId) {
+  return `<div class="bk-ref bk-ref-task" contenteditable="false" data-ref="taskRef"
+    data-ref-id="${esc(taskId)}" data-block="${newBlockId()}" tabindex="0" role="link">
+    <span class="bk-ref-k">Task</span>
+    <span class="bk-ref-t">${esc(lookupRef('taskRef', taskId)?.title ?? 'Task')}</span>
+    <button type="button" class="bk-ref-x" data-ref-remove
+      aria-label="Remove this reference from the page">×</button>
+  </div>`;
+}
+
+/* ── Pinboard interaction ───────────────────────────────────────────────
+ *
+ * Pointer events rather than HTML5 drag for MOVING a pin: dragging inside the
+ * board is a direct-manipulation gesture with live feedback, and the drag-and-
+ * drop API gives neither. HTML5 drop is still accepted, because that is how a
+ * Task arrives from the rail, which is a different gesture from a different
+ * surface.
+ */
+function mountPinboards(root, { onDirty }) {
+  root.querySelectorAll('[data-board]').forEach((board) => {
+    const pageId = board.dataset.board;
+    const commit = () => {
+      const { page } = pageOf(pageId);
+      if (!page) return;
+      const items = [...board.querySelectorAll('[data-pin]')].map((el) => {
+        const prev = (page.content?.items ?? []).find((i) => i.id === el.dataset.pin) ?? {};
+        /* The DOM is the authority for what a pin IS; the stored record only
+         * carries what the DOM does not show, such as an accent. */
+        const kind = el.dataset.kind || prev.kind;
+        const text = el.querySelector('[data-pin-text]');
+        const typed = text ? (text.textContent ?? '') : null;
+        const href = kind === 'link' || kind === 'video'
+          ? (hrefFrom(typed ?? prev.text) ?? prev.href) : prev.href;
+        const REF_ATTR = { task: 'taskId', project: 'projectId', resource: 'itemId', page: 'pageId' };
+        const refAttr = REF_ATTR[kind];
+        return {
+          ...prev,
+          id: el.dataset.pin,
+          kind,
+          ...(refAttr && el.dataset.refId ? { [refAttr]: el.dataset.refId } : {}),
+          x: pct(el.style.left, prev.x ?? 4), y: pct(el.style.top, prev.y ?? 4),
+          w: pct(el.style.width, prev.w ?? 26), h: prev.h ?? 18,
+          ...(typed !== null ? { text: typed } : {}),
+          ...(href ? { href } : {}),
+        };
+      });
+      const next = { type: 'pinboard', items };
+      queueSave(page, next);
+      page.content = next;
+      onDirty?.();
+    };
+
+    /* Moving a pin. Percentages of the board, so an arrangement made on a wide
+     * screen is the same arrangement on a narrow one. */
+    board.addEventListener('pointerdown', (e) => {
+      const grip = e.target.closest('[data-pin-grip]');
+      if (!grip) return;
+      const pin = grip.closest('[data-pin]');
+      const box = board.getBoundingClientRect();
+      const start = { x: e.clientX, y: e.clientY, l: pct(pin.style.left, 0), t: pct(pin.style.top, 0) };
+      pin.classList.add('is-dragging');
+      grip.setPointerCapture(e.pointerId);
+
+      const move = (ev) => {
+        const dx = ((ev.clientX - start.x) / box.width) * 100;
+        const dy = ((ev.clientY - start.y) / box.height) * 100;
+        pin.style.left = `${Math.min(96, Math.max(0, start.l + dx)).toFixed(2)}%`;
+        pin.style.top = `${Math.min(96, Math.max(0, start.t + dy)).toFixed(2)}%`;
+      };
+      const up = () => {
+        pin.classList.remove('is-dragging');
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', up);
+        commit();
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up);
+    });
+
+    board.addEventListener('click', (e) => {
+      const x = e.target.closest('[data-pin-remove]');
+      if (!x) return;
+      x.closest('[data-pin]')?.remove();
+      commit();
+    });
+    board.addEventListener('input', (e) => {
+      if (e.target.closest('[data-pin-text]')) commit();
+    });
+
+    // A Task dropped onto the board becomes a positioned card where it landed.
+    board.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer?.types?.includes('application/x-los-task')) return;
+      e.preventDefault();
+      board.classList.add('is-drop');
+    });
+    board.addEventListener('dragleave', () => board.classList.remove('is-drop'));
+    board.addEventListener('drop', (e) => {
+      const taskId = e.dataTransfer?.getData('application/x-los-task');
+      board.classList.remove('is-drop');
+      if (!taskId) return;
+      e.preventDefault();
+      if (board.querySelector(`[data-pin][data-ref-id="${taskId}"]`)) return;
+      const box = board.getBoundingClientRect();
+      const item = {
+        id: newBlockId(), kind: 'task', taskId,
+        x: Math.min(80, Math.max(0, ((e.clientX - box.left) / box.width) * 100 - 8)),
+        y: Math.min(85, Math.max(0, ((e.clientY - box.top) / box.height) * 100 - 4)),
+        w: 26, h: 14,
+      };
+      board.querySelector('.bk-board-empty')?.remove();
+      board.insertAdjacentHTML('beforeend', pinHtml(item));
+      commit();
+    });
+
+    /* Add a note or a link.
+     *
+     * No dialog of any kind — a link pin is created empty and you type the
+     * address into the pin itself, which is both fewer steps and the only
+     * option consistent with the rule that this app never uses a native
+     * prompt. `commit` promotes text that parses as a URL to a real href, so
+     * the pin becomes a link the moment it is one. */
+    root.querySelectorAll('[data-pin-add]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const kind = btn.dataset.pinAdd;
+        const item = { id: newBlockId(), kind, x: 6, y: 8, w: 26, h: 16, text: '' };
+        board.querySelector('.bk-board-empty')?.remove();
+        board.insertAdjacentHTML('beforeend', pinHtml(item));
+        commit();
+        board.querySelector(`[data-pin="${item.id}"] [data-pin-text]`)?.focus();
+      });
+    });
+  });
+}
+
+/** A pin's text is its address once it parses as one. Nothing else is a link. */
+function hrefFrom(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return null;
+  try {
+    const u = new URL(/^https?:\/\//i.test(t) ? t : `https://${t}`);
+    return /\./.test(u.hostname) ? u.toString() : null;
+  } catch { return null; }
+}
+
+const pct = (v, fallback) => {
+  const n = parseFloat(String(v ?? ''));
+  return Number.isFinite(n) ? n : fallback;
+};
+
+/**
+ * The live entity a reference points at.
+ *
+ * The Book payload resolves every referenced Task, Project and item once, so
+ * this is a map lookup rather than a request. A reference that resolves to
+ * nothing is one whose target was deleted; it renders as unavailable and the
+ * block stays exactly where it is (§15).
+ */
+export function lookupRef(type, id) {
+  const refs = lib.book?.refs;
+  if (!refs || !id) return null;
+  if (type === 'taskRef') {
+    const t = (refs.tasks ?? []).find((x) => x.id === id);
+    return t ? { ...t, kindLabel: 'Task' } : null;
+  }
+  if (type === 'projectRef') {
+    const p = (refs.projects ?? []).find((x) => x.id === id);
+    return p ? { ...p, kindLabel: 'Project' } : null;
+  }
+  const i = (refs.items ?? []).find((x) => x.id === id);
+  return i ? { ...i, kindLabel: i.type === 'book' ? 'Book' : 'Resource' } : null;
 }
 
 function tabsHtml() {
@@ -218,6 +577,8 @@ export function toolbarHtml() {
  * them, which is what keeps selection and undo history alive while typing.
  */
 export function mountSpread(root, { onNavigate, onDirty }) {
+  mountPinboards(root, { onDirty });
+
   root.querySelectorAll('[data-editor]').forEach((el) => {
     const pageId = el.dataset.editor;
     // Registered while `page.content` is still what the server holds. See
@@ -226,10 +587,20 @@ export function mountSpread(root, { onNavigate, onDirty }) {
     const mounted = pageOf(pageId).page;
     if (mounted) trackPage(mounted);
 
+    /* A page's document is whatever ALL its editors say, together. On a
+     * single-flow layout that is one editor and this is the identity function;
+     * on a two-column page it is what stops typing in the right column from
+     * saving a document containing only the right column. */
+    const readPage = () => {
+      const regions = [...root.querySelectorAll(`[data-editor="${pageId}"][data-region-editor]`)];
+      if (!regions.length) return htmlToDoc(el);
+      return regionsToDoc(regions.map((r) => ({ region: r.dataset.regionEditor, el: r })));
+    };
+
     el.addEventListener('input', () => {
       const { page } = pageOf(pageId);
       if (!page) return;
-      const doc = htmlToDoc(el);
+      const doc = readPage();
       queueSave(page, doc);
       // AFTER the queue, never before: queueSave compares against what the
       // server has, and this line is what would make that comparison lie.
@@ -281,6 +652,51 @@ export function mountSpread(root, { onNavigate, onDirty }) {
     el.addEventListener('keyup', updateToolbarState);
     el.addEventListener('mouseup', updateToolbarState);
     el.addEventListener('focus', updateToolbarState);
+
+    /* Ticking a box, and removing a reference. Both change the DOCUMENT, so
+     * both go through the same input event the typing does — there is one save
+     * path, and a second one would be a second set of conflict rules. */
+    el.addEventListener('click', (e) => {
+      const box = e.target.closest('[data-check]');
+      if (box) {
+        box.closest('.bk-check')?.classList.toggle('is-on');
+        box.setAttribute('aria-checked', String(box.closest('.bk-check')?.classList.contains('is-on')));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+      const x = e.target.closest('[data-ref-remove]');
+      if (x) {
+        /* Removing the CARD, never the Task (§15). The edge follows the
+         * document on save, so this unlinks; the Task is untouched. */
+        e.preventDefault();
+        x.closest('[data-ref]')?.remove();
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    /* A Task dragged from the Project Rail lands as a reference card at the end
+     * of the page. Dropping does not MOVE the task — it creates a relationship,
+     * and the task stays exactly where it was in the project (§11). */
+    el.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer?.types?.includes('application/x-los-task')) return;
+      e.preventDefault();
+      el.classList.add('is-drop');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('is-drop'));
+    el.addEventListener('drop', (e) => {
+      const taskId = e.dataTransfer?.getData('application/x-los-task');
+      el.classList.remove('is-drop');
+      if (!taskId) return;
+      e.preventDefault();
+      if (el.querySelector(`[data-ref-id="${taskId}"]`)) return;   // already here
+      const card = document.createElement('div');
+      card.innerHTML = refCardHtml(taskId);
+      const node = card.firstElementChild;
+      if (node) {
+        el.appendChild(node);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
   });
 
   root.querySelectorAll('[data-page-title]').forEach((input) => {
@@ -295,7 +711,8 @@ export function mountSpread(root, { onNavigate, onDirty }) {
 
   root.querySelector('#bk-prev')?.addEventListener('click', () => onNavigate('prev'));
   root.querySelector('#bk-next')?.addEventListener('click', () => onNavigate('next'));
-  root.querySelector('[data-add-pages]')?.addEventListener('click', () => onNavigate('add-pages'));
+  root.querySelector('[data-add-pages]')?.addEventListener('click',
+    (e) => onNavigate('add-pages', { anchor: e.currentTarget }));
   root.querySelectorAll('[data-section]').forEach((tab) => {
     tab.addEventListener('click', () => onNavigate('section', Number(tab.dataset.section)));
   });

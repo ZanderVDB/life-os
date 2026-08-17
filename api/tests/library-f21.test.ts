@@ -233,9 +233,15 @@ test('headings, lists and quotes stay real elements', () => {
   // §13: not styled paragraphs imitating them.
   assert.match(bookCode, /docToHtml/);
   const doc = code(read('editor-doc.js'));
-  assert.match(doc, /return `<h\$\{level\}>/);
+  /* Real elements, now carrying their stable block id. `${bid}` is an
+   * attribute, not a wrapper: the heading is still an `h2`, which is the thing
+   * §13 is about. The id is what a bookmark, a Task link and a future AI
+   * citation point at, and it has to survive the round trip through a
+   * contenteditable — see htmlToDoc. */
+  assert.match(doc, /return `<h\$\{level\}\$\{bid\}>/);
   assert.match(doc, /type === 'bulletList' \? 'ul' : 'ol'/);
-  assert.match(doc, /return `<blockquote>/);
+  assert.match(doc, /return `<blockquote\$\{bid\}>/);
+  assert.match(doc, /const bid = node\.attrs\?\.id \? ` data-block="/);
   assert.match(doc, /\{ type: 'heading', attrs: \{ level: tag === 'h3' \? 3 : 2 \}/);
 });
 

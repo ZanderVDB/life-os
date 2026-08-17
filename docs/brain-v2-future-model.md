@@ -9,6 +9,36 @@ Recorded at E2.8, on the user's direction.
 
 ---
 
+## Superseded, in part — Brain does not store knowledge
+
+**Decided at the Book system phase.** Brain is **not** another place to keep
+notes, research or ideas. It never was going to be a good one: two stores for
+the same material is two answers to "where did I write that?", and the second
+answer is always the wrong one.
+
+The division is now settled:
+
+| | |
+|---|---|
+| **Projects** | own execution — status, tasks, steps, next actions |
+| **Library Books** | own information and knowledge |
+| **Project Books** | connect the two |
+| **Brain / AI** | the intelligence layer *over* all of it |
+
+Ideas, Research and Learning are **page layouts inside Books**, not a separate
+data store. A user can keep an Ideas Book, or mix an Ideas page into any Book —
+the model does not enforce categories.
+
+What remains of Brain is the part that was never storage: semantic search,
+connections between things, resurfacing, reasoning, suggestions and
+natural-language actions across Library, Projects, Tasks, Diary and Calendar.
+That still is not built, and this phase deliberately built no part of it.
+
+The growth-item model below stands. It is about how a *person* changes, which
+is not information filed in a Book.
+
+---
+
 ## Growth items are not Tasks
 
 A Task is something you finish. Growth is something you *become*, and the

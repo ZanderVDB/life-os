@@ -44,8 +44,73 @@ export type Doc = { type: 'doc'; content: Block[] };
 
 export const EMPTY_DOC: Doc = { type: 'doc', content: [] };
 
-const BLOCKS = new Set(['paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote']);
+/**
+ * Reference nodes.
+ *
+ * A reference stores an ID and NOTHING ELSE — no title, no status, no date.
+ * Those are read from the canonical row every time the page renders. The moment
+ * a title is copied into a page it starts being wrong, and nothing in the
+ * system will ever tell you which of the two copies is the real one.
+ *
+ * This is also what makes the page legible to something other than a renderer:
+ * a link that exists as `{type:'taskRef', attrs:{taskId}}` can be followed by a
+ * query, while a link that exists as the words "see the deposit task" cannot.
+ */
+const REF_BLOCKS = new Set(['taskRef', 'projectRef', 'bookRef', 'pageRef', 'resourceRef']);
+const REF_ID_ATTR: Record<string, string> = {
+  taskRef: 'taskId',
+  projectRef: 'projectId',
+  bookRef: 'bookId',
+  pageRef: 'pageId',
+  resourceRef: 'itemId',
+};
+
+const BLOCKS = new Set([
+  'paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote',
+  'checkItem', ...REF_BLOCKS,
+]);
 const SIMPLE_MARKS = new Set(['bold', 'italic', 'underline', 'strike']);
+
+/** Regions for the multi-column layouts. A block outside these falls to 'a'. */
+export const REGIONS = ['a', 'b', 'c', 'd'] as const;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
+
+/**
+ * Block identity.
+ *
+ * Every top-level block carries a stable `id`, assigned here on write if the
+ * client did not supply one, and PRESERVED if it did. That id is what a
+ * bookmark, a Task link and a future AI citation all point at — "Garden
+ * Renovation → Payments → Contractor Deposit" is only addressable if the block
+ * has a name that survives the next edit.
+ *
+ * Ids are short and random rather than UUIDs: there are hundreds per page, they
+ * are never foreign keys, and they travel in every save.
+ */
+let counter = 0;
+export function blockId(): string {
+  counter = (counter + 1) % 0xffff;
+  return `b${Date.now().toString(36)}${counter.toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+}
+
+const keepId = (raw: any): string => {
+  const given = raw?.attrs?.id;
+  return typeof given === 'string' && given.length > 0 && given.length <= 40 ? given : blockId();
+};
+
+const keepRegion = (raw: any): string | undefined => {
+  const r = raw?.attrs?.region;
+  return (REGIONS as readonly string[]).includes(r) ? r : undefined;
+};
+
+/** `id` and `region` ride along on every block, so this is written once. */
+function withMeta(raw: any, block: Block): Block {
+  const region = keepRegion(raw);
+  block.attrs = { ...(block.attrs ?? {}), id: keepId(raw), ...(region ? { region } : {}) };
+  return block;
+}
 
 /** Only http(s). `javascript:` and `data:` are the whole reason this exists. */
 function safeHref(href: unknown): string | null {
@@ -90,24 +155,55 @@ function cleanInline(raw: unknown): Inline[] {
   return out;
 }
 
-function cleanParagraph(raw: unknown): Block | null {
+function cleanParagraph(raw: unknown, top = false): Block | null {
   if (!raw || typeof raw !== 'object') return null;
   if ((raw as any).type !== 'paragraph') return null;
-  return { type: 'paragraph', content: cleanInline((raw as any).content) };
+  const block: Block = { type: 'paragraph', content: cleanInline((raw as any).content) };
+  // Only TOP-level blocks are addressable. A paragraph inside a list item is
+  // part of that item, and giving it an id would invite citations to something
+  // that cannot be navigated to.
+  return top ? withMeta(raw, block) : block;
 }
 
 function cleanBlock(raw: unknown, depth = 0): Block | null {
   if (!raw || typeof raw !== 'object' || depth > 3) return null;
   const type = (raw as any).type;
   if (!BLOCKS.has(type)) return null;
+  const top = depth === 0;
 
-  if (type === 'paragraph') return cleanParagraph(raw);
+  if (type === 'paragraph') return cleanParagraph(raw, top);
+
+  /* A reference is an ID and a relationship. Everything shown about the target
+   * — its title, whether it is done, when it is due — is read live from the
+   * target's own row at render time. */
+  if (REF_BLOCKS.has(type)) {
+    const attr = REF_ID_ATTR[type]!;
+    const id = (raw as any).attrs?.[attr];
+    if (!isUuid(id)) return null;      // a reference to nothing is not content
+    const label = (raw as any).attrs?.label;
+    return withMeta(raw, {
+      type,
+      attrs: {
+        [attr]: id,
+        ...(typeof label === 'string' && label ? { label: label.slice(0, 200) } : {}),
+      },
+    });
+  }
+
+  if (type === 'checkItem') {
+    return withMeta(raw, {
+      type: 'checkItem',
+      attrs: { checked: (raw as any).attrs?.checked === true },
+      content: cleanInline((raw as any).content),
+    });
+  }
 
   if (type === 'heading') {
     // Two levels only. A page is not a document outline, and h1 belongs to the
     // book, not to a page inside it.
     const level = (raw as any).attrs?.level === 3 ? 3 : 2;
-    return { type: 'heading', attrs: { level }, content: cleanInline((raw as any).content) };
+    const block: Block = { type: 'heading', attrs: { level }, content: cleanInline((raw as any).content) };
+    return top ? withMeta(raw, block) : block;
   }
 
   if (type === 'bulletList' || type === 'orderedList') {
@@ -121,17 +217,99 @@ function cleanBlock(raw: unknown, depth = 0): Block | null {
           .filter(Boolean),
       }))
       .filter((li: any) => li.content.length);
-    return content.length ? { type, content } : null;
+    if (!content.length) return null;
+    const block: Block = { type, content };
+    return top ? withMeta(raw, block) : block;
   }
 
   if (type === 'blockquote') {
     const content = (Array.isArray((raw as any).content) ? (raw as any).content : [])
       .map((p: unknown) => cleanParagraph(p))
       .filter(Boolean) as Block[];
-    return content.length ? { type: 'blockquote', content } : null;
+    if (!content.length) return null;
+    const block: Block = { type: 'blockquote', content };
+    return top ? withMeta(raw, block) : block;
   }
   return null;
 }
+
+/* ── Pinboards ──────────────────────────────────────────────────────────
+ *
+ * A pinboard is a page whose content is POSITIONED rather than flowed, so it
+ * gets its own document shape rather than being forced through the block
+ * grammar. Same rules otherwise: every item has a stable id, and an item that
+ * points at another entity stores the id and nothing else.
+ *
+ * Coordinates are percentages of the spread, not pixels. A pinboard laid out on
+ * a 2560px monitor has to be the same pinboard on a laptop, and pixels would
+ * make the arrangement a property of the screen it was made on.
+ */
+export const PIN_KINDS = ['text', 'image', 'link', 'video', 'task', 'project', 'resource', 'page'] as const;
+
+const PIN_REF_ATTR: Record<string, string> = {
+  task: 'taskId', project: 'projectId', resource: 'itemId', page: 'pageId',
+};
+
+export type PinItem = {
+  id: string; kind: string;
+  x: number; y: number; w: number; h: number;
+  text?: string; href?: string; accent?: string;
+  taskId?: string; projectId?: string; itemId?: string; pageId?: string;
+  createdAt?: string; updatedAt?: string;
+};
+export type Pinboard = { type: 'pinboard'; items: PinItem[] };
+
+export const EMPTY_PINBOARD: Pinboard = { type: 'pinboard', items: [] };
+
+const clamp = (v: unknown, lo: number, hi: number, fallback: number) => {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+  return Math.min(hi, Math.max(lo, Math.round(n * 100) / 100));
+};
+
+export function validatePinboard(raw: unknown): Pinboard {
+  const items = raw && typeof raw === 'object' && Array.isArray((raw as any).items)
+    ? (raw as any).items : [];
+  if (items.length > 200) {
+    throw Object.assign(new Error('That pinboard has too many items.'), { statusCode: 400 });
+  }
+  const out: PinItem[] = [];
+  for (const r of items) {
+    if (!r || typeof r !== 'object') continue;
+    const kind = (r as any).kind;
+    if (!(PIN_KINDS as readonly string[]).includes(kind)) continue;
+
+    const item: PinItem = {
+      id: typeof (r as any).id === 'string' && (r as any).id ? String((r as any).id).slice(0, 40) : blockId(),
+      kind,
+      x: clamp((r as any).x, 0, 100, 4),
+      y: clamp((r as any).y, 0, 100, 4),
+      w: clamp((r as any).w, 4, 100, 26),
+      h: clamp((r as any).h, 4, 100, 18),
+    };
+
+    const refAttr = PIN_REF_ATTR[kind];
+    if (refAttr) {
+      const id = (r as any)[refAttr];
+      if (!isUuid(id)) continue;         // a reference pin with no target is nothing
+      (item as any)[refAttr] = id;
+    }
+    if (typeof (r as any).text === 'string') item.text = (r as any).text.slice(0, 4000);
+    if (kind === 'link' || kind === 'video' || kind === 'image') {
+      const href = safeHref((r as any).href);
+      if (!href && !item.text) continue;  // nothing to show and nowhere to go
+      if (href) item.href = href;
+    }
+    const accent = (r as any).accent;
+    if (typeof accent === 'string' && /^[a-z]{3,12}$/.test(accent)) item.accent = accent;
+    if (typeof (r as any).createdAt === 'string') item.createdAt = (r as any).createdAt.slice(0, 40);
+    out.push(item);
+  }
+  return { type: 'pinboard', items: out };
+}
+
+/** A pinboard's searchable text: its own words, not its references' titles. */
+export const pinboardToText = (p: Pinboard): string =>
+  (p.items ?? []).map((i) => i.text ?? '').filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 
 /**
  * Validates and normalises an incoming document.
@@ -175,5 +353,131 @@ export function docToText(doc: Doc): string {
 /** A one-paragraph document, for seeds and simple writes. */
 export const paragraph = (text: string): Block => ({
   type: 'paragraph',
+  attrs: { id: blockId() },
   content: text ? [{ type: 'text', text }] : [],
 });
+
+/* ── One door for every layout ─────────────────────────────────────────── */
+
+/**
+ * Validates a page body against the layout that will render it.
+ *
+ * One function rather than a branch at every call site: the layout decides
+ * which grammar applies, and nothing outside this file should have to know that
+ * a pinboard is shaped differently from a page of notes.
+ */
+export function validatePageContent(layout: string, raw: unknown): Doc | Pinboard {
+  return layout === 'pinboard' ? validatePinboard(raw) : validateDoc(raw);
+}
+
+export const pageToText = (layout: string, content: any): string => (layout === 'pinboard'
+  ? pinboardToText(content as Pinboard)
+  : docToText(content as Doc));
+
+/**
+ * Every Life OS entity a page body points at.
+ *
+ * This is the bridge between what is written and what can be QUERIED. The page
+ * stores its references inline, where the editor needs them; this pulls them
+ * out so they can be mirrored into `item_links` and answer "what references
+ * me?" without opening a single document.
+ *
+ * Both shapes are read — flowed reference blocks and pinned reference items —
+ * because a Task dropped on a pinboard and a Task dropped on a notes page are
+ * the same relationship and must be equally findable.
+ */
+export type PageRef = { type: string; id: string; blockId: string };
+
+export function extractRefs(layout: string, content: any): PageRef[] {
+  const out: PageRef[] = [];
+  const seen = new Set<string>();
+  const push = (type: string, id: unknown, block: string) => {
+    if (!isUuid(id)) return;
+    const key = `${type}:${id}`;
+    if (seen.has(key)) return;          // one edge per target per page
+    seen.add(key);
+    out.push({ type, id, blockId: block });
+  };
+
+  if (layout === 'pinboard') {
+    for (const item of (content?.items ?? []) as PinItem[]) {
+      const attr = PIN_REF_ATTR[item.kind];
+      if (attr) push(item.kind, (item as any)[attr], item.id);
+    }
+    return out;
+  }
+
+  const walk = (nodes: unknown[]) => {
+    for (const n of nodes) {
+      if (!n || typeof n !== 'object') continue;
+      const node = n as any;
+      if (REF_BLOCKS.has(node.type)) {
+        const attr = REF_ID_ATTR[node.type]!;
+        push(node.type.replace(/Ref$/, ''), node.attrs?.[attr], node.attrs?.id ?? '');
+      } else if (Array.isArray(node.content)) walk(node.content);
+    }
+  };
+  walk(content?.content ?? []);
+  return out;
+}
+
+/**
+ * The starter content a layout opens with.
+ *
+ * A blank page under a template that promises structure is a template that has
+ * not been applied. These are the headings and prompts that make the layout
+ * legible the moment it is created — and they are ordinary blocks, so the user
+ * can delete every one of them.
+ */
+const heading = (text: string, region?: string): Block => ({
+  type: 'heading',
+  attrs: { id: blockId(), level: 2, ...(region ? { region } : {}) },
+  content: [{ type: 'text', text }],
+});
+const para = (region?: string): Block => ({
+  type: 'paragraph',
+  attrs: { id: blockId(), ...(region ? { region } : {}) },
+  content: [],
+});
+const check = (text = ''): Block => ({
+  type: 'checkItem',
+  attrs: { id: blockId(), checked: false },
+  content: text ? [{ type: 'text', text }] : [],
+});
+
+export function starterContent(layout: string): Doc | Pinboard {
+  switch (layout) {
+    case 'pinboard':
+      return EMPTY_PINBOARD;
+    case 'checklist':
+      return { type: 'doc', content: [check(), check(), check()] };
+    case 'two_columns':
+      return { type: 'doc', content: [para('a'), para('b')] };
+    case 'comparison':
+      return {
+        type: 'doc',
+        content: [heading('Option A', 'a'), para('a'), heading('Option B', 'b'), para('b')],
+      };
+    case 'quad':
+      return { type: 'doc', content: [para('a'), para('b'), para('c'), para('d')] };
+    case 'ideas':
+      return { type: 'doc', content: [heading('Ideas'), para()] };
+    case 'research':
+      return {
+        type: 'doc',
+        content: [heading('Question'), para(), heading('What I found'), para(), heading('Sources'), para()],
+      };
+    case 'learning':
+      return {
+        type: 'doc',
+        content: [heading('What I am learning'), para(), heading('Key points'), para(), heading('Still unclear'), para()],
+      };
+    case 'meeting':
+      return {
+        type: 'doc',
+        content: [heading('Who was there'), para(), heading('Decisions'), para(), heading('Actions'), check(), check()],
+      };
+    default:
+      return EMPTY_DOC;
+  }
+}

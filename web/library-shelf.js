@@ -500,7 +500,9 @@ export const objectHtml = (item, i, n) =>
  * do anything should not be a tab stop, and one that is only decorative should
  * not be reachable at all.
  */
-export function shelfHtml({ id, title, items, extraLead = '', note = '', kind = 'book' }) {
+export function shelfHtml({
+  id, title, items, extraLead = '', note = '', kind = 'book', collapsed = false,
+}) {
   const n = items.length + (extraLead ? 1 : 0);
   const hid = `lib-sh-${id}`;
   /* ADAPTIVE DENSITY (§23/§24). Two or three books must read as two or three
@@ -510,8 +512,11 @@ export function shelfHtml({ id, title, items, extraLead = '', note = '', kind = 
    * objects still read individually at any spacing, and four is where a row
    * starts wanting rhythm. */
   const dense = n >= 4;
-  return `<section class="lib-shelf lib-shelf-${esc(kind)}" data-shelf="${esc(id)}"
-    role="group" aria-labelledby="${hid}">
+  /* A collapsed shelf is one you want to EXIST and not to look at — archived
+   * projects, today. It keeps its heading and its count, so nothing is hidden;
+   * only the rack of covers is folded away. */
+  return `<section class="lib-shelf lib-shelf-${esc(kind)}${collapsed ? ' is-folded' : ''}"
+    data-shelf="${esc(id)}" role="group" aria-labelledby="${hid}">
     <div class="lib-shelf-head">
       <h2 class="lib-shelf-h" id="${hid}">${esc(title)}</h2>
       ${items.length ? `<span class="lib-shelf-n">${items.length}</span>` : ''}

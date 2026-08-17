@@ -191,10 +191,22 @@ test('archive: reversible, idempotent, and hidden from the default list', async 
   assert.equal(restored.status, 'active');
 });
 
-test('archive: permanent deletion is not exposed', () => {
+test('archive: permanent deletion is not exposed for anything holding content', () => {
   const src = readFileSync(join(here, '..', 'src', 'routes', 'library.ts'), 'utf8');
-  assert.ok(!/app\.delete\(/.test(src),
-    'a DELETE route exists — a book is not something to lose to a misclick');
+  const deletes = [...src.matchAll(/app\.delete\(`\$\{base\}([^`]+)`/g)].map((m) => m[1]);
+  /* Items, sections and pages archive; they hold work nobody wants to lose to a
+   * misclick, and that rule has not moved.
+   *
+   * Bookmarks and links are the two things that hold NO content. A bookmark is
+   * a shortcut and a link is an edge — deleting either loses a pointer, not a
+   * word, and archiving a shortcut would be a shortcut you cannot get rid of.
+   * Note especially that deleting a link never touches the Task at either end
+   * of it (§15). */
+  const allowed = new Set(['/library/bookmarks/:id', '/library/links/:id']);
+  for (const route of deletes) {
+    assert.ok(allowed.has(route!),
+      `DELETE ${route} exists — that is content, and content archives`);
+  }
 });
 
 /* ── §7/§18  Books arrive ready to write in ──────────────────────────── */
@@ -370,7 +382,39 @@ test('save: content persists, and reload returns exactly what went in', async ()
   assert.equal(saved.contentText, 'Ideas Something worth keeping.');
 
   const reloaded = (await h.get(`/library/books/${book.id}`)).json().sections[0].pages[0];
-  assert.deepEqual(reloaded.content, content);
+  /* Everything that went in comes back, plus a stable `id` on each top-level
+   * block. The server mints one for any block that arrives without it — that
+   * id is what a bookmark, a Task link and a future AI citation address, so it
+   * has to exist for content the editor has never touched. Nothing else about
+   * the document is altered. */
+  assert.equal(reloaded.content.content.length, 2);
+  for (const [i, block] of reloaded.content.content.entries()) {
+    const { id, ...attrs } = block.attrs ?? {};
+    assert.match(id, /^b[a-z0-9]+$/, 'a block came back with no stable id');
+    assert.deepEqual({ ...block, attrs: Object.keys(attrs).length ? attrs : undefined },
+      { ...content.content[i], attrs: content.content[i]!.attrs });
+  }
+});
+
+test('save: a block that already has an id KEEPS it', async () => {
+  /* The property everything else rests on. An id regenerated on each save
+   * would break every bookmark and every link pointing at that block, silently,
+   * the first time the page was edited. */
+  const h = await setup();
+  const { book } = await aBook(h);
+  const page = (await h.get(`/library/books/${book.id}`)).json().sections[0].pages[0];
+
+  const content = { type: 'doc', content: [
+    { type: 'paragraph', attrs: { id: 'keepme' }, content: [{ type: 'text', text: 'Bank details' }] },
+  ] };
+  await h.patch(`/library/pages/${page.id}`, { content });
+  const first = (await h.get(`/library/books/${book.id}`)).json().sections[0].pages[0];
+  assert.equal(first.content.content[0].attrs.id, 'keepme');
+
+  // And again, with the id it came back with.
+  await h.patch(`/library/pages/${page.id}`, { content: first.content });
+  const second = (await h.get(`/library/books/${book.id}`)).json().sections[0].pages[0];
+  assert.equal(second.content.content[0].attrs.id, 'keepme');
 });
 
 test('save: a stale write is rejected, never silently applied', async () => {

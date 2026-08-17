@@ -51,11 +51,35 @@ export const FILTERS = [
  * with two videos on it.
  */
 export const SHELVES = [
+  /* Project Books first, and grouped by the state of the PROJECT.
+   *
+   * §16: a Book is never moved because its Project changed state. `item.project.shelf`
+   * is computed by the server at read time from the Project's lifecycle, so
+   * completing a Project — and reopening it — moves its Book between these
+   * shelves with no write to the Book at all. Nothing can drift, because there
+   * is nothing stored to drift from.
+   *
+   * Archived Projects are last and collapsed by default: they are the shelf you
+   * want to exist and not to look at. */
+  { id: 'projects_active', title: 'Active projects', types: ['book'], kind: 'book', shelf: 'projects_active' },
+  { id: 'projects_completed', title: 'Completed projects', types: ['book'], kind: 'book', shelf: 'projects_completed' },
+  { id: 'projects_archived', title: 'Archived projects', types: ['book'], kind: 'book', shelf: 'projects_archived', collapsed: true },
   { id: 'books', title: 'Books', types: ['book'], kind: 'book' },
   { id: 'documents', title: 'Documents', types: ['document'], kind: 'res' },
   { id: 'media', title: 'Media', types: ['image', 'video'], kind: 'res' },
   { id: 'clippings', title: 'Links & Files', types: ['link', 'file'], kind: 'res' },
 ];
+
+/**
+ * Whether an item belongs on a shelf.
+ *
+ * A Project Book belongs to its Project shelf and NOT to Books, so it appears
+ * exactly once — the same rule the Projects overview applies to a project with
+ * a health signal. A Book with no Project is an ordinary Book (§18).
+ */
+export const belongsOn = (item, shelf) => (shelf.shelf
+  ? item.project?.shelf === shelf.shelf
+  : shelf.types.includes(item.type) && !item.project);
 
 const TYPE_ICON = {
   book: '<path d="M4 4h2.6v13H4zM8 4h2.6v13H8z"/><path d="m12.6 4.6 2.5.7-2.8 12-2.5-.7z"/>',
@@ -195,13 +219,15 @@ export function bodyHtml() {
 
   const recent = recentItems(items);
   const shelves = SHELVES.map((s) => {
-    const own = items.filter((i) => s.types.includes(i.type));
+    const own = items.filter((i) => belongsOn(i, s));
     /* The Diary ledge rides above the Books shelf and is drawn even when there
      * are no Books — it is not a Library item and its presence does not depend
      * on owning any (§19). */
     if (!own.length && s.id !== 'books') return '';
     if (!own.length && s.id === 'books' && lib.filter !== 'all') return '';
-    return shelfHtml({ id: s.id, title: s.title, items: own, kind: s.kind });
+    return shelfHtml({
+      id: s.id, title: s.title, items: own, kind: s.kind, collapsed: s.collapsed,
+    });
   }).filter(Boolean).join('');
 
   return `${filtersHtml()}

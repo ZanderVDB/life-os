@@ -22,6 +22,7 @@ import {
   archivePage, restorePage, archiveSection,
   currentSection, currentSpread, spreadCount, findPage, search, markOpened, prefetchBook,
   sampleCheck, sampleAdd, sampleRemove,
+  loadProjectContext, setPageLayout, addBookmark, removeBookmark, spreadIndexOfPage,
 } from './library-api.js';
 import {
   headerHtml, bodyHtml, cardHtml, addMenuHtml, itemMenuHtml, visibleItems,
@@ -33,8 +34,10 @@ import {
 } from './library-shelf.js';
 import {
   coverHtml, spreadHtml, toolbarHtml, mountSpread, wireToolbar, wireSaveStatus,
-  searchBook, searchPanelHtml, locateHit, canGoNext, ACCENTS,
+  searchBook, searchPanelHtml, locateHit, canGoNext, ACCENTS, LAYOUTS, layoutLabel,
+  lookupRef,
 } from './library-book.js';
+import { setRefLookup } from './editor-doc.js';
 import {
   flush, flushAll, hasUnsaved, retry, statusOf, entryOf, onSaveStatus,
   resolveKeepMine, resolveTakeTheirs, forgetAll, forgetPage,
@@ -82,6 +85,11 @@ export function initLibrary(c) {
   initLibraryApi(c.api);
   installSampleHooks();
   installGlobals();
+  /* How a reference block finds out what it is currently called. The editor
+   * stores an id; this resolves it against the entities the Book payload came
+   * with, so a Task's title is read from the Task and never copied into a
+   * page (§20). */
+  setRefLookup(lookupRef);
 }
 
 /* ── Routing (§4) ────────────────────────────────────────────────────────
@@ -112,6 +120,10 @@ export function parseLibraryHash(hash = location.hash) {
       bookId: parts[2],
       sectionId: q.get('s') ?? null,
       pageId: q.get('p') ?? null,
+      /* A block, so a citation can land on the paragraph it meant rather than
+       * on the page containing it. Optional everywhere: a link with no `b` is
+       * an ordinary page link and behaves exactly as it did. */
+      blockId: q.get('b') ?? null,
     };
   }
   return { view: 'overview' };
@@ -382,6 +394,16 @@ function wireOverview(scroll) {
       e.preventDefault();
       if (obj === pulledObject()) openShelfObject(obj);
       else pullForward(obj);
+    });
+  });
+
+  /* A folded shelf opens on its heading. Nothing was hidden — the heading and
+   * the count were always there — so this reveals rather than loads. */
+  scroll.querySelectorAll('.lib-shelf.is-folded .lib-shelf-head').forEach((head) => {
+    head.addEventListener('click', () => {
+      const shelf = head.closest('.lib-shelf');
+      shelf.classList.remove('is-folded');
+      shelf.querySelectorAll('.lib-rail').forEach((r) => syncSteps(r));
     });
   });
 
@@ -826,16 +848,44 @@ async function renderBook(route, head, scroll, nav = navToken()) {
   if (navStale(nav)) return;
   endLoading();
 
+  /* A Project Book brings its Project with it. Fetched here rather than inside
+   * the rail's paint so the first frame of the Book already has its context —
+   * a rail that appears a moment after the pages is a layout that jumps. */
+  const projectId = lib.book?.project?.id ?? null;
+  if (projectId) {
+    try { await loadProjectContext(projectId); } catch { lib.project = lib.book.project; }
+  } else { lib.project = null; lib.projectTasks = []; }
+  if (navStale(nav)) return;
+
   // A deep link lands ON its page, not on the cover.
   if (route.sectionId) {
     const hit = locateHit(route.sectionId, route.pageId ?? '');
     const si = lib.book.sections.findIndex((s) => s.id === route.sectionId);
     if (hit) { lib.sectionIdx = hit.sectionIdx; lib.spreadIdx = hit.spreadIdx; lib.cover = false; }
     else if (si > -1) { lib.sectionIdx = si; lib.spreadIdx = 0; lib.cover = false; }
+  } else if (route.pageId) {
+    /* A backlink knows the PAGE but not the section — the Project side stores
+     * an address, not a path. Find the section holding it. */
+    const si = lib.book.sections.findIndex((s) => s.pages.some((p) => p.id === route.pageId));
+    if (si > -1) {
+      lib.sectionIdx = si;
+      lib.spreadIdx = Math.max(0, spreadIndexOfPage(lib.book.sections[si], route.pageId));
+      lib.cover = false;
+    }
   }
 
   paintBookHead(head);
   paintBookBody(scroll);
+
+  /* Highlight the cited block, once the page it lives on has been drawn. */
+  if (route.blockId) {
+    const el = document.querySelector(`[data-block="${CSS.escape(route.blockId)}"]`);
+    if (el) {
+      el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      el.classList.add('is-cited');
+      setTimeout(() => el.classList.remove('is-cited'), 2400);
+    }
+  }
 }
 
 function paintBookHead(head = document.getElementById('page-head')) {
@@ -875,18 +925,184 @@ function paintBookBody(scroll = document.getElementById('main-scroll')) {
     return;
   }
 
-  scroll.innerHTML = `<div class="bk">
-    ${toolbarHtml()}
-    ${spreadHtml()}
+  /* Book and rail are SIBLINGS, and each owns its own repaint (§33). The rail
+   * re-renders whenever a task changes; the book does not, because re-rendering
+   * an editor is how a cursor is lost mid-sentence. */
+  scroll.innerHTML = `<div class="bk-layout${lib.project ? ' has-rail' : ''}">
+    <div class="bk">
+      ${toolbarHtml()}
+      ${spreadHtml()}
+    </div>
+    ${lib.project ? '<aside class="bk-rail" id="bk-rail" aria-label="Project"></aside>' : ''}
   </div>`;
   wireBook(scroll);
+  if (lib.project) paintRail();
   setHash(bookHash());
+}
+
+/**
+ * Goes to a page by ID, and optionally highlights one block on it.
+ *
+ * This is what a bookmark, a reference and a Project-side backlink all land on
+ * (§13). It navigates by IDENTITY — find the section holding the page, find the
+ * spread holding it within that section — never by a stored page number, which
+ * stops being true the moment a page is inserted in front of it.
+ */
+export async function goToPage(pageId, blockId = null) {
+  if (!lib.book || !pageId) return;
+  const si = lib.book.sections.findIndex((s) => s.pages.some((p) => p.id === pageId));
+  if (si < 0) return;
+  await flushAll();
+  lib.sectionIdx = si;
+  lib.spreadIdx = Math.max(0, spreadIndexOfPage(lib.book.sections[si], pageId));
+  lib.cover = false;
+  lib.half = 0;
+  paintBookHead();
+  paintBookBody();
+
+  /* The block is found AFTER the paint, because it does not exist until then.
+   * `scrollIntoView` plus a brief highlight rather than focus: a citation
+   * should show you where it meant, not put a cursor there. */
+  if (!blockId) return;
+  const el = document.querySelector(`[data-block="${CSS.escape(blockId)}"]`);
+  if (!el) return;
+  el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  el.classList.add('is-cited');
+  setTimeout(() => el.classList.remove('is-cited'), 2400);
+}
+
+/* ══ The Project Rail ════════════════════════════════════════════════════
+ *
+ * A compact view of the Project this Book belongs to — NOT a second Project
+ * screen (§9). It answers "what am I actually working on?" while you are
+ * reading or writing, and it is the surface a Task is dragged FROM.
+ *
+ * It paints into `#bk-rail` and nothing else. That containment is the whole
+ * requirement of §33: a task ticked in the rail must not cost the editor its
+ * cursor, and the only way to guarantee that is for the two never to share a
+ * repaint.
+ */
+function paintRail() {
+  const rail = document.getElementById('bk-rail');
+  if (!rail || !lib.project) return;
+  const p = lib.project;
+  const tasks = lib.projectTasks ?? [];
+  const open = tasks.filter((t) => t.status === 'open');
+  const done = tasks.filter((t) => t.status !== 'open');
+  const next = p.nextAction;
+  const g = p.progress ?? { total: 0, done: 0 };
+
+  rail.innerHTML = `<div class="bk-rail-in">
+    <div class="bk-rail-hd">
+      <span class="bk-rail-eyebrow">Project</span>
+      <button type="button" class="bk-rail-title" id="bk-rail-open">${esc(p.title)}</button>
+      <div class="bk-rail-meta">
+        <span class="pj-state">${esc(STATUS_WORD[p.status] ?? p.status)}</span>
+        ${p.focus && p.status !== 'completed'
+    ? `<span class="pj-focus">${esc(FOCUS_WORD[p.focus] ?? p.focus)}</span>` : ''}
+        ${p.targetDate ? `<span class="pj-target">by ${esc(shortDate(p.targetDate))}</span>` : ''}
+      </div>
+      <div class="bk-rail-prog">
+        <span>${g.total ? `${g.done} of ${g.total} done` : 'Nothing planned yet'}</span>
+        ${g.total ? `<span class="pj-bar" aria-hidden="true"><i style="width:${
+    Math.round((g.done / g.total) * 100)}%"></i></span>` : ''}
+      </div>
+    </div>
+
+    ${next ? `<div class="bk-rail-next">
+      <span class="bk-rail-lbl">Next</span>
+      <span class="bk-rail-nt">${esc(next.title)}</span>
+    </div>` : ''}
+
+    <div class="bk-rail-tasks" id="bk-rail-tasks">
+      <span class="bk-rail-lbl">Tasks${open.length ? ` · ${open.length} open` : ''}</span>
+      ${open.length ? open.map(railTaskHtml).join('')
+    : '<p class="bk-rail-empty">Nothing open. Add a task in the project.</p>'}
+      ${done.length ? `<details class="bk-rail-done"><summary>${done.length} finished</summary>
+        ${done.map(railTaskHtml).join('')}</details>` : ''}
+    </div>
+    <p class="bk-rail-hint">Drag a task onto a page to keep its context there.</p>
+  </div>`;
+
+  rail.querySelector('#bk-rail-open')?.addEventListener('click', () => {
+    void leaveBook(`#projects/${p.id}`);
+  });
+  wireRailDrag(rail);
+}
+
+const STATUS_WORD = {
+  planning: 'Planning', active: 'Active', on_hold: 'On hold', completed: 'Completed',
+};
+const FOCUS_WORD = { now: 'Now', upcoming: 'Upcoming', someday: 'Someday' };
+const shortDate = (iso) => (iso
+  ? new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  : '');
+
+/**
+ * One task in the rail — the real Task, never a rail-specific copy (§10).
+ *
+ * `draggable` is the point of the whole panel: this is what gets dragged onto a
+ * page. The payload is the task's ID and nothing else, because the drop creates
+ * a RELATIONSHIP and the page will read the title live from here afterwards.
+ */
+function railTaskHtml(t) {
+  const done = t.status !== 'open';
+  const steps = t.steps ?? null;
+  const linked = (t.pageLinks ?? []).length;
+  return `<div class="bk-rt${done ? ' is-done' : ''}" data-task="${esc(t.id)}" draggable="true"
+    tabindex="0" role="button" aria-label="${esc(t.title)}${done ? ', done' : ''}, drag onto a page">
+    <span class="bk-rt-tick" aria-hidden="true"></span>
+    <span class="bk-rt-t">${esc(t.title)}</span>
+    <span class="bk-rt-m">
+      ${t.dueDate ? `<span class="bk-rt-due">${esc(shortDate(t.dueDate))}</span>` : ''}
+      ${t.priority && t.priority !== 'normal'
+    ? `<span class="bk-rt-pri pri-${esc(t.priority)}">${esc(t.priority)}</span>` : ''}
+      ${steps?.total ? `<span class="bk-rt-steps">${steps.done ?? 0}/${steps.total}</span>` : ''}
+      ${linked ? `<span class="bk-rt-link" title="${linked} linked page${
+    linked === 1 ? '' : 's'}">◧ ${linked}</span>` : ''}
+    </span>
+  </div>`;
+}
+
+/**
+ * Dragging a task out of the rail.
+ *
+ * A private MIME type rather than `text/plain`: the editors accept a drop only
+ * when they recognise the payload, so dragging arbitrary text into a page can
+ * never be mistaken for linking a Task.
+ */
+function wireRailDrag(rail) {
+  rail.querySelectorAll('[data-task]').forEach((el) => {
+    el.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('application/x-los-task', el.dataset.task);
+      e.dataTransfer.effectAllowed = 'link';
+      el.classList.add('is-dragging');
+    });
+    el.addEventListener('dragend', () => el.classList.remove('is-dragging'));
+  });
 }
 
 function wireBook(scroll) {
   wireToolbar(scroll);
   mountSpread(scroll, { onNavigate: (what, arg) => void navigate(what, arg) });
   stopSaveWatch = wireSaveStatus(scroll);
+
+  /* A bookmark is navigation, not structure. It moves you to the spread its
+   * page sits in and leaves every position untouched. */
+  scroll.querySelectorAll('[data-bookmark]').forEach((b) => {
+    b.addEventListener('click', () => void goToPage(b.dataset.page, b.dataset.block ?? null));
+  });
+
+  // Following a reference card through to the thing it points at.
+  scroll.addEventListener('click', (e) => {
+    const ref = e.target.closest('[data-ref]');
+    if (!ref || e.target.closest('[data-ref-remove]')) return;
+    const type = ref.dataset.ref;
+    const id = ref.dataset.refId;
+    if (type === 'taskRef' && lib.project) { void leaveBook(`#projects/${lib.project.id}`); return; }
+    if (type === 'projectRef') { void leaveBook(`#projects/${id}`); return; }
+    if (type === 'pageRef') void goToPage(id, null);
+  });
 
   scroll.querySelector('#bk-save')?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-retry]');
@@ -936,7 +1152,7 @@ function applyHalf(scroll = document) {
 
 async function navigate(what, arg) {
   if (what === 'add-section') return addSection();
-  if (what === 'add-pages') return addPages();
+  if (what === 'add-pages') return openAddPageMenu(arg?.anchor);
   if (what === 'section-menu') return openSectionMenu(arg.anchor, arg.id);
   if (what === 'page-menu') return openPageMenu(arg.anchor, arg.id);
 
@@ -1048,16 +1264,45 @@ async function addSection() {
   });
 }
 
-async function addPages() {
+/**
+ * Choosing what KIND of page to add.
+ *
+ * The picker is the whole of §2's "simple way to select a page type" — a list
+ * of templates with a sentence each, not a layout builder. A pinboard is in the
+ * same list as a page of notes because it is the same thing: a page with a
+ * layout.
+ */
+function openAddPageMenu(anchor) {
+  ctx.openSurface(anchor, {
+    kind: 'library-add-page',
+    label: 'Add a page',
+    html: `<div class="lib-menu lib-menu-sm" role="menu">
+      <p class="lib-menu-note lib-menu-hd">Add a page</p>
+      ${LAYOUTS.map((l) => `<button type="button" role="menuitem" data-new-layout="${l.id}">
+        ${esc(l.label)}<span class="lib-menu-hint">${esc(l.hint)}</span></button>`).join('')}
+    </div>`,
+    wire: (el) => el.querySelectorAll('[data-new-layout]').forEach((b) => {
+      b.addEventListener('click', () => {
+        ctx.closeSurface();
+        void addPages(b.dataset.newLayout);
+      });
+    }),
+  });
+}
+
+async function addPages(layout = 'notes') {
   await ctx.run(async () => {
     await flushAll();
     const section = currentSection();
     /* The button sits on the blank facing an odd final page. Adding two there
      * would fill the blank and open a second one — the user pressed Add on a
      * blank and got another blank. One page when the count is odd, a fresh
-     * spread of two when it is even. */
-    const count = section.pages.length % 2 === 1 ? 1 : 2;
-    const r = await createPages(section.id, count);
+     * spread of two when it is even.
+     *
+     * A pinboard ignores all of that: it IS the spread, so it is always one
+     * page and the server enforces it too. */
+    const count = layout === 'pinboard' ? 1 : (section.pages.length % 2 === 1 ? 1 : 2);
+    const r = await createPages(section.id, count, layout);
     section.pages.push(...r.pages);
     lib.spreadIdx = spreadCount(section) - 1;
     lib.half = 0;
@@ -1156,24 +1401,88 @@ function openPageMenu(anchor, pageId) {
   const { page, section } = findPage(pageId);
   if (!page) return;
   const onlyOne = section.pages.length === 1;
+  const marked = (lib.book?.bookmarks ?? []).find((m) => m.pageId === page.id);
   ctx.openSurface(anchor, {
     kind: 'library-page-menu',
     label: 'Actions for this page',
     html: `<div class="lib-menu lib-menu-sm" role="menu">
+      <button type="button" role="menuitem" data-act="${marked ? 'unbookmark' : 'bookmark'}">${
+  marked ? 'Remove bookmark' : 'Bookmark this page'}</button>
+      <p class="lib-menu-note lib-menu-hd">Page layout</p>
+      ${LAYOUTS.map((l) => `<button type="button" role="menuitem" data-layout="${l.id}"
+        class="${l.id === (page.layout ?? 'notes') ? 'is-on' : ''}">
+        ${esc(l.label)}<span class="lib-menu-hint">${esc(l.hint)}</span></button>`).join('')}
       ${onlyOne
     ? '<p class="lib-menu-note">The only page of a section cannot be archived.</p>'
     : '<button type="button" role="menuitem" data-act="archive">Archive page</button>'}
     </div>`,
-    wire: (el) => el.querySelectorAll('[data-act]').forEach((b) => {
-      b.addEventListener('click', () => {
-        ctx.closeSurface();
-        void pageAction(b.dataset.act, page, section);
+    wire: (el) => {
+      el.querySelectorAll('[data-act]').forEach((b) => {
+        b.addEventListener('click', () => {
+          ctx.closeSurface();
+          void pageAction(b.dataset.act, page, section);
+        });
       });
-    }),
+      el.querySelectorAll('[data-layout]').forEach((b) => {
+        b.addEventListener('click', () => {
+          ctx.closeSurface();
+          void changeLayout(page, b.dataset.layout);
+        });
+      });
+    },
+  });
+}
+
+/**
+ * Changing a page's template.
+ *
+ * The server decides whether the conversion is safe and REFUSES rather than
+ * losing anything (§32). A refusal is shown as it arrives — it already says
+ * exactly what would have been lost and what to do instead, which is more use
+ * than a generic "could not change layout".
+ */
+async function changeLayout(page, layout) {
+  if ((page.layout ?? 'notes') === layout) return;
+  await ctx.run(async () => {
+    await flushAll();
+    const r = await setPageLayout(page.id, layout);
+    Object.assign(page, r.page);
+    forgetPage(page.id);          // the baseline changed underneath the editor
+    paintBookBody();
+    ctx.toast(`Page layout: ${layoutLabel(layout)}`);
+  });
+}
+
+/**
+ * Bookmarking, and un-bookmarking.
+ *
+ * Its own function rather than a branch inside `pageAction` because it is the
+ * one page action that changes NOTHING about the page — no position, no
+ * content, no archive state. Keeping it separate is what makes that visible.
+ */
+async function bookmarkAction(act, page, section) {
+  await ctx.run(async () => {
+    const marks = lib.book.bookmarks ?? (lib.book.bookmarks = []);
+    if (act === 'unbookmark') {
+      const m = marks.find((x) => x.pageId === page.id);
+      if (!m) return;
+      await removeBookmark(m.id);
+      marks.splice(marks.indexOf(m), 1);
+      ctx.toast('Bookmark removed.');
+    } else {
+      const label = page.title?.trim() || section.title;
+      const r = await addBookmark(lib.book.book.id, {
+        pageId: page.id, label, accent: section.accent,
+      });
+      if (r.bookmark) marks.push(r.bookmark);
+      ctx.toast(`Bookmarked “${label}”.`);
+    }
+    paintBookBody();
   });
 }
 
 async function pageAction(act, page, section) {
+  if (act === 'bookmark' || act === 'unbookmark') return bookmarkAction(act, page, section);
   if (act !== 'archive') return;
   await ctx.run(async () => {
     await flushAll();
