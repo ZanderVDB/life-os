@@ -40,10 +40,17 @@ CREATE TABLE IF NOT EXISTS book_bookmarks (
     CHECK (accent IN ('peach','sage','lavender','gold','blue','rose'))
 );
 CREATE INDEX IF NOT EXISTS book_bookmarks_book_idx ON book_bookmarks (book_id, position);
--- NULLS NOT DISTINCT so two page-level bookmarks (block_id NULL) collide, which
--- is the point: bookmarking the same page twice is a duplicate, not a pair.
-CREATE UNIQUE INDEX IF NOT EXISTS book_bookmarks_target_idx
-  ON book_bookmarks (book_id, page_id, block_id) NULLS NOT DISTINCT;
+-- Two PARTIAL unique indexes rather than one with NULLS NOT DISTINCT.
+--
+-- The intent is that bookmarking the same page twice is a duplicate rather than
+-- a pair, and NULL block_id has to collide with NULL block_id for that to hold.
+-- `NULLS NOT DISTINCT` says exactly that in one line — and needs Postgres 15.
+-- The split below is portable to 11 and means the same thing, which matters
+-- because the database this has to run against is not the one the tests use.
+CREATE UNIQUE INDEX IF NOT EXISTS book_bookmarks_page_idx
+  ON book_bookmarks (book_id, page_id) WHERE block_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS book_bookmarks_block_idx
+  ON book_bookmarks (book_id, page_id, block_id) WHERE block_id IS NOT NULL;
 
 -- ── Project ↔ Book ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS project_books (

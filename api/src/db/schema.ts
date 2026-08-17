@@ -974,7 +974,13 @@ export const bookBookmarks = pgTable('book_bookmarks', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   byBook: index('book_bookmarks_book_idx').on(t.bookId, t.position),
-  oneePerTarget: uniqueIndex('book_bookmarks_target_idx').on(t.bookId, t.pageId, t.blockId),
+  /* Two partial indexes rather than one over a nullable column: a page-level
+   * bookmark (block_id NULL) must collide with another page-level bookmark for
+   * the same page, and a plain unique index treats NULLs as distinct. */
+  onePerPage: uniqueIndex('book_bookmarks_page_idx').on(t.bookId, t.pageId)
+    .where(sql`${t.blockId} is null`),
+  onePerBlock: uniqueIndex('book_bookmarks_block_idx').on(t.bookId, t.pageId, t.blockId)
+    .where(sql`${t.blockId} is not null`),
   accentCheck: check('book_bookmarks_accent_check',
     sql`${t.accent} in ('peach','sage','lavender','gold','blue','rose')`),
 }));
