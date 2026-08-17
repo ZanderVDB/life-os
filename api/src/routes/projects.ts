@@ -544,10 +544,15 @@ export function registerProjectRoutes(
     const project = await load(ws, id);
     const list = await tasksWithSteps(ws, id);
     const links = await pageLinksFor(ws, list.map((t: any) => t.id));
+    const book = await bookFor(ws, id);
     return {
-      project: shape(project, list),
+      /* ON the project, not beside it. The overview already shapes it this way
+       * and the detail header reads `p.book` — returning it as a sibling here
+       * meant the Book existed, was linked, and rendered its rail, while the
+       * Project screen showed no way to reach it. One shape, both routes. */
+      project: { ...shape(project, list), book },
       tasks: list.map((t: any) => ({ ...t, pageLinks: links.get(t.id) ?? [] })),
-      book: await bookFor(ws, id),
+      book,
     };
   });
 

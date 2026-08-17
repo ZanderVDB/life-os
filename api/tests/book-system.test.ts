@@ -89,6 +89,24 @@ test('creating a Project creates its Primary Book', async () => {
   assert.equal(full.project.id, project.id);
 });
 
+test('the Project detail carries its Book ON the project, not beside it', async () => {
+  /* The regression: the header renders the "Project Book" button from
+   * `p.book`, and the detail route returned the Book as a SIBLING of the
+   * project. So the Book existed, was linked, and drew its Project Rail — while
+   * the Project screen showed no way to reach it at all. */
+  const h = await setup();
+  const { project } = await aProject(h);
+  const detail = (await h.get(`/projects/${project.id}`)).json();
+  assert.ok(detail.project.book?.bookId, 'the detail project has no book');
+  assert.equal(detail.project.book.bookId, detail.book.bookId);
+
+  // The overview shapes it the same way, so one template serves both.
+  const overview = (await h.get('/projects')).json();
+  const row = overview.views.working.flatMap((g: any) => g.projects)
+    .find((p: any) => p.id === project.id);
+  assert.ok(row?.book?.bookId, 'the overview row has no book');
+});
+
 test('backfilling a Book is idempotent — asking twice makes one', async () => {
   const h = await setup();
   const { project } = await aProject(h);
