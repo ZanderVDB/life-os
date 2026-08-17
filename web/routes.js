@@ -8,11 +8,28 @@
  * missing one is not.
  */
 /**
- * PRIMARY navigation — the six places Life OS keeps your life.
+ * PRIMARY navigation — the five places Life OS keeps your life.
  *
  * Completed is not here: finished work is content history, not a section, and
  * it belongs beside Today rather than competing with it. Settings is not here
  * either: it is account-level, reached from the account block at the bottom.
+ *
+ * ── Brain was removed, and the rule at the top of this file is why ──────
+ *
+ * That rule protects a section whose system is being REBUILT. Brain was not
+ * being rebuilt — it was cancelled. It promised "ideas, resources and
+ * knowledge in one place", which is a description of Library, and keeping a
+ * destination that advertises another section's job is not honesty, it is a
+ * second answer to "where did I write that?".
+ *
+ * What Brain was going to become — semantic search, connections, resurfacing,
+ * suggestions, natural-language actions — is the ASSISTANT, and the assistant
+ * already has a home on every screen: the composer at the bottom. Two promised
+ * AI surfaces is the one thing the Book system phase was explicit about not
+ * building.
+ *
+ * `#brain` still resolves: unknown routes fall back to Today in app.js, so an
+ * old link or a bookmark lands somewhere real rather than on an error.
  */
 export const ROUTES = [
   { id: 'today', label: 'Today', icon: 'today' },
@@ -20,7 +37,6 @@ export const ROUTES = [
   { id: 'projects', label: 'Projects', icon: 'projects' },
   { id: 'diary', label: 'Diary', icon: 'diary' },
   { id: 'library', label: 'Library', icon: 'library' },
-  { id: 'brain', label: 'Brain', icon: 'brain', placeholder: true },
 ];
 
 /** Real routes that are reachable but not in the primary list. */
@@ -49,12 +65,6 @@ export const PLACEHOLDERS = {
     tagline: 'Coming soon.',
     body: 'Projects are outcomes you are working towards. Tasks will roll up '
       + 'into them, so you can see progress rather than just a list.',
-    note: 'Nothing you have saved has been lost.',
-  },
-  brain: {
-    tagline: 'Coming soon.',
-    body: 'Ideas, resources and knowledge in one place instead of three '
-      + 'separate lists.',
     note: 'Nothing you have saved has been lost.',
   },
 };

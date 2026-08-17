@@ -9,6 +9,26 @@ Recorded at E2.8, on the user's direction.
 
 ---
 
+## The tab is gone
+
+**Removed from navigation.** Not hidden, not renamed — removed, along with its
+placeholder copy and its icon.
+
+The rule in `routes.js` protects a section whose system is being *rebuilt*.
+Brain was not being rebuilt; it was cancelled. Its copy promised "ideas,
+resources and knowledge in one place", which is a description of Library, and a
+destination that advertises another section's job is a second answer to "where
+did I write that?".
+
+What remains of Brain is the assistant, and the assistant already has a home on
+every screen: the composer at the bottom. Two promised AI surfaces was the exact
+thing the Book system phase set out not to build.
+
+`#brain` still resolves — unknown routes fall back to Today — so an old link or
+a bookmark lands somewhere real.
+
+---
+
 ## Superseded, in part — Brain does not store knowledge
 
 **Decided at the Book system phase.** Brain is **not** another place to keep

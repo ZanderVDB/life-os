@@ -396,7 +396,7 @@ test('safety: Projects is a real route now, and nothing else changed', () => {
     'Projects is still a placeholder');
   // Library became real in F2 and Diary in D1; both have their own coverage.
   // Brain is the one section still honestly marked as unbuilt.
-  for (const stillPlaceholder of ['brain']) {
+  for (const stillPlaceholder of []) {
     assert.match(routes, new RegExp(`id: '${stillPlaceholder}'[^}]*placeholder: true`),
       `${stillPlaceholder} stopped being a placeholder`);
   }

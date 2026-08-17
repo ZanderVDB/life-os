@@ -89,7 +89,7 @@ test('nav: one sliding indicator, moved with transform only', () => {
 });
 
 test('nav: every section keeps a destination, unfinished ones are marked', () => {
-  const expected = ['today', 'calendar', 'projects', 'diary', 'library', 'brain', 'settings'];
+  const expected = ['today', 'calendar', 'projects', 'diary', 'library', 'settings'];
   for (const id of expected) {
     assert.ok(new RegExp(`id:\\s*'${id}'`).test(routes), `${id} is missing from navigation`);
   }
@@ -105,17 +105,31 @@ test('nav: every section keeps a destination, unfinished ones are marked', () =>
   for (const id of ['today', 'calendar', 'projects', 'library', 'diary']) {
     assert.ok(!/placeholder:\s*true/.test(entryOf(id)), `${id} is built but still a placeholder`);
   }
-  for (const id of ['brain']) {
-    assert.match(entryOf(id), /placeholder:\s*true/, `${id} is not marked as a placeholder`);
-    assert.ok(routes.includes(`${id}: {`), `${id} has no placeholder copy`);
-  }
+  /* There are no placeholder sections left. Brain was the last, and it was
+   * removed rather than finished — see below. If one is ever added, it belongs
+   * in this list with its copy. */
+  assert.ok(!/placeholder:\s*true/.test(routes), 'a placeholder section is back');
+});
+
+test('nav: Brain is gone, and its job went to the places that do it', () => {
+  /* The rule at the top of routes.js protects a section being REBUILT. Brain
+   * was not being rebuilt, it was cancelled: its copy promised "ideas,
+   * resources and knowledge in one place", which is Library's job, and its
+   * remaining future — search, connections, suggestions — is the assistant,
+   * which already has a home on every screen. */
+  assert.ok(!/id:\s*'brain'/.test(routes), 'the Brain tab is back in navigation');
+  assert.ok(!routes.includes('brain: {'), 'Brain still has placeholder copy');
+  assert.ok(!/brain/i.test(app.slice(app.indexOf('const ICONS'), app.indexOf('const ICONS') + 3000)),
+    'the Brain icon is still carried around');
+  /* And an old link still lands somewhere real rather than on an error. */
+  assert.match(app, /ALL_ROUTE_IDS\.includes\(id\) \? id : 'today'/);
 });
 
 test('placeholders: product voice, reassuring, never fake data', () => {
   // Only sections that ARE placeholders keep placeholder copy. Calendar,
   // Projects and Library are built; their entries stay for the day one of them
   // is ever taken back out, but they are not asserted as live copy.
-  for (const id of ['calendar', 'projects', 'brain']) {
+  for (const id of ['calendar', 'projects']) {
     const block = routes.slice(routes.indexOf(`${id}: {`));
     const copy = block.slice(0, block.indexOf('},'));
     // Says what the section will BE, and that nothing was lost — without
@@ -239,7 +253,7 @@ test('nav: Completed and Settings are not primary destinations', () => {
   assert.ok(!/id: 'settings'/.test(primary), 'Settings is still in the primary nav');
   assert.deepEqual(
     [...primary.matchAll(/id: '([a-z]+)'/g)].map((m) => m[1]),
-    ['today', 'calendar', 'projects', 'diary', 'library', 'brain'],
+    ['today', 'calendar', 'projects', 'diary', 'library'],
   );
   // Both remain real, bookmarkable routes.
   assert.match(routes, /SECONDARY_ROUTES[\s\S]*history[\s\S]*settings/);

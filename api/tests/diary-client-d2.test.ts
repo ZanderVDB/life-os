@@ -558,8 +558,10 @@ test('Calendar, Projects, Tasks and Habits are untouched', () => {
   assert.match(routes, /id: 'today'/);
   assert.match(routes, /id: 'calendar'/);
   assert.match(routes, /id: 'projects'/);
-  // Brain is the one section still honestly marked as a placeholder.
-  assert.match(routes, /id: 'brain'[^}]*placeholder: true/);
+  /* There are no placeholder sections left. Brain was the last one, and it was
+   * removed rather than finished: it promised knowledge storage, which is
+   * Library's job, and the rest of it is the assistant. */
+  assert.ok(!/placeholder: true/.test(routes), 'a placeholder section is back in the nav');
 });
 
 test('no Diary code reaches for Google, or for anything write-scoped', () => {
