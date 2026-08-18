@@ -35,3 +35,6 @@ Thumbs.db
 tmp/
 .tmp/
 *.log
+
+# Brainstorm tooling scratch state (pids, servers, generated mockups)
+.superpowers/
