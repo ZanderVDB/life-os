@@ -30,8 +30,28 @@ import type { SyncLogger } from './calendar-sync.js';
 export const CHANNEL_TTL_SECONDS = 7 * 24 * 3600;
 export const RENEW_MARGIN_MS = 24 * 3600 * 1000;
 
-/** Where Google should POST. Absent in local dev, which disables watches. */
-export const webhookUrl = () => process.env.GOOGLE_CALENDAR_WEBHOOK_URL ?? '';
+/**
+ * Where Google should POST.
+ *
+ * Derived from the OAuth redirect URI by default, because that is already
+ * configured, already points at this API, and is already HTTPS in every
+ * deployment where watches could work at all. Asking for the same origin twice
+ * would be a second thing to get wrong, and the failure mode — watches
+ * silently never opening — is invisible.
+ *
+ * The explicit variable still wins, for the case where Google should reach the
+ * API by a different route than the browser does.
+ */
+export function webhookUrl(): string {
+  const explicit = process.env.GOOGLE_CALENDAR_WEBHOOK_URL;
+  if (explicit) return explicit;
+  const redirect = process.env.GOOGLE_CALENDAR_REDIRECT_URI ?? '';
+  try {
+    const u = new URL(redirect);
+    if (u.protocol !== 'https:') return '';     // Google refuses anything else
+    return `${u.origin}/api/v1/integrations/google-calendar/notifications`;
+  } catch { return ''; }
+}
 
 /**
  * The public address must be HTTPS and must be reachable by Google.

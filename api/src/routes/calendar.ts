@@ -10,12 +10,12 @@
  * real connection is made.
  */
 import type { AppInstance, Guards } from '../types.js';
-import { and, asc, eq, gte, lte, or, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, or, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
   calendars, calendarEvents, calendarEventAttendees, reminders,
-  taskScheduleBlocks, itemLinks, tasks, habitEntries, habits, diaryEntries,
+  taskScheduleBlocks, itemLinks, tasks, projects, habitEntries, habits, diaryEntries,
   reminderRecurrenceRules,
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
@@ -272,15 +272,43 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
     const links = await db.select().from(itemLinks)
       .where(eq(itemLinks.workspaceId, workspaceId));
 
+    /* Task ↔ Event links for the events in view.
+     *
+     * Sent with the range rather than fetched per event, because the Calendar
+     * paints every event at once and one request per card would be a request
+     * storm for a relationship most events do not have. */
+    const eventIds = events.map((e) => e.id);
+    const taskEvents = eventIds.length
+      ? await db.select({
+        eventId: itemLinks.targetId,
+        taskId: itemLinks.sourceId,
+        title: tasks.title,
+        projectId: tasks.projectId,
+        projectTitle: projects.title,
+      }).from(itemLinks)
+        .innerJoin(tasks, eq(itemLinks.sourceId, tasks.id))
+        .leftJoin(projects, eq(tasks.projectId, projects.id))
+        .where(and(
+          eq(itemLinks.workspaceId, workspaceId),
+          eq(itemLinks.kind, 'scheduled_as'),
+          eq(itemLinks.sourceType, 'task'),
+          eq(itemLinks.targetType, 'event'),
+          inArray(itemLinks.targetId, eventIds),
+        ))
+      : [];
+
     return {
       calendars: cals,
       events: events.map((e) => ({
         ...e,
         calendarName: calById.get(e.calendarId)?.name ?? null,
         calendarColor: calById.get(e.calendarId)?.color ?? null,
+        // Named for what the UI asks: "may I offer an Edit button for this?"
+        calendarReadOnly: calById.get(e.calendarId)?.isReadOnly ?? true,
         isReadOnly: calById.get(e.calendarId)?.isReadOnly ?? true,
         attendees: byEvent.get(e.id) ?? [],
       })),
+      taskEvents,
       reminders: rems,
       blocks,
       deadlines,

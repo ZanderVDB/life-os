@@ -1501,6 +1501,19 @@ body.is-planning{cursor:grabbing;user-select:none}
   font-size:11px;color:var(--muted);padding-top:9px;border-top:1px solid var(--hairline)}
 .cs-sync-now{height:28px;font-size:11.5px;padding:0 10px}
 .cs-auto{margin:7px 0 0;font-size:10.5px;line-height:1.45;color:var(--muted)}
+/* Calendar settings, inside Sources rather than in a settings screen of their
+   own -- both answers are about the calendars listed directly above them. */
+.cs-set{margin-top:11px;padding-top:10px;border-top:1px solid var(--hairline);
+  display:flex;flex-direction:column;gap:5px}
+.cs-set-h{margin:0;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted)}
+.cs-set-h:not(:first-child){margin-top:8px}
+.cs-set-s{margin:0 0 3px;font-size:10.5px;color:var(--muted);line-height:1.4}
+.cs-default{height:30px;padding:0 8px;border-radius:7px;font-size:12px;
+  color:var(--text);background:var(--surface-2);border:1px solid var(--hairline)}
+.cs-default:disabled{color:var(--muted)}
+.cs-busy-row .cs-name{color:var(--text-2)}
+
 .cs-disconnect{margin-top:9px;font-size:11px;color:var(--muted);
   transition:color var(--t-hover)}
 .cs-disconnect:hover{color:var(--danger)}

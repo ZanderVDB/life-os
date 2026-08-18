@@ -740,3 +740,54 @@ test('Reminders stay Life OS-only', () => {
   const reminderPart = remindersRoute.slice(remindersRoute.indexOf('reminders'));
   assert.ok(!reminderPart.includes('insertEvent'), 'a reminder is written to Google');
 });
+
+test('the composer sends a body the API can actually parse', () => {
+  /* `api()` stringifies the body itself. The composer's adapter stringified it
+   * too, so every write went out as a QUOTED JSON STRING — which Fastify
+   * parsed as a string and Zod rejected. Create, edit and delete would all
+   * have failed with a validation error, and nothing in the type system or the
+   * server tests could see it, because the fault was in the seam between two
+   * helpers that each looked right alone. */
+  const app = read('app.js');
+  const adapter = app.slice(app.indexOf('_initComposer: initEventComposer('),
+    app.indexOf('connectGoogle: () =>'));
+  assert.ok(!adapter.includes('JSON.stringify'),
+    'the composer stringifies a body that api() will stringify again');
+  assert.match(adapter, /api: \(path, opts = \{\}\) => api\(/, 'the adapter no longer forwards opts');
+
+  // And api() is still the one doing it, so the body must arrive as an object.
+  const api = app.slice(app.indexOf('async function api(path, opts = {})'),
+    app.indexOf('async function api(path, opts = {})') + 900);
+  assert.match(api, /body: hasBody \? JSON\.stringify\(opts\.body\)/,
+    'api() no longer stringifies, so the adapter must');
+});
+
+test('calendar settings are stored server-side, not per-device', () => {
+  /* The assistant will need to know where to propose an event and what counts
+   * as a clash. A preference in one browser's localStorage is not an answer it
+   * can read. */
+  const app = read('app.js');
+  const fns = app.slice(app.indexOf('async function setDefaultCalendar('),
+    app.indexOf('async function setCalendarVisible('));
+  assert.match(fns, /calendars\/\$\{id\}\/settings/, 'the setting never reaches the server');
+  assert.ok(!/localStorage/.test(fns), 'a calendar setting is kept in the browser');
+
+  // The two checkbox families must not share a selector.
+  const wire = app.slice(app.indexOf('function wireSources(el)'),
+    app.indexOf('function wireRemindersView()'));
+  assert.match(wire, /\.cs-vis/, 'visibility is not wired');
+  assert.match(wire, /\.cs-busy/, 'counts-as-busy is not wired');
+  assert.ok(!/querySelectorAll\('\[data-calendar\]'\)/.test(wire),
+    'one selector catches both checkbox families, so ticking one does the other');
+});
+
+test('the webhook address is derived, so it cannot be forgotten', () => {
+  /* A missing variable meant watches silently never opened — invisible until
+   * somebody noticed the calendar was five minutes behind. The redirect URI
+   * already names this API and is already HTTPS. */
+  const src = readFileSync(join('src', 'lib', 'calendar-watch.ts'), 'utf8');
+  const fn = src.slice(src.indexOf('export function webhookUrl'), src.indexOf('export const webhookConfigured'));
+  assert.match(fn, /GOOGLE_CALENDAR_REDIRECT_URI/, 'the address is not derived from anything');
+  assert.match(fn, /u\.protocol !== 'https:'/, 'a non-HTTPS address would be registered');
+  assert.match(fn, /GOOGLE_CALENDAR_WEBHOOK_URL/, 'the explicit override was dropped');
+});

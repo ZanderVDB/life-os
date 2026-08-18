@@ -225,7 +225,10 @@ test('detail: actions appear only where the record can actually be changed', () 
    * calendar still gets none. An action that exists and then fails is worse
    * than one that was never offered. */
   const fn = body(appCode, 'function openEventDetail(ev)');
-  assert.match(fn, /actions: editable \? \[/, 'a Google event offers actions unconditionally');
+  /* Edit and Delete are gated on `editable`; "Open task" is not, because a
+   * link is worth following even on an event Google will not let us change. */
+  assert.match(fn, /\.\.\.\(editable \? \[/, 'a Google event offers Edit unconditionally');
+  assert.match(fn, /linkedTask \? \[\{ label: 'Open task'/, 'a linked task cannot be reached');
   assert.match(fn, /fromGmail/, 'Gmail events are offered an edit button');
   assert.match(fn, /calendarReadOnly/, 'a read-only calendar still offers actions');
   assert.match(detail, /\(ctx\.actions \?\? \[\]\)/, 'actions are not optional');

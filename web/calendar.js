@@ -1061,6 +1061,7 @@ export function sourcesPopoverHtml() {
   const d = cal.data;
   const conn = d?.connection ?? null;
   const cals = (d?.calendars ?? []).filter((c) => !c.isSynthetic);
+  const writable = cals.filter((c) => !c.isReadOnly);
 
   if (!conn) {
     return `<div class="sources">
@@ -1093,6 +1094,35 @@ export function sourcesPopoverHtml() {
         <i class="cs-dot" style="background:${esc(c.color || 'var(--accent)')}"></i>
         <span class="cs-name">${esc(c.name)}</span>
         ${c.isReadOnly ? '<span class="cs-ro">read-only</span>' : ''}
+      </label>`).join('')}
+    </div>
+
+    <!-- Two settings the write system genuinely needs, and no more.
+
+         DEFAULT is where a new event goes unless you say otherwise; read-only
+         calendars cannot be it, because Google would refuse.
+
+         BUSY is separate from visible on purpose. A birthdays or holidays
+         calendar is worth seeing and does not stop you doing anything, and
+         treating it as a conflict would make the warning constant — which is
+         the same as having no warning. -->
+    <div class="cs-set">
+      <p class="cs-set-h">New events go to</p>
+      <select class="cs-default" id="cal-default"
+        ${writable.length ? '' : 'disabled'}>
+        ${writable.length
+    ? writable.map((c) => `<option value="${c.id}"${c.isDefaultTarget ? ' selected' : ''}
+        >${esc(c.name)}</option>`).join('')
+    : '<option>No calendar accepts new events</option>'}
+      </select>
+
+      <p class="cs-set-h">Counts as busy</p>
+      <p class="cs-set-s">Used to warn you about clashes before an event is added.</p>
+      ${cals.map((c) => `<label class="cs-source cs-busy-row">
+        <input type="checkbox" class="cs-busy" data-calendar="${c.id}"
+          ${c.countsAsBusy === false ? '' : 'checked'}>
+        <span class="cs-box"></span>
+        <span class="cs-name">${esc(c.name)}</span>
       </label>`).join('')}
     </div>
     <div class="cs-sync">

@@ -370,8 +370,10 @@ async function boot() {
     // The event composer talks to the workspace API and refreshes the board it
     // just changed; it does not know how either of those works.
     _initComposer: initEventComposer({
-      api: (path, opts = {}) => api(`/api/v1/workspaces/${ws()}${path}`,
-        opts.body ? { ...opts, body: JSON.stringify(opts.body) } : opts),
+      /* The body is passed as an OBJECT. `api` stringifies it itself, and
+       * stringifying here too would send a quoted JSON string that Zod
+       * rejects — every write failing with a validation error. */
+      api: (path, opts = {}) => api(`/api/v1/workspaces/${ws()}${path}`, opts),
       toast,
       refresh: () => loadCalendar(),
       connectGoogle: () => {
@@ -4532,6 +4534,34 @@ async function disconnectGoogle() {
   } catch (e) { toast(e.message, true); }
 }
 
+/**
+ * Which calendar a new event lands on, and which ones block time.
+ *
+ * Both are stored server-side rather than in the browser: the assistant will
+ * later need to know where to propose an event and what counts as a clash, and
+ * a preference living in one device's localStorage is not an answer it can read.
+ */
+async function setDefaultCalendar(id) {
+  try {
+    await api(`/api/v1/workspaces/${ws()}/calendars/${id}/settings`,
+      { method: 'PATCH', body: { isDefaultTarget: true } });
+    (cal.data?.calendars ?? []).forEach((c) => { c.isDefaultTarget = c.id === id; });
+    saved('New events will go here');
+  } catch (e) { toast(e.message, true); }
+}
+
+async function setCalendarBusy(id, busy) {
+  const c = cal.data?.calendars.find((x) => x.id === id);
+  if (c) c.countsAsBusy = busy;
+  try {
+    await api(`/api/v1/workspaces/${ws()}/calendars/${id}/settings`,
+      { method: 'PATCH', body: { countsAsBusy: busy } });
+  } catch (e) {
+    if (c) c.countsAsBusy = !busy;
+    toast(e.message, true);
+  }
+}
+
 async function setCalendarVisible(id, visible) {
   const c = cal.data?.calendars.find((x) => x.id === id);
   if (c) c.isVisible = visible;
@@ -4678,6 +4708,9 @@ function openEventDetail(ev) {
   const READ_ONLY_TYPES = ['fromGmail', 'birthday', 'workingLocation'];
   const editable = ev.syncState === 'synced' && !READ_ONLY_TYPES.includes(ev.eventType)
     && !ev.calendarReadOnly;
+  /* An event that is a Task's scheduled time should say so, and be a way back
+   * to it. The relationship is real data, so both ends can show it. */
+  const linkedTask = (cal.data?.taskEvents ?? []).find((l) => l.eventId === ev.id) ?? null;
 
   openDetailSheet({
     title: ev.title,
@@ -4691,16 +4724,21 @@ function openEventDetail(ev) {
       ev.transparency === 'transparent' ? ['Shows as', 'Free'] : null,
       ev.visibility && ev.visibility !== 'default' ? ['Visibility', ev.visibility] : null,
       ev.description ? ['Details', ev.description] : null,
-      links.length ? ['Life OS', `${links.length} linked item${links.length > 1 ? 's' : ''}`] : null,
+      linkedTask ? ['Linked task', linkedTask.title] : null,
+      linkedTask?.projectTitle ? ['Project', linkedTask.projectTitle] : null,
+      links.length ? [`Life OS`, `${links.length} linked item${links.length > 1 ? 's' : ''}`] : null,
     ].filter(Boolean),
     meetLink: ev.hangoutLink ?? null,
     externalLink: ev.providerHtmlLink ?? null,
     /* Editing is offered only where Google would actually accept it. A control
      * that exists and then fails is worse than one that was never there. */
-    actions: editable ? [
-      { label: 'Edit', primary: true, onSelect: () => void openEventEditor(ev) },
-      { label: 'Delete', onSelect: () => void deleteCalendarEvent(ev) },
-    ] : [],
+    actions: [
+      ...(editable ? [
+        { label: 'Edit', primary: true, onSelect: () => void openEventEditor(ev) },
+        { label: 'Delete', onSelect: () => void deleteCalendarEvent(ev) },
+      ] : []),
+      ...(linkedTask ? [{ label: 'Open task', onSelect: () => openTask(linkedTask.taskId) }] : []),
+    ],
     note: editable ? null
       : 'Google does not allow this kind of event to be changed from another app.',
   });
@@ -4953,8 +4991,17 @@ function wireSources(el) {
   el.querySelector('#cal-sync')?.addEventListener('click', () => { closeUtility(); syncGoogle(); });
   el.querySelector('#cal-disconnect')?.addEventListener('click',
     () => { closeUtility(); disconnectGoogle(); });
-  el.querySelectorAll('[data-calendar]').forEach((cb) => {
+  /* Scoped by CLASS, not by [data-calendar]: the popover now has two rows per
+   * calendar — visible, and counts-as-busy — and a shared selector would make
+   * ticking one silently do the other. */
+  el.querySelectorAll('.cs-vis').forEach((cb) => {
     cb.onchange = () => setCalendarVisible(cb.dataset.calendar, cb.checked);
+  });
+  el.querySelectorAll('.cs-busy').forEach((cb) => {
+    cb.onchange = () => setCalendarBusy(cb.dataset.calendar, cb.checked);
+  });
+  el.querySelector('#cal-default')?.addEventListener('change', (e) => {
+    setDefaultCalendar(e.target.value);
   });
 }
 
