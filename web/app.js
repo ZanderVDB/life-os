@@ -2508,7 +2508,17 @@ async function loadCalendar() {
   const head = document.getElementById('page-head');
   const scroll = document.getElementById('main-scroll');
   if (head) head.innerHTML = calendarHeaderHtml();
-  cal.loading = !cal.data;
+  /* Loading is not "we have nothing" — it is "what is on screen is not what
+   * you just asked for". Moving to another month kept the previous month's
+   * data, so the old flag (`!cal.data`) stayed false and the grid sat there
+   * looking finished while being wrong, until the answer popped in.
+   *
+   * The data carries the mode and range it was fetched for, so the comparison
+   * is against a fact rather than a guess. A refresh in place — a manual sync,
+   * a background poll — matches, and shows no skeleton. */
+  const want = currentRange();
+  cal.loading = !cal.data || cal.data.mode !== cal.mode
+    || cal.data.from !== want.from || cal.data.to !== want.to;
   scroll.innerHTML = calendarBodyHtml();
   wireCalendarHeader();
 
@@ -2522,6 +2532,10 @@ async function loadCalendar() {
     ]);
     range.connection = integration.connection;
     range.googleConfigured = integration.configured;
+    // What this payload is FOR. Without it nothing can tell current from stale.
+    range.mode = cal.mode;
+    range.from = r.from;
+    range.to = r.to;
     cal.areas = state.me?.areas ?? [];
     // The planning queue is tasks with no block in view — Plan's whole purpose.
     const scheduled = new Set(range.blocks.map((b) => b.taskId));
@@ -2623,6 +2637,9 @@ async function refreshCalendar() {
 
     range.connection = integration.connection;
     range.googleConfigured = integration.configured;
+    range.mode = cal.mode;
+    range.from = r.from;
+    range.to = r.to;
     const scheduled = new Set(range.blocks.map((b) => b.taskId));
     range.unscheduled = (open.tasks ?? []).filter((t) => !scheduled.has(t.id) && !t.dueDate);
 

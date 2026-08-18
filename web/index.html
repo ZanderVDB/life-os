@@ -1824,6 +1824,76 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 
 /* ── §9 Agenda uses the width it has ── */
 .cal-agenda{max-width:var(--cal-max)}
+/* ── Calendar skeleton ───────────────────────────────────────────────────
+   Shown while the view being asked for is not the view on screen — changing
+   month, week or mode. It reuses the REAL containers (.cal-month, .pl-grid,
+   .cal-agenda), so the geometry is the geometry that is coming and nothing
+   shifts when the answer lands.
+
+   DECLARED LAST, AND SCOPED. The first version sat above the calendar's own
+   rules, so `.cm-cell span { background: … }` and friends beat `.sk-line` on
+   source order at equal specificity — the placeholder boxes were the right
+   size and completely invisible. Every selector here is prefixed with
+   `.is-skeleton`, and the block comes after the views it dresses.
+
+   Deliberately quiet: this appears for a fraction of a second on every
+   navigation, and a bright pulsing block would be more disruptive than the
+   pop-in it replaces.
+
+   Held back before it appears, too. A fast answer resolves in a few tens of
+   milliseconds, and a skeleton that flashed for 25ms would be a worse flicker
+   than the thing it was built to remove — so it renders immediately (holding
+   the layout) and stays invisible until the wait is worth admitting to. */
+.is-skeleton{pointer-events:none;user-select:none;
+  opacity:0;animation:sk-appear 160ms ease-out 150ms forwards}
+@keyframes sk-appear{to{opacity:1}}
+
+.is-skeleton .sk-line,.is-skeleton .sk-block{display:block;border-radius:4px;
+  background-image:linear-gradient(90deg,
+    color-mix(in srgb,var(--text) 10%,transparent) 25%,
+    color-mix(in srgb,var(--text) 20%,transparent) 50%,
+    color-mix(in srgb,var(--text) 10%,transparent) 75%);
+  background-color:transparent;
+  background-size:200% 100%;
+  animation:sk-sweep 1.4s ease-in-out infinite}
+.is-skeleton .sk-short{width:58%}
+
+/* Month: 42 cells, exactly as the real grid lays them out. */
+.is-skeleton .cm-cell{cursor:default}
+.is-skeleton .sk-cell{display:flex;flex-direction:column;gap:5px}
+.is-skeleton .sk-num{width:18px;height:11px;border-radius:3px}
+.is-skeleton .sk-ev{width:82%;height:9px}
+
+/* Plan: seven columns and the same hour axis, so the axis never jumps. */
+.is-skeleton .sk-day{display:flex;flex-direction:column}
+.is-skeleton .sk-dow{width:26px;height:9px}
+/* The REAL canvas class, so the column is the height the real column will be
+   and the grid does not grow when the answer lands. */
+.is-skeleton .sk-col{position:relative;flex:1}
+.is-skeleton .sk-block{position:absolute;left:6%;width:88%;border-radius:6px}
+
+/* Agenda: group headings and rows at the real rhythm. */
+.is-skeleton .ag-group{height:14px}
+.is-skeleton .sk-grp{width:120px;height:13px}
+.is-skeleton .sk-row{display:flex;flex-direction:column;gap:7px}
+.is-skeleton .sk-day-label{width:88px;height:11px}
+.is-skeleton .sk-item{width:100%;height:30px;border-radius:8px}
+
+@keyframes sk-sweep{
+  0%{background-position:200% 0}
+  100%{background-position:-200% 0}
+}
+/* A sweep that never stops is worse than no sweep for anyone who finds motion
+   uncomfortable — the shapes alone already say "not yet". The DELAY is the
+   useful part and survives; only the movement goes. */
+@media (prefers-reduced-motion:reduce){
+  .is-skeleton .sk-line,.is-skeleton .sk-block{animation:none;
+    background-image:none;
+    background-color:color-mix(in srgb,var(--text) 12%,transparent)}
+  .is-skeleton{animation-duration:1ms}
+}
+
+
 .ag-day{grid-template-columns:64px 1fr;gap:16px}
 .ag-item{padding:10px 14px;min-height:46px;gap:12px}
 .ag-title{font-size:13px}
@@ -3896,11 +3966,11 @@ body:has(.lib-page) .rail{display:none}
   background:var(--surface-1);border:1px solid var(--hairline);
   box-shadow:0 10px 26px rgba(0,0,0,.3)}
 .bk-pin-bar button{height:26px;padding:0 9px;border:0;border-radius:6px;cursor:pointer;
-  background:none;color:var(--text-1);font-size:11.5px;white-space:nowrap;
+  background:none;color:var(--text);font-size:11.5px;white-space:nowrap;
   transition:background var(--t-hover)}
 .bk-pin-bar button:hover{background:var(--surface-2)}
 .bk-bar-in input{height:26px;width:130px;padding:0 8px;border-radius:6px;font-size:11.5px;
-  background:var(--surface-2);border:1px solid var(--hairline);color:var(--text-1)}
+  background:var(--surface-2);border:1px solid var(--hairline);color:var(--text)}
 
 /* The More sheet: style, frame and arrangement, on demand rather than in the
    bar. Everything here is a second-order choice. */
@@ -3912,7 +3982,7 @@ body:has(.lib-page) .rail{display:none}
 .bk-sheet-r{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:9px}
 .bk-sheet-r:last-child{margin-bottom:0}
 .bk-sheet-r button{height:25px;padding:0 8px;border-radius:6px;cursor:pointer;font-size:11px;
-  background:var(--surface-2);border:1px solid var(--hairline);color:var(--text-1)}
+  background:var(--surface-2);border:1px solid var(--hairline);color:var(--text)}
 .bk-sheet-r button:hover{border-color:var(--accent)}
 .bk-sheet-r button.is-on{border-color:var(--accent);color:var(--accent)}
 .bk-sheet-sw .bk-sw{width:26px;height:26px;padding:0;border-radius:50%}
@@ -3921,7 +3991,7 @@ body:has(.lib-page) .rail{display:none}
 .bk-sw.bk-s-rose{background:#E88EA1}
 .bk-sw.bk-s-sky{background:#7FB6E8}
 .bk-sw.bk-s-sage{background:#8FC7A2}
-.bk-sw.bk-s-ink{background:var(--text-1)}
+.bk-sw.bk-s-ink{background:var(--text)}
 .bk-sw.bk-s-quote{background:linear-gradient(90deg,var(--accent) 0 30%,var(--surface-2) 30%)}
 .bk-sw.is-on{outline:2px solid var(--accent);outline-offset:2px}
 

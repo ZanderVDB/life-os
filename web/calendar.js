@@ -1283,8 +1283,68 @@ export function calendarBodyHtml() {
   </div>`;
 }
 
+/**
+ * The wait, drawn in the shape of what is arriving.
+ *
+ * Moving to another month used to keep the OLD month on screen under the NEW
+ * month's heading, because the loading flag was `!cal.data` and there was
+ * always data — just not data for what you were now looking at. So the grid sat
+ * there looking finished, being wrong, and then the real month popped in.
+ *
+ * A bare "Loading…" would be the opposite mistake: the whole calendar vanishes
+ * and comes back, which is a bigger movement than the one it was hiding. This
+ * holds each view's real geometry — 42 cells, seven day columns, a run of
+ * agenda rows — so the frame never moves and only the contents resolve.
+ */
+export function calendarSkeletonHtml() {
+  if (cal.mode === 'month') {
+    return `<div class="cal-month is-skeleton" aria-hidden="true">
+      <div class="cm-dow">${DOW.map((d) => `<span>${d}</span>`).join('')}</div>
+      <div class="cm-grid">
+        ${Array.from({ length: 42 }, (_, i) => `<div class="cm-cell sk-cell">
+          <span class="sk-line sk-num"></span>
+          ${i % 3 === 0 ? '<span class="sk-line sk-ev"></span>' : ''}
+          ${i % 5 === 0 ? '<span class="sk-line sk-ev sk-short"></span>' : ''}
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (cal.mode === 'plan') {
+    const hours = Array.from({ length: PLAN_END - PLAN_START }, (_, i) => PLAN_START + i);
+    return `<div class="cal-plan is-skeleton" aria-hidden="true">
+      <div class="pl-grid" style="--pl-hours:${hours.length}">
+        <div class="pl-axis">
+          ${hours.map((h) => `<span class="pl-hour">${String(h).padStart(2, '0')}:00</span>`).join('')}
+        </div>
+        ${Array.from({ length: 7 }, (_, i) => `<div class="pl-day sk-day">
+          <div class="pl-day-head">
+            <span class="sk-line sk-dow"></span>
+            <span class="sk-line sk-num"></span>
+          </div>
+          <div class="pl-canvas sk-col">
+            <span class="sk-block" style="top:${12 + i * 4}%;height:${10 + (i % 3) * 6}%"></span>
+            ${i % 2 === 0 ? `<span class="sk-block" style="top:${52 + i * 3}%;height:12%"></span>` : ''}
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  return `<div class="cal-agenda is-skeleton" aria-hidden="true">
+    ${Array.from({ length: 3 }, (_, g) => `<h2 class="ag-group"><span class="sk-line sk-grp"></span></h2>
+      ${Array.from({ length: 2 }, () => `<div class="ag-day sk-row">
+        <span class="sk-line sk-day-label"></span>
+        <div class="ag-items">
+          <span class="sk-line sk-item"></span>
+          <span class="sk-line sk-item sk-short"></span>
+        </div>
+      </div>`).join('')}`).join('')}
+  </div>`;
+}
+
 function calendarCanvasHtml() {
-  if (cal.loading) return '<div class="state"><b>Loading your calendar…</b></div>';
+  if (cal.loading) return calendarSkeletonHtml();
   if (cal.error) {
     return `<div class="state"><b>Could not load the calendar</b>${esc(cal.error)}
       <button class="btn" id="cal-retry">Try again</button></div>`;
