@@ -30,6 +30,7 @@ import * as G from '../src/lib/google-calendar.js';
 import {
   runSyncPass, backoffMs, jitter, startCalendarScheduler,
   BACKOFF_BASE_MS, BACKOFF_MAX_MS, SYNC_INTERVAL_MS, FAILURES_BEFORE_VISIBLE,
+  schedulerStatus,
 } from '../src/lib/calendar-scheduler.js';
 
 const KEY = 'test-key-that-is-definitely-long-enough-32';
@@ -570,9 +571,12 @@ test('health/version reports the build and whether the loop is running', async (
     const running = (await app.inject({ method: 'GET', url: '/health/version' })).json();
     assert.equal(running.calendarSync.started, true, 'a running loop reports as stopped');
     assert.equal(running.calendarSync.configured, true);
+    /* A delta, not an absolute: the counter is process-wide by design, so it
+     * carries whatever earlier tests in this file already did. */
+    const passesBefore = running.calendarSync.passes;
     await h.runOnce();
     const after = (await app.inject({ method: 'GET', url: '/health/version' })).json();
-    assert.equal(after.calendarSync.passes, 1, 'passes are not counted');
+    assert.equal(after.calendarSync.passes, passesBefore + 1, 'passes are not counted');
     assert.ok(after.calendarSync.lastPassAt, 'the last pass has no timestamp');
   } finally { h.stop(); }
 
@@ -591,4 +595,33 @@ test('the diagnostics carry no private data', async () => {
   for (const shape of ['workspace', 'email', 'token', 'account']) {
     assert.ok(!body.toLowerCase().includes(shape), `health/version exposes a ${shape} field`);
   }
+});
+
+test('a pass that throws is visible, not silent', async () => {
+  /* The first version of the diagnostics recorded nothing when a pass threw,
+   * so a loop failing every single minute looked exactly like a loop that had
+   * never started. That is the bug this whole phase is about, reproduced in
+   * the instrument built to detect it. */
+  withGoogleConfigured();
+  const exploding = { update: () => { throw new Error('column does not exist'); } } as any;
+  const h = startCalendarScheduler(exploding, quiet);
+  try {
+    await h.runOnce();
+    const s = schedulerStatus();
+    assert.equal(s.failedPasses >= 1, true, 'a thrown pass is not counted');
+    assert.ok(s.lastPassAt, 'a thrown pass leaves no timestamp');
+    assert.match(s.lastError ?? '', /column does not exist/, 'the reason is not recorded');
+    assert.ok((s.lastError ?? '').length <= 300, 'the recorded error is unbounded');
+  } finally { h.stop(); }
+});
+
+test('a logger that throws does not take the loop with it', async () => {
+  withGoogleConfigured();
+  const exploding = { update: () => { throw new Error('boom'); } } as any;
+  const angry = { info() {}, warn() {}, error() { throw new Error('logger died'); } };
+  const h = startCalendarScheduler(exploding, angry);
+  try {
+    const r = await h.runOnce();      // must resolve, not reject
+    assert.equal(r.failed, 1);
+  } finally { h.stop(); }
 });

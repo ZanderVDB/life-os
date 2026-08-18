@@ -87,6 +87,11 @@ const status = {
   lastSynced: 0,
   lastFailed: 0,
   consecutivePassFailures: 0,
+  /* A pass that THREW is the state most worth seeing, and the first version of
+   * this recorded nothing at all for it — so a loop failing every minute was
+   * indistinguishable from a loop that had never run. Never again. */
+  failedPasses: 0,
+  lastError: null as string | null,
 };
 
 export const schedulerStatus = () => ({ ...status });
@@ -193,10 +198,18 @@ export function startCalendarScheduler(db: Db, log: SyncLogger): SchedulerHandle
       status.lastSynced = r.synced;
       status.lastFailed = r.failed;
       status.consecutivePassFailures = r.failed > 0 ? status.consecutivePassFailures + 1 : 0;
+      if (r.failed === 0) status.lastError = null;
       return r;
     } catch (e) {
       // Unattended code: a throw here would be an unhandled rejection.
-      log.error({ err: redactTokens(e) }, 'calendar scheduler pass failed');
+      status.passes++;
+      status.failedPasses++;
+      status.lastPassAt = new Date().toISOString();
+      status.consecutivePassFailures++;
+      // The message only, and never the error object: it can carry a token.
+      status.lastError = (e instanceof Error ? e.message : String(e)).slice(0, 300);
+      try { log.error({ err: redactTokens(e) }, 'calendar scheduler pass failed'); }
+      catch { /* a logger that throws must not take the loop with it */ }
       return { synced: 0, failed: 1, skipped: 0 };
     } finally {
       running = false;
