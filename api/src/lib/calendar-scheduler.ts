@@ -24,7 +24,7 @@
  *   NEVER LET A TICK THROW. This runs unattended. An unhandled rejection here
  *   takes down the API for everyone.
  */
-import { and, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { calendarConnections } from '../db/schema.js';
 import { redactTokens } from './token-crypto.js';
@@ -115,26 +115,32 @@ export async function runSyncPass(db: Db, log: SyncLogger) {
   const now = new Date();
   const staleClaim = new Date(now.getTime() - CLAIM_STALE_MS);
 
-  /* Claim and read in one statement. `syncingSince IS NULL` is the lock: a
-   * second caller matches zero rows and does nothing, which is exactly right.
-   * A stale claim is retaken so a crash mid-sync cannot strand an account. */
+  /* Due, oldest first. Built entirely with drizzle helpers and NO raw `sql`
+   * template — a Date interpolated into one is passed to the driver verbatim,
+   * and the production Postgres driver rejects it ("Received an instance of
+   * Date") where PGlite quietly accepts it. Every test passed; every pass in
+   * staging threw. Dates go through typed columns only. */
+  const due = and(
+    ne(calendarConnections.status, 'revoked'),
+    isNotNull(calendarConnections.refreshTokenRef),
+    or(isNull(calendarConnections.syncingSince), lte(calendarConnections.syncingSince, staleClaim)),
+    or(isNull(calendarConnections.nextSyncAt), lte(calendarConnections.nextSyncAt, now)),
+  );
+
+  const candidates = await db.select({ id: calendarConnections.id })
+    .from(calendarConnections)
+    .where(due)
+    .orderBy(sql`${calendarConnections.nextSyncAt} ASC NULLS FIRST`)
+    .limit(BATCH);
+  if (!candidates.length) return outcome;
+
+  /* The claim. Re-checking `due` inside the UPDATE is what makes it exclusive:
+   * whoever flips `syncingSince` first wins, and a second caller matches zero
+   * rows. Splitting select from update does not weaken that, because the
+   * UPDATE — not the SELECT — is the lock. */
   const claimed = await db.update(calendarConnections)
     .set({ syncingSince: now })
-    .where(and(
-      ne(calendarConnections.status, 'revoked'),
-      or(isNull(calendarConnections.syncingSince), lte(calendarConnections.syncingSince, staleClaim)),
-      or(isNull(calendarConnections.nextSyncAt), lte(calendarConnections.nextSyncAt, now)),
-      sql`${calendarConnections.refreshTokenRef} IS NOT NULL`,
-      sql`${calendarConnections.id} IN (
-        SELECT id FROM calendar_connections
-        WHERE status <> 'revoked'
-          AND refresh_token_ref IS NOT NULL
-          AND (syncing_since IS NULL OR syncing_since <= ${staleClaim})
-          AND (next_sync_at IS NULL OR next_sync_at <= ${now})
-        ORDER BY next_sync_at ASC NULLS FIRST
-        LIMIT ${BATCH}
-      )`,
-    ))
+    .where(and(inArray(calendarConnections.id, candidates.map((c) => c.id)), due))
     .returning();
 
   for (const conn of claimed) {
@@ -144,7 +150,7 @@ export async function runSyncPass(db: Db, log: SyncLogger) {
       await db.update(calendarConnections).set({
         syncingSince: null,
         nextSyncAt: new Date(Date.now() + jitter(SYNC_INTERVAL_MS)),
-      }).where(sql`${calendarConnections.id} = ${conn.id}`);
+      }).where(eq(calendarConnections.id, conn.id));
       outcome.synced++;
       if (result.created || result.updated || result.removed) {
         log.info({
@@ -166,13 +172,13 @@ export async function runSyncPass(db: Db, log: SyncLogger) {
           ? `Google has not responded since ${conn.lastSyncedAt?.toISOString().slice(0, 16).replace('T', ' ') ?? 'the last sync'}. Still trying.`
           : conn.lastError,
       }).where(and(
-        sql`${calendarConnections.id} = ${conn.id}`,
+        eq(calendarConnections.id, conn.id),
         ne(calendarConnections.status, 'revoked'),
       ));
       /* A revoked connection still needs its claim released or the stale-claim
        * timeout is the only thing that frees it. */
       await db.update(calendarConnections).set({ syncingSince: null })
-        .where(sql`${calendarConnections.id} = ${conn.id}`);
+        .where(eq(calendarConnections.id, conn.id));
       outcome.failed++;
       log.warn({
         workspace: conn.workspaceId, failures, retryInMs: delay, err: redactTokens(e),

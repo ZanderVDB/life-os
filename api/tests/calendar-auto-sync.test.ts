@@ -603,7 +603,10 @@ test('a pass that throws is visible, not silent', async () => {
    * never started. That is the bug this whole phase is about, reproduced in
    * the instrument built to detect it. */
   withGoogleConfigured();
-  const exploding = { update: () => { throw new Error('column does not exist'); } } as any;
+  const exploding = {
+    select: () => { throw new Error('column does not exist'); },
+    update: () => { throw new Error('column does not exist'); },
+  } as any;
   const h = startCalendarScheduler(exploding, quiet);
   try {
     await h.runOnce();
@@ -617,11 +620,49 @@ test('a pass that throws is visible, not silent', async () => {
 
 test('a logger that throws does not take the loop with it', async () => {
   withGoogleConfigured();
-  const exploding = { update: () => { throw new Error('boom'); } } as any;
+  const exploding = {
+    select: () => { throw new Error('boom'); },
+    update: () => { throw new Error('boom'); },
+  } as any;
   const angry = { info() {}, warn() {}, error() { throw new Error('logger died'); } };
   const h = startCalendarScheduler(exploding, angry);
   try {
     const r = await h.runOnce();      // must resolve, not reject
     assert.equal(r.failed, 1);
   } finally { h.stop(); }
+});
+
+test('the scheduler never puts a value into a raw sql template', () => {
+  /* Every test in this file passed while every pass in staging threw:
+   *
+   *   The "string" argument must be of type string or an instance of Buffer
+   *   or ArrayBuffer. Received an instance of Date
+   *
+   * A Date interpolated into a raw `sql` template reaches the driver verbatim.
+   * PGlite accepts it; the production Postgres driver does not. No test run
+   * against PGlite can catch that, so the rule is enforced on the source
+   * instead: raw templates may name COLUMNS and nothing else. Values go
+   * through eq/lte/inArray, which bind by type.
+   */
+  const src = readFileSync(join('src', 'lib', 'calendar-scheduler.ts'), 'utf8');
+  const templates = src.match(/sql`[^`]*`/g) ?? [];
+  for (const t of templates) {
+    for (const expr of t.match(/\$\{([^}]*)\}/g) ?? []) {
+      assert.match(expr, /^\$\{\s*calendarConnections\.\w+\s*\}$/,
+        `a raw sql template interpolates ${expr}, which is not a column reference`);
+    }
+  }
+});
+
+test('the claim stays exclusive even though it is now two statements', async () => {
+  /* Selecting candidates and then claiming them is two round trips, so a
+   * second caller can read the same row. The UPDATE is the lock, not the
+   * SELECT: it re-checks the same predicate, so only one caller can flip
+   * syncing_since and the loser claims nothing. */
+  const { db } = await connectedWorkspace();
+  const g = stubGoogle({ token: OK_TOKEN, calendars: ONE_CALENDAR });
+  try {
+    const [a, b] = await Promise.all([runSyncPass(db, quiet), runSyncPass(db, quiet)]);
+    assert.equal(a.synced + b.synced, 1, `the connection was claimed twice (${a.synced}+${b.synced})`);
+  } finally { g.restore(); }
 });
