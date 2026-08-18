@@ -1473,6 +1473,9 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cs-acct-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .cs-acct-dot.is-ok{background:var(--ok)}
 .cs-acct-dot.is-error{background:var(--danger)}
+/* Trouble is amber, not red: the server is still retrying and there is nothing
+   for the user to do. Red is reserved for the one state that needs them. */
+.cs-acct-dot.is-warn{background:var(--warn)}
 .cs-acct-body{display:flex;flex-direction:column;gap:1px;min-width:0}
 .cs-acct-body b{font-size:12px;font-weight:600;color:var(--text);overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
@@ -1497,6 +1500,7 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cs-sync{display:flex;align-items:center;justify-content:space-between;gap:8px;
   font-size:11px;color:var(--muted);padding-top:9px;border-top:1px solid var(--hairline)}
 .cs-sync-now{height:28px;font-size:11.5px;padding:0 10px}
+.cs-auto{margin:7px 0 0;font-size:10.5px;line-height:1.45;color:var(--muted)}
 .cs-disconnect{margin-top:9px;font-size:11px;color:var(--muted);
   transition:color var(--t-hover)}
 .cs-disconnect:hover{color:var(--danger)}

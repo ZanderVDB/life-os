@@ -16,6 +16,9 @@ import * as G from '../src/lib/google-calendar.js';
 const WEB = join('..', 'web');
 const read = (f: string) => readFileSync(join(WEB, f), 'utf8');
 const route = readFileSync(join('src', 'routes', 'google-calendar.ts'), 'utf8');
+/* The sync engine moved out of the route when it gained a second caller: the
+ * background scheduler. The rules below are unchanged — only their address is. */
+const engine = readFileSync(join('src', 'lib', 'calendar-sync.ts'), 'utf8');
 const client = readFileSync(join('src', 'lib', 'google-calendar.ts'), 'utf8');
 const crypto = readFileSync(join('src', 'lib', 'token-crypto.ts'), 'utf8');
 const calendar = read('calendar.js');
@@ -219,8 +222,8 @@ test('sync: an all-day end date is converted from exclusive to inclusive', () =>
 });
 
 test('sync: cancelled events are removed, not left behind', () => {
-  assert.match(route, /if \(raw\.status === 'cancelled'\)/, 'cancellations are ignored');
-  assert.match(route, /db\.delete\(calendarEvents\)/, 'cancelled events are not removed');
+  assert.match(engine, /if \(raw\.status === 'cancelled'\)/, 'cancellations are ignored');
+  assert.match(engine, /db\.delete\(calendarEvents\)/, 'cancelled events are not removed');
   assert.match(client, /showDeleted: opts\.syncToken \? 'true' : undefined/,
     'incremental sync does not ask for deletions');
 });
@@ -228,7 +231,7 @@ test('sync: cancelled events are removed, not left behind', () => {
 test('sync: an invalid sync token triggers a full resync without emptying anything', () => {
   assert.match(client, /export const isSyncTokenInvalid/, 'a 410 is not detected');
   assert.match(client, /e\.status === 410/, '410 is not the invalidation signal');
-  const fn = route.slice(route.indexOf('async function syncEvents'));
+  const fn = engine.slice(engine.indexOf('async function syncEvents'));
   assert.match(fn, /fullResync = true/, 'no full resync path');
   // Critically: no delete-then-refill, which would blank the calendar.
   const recovery = fn.slice(fn.indexOf('isSyncTokenInvalid'), fn.indexOf('let created'));
@@ -236,20 +239,20 @@ test('sync: an invalid sync token triggers a full resync without emptying anythi
 });
 
 test('sync: upserts are idempotent, so re-running cannot duplicate', () => {
-  assert.match(route, /onConflictDoUpdate\(\{\s*target: \[calendarEvents\.calendarId, calendarEvents\.providerEventId\]/,
+  assert.match(engine, /onConflictDoUpdate\(\{\s*target: \[calendarEvents\.calendarId, calendarEvents\.providerEventId\]/,
     'events are not upserted on provider identity');
-  assert.match(route, /onConflictDoUpdate\(\{\s*\n?\s*target: \[calendars\.workspaceId, calendars\.providerCalendarId\]/,
+  assert.match(engine, /onConflictDoUpdate\(\{\s*\n?\s*target: \[calendars\.workspaceId, calendars\.providerCalendarId\]/,
     'calendars are not upserted on provider identity');
 });
 
 test('sync: one failing calendar does not abort the rest', () => {
-  assert.match(route, /result\.errors\.push\(c\.name\)/, 'a failure aborts the whole sync');
+  assert.match(engine, /result\.errors\.push\(c\.name\)/, 'a failure aborts the whole sync');
 });
 
 test('sync: read-only is derived from the access role, once', () => {
   assert.match(client, /export const roleIsReadOnly = \(role: string\) =>\s*role !== 'owner' && role !== 'writer'/,
     'read-only is not derived from the Google role');
-  assert.match(route, /isReadOnly: G\.roleIsReadOnly\(c\.accessRole\)/,
+  assert.match(engine, /isReadOnly: G\.roleIsReadOnly\(c\.accessRole\)/,
     'the stored calendar does not record read-only');
 });
 

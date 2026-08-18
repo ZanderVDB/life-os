@@ -65,18 +65,64 @@ export interface TokenSet {
   scopes: string[];
 }
 
+/**
+ * A token failure, with enough detail to tell a dead grant from a bad minute.
+ *
+ * This distinction is the whole reason the class exists. Before it, every
+ * failure of `refreshAccessToken` — a Google 503, a DNS blip, a timeout, a
+ * rate limit — was recorded as `revoked`, which is a PERMANENT state that
+ * demands the user reconnect by hand. One bad second on Google's side and the
+ * calendar stayed dead until somebody noticed and clicked a button.
+ *
+ * `permanent` is true only when Google has actually said the grant is gone.
+ */
+export class GoogleTokenError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly permanent: boolean;
+
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = 'GoogleTokenError';
+    this.status = status;
+    this.code = code;
+    /* `invalid_grant` is Google's way of saying the refresh token is dead:
+     * revoked in the account's permissions, expired after long disuse, or
+     * invalidated by a password change. `invalid_client` means our own
+     * credentials are wrong, which no amount of retrying fixes either.
+     *
+     * Everything else — 429, 5xx, network, timeout — is a bad minute. */
+    this.permanent = code === 'invalid_grant' || code === 'invalid_client'
+      || code === 'unauthorized_client';
+  }
+}
+
+/** True for anything worth trying again later rather than giving up on. */
+export const isTransientTokenError = (e: unknown): boolean =>
+  !(e instanceof GoogleTokenError) || !e.permanent;
+
 async function tokenRequest(body: URLSearchParams): Promise<TokenSet> {
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (e) {
+    /* Never reached Google at all. This is the case that most often masqueraded
+     * as a revoked grant, and it is the least permanent thing there is. */
+    throw new GoogleTokenError(
+      `Could not reach Google: ${e instanceof Error ? e.message : String(e)}`, 0, 'network');
+  }
   const json = await res.json().catch(() => ({})) as Record<string, unknown>;
   if (!res.ok) {
     // The error description is safe to surface; the token payload never is.
     const desc = typeof json.error_description === 'string' ? json.error_description
       : typeof json.error === 'string' ? json.error : `HTTP ${res.status}`;
-    throw new Error(`Google rejected the request: ${desc}`);
+    const code = typeof json.error === 'string' ? json.error : `http_${res.status}`;
+    throw new GoogleTokenError(`Google rejected the request: ${desc}`, res.status, code);
   }
   const expiresIn = Number(json.expires_in ?? 3600);
   return {
@@ -134,9 +180,20 @@ export const isSyncTokenInvalid = (e: unknown) =>
 async function get(accessToken: string, path: string, params: Record<string, string | undefined>) {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined) p.set(k, v);
-  const res = await fetch(`${API}${path}?${p.toString()}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}?${p.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      /* A request that never settles is worse than one that fails. The
+       * scheduler runs one pass at a time, so a single hung call would stop
+       * every calendar syncing for as long as the process lived — the exact
+       * silent, permanent stop this work exists to remove. */
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (e) {
+    throw new GoogleError(
+      `Could not reach Google: ${e instanceof Error ? e.message : String(e)}`, 0, 'network');
+  }
   if (!res.ok) {
     const j = await res.json().catch(() => ({})) as any;
     const reason = j?.error?.errors?.[0]?.reason;
@@ -276,7 +333,12 @@ export function mapEvent(ev: any) {
     organizerEmail: ev.organizer?.email ?? null,
     providerHtmlLink: ev.htmlLink ?? null,
     etag: ev.etag ?? null,
-    sequence: typeof ev.sequence === 'number' ? ev.sequence : null,
+    /* 0, never null: the column is NOT NULL DEFAULT 0, and an explicit null
+     * OVERRIDES the default rather than falling back to it. An event without a
+     * sequence therefore failed to insert — and because one failed insert
+     * aborts the whole calendar before its sync token advances, a single such
+     * event stopped that calendar syncing on every pass thereafter. */
+    sequence: typeof ev.sequence === 'number' ? ev.sequence : 0,
     providerCreatedAt: ev.created ? new Date(ev.created) : null,
     providerUpdatedAt: ev.updated ? new Date(ev.updated) : null,
     attendees: (ev.attendees ?? []).map((a: any) => ({

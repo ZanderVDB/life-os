@@ -1,0 +1,313 @@
+<h2>People tab — v2 with your feedback baked in</h2>
+<p class="subtitle">Multiple promises (with edit), paddle-style level system, pin button, customizable tags. Birthday-on-Daily removed. Habit popup unchanged. Confirm or tweak.</p>
+
+<style>
+  .mock-people-card{background:#fff;border:1px solid #e5e0d6;border-radius:10px;padding:13px 14px;font-family:Inter,sans-serif;color:#3a342b;position:relative}
+  .mock-people-card .pin{position:absolute;top:9px;left:11px;font-size:11px;color:#c9a94a}
+  .mock-people-card .lvl{position:absolute;top:9px;right:11px;font-size:9.5px;font-weight:700;letter-spacing:.05em;background:#f4ecd0;color:#c9a94a;padding:2px 7px;border-radius:6px;text-transform:uppercase}
+  .mock-people-card .name{font-size:15px;font-weight:700;margin-bottom:4px;padding:0 60px 0 18px}
+  .mock-people-card .met{font-size:11px;color:#9e958a;margin-bottom:8px;padding-left:18px}
+  .mock-people-card .tags{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;padding-left:18px}
+  .mock-people-card .tags .tag{font-size:9px;background:#e9ecf1;color:#5a6c8a;padding:1px 6px;border-radius:3px;font-weight:600}
+  .mock-people-card .tags .tag.fam{background:#f9e8eb;color:#a85365}
+  .mock-people-card .tags .tag.work{background:#e8f0e9;color:#5a8a6e}
+  .mock-people-card .promise{font-size:11.5px;background:#f0ede5;border-left:3px solid #7fa186;padding:5px 9px;border-radius:5px;display:flex;align-items:center;gap:6px;margin-bottom:4px}
+  .mock-people-card .promise-icon{font-size:12px;flex-shrink:0}
+  .mock-people-card .promise-more{font-size:10px;color:#9e958a;text-align:right;padding-right:4px}
+  .mock-people-card .promise-empty{font-size:11px;color:#9e958a;font-style:italic;padding:4px 0}
+  .mock-people-card .last-seen{position:absolute;bottom:8px;right:11px;font-size:9px;color:#9e958a;font-weight:500}
+  .mock-people-card.overdue{background:#fef5f3}
+  .mock-people-card.overdue .last-seen{color:#c46a6a;font-weight:600}
+  .mock-grid{display:grid;gap:10px;background:#faf7f0;padding:14px;border-radius:8px}
+  .mock-grid.mobile{grid-template-columns:1fr 1fr;max-width:380px}
+  .mock-grid.desktop{grid-template-columns:repeat(4,1fr);min-width:600px}
+  .note{background:#fff8d5;border-left:3px solid #c9a94a;padding:8px 11px;font-size:11.5px;margin-top:8px;border-radius:4px;color:#6b5a32}
+  .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#9e958a;margin-bottom:8px}
+  h3{font-size:14px;font-weight:700;margin:18px 0 8px}
+  .modal-mock{background:#fff;border:1px solid #e5e0d6;border-radius:12px;padding:18px 20px;max-width:380px;font-family:Inter,sans-serif;color:#3a342b}
+  .modal-mock .mname{font-size:18px;font-weight:700;margin-bottom:2px}
+  .modal-mock .msub{font-size:11px;color:#9e958a;margin-bottom:14px}
+  .modal-mock .row{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:6px;color:#5a5147}
+  .modal-mock .row .icon{width:14px;color:#9e958a;flex-shrink:0}
+  .modal-mock .sec{margin-top:14px}
+  .modal-mock .sec-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9e958a;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center}
+  .modal-mock .promise-row{background:#f0ede5;border-left:3px solid #7fa186;padding:7px 10px;border-radius:5px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+  .modal-mock .promise-row .ctrls{display:flex;gap:4px;flex-shrink:0}
+  .modal-mock .promise-row .ico-btn{background:transparent;border:none;font-size:11px;color:#9e958a;cursor:pointer;padding:2px 4px}
+  .modal-mock .promise-row .link-pill{font-size:9.5px;background:#fff;border:1px solid #c9a94a;color:#c9a94a;padding:2px 6px;border-radius:4px;font-weight:600;white-space:nowrap}
+  .modal-mock .promise-row .linked-pill{font-size:9.5px;background:#7fa186;color:#fff;padding:2px 6px;border-radius:4px;font-weight:600;white-space:nowrap}
+  .modal-mock .add-promise{font-size:11px;color:#7fa186;background:transparent;border:1px dashed #7fa186;padding:6px 10px;border-radius:5px;cursor:pointer;width:100%;margin-top:3px;font-weight:600}
+  .modal-mock .last-box{background:#f7f4ec;padding:6px 10px;border-radius:5px;font-size:11px;color:#7a7166;font-style:italic}
+  .modal-mock .bday{font-size:11px;background:#f9e8eb;color:#a85365;padding:4px 8px;border-radius:5px;display:inline-block}
+  .modal-mock .pin-toggle{font-size:10px;color:#9e958a;cursor:pointer}
+  .modal-mock .pin-toggle.on{color:#c9a94a;font-weight:600}
+  .lvl-widget{background:#f7f4ec;border-radius:8px;padding:11px 13px;margin-top:4px}
+  .lvl-widget .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .lvl-widget .lvl-label{font-size:13px;font-weight:700;color:#3a342b}
+  .lvl-widget .lvl-name{font-size:11px;color:#9e958a;font-weight:500;margin-left:5px}
+  .lvl-widget .arrows{display:flex;gap:4px}
+  .lvl-widget .arrows button{width:24px;height:22px;border:1px solid #c9a94a;background:#fff;color:#c9a94a;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer}
+  .lvl-widget .arrows button:disabled{opacity:.35;cursor:default}
+  .lvl-bar{display:flex;gap:1px}
+  .lvl-bar .slot{flex:1;height:9px;background:#e5e0d6;border-radius:1px}
+  .lvl-bar .slot.on{background:#c9a94a}
+  .lvl-bar .slot.below{background:#d8c89c}
+  .lvl-bar .lvl-block{display:flex;gap:1px;flex:1;padding:0 1px;border-right:2px solid #faf7f0}
+  .lvl-bar .lvl-block:last-child{border-right:none;padding-right:0}
+  .level-picker{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+  .level-picker .opt{font-size:11px;background:#fff;border:1px solid #e5e0d6;padding:6px 9px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+  .level-picker .opt .lvl-name{color:#7a7166}
+  .level-picker .opt.cur{border-color:#c9a94a;background:#fff8d5}
+  .arrow{text-align:center;font-size:22px;color:#c9a94a;margin:8px 0}
+  .task-mock{background:#fff;border:1px solid #e5e0d6;border-radius:8px;padding:8px 12px;font-size:12.5px;display:flex;align-items:center;gap:9px;color:#3a342b}
+  .task-mock .cb{width:14px;height:14px;border:1.5px solid #c9a94a;border-radius:3px}
+  .person-link-badge{font-size:9px;background:#f4ecd0;color:#c9a94a;padding:1px 5px;border-radius:3px;font-weight:600;margin-left:auto}
+  .feature-banner{background:#3a342b;color:#fff;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:10px 14px;border-radius:6px;margin:24px 0 14px}
+  .filter-chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;font-family:Inter,sans-serif}
+  .filter-chips .chip{font-size:10.5px;padding:4px 9px;border-radius:5px;background:#fff;border:1px solid #e5e0d6;color:#7a7166;cursor:pointer}
+  .filter-chips .chip.on{background:#3a342b;color:#fff;border-color:#3a342b}
+  .filter-chips .chip.fam{background:#f9e8eb;color:#a85365;border-color:#f9e8eb}
+  .filter-chips .chip.fam.on{background:#a85365;color:#fff;border-color:#a85365}
+  .filter-chips .chip.work{background:#e8f0e9;color:#5a8a6e;border-color:#e8f0e9}
+  .filter-chips .chip.work.on{background:#5a8a6e;color:#fff;border-color:#5a8a6e}
+</style>
+
+<div class="feature-banner">People tab — overview</div>
+
+<div class="section">
+  <div class="label">Phone view — pinned at top, tags + last-seen badge, multiple promises summarised</div>
+  <div class="mock-grid mobile">
+    <div class="mock-people-card">
+      <div class="pin">📌</div>
+      <div class="lvl">L4.3</div>
+      <div class="name">Nigel</div>
+      <div class="met">Hennie's wedding</div>
+      <div class="tags"><span class="tag">Inner circle</span></div>
+      <div class="promise"><span class="promise-icon">🎣</span> Fishing on the 4th</div>
+      <div class="promise-more">+ 2 more promises</div>
+      <div class="last-seen">5d</div>
+    </div>
+    <div class="mock-people-card">
+      <div class="pin">📌</div>
+      <div class="lvl">L3.5</div>
+      <div class="name">Jack</div>
+      <div class="met">University, 2019</div>
+      <div class="tags"><span class="tag">Uni</span></div>
+      <div class="promise"><span class="promise-icon">☕</span> Go for coffee</div>
+      <div class="last-seen">2w</div>
+    </div>
+    <div class="mock-people-card overdue">
+      <div class="lvl">L3.2</div>
+      <div class="name">Andrew</div>
+      <div class="met">Gym, 2023</div>
+      <div class="tags"><span class="tag">Gym</span> <span class="tag fam">Family friend</span></div>
+      <div class="promise"><span class="promise-icon">🎾</span> Play paddle</div>
+      <div class="last-seen">4mo</div>
+    </div>
+    <div class="mock-people-card">
+      <div class="lvl">L1.1</div>
+      <div class="name">Sarah</div>
+      <div class="met">Sister's friend</div>
+      <div class="tags"><span class="tag fam">Family friend</span></div>
+      <div class="promise-empty">— no promises</div>
+      <div class="last-seen">—</div>
+    </div>
+  </div>
+  <div class="note"><b>What changed on the card:</b><br>
+  • <b>Pin icon</b> (top-left) when pinned. Pinned cards always sort to the top regardless of selected sort order.<br>
+  • <b>Level format</b> is now <b>L3.5</b> (paddle-style). Tap to open level widget.<br>
+  • <b>Tags</b> appear under "where you met". Coloured per tag. Max ~2 visible on card.<br>
+  • <b>Multiple promises</b> — card shows the next-due one plus "+ N more promises" if more exist.<br>
+  • <b>Last-seen badge</b> (bottom-right) — "2w", "4mo" etc. Soft red tint to whole card when > 90 days since last meet.</div>
+</div>
+
+<div class="section">
+  <div class="label">Filter / sort row above the grid</div>
+  <div class="filter-chips">
+    <span class="chip on">All</span>
+    <span class="chip fam">Family friends</span>
+    <span class="chip work">Work</span>
+    <span class="chip">Uni</span>
+    <span class="chip">Gym</span>
+    <span class="chip">Travel</span>
+  </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;font-family:Inter,sans-serif">
+    <span style="background:#c9a94a;color:#fff;font-size:11px;padding:4px 9px;border-radius:5px;font-weight:600">Promise date ↑</span>
+    <span style="background:#fff;border:1px solid #e5e0d6;color:#7a7166;font-size:11px;padding:4px 9px;border-radius:5px">Level ↓</span>
+    <span style="background:#fff;border:1px solid #e5e0d6;color:#7a7166;font-size:11px;padding:4px 9px;border-radius:5px">Last seen (longest first)</span>
+    <span style="background:#fff;border:1px solid #e5e0d6;color:#7a7166;font-size:11px;padding:4px 9px;border-radius:5px">Name A–Z</span>
+    <span style="background:#fff;border:1px solid #e5e0d6;color:#7a7166;font-size:11px;padding:4px 9px;border-radius:5px">Recently added</span>
+  </div>
+  <div class="note"><b>Tag chips</b> filter the grid; one click on a tag = show only people with that tag. Click "All" to clear. <b>Sort chips</b> below — default is "Promise date ↑" so soonest-promised people surface first. Added "Last seen" sort since you've got the badge anyway.</div>
+</div>
+
+<h3>Person detail modal — multiple promises, edit controls, level widget</h3>
+<div class="modal-mock">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <div class="mname">Nigel</div>
+      <div class="msub">Met at: Hennie's wedding · 2024</div>
+    </div>
+    <div class="pin-toggle on">📌 Pinned</div>
+  </div>
+
+  <div class="row"><span class="icon">📱</span> +27 82 555 5555</div>
+  <div class="row"><span class="icon">✉️</span> nigel@example.com</div>
+  <div class="row"><span class="icon">🎂</span> <span class="bday">June 22 — from Google Calendar</span></div>
+
+  <div class="sec">
+    <div class="sec-lbl">Tags</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      <span style="font-size:10px;background:#e9ecf1;color:#5a6c8a;padding:2px 8px;border-radius:4px;font-weight:600">Inner circle</span>
+      <span style="font-size:10px;background:#f9e8eb;color:#a85365;padding:2px 8px;border-radius:4px;font-weight:600">Travel buddy</span>
+      <span style="font-size:10px;color:#7a7166;border:1px dashed #c9a94a;padding:2px 8px;border-radius:4px;cursor:pointer">+ Tag</span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-lbl">Friendship level</div>
+    <div class="lvl-widget">
+      <div class="top">
+        <div>
+          <span class="lvl-label">L4.3</span>
+          <span class="lvl-name">· Close friend (3/5)</span>
+        </div>
+        <div class="arrows">
+          <button>▼</button>
+          <button>▲</button>
+        </div>
+      </div>
+      <div class="lvl-bar">
+        <div class="lvl-block">
+          <div class="slot below"></div><div class="slot below"></div><div class="slot below"></div><div class="slot below"></div><div class="slot below"></div>
+        </div>
+        <div class="lvl-block">
+          <div class="slot below"></div><div class="slot below"></div><div class="slot below"></div><div class="slot below"></div><div class="slot below"></div>
+        </div>
+        <div class="lvl-block">
+          <div class="slot below"></div><div class="slot below"></div><div class="slot below"></div><div class="slot below"></div><div class="slot below"></div>
+        </div>
+        <div class="lvl-block">
+          <div class="slot on"></div><div class="slot on"></div><div class="slot on"></div><div class="slot"></div><div class="slot"></div>
+        </div>
+        <div class="lvl-block">
+          <div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:8px;color:#9e958a;margin-top:3px;font-family:Inter,sans-serif"><span>L1</span><span>L2</span><span>L3</span><span>L4</span><span>L5</span></div>
+    </div>
+    <div class="level-picker">
+      <div class="opt"><span>Level 1</span><span class="lvl-name">Acquaintance</span></div>
+      <div class="opt"><span>Level 2</span><span class="lvl-name">Casual friend</span></div>
+      <div class="opt"><span>Level 3</span><span class="lvl-name">Friend</span></div>
+      <div class="opt cur"><span>Level 4</span><span class="lvl-name">Close friend</span></div>
+      <div class="opt"><span>Level 5</span><span class="lvl-name">Inner circle</span></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-lbl">Notes</div>
+    <div style="font-size:12px;color:#5a5147;line-height:1.45">Met at Hennie's wedding 2024. Engineer, loves fishing. Wife Lisa. Lives in Cape Town.</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-lbl"><span>Promises / things said</span><span style="font-size:10px;color:#9e958a">3 active</span></div>
+    <div class="promise-row">
+      <div style="display:flex;align-items:center;gap:6px"><span>🎣</span> Fishing on the 4th</div>
+      <div class="ctrls">
+        <span class="linked-pill">🔗 Linked</span>
+        <button class="ico-btn">✎</button>
+        <button class="ico-btn">🗑</button>
+      </div>
+    </div>
+    <div class="promise-row">
+      <div style="display:flex;align-items:center;gap:6px"><span>🍻</span> Drinks next time he's in town</div>
+      <div class="ctrls">
+        <button class="link-pill">→ Link</button>
+        <button class="ico-btn">✎</button>
+        <button class="ico-btn">🗑</button>
+      </div>
+    </div>
+    <div class="promise-row">
+      <div style="display:flex;align-items:center;gap:6px"><span>🎬</span> Watch the new Dune</div>
+      <div class="ctrls">
+        <button class="link-pill">→ Link</button>
+        <button class="ico-btn">✎</button>
+        <button class="ico-btn">🗑</button>
+      </div>
+    </div>
+    <button class="add-promise">+ Add another promise</button>
+  </div>
+
+  <div class="sec">
+    <div class="sec-lbl">Last did together</div>
+    <div class="last-box">🍻 Drinks at Aandwind — 5 days ago</div>
+  </div>
+</div>
+
+<div class="note"><b>What changed in the modal:</b><br>
+• <b>Pin toggle</b> at the top-right of the modal — pin/unpin from inside the detail view.<br>
+• <b>Tags section</b> — current tags + a "+ Tag" pill that opens a tag picker (existing tags) or lets you create a new one inline.<br>
+• <b>Level widget</b>: <b>(1)</b> Shows current position as "L4.3 · Close friend (3/5)" with a 25-slot bar visualising the position. <b>(2)</b> Up/down arrows nudge by one slot at a time, crossing level boundaries as needed (e.g. L4.5 ▲ → L5.1). <b>(3)</b> Below: the 5 named-level picker — tap a level to jump there. Default sub-position when jumping = 3 (middle). <b>(4)</b> Sub-positions don't have names — just numbers — matching your spec.<br>
+• <b>Promises is now a list</b>, not a single field. Each row: text, [link/linked badge], [edit pencil], [delete trash]. "+ Add another promise" at the bottom. Linked promises show a green "🔗 Linked" badge instead of the action button.<br>
+• <b>Edit (pencil)</b> turns the row into an inline editor for text + optional date. Save / cancel inline.<br>
+• <b>Last did together</b> stays a single slot — only the most recent completion is remembered. Matches your "no history" rule.</div>
+
+<h3>Default level names (proposed — editable in Settings later)</h3>
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;font-family:Inter,sans-serif;font-size:11px">
+  <div style="background:#fff;border:1px solid #e5e0d6;border-radius:5px;padding:8px;text-align:center"><div style="font-weight:700;font-size:13px;color:#c9a94a">L1</div><div style="color:#5a5147">Acquaintance</div></div>
+  <div style="background:#fff;border:1px solid #e5e0d6;border-radius:5px;padding:8px;text-align:center"><div style="font-weight:700;font-size:13px;color:#c9a94a">L2</div><div style="color:#5a5147">Casual friend</div></div>
+  <div style="background:#fff;border:1px solid #e5e0d6;border-radius:5px;padding:8px;text-align:center"><div style="font-weight:700;font-size:13px;color:#c9a94a">L3</div><div style="color:#5a5147">Friend</div></div>
+  <div style="background:#fff;border:1px solid #e5e0d6;border-radius:5px;padding:8px;text-align:center"><div style="font-weight:700;font-size:13px;color:#c9a94a">L4</div><div style="color:#5a5147">Close friend</div></div>
+  <div style="background:#fff;border:1px solid #e5e0d6;border-radius:5px;padding:8px;text-align:center"><div style="font-weight:700;font-size:13px;color:#c9a94a">L5</div><div style="color:#5a5147">Inner circle</div></div>
+</div>
+
+<h3>Settings → People (new sub-panel)</h3>
+<div style="background:#fff;border:1px solid #e5e0d6;border-radius:8px;padding:14px;font-family:Inter,sans-serif">
+  <div class="sec-lbl" style="font-size:10px;font-weight:700;color:#9e958a;text-transform:uppercase;margin-bottom:8px">Tags</div>
+  <div style="display:flex;flex-direction:column;gap:5px">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:#f7f4ec;border-radius:5px"><span><span style="display:inline-block;width:10px;height:10px;background:#f9e8eb;border-radius:50%;margin-right:6px"></span>Family friend</span><span style="font-size:10px;color:#9e958a">3 people · ✎ 🗑</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:#f7f4ec;border-radius:5px"><span><span style="display:inline-block;width:10px;height:10px;background:#e9ecf1;border-radius:50%;margin-right:6px"></span>Uni</span><span style="font-size:10px;color:#9e958a">7 people · ✎ 🗑</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:#f7f4ec;border-radius:5px"><span><span style="display:inline-block;width:10px;height:10px;background:#e8f0e9;border-radius:50%;margin-right:6px"></span>Work</span><span style="font-size:10px;color:#9e958a">2 people · ✎ 🗑</span></div>
+    <button style="font-size:11px;color:#7fa186;background:transparent;border:1px dashed #7fa186;padding:6px 10px;border-radius:5px;cursor:pointer;width:100%;margin-top:3px;font-weight:600">+ Add tag</button>
+  </div>
+  <div class="sec-lbl" style="font-size:10px;font-weight:700;color:#9e958a;text-transform:uppercase;margin:14px 0 8px">Level names</div>
+  <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
+    <div style="display:flex;justify-content:space-between;padding:5px 9px;background:#f7f4ec;border-radius:5px"><span>L1</span><span style="color:#5a5147">Acquaintance ✎</span></div>
+    <div style="display:flex;justify-content:space-between;padding:5px 9px;background:#f7f4ec;border-radius:5px"><span>L2</span><span style="color:#5a5147">Casual friend ✎</span></div>
+    <div style="display:flex;justify-content:space-between;padding:5px 9px;background:#f7f4ec;border-radius:5px"><span>L3</span><span style="color:#5a5147">Friend ✎</span></div>
+    <div style="display:flex;justify-content:space-between;padding:5px 9px;background:#f7f4ec;border-radius:5px"><span>L4</span><span style="color:#5a5147">Close friend ✎</span></div>
+    <div style="display:flex;justify-content:space-between;padding:5px 9px;background:#f7f4ec;border-radius:5px"><span>L5</span><span style="color:#5a5147">Inner circle ✎</span></div>
+  </div>
+</div>
+
+<div class="note"><b>Settings → People panel.</b> Lives in the existing Settings page. Manage tags (add, rename, recolor, delete — deleting clears the tag from any people using it). Rename levels (changes only the label, not the underlying L1-L5 ordering).</div>
+
+<h3>Final v1 scope summary</h3>
+<div style="background:#fff;border:1px solid #e5e0d6;border-radius:8px;padding:14px;font-family:Inter,sans-serif;font-size:12px;color:#5a5147">
+  <div style="font-weight:700;margin-bottom:6px;color:#3a342b">In v1:</div>
+  <ul style="margin:0 0 10px 16px;line-height:1.55">
+    <li>People grid (mobile + desktop), card shape per mockup</li>
+    <li>Multiple promises per person, with edit + delete + link-to-task</li>
+    <li>Manual level system — 5 levels × 5 sub-positions = 25 slots, up/down arrows, level picker</li>
+    <li>Customizable tags + level names in Settings → People</li>
+    <li>Pin button (always-on-top)</li>
+    <li>Last-seen badge (auto from lastTogether)</li>
+    <li>Birthday read-only from GCal, "+ Add birthday" opens GCal event creator</li>
+    <li>AI ops: <code>addPerson</code>, <code>addPromise</code> (with full review-queue support)</li>
+    <li>Sort by: promise date (default), level, last seen, name, recently added</li>
+    <li>Filter by tag</li>
+  </ul>
+  <div style="font-weight:700;margin-bottom:6px;color:#3a342b">Out (per your call):</div>
+  <ul style="margin:0 0 10px 16px;line-height:1.55;color:#9e958a">
+    <li>XP / gamified levels — manual only</li>
+    <li>Birthday surface on Daily (already covered by morning brief)</li>
+    <li>Photos</li>
+    <li>Drag-to-reorder cards (pin handles the same need)</li>
+    <li>Promise history (only "last did together" remembered)</li>
+  </ul>
+</div>
+
+<div style="margin-top:24px;padding:14px;background:#f0ede5;border-radius:8px;font-family:Inter,sans-serif;font-size:12px;color:#5a5147">
+  <b>Reply in terminal:</b> say "go" to write the specs, or call out anything to tweak first. Habit popup design unchanged from the previous mockup — also included in the spec.
+</div>

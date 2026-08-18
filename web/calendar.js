@@ -1080,10 +1080,10 @@ export function sourcesPopoverHtml() {
   return `<div class="sources">
     <h4>Calendar sources</h4>
     <div class="cs-account">
-      <span class="cs-acct-dot ${conn.status === 'error' ? 'is-error' : 'is-ok'}"></span>
+      <span class="cs-acct-dot ${connHealth(conn)}"></span>
       <div class="cs-acct-body">
         <b>${esc(conn.accountEmail ?? 'Google account')}</b>
-        <span>${conn.status === 'error' ? 'Needs reconnecting' : 'Connected · Read-only'}</span>
+        <span>${esc(connStatusWord(conn))}</span>
       </div>
     </div>
     <div class="cs-sources">
@@ -1099,8 +1099,48 @@ export function sourcesPopoverHtml() {
       <span>${esc(lastSyncedWord(conn.lastSyncedAt))}</span>
       <button class="btn btn-ghost cs-sync-now" id="cal-sync">Sync now</button>
     </div>
+    <p class="cs-auto">${esc(autoSyncWord(conn))}</p>
+    ${needsReconnect(conn) ? `<button class="btn btn-primary cs-connect" id="cal-connect">
+      Reconnect Google Calendar</button>` : ''}
     <button class="rail-link cs-disconnect" id="cal-disconnect">Disconnect</button>
   </div>`;
+}
+
+/**
+ * The three states worth telling apart.
+ *
+ * Only a revoked grant is the user's problem: Google has withdrawn access and
+ * no amount of waiting brings it back. A transient failure used to look
+ * identical — "Needs reconnecting" — which sent people to click a button that
+ * fixed nothing, for something the server was already retrying on its own.
+ */
+export const needsReconnect = (conn) =>
+  conn?.status === 'revoked' || conn?.status === 'needs_reauth';
+
+function connHealth(conn) {
+  if (needsReconnect(conn)) return 'is-error';
+  return conn?.status === 'error' ? 'is-warn' : 'is-ok';
+}
+
+function connStatusWord(conn) {
+  if (needsReconnect(conn)) return 'Reconnect needed';
+  if (conn?.status === 'error') return 'Having trouble · retrying';
+  return 'Connected · Read-only';
+}
+
+/**
+ * What the calendar does when nobody is watching.
+ *
+ * Worth a line of its own: the sync now runs on the server, so it keeps up
+ * while the app is closed. Saying so is the difference between "Sync now" being
+ * a chore and being a shortcut.
+ */
+function autoSyncWord(conn) {
+  if (needsReconnect(conn)) return 'Automatic syncing is paused until you reconnect.';
+  if (conn?.status === 'error') {
+    return 'Google is not answering. Life OS keeps trying — nothing is lost.';
+  }
+  return 'Kept up to date automatically, even when Life OS is closed.';
 }
 
 function lastSyncedWord(ts) {

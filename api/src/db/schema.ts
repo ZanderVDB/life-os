@@ -472,6 +472,12 @@ export const calendarConnections = pgTable('calendar_connections', {
   grantedScopes: jsonb('granted_scopes').$type<string[]>().notNull().default(EMPTY_JSON_ARRAY),
   lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
   lastError: text('last_error'),
+  // The background scheduler's bookkeeping. `nextSyncAt` is when this
+  // connection is next due; `syncingSince` is a claim, held only while a pass
+  // is actually running, so two processes cannot sync one account at once.
+  nextSyncAt: timestamp('next_sync_at', { withTimezone: true }),
+  syncingSince: timestamp('syncing_since', { withTimezone: true }),
+  syncFailureCount: integer('sync_failure_count').notNull().default(0),
   disconnectedAt: timestamp('disconnected_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -479,6 +485,8 @@ export const calendarConnections = pgTable('calendar_connections', {
   byWorkspace: index('cal_conn_ws_idx').on(t.workspaceId),
   uniqueAccount: uniqueIndex('cal_conn_account_idx')
     .on(t.workspaceId, t.provider, t.providerAccountId),
+  // The scheduler's only query: due connections, oldest first.
+  byDue: index('cal_conn_due_idx').on(t.nextSyncAt),
   statusCheck: check('cal_conn_status',
     sql`${t.status} IN ('active','needs_reauth','revoked','error')`),
 }));

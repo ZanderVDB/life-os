@@ -17,13 +17,14 @@ import {
   calendarConnections, calendars, calendarEvents, calendarEventAttendees,
   calendarSyncStates,
 } from '../db/schema.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { ApiError, badRequest, notFound, upstreamUnavailable } from '../lib/errors.js';
 import { encryptToken, decryptToken, redactTokens } from '../lib/token-crypto.js';
 import * as G from '../lib/google-calendar.js';
-
-/** How far around today the FIRST sync reaches. Incremental sync has no window. */
-const INITIAL_PAST_DAYS = 90;
-const INITIAL_FUTURE_DAYS = 365;
+import {
+  syncCalendarList, syncConnection, recordSyncOutcome,
+  googleConfig, encryptionKey,
+} from '../lib/calendar-sync.js';
+import { SYNC_INTERVAL_MS, BACKOFF_BASE_MS, jitter } from '../lib/calendar-scheduler.js';
 
 /**
  * Pending authorisations, held in memory.
@@ -43,15 +44,6 @@ function sweep() {
   for (const [k, v] of pending) if (v.expiresAt < now) pending.delete(k);
 }
 
-function googleConfig() {
-  const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
-  const redirectUri = process.env.GOOGLE_CALENDAR_REDIRECT_URI;
-  if (!clientId || !clientSecret || !redirectUri) return null;
-  return { clientId, clientSecret, redirectUri };
-}
-
-const encryptionKey = () => process.env.GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY ?? '';
 const postConnectUrl = () =>
   process.env.GOOGLE_CALENDAR_POST_CONNECT_URL ?? 'https://life-os-v2-web-staging-v2-staging.up.railway.app/#calendar';
 
@@ -66,41 +58,6 @@ export function maskEmail(email: string | null): string | null {
 export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: Guards) {
   const pre = { preHandler: [guards.authenticate, guards.resolveWorkspace] };
   const log = app.log;
-
-  /** Fresh access token for a connection, refreshing when close to expiry. */
-  async function accessTokenFor(connectionId: string): Promise<string> {
-    const cfg = googleConfig();
-    if (!cfg) throw badRequest('Google Calendar is not configured on this server.');
-    const [conn] = await db.select().from(calendarConnections)
-      .where(eq(calendarConnections.id, connectionId));
-    if (!conn) throw notFound('Connection not found.');
-    if (!conn.refreshTokenRef) throw badRequest('This connection needs to be reconnected.');
-
-    const stillValid = conn.accessTokenRef && conn.tokenExpiresAt
-      && conn.tokenExpiresAt.getTime() - Date.now() > 60_000;
-    if (stillValid) return decryptToken(conn.accessTokenRef!, encryptionKey());
-
-    const refresh = decryptToken(conn.refreshTokenRef, encryptionKey());
-    try {
-      const set = await G.refreshAccessToken(cfg, refresh);
-      await db.update(calendarConnections).set({
-        accessTokenRef: encryptToken(set.accessToken, encryptionKey()),
-        tokenExpiresAt: set.expiresAt,
-        status: 'active',
-        lastError: null,
-        updatedAt: new Date(),
-      }).where(eq(calendarConnections.id, connectionId));
-      return set.accessToken;
-    } catch (e) {
-      // A refresh failure is usually a revoked grant, which the user must fix.
-      await db.update(calendarConnections).set({
-        status: 'revoked',
-        lastError: 'Google access was revoked or expired. Reconnect to continue.',
-        updatedAt: new Date(),
-      }).where(eq(calendarConnections.id, connectionId));
-      throw badRequest('Google access was revoked or expired. Reconnect to continue.');
-    }
-  }
 
   /* ── Status ────────────────────────────────────────────────────────── */
   app.get('/api/v1/workspaces/:workspaceId/integrations/google-calendar', pre, async (req) => {
@@ -217,36 +174,35 @@ export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: G
       ));
       if (!conn) throw notFound('No Google Calendar connection.');
 
-      const token = await accessTokenFor(conn.id);
-      await syncCalendarList(db, conn.id, workspaceId, token);
-
-      const cals = await db.select().from(calendars).where(and(
-        eq(calendars.workspaceId, workspaceId),
-        eq(calendars.connectionId, conn.id),
-        eq(calendars.isVisible, true),
-      ));
-
-      const result = { calendars: 0, created: 0, updated: 0, removed: 0, errors: [] as string[] };
-      for (const c of cals) {
-        try {
-          const r = await syncEvents(db, workspaceId, conn.id, c, token);
-          result.calendars++;
-          result.created += r.created;
-          result.updated += r.updated;
-          result.removed += r.removed;
-        } catch (e) {
-          // One bad calendar must not abort the rest.
-          result.errors.push(c.name);
-          log.warn({ calendar: c.name, err: redactTokens(e) }, 'calendar sync failed');
-        }
+      let result;
+      try {
+        result = await syncConnection(db, conn, log);
+      } catch (e) {
+        /* A transient failure is no longer recorded as a revoked grant, so it
+         * must not be REPORTED as one either. It is Google having a minute;
+         * the connection is intact and the scheduler is already on it. */
+        /* An ApiError is already a decided, user-facing answer — including the
+         * genuine "Reconnect to continue" that accessTokenFor writes for a
+         * revoked grant. Softening it here would be the original bug wearing
+         * the opposite face: telling someone to wait when they must act. */
+        if (e instanceof ApiError) throw e;
+        if (!G.isTransientTokenError(e)) throw e;
+        await db.update(calendarConnections).set({
+          syncFailureCount: (conn.syncFailureCount ?? 0) + 1,
+          nextSyncAt: new Date(Date.now() + jitter(BACKOFF_BASE_MS)),
+          updatedAt: new Date(),
+        }).where(eq(calendarConnections.id, conn.id));
+        log.warn({ workspace: workspaceId, err: redactTokens(e) }, 'manual calendar sync failed');
+        throw upstreamUnavailable(
+          'Google is not responding right now. Your calendar is still connected — '
+          + 'Life OS will keep trying on its own.');
       }
-
-      await db.update(calendarConnections).set({
-        lastSyncedAt: new Date(),
-        status: result.errors.length && !result.calendars ? 'error' : 'active',
-        lastError: result.errors.length ? `Could not sync: ${result.errors.join(', ')}` : null,
-        updatedAt: new Date(),
-      }).where(eq(calendarConnections.id, conn.id));
+      await recordSyncOutcome(db, conn.id, result);
+      /* A manual sync resets the clock: the scheduler has no reason to pull
+       * again in ten seconds because somebody just did it by hand. */
+      await db.update(calendarConnections)
+        .set({ nextSyncAt: new Date(Date.now() + jitter(SYNC_INTERVAL_MS)) })
+        .where(eq(calendarConnections.id, conn.id));
 
       return result;
     });
@@ -303,141 +259,11 @@ function publicConnection(c: typeof calendarConnections.$inferSelect) {
     readOnly: true,
     lastSyncedAt: c.lastSyncedAt,
     lastError: c.lastError,
+    // The Calendar needs these to say "syncing automatically" honestly rather
+    // than as decoration: they are the scheduler's real state.
+    autoSync: c.status !== 'revoked',
+    nextSyncAt: c.nextSyncAt,
+    syncing: !!c.syncingSince,
+    failureCount: c.syncFailureCount ?? 0,
   };
-}
-
-/* ── Sync implementation ─────────────────────────────────────────────── */
-
-async function syncCalendarList(db: Db, connectionId: string, workspaceId: string, token: string) {
-  const list = await G.listCalendars(token);
-  for (const c of list) {
-    const values = {
-      workspaceId,
-      connectionId,
-      providerCalendarId: c.id,
-      name: c.summary ?? 'Calendar',
-      description: c.description ?? null,
-      color: c.backgroundColor ?? null,
-      timeZone: c.timeZone ?? null,
-      accessRole: c.accessRole,
-      isPrimary: !!c.primary,
-      isReadOnly: G.roleIsReadOnly(c.accessRole),
-      isSynthetic: false,
-      updatedAt: new Date(),
-    };
-    // Idempotent: a re-run updates rather than duplicating.
-    await db.insert(calendars).values({
-      ...values,
-      // Google's own "selected" decides the default, once.
-      isVisible: c.selected !== false,
-    }).onConflictDoUpdate({
-      target: [calendars.workspaceId, calendars.providerCalendarId],
-      set: values,
-    });
-  }
-  return list.length;
-}
-
-async function syncEvents(
-  db: Db, workspaceId: string, connectionId: string,
-  cal: typeof calendars.$inferSelect, token: string,
-) {
-  const [state] = await db.select().from(calendarSyncStates)
-    .where(eq(calendarSyncStates.calendarId, cal.id));
-
-  const window = () => {
-    const min = new Date(); min.setDate(min.getDate() - INITIAL_PAST_DAYS);
-    const max = new Date(); max.setDate(max.getDate() + INITIAL_FUTURE_DAYS);
-    return { timeMin: min.toISOString(), timeMax: max.toISOString() };
-  };
-
-  let page: G.EventPage;
-  let fullResync = false;
-  try {
-    page = await G.listEvents(token, cal.providerCalendarId,
-      state?.syncToken ? { syncToken: state.syncToken } : window());
-  } catch (e) {
-    if (!G.isSyncTokenInvalid(e)) throw e;
-    // Google expired the token. Start again from a clean window — but do NOT
-    // delete anything first: the upserts below reconcile, and wiping would
-    // briefly empty the user's calendar.
-    fullResync = true;
-    page = await G.listEvents(token, cal.providerCalendarId, window());
-  }
-
-  let created = 0; let updated = 0; let removed = 0;
-
-  for (const raw of page.items) {
-    // Cancelled instances arrive during incremental sync and must be removed.
-    if (raw.status === 'cancelled') {
-      const del = await db.delete(calendarEvents).where(and(
-        eq(calendarEvents.calendarId, cal.id),
-        eq(calendarEvents.providerEventId, raw.id),
-      )).returning({ id: calendarEvents.id });
-      removed += del.length;
-      continue;
-    }
-
-    const m = G.mapEvent(raw);
-    if (!m) continue;
-    const { attendees, ...row } = m;
-
-    const [saved] = await db.insert(calendarEvents).values({
-      workspaceId,
-      calendarId: cal.id,
-      ...row,
-      syncState: 'synced',
-      isSynthetic: false,
-      lastSyncedAt: new Date(),
-      updatedAt: new Date(),
-    }).onConflictDoUpdate({
-      target: [calendarEvents.calendarId, calendarEvents.providerEventId],
-      // The index is PARTIAL (`WHERE provider_event_id IS NOT NULL`), and
-      // Postgres refuses to match ON CONFLICT to a partial index unless the
-      // statement repeats the predicate. Without this every event insert threw
-      // "no unique or exclusion constraint matching the ON CONFLICT
-      // specification", so a connection synced its calendar list and no events.
-      targetWhere: isNotNull(calendarEvents.providerEventId),
-      set: {
-        ...row,
-        syncState: 'synced',
-        lastSyncedAt: new Date(),
-        updatedAt: new Date(),
-      },
-    }).returning({ id: calendarEvents.id, createdAt: calendarEvents.createdAt });
-
-    if (saved) {
-      // Cheap create/update discrimination without a second query.
-      if (Date.now() - saved.createdAt.getTime() < 5_000) created++; else updated++;
-      await db.delete(calendarEventAttendees)
-        .where(eq(calendarEventAttendees.eventId, saved.id));
-      if (attendees.length) {
-        await db.insert(calendarEventAttendees).values(
-          attendees.map((a: typeof attendees[number]) =>
-            ({ workspaceId, eventId: saved.id, ...a })),
-        );
-      }
-    }
-  }
-
-  const syncValues = {
-    workspaceId,
-    calendarId: cal.id,
-    connectionId,
-    syncToken: page.nextSyncToken,
-    // A full window read counts as a full sync; an incremental one does not
-    // reset the marker, so "when did we last read everything" stays true.
-    fullSyncCompletedAt: state?.syncToken && !fullResync
-      ? state.fullSyncCompletedAt : new Date(),
-    lastIncrementalAt: new Date(),
-    tokenInvalidatedAt: fullResync ? new Date() : null,
-    isSyncing: false,
-    consecutiveFailures: 0,
-    lastError: null,
-    updatedAt: new Date(),
-  };
-  await db.insert(calendarSyncStates).values(syncValues)
-    .onConflictDoUpdate({ target: calendarSyncStates.calendarId, set: syncValues });
-
-  return { created, updated, removed, fullResync };
 }

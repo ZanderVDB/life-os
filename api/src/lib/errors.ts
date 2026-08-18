@@ -17,3 +17,5 @@ export const forbidden = (m = 'You do not have access to this workspace.') => ne
 export const notFound = (m = 'Not found.') => new ApiError(404, 'NOT_FOUND', m);
 export const conflict = (m: string, d?: unknown) => new ApiError(409, 'CONFLICT', m, d);
 export const unprocessable = (m: string, d?: unknown) => new ApiError(422, 'UNPROCESSABLE', m, d);
+/** Somebody else is having the problem, and it is expected to pass. */
+export const upstreamUnavailable = (m: string) => new ApiError(503, 'UPSTREAM_UNAVAILABLE', m);
