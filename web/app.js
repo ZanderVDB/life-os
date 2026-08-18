@@ -3610,23 +3610,51 @@ async function moveProjectToTop(project) {
   catch (e) { toast(e.message, true); }
 }
 
+/**
+ * Deleting a project, and deciding what happens to its work.
+ *
+ * Keeping the tasks was the only behaviour, and it is still the safe one — but
+ * it is not free. An orphaned task keeps its BUCKET, so deleting a project full
+ * of Today tasks empties them onto Today as loose work nobody put there.
+ * Deleting ten projects at once buries the board.
+ *
+ * So the question is asked rather than answered. The count is real, fetched
+ * before asking, because "delete 9 tasks" and "delete 0 tasks" are different
+ * decisions and a generic warning makes them look the same.
+ *
+ * Dated and scheduled tasks are kept whichever answer is given — the server
+ * enforces it. A commitment outlives the plan that produced it.
+ */
 async function deleteProject(project, silent = false) {
+  let tasksMode = 'keep';
   if (!silent) {
+    const open = project.progress?.open ?? 0;
+    const choices = [
+      { id: 'keep', label: open ? 'Delete it, keep the tasks' : 'Delete the project', tone: 'danger' },
+      ...(open ? [{ id: 'all', label: `Delete it and its ${open} task${open === 1 ? '' : 's'}`, tone: 'danger' }] : []),
+      { id: 'cancel', label: 'Keep it', tone: 'quiet' },
+    ];
     const choice = await openChoiceDialog({
       title: 'Delete this project?',
-      body: 'Its tasks are kept — they simply stop belonging to it.',
-      choices: [
-        { id: 'delete', label: 'Delete the project', tone: 'danger' },
-        { id: 'keep', label: 'Keep it', tone: 'quiet' },
-      ],
+      body: open
+        ? `Kept tasks stay on your board as loose work — anything with a date or a `
+          + `time is kept either way. Its Book stays in Library.`
+        : 'Its Book stays in Library.',
+      choices,
     });
-    if (choice !== 'delete') return;
+    if (choice === 'cancel' || !choice) return;
+    tasksMode = choice === 'all' ? 'delete' : 'keep';
   }
   try {
-    const r = await api(`/api/v1/workspaces/${ws()}/projects/${project.id}`, { method: 'DELETE' });
+    const r = await api(`/api/v1/workspaces/${ws()}/projects/${project.id}?tasks=${tasksMode}`,
+      { method: 'DELETE' });
     if (pj.openId === project.id) { pj.openId = null; await loadProjects(); }
     else await refreshProjects();
-    saved(r.tasksKept ? `Deleted · ${r.tasksKept} task${r.tasksKept === 1 ? '' : 's'} kept` : 'Deleted');
+    const bits = [
+      r.tasksDeleted ? `${r.tasksDeleted} task${r.tasksDeleted === 1 ? '' : 's'} deleted` : '',
+      r.tasksKept ? `${r.tasksKept} kept` : '',
+    ].filter(Boolean);
+    saved(bits.length ? `Deleted · ${bits.join(', ')}` : 'Deleted');
   } catch (e) { toast(e.message, true); }
 }
 

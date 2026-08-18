@@ -47,6 +47,8 @@ async function setup() {
   const base = `/api/v1/workspaces/${me.workspace.id}`;
   return {
     me,
+    app,
+    del: (u: string) => app.inject({ method: 'DELETE', url: base + u, headers: auth() }),
     post: (u: string, p?: any) => app.inject({ method: 'POST', url: base + u, headers: auth(), payload: p ?? {} }),
     patch: (u: string, p: any) => app.inject({ method: 'PATCH', url: base + u, headers: auth(), payload: p }),
     get: (u: string) => app.inject({ method: 'GET', url: base + u, headers: auth() }),
@@ -200,4 +202,51 @@ test('the starter set is deliberately small', () => {
     assert.ok(s.opening.length > 60, `${s.title} does not explain itself`);
     assert.ok(!/^Nothing here/i.test(s.opening));
   }
+});
+
+/* ── Deleting a project, and what happens to its work ─────────────────── */
+
+test('deleting a project keeps its tasks by default', async () => {
+  const h = await setup();
+  const p = await aProject(h);
+  const t = await aTaskOn(h, p.id);
+  const r = await h.del(`/projects/${p.id}`);
+  assert.equal(r.json().tasksKept, 1);
+  assert.equal(r.json().tasksDeleted, 0);
+  const still = (await h.get('/tasks?includeCompleted=false')).json()
+    .tasks.find((x: any) => x.id === t.id);
+  assert.ok(still, 'the task was destroyed by the default');
+  assert.equal(still.projectId, null);
+});
+
+test('deleting a project can take its tasks with it — but never a commitment', async () => {
+  /* The reported problem: deleting ten projects emptied their Today tasks onto
+   * the board as loose work nobody put there. The answer is to ask, not to
+   * change the default — and a dated task is kept whichever answer is given,
+   * because a commitment outlives the plan that produced it. */
+  const h = await setup();
+  const p = await aProject(h);
+  const loose = await aTaskOn(h, p.id, { title: 'Pick tiles' });
+  const dated = await aTaskOn(h, p.id, { title: 'Pay the deposit', dueDate: '2026-09-01' });
+
+  const r = await h.del(`/projects/${p.id}?tasks=delete`);
+  assert.equal(r.json().tasksDeleted, 1, 'the undated task was not removed');
+  assert.equal(r.json().tasksKept, 1, 'the dated task was not kept');
+
+  const left = (await h.get('/tasks?includeCompleted=false')).json().tasks;
+  assert.ok(!left.some((x: any) => x.id === loose.id), 'the loose task survived');
+  const kept = left.find((x: any) => x.id === dated.id);
+  assert.ok(kept, 'a task with a due date was deleted');
+  assert.equal(kept.dueDate, '2026-09-01');
+  assert.equal(kept.projectId, null);
+});
+
+test('the delete dialog asks about the work, with a real count', () => {
+  const app = readFileSync(join(WEB, 'app.js'), 'utf8');
+  const fn = app.slice(app.indexOf('async function deleteProject('),
+    app.indexOf('async function completeProjectTask('));
+  assert.match(fn, /project\.progress\?\.open/, 'the dialog does not use the real count');
+  assert.match(fn, /Delete it and its \$\{open\} task/, 'there is no way to delete the tasks');
+  assert.match(fn, /keep the tasks/, 'keeping is no longer offered');
+  assert.match(fn, /\?tasks=\$\{tasksMode\}/, 'the answer is not sent to the server');
 });

@@ -112,11 +112,17 @@ test('s3: reopening leaves completed without a second write to tidy up after it'
   assert.ok(!/completedAt/.test(fn), 'the client is second-guessing completedAt');
 });
 
-test('s3: deleting a project asks first, and keeps the tasks', () => {
+test('s3: deleting a project asks first, and never destroys by default', () => {
   const fn = app.slice(app.indexOf('async function deleteProject('), app.indexOf('async function completeProjectTask('));
   assert.match(fn, /openChoiceDialog/, 'delete does not confirm');
-  assert.match(fn, /if \(choice !== 'delete'\) return;/, 'delete proceeds without a yes');
+  /* The cancel path. The choices grew — keeping the tasks, taking them with it,
+   * or not deleting at all — so the guard is now on the cancel answer rather
+   * than on one specific yes. An unanswered dialog must still do nothing. */
+  assert.match(fn, /if \(choice === 'cancel' \|\| !choice\) return;/,
+    'delete proceeds without an answer');
   assert.match(fn, /tone: 'danger'/);
+  /* Keeping the work is still what happens unless the user says otherwise. */
+  assert.match(fn, /let tasksMode = 'keep';/, 'the default is no longer to keep the tasks');
 });
 
 test('s3: switching lifecycle tab cannot leave a menu behind', () => {

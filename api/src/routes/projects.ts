@@ -1079,12 +1079,34 @@ export function registerProjectRoutes(
   app.delete(`${base}/projects/:id`, pre, async (req) => {
     const { id } = z.object({ id: uuid }).parse(req.params);
     const ws = wsId(req);
-    const q = z.object({ book: z.enum(['keep', 'archive', 'delete']).default('keep') })
-      .parse(req.query ?? {});
+    const q = z.object({
+      book: z.enum(['keep', 'archive', 'delete']).default('keep'),
+      /* What happens to the work.
+       *
+       * `keep` orphans them, which was the only behaviour and is still the
+       * default — it never destroys anything. But orphaning is not free: an
+       * orphaned task keeps its BUCKET, so deleting a project full of Today
+       * tasks empties them onto Today as loose work you did not put there.
+       * Deleting ten sample projects did exactly that.
+       *
+       * So the caller says. `delete` removes the tasks that belonged ONLY to
+       * this project; anything the user had also dated or scheduled is kept,
+       * because a commitment outlives the plan that produced it. */
+      tasks: z.enum(['keep', 'delete']).default('keep'),
+    }).parse(req.query ?? {});
     await load(ws, id);
     const book = await bookFor(ws, id);
 
-    const orphaned = await db.update(tasks)
+    let orphaned: { id: string }[] = [];
+    let removed: { id: string }[] = [];
+    if (q.tasks === 'delete') {
+      removed = await db.delete(tasks)
+        .where(and(eq(tasks.workspaceId, ws), eq(tasks.projectId, id),
+          isNull(tasks.dueDate), isNull(tasks.scheduledAt), isNull(tasks.completedAt)))
+        .returning({ id: tasks.id });
+    }
+    // Whatever is left — dated, scheduled or already finished — is kept.
+    orphaned = await db.update(tasks)
       .set({ projectId: null, updatedAt: new Date() })
       .where(and(eq(tasks.workspaceId, ws), eq(tasks.projectId, id)))
       .returning({ id: tasks.id });
@@ -1105,7 +1127,9 @@ export function registerProjectRoutes(
 
     await db.delete(projects).where(and(eq(projects.workspaceId, ws), eq(projects.id, id)));
     return {
-      deleted: true, tasksKept: orphaned.length,
+      deleted: true,
+      tasksKept: orphaned.length,
+      tasksDeleted: removed.length,
       book: book ? { itemId: book.itemId, disposition: q.book } : null,
     };
   });
