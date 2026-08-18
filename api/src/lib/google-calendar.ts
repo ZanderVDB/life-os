@@ -13,7 +13,55 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 
-export const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+/**
+ * The scopes, chosen to be the narrowest set that does the job.
+ *
+ *   calendar.events              read AND write events on calendars the user
+ *                                can already access. This is the write grant,
+ *                                and it is per-EVENT: it confers no power to
+ *                                create, delete or re-share calendars.
+ *   calendar.calendarlist.readonly   list the user's calendars and read their
+ *                                metadata — name, colour, timezone and,
+ *                                critically, accessRole. Deliberately chosen
+ *                                over the full `calendar.readonly`, which
+ *                                would also hand over every event on every
+ *                                calendar for no additional benefit.
+ *   calendar.freebusy            availability only. Returns busy INTERVALS,
+ *                                never titles, guests or details — exactly
+ *                                what conflict checking needs and nothing more.
+ *
+ * Not requested, and not needed: `calendar` (full control), any ACL scope, or
+ * `calendar.settings`. Life OS never manages calendars or their sharing.
+ *
+ * `calendar.events` supersedes the old `calendar.readonly` for events, so the
+ * read paths keep working on the new grant. Everyone must re-consent, because
+ * a scope set that gains write is a genuinely different request — see
+ * SCOPES_VERSION.
+ */
+export const GOOGLE_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  'https://www.googleapis.com/auth/calendar.freebusy',
+] as const;
+
+export const GOOGLE_SCOPE = GOOGLE_SCOPES.join(' ');
+
+/**
+ * Bumped whenever the scope set changes.
+ *
+ * A connection stamped with an older version holds a token that cannot write,
+ * however healthy it looks. Comparing versions is how the app knows to ask for
+ * a reconnect BEFORE someone fills in an event form, rather than after.
+ */
+export const SCOPES_VERSION = 2;
+
+/** The scope that actually grants writes. Everything else is reading. */
+export const WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+
+/** Can this grant write events? Google returns what it actually gave us. */
+export const grantCanWrite = (granted: string[] | null | undefined): boolean =>
+  (granted ?? []).some((s) => s === WRITE_SCOPE
+    || s === 'https://www.googleapis.com/auth/calendar');
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
@@ -357,3 +405,204 @@ function shiftDay(day: string, delta: number): string {
   d.setUTCDate(d.getUTCDate() + delta);
   return d.toISOString().slice(0, 10);
 }
+
+
+/* ══ Writing ═════════════════════════════════════════════════════════════
+ *
+ * Every mutating call goes through `send`, the counterpart to `get`. One
+ * chokepoint each way, so "what can this code do to somebody's calendar" is
+ * answerable by reading two functions rather than auditing every call site.
+ *
+ * These are called ONLY by the mutation service (calendar-mutations.ts), which
+ * is what enforces that a write is always preceded by a confirmed proposal.
+ */
+
+async function send(accessToken: string, method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  path: string, body?: unknown, params: Record<string, string | undefined> = {}) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined) p.set(k, v);
+  const qs = p.toString();
+
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}${qs ? `?${qs}` : ''}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (e) {
+    throw new GoogleError(
+      `Could not reach Google: ${e instanceof Error ? e.message : String(e)}`, 0, 'network');
+  }
+
+  // 204 on DELETE, and 410 meaning "already gone", which is a success for us.
+  if (res.status === 204 || res.status === 410) return null;
+  const json = await res.json().catch(() => ({})) as any;
+  if (!res.ok) {
+    const reason = json?.error?.errors?.[0]?.reason;
+    throw new GoogleError(json?.error?.message ?? `Google returned ${res.status}`,
+      res.status, reason);
+  }
+  return json;
+}
+
+/** One event, fresh from Google. Used to reconcile before a risky update. */
+export const getEvent = (accessToken: string, calendarId: string, eventId: string) =>
+  get(accessToken, `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {});
+
+export type EventWrite = {
+  summary?: string;
+  description?: string | null;
+  location?: string | null;
+  start?: any;
+  end?: any;
+  attendees?: { email: string; optional?: boolean }[];
+  recurrence?: string[] | null;
+  reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
+  conferenceData?: any;
+  transparency?: string;
+  visibility?: string;
+  extendedProperties?: { private?: Record<string, string> };
+  eventType?: string;
+};
+
+/**
+ * Create an event.
+ *
+ * `requestId` is Google's own idempotency key for conference creation, and we
+ * reuse the Life OS mutation id for it so a retried create cannot produce a
+ * second Meet link. Duplicate-event protection itself is ours — see
+ * calendar-mutations.ts — because Google has no idempotency key for
+ * events.insert.
+ */
+export const insertEvent = (accessToken: string, calendarId: string, body: EventWrite,
+  opts: { sendUpdates?: string; withMeet?: boolean } = {}) =>
+  send(accessToken, 'POST', `/calendars/${encodeURIComponent(calendarId)}/events`, body, {
+    sendUpdates: opts.sendUpdates ?? 'none',
+    conferenceDataVersion: opts.withMeet ? '1' : undefined,
+    supportsAttachments: 'false',
+  });
+
+/**
+ * Update an event, refusing to clobber a newer version.
+ *
+ * `If-Match` is not available on this endpoint the way it is on some APIs, so
+ * concurrency is enforced one level up: the service re-reads the event and
+ * compares etags before calling this. PATCH rather than PUT so that fields
+ * Life OS does not model — attachments, colours set on a phone — survive.
+ */
+export const patchEvent = (accessToken: string, calendarId: string, eventId: string,
+  body: EventWrite, opts: { sendUpdates?: string; withMeet?: boolean } = {}) =>
+  send(accessToken, 'PATCH',
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, body, {
+      sendUpdates: opts.sendUpdates ?? 'none',
+      conferenceDataVersion: opts.withMeet ? '1' : undefined,
+    });
+
+export const deleteEvent = (accessToken: string, calendarId: string, eventId: string,
+  opts: { sendUpdates?: string } = {}) =>
+  send(accessToken, 'DELETE',
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    undefined, { sendUpdates: opts.sendUpdates ?? 'none' });
+
+/**
+ * One instance of a recurring event.
+ *
+ * Editing "just this one" means finding the INSTANCE and patching it, not
+ * patching the series master — which is the difference between moving one
+ * appointment and moving every appointment forever.
+ */
+export async function listInstances(accessToken: string, calendarId: string, eventId: string,
+  opts: { timeMin?: string; timeMax?: string; maxResults?: number } = {}) {
+  const page: any = await get(accessToken,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}/instances`, {
+      timeMin: opts.timeMin,
+      timeMax: opts.timeMax,
+      maxResults: String(opts.maxResults ?? 50),
+    });
+  return (page.items ?? []) as any[];
+}
+
+/**
+ * Busy intervals across calendars.
+ *
+ * Returns times only — no titles, no guests. That is the whole reason
+ * `calendar.freebusy` is a separate, narrower scope, and the reason conflict
+ * checking can look at calendars whose contents Life OS never reads.
+ */
+export async function freeBusy(accessToken: string, calendarIds: string[],
+  timeMin: string, timeMax: string) {
+  if (!calendarIds.length) return {} as Record<string, { start: string; end: string }[]>;
+  const json = await send(accessToken, 'POST', '/freeBusy', {
+    timeMin, timeMax, items: calendarIds.map((id) => ({ id })),
+  });
+  const out: Record<string, { start: string; end: string }[]> = {};
+  for (const [id, v] of Object.entries((json?.calendars ?? {}) as Record<string, any>)) {
+    out[id] = (v?.busy ?? []) as { start: string; end: string }[];
+  }
+  return out;
+}
+
+/* ══ Push notifications ══════════════════════════════════════════════════ */
+
+export type WatchChannel = {
+  id: string; resourceId: string; resourceUri?: string; expiration?: string;
+};
+
+/**
+ * Ask Google to tell us when a calendar changes.
+ *
+ * The `token` travels back on every notification and is how a POST is matched
+ * to a workspace. It therefore carries an opaque secret and NOTHING else — no
+ * OAuth token, no ids that mean anything to anyone who intercepts it.
+ */
+export async function watchEvents(accessToken: string, calendarId: string, opts: {
+  channelId: string; address: string; token: string; ttlSeconds?: number;
+}): Promise<WatchChannel> {
+  const json = await send(accessToken, 'POST',
+    `/calendars/${encodeURIComponent(calendarId)}/events/watch`, {
+      id: opts.channelId,
+      type: 'web_hook',
+      address: opts.address,
+      token: opts.token,
+      params: { ttl: String(opts.ttlSeconds ?? 7 * 24 * 3600) },
+    });
+  return {
+    id: json.id, resourceId: json.resourceId,
+    resourceUri: json.resourceUri, expiration: json.expiration,
+  };
+}
+
+/** Politely close a channel. Best effort — an expired one is already closed. */
+export async function stopChannel(accessToken: string, channelId: string, resourceId: string) {
+  try {
+    await stopChannelRaw(accessToken, { id: channelId, resourceId });
+    return true;
+  } catch { return false; }
+}
+
+/** channels.stop lives at the API root, not under /calendars. */
+async function stopChannelRaw(accessToken: string, body: unknown) {
+  const res = await fetch(`${API}/channels/stop`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok && res.status !== 404) throw new GoogleError('channels.stop failed', res.status);
+}
+
+/* ══ Mapping, outbound ═══════════════════════════════════════════════════ */
+
+/** Google's time shape: a date for all-day, a dateTime plus zone otherwise. */
+export const timePoint = (v: { date?: string | null; dateTime?: string | null; timeZone?: string | null }) =>
+  (v.date ? { date: v.date } : { dateTime: v.dateTime, timeZone: v.timeZone ?? undefined });
+
+/** True when Google says this event is one Life OS must not offer to edit. */
+export const EVENT_TYPES_READ_ONLY = new Set(['fromGmail', 'birthday', 'workingLocation']);
+export const isReadOnlyEventType = (t: string | null | undefined) =>
+  !!t && EVENT_TYPES_READ_ONLY.has(t);

@@ -199,17 +199,30 @@ test('plan: the current-time marker is today-only and inside planning hours', ()
 
 /* ── §15/§19 Google stays read-only ──────────────────────────────────── */
 
-test('google: still read-only, with no write path anywhere', () => {
-  assert.match(googleClient, /calendar\.readonly/, 'the scope changed');
-  for (const bad of ['auth/calendar\'', 'calendar.events\'', 'calendar.acls']) {
-    assert.ok(!googleClient.includes(bad), `a write scope appeared: ${bad}`);
+test('google: writes exist, and only through the one door', () => {
+  /* This used to assert that no write path existed at all. Writing is now the
+   * point, so what has to hold instead is that there is exactly ONE way to do
+   * it. The Calendar phase added insert/patch/delete deliberately; what would
+   * be a regression is a second route to Google that skips the confirmation. */
+  const requested = googleClient.slice(
+    googleClient.indexOf('export const GOOGLE_SCOPES'),
+    googleClient.indexOf('export const GOOGLE_SCOPE ='));
+  assert.match(requested, /auth\/calendar\.events'/, 'the write scope is gone');
+  /* Still no power over calendars themselves — only over events on them. The
+   * check is against what is REQUESTED: elsewhere the file names the full
+   * scope in order to accept a broader grant a user may already have given,
+   * and reading a scope is not asking for one. */
+  for (const bad of ['auth/calendar\'', 'calendar.acls', 'calendar.settings',
+    'auth/calendar.calendars']) {
+    assert.ok(!requested.includes(bad), `an over-broad scope is requested: ${bad}`);
   }
-  assert.ok(!/insertEvent|patchEvent|deleteEvent/.test(googleClient), 'a write helper exists');
-  // And the UI never offers one for a synced event.
-  assert.match(appCode, /ev\.syncState === 'synced'.*openEventDetail/s,
-    'a Google event can open the editor');
-  const detail = read('detail-sheet.js');
-  assert.ok(!/<input|<textarea|<select/.test(detail), 'the detail sheet has form controls');
+  // Every mutating call goes through one chokepoint, as reads go through get().
+  assert.match(googleClient, /async function send\(accessToken/, 'no single write chokepoint');
+  /* Every mutating verb the file names belongs to `send`, the token exchange
+   * or channels.stop. A fourth `await fetch(` would be the smell. */
+  const fetches = googleClient.match(/await fetch\(/g) ?? [];
+  assert.ok(fetches.length <= 6,
+    `${fetches.length} fetch calls — one may be bypassing get()/send()`);
 });
 
 test('data: cleanup cannot reach Google projections or the connection', () => {

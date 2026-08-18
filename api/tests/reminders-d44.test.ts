@@ -218,10 +218,16 @@ test('detail: a reminder gets a Life OS surface with real actions', () => {
   assert.ok(!/openEventModal/.test(detailFn), 'reminder detail opens the Event editor');
 });
 
-test('detail: Google events still get no actions at all', () => {
-  // The same sheet serves both. Only records Life OS can change pass actions.
+test('detail: actions appear only where the record can actually be changed', () => {
+  /* The same sheet serves reminders and Google events. It used to be that only
+   * reminders could carry actions; Google events can now too, but ONLY when
+   * Google would accept the change — a birthday, a Gmail event or a read-only
+   * calendar still gets none. An action that exists and then fails is worse
+   * than one that was never offered. */
   const fn = body(appCode, 'function openEventDetail(ev)');
-  assert.ok(!/actions:/.test(fn), 'a Google event detail offers actions');
+  assert.match(fn, /actions: editable \? \[/, 'a Google event offers actions unconditionally');
+  assert.match(fn, /fromGmail/, 'Gmail events are offered an edit button');
+  assert.match(fn, /calendarReadOnly/, 'a read-only calendar still offers actions');
   assert.match(detail, /\(ctx\.actions \?\? \[\]\)/, 'actions are not optional');
 });
 

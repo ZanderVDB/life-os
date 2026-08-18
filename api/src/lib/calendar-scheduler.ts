@@ -29,9 +29,13 @@ import type { Db } from '../db/client.js';
 import { calendarConnections } from '../db/schema.js';
 import { redactTokens } from './token-crypto.js';
 import { syncConnection, recordSyncOutcome, googleConfig, type SyncLogger } from './calendar-sync.js';
+import { renewWatches, webhookConfigured } from './calendar-watch.js';
 
 /** How often the loop looks for work. Cheap: one indexed query. */
 export const TICK_MS = 60_000;
+
+/** How often watch channels are checked for expiry. They last days. */
+export const RENEW_TICK_MS = 60 * 60_000;
 
 /** How often a healthy connection is pulled. */
 export const SYNC_INTERVAL_MS = 5 * 60_000;
@@ -223,12 +227,34 @@ export function startCalendarScheduler(db: Db, log: SyncLogger): SchedulerHandle
   };
 
   status.started = true;
+  /* Watch channels expire in days, so they are checked on a slower beat than
+   * the sync itself. A calendar whose watch quietly lapsed keeps looking
+   * connected and stops being current — the same silent stop as a dead token,
+   * wearing a different hat. */
+  const renew = async () => {
+    if (stopped || !webhookConfigured()) return;
+    try {
+      const r = await renewWatches(db, log);
+      if (r.renewed || r.retired) log.info(r, 'calendar watch channels refreshed');
+    } catch (e) {
+      log.error({ err: redactTokens(e) }, 'calendar watch renewal failed');
+    }
+  };
+  void renew();
+  const renewTimer = setInterval(() => { void renew(); }, RENEW_TICK_MS);
+  if (typeof renewTimer.unref === 'function') renewTimer.unref();
+
   const timer = setInterval(() => { void pass(); }, TICK_MS);
   // Never hold the process open on this alone.
   if (typeof timer.unref === 'function') timer.unref();
 
   return {
     runOnce: pass,
-    stop: () => { stopped = true; status.started = false; clearInterval(timer); },
+    stop: () => {
+      stopped = true;
+      status.started = false;
+      clearInterval(timer);
+      clearInterval(renewTimer);
+    },
   };
 }

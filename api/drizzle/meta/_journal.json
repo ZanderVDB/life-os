@@ -99,6 +99,13 @@
       "when": 1785700001008,
       "tag": "0013_calendar_auto_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785700002008,
+      "tag": "0014_calendar_two_way",
+      "breakpoints": true
     }
   ]
 }

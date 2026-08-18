@@ -619,8 +619,18 @@ test('Diary shares the document grammar and nothing else', () => {
   }
 });
 
-test('Google access is still read-only', () => {
+test('Diary never touches Google', () => {
+  /* Calendar gained write access; Diary did not, and must not inherit it. The
+   * scope set itself is Calendar's business — asserted there — so what this
+   * file checks is that nothing in Diary reaches for Google at all. */
+  const diaryRoute = readFileSync(join(here, '..', 'src', 'routes', 'diary.ts'), 'utf8');
+  for (const forbidden of ['google', 'calendarMutations', 'insertEvent', 'accessTokenFor']) {
+    assert.ok(!new RegExp(forbidden, 'i').test(diaryRoute),
+      `Diary reaches for ${forbidden}`);
+  }
+  // And the over-broad scope is still not among the ones requested.
   const google = readFileSync(join(here, '..', 'src', 'lib', 'google-calendar.ts'), 'utf8');
-  assert.match(google, /auth\/calendar\.readonly'/);
-  assert.ok(!/auth\/calendar'/.test(google), 'a Google write scope was added');
+  const requested = google.slice(google.indexOf('export const GOOGLE_SCOPES'),
+    google.indexOf('export const GOOGLE_SCOPE ='));
+  assert.ok(!/auth\/calendar'/.test(requested), 'the full-control Google scope is requested');
 });

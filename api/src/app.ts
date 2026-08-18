@@ -19,6 +19,7 @@ import { registerPreferenceRoutes } from './routes/preferences.js';
 import { registerHabitRoutes } from './routes/habits.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerGoogleCalendarRoutes } from './routes/google-calendar.js';
+import { registerCalendarWriteRoutes, registerCalendarWebhook } from './routes/calendar-write.js';
 
 export const API_VERSION = '0.1.0';
 
@@ -73,6 +74,10 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerHabitRoutes(app, db, guards);
   registerCalendarRoutes(app, db, guards);
   registerGoogleCalendarRoutes(app, db, guards);
+  registerCalendarWriteRoutes(app, db, guards);
+  /* Google is not a signed-in user, so its webhook is registered outside the
+   * workspace-scoped routes and proves who it is from a channel row instead. */
+  registerCalendarWebhook(app, db);
 
   /** One error shape. Internals are logged, never returned. */
   app.setErrorHandler((err, req, reply) => {

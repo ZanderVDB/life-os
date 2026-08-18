@@ -478,6 +478,16 @@ export const calendarConnections = pgTable('calendar_connections', {
   nextSyncAt: timestamp('next_sync_at', { withTimezone: true }),
   syncingSince: timestamp('syncing_since', { withTimezone: true }),
   syncFailureCount: integer('sync_failure_count').notNull().default(0),
+  /* What this grant can DO, recorded rather than assumed.
+   *
+   * `canWrite` is derived from the scopes Google actually returned, which can
+   * be narrower than the ones requested — a user may untick a permission on
+   * the consent screen. `scopesVersion` is the scope SET this token was issued
+   * under: a connection from before writes existed looks perfectly healthy and
+   * cannot create anything, and the only honest way to know that is to have
+   * written down which contract it was signed under. */
+  canWrite: boolean('can_write').notNull().default(false),
+  scopesVersion: integer('scopes_version').notNull().default(1),
   disconnectedAt: timestamp('disconnected_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -508,6 +518,12 @@ export const calendars = pgTable('calendars', {
   accessRole: text('access_role').notNull().default('reader'),
   isPrimary: boolean('is_primary').notNull().default(false),
   isVisible: boolean('is_visible').notNull().default(true),
+  /* Whether time on this calendar blocks time in real life. Separate from
+   * visibility on purpose: a holidays or birthdays calendar is worth seeing
+   * and does not stop you doing anything, and treating it as a conflict would
+   * make the warning worthless by making it constant. */
+  countsAsBusy: boolean('counts_as_busy').notNull().default(true),
+  isDefaultTarget: boolean('is_default_target').notNull().default(false),
   // Derived from accessRole and stored, so the UI never re-derives it and
   // never accidentally offers an edit control on a read-only calendar.
   isReadOnly: boolean('is_read_only').notNull().default(true),
@@ -529,6 +545,96 @@ export const calendars = pgTable('calendars', {
  * When Google invalidates it (410 GONE), `tokenInvalidatedAt` is stamped and a
  * controlled FULL resync runs for that calendar only. Never a guess at what
  * changed in between, and never a delete of Life OS-only data. */
+/**
+ * Google push-notification channels.
+ *
+ * Google tells us "something on this calendar changed" and nothing else — no
+ * event, no diff. The row exists to answer, quickly and safely, "whose calendar
+ * is this notification about?" without trusting anything in the POST body
+ * beyond an opaque secret we issued ourselves.
+ *
+ * `verificationToken` is that secret. It is matched, never parsed: it carries
+ * no workspace id, no user id and certainly no OAuth token, so intercepting a
+ * notification tells an attacker nothing and forging one gets nowhere.
+ */
+export const calendarWatchChannels = pgTable('calendar_watch_channels', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  connectionId: uuid('connection_id').notNull()
+    .references(() => calendarConnections.id, { onDelete: 'cascade' }),
+  calendarId: uuid('calendar_id').notNull()
+    .references(() => calendars.id, { onDelete: 'cascade' }),
+  // Google's identifiers for the channel and the resource it watches.
+  channelId: text('channel_id').notNull().unique(),
+  resourceId: text('resource_id'),
+  resourceUri: text('resource_uri'),
+  verificationToken: text('verification_token').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  // active | expired | stopped | failed
+  status: text('status').notNull().default('active'),
+  lastNotifiedAt: timestamp('last_notified_at', { withTimezone: true }),
+  notifyCount: integer('notify_count').notNull().default(0),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byWorkspace: index('cal_watch_ws_idx').on(t.workspaceId),
+  byCalendar: index('cal_watch_cal_idx').on(t.calendarId),
+  // The renewal sweep's only query: active channels, soonest expiry first.
+  byExpiry: index('cal_watch_exp_idx').on(t.status, t.expiresAt),
+  statusCheck: check('cal_watch_status',
+    sql`${t.status} IN ('active','expired','stopped','failed')`),
+}));
+
+/**
+ * Every Google mutation Life OS has attempted, and how it went.
+ *
+ * Two jobs. First, idempotency: a retried create finds its own completed row
+ * and returns the event it already made, instead of putting a second identical
+ * appointment in somebody's calendar. Matching on title and time would be a
+ * guess; matching on the mutation id is a fact.
+ *
+ * Second, the audit trail. When the assistant can propose calendar changes,
+ * "what was proposed, what was confirmed, what actually executed, and by whom"
+ * has to be answerable — and it has to be answerable from data rather than
+ * from trusting that the model behaved.
+ */
+export const calendarMutations = pgTable('calendar_mutations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  // The caller's idempotency key. Unique per workspace, so a retry is detected.
+  requestId: text('request_id').notNull(),
+  // calendar.create | calendar.update | calendar.delete
+  kind: text('kind').notNull(),
+  // proposed | confirmed | executed | failed | cancelled
+  status: text('status').notNull().default('proposed'),
+  // Who asked. `user` today; `assistant` later — and the column exists now so
+  // that when it does, nothing about the confirmation path has to change.
+  origin: text('origin').notNull().default('user'),
+  calendarId: uuid('calendar_id').references(() => calendars.id, { onDelete: 'set null' }),
+  eventId: uuid('event_id').references(() => calendarEvents.id, { onDelete: 'set null' }),
+  providerEventId: text('provider_event_id'),
+  scope: text('scope').notNull().default('single'),
+  payload: jsonb('payload'),
+  summary: jsonb('summary'),
+  error: text('error'),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  executedAt: timestamp('executed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byWorkspace: index('cal_mut_ws_idx').on(t.workspaceId),
+  uniqueRequest: uniqueIndex('cal_mut_request_idx').on(t.workspaceId, t.requestId),
+  kindCheck: check('cal_mut_kind',
+    sql`${t.kind} IN ('calendar.create','calendar.update','calendar.delete')`),
+  statusCheck: check('cal_mut_status',
+    sql`${t.status} IN ('proposed','confirmed','executed','failed','cancelled')`),
+  scopeCheck: check('cal_mut_scope',
+    sql`${t.scope} IN ('single','instance','series','following')`),
+}));
+
 export const calendarSyncStates = pgTable('calendar_sync_states', {
   id: uuid('id').primaryKey().defaultRandom(),
   workspaceId: uuid('workspace_id').notNull()

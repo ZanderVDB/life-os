@@ -41,38 +41,95 @@ const KEY = 'test-key-that-is-definitely-long-enough-32';
 
 /* ── Scope and write safety ──────────────────────────────────────────── */
 
-test('scope: read-only, and no write scope anywhere', () => {
-  assert.equal(G.GOOGLE_SCOPE, 'https://www.googleapis.com/auth/calendar.readonly');
-  for (const [name, src] of [['client', client], ['route', route]] as const) {
-    // These are the scopes that would allow writing. None may appear.
-    for (const bad of [
-      'auth/calendar\'', 'auth/calendar"', 'calendar.events\'',
-      'calendar.app.created', 'calendar.acls', 'calendar.calendars',
-    ]) {
-      assert.ok(!src.includes(bad), `${name} requests the write-capable scope ${bad}`);
+test('scopes: the narrowest set that can do the job, and no wider', () => {
+  /* Writing is now the product. What has to stay true is that the grant is
+   * still the SMALLEST one that supports it: events on calendars the user
+   * already has, the calendar list, and availability. Nothing that could
+   * create a calendar, delete one, or change who it is shared with. */
+  assert.deepEqual([...G.GOOGLE_SCOPES], [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+    'https://www.googleapis.com/auth/calendar.freebusy',
+  ]);
+  // calendar.readonly would ALSO hand over every event on every calendar, for
+  // no benefit over calendar.events plus the list scope.
+  assert.ok(!G.GOOGLE_SCOPE.includes('auth/calendar.readonly'),
+    'the broad read scope is still requested alongside the narrow ones');
+
+  const requested = client.slice(client.indexOf('export const GOOGLE_SCOPES'),
+    client.indexOf('export const GOOGLE_SCOPE ='));
+  for (const bad of [
+    "auth/calendar'", 'auth/calendar"', 'calendar.app.created',
+    'calendar.acls', 'calendar.calendars', 'calendar.settings',
+  ]) {
+    assert.ok(!requested.includes(bad), `an over-broad scope is requested: ${bad}`);
+  }
+  // A scope change must bump the version, or existing tokens silently cannot write.
+  assert.ok(G.SCOPES_VERSION >= 2, 'the scope set changed without bumping SCOPES_VERSION');
+});
+
+test('write safety: two chokepoints, and nothing writes around them', () => {
+  /* Reads go through `get`; writes go through `send`. Both are private to this
+   * module, so "what can this code do to somebody's calendar" is answerable by
+   * reading two functions rather than auditing every call site.
+   *
+   * The old version of this test asserted no write path existed at all. That
+   * was the right invariant when the integration was read-only and is the
+   * wrong one now — but the thing it was really protecting, that a write
+   * cannot happen somewhere nobody is looking, still holds. */
+  assert.match(client, /async function get\(accessToken/, 'no single GET chokepoint');
+  assert.match(client, /async function send\(accessToken/, 'no single write chokepoint');
+
+  /* Six fetches, and every one of them has a name: the two chokepoints, the
+   * token exchange, revocation, the account-email lookup and channels.stop.
+   * A seventh would be something reaching past get/send. */
+  const owners = ['tokenRequest', 'async function get(', 'async function send(',
+    'revokeToken', 'fetchAccountEmail', 'stopChannelRaw'];
+  for (const owner of owners) {
+    assert.ok(client.includes(owner), `${owner} is gone — the fetch budget below is stale`);
+  }
+  const fetches = client.match(/await fetch\(/g) ?? [];
+  assert.equal(fetches.length, owners.length,
+    `${fetches.length} fetch calls for ${owners.length} known owners — one bypasses get/send`);
+
+  // The write helpers exist and are the ONLY exported way to mutate.
+  for (const fn of ['insertEvent', 'patchEvent', 'deleteEvent']) {
+    assert.ok(client.includes(`export const ${fn}`), `${fn} is missing`);
+  }
+  assert.ok(!/export const createEvent|export async function createEvent/.test(client),
+    'a second creation helper exists');
+});
+
+test('write safety: only the mutation service may call Google write helpers', () => {
+  /* This is the rule the whole Calendar phase rests on, and the one the
+   * assistant will later be held to. If a route could call insertEvent
+   * directly, then "every write is confirmed first" would be a convention
+   * rather than a fact, and conventions do not survive contact with a model
+   * that is trying to be helpful. */
+  const callers = ['routes/google-calendar.ts', 'routes/calendar.ts',
+    'routes/calendar-write.ts', 'routes/tasks.ts', 'routes/projects.ts',
+    'lib/calendar-sync.ts', 'lib/calendar-scheduler.ts', 'lib/calendar-watch.ts'];
+  for (const file of callers) {
+    const src = readFileSync(join('src', ...file.split('/')), 'utf8');
+    for (const fn of ['insertEvent', 'patchEvent', 'deleteEvent']) {
+      assert.ok(!src.includes(`${fn}(`),
+        `${file} calls ${fn} directly, going around the mutation service`);
     }
+  }
+  // And the service itself is the one place that does.
+  const service = readFileSync(join('src', 'lib', 'calendar-mutations.ts'), 'utf8');
+  for (const fn of ['insertEvent', 'patchEvent', 'deleteEvent']) {
+    assert.ok(service.includes(`G.${fn}(`), `the mutation service never calls ${fn}`);
   }
 });
 
-test('write safety: there is no insert, patch or delete Google call', () => {
-  // A path that does not exist cannot be called by accident. This is stronger
-  // than a permission check somebody could later remove.
-  assert.ok(!/method:\s*'(POST|PUT|PATCH|DELETE)'[\s\S]{0,200}googleapis\.com\/calendar/i.test(client),
-    'the client makes a mutating Calendar call');
-  const apiCalls = client.match(/fetch\(`\$\{API\}[^`]*`/g) ?? [];
-  assert.ok(apiCalls.length > 0, 'no Calendar API calls found at all');
-  // Every Calendar API call goes through get(), which is GET-only.
-  assert.match(client, /async function get\(accessToken/, 'no single GET chokepoint');
-  assert.ok(!/insertEvent|patchEvent|deleteEvent|createEvent/.test(client),
-    'a write helper exists');
-  // The only non-GET Google calls are the token endpoints, which are required.
-  const posts = client.match(/method: 'POST'/g) ?? [];
-  assert.ok(posts.length <= 3, `unexpected POST count (${posts.length}) in the Google client`);
-});
-
 test('write safety: ACLs and calendar management are never touched', () => {
-  for (const forbidden of ['/acl', 'calendars/insert', 'calendarList/insert', 'setting']) {
-    assert.ok(!client.includes(`${forbidden}`), `the client touches ${forbidden}`);
+  /* Events on calendars, never the calendars themselves. Life OS has no
+   * business creating, deleting or re-sharing a calendar, and the absence of
+   * the code path is a stronger guarantee than the absence of the scope. */
+  for (const forbidden of ['/acl', 'calendars/insert', 'calendarList/insert',
+    '/settings', 'calendarList/delete']) {
+    assert.ok(!client.includes(forbidden), `the client touches ${forbidden}`);
   }
 });
 

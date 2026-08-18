@@ -23,6 +23,10 @@ import {
   PROJECT_FILTERS, STATUS_LABEL, FOCUS_LABEL,
 } from './projects.js';
 import { openProjectModal, openChoiceDialog, openTaskPicker } from './project-modal.js';
+import {
+  initEventComposer, openEventComposer, openEventEditor, deleteCalendarEvent,
+  addTaskToCalendar,
+} from './event-composer.js';
 import { openTaskModal } from './task-modal.js';
 import {
   stepsChipHtml, stepsPanelHtml, wireSteps, repaintSteps, readyToFinish, stepCounts,
@@ -363,6 +367,18 @@ async function boot() {
     openSurface: openUtilitySurface,
     closeSurface: closeUtility,
     choose: openChoiceDialog,
+    // The event composer talks to the workspace API and refreshes the board it
+    // just changed; it does not know how either of those works.
+    _initComposer: initEventComposer({
+      api: (path, opts = {}) => api(`/api/v1/workspaces/${ws()}${path}`,
+        opts.body ? { ...opts, body: JSON.stringify(opts.body) } : opts),
+      toast,
+      refresh: () => loadCalendar(),
+      connectGoogle: () => {
+        const btn = document.getElementById('cal-connect');
+        if (btn) connectGoogle(btn); else toast('Open Calendar → Sources to reconnect.');
+      },
+    }),
     /* Leaving for ANOTHER section. A surface can route inside itself by writing
      * its own hash, but crossing a section boundary is the shell's job: `go`
      * flushes pending writes, claims the navigation token, moves the sidebar
@@ -1674,7 +1690,8 @@ function openTaskMenu(id, anchorEl) {
     <button role="menuitem" data-o="bottom"><span>Move to bottom</span></button>
     <div class="am-sep"></div>
     <button role="menuitem" data-x="steps"><span>Add step</span></button>
-    <button role="menuitem" data-x="open"><span>Open task</span><kbd>↵</kbd></button>`;
+    <button role="menuitem" data-x="open"><span>Open task</span><kbd>↵</kbd></button>
+    <button role="menuitem" data-x="calendar"><span>Add to Calendar…</span></button>`;
   document.body.appendChild(m);
   m.style.left = `${Math.max(8, Math.min(r.left - 140, innerWidth - m.offsetWidth - 12))}px`;
   m.style.top = `${Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 12)}px`;
@@ -1683,6 +1700,12 @@ function openTaskMenu(id, anchorEl) {
     b.onclick = () => {
       closeMenu();
       if (b.dataset.x === 'open') return openTask(id);
+      /* Scheduling is an explicit, separate decision from a due date. Nothing
+       * here converts the task — it opens a prefilled composer, and the Google
+       * event that results is LINKED to the task, not a replacement for it. */
+      if (b.dataset.x === 'calendar') {
+        return void addTaskToCalendar(t, t.projectId ? state.projectsById?.[t.projectId] : null);
+      }
       // The way in for a task with no steps yet: there is no chip to click,
       // because a chip on every task would be noise on the ones that have none.
       if (b.dataset.x === 'steps') return expandSteps(id);
@@ -3157,7 +3180,10 @@ function calendarAddMenu(anchor, day = null) {
   closeUtility();
   anchor.setAttribute('aria-expanded', 'true');
   openAddMenu(anchor, {
-    event: () => openEvent(null, day ?? cal.selected ?? undefined),
+    /* A real event is a GOOGLE event. Creation goes to the composer, which
+     * proposes to Google and commits only what Google accepted — never a local
+     * row that looks like an event and exists nowhere else. */
+    event: () => void openEventComposer({ day: day ?? cal.selected ?? undefined }),
     reminder: () => addReminder(day ?? cal.selected),
     task: () => openScheduleTask({ day: day ?? cal.selected ?? null }),
     // Habit is deliberately absent. Habits are a Calendar LAYER, not a
@@ -4647,6 +4673,11 @@ function openEventDetail(ev) {
       + `${hhmmOf(ev.startsAt)} – ${hhmmOf(ev.endsAt)}`;
   const going = (ev.attendees ?? []).filter((a) => a.responseStatus === 'accepted').length;
   const links = (cal.data?.links ?? []).filter((l) => l.sourceId === ev.id);
+  /* Birthdays, Gmail events and working-location entries are Google's own and
+   * cannot be edited through the API, whatever access the calendar grants. */
+  const READ_ONLY_TYPES = ['fromGmail', 'birthday', 'workingLocation'];
+  const editable = ev.syncState === 'synced' && !READ_ONLY_TYPES.includes(ev.eventType)
+    && !ev.calendarReadOnly;
 
   openDetailSheet({
     title: ev.title,
@@ -4664,8 +4695,14 @@ function openEventDetail(ev) {
     ].filter(Boolean),
     meetLink: ev.hangoutLink ?? null,
     externalLink: ev.providerHtmlLink ?? null,
-    // Stated plainly rather than implied by a missing button.
-    note: 'This event lives in Google Calendar. Life OS can read it but not change it.',
+    /* Editing is offered only where Google would actually accept it. A control
+     * that exists and then fails is worse than one that was never there. */
+    actions: editable ? [
+      { label: 'Edit', primary: true, onSelect: () => void openEventEditor(ev) },
+      { label: 'Delete', onSelect: () => void deleteCalendarEvent(ev) },
+    ] : [],
+    note: editable ? null
+      : 'Google does not allow this kind of event to be changed from another app.',
   });
 }
 

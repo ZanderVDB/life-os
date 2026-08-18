@@ -25,6 +25,7 @@ import {
   googleConfig, encryptionKey,
 } from '../lib/calendar-sync.js';
 import { SYNC_INTERVAL_MS, BACKOFF_BASE_MS, jitter } from '../lib/calendar-scheduler.js';
+import { ensureWatches, stopAllWatches } from '../lib/calendar-watch.js';
 
 /**
  * Pending authorisations, held in memory.
@@ -139,6 +140,10 @@ export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: G
         refreshTokenRef: encryptToken(set.refreshToken, encryptionKey()),
         tokenExpiresAt: set.expiresAt,
         grantedScopes: set.scopes,
+        // What Google ACTUALLY granted, which can be narrower than what was
+        // asked for — a consent screen lets people untick things.
+        canWrite: G.grantCanWrite(set.scopes),
+        scopesVersion: G.SCOPES_VERSION,
         lastError: null,
         disconnectedAt: null,
         updatedAt: new Date(),
@@ -157,6 +162,10 @@ export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: G
       // Calendar list now; events on the first explicit sync, so the redirect
       // is not held open for a long import.
       await syncCalendarList(db, connectionId, entry.workspaceId, set.accessToken);
+      /* Open push channels straight away, so a change made on a phone reaches
+       * Life OS in seconds rather than waiting for the next five-minute pass.
+       * Best effort: a failure here must not cost the user their connection. */
+      await ensureWatches(db, entry.workspaceId, log).catch(() => null);
       return reply.redirect(`${postConnectUrl()}?calendar=connected`);
     } catch (e) {
       log.error({ err: redactTokens(e) }, 'google calendar callback failed');
@@ -243,6 +252,9 @@ export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: G
       if (cals.length) {
         await db.delete(calendars).where(inArray(calendars.id, cals.map((c) => c.id)));
       }
+      /* Close the channels first. Google would otherwise keep POSTing about an
+       * account Life OS no longer holds a token for. */
+      await stopAllWatches(db, workspaceId).catch(() => null);
       await db.delete(calendarConnections).where(eq(calendarConnections.id, conn.id));
 
       return { disconnected: true, revokedWithGoogle: revoked, calendarsRemoved: cals.length };
@@ -262,6 +274,9 @@ function publicConnection(c: typeof calendarConnections.$inferSelect) {
     // The Calendar needs these to say "syncing automatically" honestly rather
     // than as decoration: they are the scheduler's real state.
     autoSync: c.status !== 'revoked',
+    // What this grant can DO, so the UI never offers a control Google will refuse.
+    canWrite: !!c.canWrite && (c.scopesVersion ?? 1) >= G.SCOPES_VERSION,
+    scopesVersion: c.scopesVersion ?? 1,
     nextSyncAt: c.nextSyncAt,
     syncing: !!c.syncingSince,
     failureCount: c.syncFailureCount ?? 0,

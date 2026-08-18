@@ -193,21 +193,31 @@ test('schedule: free/busy transparency is respected', () => {
 
 /* ── §19 Read-only Google events ─────────────────────────────────────── */
 
-test('events: a synced Google event opens read-only detail, not a form', () => {
+test('events: a Google event opens a detail sheet, and edits through a confirmation', () => {
+  /* This used to assert that no edit affordance existed at all — correct while
+   * the integration was read-only, wrong now. What still has to hold is that
+   * the SHEET is not a form: it shows the event and offers actions, and every
+   * action goes through the composer and its confirmation rather than editing
+   * in place and saving. */
   assert.match(appCode, /if \(ev && ev\.syncState === 'synced'\) return openEventDetail\(ev\)/,
-    'a real Google event opens the editor');
-  assert.match(detail, /export function openDetailSheet/, 'no read-only surface');
-  // No inputs, no save.
+    'a real Google event bypasses the detail sheet');
+  assert.match(detail, /export function openDetailSheet/, 'no detail surface');
+  // Still no inline editing: the sheet reads, the composer writes.
   assert.ok(!/<input|<textarea|<select/.test(detail), 'the detail sheet contains form controls');
   assert.ok(!/Save|Create/.test(detail.slice(detail.indexOf('m-foot'))),
-    'the detail sheet offers a save action');
-  // And no disabled Edit, which would imply the capability exists.
-  const detailCode = code(detail);
-  assert.ok(!/>\s*Edit|aria-label="Edit/.test(detailCode),
-    'a misleading Edit affordance exists');
+    'the detail sheet saves directly, skipping the confirmation');
+  // Edit and Delete are offered only where Google would accept them.
+  const fn = appCode.slice(appCode.indexOf('function openEventDetail(ev)'),
+    appCode.indexOf('const prettyDay ='));
+  assert.match(fn, /editable \? \[/, 'the actions are offered unconditionally');
+  assert.match(fn, /openEventEditor\(ev\)/, 'there is no way to edit a Google event');
+  assert.match(fn, /deleteCalendarEvent\(ev\)/, 'there is no way to delete a Google event');
   assert.match(detail, /Open in Google Calendar/, 'no way to reach the real event');
-  assert.match(appCode, /Life OS can read it but not change it/,
-    'the read-only limit is not stated to the user');
+  /* The sentence changed with the capability. Life OS CAN now change an
+   * ordinary Google event — so the note explains the cases where it still
+   * cannot, rather than claiming a blanket limit that is no longer true. */
+  assert.match(fn, /Google does not allow this kind of event to be changed/,
+    'the remaining read-only cases are not explained to the user');
 });
 
 test('events: local events remain editable', () => {

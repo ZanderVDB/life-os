@@ -404,13 +404,16 @@ test('safety: Projects is a real route now, and nothing else changed', () => {
 
 test('safety: no Google write, no boards, no library, no AI', () => {
   const all = pjSection + pjCode + modalCode;
-  for (const forbidden of ['calendar\\.events\\b', 'calendar/write', 'auth/calendar\\b']) {
+  for (const forbidden of ['calendar/write', 'auth/calendar\\b', 'insertEvent']) {
     assert.ok(!new RegExp(forbidden).test(all), `a Google write scope appears (${forbidden})`);
   }
-  // …and the API still asks for read-only and nothing else.
+  /* Calendar can now write to Google; Projects still cannot, and must reach it
+   * only through the shared Task → Calendar flow. The full-control scope stays
+   * absent everywhere. */
   const google = readFileSync(join('src', 'lib', 'google-calendar.ts'), 'utf8');
-  assert.match(google, /auth\/calendar\.readonly'/, 'the Google scope changed');
-  assert.ok(!/auth\/calendar'/.test(google), 'a Google write scope was added');
+  const requested = google.slice(google.indexOf('export const GOOGLE_SCOPES'),
+    google.indexOf('export const GOOGLE_SCOPE ='));
+  assert.ok(!/auth\/calendar'/.test(requested), 'the full-control Google scope is requested');
   for (const absent of ['/boards', '/library', '/ai/', 'aiPropose']) {
     assert.ok(!all.includes(absent), `${absent} shipped in E2`);
   }
