@@ -142,6 +142,43 @@ first tick after deploy catches everyone up.
 
 ---
 
+---
+
+## What staging taught, that 1280 passing tests could not
+
+The loop shipped green and then did nothing. `/health/version` reported
+`started: true, passes: 0` for nine minutes.
+
+**The diagnostics had the same disease as the bug.** `passes` was only written
+on the success path, so a loop whose every pass threw was indistinguishable
+from a loop whose timer never fired. A thrown pass now counts, timestamps and
+records its message — bounded, message only, never the error object, which can
+carry a token.
+
+With that in place the cause appeared within two minutes:
+
+> The "string" argument must be of type string or an instance of Buffer or
+> ArrayBuffer. Received an instance of Date
+
+The claim query interpolated `now` and `staleClaim` into a raw drizzle
+``sql`...` `` template, which passes the value to the driver verbatim. **PGlite
+accepts a `Date` there; the production Postgres driver does not** — so no test
+run against PGlite could ever have caught it. (The earlier `NULLS NOT DISTINCT`
+case was the mirror image: PGlite is PG16 and accepted syntax the PG15 target
+rejected.)
+
+The claim is now built from drizzle helpers, which bind by column type. It
+became two statements — select candidates, then claim them — and stays
+exclusive because the `UPDATE` was always the lock, not the `SELECT`: it
+re-checks the same predicate, so only one caller can flip `syncing_since`.
+Asserted with two concurrent passes.
+
+Since PGlite cannot catch this class of defect, the rule is enforced on the
+source instead: **a raw `sql` template in the scheduler may name columns and
+nothing else.** Every value goes through `eq`, `lte`, `inArray` or `isNull`.
+
+Verified on staging at build `1564486`: a pass every 60 seconds, zero failures.
+
 ## Still true
 
 Read-only, and asserted as such against the new files: no `insertEvent`,
