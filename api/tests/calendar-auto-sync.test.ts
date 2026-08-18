@@ -550,3 +550,45 @@ test('every Google call can time out, so a pass cannot hang forever', () => {
   assert.match(get.slice(0, get.indexOf('if (!res.ok)')), /AbortSignal\.timeout/,
     'the Calendar API GET has no timeout');
 });
+
+/* ── Diagnostics: an unattended loop has to be visible ────────────────── */
+
+test('health/version reports the build and whether the loop is running', async () => {
+  /* Verifying a deploy by reading the package version back proves only that
+   * something is up. And a background job nobody can see is a background job
+   * nobody can trust — which is how the old bug went unnoticed for so long. */
+  const { db } = await freshDb();
+  const app = buildApp(db, env);
+  await app.ready();
+  const before = (await app.inject({ method: 'GET', url: '/health/version' })).json();
+  assert.ok('build' in before, 'the deployed commit cannot be identified');
+  assert.ok('calendarSync' in before, 'the scheduler is invisible');
+  assert.equal(before.calendarSync.started, false, 'buildApp started a background loop');
+
+  const h = startCalendarScheduler(db, quiet);
+  try {
+    const running = (await app.inject({ method: 'GET', url: '/health/version' })).json();
+    assert.equal(running.calendarSync.started, true, 'a running loop reports as stopped');
+    assert.equal(running.calendarSync.configured, true);
+    await h.runOnce();
+    const after = (await app.inject({ method: 'GET', url: '/health/version' })).json();
+    assert.equal(after.calendarSync.passes, 1, 'passes are not counted');
+    assert.ok(after.calendarSync.lastPassAt, 'the last pass has no timestamp');
+  } finally { h.stop(); }
+
+  const stopped = (await app.inject({ method: 'GET', url: '/health/version' })).json();
+  assert.equal(stopped.calendarSync.started, false, 'a stopped loop still reports as running');
+});
+
+test('the diagnostics carry no private data', async () => {
+  /* It is unauthenticated, so it may only ever say how the machine is doing —
+   * never whose calendar, whose account, or what is in it. */
+  const { app } = await connectedWorkspace();
+  const body = JSON.stringify((await app.inject({ method: 'GET', url: '/health/version' })).json());
+  for (const secret of ['zander@example.com', 'refresh-token-value', KEY, 'google-123']) {
+    assert.ok(!body.includes(secret), `health/version leaks ${secret}`);
+  }
+  for (const shape of ['workspace', 'email', 'token', 'account']) {
+    assert.ok(!body.toLowerCase().includes(shape), `health/version exposes a ${shape} field`);
+  }
+});

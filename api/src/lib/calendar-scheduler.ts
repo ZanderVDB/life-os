@@ -71,6 +71,26 @@ export function jitter(ms: number, rand = Math.random): number {
   return Math.round(ms * (0.9 + rand() * 0.2));
 }
 
+/**
+ * The loop's own account of itself, for /health/version.
+ *
+ * A background job you cannot see is a background job you cannot trust. This
+ * is what makes "is the calendar actually syncing?" answerable without a
+ * database session — the question that had no answer while the old bug was
+ * quietly disconnecting people. Counters only: no workspace, no account, no
+ * token, nothing that is anyone's private business.
+ */
+const status = {
+  started: false,
+  passes: 0,
+  lastPassAt: null as string | null,
+  lastSynced: 0,
+  lastFailed: 0,
+  consecutivePassFailures: 0,
+};
+
+export const schedulerStatus = () => ({ ...status });
+
 export type SchedulerHandle = {
   /** Runs one pass immediately and resolves when it is done. For tests. */
   runOnce: () => Promise<{ synced: number; failed: number; skipped: number }>;
@@ -167,7 +187,13 @@ export function startCalendarScheduler(db: Db, log: SyncLogger): SchedulerHandle
     if (running || stopped) return { synced: 0, failed: 0, skipped: 1 };
     running = true;
     try {
-      return await runSyncPass(db, log);
+      const r = await runSyncPass(db, log);
+      status.passes++;
+      status.lastPassAt = new Date().toISOString();
+      status.lastSynced = r.synced;
+      status.lastFailed = r.failed;
+      status.consecutivePassFailures = r.failed > 0 ? status.consecutivePassFailures + 1 : 0;
+      return r;
     } catch (e) {
       // Unattended code: a throw here would be an unhandled rejection.
       log.error({ err: redactTokens(e) }, 'calendar scheduler pass failed');
@@ -177,12 +203,13 @@ export function startCalendarScheduler(db: Db, log: SyncLogger): SchedulerHandle
     }
   };
 
+  status.started = true;
   const timer = setInterval(() => { void pass(); }, TICK_MS);
   // Never hold the process open on this alone.
   if (typeof timer.unref === 'function') timer.unref();
 
   return {
     runOnce: pass,
-    stop: () => { stopped = true; clearInterval(timer); },
+    stop: () => { stopped = true; status.started = false; clearInterval(timer); },
   };
 }
