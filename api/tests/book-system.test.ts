@@ -190,7 +190,8 @@ test('pages carry a layout, and a pinboard is one page across the spread', async
     { count: 2, layout: 'pinboard' })).json();
   assert.equal(board.pages.length, 1, 'a pinboard was created as two pages');
   assert.equal(board.pages[0].spansSpread, true);
-  assert.deepEqual(board.pages[0].content, { type: 'pinboard', items: [] });
+  assert.deepEqual(board.pages[0].content,
+    { type: 'pinboard', items: [], groups: [], connections: [] });
 });
 
 test('changing layout within the flowed family keeps every block', async () => {
@@ -551,23 +552,37 @@ test('a pin with no target and a pin with no address are both dropped', async ()
   assert.equal(r.json().page.content.items[0].id, 'c');
 });
 
-test('a pin carries what it IS in the DOM, not only in the stored record', () => {
+test('a new pin is created whole, so it cannot be saved as nothing', () => {
   /* The bug this exists for: `commit` rebuilt each pin from its PREVIOUS stored
    * record plus its geometry. A pin that had just been dropped had no previous
    * record, so it lost its `kind` and its `taskId` — the server then correctly
    * dropped it as an item with no kind, and a task dragged onto a board
    * vanished on reload while the editor said "Saved".
    *
-   * The element is the authority for what a pin is. Same rule as reference
-   * blocks, which is where it should have been copied from in the first place. */
-  const src = readFileSync(join(WEB, 'library-book.js'), 'utf8');
-  const pin = src.slice(src.indexOf('function pinHtml('), src.indexOf('/* ══ Bookmarks'));
-  assert.match(pin, /data-kind="\$\{esc\(item\.kind\)\}"/, 'a pin does not carry its kind');
-  assert.match(pin, /data-ref-id="\$\{esc\(ref\)\}"/, 'a reference pin does not carry its target');
+   * The fix then was to make the ELEMENT the authority. The fix now is better:
+   * there is no reconstruction at all. The board holds a model, every pin is
+   * created complete in that model, and saving serialises it. A field cannot be
+   * lost on the way out if nothing on the way out has to guess at it.
+   *
+   * This also had to change, because groups, edges and stacking order live
+   * BETWEEN elements and no element could honestly own them. */
+  const src = readFileSync(join(WEB, 'pinboard.js'), 'utf8');
 
-  const commit = src.slice(src.indexOf('const commit = ()'), src.indexOf('board.addEventListener(\'pointerdown\''));
-  assert.match(commit, /el\.dataset\.kind \|\| prev\.kind/, 'commit still trusts the stored record for kind');
-  assert.match(commit, /el\.dataset\.refId/, 'commit does not read the pin target from the DOM');
+  // Every pin is born with its kind, and a reference pin with its target.
+  const add = src.slice(src.indexOf('function addItem('), src.indexOf('function pointAt('));
+  assert.match(add, /id: uid\(\)/, 'a new pin has no stable id');
+  const drop = src.slice(src.indexOf("board.addEventListener('drop'"), src.indexOf('/* Keys.'));
+  assert.match(drop, /addItem\(\{ kind: 'task', taskId, w: 26, h: 14 \}, at\)/,
+    'a dropped task is not created with its kind and target together');
+
+  // Saving is a serialisation of the model, never a read-back of the DOM.
+  const persist = src.slice(src.indexOf('const persist = ()'), src.indexOf('function apply('));
+  assert.match(persist, /JSON\.parse\(snapshot\(state\)\)/, 'the save does not come from the model');
+  assert.ok(!/querySelectorAll\('\[data-pin\]'\)[\s\S]{0,400}\.map/.test(src),
+    'something still rebuilds the item list by reading the DOM back');
+
+  // And the model is what the server is given, so ids survive a round trip.
+  assert.match(src, /save\(page\.content\)/);
 });
 
 /* ── §22/§23  What AI will need ───────────────────────────────────────── */

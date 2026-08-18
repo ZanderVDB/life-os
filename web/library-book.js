@@ -30,6 +30,8 @@ import {
   handleEnter, handleBackspace, applyBlockStyle, currentStyleId, BLOCK_STYLES,
 } from './editor-blocks.js';
 
+import { mountPinboard } from './pinboard.js';
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -285,7 +287,6 @@ function pageBodyHtml(page, layout) {
  */
 function pinboardPageHtml(page, section) {
   const accent = section?.accent ?? 'peach';
-  const items = page.content?.items ?? [];
   return `<div class="bk-page bk-page-full bk-l-pinboard" data-accent="${esc(accent)}"
       data-page="${page.id}" data-layout="pinboard">
     <div class="bk-page-hdr">
@@ -299,71 +300,8 @@ function pinboardPageHtml(page, section) {
           aria-label="Actions for this page" aria-haspopup="menu">${dots()}</button>
       </div>
     </div>
-    <div class="bk-board" data-board="${page.id}">
-      ${items.map(pinHtml).join('')}
-      ${items.length ? '' : `<p class="bk-board-empty">Nothing pinned yet. Add a note,
-        or drag a task in from the project on the right.</p>`}
-    </div>
-  </div>`;
-}
-
-function pinHtml(item) {
-  const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;min-height:${item.h}%`;
-  const live = item.taskId || item.projectId || item.itemId || item.pageId
-    ? lookupRef(item.kind === 'task' ? 'taskRef' : `${item.kind}Ref`,
-      item.taskId || item.projectId || item.itemId || item.pageId)
-    : null;
-
-  const body = () => {
-    if (item.kind === 'task' || item.kind === 'project' || item.kind === 'resource' || item.kind === 'page') {
-      if (!live) {
-        return `<span class="bk-pin-k">${esc(item.kind)}</span>
-          <span class="bk-pin-t">No longer available</span>`;
-      }
-      const done = live.status === 'done' || live.status === 'completed';
-      return `<span class="bk-pin-k">${esc(live.kindLabel ?? item.kind)}</span>
-        <span class="bk-pin-t${done ? ' is-done' : ''}">${esc(live.title ?? '')}</span>
-        ${live.dueDate ? `<span class="bk-pin-m">Due ${esc(String(live.dueDate).slice(5))}</span>` : ''}`;
-    }
-    if (item.kind === 'link' || item.kind === 'video') {
-      /* Editable until it IS a link, then a link with an editable address
-       * beside it. A pin you cannot correct is a pin you have to delete and
-       * make again. */
-      return `<span class="bk-pin-k">${item.kind === 'video' ? 'Video' : 'Link'}</span>
-        <span class="bk-pin-t" data-pin-text contenteditable="true" role="textbox"
-          data-placeholder="Paste a web address" aria-label="Link address"
-          >${esc(item.text ?? '')}</span>
-        ${item.href ? `<a class="bk-pin-go" href="${esc(item.href)}" target="_blank"
-          rel="noopener noreferrer">Open link</a>` : ''}`;
-    }
-    if (item.kind === 'image') {
-      /* The address stays editable underneath the picture. An image pin whose
-       * URL you cannot correct is one you have to delete and re-make, and the
-       * address is exactly the thing that gets pasted wrong. */
-      return `${item.href ? `<img class="bk-pin-img" src="${esc(item.href)}"
-        alt="${esc(item.text ?? '')}" loading="lazy" decoding="async">`
-    : '<span class="bk-pin-k">Image</span>'}
-        <span class="bk-pin-t bk-pin-src" data-pin-text contenteditable="true" role="textbox"
-          data-placeholder="Paste an image address" aria-label="Image address"
-          >${esc(item.text ?? '')}</span>`;
-    }
-    return `<span class="bk-pin-t" data-pin-text contenteditable="true" role="textbox"
-      data-placeholder="Write a note" aria-label="Note">${esc(item.text ?? '')}</span>`;
-  };
-
-  /* The element carries everything needed to RECONSTRUCT the item — its kind
-   * and the id of whatever it references — exactly as a reference block does.
-   * Reading a pin back from its previous stored record instead is what silently
-   * lost a pin the moment it was created, because a new pin has no previous
-   * record to read from. */
-  const ref = item.taskId || item.projectId || item.itemId || item.pageId || '';
-  return `<div class="bk-pin bk-pin-${esc(item.kind)}" data-pin="${esc(item.id)}"
-    data-kind="${esc(item.kind)}"${ref ? ` data-ref-id="${esc(ref)}"` : ''}
-    style="${style}"${item.accent ? ` data-accent="${esc(item.accent)}"` : ''}>
-    <span class="bk-pin-grip" data-pin-grip aria-hidden="true"></span>
-    ${body()}
-    <button type="button" class="bk-pin-x" data-pin-remove
-      aria-label="Remove this pin">×</button>
+    <div class="bk-board" data-board="${page.id}" tabindex="0"
+      aria-label="Pinboard. Double-click to write a note; paste a picture or a link."></div>
   </div>`;
 }
 
@@ -396,189 +334,26 @@ function refCardHtml(taskId) {
 
 /* ── Pinboard interaction ───────────────────────────────────────────────
  *
- * Pointer events rather than HTML5 drag for MOVING a pin: dragging inside the
- * board is a direct-manipulation gesture with live feedback, and the drag-and-
- * drop API gives neither. HTML5 drop is still accepted, because that is how a
- * Task arrives from the rail, which is a different gesture from a different
- * surface.
+ * The board itself lives in pinboard.js: it holds a model, renders from it and
+ * owns its own undo. This is only the wiring — one mount per board on the
+ * spread, torn down when the spread is replaced.
  */
-function mountPinboards(root, { onDirty }) {
+let boards = [];
+
+function mountPinboards(root, { onDirty, toast }) {
+  boards.forEach((b) => b.destroy?.());
+  boards = [];
   root.querySelectorAll('[data-board]').forEach((board) => {
-    const pageId = board.dataset.board;
-    const commit = () => {
-      const { page } = pageOf(pageId);
-      if (!page) return;
-      const items = [...board.querySelectorAll('[data-pin]')].map((el) => {
-        const prev = (page.content?.items ?? []).find((i) => i.id === el.dataset.pin) ?? {};
-        /* The DOM is the authority for what a pin IS; the stored record only
-         * carries what the DOM does not show, such as an accent. */
-        const kind = el.dataset.kind || prev.kind;
-        const text = el.querySelector('[data-pin-text]');
-        const typed = text ? (text.textContent ?? '') : null;
-        const href = kind === 'link' || kind === 'video' || kind === 'image'
-          ? (hrefFrom(typed ?? prev.text) ?? prev.href) : prev.href;
-        const REF_ATTR = { task: 'taskId', project: 'projectId', resource: 'itemId', page: 'pageId' };
-        const refAttr = REF_ATTR[kind];
-        return {
-          ...prev,
-          id: el.dataset.pin,
-          kind,
-          ...(refAttr && el.dataset.refId ? { [refAttr]: el.dataset.refId } : {}),
-          x: pct(el.style.left, prev.x ?? 4), y: pct(el.style.top, prev.y ?? 4),
-          w: pct(el.style.width, prev.w ?? 26), h: prev.h ?? 18,
-          ...(typed !== null ? { text: typed } : {}),
-          ...(href ? { href } : {}),
-        };
-      });
-      const next = { type: 'pinboard', items };
-      queueSave(page, next);
-      page.content = next;
-      onDirty?.();
-      return items;
-    };
-
-    /* A pin that has just BECOME something — an image address typed into an
-     * empty image pin — has to be redrawn to show it. Only that pin, and only
-     * when it crossed the line, so typing never yanks the caret mid-word. */
-    const refresh = (items) => {
-      for (const item of items) {
-        if (item.kind !== 'image' && item.kind !== 'link' && item.kind !== 'video') continue;
-        const el = board.querySelector(`[data-pin="${item.id}"]`);
-        if (!el) continue;
-        const shows = item.kind === 'image' ? !!el.querySelector('.bk-pin-img')
-          : !!el.querySelector('.bk-pin-go');
-        if (!!item.href === shows) continue;
-        const focused = el.contains(document.activeElement);
-        el.outerHTML = pinHtml(item);
-        if (focused) {
-          const t = board.querySelector(`[data-pin="${item.id}"] [data-pin-text]`);
-          if (t) { t.focus(); getSelection()?.selectAllChildren(t); getSelection()?.collapseToEnd(); }
-        }
-      }
-    };
-
-    /* Moving a pin. Percentages of the board, so an arrangement made on a wide
-     * screen is the same arrangement on a narrow one. */
-    board.addEventListener('pointerdown', (e) => {
-      const grip = e.target.closest('[data-pin-grip]');
-      if (!grip) return;
-      const pin = grip.closest('[data-pin]');
-      const box = board.getBoundingClientRect();
-      const start = { x: e.clientX, y: e.clientY, l: pct(pin.style.left, 0), t: pct(pin.style.top, 0) };
-      pin.classList.add('is-dragging');
-      grip.setPointerCapture(e.pointerId);
-
-      const move = (ev) => {
-        const dx = ((ev.clientX - start.x) / box.width) * 100;
-        const dy = ((ev.clientY - start.y) / box.height) * 100;
-        pin.style.left = `${Math.min(96, Math.max(0, start.l + dx)).toFixed(2)}%`;
-        pin.style.top = `${Math.min(96, Math.max(0, start.t + dy)).toFixed(2)}%`;
-      };
-      const up = () => {
-        pin.classList.remove('is-dragging');
-        grip.removeEventListener('pointermove', move);
-        grip.removeEventListener('pointerup', up);
-        commit();
-      };
-      grip.addEventListener('pointermove', move);
-      grip.addEventListener('pointerup', up);
-    });
-
-    board.addEventListener('click', (e) => {
-      const x = e.target.closest('[data-pin-remove]');
-      if (!x) return;
-      x.closest('[data-pin]')?.remove();
-      commit();
-    });
-    /* Typing saves as you go; the redraw waits until you stop, so a pin never
-     * re-renders under the caret while a word is still being typed. */
-    let settle = 0;
-    board.addEventListener('input', (e) => {
-      if (!e.target.closest('[data-pin-text]')) return;
-      const items = commit();
-      clearTimeout(settle);
-      settle = setTimeout(() => refresh(items), 600);
-    });
-
-    // A Task dropped onto the board becomes a positioned card where it landed.
-    board.addEventListener('dragover', (e) => {
-      if (!e.dataTransfer?.types?.includes('application/x-los-task')) return;
-      e.preventDefault();
-      board.classList.add('is-drop');
-    });
-    board.addEventListener('dragleave', () => board.classList.remove('is-drop'));
-    board.addEventListener('drop', (e) => {
-      const taskId = e.dataTransfer?.getData('application/x-los-task');
-      board.classList.remove('is-drop');
-      if (!taskId) return;
-      e.preventDefault();
-      if (board.querySelector(`[data-pin][data-ref-id="${taskId}"]`)) return;
-      const box = board.getBoundingClientRect();
-      const item = {
-        id: newBlockId(), kind: 'task', taskId,
-        x: Math.min(80, Math.max(0, ((e.clientX - box.left) / box.width) * 100 - 8)),
-        y: Math.min(85, Math.max(0, ((e.clientY - box.top) / box.height) * 100 - 4)),
-        w: 26, h: 14,
-      };
-      board.querySelector('.bk-board-empty')?.remove();
-      board.insertAdjacentHTML('beforeend', pinHtml(item));
-      commit();
-    });
-
-    /* Add a note or a link.
-     *
-     * No dialog of any kind — a link pin is created empty and you type the
-     * address into the pin itself, which is both fewer steps and the only
-     * option consistent with the rule that this app never uses a native
-     * prompt. `commit` promotes text that parses as a URL to a real href, so
-     * the pin becomes a link the moment it is one. */
-    root.querySelectorAll('[data-pin-add]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const kind = btn.dataset.pinAdd;
-        const item = { id: newBlockId(), kind, ...freeSpot(board), w: 26, h: 16, text: '' };
-        board.querySelector('.bk-board-empty')?.remove();
-        board.insertAdjacentHTML('beforeend', pinHtml(item));
-        commit();
-        board.querySelector(`[data-pin="${item.id}"] [data-pin-text]`)?.focus();
-      });
-    });
+    const { page } = pageOf(board.dataset.board);
+    if (!page) return;
+    boards.push(mountPinboard(board, {
+      page,
+      save: (content) => queueSave(page, content),
+      onDirty,
+      lookupRef,
+      toast,
+    }));
   });
-}
-
-/**
- * Somewhere to put a new pin that is not on top of an existing one.
- *
- * Every new pin used to start at the same corner, so the second one landed
- * exactly over the first and the first simply disappeared — it was still
- * there, still saved, and completely unreachable.
- *
- * Walks the board in reading order and takes the first cell that does not
- * overlap anything. If the board is genuinely full it cascades instead, which
- * at least leaves a visible edge to grab.
- */
-function freeSpot(board) {
-  const taken = [...board.querySelectorAll('[data-pin]')].map((el) => ({
-    x: pct(el.style.left, 0), y: pct(el.style.top, 0),
-    w: pct(el.style.width, 26), h: (el.getBoundingClientRect().height
-      / Math.max(1, board.getBoundingClientRect().height)) * 100,
-  }));
-  const clear = (x, y) => !taken.some((t) => x < t.x + t.w + 1 && x + 27 > t.x
-    && y < t.y + Math.max(t.h, 8) + 1 && y + 17 > t.y);
-  for (let y = 5; y <= 70; y += 9) {
-    for (let x = 4; x <= 68; x += 30) if (clear(x, y)) return { x, y };
-  }
-  const n = taken.length;
-  return { x: Math.min(66, 4 + n * 3), y: Math.min(76, 5 + n * 3) };
-}
-
-/** A pin's text is its address once it parses as one. Nothing else is a link. */
-function hrefFrom(text) {
-  const t = String(text ?? '').trim();
-  if (!t) return null;
-  try {
-    const u = new URL(/^https?:\/\//i.test(t) ? t : `https://${t}`);
-    return /\./.test(u.hostname) ? u.toString() : null;
-  } catch { return null; }
 }
 
 const pct = (v, fallback) => {
@@ -673,8 +448,8 @@ export function toolbarHtml() {
  * The editor elements are the ones already in the DOM — this never re-creates
  * them, which is what keeps selection and undo history alive while typing.
  */
-export function mountSpread(root, { onNavigate, onDirty }) {
-  mountPinboards(root, { onDirty });
+export function mountSpread(root, { onNavigate, onDirty, toast }) {
+  mountPinboards(root, { onDirty, toast });
 
   root.querySelectorAll('[data-editor]').forEach((el) => {
     const pageId = el.dataset.editor;

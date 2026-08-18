@@ -392,6 +392,7 @@ export const itemMenuHtml = (item) => `<div class="lib-menu lib-menu-sm" role="m
   ${item.archivedAt
     ? '<button type="button" role="menuitem" data-act="restore">Restore</button>'
     : '<button type="button" role="menuitem" data-act="archive">Archive</button>'}
+  <button type="button" role="menuitem" class="lib-menu-del" data-act="delete">Delete…</button>
 </div>`;
 
 /**

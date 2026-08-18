@@ -191,22 +191,34 @@ test('archive: reversible, idempotent, and hidden from the default list', async 
   assert.equal(restored.status, 'active');
 });
 
-test('archive: permanent deletion is not exposed for anything holding content', () => {
+test('archive is the default exit; only an ITEM can also be deleted outright', () => {
   const src = readFileSync(join(here, '..', 'src', 'routes', 'library.ts'), 'utf8');
   const deletes = [...src.matchAll(/app\.delete\(`\$\{base\}([^`]+)`/g)].map((m) => m[1]);
-  /* Items, sections and pages archive; they hold work nobody wants to lose to a
-   * misclick, and that rule has not moved.
+  /* Sections and pages still archive and only archive. They hold work nobody
+   * wants to lose to a misclick, and a page has no "are you sure" of its own —
+   * it is one item in a menu of ordinary page settings.
    *
-   * Bookmarks and links are the two things that hold NO content. A bookmark is
-   * a shortcut and a link is an edge — deleting either loses a pointer, not a
-   * word, and archiving a shortcut would be a shortcut you cannot get rid of.
-   * Note especially that deleting a link never touches the Task at either end
-   * of it (§15). */
-  const allowed = new Set(['/library/bookmarks/:id', '/library/links/:id']);
+   * Bookmarks and links hold NO content. A bookmark is a shortcut and a link is
+   * an edge; deleting either loses a pointer, not a word, and archiving a
+   * shortcut would be a shortcut you cannot get rid of. Deleting a link never
+   * touches the Task at either end of it (§15).
+   *
+   * An ITEM may now be deleted, which is a deliberate change: archive was the
+   * only exit, so a Book made by mistake could be put away but never got rid
+   * of, and shelves filled with things nobody would open again. It is the one
+   * destructive action in Library, it confirms first, it offers archive in the
+   * same breath, and a Project Book refuses — see the pinboard-groups suite. */
+  const allowed = new Set(['/library/bookmarks/:id', '/library/links/:id', '/library/items/:id']);
   for (const route of deletes) {
     assert.ok(allowed.has(route!),
       `DELETE ${route} exists — that is content, and content archives`);
   }
+  for (const forbidden of ['/library/sections/:id', '/library/pages/:id']) {
+    assert.ok(!deletes.includes(forbidden), `DELETE ${forbidden} exists — that content archives`);
+  }
+  // The destructive one is guarded, not just present.
+  const fn = src.slice(src.indexOf('app.delete(`${base}/library/items/:id`'));
+  assert.match(fn, /throw conflict\(/, 'a Project Book is not protected from deletion');
 });
 
 /* ── §7/§18  Books arrive ready to write in ──────────────────────────── */

@@ -17,7 +17,7 @@
  */
 
 import {
-  lib, initLibraryApi, loadItems, createItem, updateItem, archiveItem, restoreItem,
+  lib, initLibraryApi, loadItems, createItem, updateItem, archiveItem, restoreItem, deleteItem,
   createBook, loadBook, createSection, updateSection, createPages,
   archivePage, restorePage, archiveSection,
   currentSection, currentSpread, spreadCount, findPage, search, markOpened, prefetchBook,
@@ -655,6 +655,51 @@ async function itemAction(act, item) {
       ctx.toast(`“${item.title}” restored.`);
     });
   }
+
+  if (act === 'delete') {
+    /* The one place in Library that destroys something, so it is the one place
+     * that asks first. Archive is offered in the same breath, because it is
+     * usually what was actually meant — and it is listed FIRST, so the safe
+     * answer is the one under the pointer.
+     *
+     * A Project Book refuses on the server, and the refusal names the project.
+     * Showing that message is better than hiding the button: "why can I not
+     * delete this?" is a worse experience than being told. */
+    const isBook = item.type === 'book';
+    const choice = await ctx.choose({
+      title: `Delete “${item.title}”?`,
+      body: isBook
+        ? 'Its pages and everything written on them go with it, permanently. '
+          + 'Tasks, projects and diary entries a page linked to are not touched.'
+        : 'This cannot be undone.',
+      choices: [
+        ...(item.archivedAt ? [] : [{ id: 'archive', label: 'Archive it instead', tone: 'quiet' }]),
+        { id: 'delete', label: 'Delete permanently', tone: 'danger' },
+        { id: 'cancel', label: 'Keep it', tone: 'quiet' },
+      ],
+    });
+    if (choice === 'archive') return itemAction('archive', item);
+    if (choice !== 'delete') return undefined;
+
+    return ctx.run(async () => {
+      try {
+        const r = await deleteItem(item.id);
+        /* Only leave if we were LOOKING at it. The same action runs from a
+         * shelf card, where navigating away would be a non-sequitur. */
+        const bookId = item.book?.id;
+        if (location.hash.includes(item.id) || (bookId && location.hash.includes(bookId))) {
+          setHash('#library');
+        }
+        paintOverview();
+        ctx.toast(r.pages
+          ? `“${item.title}” deleted, with ${r.pages} page${r.pages === 1 ? '' : 's'}.`
+          : `“${item.title}” deleted.`);
+      } catch (e) {
+        ctx.toast(e.message, true);
+      }
+    });
+  }
+  return undefined;
 }
 
 /** Swaps one card in place, so renaming does not re-enter the whole shelf. */
@@ -698,6 +743,7 @@ async function renderItem(id, head, scroll, nav = navToken()) {
       ${item.archivedAt
     ? '<button class="btn" data-act="restore">Restore</button>'
     : '<button class="btn" data-act="archive">Archive</button>'}
+      <button class="btn btn-ghost lib-del" data-act="delete">Delete</button>
     </div>`;
 
   /* THE OPEN VIEW (L3.1 §19).
@@ -1085,7 +1131,10 @@ function wireRailDrag(rail) {
 
 function wireBook(scroll) {
   wireToolbar(scroll);
-  mountSpread(scroll, { onNavigate: (what, arg) => void navigate(what, arg) });
+  mountSpread(scroll, {
+    onNavigate: (what, arg) => void navigate(what, arg),
+    toast: (m, bad) => ctx.toast(m, bad),
+  });
   stopSaveWatch = wireSaveStatus(scroll);
 
   /* A bookmark is navigation, not structure. It moves you to the spread its
@@ -1474,15 +1523,20 @@ function openPageMenu(anchor, pageId) {
     kind: 'library-page-menu',
     label: 'Actions for this page',
     html: `<div class="lib-menu lib-menu-layouts" role="menu">
-      <p class="lib-menu-hd">Page shape</p>
-      ${layoutItemsHtml(page.layout ?? 'notes')}
-
       <p class="lib-menu-hd">What this page is for</p>
       <p class="lib-menu-sub">Same page either way — this only names it and
         offers its headings.</p>
       ${purposeChipsHtml(page.purpose ?? null)}
 
-      <p class="lib-menu-hd">Page</p>
+      <p class="lib-menu-hd">Page shape</p>
+      ${layoutItemsHtml(page.layout ?? 'notes')}
+
+      ${page.layout === 'pinboard' ? `<p class="lib-menu-hd">Pinboard</p>
+        <p class="lib-menu-sub">Double-click the board to write a note. Paste a
+          picture, a link or text straight onto it, or drag one in. Shift-click
+          to select several, then group them. Ctrl+Z undoes.</p>` : ''}
+
+      <div class="lib-menu-foot">
       <button type="button" role="menuitem" data-act="${marked ? 'unbookmark' : 'bookmark'}">
         <span class="lib-menu-i" aria-hidden="true">${MARK_GLYPH}</span>
         <span class="lib-menu-tx"><b>${marked ? 'Remove bookmark' : 'Bookmark this page'}</b></span>
@@ -1492,6 +1546,7 @@ function openPageMenu(anchor, pageId) {
     : `<button type="button" role="menuitem" data-act="archive">
         <span class="lib-menu-i" aria-hidden="true">${ARCHIVE_GLYPH}</span>
         <span class="lib-menu-tx"><b>Archive page</b></span></button>`}
+      </div>
     </div>`,
     wire: (el) => {
       el.querySelectorAll('[data-act]').forEach((b) => {

@@ -3785,6 +3785,158 @@ body:has(.lib-page) .rail{display:none}
 .bk-pin-x:hover{color:var(--paper-ink);
   background:color-mix(in srgb,var(--paper-ink) 14%,transparent)}
 .bk-pin-tools{display:flex;gap:6px;align-items:center}
+/* Delete sits apart from the reversible actions and only colours on hover —
+   destructive, but not shouting at someone who came to read. */
+.lib-del{color:var(--muted)}
+/* Separated from the reversible actions above it. The ellipsis is the promise
+   that something will ask before anything is destroyed. */
+.lib-menu-del{margin-top:4px;padding-top:6px;border-top:1px solid var(--hairline);
+  color:var(--muted)}
+.lib-menu-del:hover{color:var(--danger)}
+.lib-del:hover{color:var(--danger);border-color:var(--danger)}
+/* Bookmark and Archive are page ACTIONS, not page settings, so a rule keeps
+   them off the end of the settings list rather than merely a gap. */
+.lib-menu-foot{margin-top:10px;padding-top:9px;border-top:1px solid var(--hairline);
+  display:flex;flex-direction:column;gap:2px}
+
+/* ── Pinboard: selection, groups, wires and the contextual bar ───────────
+   Everything below is drawn from the PAPER tokens, never a fixed colour. The
+   board sits on whichever paper the theme gives it, and the first version of
+   the pins hard-coded light-theme values onto a dark page — which is how a pin
+   ended up invisible, along with the button that deleted it. */
+.bk-pin{transition:box-shadow var(--t-hover),border-color var(--t-hover),opacity 160ms ease}
+.bk-pin.is-selected{border-color:var(--accent-c,var(--a-peach));
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-c,var(--a-peach)) 45%,transparent),
+    0 8px 22px rgba(0,0,0,.26)}
+.bk-pin.is-connect-target{border-color:var(--accent-c,var(--a-peach));
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent-c,var(--a-peach)) 30%,transparent)}
+/* Focus mode dims, never hides: what is not the subject stays legible enough
+   to see it is still there. */
+.bk-pin.is-dimmed,.bk-group.is-dimmed,.bk-wire.is-dimmed{opacity:.22}
+.bk-board.is-focused .bk-pin:not(.is-dimmed){box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.bk-board.is-moving{cursor:grabbing}
+.bk-board.is-connecting{cursor:crosshair}
+
+/* The two handles a selected pin exposes. Hidden until selected so a resting
+   board stays a board and not a control panel. */
+.bk-pin-size,.bk-pin-link{position:absolute;opacity:0;pointer-events:none;
+  transition:opacity var(--t-hover)}
+.bk-pin.is-selected .bk-pin-size,.bk-pin.is-selected .bk-pin-link{opacity:1;pointer-events:auto}
+.bk-pin-size{right:-4px;bottom:-4px;width:14px;height:14px;cursor:nwse-resize;
+  border-radius:3px;background:var(--accent-c,var(--a-peach));
+  border:2px solid var(--paper)}
+.bk-pin-link{right:-9px;top:50%;margin-top:-7px;width:14px;height:14px;cursor:crosshair;
+  border-radius:50%;background:var(--paper);
+  border:2px solid var(--accent-c,var(--a-peach))}
+.bk-pin-link:hover{background:var(--accent-c,var(--a-peach))}
+
+/* Note styles. Restrained on purpose: enough to group by eye, not enough to
+   turn a board into confetti. Each is a wash of one hue over the paper, so it
+   still reads as paper in both themes rather than as a sticker. */
+.bk-pin.bk-s-sun{background:color-mix(in srgb,#F3C969 22%,var(--paper));
+  border-color:color-mix(in srgb,#F3C969 42%,transparent)}
+.bk-pin.bk-s-rose{background:color-mix(in srgb,#E88EA1 20%,var(--paper));
+  border-color:color-mix(in srgb,#E88EA1 40%,transparent)}
+.bk-pin.bk-s-sky{background:color-mix(in srgb,#7FB6E8 20%,var(--paper));
+  border-color:color-mix(in srgb,#7FB6E8 40%,transparent)}
+.bk-pin.bk-s-sage{background:color-mix(in srgb,#8FC7A2 20%,var(--paper));
+  border-color:color-mix(in srgb,#8FC7A2 40%,transparent)}
+.bk-pin.bk-s-ink{background:color-mix(in srgb,var(--paper-ink) 22%,var(--paper));
+  border-color:color-mix(in srgb,var(--paper-ink) 38%,transparent)}
+.bk-pin.bk-s-quote{background:transparent;border-color:transparent;box-shadow:none;
+  border-left:3px solid var(--accent-c,var(--a-peach));border-radius:0;
+  font-style:italic;padding-left:14px}
+.bk-pin.bk-s-quote:hover{border-color:transparent;
+  border-left-color:var(--accent-c,var(--a-peach))}
+
+/* Image frames. */
+.bk-pin.bk-f-frame .bk-pin-img{border:1px solid color-mix(in srgb,var(--paper-ink) 26%,transparent);
+  padding:3px;background:color-mix(in srgb,var(--paper-ink) 6%,var(--paper))}
+.bk-pin.bk-f-polaroid{background:#F6F3EC;color:#2A2724;padding-bottom:22px}
+.bk-pin.bk-f-polaroid .bk-pin-img{border-radius:2px}
+.bk-pin.bk-f-polaroid .bk-pin-cap{color:#4A443C}
+.bk-pin.bk-f-polaroid .bk-pin-grip::before{background:#8A8177}
+.bk-pin.bk-f-polaroid .bk-pin-x{color:#6A6259}
+.bk-pin-cap{font-size:11px;line-height:1.35;color:var(--paper-ink-2);outline:0;
+  min-height:14px;word-break:break-word}
+.bk-pin-cap:empty::before{content:attr(data-placeholder);color:var(--paper-ink-2);opacity:.65}
+
+/* Groups. Drawn FROM membership every paint — never stored as a rectangle,
+   because then moving one member would leave the frame behind and the picture
+   would start lying about what belongs together. */
+.bk-groups{position:absolute;inset:0;pointer-events:none}
+.bk-group{position:absolute;border-radius:14px;pointer-events:none;
+  border:1.5px dashed color-mix(in srgb,var(--accent-c,var(--a-peach)) 55%,transparent);
+  background:color-mix(in srgb,var(--accent-c,var(--a-peach)) 7%,transparent);
+  transition:opacity 160ms ease}
+.bk-group-t{position:absolute;top:-9px;left:12px;pointer-events:auto;
+  font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  padding:1px 7px;border-radius:5px;outline:0;cursor:text;
+  color:var(--paper-ink-2);background:var(--paper);
+  border:1px solid color-mix(in srgb,var(--accent-c,var(--a-peach)) 40%,transparent)}
+.bk-group-t:empty::before{content:attr(data-placeholder);opacity:.6}
+
+/* Connections. The wire is a hairline; the invisible fat path beside it is
+   what you can actually hit with a pointer. */
+.bk-wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.bk-wire{pointer-events:auto}
+.bk-wire-hit{stroke:transparent;stroke-width:14;cursor:pointer}
+.bk-wire-line{stroke:color-mix(in srgb,var(--paper-ink) 45%,transparent);stroke-width:1.5;
+  pointer-events:none}
+.bk-wire:hover .bk-wire-line{stroke:var(--accent-c,var(--a-peach))}
+.bk-wire.is-selected .bk-wire-line{stroke:var(--accent-c,var(--a-peach));stroke-width:2.5}
+.bk-wire-lb{fill:var(--paper-ink-2);font-size:10px;pointer-events:none;
+  paint-order:stroke;stroke:var(--paper);stroke-width:3px;stroke-linejoin:round}
+.bk-wire-ghost{stroke:var(--accent-c,var(--a-peach));stroke-width:2;stroke-dasharray:4 4}
+
+/* The contextual bar. Restrained: it names what you can do with THIS, and
+   nothing else. Positioned above the selection and translated onto it. */
+.bk-pin-bar{position:absolute;transform:translate(-50%,-100%);z-index:60;
+  display:flex;gap:2px;padding:3px;border-radius:9px;
+  background:var(--surface-1);border:1px solid var(--hairline);
+  box-shadow:0 10px 26px rgba(0,0,0,.3)}
+.bk-pin-bar button{height:26px;padding:0 9px;border:0;border-radius:6px;cursor:pointer;
+  background:none;color:var(--text-1);font-size:11.5px;white-space:nowrap;
+  transition:background var(--t-hover)}
+.bk-pin-bar button:hover{background:var(--surface-2)}
+.bk-bar-in input{height:26px;width:130px;padding:0 8px;border-radius:6px;font-size:11.5px;
+  background:var(--surface-2);border:1px solid var(--hairline);color:var(--text-1)}
+
+/* The More sheet: style, frame and arrangement, on demand rather than in the
+   bar. Everything here is a second-order choice. */
+.bk-pin-sheet{position:absolute;z-index:61;width:210px;padding:9px 10px 10px;
+  border-radius:11px;background:var(--surface-1);border:1px solid var(--hairline);
+  box-shadow:0 14px 34px rgba(0,0,0,.34)}
+.bk-sheet-h{margin:0 0 5px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted)}
+.bk-sheet-r{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:9px}
+.bk-sheet-r:last-child{margin-bottom:0}
+.bk-sheet-r button{height:25px;padding:0 8px;border-radius:6px;cursor:pointer;font-size:11px;
+  background:var(--surface-2);border:1px solid var(--hairline);color:var(--text-1)}
+.bk-sheet-r button:hover{border-color:var(--accent)}
+.bk-sheet-r button.is-on{border-color:var(--accent);color:var(--accent)}
+.bk-sheet-sw .bk-sw{width:26px;height:26px;padding:0;border-radius:50%}
+.bk-sw.bk-s-plain{background:var(--surface-2)}
+.bk-sw.bk-s-sun{background:#F3C969}
+.bk-sw.bk-s-rose{background:#E88EA1}
+.bk-sw.bk-s-sky{background:#7FB6E8}
+.bk-sw.bk-s-sage{background:#8FC7A2}
+.bk-sw.bk-s-ink{background:var(--text-1)}
+.bk-sw.bk-s-quote{background:linear-gradient(90deg,var(--accent) 0 30%,var(--surface-2) 30%)}
+.bk-sw.is-on{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Marquee and alignment guides. */
+.bk-marquee{position:absolute;z-index:55;pointer-events:none;border-radius:4px;
+  border:1px solid var(--accent-c,var(--a-peach));
+  background:color-mix(in srgb,var(--accent-c,var(--a-peach)) 12%,transparent)}
+.bk-guides{position:absolute;inset:0;z-index:54;pointer-events:none}
+.bk-guide{position:absolute;background:var(--accent-c,var(--a-peach));opacity:.6}
+.bk-guide-v{top:0;bottom:0;width:1px}
+.bk-guide-h{left:0;right:0;height:1px}
+
+@media (prefers-reduced-motion:reduce){
+  .bk-pin,.bk-group{transition:none}
+}
 
 /* A folded shelf keeps its heading and its count — nothing is hidden, only
    the rack of covers is put away. Click the heading to open it. */

@@ -159,6 +159,19 @@ export async function archiveItem(id) {
   applyItem(r.item);
   return r.item;
 }
+/**
+ * Permanent deletion. The one destructive call in Library.
+ *
+ * Removes the row from local state rather than marking it, because there is
+ * nothing to come back to — leaving a ghost on the shelf that the next reload
+ * disagrees with is worse than the shelf simply being shorter.
+ */
+export async function deleteItem(id) {
+  const r = await call(`/library/items/${id}`, { method: 'DELETE' });
+  lib.items = (lib.items ?? []).filter((i) => i.id !== id);
+  return r;
+}
+
 export async function restoreItem(id) {
   const r = await call(`/library/items/${id}/restore`, { method: 'POST' });
   applyItem(r.item);

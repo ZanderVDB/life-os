@@ -21,7 +21,7 @@
  *    lose to a misclick.
  */
 import type { AppInstance, Guards } from '../types.js';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
@@ -29,7 +29,7 @@ import {
   projects, tasks, itemLinks,
   LIBRARY_TYPES, SECTION_ACCENTS, PAGE_LAYOUTS, PAGE_PURPOSES,
 } from '../db/schema.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import {
   docToText, validateDoc, validatePageContent, pageToText, starterContent, extractRefs,
   convertContent,
@@ -256,6 +256,83 @@ export function registerLibraryRoutes(
       .set({ archivedAt: new Date(), status: 'archived', updatedAt: new Date() })
       .where(and(eq(libraryItems.workspaceId, ws), eq(libraryItems.id, id))).returning();
     return { item: row };
+  });
+
+  /**
+   * Delete, permanently — the one destructive action in Library.
+   *
+   * Archive was the only exit until now, which meant a Book made by mistake
+   * could be put away but never got rid of, and a shelf slowly filled with
+   * things nobody would ever open. Archive is still the default and still what
+   * the menu offers first; this is the deliberate second step.
+   *
+   * A PROJECT BOOK IS REFUSED. Its existence is the project's, not the
+   * Library's: `ensureProjectBook` recreates one on demand, so deleting it here
+   * would either be undone by the next visit to the project or leave the
+   * project pointing at nothing. Deleting the project is where that decision
+   * belongs, and it already asks. The refusal names the project so the answer
+   * is actionable rather than just a wall.
+   *
+   * What goes: the item, its book, sections, pages, bookmarks — all by database
+   * cascade — and the polymorphic edges that pointed AT them, which have no
+   * foreign key and would otherwise be left behind as links to nothing.
+   *
+   * What never goes: projects, tasks, diary entries, calendar events. A Book
+   * page can reference all of those, and a reference is not ownership.
+   */
+  app.delete(`${base}/library/items/:id`, pre, async (req) => {
+    const ws = wsId(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const item = await loadItem(ws, id);
+
+    const [book] = await db.select().from(libraryBooks)
+      .where(and(eq(libraryBooks.workspaceId, ws), eq(libraryBooks.libraryItemId, id))).limit(1);
+
+    if (book) {
+      const [link] = await db.select({ projectId: projectBooks.projectId, role: projectBooks.role })
+        .from(projectBooks)
+        .where(and(eq(projectBooks.workspaceId, ws), eq(projectBooks.bookId, book.id))).limit(1);
+      if (link) {
+        const [project] = await db.select({ title: projects.title }).from(projects)
+          .where(and(eq(projects.workspaceId, ws), eq(projects.id, link.projectId))).limit(1);
+        throw conflict(
+          `This is the Book for “${project?.title ?? 'a project'}”. Delete the project to `
+          + 'remove it, or archive the Book to put it away.',
+          { projectId: link.projectId, role: link.role },
+        );
+      }
+    }
+
+    const result = await db.transaction(async (tx) => {
+      let pageIds: string[] = [];
+      if (book) {
+        const rows = await tx.select({ id: bookPages.id }).from(bookPages)
+          .innerJoin(bookSections, eq(bookPages.sectionId, bookSections.id))
+          .where(eq(bookSections.bookId, book.id));
+        pageIds = rows.map((r) => r.id);
+      }
+
+      /* Edges have no foreign key — that is the price of one polymorphic table
+       * — so nothing removes them for us. A link to a deleted page is a link
+       * that resolves to nothing, which is worse than no link at all. */
+      const targets = [id, ...(book ? [book.id] : []), ...pageIds];
+      await tx.delete(itemLinks).where(and(
+        eq(itemLinks.workspaceId, ws),
+        or(
+          and(eq(itemLinks.targetType, PAGE_TARGET), inArray(itemLinks.targetId, targets)),
+          and(eq(itemLinks.sourceType, PAGE_TARGET), inArray(itemLinks.sourceId, targets)),
+          and(eq(itemLinks.targetType, 'library'), inArray(itemLinks.targetId, targets)),
+          and(eq(itemLinks.sourceType, 'library'), inArray(itemLinks.sourceId, targets)),
+        ),
+      ));
+
+      // The cascade takes the book, its sections, pages and bookmarks with it.
+      await tx.delete(libraryItems)
+        .where(and(eq(libraryItems.workspaceId, ws), eq(libraryItems.id, id)));
+      return { pages: pageIds.length };
+    });
+
+    return { deleted: true, id, title: item.title, pages: result.pages };
   });
 
   app.post(`${base}/library/items/:id/restore`, pre, async (req) => {

@@ -244,7 +244,18 @@ function cleanBlock(raw: unknown, depth = 0): Block | null {
  * a 2560px monitor has to be the same pinboard on a laptop, and pixels would
  * make the arrangement a property of the screen it was made on.
  */
-export const PIN_KINDS = ['text', 'image', 'link', 'video', 'task', 'project', 'resource', 'page'] as const;
+export const PIN_KINDS = ['text', 'image', 'link', 'video', 'file', 'task', 'project', 'resource', 'page'] as const;
+
+/**
+ * Note styles and image frames.
+ *
+ * A deliberately short list. A pinboard should be able to look like something
+ * a person arranged, which a single grey card cannot — but an open colour
+ * picker turns every board into confetti, and then the colours stop meaning
+ * anything at all. Seven notes and three frames is enough to group by eye.
+ */
+export const NOTE_STYLES = ['plain', 'sun', 'rose', 'sky', 'sage', 'ink', 'quote'] as const;
+export const IMAGE_FRAMES = ['none', 'frame', 'polaroid'] as const;
 
 const PIN_REF_ATTR: Record<string, string> = {
   task: 'taskId', project: 'projectId', resource: 'itemId', page: 'pageId',
@@ -255,31 +266,102 @@ export type PinItem = {
   x: number; y: number; w: number; h: number;
   text?: string; href?: string; accent?: string;
   taskId?: string; projectId?: string; itemId?: string; pageId?: string;
+  /* Membership lives on the ITEM, not as a list on the group. One source of
+   * truth: moving a pin out of a group is one field, and there is no way for
+   * a group's list and an item's belief about itself to disagree. */
+  groupId?: string;
+  z?: number;
+  style?: string; frame?: string; caption?: string;
+  fileName?: string; fileType?: string; fileSize?: number;
   createdAt?: string; updatedAt?: string;
 };
-export type Pinboard = { type: 'pinboard'; items: PinItem[] };
 
-export const EMPTY_PINBOARD: Pinboard = { type: 'pinboard', items: [] };
+/** A group is identity and a name. What belongs to it is on the items. */
+export type PinGroup = { id: string; title?: string };
+
+/**
+ * A relationship between two pins, stored as data rather than drawn as decoration.
+ *
+ * The line on screen is the least important part. This is a structured edge —
+ * stable id, stable endpoints — so that a later reader can know the beach
+ * photo and the location link belong to the same thought, without having to
+ * infer it from two boxes happening to sit near each other.
+ */
+export type PinConnection = { id: string; from: string; to: string; label?: string };
+
+export type Pinboard = {
+  type: 'pinboard'; items: PinItem[]; groups: PinGroup[]; connections: PinConnection[];
+};
+
+export const EMPTY_PINBOARD: Pinboard = {
+  type: 'pinboard', items: [], groups: [], connections: [],
+};
 
 const clamp = (v: unknown, lo: number, hi: number, fallback: number) => {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;
   return Math.min(hi, Math.max(lo, Math.round(n * 100) / 100));
 };
 
+/** One embedded image, and the whole board's worth. */
+const MAX_IMAGE_CHARS = 900_000;
+const MAX_BOARD_IMAGE_CHARS = 4_000_000;
+
+const DATA_IMAGE_RE = /^data:image\/(png|jpeg|jpg|gif|webp|avif);base64,[A-Za-z0-9+/=\s]+$/i;
+
+/**
+ * An image source: an ordinary URL, or a bounded inline raster.
+ *
+ * Pasting a screenshot has to work, and there is no blob storage in this
+ * stack, so a pasted image is stored inline. Two limits make that safe rather
+ * than reckless: a size cap, and a whitelist of RASTER types only. SVG is
+ * excluded deliberately — an SVG can carry script, and while an `<img>` will
+ * not run it, storing one means the next surface to render it inline inherits
+ * a problem this one merely avoided.
+ */
+function safeImageSrc(href: unknown): string | null {
+  if (typeof href !== 'string') return null;
+  const t = href.trim();
+  if (/^data:/i.test(t)) {
+    if (t.length > MAX_IMAGE_CHARS) return null;
+    return DATA_IMAGE_RE.test(t) ? t : null;
+  }
+  return safeHref(t);
+}
+
 export function validatePinboard(raw: unknown): Pinboard {
-  const items = raw && typeof raw === 'object' && Array.isArray((raw as any).items)
-    ? (raw as any).items : [];
+  const src = raw && typeof raw === 'object' ? raw as any : {};
+  const items = Array.isArray(src.items) ? src.items : [];
   if (items.length > 200) {
     throw Object.assign(new Error('That pinboard has too many items.'), { statusCode: 400 });
   }
+
+  /* Groups first: an item may only claim a group that exists. */
+  const groups: PinGroup[] = [];
+  const groupIds = new Set<string>();
+  for (const g of (Array.isArray(src.groups) ? src.groups : [])) {
+    if (!g || typeof g !== 'object') continue;
+    const id = typeof g.id === 'string' && g.id ? String(g.id).slice(0, 40) : blockId();
+    if (groupIds.has(id)) continue;
+    groupIds.add(id);
+    const title = typeof g.title === 'string' ? g.title.slice(0, 80).trim() : '';
+    groups.push(title ? { id, title } : { id });
+  }
+
   const out: PinItem[] = [];
+  const seen = new Set<string>();
+  let imageChars = 0;
   for (const r of items) {
     if (!r || typeof r !== 'object') continue;
     const kind = (r as any).kind;
     if (!(PIN_KINDS as readonly string[]).includes(kind)) continue;
 
+    const id = typeof (r as any).id === 'string' && (r as any).id
+      ? String((r as any).id).slice(0, 40) : blockId();
+    if (seen.has(id)) continue;        // a duplicated id is a broken edge waiting to happen
+    seen.add(id);
+
     const item: PinItem = {
-      id: typeof (r as any).id === 'string' && (r as any).id ? String((r as any).id).slice(0, 40) : blockId(),
+      id,
       kind,
       x: clamp((r as any).x, 0, 100, 4),
       y: clamp((r as any).y, 0, 100, 4),
@@ -289,27 +371,96 @@ export function validatePinboard(raw: unknown): Pinboard {
 
     const refAttr = PIN_REF_ATTR[kind];
     if (refAttr) {
-      const id = (r as any)[refAttr];
-      if (!isUuid(id)) continue;         // a reference pin with no target is nothing
-      (item as any)[refAttr] = id;
+      const rid = (r as any)[refAttr];
+      if (!isUuid(rid)) continue;      // a reference pin with no target is nothing
+      (item as any)[refAttr] = rid;
     }
     if (typeof (r as any).text === 'string') item.text = (r as any).text.slice(0, 4000);
-    if (kind === 'link' || kind === 'video' || kind === 'image') {
+
+    if (kind === 'image') {
+      const imgSrc = safeImageSrc((r as any).href);
+      if (imgSrc) {
+        if (imgSrc.startsWith('data:')) {
+          // A board that would exceed the total budget keeps what fits.
+          if (imageChars + imgSrc.length > MAX_BOARD_IMAGE_CHARS) continue;
+          imageChars += imgSrc.length;
+        }
+        item.href = imgSrc;
+      } else if (!item.text) continue; // nothing to show and nowhere to go
+    } else if (kind === 'link' || kind === 'video') {
       const href = safeHref((r as any).href);
-      if (!href && !item.text) continue;  // nothing to show and nowhere to go
+      if (!href && !item.text) continue;
+      if (href) item.href = href;
+    } else if (kind === 'file') {
+      const name = typeof (r as any).fileName === 'string'
+        ? (r as any).fileName.trim().slice(0, 200) : '';
+      if (!name) continue;             // a file pin with no filename says nothing
+      item.fileName = name;
+      const ft = (r as any).fileType;
+      if (typeof ft === 'string' && ft) item.fileType = ft.slice(0, 100);
+      const fsz = (r as any).fileSize;
+      if (typeof fsz === 'number' && Number.isFinite(fsz) && fsz >= 0) {
+        item.fileSize = Math.round(fsz);
+      }
+      const href = safeHref((r as any).href);
       if (href) item.href = href;
     }
+
+    const gid = (r as any).groupId;
+    if (typeof gid === 'string' && groupIds.has(gid)) item.groupId = gid;
+
+    const z = (r as any).z;
+    if (typeof z === 'number' && Number.isFinite(z)) {
+      item.z = Math.min(9999, Math.max(0, Math.round(z)));
+    }
+
+    const style = (r as any).style;
+    if ((NOTE_STYLES as readonly string[]).includes(style)) item.style = style;
+    const frame = (r as any).frame;
+    if ((IMAGE_FRAMES as readonly string[]).includes(frame)) item.frame = frame;
+    const caption = (r as any).caption;
+    if (typeof caption === 'string' && caption.trim()) item.caption = caption.slice(0, 300);
+
     const accent = (r as any).accent;
     if (typeof accent === 'string' && /^[a-z]{3,12}$/.test(accent)) item.accent = accent;
     if (typeof (r as any).createdAt === 'string') item.createdAt = (r as any).createdAt.slice(0, 40);
     out.push(item);
   }
-  return { type: 'pinboard', items: out };
+
+  /* An edge to a pin that is not here is not an edge. Dropping it is the only
+   * option that leaves the board describing something true. */
+  const live = new Set(out.map((i) => i.id));
+  const connections: PinConnection[] = [];
+  const pairs = new Set<string>();
+  for (const c of (Array.isArray(src.connections) ? src.connections : [])) {
+    if (!c || typeof c !== 'object') continue;
+    const from = typeof c.from === 'string' ? c.from : '';
+    const to = typeof c.to === 'string' ? c.to : '';
+    if (!live.has(from) || !live.has(to) || from === to) continue;
+    const key = from + '>' + to;
+    if (pairs.has(key)) continue;
+    pairs.add(key);
+    const id = typeof c.id === 'string' && c.id ? String(c.id).slice(0, 40) : blockId();
+    const label = typeof c.label === 'string' ? c.label.slice(0, 80).trim() : '';
+    connections.push(label ? { id, from, to, label } : { id, from, to });
+  }
+
+  // A group nobody belongs to is not a group.
+  const used = new Set(out.map((i) => i.groupId).filter(Boolean) as string[]);
+  return {
+    type: 'pinboard',
+    items: out,
+    groups: groups.filter((g) => used.has(g.id)),
+    connections,
+  };
 }
 
 /** A pinboard's searchable text: its own words, not its references' titles. */
-export const pinboardToText = (p: Pinboard): string =>
-  (p.items ?? []).map((i) => i.text ?? '').filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+export const pinboardToText = (p: Pinboard): string => [
+  ...(p.items ?? []).map((i) => [i.text, i.caption, i.fileName].filter(Boolean).join(' ')),
+  ...(p.groups ?? []).map((g) => g.title ?? ''),
+  ...(p.connections ?? []).map((c) => c.label ?? ''),
+].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 
 /**
  * Validates and normalises an incoming document.
@@ -526,7 +677,7 @@ export function convertContent(from: string, to: string, raw: unknown): Conversi
     if (text) items.push({ id: blockId(), kind: 'text', ...place(), text });
   }
   return {
-    content: { type: 'pinboard', items },
+    content: { type: 'pinboard', items, groups: [], connections: [] },
     note: blocks.length
       ? `${items.length} block${items.length === 1 ? '' : 's'} became pins. Drag them where you want them.`
       : null,
