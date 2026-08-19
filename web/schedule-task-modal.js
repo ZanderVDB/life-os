@@ -86,8 +86,7 @@ export function openScheduleTaskModal(ctx) {
           <button class="btn" id="st-open-tasks">Go to Today</button>
         </div>`
       : `
-      <div class="ev-row ev-row-top">
-        <span class="ev-lab">Task</span>
+      ${row('Task', `
         <div class="st-list" role="radiogroup" aria-label="Choose a task" id="st-list">
           ${tasks.map((t, i) => `<button type="button" class="st-task pri-${t.priority}
             ${i === 0 ? 'is-sel' : ''}" role="radio" aria-checked="${i === 0}"
@@ -99,8 +98,7 @@ export function openScheduleTaskModal(ctx) {
               ${t.dueDate ? `<span class="st-due">due ${esc(prettyDate(t.dueDate))}</span>` : ''}
             </span>
           </button>`).join('')}
-        </div>
-      </div>
+        </div>`, { top: true })}
 
       <!-- When, how long, and whether it is free are one decision. The same
            controls as Event and Reminder, so this is not a third dialect. -->
@@ -138,15 +136,18 @@ export function openScheduleTaskModal(ctx) {
     if (!el) return;
     const start = minutesFromTime();
     const clashes = ctx.conflictsAt?.(f.day, start, start + f.minutes) ?? [];
-    const endLabel = (() => {
-      const e = start + f.minutes;
-      return `${String(Math.floor(e / 60) % 24).padStart(2, '0')}:${String(e % 60).padStart(2, '0')}`;
-    })();
+    /* The SHARED format. This line used to build its own "09:00–10:00" while
+     * the controls two rows above said "9:00 am", so one dialog stated the
+     * same hour two different ways. */
+    const e = start + f.minutes;
+    const endLabel = formatTime(
+      `${String(Math.floor(e / 60) % 24).padStart(2, '0')}:${String(e % 60).padStart(2, '0')}`);
+    const startLabel = formatTime(f.time);
     el.className = `st-check ${clashes.length ? 'has-clash' : 'is-clear'}`;
     el.innerHTML = clashes.length
-      ? `<b>${esc(f.time)}–${esc(endLabel)}</b> overlaps ${esc(clashes[0])}${
+      ? `<b>${esc(startLabel)}–${esc(endLabel)}</b> overlaps ${esc(clashes[0])}${
         clashes.length > 1 ? ` and ${clashes.length - 1} more` : ''}. You can still schedule it.`
-      : `<b>${esc(f.time)}–${esc(endLabel)}</b> is free.`;
+      : `<b>${esc(startLabel)}–${esc(endLabel)}</b> is free.`;
   }
 
   if (!empty) refreshCheck();

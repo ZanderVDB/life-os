@@ -24,6 +24,8 @@ const composer = read('event-composer.js');
 const reminder = read('reminder-modal.js');
 const schedule = read('schedule-task-modal.js');
 const html = read('index.html');
+/** A newline, so a selector can be anchored at column 0. */
+const NL = String.fromCharCode(10);
 
 const FLOWS: [string, string][] = [
   ['Event/Birthday', composer], ['Reminder', reminder], ['Schedule Task', schedule],
@@ -221,4 +223,82 @@ test('the dropdown panel is opaque, not merely positioned', () => {
   assert.match(html, /\.cf-menu\{[^}]*background:var\(--surface\)/,
     'the dropdown panel has no background, so the modal shows through it');
   assert.ok(!/var\(--surface-1\)/.test(html), 'the undefined surface token is back');
+});
+
+/* ── Four bugs found by driving the app, not by reading it ────────────── */
+
+test('every floating panel carries its own background', () => {
+  /* The date picker had none. It borrowed background, border and shadow from
+   * the `.ev-pop` host it happened to be rendered into, so when the host
+   * became the shared `.cf-pop` — which only positions — the picker kept its
+   * size and lost its skin: a correctly-placed, fully-interactive, completely
+   * invisible grid. A panel that needs its container to be visible is one
+   * refactor away from being transparent. */
+  for (const sel of [NL + '.dp{', NL + '.tp{', NL + '.cf-menu{']) {
+    // Anchored at column 0, so the mobile media-query overrides (indented) are
+    // not mistaken for the rule that gives the panel its surface.
+    const at = html.indexOf(sel);
+    assert.ok(at > -1, `${sel.trim()} has no top-level rule at all`);
+    const rule = html.slice(at, html.indexOf('}', at));
+    assert.match(rule, /background:var\(--/, `${sel.trim()} has no background of its own`);
+  }
+  // And the hosts only position; they must not decorate.
+  for (const host of ['.cf-pop{', '.ev-pop{']) {
+    const at = html.indexOf(host);
+    const rule = html.slice(at, html.indexOf('}', at));
+    assert.ok(!/background:/.test(rule), `${host} decorates, so its children can go skinless`);
+  }
+});
+
+test('one popover, one owner — a picker and a dropdown cannot disagree', () => {
+  /* wireDateTime and wireMenus share the host. When each kept its own idea of
+   * what was open, closing a dropdown left the date picker still believing it
+   * was open, so the next click on the date field read as "close the thing
+   * already open" and the picker appeared dead until clicked twice. */
+  assert.match(fields, /pop\.__owner = null;/, 'the popover has no single owner');
+  assert.match(fields, /export function closePopover/, 'closing is not shared');
+  assert.ok(!/let openFor = null|let openBtn = null/.test(fields),
+    'a wiring keeps its own open-state again');
+});
+
+test('wiring a control twice is harmless', () => {
+  /* The recurrence builder is rendered with the composer and wired again when
+   * it appears. Two handlers on one dropdown meant the first opened the panel
+   * and the second immediately closed it — the control looked completely
+   * dead. Calling a wiring function twice should be a no-op, not destructive. */
+  assert.match(fields, /if \(btn\.dataset\.cfWired\) return;/, 'controls can be double-wired');
+  const count = (fields.match(/dataset\.cfWired = '1'/g) ?? []).length;
+  assert.ok(count >= 2, 'only one control family is protected from double wiring');
+});
+
+test('a menu change is announced to everyone, not just its first wirer', () => {
+  /* With wiring idempotent, `onChange` belongs to whoever wired first — so the
+   * recurrence builder never heard about its own dropdowns and left its
+   * sentence describing the previous choice. An event has no owner. */
+  const fn = fields.slice(fields.indexOf('const choose = (btn, opt)'),
+    fields.indexOf('const open = (btn)'));
+  assert.match(fn, /dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/,
+    'a menu change is not observable by anyone but the first listener');
+  assert.match(fn, /if \(before === btn\.dataset\.value\) return;/,
+    're-picking the same value still fires a change');
+});
+
+test('a floating menu escapes the modal it floats out of', () => {
+  /* The reminder menu was absolutely positioned inside `.cf-rems`, a child of
+   * the modal's scrolling body — so overflow:auto cut it in half and the later
+   * presets could not be reached at all. */
+  const from = fields.indexOf("addBtn.addEventListener('click'");
+  const fn = fields.slice(from, fields.indexOf('return { get values()', from));
+  assert.match(fn, /popoverHost\(dlg\)/, 'the reminder menu is not in the shared host');
+  assert.match(fn, /anchor\(pop, dlg, addBtn\)/, 'it is not placed by the shared rule');
+  assert.ok(!/host\.appendChild\(menu\)/.test(fn),
+    'the menu is still mounted inside the scrolling body');
+});
+
+test('the Schedule Task list fills its row', () => {
+  /* As a flex item that never grew, it collapsed to the width of its longest
+   * title — a narrow scrolling stack of half-visible cards in a 544px modal. */
+  assert.match(html, /\.st-list\{[^}]*flex:1 1 100%/, 'the task list does not fill its row');
+  assert.ok(!/class="ev-row ev-row-top">\s*<span class="ev-lab">Task/.test(schedule),
+    'the Task row still uses the legacy three-column grid');
 });

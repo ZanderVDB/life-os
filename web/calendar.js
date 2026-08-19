@@ -1102,10 +1102,15 @@ export function sourcesPopoverHtml() {
     return `<div class="sources">
       <h4>Calendar sources</h4>
       <p class="cs-connect-copy">Connect Google Calendar to see your real events
-        in Month, Agenda and Plan week.</p>
+        in Month, Agenda and Plan week — and to add to them from here.</p>
       <ul class="cs-connect-list">
+        <!-- This list used to promise Life OS could not change anything in
+             Google. That was true while the integration was read-only and
+             stopped being true when it gained write access; a permissions
+             promise that has quietly expired is worse than none. -->
         <li>Life OS reads your calendars and events.</li>
-        <li>It cannot create, change or delete anything in Google.</li>
+        <li>It can add, change and delete events — always asking you first.</li>
+        <li>It never touches your calendars themselves, or who they are shared with.</li>
         <li>You can disconnect at any time.</li>
       </ul>
       <button class="btn btn-primary cs-connect" id="cal-connect">

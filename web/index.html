@@ -403,7 +403,7 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .tm-steps:hover{color:var(--text-2)}
 .tm-steps-caret{width:0;height:0;border-left:3.5px solid transparent;
   border-right:3.5px solid transparent;border-top:4px solid currentColor;
-  opacity:.7;transition:rotate var(--t-fast)}
+  opacity:.7;transition:rotate var(--t-hover)}
 .tm-steps[aria-expanded="true"] .tm-steps-caret{rotate:180deg}
 
 /* ── ONE step control, ONE row grid ──
@@ -1067,10 +1067,23 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
 .ev-los-list{display:flex;flex-wrap:wrap;gap:5px}
 
 /* ── Custom date picker ── */
-.ev-pop{position:absolute;z-index:5;background:var(--surface-2);
-  border:1px solid var(--border-strong);border-radius:12px;box-shadow:var(--e3);
-  padding:10px;animation:rise var(--d-fast) var(--e-out) backwards}
-.dp{width:246px}
+/* A floating HOST positions; it does not decorate.
+   `.ev-pop` used to carry the background, border and shadow for whatever was
+   dropped inside it, which is why the date picker had no skin of its own and
+   turned invisible the moment it was rendered somewhere else. Now every panel
+   brings its own surface and every host does one job. */
+.ev-pop{position:absolute;z-index:200;
+  animation:rise var(--d-fast) var(--e-out) backwards}
+/* Each panel owns its own surface.
+   The date picker used to have none, borrowing background, border and shadow
+   from the `.ev-pop` host it was rendered into. When the host became the
+   shared `.cf-pop` — which only positions — the picker kept its size and lost
+   its skin: a correctly-placed, fully-interactive, completely invisible grid.
+   A floating panel that depends on its container to be visible is one
+   refactor away from being transparent. */
+.dp{width:246px;padding:10px;border-radius:12px;
+  background:var(--surface);border:1px solid var(--hairline);
+  box-shadow:0 16px 38px rgba(0,0,0,.42)}
 .dp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .dp-label{font-size:12.5px;font-weight:600;color:var(--text)}
 .dp-nav{width:26px;height:26px;border-radius:7px;color:var(--text-2);font-size:15px;
@@ -1088,15 +1101,14 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
 .dp-day.is-sel{background:var(--accent);color:#fff;font-weight:600}
 
 /* ── Custom time picker ── */
-.tp{width:120px;max-height:230px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;
-  scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
-.tp::-webkit-scrollbar{width:8px}
-.tp::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
-.tp::-webkit-scrollbar-track{background:transparent}
-.tp-opt{height:30px;border-radius:7px;font-size:12px;color:var(--text-2);
-  font-variant-numeric:tabular-nums;transition:background var(--t-hover)}
-.tp-opt:hover{background:var(--surface-3);color:var(--text)}
-.tp-opt.is-sel{background:var(--accent);color:#fff;font-weight:600}
+/* The time picker's styling now lives with the shared Calendar fields. What
+   was here belonged to the 96-row list it replaced: a 120px column, and an
+   option colour of --text-2 that was the reason some entries read as barely
+   there. Leaving it would have half-applied to the new two-column picker. */
+.tp::-webkit-scrollbar,.tp-col::-webkit-scrollbar{width:8px}
+.tp::-webkit-scrollbar-thumb,.tp-col::-webkit-scrollbar-thumb{
+  background:var(--border-strong);border-radius:4px}
+.tp::-webkit-scrollbar-track,.tp-col::-webkit-scrollbar-track{background:transparent}
 
 /* Save button progress — restrained, no spinner takeover. */
 .btn.is-busy{opacity:.72;pointer-events:none;position:relative}
@@ -1133,10 +1145,14 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
   .ev-chip{min-height:30px}
   .ev-chip-x{min-width:24px;min-height:24px}
 
-  .ev-pop{position:fixed;left:12px!important;right:12px;top:auto!important;bottom:12px;
-    width:auto}
+  /* On a phone there is no room to hang a panel off a control, so every
+     floating surface docks to the bottom instead. `.cf-pop` was added later
+     and missed this, which would have let a dropdown run off the screen. */
+  .ev-pop,.cf-pop{position:fixed;left:12px!important;right:12px;top:auto!important;
+    bottom:12px;width:auto}
   .dp{width:100%}
   .tp{width:100%;max-height:180px}
+  .cf-menu{max-width:none;max-height:46vh}
 }
 
 /* ══ CALENDAR (Phase D3) ══════════════════════════════════════════════
@@ -1260,7 +1276,10 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
 .ag-block{background:rgba(78,143,196,.07);border-left:2px solid var(--p-low);
   border-radius:0 10px 10px 0}
 .ag-plan{width:7px;height:7px;border-radius:2px;background:var(--p-low);flex-shrink:0}
-.ag-badge{font-size:10px;font-weight:600;color:var(--muted);background:var(--surface-2);
+/* --muted on this pill measured 3.06:1 — under the 4.5:1 that small text
+   needs, and it read as barely-there grey. A label worth showing is a label
+   worth reading. */
+.ag-badge{font-size:10px;font-weight:600;color:var(--text-2);background:var(--surface-2);
   border-radius:4px;padding:1px 6px;flex-shrink:0}
 .ag-badge.is-warn{background:rgba(255,196,77,.14);color:var(--warn)}
 .ag-ro{opacity:.7}
@@ -1438,7 +1457,7 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cs-habit-note.is-err{color:var(--danger)}
 .cs-habit-row{display:flex;align-items:center;gap:8px;width:100%;padding:5px 6px;
   margin-left:-6px;border:0;background:none;border-radius:7px;cursor:pointer;
-  text-align:left;transition:background var(--t-fast)}
+  text-align:left;transition:background var(--t-hover)}
 .cs-habit-row:hover{background:var(--surface-3)}
 .cs-habit-row b{font-size:11.5px;font-weight:500;color:var(--text-2);
   overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -1449,7 +1468,7 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cs-habit-tick{width:16px;height:16px;border-radius:5px;flex-shrink:0;
   border:1.5px solid var(--border-strong);
   display:grid;place-items:center;color:transparent;
-  transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast)}
+  transition:background var(--t-hover),border-color var(--t-hover),color var(--t-hover)}
 .cs-habit-row:hover .cs-habit-tick{border-color:var(--ok)}
 .cs-habit-row.is-done .cs-habit-tick{background:var(--ok);border-color:var(--ok);
   color:#08221c}
@@ -1788,7 +1807,12 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 .st-mark{width:9px;height:9px;border-radius:2px;background:var(--p-low);flex-shrink:0;
   margin-top:14px}
 .st-title{font-size:19px;font-weight:600;margin:0;flex:1}
-.st-list{display:flex;flex-direction:column;gap:5px;max-height:210px;overflow-y:auto;
+/* Fill the row. As a flex item that never grew, the list collapsed to the
+   width of its longest title — a narrow scrolling stack of half-visible
+   cards in a 544px modal, which is what made choosing a task feel like
+   rummaging. It is the subject of this dialog and should look like it. */
+.st-list{display:flex;flex-direction:column;gap:5px;width:100%;flex:1 1 100%;
+  max-height:246px;overflow-y:auto;
   scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
 .st-list::-webkit-scrollbar{width:8px}
 .st-list::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
@@ -4069,8 +4093,9 @@ body:has(.lib-page) .rail{display:none}
   border-left:1.8px solid currentColor;border-bottom:1.8px solid currentColor;
   transform:rotate(-45deg) translate(1px,-2px)}
 
-/* The reminder menu is the same panel, positioned by its own field. */
-.cf-rem-menu{position:absolute;top:100%;left:0;z-index:80;margin-top:5px}
+/* The reminder menu is the same panel, in the same shared host as every other
+   dropdown — it used to be absolutely positioned inside the modal body, where
+   overflow:auto cut it in half. */
 
 /* The one floating surface per dialog. Appended to the DIALOG rather than the
    scrolling body, so no panel is ever clipped by the modal's overflow, and

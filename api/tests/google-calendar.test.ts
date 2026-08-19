@@ -454,7 +454,18 @@ test('ui: no developer-facing language in normal product UI', () => {
       `the sources card says "${word}" to the user`);
   }
   assert.match(rail, /Connect Google Calendar/, 'there is no connect affordance');
-  assert.match(rail, /cannot create, change or delete/i, 'read-only is not explained');
+  /* What Life OS will do with the access, stated accurately.
+   *
+   * This used to assert the words "cannot create, change or delete" — true
+   * while the integration was read-only, and false from the moment it gained
+   * write access. A permissions promise that has quietly expired is worse than
+   * no promise, and a test that pins the expired wording keeps it alive. */
+  assert.match(rail, /add, change and delete events/i, 'what Life OS can do is not stated');
+  assert.match(rail, /asking you first/i, 'the confirmation guarantee is not stated');
+  assert.match(rail, /never touches your calendars themselves/i,
+    'the limit of the access is not stated');
+  assert.ok(!/cannot create, change or delete/i.test(rail),
+    'the expired read-only promise is back');
 });
 
 test('ui: the plan queue is cards with a non-drag path', () => {

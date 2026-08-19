@@ -3168,10 +3168,13 @@ function selectDay(day) {
 /**
  * Opens an event.
  *
- * A REAL Google event opens read-only detail, never a form. Life OS cannot
- * write to Google in this phase, and a form with a Save button would promise
- * something that does not exist. Local and synthetic events still open the
- * editor, because those Life OS can actually change.
+ * A REAL Google event opens the detail SHEET, never a form. Not because Life
+ * OS cannot write — it can now — but because a Google write has to go through
+ * a proposal and a confirmation, and a form with a Save button would skip both.
+ * The sheet's Edit action opens the composer, which does it properly.
+ *
+ * Local and synthetic events still open the editor, because those are Life
+ * OS's own and nothing has to be asked of Google.
  */
 function openEvent(id, defaultDay = null) {
   const ev = id ? cal.data?.events.find((x) => x.id === id) : null;

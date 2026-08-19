@@ -135,14 +135,31 @@ export function popoverHost(dlg) {
    * it — so choosing an hour dismissed the picker before a minute could be
    * chosen, and nothing was ever committed. */
   pop.addEventListener('click', (e) => e.stopPropagation());
+  /* WHO has it open lives on the host, not in each wiring's own closure.
+   *
+   * wireDateTime and wireMenus share this element. When each kept its own
+   * `openFor`, closing a dropdown left the date picker still believing it was
+   * open — so the next click on the date field was read as "click the thing
+   * that is already open", which closes it, and the picker appeared dead until
+   * you clicked a second time. One owner, one truth. */
+  pop.__owner = null;
   dlg.appendChild(pop);
   return pop;
 }
 
+/** Closes whatever the shared popover is showing, whoever opened it. */
+export function closePopover(dlg) {
+  const pop = dlg.querySelector('[data-cf-pop]');
+  if (!pop) return;
+  pop.hidden = true;
+  pop.innerHTML = '';
+  if (pop.__owner) pop.__owner.setAttribute?.('aria-expanded', 'false');
+  pop.__owner = null;
+}
+
 export function wireDateTime(root, dlg, onChange) {
   const pop = popoverHost(dlg);
-  let openFor = null;
-  const close = () => { pop.hidden = true; pop.innerHTML = ''; openFor = null; };
+  const close = () => closePopover(dlg);
 
   const set = (btn, value, kind) => {
     btn.dataset.value = value ?? '';
@@ -154,10 +171,13 @@ export function wireDateTime(root, dlg, onChange) {
   };
 
   root.querySelectorAll('[data-cf-date],[data-cf-time]').forEach((btn) => {
+    if (btn.dataset.cfWired) return;
+    btn.dataset.cfWired = '1';
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (openFor === btn) return close();
-      openFor = btn;
+      if (pop.__owner === btn) return close();
+      close();
+      pop.__owner = btn;
       if (btn.hasAttribute('data-cf-date')) {
         datePickerPopover(pop, dlg, btn, btn.dataset.value, (v) => set(btn, v, 'date'));
       } else {
@@ -375,20 +395,33 @@ export function wireReminders(root, opts = {}) {
     say('');
   });
 
-  addBtn.addEventListener('click', () => {
-    if (host.querySelector('[data-cf-rem-menu]')) return;
+  addBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    /* Into the SHARED popover host, not into the field.
+     *
+     * Absolutely positioned inside `.cf-rems`, this menu was a child of the
+     * modal's scrolling body — so `overflow: auto` cut it off partway down,
+     * and the later presets simply could not be reached. Anything that floats
+     * has to escape the box it floats out of. */
+    const dlg = host.closest('.modal') ?? document.body;
+    const pop = popoverHost(dlg);
+    if (pop.__owner === addBtn) { closePopover(dlg); return; }
+    closePopover(dlg);
+    pop.__owner = addBtn;
+
     const presets = host.dataset.allDay === '1' ? ALL_DAY_PRESETS : REMINDER_PRESETS;
-    const menu = document.createElement('div');
-    menu.className = 'cf-menu cf-rem-menu';
-    menu.dataset.cfRemMenu = '';
-    menu.setAttribute('role', 'listbox');
-    menu.innerHTML = `${presets.map((p) => `<button type="button" role="option"
-      class="cf-menu-opt" data-m="${p.m}"><span class="cf-menu-l">${esc(p.label)}</span></button>`).join('')}
+    pop.innerHTML = `<div class="cf-menu" role="listbox" aria-label="When to remind you">
+      ${presets.map((x) => `<button type="button" role="option" class="cf-menu-opt"
+        data-m="${x.m}"><span class="cf-menu-l">${esc(x.label)}</span></button>`).join('')}
       <button type="button" role="option" class="cf-menu-opt" data-custom>
-        <span class="cf-menu-l">Custom…</span></button>`;
-    host.appendChild(menu);
+        <span class="cf-menu-l">Custom…</span></button>
+    </div>`;
+    pop.hidden = false;
+    anchor(pop, dlg, addBtn);
+
+    const menu = pop.querySelector('.cf-menu');
     menu.querySelectorAll('[data-m]').forEach((b) => {
-      b.onclick = () => { add(Number(b.dataset.m)); menu.remove(); };
+      b.onclick = () => { add(Number(b.dataset.m)); closePopover(dlg); };
     });
     menu.querySelector('[data-custom]').onclick = () => {
       menu.innerHTML = `<div class="cf-rem-custom">
@@ -398,6 +431,7 @@ export function wireReminders(root, opts = {}) {
         <button type="button" data-ok>Add</button></div>`;
       const input = menu.querySelector('input');
       input.focus();
+      input.select();
       const ok = () => {
         const n = Number(input.value);
         if (!Number.isFinite(n) || n < 0 || n > MAX_REMINDER_MINUTES) {
@@ -405,14 +439,14 @@ export function wireReminders(root, opts = {}) {
           return;
         }
         add(n);
-        menu.remove();
+        closePopover(dlg);
       };
       menu.querySelector('[data-ok]').onclick = ok;
-      input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); ok(); } };
+      input.onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); ok(); } };
     };
-    const away = (e) => {
-      if (menu.contains(e.target) || e.target === addBtn) return;
-      menu.remove();
+    const away = (ev) => {
+      if (pop.contains(ev.target) || ev.target === addBtn) return;
+      closePopover(dlg);
       document.removeEventListener('click', away, true);
     };
     setTimeout(() => document.addEventListener('click', away, true), 0);
@@ -660,15 +694,11 @@ export const calendarSelect = (id, calendars, value) => selectField(
  */
 export function wireMenus(root, dlg, onChange) {
   const pop = popoverHost(dlg);
-  let openBtn = null;
 
   const close = (focusBack = false) => {
-    if (!openBtn) return;
-    openBtn.setAttribute('aria-expanded', 'false');
-    if (focusBack) openBtn.focus();
-    openBtn = null;
-    pop.hidden = true;
-    pop.innerHTML = '';
+    const owner = pop.__owner;
+    closePopover(dlg);
+    if (focusBack && owner) owner.focus();
   };
 
   const choose = (btn, opt) => {
@@ -679,13 +709,21 @@ export function wireMenus(root, dlg, onChange) {
     const mark = btn.querySelector('.cf-menu-mark');
     if (mark && opt.mark) mark.style.background = opt.mark;
     close(true);
-    if (before !== btn.dataset.value) onChange?.(btn.id, btn.dataset.value, opt);
+    if (before === btn.dataset.value) return;
+    onChange?.(btn.id, btn.dataset.value, opt);
+    /* Also announce it as a real DOM event.
+     *
+     * A single `onChange` belongs to whoever wired the control first, and
+     * wiring is idempotent — so the recurrence builder, wired second, never
+     * heard about its own dropdowns and left its sentence describing the
+     * previous choice. An event has no owner and any number of listeners. */
+    btn.dispatchEvent(new Event('change', { bubbles: true }));
   };
 
   const open = (btn) => {
-    if (openBtn === btn) return close();
+    if (pop.__owner === btn) return close();
     close();
-    openBtn = btn;
+    pop.__owner = btn;
     btn.setAttribute('aria-expanded', 'true');
 
     let options = [];
@@ -755,6 +793,16 @@ export function wireMenus(root, dlg, onChange) {
   };
 
   root.querySelectorAll('[data-cf-menu]').forEach((btn) => {
+    /* Wire each control ONCE, however many times this is called.
+     *
+     * The recurrence builder is rendered with the composer and wired again by
+     * wireRecurrence when it appears, so its dropdowns ended up with two
+     * handlers: the first opened the panel and the second immediately saw
+     * "this one is already open" and closed it. The control looked completely
+     * dead. Calling a wiring function twice should be harmless, not silently
+     * destructive. */
+    if (btn.dataset.cfWired) return;
+    btn.dataset.cfWired = '1';
     btn.addEventListener('click', (e) => { e.stopPropagation(); open(btn); });
     btn.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
@@ -765,7 +813,7 @@ export function wireMenus(root, dlg, onChange) {
   });
 
   dlg.addEventListener('click', (e) => {
-    if (openBtn && !e.target.closest('[data-cf-menu]')) close();
+    if (pop.__owner && !e.target.closest('[data-cf-menu]')) close();
   });
 
   return {
