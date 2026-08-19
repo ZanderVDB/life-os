@@ -1500,9 +1500,38 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cs-sync{display:flex;align-items:center;justify-content:space-between;gap:8px;
   font-size:11px;color:var(--muted);padding-top:9px;border-top:1px solid var(--hairline)}
 .cs-sync-now{height:28px;font-size:11.5px;padding:0 10px}
+/* The sync button says what it is doing, where it is. A toast would be gone
+   by the time the work finished, and disabling the Calendar for background
+   work is worse than being briefly behind. */
+.cs-sync-now{display:inline-flex;align-items:center;gap:6px}
+.cs-spin{width:11px;height:11px;border-radius:50%;flex:0 0 auto;display:none;
+  border:1.5px solid color-mix(in srgb,var(--text) 30%,transparent);
+  border-top-color:var(--accent);animation:cs-spin 700ms linear infinite}
+.cs-sync-now[data-sync-state="busy"] .cs-spin{display:block}
+.cs-sync-now[data-sync-state="busy"]{color:var(--muted)}
+.cs-sync-now[data-sync-state="ok"]{color:var(--ok)}
+.cs-sync-now[data-sync-state="failed"]{color:var(--danger)}
+@keyframes cs-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .cs-spin{animation-duration:2.4s}
+}
+
 .cs-auto{margin:7px 0 0;font-size:10.5px;line-height:1.45;color:var(--muted)}
 /* Calendar settings, inside Sources rather than in a settings screen of their
    own -- both answers are about the calendars listed directly above them. */
+/* Habits that did not exist on the day being looked at. Shown, because you
+   may well have been doing one already and want to say so -- but set apart,
+   because they are not part of what that day asked of you. */
+.cs-habit-later{margin-top:9px;padding-top:8px;border-top:1px dashed var(--hairline)}
+.cs-habit-later-l{display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:3px}
+.cs-habit-row.is-later{opacity:.82}
+.cs-habit-when{margin-left:auto;font-size:10px;color:var(--muted);white-space:nowrap}
+.cs-habit-add{width:20px;height:20px;margin-left:auto;border:0;border-radius:6px;cursor:pointer;
+  background:var(--surface-2);color:var(--muted);font-size:14px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center}
+.cs-habit-add:hover{color:var(--text);background:var(--surface-1)}
+.cs-habits .cs-lab{display:flex;align-items:center;gap:7px}
 .cs-set{margin-top:11px;padding-top:10px;border-top:1px solid var(--hairline);
   display:flex;flex-direction:column;gap:5px}
 .cs-set-h{margin:0;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
@@ -3898,6 +3927,67 @@ body:has(.lib-page) .rail{display:none}
 .ev-more[open] summary{margin-bottom:6px}
 .ev-more{display:flex;flex-direction:column;gap:9px}
 .ev-foot{display:flex;justify-content:flex-end;gap:8px}
+
+/* -- Composer, arranged by decision rather than by API field ------------
+   What -> When -> Where -> Details, everything else behind More. A form that
+   shows nine fields at once makes the two-field case feel like work. */
+.ev-what input{width:100%;height:44px;padding:0 12px;border-radius:10px;
+  font:inherit;font-size:17px;font-weight:600;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--hairline)}
+.ev-what input::placeholder{font-weight:500;color:var(--muted)}
+.ev-what input:focus{outline:0;border-color:var(--accent)}
+
+.ev-group{display:flex;flex-direction:column;gap:8px;padding:11px 12px;border-radius:11px;
+  background:color-mix(in srgb,var(--text) 3%,transparent);
+  border:1px solid var(--hairline)}
+.ev-when-row{display:grid;grid-template-columns:1fr 1fr;gap:9px;align-items:end}
+.ev-time-f{display:flex;flex-direction:column;gap:4px;position:relative}
+.ev-time-f label{font-size:11px;color:var(--muted)}
+.ev-time-f input{height:34px;padding:0 10px;border-radius:8px;font:inherit;font-size:13px;
+  color:var(--text);background:var(--surface-2);border:1px solid var(--hairline)}
+.ev-time-f input:focus{outline:0;border-color:var(--accent)}
+
+/* The time list. A native time input is a different control in every browser
+   and none of them match the app; this is a text field that understands "930"
+   with quarter hours one keypress away. */
+.ev-time-list{position:absolute;top:100%;left:0;right:0;z-index:70;margin-top:4px;
+  max-height:190px;overflow-y:auto;padding:4px;border-radius:9px;
+  background:var(--surface-1);border:1px solid var(--hairline);
+  box-shadow:0 14px 32px rgba(0,0,0,.34)}
+.ev-time-list button{display:block;width:100%;text-align:left;height:28px;padding:0 9px;
+  border:0;border-radius:6px;background:none;color:var(--text);font-size:12.5px;cursor:pointer;
+  font-variant-numeric:tabular-nums}
+.ev-time-list button:hover{background:var(--surface-2)}
+.ev-time-list button.is-on{color:var(--accent);font-weight:600}
+
+/* Duration as presets, with the consequence stated. "For 1 hr" means nothing
+   without "Ends 15:30" next to it. */
+.ev-durs{display:flex;flex-wrap:wrap;gap:5px}
+.ev-dur{height:28px;padding:0 10px;border-radius:7px;cursor:pointer;font-size:12px;
+  color:var(--text-2);background:var(--surface-2);border:1px solid var(--hairline);
+  white-space:nowrap;transition:border-color var(--t-hover),color var(--t-hover)}
+.ev-dur:hover{border-color:var(--accent)}
+.ev-dur.is-on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.ev-ends{margin:1px 0 0;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.ev-row-2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.ev-more summary{list-style:none;font-size:12px;color:var(--text-2);cursor:pointer;
+  padding:7px 0;border-top:1px solid var(--hairline)}
+.ev-more summary::-webkit-details-marker{display:none}
+.ev-more summary::before{content:"+ ";color:var(--muted)}
+.ev-more[open] summary::before{content:"- "}
+
+/* The quick composer: a name and a time, because most events are exactly that. */
+.qc-title{width:100%;height:42px;padding:0 12px;border-radius:10px;font:inherit;
+  font-size:16px;font-weight:600;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--hairline)}
+.qc-title:focus{outline:0;border-color:var(--accent)}
+.qc-when{margin:9px 0 0;font-size:12px;color:var(--muted)}
+
+@media (max-width:520px){
+  .ev-when-row,.ev-row-2{grid-template-columns:1fr}
+}
+
 
 /* The confirmation. What it shows is what the SERVER prepared -- if this
    screen built its own description, the thing agreed to and the thing

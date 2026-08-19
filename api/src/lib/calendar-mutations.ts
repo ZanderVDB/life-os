@@ -23,7 +23,7 @@
  * the app shows the authoritative result immediately rather than waiting for a
  * webhook. The webhook is reconciliation, not the happy path.
  */
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import {
   calendarConnections, calendars, calendarEvents, calendarEventAttendees,
@@ -58,6 +58,15 @@ export type EventDraft = {
   useDefaultReminders?: boolean;
   withMeet?: boolean;
   transparency?: 'opaque' | 'transparent';
+  visibility?: string;
+  /**
+   * Google's own event type. `birthday` is a real thing with real rules — all
+   * day, yearly, and it does not consume time — so Life OS uses it rather than
+   * making an ordinary event that merely looks like one. An ordinary event
+   * would block the day in free/busy and lose its meaning to every other
+   * Google client.
+   */
+  eventType?: string;
   /** Google is told to email guests only when the user asked for it. */
   notifyGuests?: boolean;
 };
@@ -177,6 +186,15 @@ function shiftDay(day: string, by: number): string {
 
 function validateDraft(d: EventDraft) {
   if (!d.title || !d.title.trim()) throw badRequest('An event needs a title.');
+  if (d.eventType === 'birthday') {
+    /* Google refuses a birthday that is not all-day and annual, and its
+     * refusal is a 400 with a message about eventType that means nothing to
+     * anyone. Better to be clear here. */
+    if (!d.isAllDay) throw badRequest('A birthday is an all-day event.');
+    if (!(d.recurrence ?? []).some((r) => /FREQ=YEARLY/.test(r))) {
+      throw badRequest('A birthday repeats every year.');
+    }
+  }
   if (d.isAllDay) {
     if (!d.startDate) throw badRequest('An all-day event needs a date.');
   } else {
@@ -527,6 +545,8 @@ const eventBody = (d: EventDraft, zone: string): G.EventWrite => ({
   ...(d.attendees?.length ? { attendees: d.attendees.map((email) => ({ email })) } : {}),
   ...(d.recurrence?.length ? { recurrence: d.recurrence } : {}),
   ...(d.transparency ? { transparency: d.transparency } : {}),
+  ...(d.visibility ? { visibility: d.visibility } : {}),
+  ...(d.eventType ? { eventType: d.eventType } : {}),
   ...(d.useDefaultReminders === false && d.reminders
     ? {
       reminders: {
@@ -679,6 +699,8 @@ export async function executeMutation(db: Db, workspaceId: string, requestId: st
       const updated = await G.patchEvent(token, cal.providerCalendarId, targetId,
         eventBody(draft, zone), { sendUpdates });
       const saved = await mirrorFromGoogle(db, workspaceId, cal.id, updated);
+      // Google agreed, so a task scheduled by this event moves with it.
+      if (saved?.id) await syncLinkedTaskTime(db, workspaceId, saved.id);
       await db.update(calendarMutations).set({
         status: 'executed', eventId: saved?.id ?? row.eventId,
         executedAt: new Date(), updatedAt: new Date(),
@@ -691,6 +713,9 @@ export async function executeMutation(db: Db, workspaceId: string, requestId: st
     await G.deleteEvent(token, cal.providerCalendarId, targetId, { sendUpdates });
     /* Google said yes, so the mirror updates NOW rather than waiting for the
      * webhook. The webhook is reconciliation; the user is standing here. */
+    /* Release before the rows go: once the event is deleted the link has
+     * nothing to point at, and the task would keep a time nothing explains. */
+    if (row.eventId) await releaseLinkedTasks(db, workspaceId, [row.eventId]);
     if (row.scope === 'series' && row.eventId) {
       const [ev] = await db.select().from(calendarEvents)
         .where(eq(calendarEvents.id, row.eventId));
@@ -788,10 +813,86 @@ export async function linkTaskToEvent(db: Db, workspaceId: string,
       calendarId: event.calendarId,
       providerEventId: event.providerEventId,
       projectId: task.projectId ?? null,
+      /* Remembered so that deleting the event later can tell "this task was
+       * scheduled BECAUSE of this event" from "the user set a time by hand and
+       * separately linked an event". Only the first should be cleared. */
+      setScheduledAt: event.startsAt?.toISOString() ?? null,
     },
     createdBy: userId ?? null,
   }).onConflictDoNothing();
-  return { linked: true };
+
+  /* Scheduling means "I intend to work on this at this time", and the task is
+   * where that intention lives. Leaving it unscheduled while its event sits on
+   * the calendar makes Today and the Calendar disagree about the same day.
+   *
+   * The DUE DATE is untouched, deliberately. "Due Friday" and "I will do it
+   * Wednesday afternoon" are different statements, and collapsing them makes
+   * both untrustworthy. */
+  if (event.startsAt) {
+    await db.update(tasks).set({ scheduledAt: event.startsAt, updatedAt: new Date() })
+      .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, taskId)));
+  }
+  return { linked: true, scheduledAt: event.startsAt ?? null };
+}
+
+/**
+ * Keeps a scheduled task in step with the event that represents it.
+ *
+ * Called after Google has confirmed a change — never before, because a task
+ * that claims to be scheduled for a time Google refused is a lie the user
+ * cannot see.
+ */
+export async function syncLinkedTaskTime(db: Db, workspaceId: string, eventId: string) {
+  const [event] = await db.select().from(calendarEvents)
+    .where(and(eq(calendarEvents.workspaceId, workspaceId), eq(calendarEvents.id, eventId)));
+  if (!event?.startsAt) return { updated: 0 };
+
+  const links = await db.select().from(itemLinks).where(and(
+    eq(itemLinks.workspaceId, workspaceId),
+    eq(itemLinks.kind, TASK_EVENT_KIND),
+    eq(itemLinks.targetType, 'event'),
+    eq(itemLinks.targetId, eventId),
+  ));
+  for (const link of links) {
+    await db.update(tasks).set({ scheduledAt: event.startsAt, updatedAt: new Date() })
+      .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, link.sourceId)));
+    await db.update(itemLinks)
+      .set({ metadata: { ...(link.metadata as any ?? {}), setScheduledAt: event.startsAt.toISOString() } })
+      .where(eq(itemLinks.id, link.id));
+  }
+  return { updated: links.length };
+}
+
+/**
+ * The event that held a task's time has gone.
+ *
+ * The TASK stays — a plan that fell through is not work that stopped
+ * mattering. Its scheduled time is cleared only if that time exists because of
+ * this event; a time the user set by hand is theirs, not the calendar's. The
+ * due date is never touched.
+ */
+export async function releaseLinkedTasks(db: Db, workspaceId: string, eventIds: string[]) {
+  if (!eventIds.length) return { released: 0 };
+  const links = await db.select().from(itemLinks).where(and(
+    eq(itemLinks.workspaceId, workspaceId),
+    eq(itemLinks.kind, TASK_EVENT_KIND),
+    eq(itemLinks.targetType, 'event'),
+    inArray(itemLinks.targetId, eventIds),
+  ));
+  for (const link of links) {
+    const owned = (link.metadata as any)?.setScheduledAt;
+    if (owned) {
+      const [task] = await db.select().from(tasks)
+        .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, link.sourceId)));
+      // Only clear the time this event actually put there.
+      if (task?.scheduledAt && task.scheduledAt.toISOString() === owned) {
+        await db.update(tasks).set({ scheduledAt: null, updatedAt: new Date() })
+          .where(eq(tasks.id, link.sourceId));
+      }
+    }
+    await db.delete(itemLinks).where(eq(itemLinks.id, link.id));
+  }
+  return { released: links.length };
 }
 
 export async function unlinkTaskFromEvent(db: Db, workspaceId: string,

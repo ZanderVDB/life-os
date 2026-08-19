@@ -120,6 +120,39 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
    * One request per view. Month, Agenda and Plan differ in how they PRESENT
    * time, not in what they can see, so they share this endpoint and filter
    * client-side by layer. */
+  /**
+   * "Has anything changed?" — one cheap aggregate, answered often.
+   *
+   * The Calendar used to learn about a change by re-reading the whole range
+   * every 45 seconds and, separately, by asking GOOGLE every five minutes from
+   * the browser. The second one is why a change made on a phone took minutes
+   * to appear: the client was the thing driving the sync, on a five-minute
+   * timer, and the server's own scheduler and webhooks were doing the work
+   * twice over.
+   *
+   * Now the server owns syncing entirely — webhook first, scheduler as
+   * fallback — and the client only needs to know whether the mirror it is
+   * showing is still current. This is that question, cheap enough to ask every
+   * few seconds: two indexed aggregates and no payload.
+   */
+  app.get('/api/v1/workspaces/:workspaceId/calendar/pulse', pre, async (req) => {
+    const { workspaceId } = req.params as { workspaceId: string };
+    const [ev] = await db.select({
+      n: sql<number>`count(*)::int`,
+      last: sql<string | null>`max(${calendarEvents.updatedAt})`,
+    }).from(calendarEvents).where(eq(calendarEvents.workspaceId, workspaceId));
+    const [rem] = await db.select({
+      n: sql<number>`count(*)::int`,
+      last: sql<string | null>`max(${reminders.updatedAt})`,
+    }).from(reminders).where(eq(reminders.workspaceId, workspaceId));
+
+    /* A count AND a timestamp: a delete lowers the count without moving the
+     * newest updatedAt, so either alone would miss half the changes. */
+    return {
+      token: `${ev?.n ?? 0}:${ev?.last ?? ''}:${rem?.n ?? 0}:${rem?.last ?? ''}`,
+    };
+  });
+
   app.get('/api/v1/workspaces/:workspaceId/calendar/range', pre, async (req) => {
     const { workspaceId } = req.params as { workspaceId: string };
     const q = RangeQuery.safeParse(req.query);

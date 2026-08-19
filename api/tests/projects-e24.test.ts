@@ -372,9 +372,10 @@ test('ui: the Month cell shows a ratio, and nothing on a future or empty day', (
 });
 
 test('ui: the selected day lists its habits, each one tickable on that day', () => {
-  const fn = body(calCode, 'function habitCardHtml(day)');
-  assert.match(fn, /data-habit-day="\$\{day\}"/,
+  const row = body(calCode, 'function habitRowHtml(h, day, later = false)');
+  assert.match(row, /data-habit-day="\$\{day\}"/,
     'the row does not carry its day, so a tick cannot reach a past date');
+  const fn = body(calCode, 'function habitCardHtml(day)');
   assert.match(fn, /h\.dueToday/, 'habits that were not due are being listed');
   // Month only.
   const sel = body(appCode, 'function selectDay(day)');

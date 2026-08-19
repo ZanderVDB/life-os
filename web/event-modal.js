@@ -523,6 +523,10 @@ export function openAddMenu(anchor, handlers, onClose) {
     ['event', 'Event', 'Something that occupies time', 'var(--accent)'],
     ['reminder', 'Reminder', 'Something to be reminded about', 'var(--warn)'],
     ['task', 'Schedule a task', 'Set aside time for something', 'var(--p-low)'],
+    /* A birthday is a Google event TYPE, not an ordinary event with a party
+     * hat. It does not consume time in free/busy and reads as a birthday in
+     * every other Google client, which an all-day yearly event would not. */
+    ['birthday', 'Birthday', 'Every year, all day, does not take up time', 'var(--ok)'],
   ].filter(([k]) => handlers[k]);
 
   menu.innerHTML = items.map(([k, label, hint, colour]) => `

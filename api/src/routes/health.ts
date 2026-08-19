@@ -3,6 +3,8 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { schedulerStatus } from '../lib/calendar-scheduler.js';
 import { googleConfig } from '../lib/calendar-sync.js';
+import { webhookConfigured, webhookUrl } from '../lib/calendar-watch.js';
+import { calendarWatchChannels } from '../db/schema.js';
 
 export function registerHealthRoutes(app: AppInstance, db: Db, version: string) {
   /** Liveness — no dependencies, no auth. Railway uses this. */
@@ -31,5 +33,42 @@ export function registerHealthRoutes(app: AppInstance, db: Db, version: string) 
     build: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) ?? process.env.BUILD_ID ?? 'dev',
     node: process.version,
     calendarSync: { configured: !!googleConfig(), ...schedulerStatus() },
+    /* Whether push is actually working, which is the difference between a
+     * calendar that updates in seconds and one that updates in minutes — and
+     * is otherwise invisible, because a failed watch looks exactly like a
+     * working one from the outside. Counts and the last error only; no
+     * workspace, no calendar name, no token. */
+    calendarPush: await pushStatus(),
   }));
+
+  async function pushStatus() {
+    if (!webhookConfigured()) {
+      return { configured: false, reason: 'no HTTPS webhook address', channels: 0 };
+    }
+    try {
+      const rows = await db.select({
+        status: calendarWatchChannels.status,
+        expiresAt: calendarWatchChannels.expiresAt,
+        notifyCount: calendarWatchChannels.notifyCount,
+        lastNotifiedAt: calendarWatchChannels.lastNotifiedAt,
+        lastError: calendarWatchChannels.lastError,
+      }).from(calendarWatchChannels);
+      const active = rows.filter((r) => r.status === 'active');
+      return {
+        configured: true,
+        address: webhookUrl(),
+        channels: rows.length,
+        active: active.length,
+        failed: rows.filter((r) => r.status === 'failed').length,
+        notifications: rows.reduce((n, r) => n + (r.notifyCount ?? 0), 0),
+        lastNotifiedAt: rows.map((r) => r.lastNotifiedAt).filter(Boolean)
+          .sort().at(-1) ?? null,
+        soonestExpiry: active.map((r) => r.expiresAt).filter(Boolean).sort().at(0) ?? null,
+        // The reason a watch could not be opened is the thing worth seeing.
+        lastError: rows.map((r) => r.lastError).filter(Boolean).at(-1) ?? null,
+      };
+    } catch (e) {
+      return { configured: true, error: String((e as any)?.message ?? e).slice(0, 200) };
+    }
+  }
 }

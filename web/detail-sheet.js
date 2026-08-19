@@ -101,10 +101,24 @@ export function openDetailSheet(ctx) {
   scrim.onclick = close;
   dlg.querySelector('#dt-close').onclick = close;
   dlg.querySelector('#dt-done').onclick = close;
-  // Actions are for Life OS records the app CAN change. Google events pass
-  // none, which is why their sheet has no action row at all.
+  /* Actions are for records the app CAN change — Life OS records, and now
+   * Google events on writable calendars.
+   *
+   * `onSelect` is accepted alongside `onClick` because a caller passing the
+   * wrong one of two plausible names got silence: the button rendered, the
+   * click ran `undefined()`, and Edit and Delete simply did nothing. A handler
+   * that is missing is worth a console error, not a shrug. */
   dlg.querySelectorAll('[data-dt-action]').forEach((b) => {
-    b.onclick = () => { close(); ctx.actions[Number(b.dataset.dtAction)].onClick(); };
+    b.onclick = () => {
+      const action = ctx.actions[Number(b.dataset.dtAction)];
+      const run = action?.onSelect ?? action?.onClick;
+      close();
+      if (typeof run !== 'function') {
+        console.error('detail sheet action has no handler', action);
+        return;
+      }
+      run();
+    };
   });
   dlg.querySelector('#dt-done').focus();
 

@@ -47,6 +47,10 @@ const Draft = z.object({
   useDefaultReminders: z.boolean().optional(),
   withMeet: z.boolean().optional(),
   transparency: z.enum(['opaque', 'transparent']).optional(),
+  visibility: z.enum(['default', 'public', 'private']).optional(),
+  // Only the types Life OS can legitimately create. `fromGmail` and
+  // `workingLocation` are Google's to make, and the API refuses them anyway.
+  eventType: z.enum(['default', 'birthday', 'outOfOffice', 'focusTime']).optional(),
   notifyGuests: z.boolean().default(false),
   losTaskId: uuid.optional(),
   losProjectId: uuid.optional(),

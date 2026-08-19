@@ -177,11 +177,25 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
           streak++;
           cursor.setUTCDate(cursor.getUTCDate() - 1);
         }
+        /* Whether this habit even EXISTED on the day being looked at.
+         *
+         * From its real creation date, never from its first completion: a
+         * habit you kept for a week before ticking anything was still a habit
+         * you had, and inferring otherwise rewrites history to match the
+         * record-keeping rather than the life.
+         *
+         * A habit created later is still shown — you may well have been doing
+         * it already and want to say so — but it does not join that day's
+         * denominator unless you actually mark it. Otherwise creating a habit
+         * today would retroactively turn every past day into a failure. */
+        const createdOn = h.createdAt.toISOString().slice(0, 10);
         return {
           ...h,
           dueToday: isDueOn(h, new Date(`${today}T12:00:00Z`)),
           todayCount: todayEntry?.completedCount ?? 0,
           completedToday: (todayEntry?.completedCount ?? 0) >= h.targetCount,
+          createdOn,
+          createdAfter: createdOn > today,
           streak,
           historyCount: mine.length,
         };

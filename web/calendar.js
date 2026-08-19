@@ -958,20 +958,33 @@ function habitCardHtml(day) {
       <p class="cs-habit-note is-err">${esc(dh.error)}</p></div>`;
   }
 
-  const due = (dh.habits ?? []).filter((h) => h.dueToday);
+  const dueAll = (dh.habits ?? []).filter((h) => h.dueToday);
+  /* A habit created after this day did not exist then, so it is not part of
+   * what the day asked of you. It is still shown — you may well have been
+   * doing it already and want to record that — but below the line, and it
+   * only joins the count if you actually mark it. */
+  const due = dueAll.filter((h) => !h.createdAfter);
+  const later = dueAll.filter((h) => h.createdAfter);
   /* The computed `Write in Diary` habit is part of the same system (D2.2 §9),
    * so it appears here as a series like any other — but it OPENS that day's
    * diary instead of ticking, because completing it means writing something. */
   const diary = dh.diaryHabit ?? null;
-  if (!due.length && !diary) {
+  if (!due.length && !later.length && !diary) {
     return `<div class="cs-sec cs-habits"><span class="cs-lab">Habits</span>
+      ${addHabitBtn()}
       <p class="cs-habit-note">Nothing was due.</p></div>`;
   }
-  const done = due.filter((h) => h.completedToday).length + (diary?.completedToday ? 1 : 0);
+  /* The denominator is what existed THEN. A later habit you tick for that day
+   * still counts as done, which is why "5/4" is possible and honest — the
+   * section below explains where the extra came from. */
+  const laterDone = later.filter((h) => h.completedToday).length;
+  const done = due.filter((h) => h.completedToday).length
+    + (diary?.completedToday ? 1 : 0) + laterDone;
   const total = due.length + (diary ? 1 : 0);
 
   return `<div class="cs-sec cs-habits">
-    <span class="cs-lab">Habits <b class="cs-habit-count">${done}/${total}</b></span>
+    <span class="cs-lab">Habits <b class="cs-habit-count">${done}/${total}</b>
+      ${addHabitBtn()}</span>
     ${diary ? `<button class="cs-habit-row cs-habit-diary ${
   diary.completedToday ? 'is-done' : ''}" data-diary-day="${day}"
       aria-label="${esc(diary.name)}${diary.completedToday ? ', written' : ', not written'
@@ -983,19 +996,41 @@ function habitCardHtml(day) {
       <b>${esc(diary.name)}</b>
       <span class="cs-habit-auto" title="Automatic — kept from your Diary">Automatic</span>
     </button>` : ''}
-    ${due.map((h) => `<button class="cs-habit-row ${h.completedToday ? 'is-done' : ''}"
-      data-habit="${h.id}" data-habit-day="${day}"
-      aria-pressed="${h.completedToday ? 'true' : 'false'}"
-      aria-label="${esc(h.name)}${h.completedToday ? ', done' : ', not done'}">
-      <span class="cs-habit-tick" aria-hidden="true">
-        <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-          stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg></span>
-      <b>${esc(h.name)}</b>
-      ${h.targetCount > 1 ? `<span class="cs-habit-n">${h.todayCount}/${h.targetCount}</span>` : ''}
-    </button>`).join('')}
+    ${due.map((h) => habitRowHtml(h, day)).join('')}
+    ${later.length ? `<div class="cs-habit-later">
+      <span class="cs-habit-later-l">Created later</span>
+      <p class="cs-habit-note">These did not exist on this day, so they are not
+        part of ${done > total ? 'the' : `the ${total}`} counted above. Tick one if you were
+        already doing it.</p>
+      ${later.map((h) => habitRowHtml(h, day, true)).join('')}
+    </div>` : ''}
   </div>`;
 }
+
+/** One habit row. Shared, so a later habit ticks exactly like an earlier one. */
+function habitRowHtml(h, day, later = false) {
+  return `<button class="cs-habit-row ${h.completedToday ? 'is-done' : ''}${later ? ' is-later' : ''}"
+    data-habit="${h.id}" data-habit-day="${day}"
+    aria-pressed="${h.completedToday ? 'true' : 'false'}"
+    aria-label="${esc(h.name)}${h.completedToday ? ', done' : ', not done'}${
+  later ? `, created ${esc(prettyCreated(h.createdOn))}` : ''}">
+    <span class="cs-habit-tick" aria-hidden="true">
+      <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+        stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg></span>
+    <b>${esc(h.name)}</b>
+    ${later ? `<span class="cs-habit-when">Created ${esc(prettyCreated(h.createdOn))}</span>` : ''}
+    ${h.targetCount > 1 ? `<span class="cs-habit-n">${h.todayCount}/${h.targetCount}</span>` : ''}
+  </button>`;
+}
+
+const prettyCreated = (d) => (d
+  ? new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  : 'later');
+
+/** The ordinary Add Habit flow, reached from where habits are being looked at. */
+const addHabitBtn = () => `<button class="cs-habit-add" id="cs-habit-add"
+  aria-label="Add a habit" title="Add a habit">+</button>`;
 
 const loadWord = (l) => ({
   open: 'Open day', moderate: 'A few commitments',
@@ -1127,7 +1162,8 @@ export function sourcesPopoverHtml() {
     </div>
     <div class="cs-sync">
       <span>${esc(lastSyncedWord(conn.lastSyncedAt))}</span>
-      <button class="btn btn-ghost cs-sync-now" id="cal-sync">Sync now</button>
+      <button class="btn btn-ghost cs-sync-now" id="cal-sync" data-sync-state="idle">
+        <i class="cs-spin" aria-hidden="true"></i><span data-sync-label>Sync</span></button>
     </div>
     <p class="cs-auto">${esc(autoSyncWord(conn))}</p>
     ${needsReconnect(conn) ? `<button class="btn btn-primary cs-connect" id="cal-connect">

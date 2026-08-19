@@ -399,20 +399,46 @@ test('surface: no surface outlives what it described', () => {
 
 /* ── Live updates ────────────────────────────────────────────────────── */
 
-test('live: the calendar re-reads itself while you are watching it', () => {
-  // A view that is only correct at the moment you opened it is not a calendar:
-  // Google events land from other devices, and once this app writes events it
-  // must see its own writes from a second tab.
-  assert.match(appCode, /const CAL_POLL_MS = 45_000/, 'the range is never re-read');
-  assert.match(appCode, /const CAL_SYNC_MS = 5 \* 60_000/, 'Google is never re-polled');
+test('live: the calendar learns about changes in seconds, not minutes', () => {
+  /* This used to assert the CLIENT polled Google every five minutes — and that
+   * turned out to be the answer to "why does a change made on my phone take so
+   * long to show up". The browser was driving the sync, on the slowest clock in
+   * the system, while the server's own scheduler and webhooks did the same work
+   * unnoticed.
+   *
+   * The server owns syncing now. The client only asks whether the mirror moved,
+   * which is cheap enough to ask every ten seconds. */
+  assert.match(appCode, /const CAL_PULSE_MS = 10_000/, 'there is no fast change check');
+  assert.ok(!/const CAL_SYNC_MS/.test(appCode),
+    'the client still runs its own Google sync on a timer');
+  assert.ok(!/syncCalendarQuietly/.test(appCode),
+    'the browser-driven background Google sync is still there');
+
   const start = body(appCode, 'function startCalendarLive()');
-  assert.match(start, /document\.visibilityState === 'visible'/,
-    'a hidden tab still polls');
+  assert.match(start, /document\.visibilityState === 'visible'/, 'a hidden tab still polls');
   assert.match(start, /visibilitychange/, 'returning to the tab does not refresh');
-  // Two cadences on purpose: the range is local and cheap, a Google sync costs
-  // an API round trip against a quota.
-  assert.ok(start.indexOf('CAL_POLL_MS') < start.indexOf('CAL_SYNC_MS'),
-    'the range and the Google pull share one cadence');
+  assert.match(start, /CAL_PULSE_MS/, 'the pulse is never scheduled');
+  // The full re-read survives as a fallback, in case a pulse is ever missed.
+  assert.match(start, /CAL_POLL_MS/, 'nothing re-reads the range if a pulse is missed');
+  assert.match(appCode, /const CAL_POLL_MS = 5 \* 60_000/, 'the fallback is not low-frequency');
+});
+
+test('live: the pulse asks about the mirror, never about Google', () => {
+  /* If the cheap check hit Google it would not be cheap, and every open tab
+   * would spend somebody's API quota every ten seconds. */
+  const fn = body(appCode, 'async function pulseCalendar()');
+  assert.match(fn, /calendar\/pulse/, 'the pulse does not call the pulse endpoint');
+  assert.ok(!/integrations\/google-calendar\/sync/.test(fn),
+    'the pulse triggers a Google sync');
+  assert.match(fn, /token === calPulse/, 'the range is re-read even when nothing changed');
+});
+
+test('live: a stale response cannot undo a newer change', () => {
+  /* Background read starts, the user deletes an event, the old read lands and
+   * puts it back. Sequence numbers, not luck. */
+  const fn = body(appCode, 'async function refreshCalendar()');
+  assert.match(fn, /const seq = \+\+calSeq/, 'reads are not sequenced');
+  assert.match(fn, /if \(seq !== calSeq\) return/, 'a stale read is still applied');
 });
 
 test('live: a refresh is invisible unless something actually changed', () => {
@@ -450,14 +476,24 @@ test('live: polling stops when the calendar is not on screen', () => {
     'the listeners are never detached, so they accumulate on every visit');
 });
 
-test('live: a quiet sync stays quiet', () => {
-  // The manual "Sync now" earns a toast. A background one has no user waiting
-  // on it, and a toast every five minutes is noise.
-  const fn = body(appCode, 'async function syncCalendarQuietly()');
-  assert.ok(!/saved\(|toast\(/.test(fn), 'the background sync reports itself');
-  assert.match(fn, /Date\.now\(\) - calLastSync < CAL_SYNC_MS/,
-    'nothing stops the background sync running more often than intended');
-  assert.match(fn, /if \(!cal\.data\?\.connection/, 'it syncs with no account connected');
+test('live: background work never reports itself, and never blocks the board', () => {
+  /* The background pull is gone entirely — the server does it. What remains is
+   * the manual Sync, which DOES owe the person who pressed it an answer, in
+   * place rather than through a toast that has gone by the time it finishes.
+   *
+   * And it must not disable the Calendar: syncing is background work, and a
+   * board that goes dead for ten seconds is worse than one briefly behind. */
+  const pulse = body(appCode, 'async function pulseCalendar()');
+  assert.ok(!/saved\(|toast\(/.test(pulse), 'the background check reports itself');
+
+  const sync = body(appCode, 'async function syncGoogle()');
+  assert.match(sync, /setState\('busy', 'Syncing…'\)/, 'the manual sync gives no feedback');
+  assert.match(sync, /Synced just now/, 'a successful sync says nothing');
+  assert.match(sync, /Sync failed/, 'a failed sync has no state');
+  // Only the button is disabled, and only to stop a second identical pull.
+  assert.match(sync, /btn\.disabled = stateName === 'busy'/);
+  assert.ok(!/loadCalendar\(\)/.test(sync),
+    'the manual sync rebuilds the whole surface, throwing away scroll and menus');
 });
 
 /* ── §14 The Reminders workspace keeps its own header ────────────────── */

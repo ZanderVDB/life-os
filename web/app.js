@@ -25,7 +25,7 @@ import {
 import { openProjectModal, openChoiceDialog, openTaskPicker } from './project-modal.js';
 import {
   initEventComposer, openEventComposer, openEventEditor, deleteCalendarEvent,
-  addTaskToCalendar,
+  addTaskToCalendar, openQuickComposer, openBirthdayComposer,
 } from './event-composer.js';
 import { openTaskModal } from './task-modal.js';
 import {
@@ -2353,6 +2353,10 @@ function editHabit(id) {
         await api(`/api/v1/workspaces/${ws()}/habits`, { method: 'POST', body });
       }
       await loadHabits(); renderRail();
+      /* The day being looked at has to be re-read, or a habit added from the
+       * Calendar shows up only after navigating away and back. It arrives in
+       * the "Created later" section for any past day, which is correct. */
+      if (state.route === 'calendar' && cal.selected) await loadDayHabits(cal.selected);
       saved(h ? 'Habit saved' : 'Habit added');
     },
     onArchive: async () => {
@@ -2610,11 +2614,27 @@ async function loadCalendar() {
  * throws away scroll position, which is worse than being a minute stale. So a
  * refresh compares the new data against the old and repaints only on a real
  * difference. */
-const CAL_POLL_MS = 45_000;         // re-read the range while the tab is watched
-const CAL_SYNC_MS = 5 * 60_000;     // ask Google what changed
+/* ── How the Calendar stays current ─────────────────────────────────────
+ *
+ * It used to drive its own Google sync from the browser on a five-minute
+ * timer, which is exactly the delay that was being felt: the SERVER already
+ * syncs (webhook first, scheduler as fallback), so the client was duplicating
+ * the work on the slowest possible clock.
+ *
+ * The client's only job now is to notice that the mirror moved. `pulse` is one
+ * cheap aggregate, so it can be asked every few seconds; the range is re-read
+ * only when the answer actually changes. Google is asked directly only when a
+ * person presses Sync.
+ */
+const CAL_PULSE_MS = 10_000;        // "has anything changed?" — two aggregates
+const CAL_POLL_MS = 5 * 60_000;     // belt and braces, in case a pulse is missed
 const CAL_STALE_MS = 20_000;        // "you have been away" threshold
 let calTimers = [];
-let calLastSync = 0;
+let calPulse = null;
+/* Every range request carries a sequence number. A response older than the
+ * newest request is DROPPED — otherwise a slow background read can land after
+ * a mutation and put the event the user just deleted back on screen. */
+let calSeq = 0;
 
 /**
  * A cheap fingerprint of everything the canvas draws.
@@ -2649,6 +2669,7 @@ function calendarSignature(d) {
 async function refreshCalendar() {
   if (state.route !== 'calendar' || cal.utility !== 'none' || !cal.data) return;
   const r = currentRange();
+  const seq = ++calSeq;
   try {
     const [range, open, integration] = await Promise.all([
       api(`/api/v1/workspaces/${ws()}/calendar/range?from=${r.from}&to=${r.to}`),
@@ -2659,6 +2680,9 @@ async function refreshCalendar() {
     // The range may have moved under us while the request was in flight.
     const now = currentRange();
     if (state.route !== 'calendar' || now.from !== r.from || now.to !== r.to) return;
+    /* And a NEWER read may have been issued and already landed. Applying this
+     * one now would roll the board back to before the user's own change. */
+    if (seq !== calSeq) return;
 
     range.connection = integration.connection;
     range.googleConfigured = integration.configured;
@@ -2678,29 +2702,37 @@ async function refreshCalendar() {
   } catch { /* stay quiet and try again on the next tick */ }
 }
 
-/** An incremental Google pull, without the toast a manual sync earns. */
-async function syncCalendarQuietly() {
-  if (!cal.data?.connection || cal.data.connection.status === 'syncing') return;
-  if (Date.now() - calLastSync < CAL_SYNC_MS) return;
-  calLastSync = Date.now();
+/**
+ * Has the mirror moved?
+ *
+ * Deliberately NOT a Google call. The server owns syncing; this only asks
+ * whether what is on screen is still what the database holds, which is cheap
+ * enough to ask every ten seconds and makes a webhook-driven change visible
+ * about that fast.
+ */
+async function pulseCalendar() {
+  if (state.route !== 'calendar' || cal.utility !== 'none' || !cal.data) return;
   try {
-    await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar/sync`, { method: 'POST' });
+    const { token } = await api(`/api/v1/workspaces/${ws()}/calendar/pulse`);
+    if (calPulse === null) { calPulse = token; return; }
+    if (token === calPulse) return;
+    calPulse = token;
     await refreshCalendar();
   } catch { /* the next tick will try again */ }
 }
 
 function startCalendarLive() {
   stopCalendarLive();
+  const pulse = () => { if (document.visibilityState === 'visible') pulseCalendar(); };
   const tick = () => { if (document.visibilityState === 'visible') refreshCalendar(); };
-  const sync = () => { if (document.visibilityState === 'visible') syncCalendarQuietly(); };
-  calTimers.push(setInterval(tick, CAL_POLL_MS), setInterval(sync, CAL_SYNC_MS));
+  calTimers.push(setInterval(pulse, CAL_PULSE_MS), setInterval(tick, CAL_POLL_MS));
 
   // Coming back to the tab is the moment a stale calendar is most obvious, and
   // the moment a poll is most likely to have been throttled away.
   let leftAt = 0;
   const onVisible = () => {
     if (document.visibilityState !== 'visible') { leftAt = Date.now(); return; }
-    if (Date.now() - leftAt > CAL_STALE_MS) { refreshCalendar(); syncCalendarQuietly(); }
+    if (Date.now() - leftAt > CAL_STALE_MS) { calPulse = null; refreshCalendar(); }
   };
   document.addEventListener('visibilitychange', onVisible);
   window.addEventListener('focus', onVisible);
@@ -2854,6 +2886,10 @@ function renderCalendarRail() {
   rail.querySelectorAll('[data-schedule]').forEach((b) => {
     b.onclick = (e) => { e.stopPropagation(); scheduleFromQueue(b.dataset.schedule); };
   });
+  /* The ordinary Add Habit flow, opened from where habits are being looked at
+   * — not a Calendar-specific creator, which would be a second place a habit
+   * can be defined and a second set of rules to keep in step. */
+  rail.querySelector('#cs-habit-add')?.addEventListener('click', () => editHabit(null));
   rail.querySelectorAll('[data-habit]').forEach((b) => {
     b.onclick = () => toggleHabitOn(b.dataset.habit, b.dataset.habitDay);
   });
@@ -3089,6 +3125,9 @@ function wireCalendarHeader() {
 }
 
 function wireCalendar() {
+  document.querySelectorAll('.pl-canvas[data-drop-day]').forEach((canvas) => {
+    canvas.addEventListener('click', (e) => planCanvasClick(e, canvas));
+  });
   document.querySelectorAll('.cm-cell').forEach((c) => {
     c.onclick = () => selectDay(c.dataset.day);
     c.onkeydown = (e) => {
@@ -3193,6 +3232,9 @@ function calendarAddMenu(anchor, day = null) {
     event: () => void openEventComposer({ day: day ?? cal.selected ?? undefined }),
     reminder: () => addReminder(day ?? cal.selected),
     task: () => openScheduleTask({ day: day ?? cal.selected ?? null }),
+    /* A birthday is a Google event TYPE, not an ordinary event with a party
+     * hat: it does not consume time and reads as a birthday everywhere else. */
+    birthday: () => void openBirthdayComposer({ day: day ?? cal.selected ?? undefined }),
     // Habit is deliberately absent. Habits are a Calendar LAYER, not a
     // Calendar creation flow — you review habit history here and manage
     // habits on Today or in Settings. Offering creation just because the
@@ -4507,21 +4549,47 @@ async function connectGoogle(btn) {
   }
 }
 
+/**
+ * "Sync now" — the manual, explicit pull.
+ *
+ * It reports on ITSELF, in place, rather than through a toast that has gone by
+ * the time the work finishes. And it never disables the Calendar: syncing is
+ * background work, and a board that goes dead for ten seconds because
+ * something is happening elsewhere is worse than one that is briefly behind.
+ *
+ * The button is the only thing that changes state.
+ */
 async function syncGoogle() {
-  if (cal.data?.connection) cal.data.connection.status = 'syncing';
-  renderCalendarRail();
+  const btn = document.getElementById('cal-sync');
+  const setState = (stateName, label) => {
+    if (!btn || !btn.isConnected) return;
+    btn.dataset.syncState = stateName;
+    const el = btn.querySelector('[data-sync-label]');
+    if (el) el.textContent = label;
+    // Pressing it again mid-flight would queue a second identical pull.
+    btn.disabled = stateName === 'busy';
+  };
+
+  if (btn?.dataset.syncState === 'busy') return;
+  setState('busy', 'Syncing…');
   try {
     const r = await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar/sync`,
       { method: 'POST' });
-    await loadCalendar();
-    saved(r.created || r.updated
-      ? `Synced ${r.created + r.updated} event${r.created + r.updated === 1 ? '' : 's'}`
-      : 'Up to date');
+    /* Re-read rather than reload: loadCalendar() rebuilds the whole surface,
+     * which threw away scroll position and any open menu for a background
+     * operation the user did not ask to be interrupted by. */
+    calPulse = null;
+    await refreshCalendar();
+    renderCalendarRail();
+    const n = (r.created ?? 0) + (r.updated ?? 0);
+    setState('ok', n ? `Synced ${n} change${n === 1 ? '' : 's'}` : 'Synced just now');
+    setTimeout(() => setState('idle', 'Sync'), 4000);
   } catch (e) {
     if (cal.data?.connection) {
       cal.data.connection.status = 'error';
       cal.data.connection.lastError = e.message;
     }
+    setState('failed', 'Sync failed — retry');
     renderCalendarRail();
     toast(e.message, true);
   }
@@ -4579,6 +4647,32 @@ async function setCalendarVisible(id, visible) {
     paintCalendar();
     toast(e.message, true);
   }
+}
+
+/**
+ * Clicking empty time in Plan Week starts an event there.
+ *
+ * Snapped to the nearest half hour, because a calendar full of events starting
+ * at 10:07 is a calendar nobody can read at a glance — and because the pointer
+ * is not precise enough to mean anything finer.
+ *
+ * Clicking an EVENT opens the event. The two must not be the same gesture:
+ * accidentally creating something on top of what you meant to read is the
+ * worst outcome available here.
+ */
+function planCanvasClick(e, canvas) {
+  if (e.target.closest('[data-event], [data-block], .pl-ad, .pl-rem, button, a')) return;
+  const day = canvas.dataset.dropDay;
+  if (!day) return;
+
+  const hrs = planHours();
+  const box = canvas.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (e.clientY - box.top) / box.height));
+  const minutes = hrs.start * 60 + frac * (hrs.end - hrs.start) * 60;
+  // Nearest 30, and never past the end of the visible grid.
+  const snapped = Math.min((hrs.end - 1) * 60, Math.round(minutes / 30) * 30);
+  const time = `${String(Math.floor(snapped / 60)).padStart(2, '0')}:${String(snapped % 60).padStart(2, '0')}`;
+  void openQuickComposer({ day, time, duration: 60 });
 }
 
 /** Schedules a queued task without dragging — keyboard and touch path. */

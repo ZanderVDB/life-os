@@ -390,14 +390,37 @@ test('ui: an empty or future day gets NO habit mark', () => {
 });
 
 test('ui: the selected day lists habits and every one can be ticked', () => {
-  const fn = body(calendar, 'function habitCardHtml(day)');
-  assert.match(fn, /data-habit="\$\{h\.id\}"/, 'habit rows are not identified');
-  assert.match(fn, /data-habit-day="\$\{day\}"/,
+  // The row markup is shared now, so a habit created later ticks exactly like
+  // one that existed at the time — same control, same day, same behaviour.
+  const row = body(calendar, 'function habitRowHtml(h, day, later = false)');
+  assert.match(row, /data-habit="\$\{h\.id\}"/, 'habit rows are not identified');
+  assert.match(row, /data-habit-day="\$\{day\}"/,
     'the row does not carry the day, so a tick cannot land on a past date');
-  assert.match(fn, /aria-pressed/, 'the tick state is not exposed to assistive tech');
-  // Only what was actually due that day appears — otherwise the card shows
-  // habits that were never owed and the count disagrees with the cell.
+  assert.match(row, /aria-pressed/, 'the tick state is not exposed to assistive tech');
+
+  const fn = body(calendar, 'function habitCardHtml(day)');
   assert.match(fn, /filter\(\(h\) => h\.dueToday\)/, 'the card is not filtered to what was due');
+});
+
+test('ui: a habit created after the day does not rewrite that day', () => {
+  /* Creating a habit today must not retroactively turn every past day into a
+   * failure. It is still SHOWN — you may have been doing it already — but it
+   * sits below the line and only joins the count if you actually tick it,
+   * which is why "5/4" is possible and honest. */
+  const fn = body(calendar, 'function habitCardHtml(day)');
+  assert.match(fn, /filter\(\(h\) => !h\.createdAfter\)/,
+    'a later habit is counted in a day it did not exist for');
+  assert.match(fn, /const later = dueAll\.filter\(\(h\) => h\.createdAfter\)/,
+    'later habits are dropped instead of shown');
+  assert.match(fn, /const total = due\.length/, 'the denominator includes later habits');
+  assert.match(fn, /laterDone/, 'ticking a later habit does not count');
+  assert.match(fn, /Created later/, 'later habits are not set apart');
+
+  // From the real creation date, never inferred from a first completion.
+  const habits = readFileSync(join('src', 'routes', 'habits.ts'), 'utf8');
+  assert.match(habits, /const createdOn = h\.createdAt\.toISOString\(\)/,
+    'creation is inferred rather than read');
+  assert.match(habits, /createdAfter: createdOn > today/);
 });
 
 test('ui: the selected day is a tint and a border, not a heavy fill', () => {

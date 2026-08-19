@@ -124,7 +124,15 @@ async function blockedByConnection(state) {
 
 /* ══ Composer ════════════════════════════════════════════════════════════ */
 
-const DURATIONS = [15, 30, 45, 60, 90, 120, 180];
+const DURATIONS = [
+  { m: 15, label: '15 min' },
+  { m: 30, label: '30 min' },
+  { m: 45, label: '45 min' },
+  { m: 60, label: '1 hr' },
+  { m: 90, label: '1 hr 30' },
+  { m: 120, label: '2 hr' },
+  { m: 180, label: '3 hr' },
+];
 const REPEATS = [
   { id: '', label: 'Does not repeat' },
   { id: 'RRULE:FREQ=DAILY', label: 'Every day' },
@@ -132,95 +140,265 @@ const REPEATS = [
   { id: 'RRULE:FREQ=MONTHLY', label: 'Every month' },
   { id: 'RRULE:FREQ=YEARLY', label: 'Every year' },
 ];
+const REMINDERS = [
+  { m: null, label: 'Default' },
+  { m: 0, label: 'At the time' },
+  { m: 10, label: '10 min before' },
+  { m: 30, label: '30 min before' },
+  { m: 60, label: '1 hr before' },
+  { m: 1440, label: '1 day before' },
+];
 
+/* ── The time field ──────────────────────────────────────────────────────
+ *
+ * `<input type="time">` is a different control in every browser, none of them
+ * matching the app, and on desktop it is a fiddly three-part spinner for a
+ * value people already know. This is a text field with a list: type "9", "930"
+ * or "14:30" and it understands; or pick from quarter hours, which is what
+ * almost every event actually starts on.
+ *
+ * Deliberately not a clock face. The keyboard is the fast path and must stay
+ * the fast path.
+ */
+const QUARTERS = Array.from({ length: 24 * 4 }, (_, i) =>
+  `${pad(Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
+
+/** "9", "9.30", "930", "14:30", "2:30pm" → "09:30" / "14:30". Anything else: null. */
+export function parseTime(raw) {
+  const t = String(raw ?? '').trim().toLowerCase();
+  if (!t) return null;
+  const pm = /p/.test(t);
+  const am = /a/.test(t);
+  const digits = t.replace(/[^0-9:.]/g, '').replace('.', ':');
+  let h; let m = 0;
+  if (digits.includes(':')) {
+    const [a, b] = digits.split(':');
+    h = Number(a); m = Number(b ?? 0);
+  } else if (digits.length <= 2) {
+    h = Number(digits);
+  } else {
+    h = Number(digits.slice(0, digits.length - 2));
+    m = Number(digits.slice(-2));
+  }
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  if (pm && h < 12) h += 12;
+  if (am && h === 12) h = 0;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return `${pad(h)}:${pad(m)}`;
+}
+
+const timeFieldHtml = (id, value, label) => `<div class="ev-time-f" data-timefield>
+    <label for="${id}">${esc(label)}</label>
+    <input id="${id}" class="ev-time-in" value="${esc(value)}" inputmode="numeric"
+      autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list">
+    <div class="ev-time-list" data-time-list hidden role="listbox"></div>
+  </div>`;
+
+/** Wires one time field: a list on focus, typing accepted, keyboard first. */
+function wireTimeField(root, onChange) {
+  const input = root.querySelector('.ev-time-in');
+  const list = root.querySelector('[data-time-list]');
+  let open = false;
+
+  const render = () => {
+    const current = parseTime(input.value) ?? '09:00';
+    list.innerHTML = QUARTERS.map((t) => `<button type="button" role="option" data-t="${t}"
+      class="${t === current ? 'is-on' : ''}" aria-selected="${t === current}">${t}</button>`).join('');
+    // Bring the current time into view rather than making them scroll to it.
+    const on = list.querySelector('.is-on');
+    if (on) list.scrollTop = Math.max(0, on.offsetTop - 62);
+  };
+  const show = () => { if (open) return; open = true; list.hidden = false; input.setAttribute('aria-expanded', 'true'); render(); };
+  const hide = () => { open = false; list.hidden = true; input.setAttribute('aria-expanded', 'false'); };
+
+  const commit = (value) => {
+    const t = parseTime(value);
+    if (t) input.value = t;
+    hide();
+    onChange?.(t ?? parseTime(input.value));
+  };
+
+  input.addEventListener('focus', show);
+  input.addEventListener('click', show);
+  input.addEventListener('blur', () => setTimeout(() => { commit(input.value); }, 120));
+  input.addEventListener('input', () => { if (!open) show(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && open) { e.stopPropagation(); hide(); return; }
+    if (e.key === 'Enter') { e.preventDefault(); commit(input.value); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    // Arrows step by a quarter hour, which is the whole point of the list.
+    e.preventDefault();
+    show();
+    const now = parseTime(input.value) ?? '09:00';
+    const i = QUARTERS.indexOf(now);
+    const step = e.key === 'ArrowDown' ? 1 : -1;
+    const next = i === -1
+      ? QUARTERS.findIndex((t) => t > now)
+      : Math.min(QUARTERS.length - 1, Math.max(0, i + step));
+    input.value = QUARTERS[next < 0 ? 0 : next];
+    render();
+    onChange?.(input.value);
+  });
+  list.addEventListener('mousedown', (e) => {
+    const b = e.target.closest('[data-t]');
+    if (!b) return;
+    e.preventDefault();
+    input.value = b.dataset.t;
+    commit(b.dataset.t);
+  });
+}
+
+/**
+ * The composer, arranged by what the person is deciding rather than by what
+ * the API happens to accept.
+ *
+ * What → When → Where → Details, with everything else behind More. The first
+ * three answer "is this the right event"; the rest are refinements, and a form
+ * that shows nine fields at once makes the two-field case feel like work.
+ */
 function composerHtml(state, d) {
   const cals = state.writable ?? [];
-  return `<label class="ev-f">
-      <span>Title</span>
+  const end = addMinutes(d.day, d.time, d.duration);
+  return `<div class="ev-what">
       <input id="ev-title" value="${esc(d.title ?? '')}" placeholder="What is it?"
-        maxlength="500" autocomplete="off">
-    </label>
-
-    <label class="ev-f">
-      <span>Calendar</span>
-      <select id="ev-cal">
-        ${cals.map((c) => `<option value="${c.id}"${c.id === d.calendarId ? ' selected' : ''}
-          >${esc(c.name)}</option>`).join('')}
-      </select>
-    </label>
-    ${(state.calendars ?? []).some((c) => c.isReadOnly) ? `<p class="ev-sub">
-      Read-only calendars are not listed — Google will not accept events on them.</p>` : ''}
-
-    <div class="ev-row">
-      <label class="ev-f">
-        <span>Date</span>
-        <input type="date" id="ev-date" value="${esc(d.day)}">
-      </label>
-      <label class="ev-f ev-time" ${d.isAllDay ? 'hidden' : ''}>
-        <span>Start</span>
-        <input type="time" id="ev-start" value="${esc(d.time)}">
-      </label>
-      <label class="ev-f ev-time" ${d.isAllDay ? 'hidden' : ''}>
-        <span>For</span>
-        <select id="ev-dur">
-          ${DURATIONS.map((m) => `<option value="${m}"${m === d.duration ? ' selected' : ''}
-            >${m < 60 ? `${m} min` : `${m / 60} hr${m > 60 ? 's' : ''}`}</option>`).join('')}
-        </select>
-      </label>
+        maxlength="500" autocomplete="off" aria-label="Title">
     </div>
 
-    <label class="ev-check">
-      <input type="checkbox" id="ev-allday"${d.isAllDay ? ' checked' : ''}>
-      <span>All day</span>
-    </label>
+    <section class="ev-group ev-when">
+      <div class="ev-when-row">
+        <div class="ev-time-f">
+          <label for="ev-date">Date</label>
+          <input type="date" id="ev-date" value="${esc(d.day)}">
+        </div>
+        <div class="ev-time-slot" ${d.isAllDay ? 'hidden' : ''}>
+          ${timeFieldHtml('ev-start', d.time, 'Start')}
+        </div>
+      </div>
 
-    <label class="ev-f">
+      <div class="ev-durs" ${d.isAllDay ? 'hidden' : ''} role="group" aria-label="Duration">
+        ${DURATIONS.map((x) => `<button type="button" class="ev-dur${x.m === d.duration ? ' is-on' : ''}"
+          data-dur="${x.m}" aria-pressed="${x.m === d.duration}">${esc(x.label)}</button>`).join('')}
+      </div>
+      <p class="ev-ends" data-ends ${d.isAllDay ? 'hidden' : ''}>Ends ${esc(end.time)}</p>
+
+      <label class="ev-check">
+        <input type="checkbox" id="ev-allday"${d.isAllDay ? ' checked' : ''}>
+        <span>All day</span>
+      </label>
+    </section>
+
+    <div class="ev-f">
       <span>Where <i>optional</i></span>
-      <input id="ev-loc" value="${esc(d.location ?? '')}" maxlength="500">
-    </label>
+      <input id="ev-loc" value="${esc(d.location ?? '')}" maxlength="500"
+        placeholder="Add a place">
+    </div>
 
-    <label class="ev-f">
+    <div class="ev-f">
       <span>Details <i>optional</i></span>
-      <textarea id="ev-desc" rows="2" maxlength="8000">${esc(d.description ?? '')}</textarea>
-    </label>
+      <textarea id="ev-desc" rows="2" maxlength="8000"
+        placeholder="Anything worth remembering">${esc(d.description ?? '')}</textarea>
+    </div>
 
     <details class="ev-more">
-      <summary>More</summary>
-      <label class="ev-f">
-        <span>Guests <i>comma-separated email addresses</i></span>
+      <summary>More options</summary>
+
+      <div class="ev-f">
+        <span>Calendar</span>
+        <select id="ev-cal">
+          ${cals.map((c) => `<option value="${c.id}"${c.id === d.calendarId ? ' selected' : ''}
+            >${esc(c.name)}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="ev-f">
+        <span>Guests <i>comma-separated</i></span>
         <input id="ev-guests" value="${esc((d.attendees ?? []).join(', '))}"
           placeholder="someone@example.com">
-      </label>
+      </div>
       <label class="ev-check">
         <input type="checkbox" id="ev-notify">
         <span>Email the guests when this is added</span>
       </label>
-      <label class="ev-f">
-        <span>Repeats</span>
-        <select id="ev-repeat">
-          ${REPEATS.map((r) => `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join('')}
-        </select>
-      </label>
+
+      <div class="ev-row-2">
+        <div class="ev-f">
+          <span>Repeats</span>
+          <select id="ev-repeat">
+            ${REPEATS.map((r) => `<option value="${esc(r.id)}"${r.id === (d.repeat ?? '') ? ' selected' : ''}
+              >${esc(r.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="ev-f">
+          <span>Reminder</span>
+          <select id="ev-remind">
+            ${REMINDERS.map((r) => `<option value="${r.m ?? ''}">${esc(r.label)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
       <label class="ev-check">
         <input type="checkbox" id="ev-meet">
         <span>Add a Google Meet link</span>
       </label>
-    </details>
-
-    <p class="ev-zone">Times are ${esc(localZone())}.</p>`;
+      <p class="ev-zone">Times are ${esc(localZone())}.</p>
+    </details>`;
 }
 
-function readComposer(dlg) {
+/**
+ * Wires the shared composer body. Used by New and Edit, so the two cannot
+ * drift into behaving differently.
+ */
+function wireComposer(dlg, d) {
+  const state = { duration: d.duration ?? 60 };
+  const ends = dlg.querySelector('[data-ends]');
+  const startField = dlg.querySelector('[data-timefield]');
+
+  const showEnd = () => {
+    const time = parseTime(dlg.querySelector('#ev-start')?.value) ?? d.time;
+    const day = dlg.querySelector('#ev-date')?.value ?? d.day;
+    const e = addMinutes(day, time, state.duration);
+    if (ends) ends.textContent = `Ends ${e.time}${e.day !== day ? ' next day' : ''}`;
+  };
+
+  if (startField) wireTimeField(startField, showEnd);
+  dlg.querySelector('#ev-date')?.addEventListener('change', showEnd);
+
+  dlg.querySelectorAll('[data-dur]').forEach((b) => {
+    b.addEventListener('click', () => {
+      state.duration = Number(b.dataset.dur);
+      dlg.querySelectorAll('[data-dur]').forEach((x) => {
+        const on = x === b;
+        x.classList.toggle('is-on', on);
+        x.setAttribute('aria-pressed', String(on));
+      });
+      showEnd();
+    });
+  });
+
+  const allDay = dlg.querySelector('#ev-allday');
+  allDay?.addEventListener('change', () => {
+    dlg.querySelectorAll('.ev-time-slot, .ev-durs, [data-ends]').forEach((el) => {
+      el.hidden = allDay.checked;
+    });
+  });
+
+  showEnd();
+  return state;
+}
+
+function readComposer(dlg, ui) {
   const v = (id) => dlg.querySelector(`#${id}`)?.value ?? '';
   const on = (id) => !!dlg.querySelector(`#${id}`)?.checked;
   const day = v('ev-date');
-  const time = v('ev-start');
-  const mins = Number(v('ev-dur') || 60);
+  const time = parseTime(v('ev-start')) ?? '09:00';
+  const mins = ui?.duration ?? 60;
   const end = addMinutes(day, time, mins);
   const isAllDay = on('ev-allday');
   const repeat = v('ev-repeat');
+  const remind = v('ev-remind');
   return {
     calendarId: v('ev-cal'),
+    duration: mins,
     draft: {
       title: v('ev-title').trim(),
       description: v('ev-desc').trim() || null,
@@ -234,6 +412,7 @@ function readComposer(dlg) {
       notifyGuests: on('ev-notify'),
       ...(repeat ? { recurrence: [repeat] } : {}),
       ...(on('ev-meet') ? { withMeet: true } : {}),
+      ...(remind !== '' ? { useDefaultReminders: false, reminders: [{ minutes: Number(remind) }] } : {}),
     },
   };
 }
@@ -278,13 +457,9 @@ export async function openEventComposer(prefill = {}) {
       body: composerHtml(state, carry),
       actions: foot('Continue'),
       onMount: (dlg, close) => {
-        const allDay = dlg.querySelector('#ev-allday');
-        const times = dlg.querySelectorAll('.ev-time');
-        allDay.addEventListener('change', () => {
-          times.forEach((t) => { t.hidden = allDay.checked; });
-        });
+        const ui = wireComposer(dlg, carry);
         dlg.querySelector('[data-go]').addEventListener('click', () => {
-          const read = readComposer(dlg);
+          const read = readComposer(dlg, ui);
           if (!read.draft.title) {
             dlg.querySelector('#ev-title')?.focus();
             return;
@@ -337,6 +512,86 @@ function backToForm(input) {
     description: d.description ?? '',
     attendees: d.attendees,
   };
+}
+
+/**
+ * The one-line composer, for a slot you just clicked.
+ *
+ * Most events are a name and a time, and the time is already known from where
+ * the pointer landed. Making someone open a nine-field form to write "Gym" is
+ * the kind of friction that stops a calendar being used at all.
+ *
+ * It still goes through the same proposal and the same confirmation: quick
+ * means fewer fields, not fewer safeguards.
+ */
+export async function openQuickComposer({ day, time, duration = 60 }) {
+  const state = await writeState();
+  if (!state) { ctx.toast('Could not reach Life OS.', true); return null; }
+  if (!state.canWrite) { await blockedByConnection(state); return null; }
+  if (!state.writable?.length) {
+    ctx.toast('None of your Google calendars accept new events.', true);
+    return null;
+  }
+
+  const end = addMinutes(day, time, duration);
+  const calendarId = state.defaultCalendarId ?? state.writable[0].id;
+
+  const input = await modal({
+    title: `${time} – ${end.time}`,
+    body: `<input id="qc-title" class="qc-title" placeholder="What is this?"
+        maxlength="500" autocomplete="off">
+      <p class="qc-when">${esc(new Date(`${day}T00:00:00`).toLocaleDateString(undefined,
+    { weekday: 'long', day: 'numeric', month: 'long' }))}
+        · ${esc(time)}–${esc(end.time)}
+        · ${esc(state.writable.find((c) => c.id === calendarId)?.name ?? 'Calendar')}</p>`,
+    actions: `<button class="btn btn-ghost" data-close="cancel">Cancel</button>
+      <button class="btn btn-ghost" data-more>More details</button>
+      <button class="btn btn-primary" data-go>Continue</button>`,
+    onMount: (dlg, close) => {
+      const field = dlg.querySelector('#qc-title');
+      const go = () => {
+        const title = field.value.trim();
+        if (!title) { field.focus(); return; }
+        close({ title });
+      };
+      // Enter is the whole point of a quick composer.
+      field.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); go(); }
+      });
+      dlg.querySelector('[data-go]').addEventListener('click', go);
+      dlg.querySelector('[data-more]').addEventListener('click',
+        () => close({ more: true, title: field.value.trim() }));
+      setTimeout(() => field.focus(), 40);
+    },
+  });
+  if (!input) return null;
+
+  // "More details" hands the same slot to the full composer, nothing lost.
+  if (input.more) {
+    return openEventComposer({ day, time, duration, title: input.title });
+  }
+
+  const draft = {
+    title: input.title,
+    isAllDay: false,
+    startsAt: toInstant(day, time),
+    endsAt: toInstant(end.day, end.time),
+    timeZone: localZone(),
+    attendees: [],
+    notifyGuests: false,
+  };
+  try {
+    const r = await ctx.api('/calendar/events/propose-create', {
+      method: 'POST', body: { requestId: uid(), calendarId, draft },
+    });
+    const done = await confirmProposal(r.proposal, { confirmLabel: 'Add to Google Calendar' });
+    // A clash sends them to the full composer rather than a dead end.
+    if (done === 'back') return openEventComposer({ day, time, duration, title: input.title });
+    return done;
+  } catch (e) {
+    ctx.toast(e.message, true);
+    return openEventComposer({ day, time, duration, title: input.title });
+  }
 }
 
 /* ══ Confirmation ════════════════════════════════════════════════════════ */
@@ -424,6 +679,117 @@ export async function confirmProposal(proposal, opts = {}) {
   return ok;
 }
 
+/**
+ * A birthday, using Google's own birthday event type.
+ *
+ * Deliberately not "an all-day event that repeats yearly and happens to be
+ * called a birthday". Google has a real type for this: it does not consume
+ * time in free/busy, it renders as a birthday in every other Google client,
+ * and it stays a birthday when something else reads the calendar.
+ *
+ * Which is also why the form is short. Location, guests and Meet are not
+ * offered because Google will not accept them on this type, and a field that
+ * exists only to be rejected is worse than no field.
+ */
+export async function openBirthdayComposer(prefill = {}) {
+  const state = await writeState();
+  if (!state) { ctx.toast('Could not reach Life OS.', true); return null; }
+  if (!state.canWrite) { await blockedByConnection(state); return null; }
+  if (!state.writable?.length) {
+    ctx.toast('None of your Google calendars accept new events.', true);
+    return null;
+  }
+
+  let carry = {
+    name: prefill.name ?? '',
+    day: prefill.day ?? isoDay(new Date()),
+    calendarId: state.defaultCalendarId ?? state.writable[0].id,
+    remind: '1440',
+  };
+
+  for (;;) {
+    const input = await modal({
+      title: 'Add a birthday',
+      body: `<div class="ev-what">
+          <input id="bd-name" value="${esc(carry.name)}" placeholder="Whose birthday?"
+            maxlength="200" autocomplete="off" aria-label="Name">
+        </div>
+        <section class="ev-group">
+          <div class="ev-when-row">
+            <div class="ev-time-f">
+              <label for="bd-date">Date</label>
+              <input type="date" id="bd-date" value="${esc(carry.day)}">
+            </div>
+            <div class="ev-time-f">
+              <label for="bd-remind">Remind me</label>
+              <select id="bd-remind">
+                <option value="">No reminder</option>
+                <option value="0">On the day</option>
+                <option value="1440" selected>1 day before</option>
+                <option value="10080">1 week before</option>
+              </select>
+            </div>
+          </div>
+          <p class="ev-ends">Repeats every year · all day</p>
+        </section>
+        <div class="ev-f">
+          <span>Calendar</span>
+          <select id="bd-cal">
+            ${state.writable.map((c) => `<option value="${c.id}"${c.id === carry.calendarId ? ' selected' : ''}
+              >${esc(c.name)}</option>`).join('')}
+          </select>
+        </div>
+        <p class="ev-sub">Saved as a Google birthday, so it does not take up
+          time in your day and shows as a birthday everywhere else.</p>`,
+      actions: foot('Continue'),
+      onMount: (dlg, close) => {
+        dlg.querySelector('[data-go]').addEventListener('click', () => {
+          const name = dlg.querySelector('#bd-name').value.trim();
+          if (!name) { dlg.querySelector('#bd-name').focus(); return; }
+          close({
+            name,
+            day: dlg.querySelector('#bd-date').value,
+            calendarId: dlg.querySelector('#bd-cal').value,
+            remind: dlg.querySelector('#bd-remind').value,
+          });
+        });
+        setTimeout(() => dlg.querySelector('#bd-name')?.focus(), 40);
+      },
+    });
+    if (!input) return null;
+    carry = input;
+
+    const draft = {
+      title: `${input.name}’s birthday`,
+      isAllDay: true,
+      startDate: input.day,
+      endDate: input.day,
+      // Google's rules for the type, not decoration.
+      eventType: 'birthday',
+      recurrence: ['RRULE:FREQ=YEARLY'],
+      transparency: 'transparent',
+      visibility: 'private',
+      attendees: [],
+      notifyGuests: false,
+      ...(input.remind !== ''
+        ? { useDefaultReminders: false, reminders: [{ minutes: Number(input.remind) }] }
+        : {}),
+    };
+
+    try {
+      const r = await ctx.api('/calendar/events/propose-create', {
+        method: 'POST', body: { requestId: uid(), calendarId: input.calendarId, draft },
+      });
+      const done = await confirmProposal(r.proposal, { confirmLabel: 'Add birthday' });
+      if (done === 'back') continue;
+      return done;
+    } catch (e) {
+      ctx.toast(e.message, true);
+      continue;
+    }
+  }
+}
+
 /* ══ Edit and delete ═════════════════════════════════════════════════════ */
 
 /** Which occurrences a change to a repeating event should touch. */
@@ -475,11 +841,9 @@ export async function openEventEditor(ev) {
         // The calendar cannot move in this pass; Google treats that as a move.
         const sel = dlg.querySelector('#ev-cal');
         if (sel) { sel.disabled = true; sel.title = 'Moving an event between calendars is not supported yet.'; }
-        const allDay = dlg.querySelector('#ev-allday');
-        const times = dlg.querySelectorAll('.ev-time');
-        allDay.addEventListener('change', () => times.forEach((t) => { t.hidden = allDay.checked; }));
+        const ui = wireComposer(dlg, carry);
         dlg.querySelector('[data-go]').addEventListener('click', () => {
-          const read = readComposer(dlg);
+          const read = readComposer(dlg, ui);
           if (!read.draft.title) { dlg.querySelector('#ev-title')?.focus(); return; }
           close(read);
         });
