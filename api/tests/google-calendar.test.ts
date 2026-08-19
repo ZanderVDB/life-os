@@ -481,8 +481,17 @@ test('ui: the event editor is wider and its scrollbar is styled', () => {
 test('ui: pickers are shared, so the two editors cannot drift apart', () => {
   assert.match(pickers, /export function datePickerPopover/, 'no shared date picker');
   assert.match(pickers, /export function timePickerPopover/, 'no shared time picker');
-  for (const f of ['event-modal.js', 'reminder-modal.js']) {
-    assert.match(read(f), /from '\.\/pickers\.js'/, `${f} has its own picker`);
+  /* The modals no longer import the pickers directly — they compose
+   * calendar-fields.js, which is the one place a date or time control is
+   * built. That is stricter than the old rule, not looser: four modals
+   * importing the same picker still left four different fields around it. */
+  const fields = read('calendar-fields.js');
+  assert.match(fields, /from '\.\/pickers\.js'/, 'the shared fields do not use the shared pickers');
+  for (const f of ['reminder-modal.js', 'schedule-task-modal.js', 'event-composer.js']) {
+    assert.match(read(f), /from '\.\/calendar-fields\.js'/,
+      `${f} does not use the shared calendar fields`);
+    assert.ok(!/datePickerPopover|timePickerPopover/.test(read(f)),
+      `${f} reaches past the shared fields to the raw picker`);
   }
   // Keyboard operation is part of the contract.
   assert.match(pickers, /ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7/,

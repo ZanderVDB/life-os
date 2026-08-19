@@ -13,6 +13,7 @@ import { initServiceWorker } from './pwa.js';
 import {
   bumpNav, navToken, navStale, setHash, hashWasOurs,
 } from './nav.js';
+import { formatTime as fmtPlanTime } from './calendar-fields.js';
 import { flip, pulse, collapseOut, reducedMotion, afterTransition, settle } from './motion.js';
 import { openUtilityMenu, openUtilitySurface, closeUtility,
   utilityTriggerHtml } from './utility-menu.js';
@@ -3127,6 +3128,9 @@ function wireCalendarHeader() {
 function wireCalendar() {
   document.querySelectorAll('.pl-canvas[data-drop-day]').forEach((canvas) => {
     canvas.addEventListener('click', (e) => planCanvasClick(e, canvas));
+    // Show where a click would land, before it lands.
+    canvas.addEventListener('mousemove', (e) => planCanvasHover(e, canvas));
+    canvas.addEventListener('mouseleave', () => planPreviewOff(canvas));
   });
   document.querySelectorAll('.cm-cell').forEach((c) => {
     c.onclick = () => selectDay(c.dataset.day);
@@ -4660,20 +4664,70 @@ async function setCalendarVisible(id, visible) {
  * accidentally creating something on top of what you meant to read is the
  * worst outcome available here.
  */
-function planCanvasClick(e, canvas) {
-  if (e.target.closest('[data-event], [data-block], .pl-ad, .pl-rem, button, a')) return;
+/** The half-hour slot under the pointer, or null over anything that is not
+ * empty creation space. */
+function planSlotAt(e, canvas) {
+  if (e.target.closest('[data-event], [data-block], .pl-ad, .pl-rem, button, a')) return null;
   const day = canvas.dataset.dropDay;
-  if (!day) return;
-
+  if (!day) return null;
   const hrs = planHours();
   const box = canvas.getBoundingClientRect();
   const frac = Math.min(1, Math.max(0, (e.clientY - box.top) / box.height));
   const minutes = hrs.start * 60 + frac * (hrs.end - hrs.start) * 60;
   // Nearest 30, and never past the end of the visible grid.
   const snapped = Math.min((hrs.end - 1) * 60, Math.round(minutes / 30) * 30);
-  const time = `${String(Math.floor(snapped / 60)).padStart(2, '0')}:${String(snapped % 60).padStart(2, '0')}`;
-  void openQuickComposer({ day, time, duration: 60 });
+  const span = hrs.end - hrs.start;
+  return {
+    day,
+    time: `${String(Math.floor(snapped / 60)).padStart(2, '0')}:${String(snapped % 60).padStart(2, '0')}`,
+    // Where the preview sits, and how tall an hour is, in this column.
+    top: ((snapped - hrs.start * 60) / (span * 60)) * 100,
+    height: (60 / (span * 60)) * 100,
+  };
 }
+
+function planCanvasClick(e, canvas) {
+  const slot = planSlotAt(e, canvas);
+  if (!slot) return;
+  void openQuickComposer({ day: slot.day, time: slot.time, duration: 60 });
+}
+
+/**
+ * The placement preview.
+ *
+ * Snapping to the half hour is only useful if you can see WHERE it snapped
+ * before committing to it — otherwise the first indication that 10:08 became
+ * 10:00 is a confirmation dialog. A tinted block in the target column, an hour
+ * tall, following the same rule the click will use.
+ *
+ * It is only drawn over genuinely empty space: an existing event is something
+ * to open, not something to create on top of.
+ */
+function planCanvasHover(e, canvas) {
+  const slot = planSlotAt(e, canvas);
+  if (!slot) return planPreviewOff(canvas);
+
+  let ghost = canvas.querySelector('[data-pl-ghost]');
+  if (!ghost) {
+    ghost = document.createElement('div');
+    ghost.className = 'pl-ghost';
+    ghost.dataset.plGhost = '';
+    ghost.setAttribute('aria-hidden', 'true');
+    canvas.appendChild(ghost);
+  }
+  const end = addPlanMinutes(slot.time, 60);
+  ghost.style.top = `${slot.top}%`;
+  ghost.style.height = `${slot.height}%`;
+  ghost.textContent = `${fmtPlanTime(slot.time)} – ${fmtPlanTime(end)}`;
+}
+
+const planPreviewOff = (canvas) => canvas.querySelector('[data-pl-ghost]')?.remove();
+
+const addPlanMinutes = (time, mins) => {
+  const [h, m] = time.split(':').map(Number);
+  const t = h * 60 + m + mins;
+  return `${String(Math.floor(t / 60) % 24).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+};
 
 /** Schedules a queued task without dragging — keyboard and touch path. */
 async function scheduleFromQueue(taskId) {

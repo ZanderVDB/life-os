@@ -17,6 +17,13 @@
  * not cause is its own bug.
  */
 
+import {
+  row, section, moreOptions, wireMoreOptions, dateField, timeField, wireDateTime,
+  durationField, wireDuration, addMinutes, remindersField, wireReminders,
+  recurrenceBuilder, wireRecurrence, describeRecurrence, REPEATS, selectField,
+  calendarSelect, formatTime, parseTime, formatDate, isoDate,
+} from './calendar-fields.js';
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -26,7 +33,7 @@ const uid = () => (crypto?.randomUUID?.() ?? `r${Date.now()}${Math.random()}`).s
 const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
 const pad = (n) => String(n).padStart(2, '0');
-const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const isoDay = (d) => isoDate(d);
 const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 /** A local date + time, as an instant with an offset Google can read. */
@@ -37,12 +44,7 @@ function toInstant(day, time) {
   return d.toISOString();
 }
 
-const addMinutes = (day, time, mins) => {
-  const [h, m] = String(time || '09:00').split(':').map(Number);
-  const d = new Date(`${day}T00:00:00`);
-  d.setHours(h || 0, (m || 0) + mins, 0, 0);
-  return { day: isoDay(d), time: hhmm(d) };
-};
+
 
 let ctx = null;
 /** Wired once by app.js: `api`, `toast`, and a way to refresh the calendar. */
@@ -124,224 +126,59 @@ async function blockedByConnection(state) {
 
 /* ══ Composer ════════════════════════════════════════════════════════════ */
 
-const DURATIONS = [
-  { m: 15, label: '15 min' },
-  { m: 30, label: '30 min' },
-  { m: 45, label: '45 min' },
-  { m: 60, label: '1 hr' },
-  { m: 90, label: '1 hr 30' },
-  { m: 120, label: '2 hr' },
-  { m: 180, label: '3 hr' },
-];
-const REPEATS = [
-  { id: '', label: 'Does not repeat' },
-  { id: 'RRULE:FREQ=DAILY', label: 'Every day' },
-  { id: 'RRULE:FREQ=WEEKLY', label: 'Every week' },
-  { id: 'RRULE:FREQ=MONTHLY', label: 'Every month' },
-  { id: 'RRULE:FREQ=YEARLY', label: 'Every year' },
-];
-const REMINDERS = [
-  { m: null, label: 'Default' },
-  { m: 0, label: 'At the time' },
-  { m: 10, label: '10 min before' },
-  { m: 30, label: '30 min before' },
-  { m: 60, label: '1 hr before' },
-  { m: 1440, label: '1 day before' },
-];
-
-/* ── The time field ──────────────────────────────────────────────────────
- *
- * `<input type="time">` is a different control in every browser, none of them
- * matching the app, and on desktop it is a fiddly three-part spinner for a
- * value people already know. This is a text field with a list: type "9", "930"
- * or "14:30" and it understands; or pick from quarter hours, which is what
- * almost every event actually starts on.
- *
- * Deliberately not a clock face. The keyboard is the fast path and must stay
- * the fast path.
- */
-const QUARTERS = Array.from({ length: 24 * 4 }, (_, i) =>
-  `${pad(Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
-
-/** "9", "9.30", "930", "14:30", "2:30pm" → "09:30" / "14:30". Anything else: null. */
-export function parseTime(raw) {
-  const t = String(raw ?? '').trim().toLowerCase();
-  if (!t) return null;
-  const pm = /p/.test(t);
-  const am = /a/.test(t);
-  const digits = t.replace(/[^0-9:.]/g, '').replace('.', ':');
-  let h; let m = 0;
-  if (digits.includes(':')) {
-    const [a, b] = digits.split(':');
-    h = Number(a); m = Number(b ?? 0);
-  } else if (digits.length <= 2) {
-    h = Number(digits);
-  } else {
-    h = Number(digits.slice(0, digits.length - 2));
-    m = Number(digits.slice(-2));
-  }
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-  if (pm && h < 12) h += 12;
-  if (am && h === 12) h = 0;
-  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-  return `${pad(h)}:${pad(m)}`;
-}
-
-const timeFieldHtml = (id, value, label) => `<div class="ev-time-f" data-timefield>
-    <label for="${id}">${esc(label)}</label>
-    <input id="${id}" class="ev-time-in" value="${esc(value)}" inputmode="numeric"
-      autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list">
-    <div class="ev-time-list" data-time-list hidden role="listbox"></div>
-  </div>`;
-
-/** Wires one time field: a list on focus, typing accepted, keyboard first. */
-function wireTimeField(root, onChange) {
-  const input = root.querySelector('.ev-time-in');
-  const list = root.querySelector('[data-time-list]');
-  let open = false;
-
-  const render = () => {
-    const current = parseTime(input.value) ?? '09:00';
-    list.innerHTML = QUARTERS.map((t) => `<button type="button" role="option" data-t="${t}"
-      class="${t === current ? 'is-on' : ''}" aria-selected="${t === current}">${t}</button>`).join('');
-    // Bring the current time into view rather than making them scroll to it.
-    const on = list.querySelector('.is-on');
-    if (on) list.scrollTop = Math.max(0, on.offsetTop - 62);
-  };
-  const show = () => { if (open) return; open = true; list.hidden = false; input.setAttribute('aria-expanded', 'true'); render(); };
-  const hide = () => { open = false; list.hidden = true; input.setAttribute('aria-expanded', 'false'); };
-
-  const commit = (value) => {
-    const t = parseTime(value);
-    if (t) input.value = t;
-    hide();
-    onChange?.(t ?? parseTime(input.value));
-  };
-
-  input.addEventListener('focus', show);
-  input.addEventListener('click', show);
-  input.addEventListener('blur', () => setTimeout(() => { commit(input.value); }, 120));
-  input.addEventListener('input', () => { if (!open) show(); });
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && open) { e.stopPropagation(); hide(); return; }
-    if (e.key === 'Enter') { e.preventDefault(); commit(input.value); return; }
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    // Arrows step by a quarter hour, which is the whole point of the list.
-    e.preventDefault();
-    show();
-    const now = parseTime(input.value) ?? '09:00';
-    const i = QUARTERS.indexOf(now);
-    const step = e.key === 'ArrowDown' ? 1 : -1;
-    const next = i === -1
-      ? QUARTERS.findIndex((t) => t > now)
-      : Math.min(QUARTERS.length - 1, Math.max(0, i + step));
-    input.value = QUARTERS[next < 0 ? 0 : next];
-    render();
-    onChange?.(input.value);
-  });
-  list.addEventListener('mousedown', (e) => {
-    const b = e.target.closest('[data-t]');
-    if (!b) return;
-    e.preventDefault();
-    input.value = b.dataset.t;
-    commit(b.dataset.t);
-  });
-}
-
 /**
  * The composer, arranged by what the person is deciding rather than by what
  * the API happens to accept.
  *
- * What → When → Where → Details, with everything else behind More. The first
- * three answer "is this the right event"; the rest are refinements, and a form
- * that shows nine fields at once makes the two-field case feel like work.
+ * What → When → Where → Details, with everything else behind one More Options
+ * disclosure that looks the same here as it does in Reminder, Schedule Task
+ * and Birthday. Every control comes from calendar-fields.js: there is no
+ * Event-specific date field, time field or duration control any more, which is
+ * how the four flows stopped drifting apart.
  */
 function composerHtml(state, d) {
   const cals = state.writable ?? [];
-  const end = addMinutes(d.day, d.time, d.duration);
-  return `<div class="ev-what">
+  return `<div class="cf-title">
       <input id="ev-title" value="${esc(d.title ?? '')}" placeholder="What is it?"
         maxlength="500" autocomplete="off" aria-label="Title">
     </div>
 
-    <section class="ev-group ev-when">
-      <div class="ev-when-row">
-        <div class="ev-time-f">
-          <label for="ev-date">Date</label>
-          <input type="date" id="ev-date" value="${esc(d.day)}">
-        </div>
-        <div class="ev-time-slot" ${d.isAllDay ? 'hidden' : ''}>
-          ${timeFieldHtml('ev-start', d.time, 'Start')}
-        </div>
-      </div>
-
-      <div class="ev-durs" ${d.isAllDay ? 'hidden' : ''} role="group" aria-label="Duration">
-        ${DURATIONS.map((x) => `<button type="button" class="ev-dur${x.m === d.duration ? ' is-on' : ''}"
-          data-dur="${x.m}" aria-pressed="${x.m === d.duration}">${esc(x.label)}</button>`).join('')}
-      </div>
-      <p class="ev-ends" data-ends ${d.isAllDay ? 'hidden' : ''}>Ends ${esc(end.time)}</p>
-
-      <label class="ev-check">
+    ${section(`
+      ${row('When', `${dateField('ev-date', d.day, { label: 'Date' })}
+        <span class="cf-when-time"${d.isAllDay ? ' hidden' : ''}
+          >${timeField('ev-start', d.time, { label: 'Start time' })}</span>`)}
+      ${row('For', durationField(d.duration), { top: true, hideWhenAllDay: true })}
+      <label class="cf-check">
         <input type="checkbox" id="ev-allday"${d.isAllDay ? ' checked' : ''}>
         <span>All day</span>
-      </label>
-    </section>
+      </label>`)}
 
-    <div class="ev-f">
-      <span>Where <i>optional</i></span>
-      <input id="ev-loc" value="${esc(d.location ?? '')}" maxlength="500"
-        placeholder="Add a place">
-    </div>
+    ${row('Where', `<input class="cf-ctl cf-input" id="ev-loc"
+      value="${esc(d.location ?? '')}" maxlength="500" placeholder="Add a place">`)}
 
-    <div class="ev-f">
-      <span>Details <i>optional</i></span>
-      <textarea id="ev-desc" rows="2" maxlength="8000"
-        placeholder="Anything worth remembering">${esc(d.description ?? '')}</textarea>
-    </div>
+    ${row('Details', `<textarea class="cf-ctl cf-input cf-textarea" id="ev-desc" rows="2"
+      maxlength="8000" placeholder="Anything worth remembering">${esc(d.description ?? '')}</textarea>`,
+    { top: true })}
 
-    <details class="ev-more">
-      <summary>More options</summary>
-
-      <div class="ev-f">
-        <span>Calendar</span>
-        <select id="ev-cal">
-          ${cals.map((c) => `<option value="${c.id}"${c.id === d.calendarId ? ' selected' : ''}
-            >${esc(c.name)}</option>`).join('')}
-        </select>
-      </div>
-
-      <div class="ev-f">
-        <span>Guests <i>comma-separated</i></span>
-        <input id="ev-guests" value="${esc((d.attendees ?? []).join(', '))}"
-          placeholder="someone@example.com">
-      </div>
-      <label class="ev-check">
+    ${moreOptions(`
+      ${row('Calendar', calendarSelect('ev-cal', cals, d.calendarId))}
+      ${row('Guests', `<input class="cf-ctl cf-input" id="ev-guests"
+        value="${esc((d.attendees ?? []).join(', '))}" placeholder="someone@example.com">`)}
+      <label class="cf-check cf-check-sub">
         <input type="checkbox" id="ev-notify">
         <span>Email the guests when this is added</span>
       </label>
 
-      <div class="ev-row-2">
-        <div class="ev-f">
-          <span>Repeats</span>
-          <select id="ev-repeat">
-            ${REPEATS.map((r) => `<option value="${esc(r.id)}"${r.id === (d.repeat ?? '') ? ' selected' : ''}
-              >${esc(r.label)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="ev-f">
-          <span>Reminder</span>
-          <select id="ev-remind">
-            ${REMINDERS.map((r) => `<option value="${r.m ?? ''}">${esc(r.label)}</option>`).join('')}
-          </select>
-        </div>
-      </div>
+      ${row('Repeats', selectField('ev-repeat', REPEATS, d.repeat ?? '', 'Repeats'))}
+      <div class="cf-rec-wrap" data-rec-wrap hidden>${recurrenceBuilder(d.day)}</div>
 
-      <label class="ev-check">
+      ${row('Reminders', remindersField(d.reminders ?? [], { allDay: d.isAllDay }), { top: true })}
+
+      <label class="cf-check cf-check-sub">
         <input type="checkbox" id="ev-meet">
         <span>Add a Google Meet link</span>
       </label>
-      <p class="ev-zone">Times are ${esc(localZone())}.</p>
-    </details>`;
+      <p class="cf-note">Times are ${esc(localZone())}.</p>`)}`;
 }
 
 /**
@@ -349,53 +186,66 @@ function composerHtml(state, d) {
  * drift into behaving differently.
  */
 function wireComposer(dlg, d) {
-  const state = { duration: d.duration ?? 60 };
-  const ends = dlg.querySelector('[data-ends]');
-  const startField = dlg.querySelector('[data-timefield]');
-
-  const showEnd = () => {
-    const time = parseTime(dlg.querySelector('#ev-start')?.value) ?? d.time;
-    const day = dlg.querySelector('#ev-date')?.value ?? d.day;
-    const e = addMinutes(day, time, state.duration);
-    if (ends) ends.textContent = `Ends ${e.time}${e.day !== day ? ' next day' : ''}`;
-  };
-
-  if (startField) wireTimeField(startField, showEnd);
-  dlg.querySelector('#ev-date')?.addEventListener('change', showEnd);
-
-  dlg.querySelectorAll('[data-dur]').forEach((b) => {
-    b.addEventListener('click', () => {
-      state.duration = Number(b.dataset.dur);
-      dlg.querySelectorAll('[data-dur]').forEach((x) => {
-        const on = x === b;
-        x.classList.toggle('is-on', on);
-        x.setAttribute('aria-pressed', String(on));
-      });
-      showEnd();
-    });
+  const readWhen = () => ({
+    day: dt.valueOf('ev-date') || d.day,
+    time: dt.valueOf('ev-start') || d.time,
+    allDay: !!dlg.querySelector('#ev-allday')?.checked,
   });
+
+  const dt = wireDateTime(dlg, dlg, () => {
+    dur.refresh();
+    rec?.refresh?.();
+  });
+  const dur = wireDuration(dlg, readWhen, d.duration ?? 60);
+  const rems = wireReminders(dlg);
+  wireMoreOptions(dlg);
+
+  // The custom recurrence builder appears only when it is asked for.
+  const repeat = dlg.querySelector('#ev-repeat');
+  const recWrap = dlg.querySelector('[data-rec-wrap]');
+  let rec = null;
+  const syncRepeat = () => {
+    const custom = repeat.value === 'custom';
+    if (recWrap) recWrap.hidden = !custom;
+    if (custom && !rec) rec = wireRecurrence(dlg);
+  };
+  repeat?.addEventListener('change', syncRepeat);
+  syncRepeat();
 
   const allDay = dlg.querySelector('#ev-allday');
   allDay?.addEventListener('change', () => {
-    dlg.querySelectorAll('.ev-time-slot, .ev-durs, [data-ends]').forEach((el) => {
-      el.hidden = allDay.checked;
+    const on = allDay.checked;
+    dlg.querySelectorAll('.cf-when-time, [data-cf-durs], [data-cf-ends]').forEach((el) => {
+      el.hidden = on;
     });
+    // An all-day event needs day-based reminder options, not minute-based ones.
+    dlg.querySelector('[data-cf-rems]')?.setAttribute('data-all-day', on ? '1' : '');
+    dur.refresh();
   });
 
-  showEnd();
-  return state;
+  dur.refresh();
+  return {
+    get duration() { return dur.minutes; },
+    get reminders() { return rems.values; },
+    get recurrence() {
+      if (!repeat) return null;
+      if (repeat.value === 'custom') return rec?.rule ? [rec.rule] : null;
+      return repeat.value ? [repeat.value] : null;
+    },
+    dateTime: dt,
+  };
 }
 
 function readComposer(dlg, ui) {
   const v = (id) => dlg.querySelector(`#${id}`)?.value ?? '';
   const on = (id) => !!dlg.querySelector(`#${id}`)?.checked;
-  const day = v('ev-date');
-  const time = parseTime(v('ev-start')) ?? '09:00';
-  const mins = ui?.duration ?? 60;
+  const day = ui.dateTime.valueOf('ev-date');
+  const time = parseTime(ui.dateTime.valueOf('ev-start')) ?? '09:00';
+  const mins = ui.duration;
   const end = addMinutes(day, time, mins);
   const isAllDay = on('ev-allday');
-  const repeat = v('ev-repeat');
-  const remind = v('ev-remind');
+  const reminders = ui.reminders;
+  const recurrence = ui.recurrence;
   return {
     calendarId: v('ev-cal'),
     duration: mins,
@@ -410,9 +260,13 @@ function readComposer(dlg, ui) {
       timeZone: localZone(),
       attendees: v('ev-guests').split(',').map((x) => x.trim()).filter(Boolean),
       notifyGuests: on('ev-notify'),
-      ...(repeat ? { recurrence: [repeat] } : {}),
+      ...(recurrence ? { recurrence } : {}),
       ...(on('ev-meet') ? { withMeet: true } : {}),
-      ...(remind !== '' ? { useDefaultReminders: false, reminders: [{ minutes: Number(remind) }] } : {}),
+      /* An empty list is a real answer — "no reminders" — and must not be
+       * confused with "use whatever Google's default is". */
+      ...(reminders.length
+        ? { useDefaultReminders: false, reminders: reminders.map((m) => ({ minutes: m })) }
+        : {}),
     },
   };
 }
@@ -537,12 +391,12 @@ export async function openQuickComposer({ day, time, duration = 60 }) {
   const calendarId = state.defaultCalendarId ?? state.writable[0].id;
 
   const input = await modal({
-    title: `${time} – ${end.time}`,
+    title: `${formatTime(time)} – ${formatTime(end.time)}`,
     body: `<input id="qc-title" class="qc-title" placeholder="What is this?"
         maxlength="500" autocomplete="off">
       <p class="qc-when">${esc(new Date(`${day}T00:00:00`).toLocaleDateString(undefined,
     { weekday: 'long', day: 'numeric', month: 'long' }))}
-        · ${esc(time)}–${esc(end.time)}
+        · ${esc(formatTime(time))}–${esc(formatTime(end.time))}
         · ${esc(state.writable.find((c) => c.id === calendarId)?.name ?? 'Calendar')}</p>`,
     actions: `<button class="btn btn-ghost" data-close="cancel">Cancel</button>
       <button class="btn btn-ghost" data-more>More details</button>
@@ -596,12 +450,17 @@ export async function openQuickComposer({ day, time, duration = 60 }) {
 
 /* ══ Confirmation ════════════════════════════════════════════════════════ */
 
+/** An instant, in the app's one time format. */
+const clockOf = (iso) => {
+  const d = new Date(iso);
+  return formatTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+};
+
 const conflictHtml = (conflicts) => (!conflicts?.length ? '' : `
   <div class="ev-clash">
     <b>You already have something at this time</b>
     ${conflicts.slice(0, 3).map((c) => `<span>${esc(c.title ?? 'Busy')} · ${
-  esc(new Date(c.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }))}–${
-  esc(new Date(c.end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }))}</span>`).join('')}
+  esc(clockOf(c.start))}–${esc(clockOf(c.end))}</span>`).join('')}
     <i>Google allows this. It is your call.</i>
   </div>`);
 
@@ -702,55 +561,39 @@ export async function openBirthdayComposer(prefill = {}) {
 
   let carry = {
     name: prefill.name ?? '',
-    day: prefill.day ?? isoDay(new Date()),
+    day: prefill.day ?? isoDate(new Date()),
     calendarId: state.defaultCalendarId ?? state.writable[0].id,
-    remind: '1440',
+    reminders: [1440],
   };
 
   for (;;) {
     const input = await modal({
       title: 'Add a birthday',
-      body: `<div class="ev-what">
+      body: `<div class="cf-title">
           <input id="bd-name" value="${esc(carry.name)}" placeholder="Whose birthday?"
             maxlength="200" autocomplete="off" aria-label="Name">
         </div>
-        <section class="ev-group">
-          <div class="ev-when-row">
-            <div class="ev-time-f">
-              <label for="bd-date">Date</label>
-              <input type="date" id="bd-date" value="${esc(carry.day)}">
-            </div>
-            <div class="ev-time-f">
-              <label for="bd-remind">Remind me</label>
-              <select id="bd-remind">
-                <option value="">No reminder</option>
-                <option value="0">On the day</option>
-                <option value="1440" selected>1 day before</option>
-                <option value="10080">1 week before</option>
-              </select>
-            </div>
-          </div>
-          <p class="ev-ends">Repeats every year · all day</p>
-        </section>
-        <div class="ev-f">
-          <span>Calendar</span>
-          <select id="bd-cal">
-            ${state.writable.map((c) => `<option value="${c.id}"${c.id === carry.calendarId ? ' selected' : ''}
-              >${esc(c.name)}</option>`).join('')}
-          </select>
-        </div>
-        <p class="ev-sub">Saved as a Google birthday, so it does not take up
-          time in your day and shows as a birthday everywhere else.</p>`,
+        ${section(`
+          ${row('When', dateField('bd-date', carry.day, { label: 'Date' }))}
+          <p class="cf-note">All day, every year — and it does not take up time
+            in your day.</p>`)}
+        ${row('Calendar', calendarSelect('bd-cal', state.writable, carry.calendarId))}
+        ${row('Reminders', remindersField(carry.reminders, { allDay: true }), { top: true })}`,
       actions: foot('Continue'),
       onMount: (dlg, close) => {
+        /* The same controls as every other flow. The birthday form is SHORT
+         * because Google's birthday type is constrained — not because it is a
+         * different kind of form. */
+        const dt = wireDateTime(dlg, dlg);
+        const rems = wireReminders(dlg);
         dlg.querySelector('[data-go]').addEventListener('click', () => {
           const name = dlg.querySelector('#bd-name').value.trim();
           if (!name) { dlg.querySelector('#bd-name').focus(); return; }
           close({
             name,
-            day: dlg.querySelector('#bd-date').value,
+            day: dt.valueOf('bd-date'),
             calendarId: dlg.querySelector('#bd-cal').value,
-            remind: dlg.querySelector('#bd-remind').value,
+            reminders: rems.values,
           });
         });
         setTimeout(() => dlg.querySelector('#bd-name')?.focus(), 40);
@@ -771,8 +614,8 @@ export async function openBirthdayComposer(prefill = {}) {
       visibility: 'private',
       attendees: [],
       notifyGuests: false,
-      ...(input.remind !== ''
-        ? { useDefaultReminders: false, reminders: [{ minutes: Number(input.remind) }] }
+      ...(input.reminders.length
+        ? { useDefaultReminders: false, reminders: input.reminders.map((m) => ({ minutes: m })) }
         : {}),
     };
 

@@ -13,7 +13,10 @@
  * Conflicts are shown before you confirm, not discovered afterwards.
  */
 import { reducedMotion, settle } from './motion.js';
-import { datePickerPopover, timePickerPopover } from './pickers.js';
+import {
+  row, section, dateField, timeField, wireDateTime, durationField, wireDuration,
+  formatTime,
+} from './calendar-fields.js';
 
 const RISE_IN = [{ opacity: 0, translate: '0 10px', scale: '0.985' },
   { opacity: 1, translate: '0 0', scale: '1' }];
@@ -26,7 +29,6 @@ const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),'
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const DURATIONS = [15, 30, 45, 60, 90, 120, 180];
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   + `-${String(d.getDate()).padStart(2, '0')}`;
@@ -100,27 +102,13 @@ export function openScheduleTaskModal(ctx) {
         </div>
       </div>
 
-      <!-- When and for how long are one decision, and the availability answer
-           belongs to it rather than floating underneath as a status strip. -->
-      <section class="ev-group">
-        <div class="ev-row">
-          <span class="ev-lab">When</span>
-          <button type="button" class="ev-ctl" id="st-date" data-picker="date"
-            data-target="day">${esc(prettyDate(f.day))}</button>
-          <button type="button" class="ev-ctl ev-time" id="st-time" data-picker="time"
-            data-target="time">${esc(f.time)}</button>
-        </div>
-
-        <div class="ev-row ev-row-top">
-          <span class="ev-lab">For</span>
-          <div class="st-durations" id="st-durations">
-            ${DURATIONS.map((m) => `<button type="button" class="ev-pill ${m === f.minutes ? 'is-on' : ''}"
-              data-minutes="${m}">${durLabel(m)}</button>`).join('')}
-          </div>
-        </div>
-
-        <div class="st-check" id="st-check" role="status"></div>
-      </section>`}
+      <!-- When, how long, and whether it is free are one decision. The same
+           controls as Event and Reminder, so this is not a third dialect. -->
+      ${section(`
+        ${row('When', `${dateField('st-date', f.day, { label: 'Date' })}
+          ${timeField('st-time', f.time, { label: 'Time' })}`)}
+        ${row('For', durationField(f.minutes), { top: true })}
+        <div class="st-check" id="st-check" role="status"></div>`)}`}
     </div>
 
     <div class="m-foot">
@@ -129,7 +117,7 @@ export function openScheduleTaskModal(ctx) {
       ${empty ? '' : '<button class="btn btn-primary" id="st-save">Schedule it</button>'}
     </div>
 
-    <div class="ev-pop" id="st-pop" hidden></div>`;
+`;   // The popover host is created by wireDateTime, once per dialog.
 
   document.body.append(scrim, dlg);
   document.body.classList.add('modal-open');
@@ -172,48 +160,28 @@ export function openScheduleTaskModal(ctx) {
       });
       // Adopt the task's own estimate when it has one.
       const est = Number(b.dataset.minutes);
-      if (est) {
-        f.minutes = est;
-        dlg.querySelectorAll('[data-minutes]').forEach((p) =>
-          p.classList.toggle('is-on', Number(p.dataset.minutes) === est));
-      }
+      if (est) dur.set(est);
       refreshCheck();
     };
   });
 
-  dlg.querySelectorAll('#st-durations [data-minutes]').forEach((p) => {
-    p.onclick = () => {
-      f.minutes = Number(p.dataset.minutes);
-      dlg.querySelectorAll('#st-durations [data-minutes]').forEach((x) =>
-        x.classList.toggle('is-on', x === p));
-      refreshCheck();
-    };
+  /* Shared controls: the same date field, time field and duration presets as
+   * Event, so this modal cannot drift into being a third dialect. `f` is kept
+   * in step because the availability check and the save both read it. */
+  const dt = wireDateTime(dlg, dlg, (kind, value) => {
+    if (kind === 'date') f.day = value; else f.time = value;
+    dur.refresh();
+    refreshCheck();
   });
-
-  /* Shared pickers, so this modal cannot drift from Event and Reminder. */
-  const pop = $('#st-pop');
-  let popFor = null;
-  const closePop = () => { pop.hidden = true; pop.innerHTML = ''; popFor = null; };
-  dlg.querySelectorAll('[data-picker]').forEach((btn) => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const target = btn.dataset.target;
-      if (popFor === target) return closePop();
-      popFor = target;
-      if (btn.dataset.picker === 'date') {
-        datePickerPopover(pop, dlg, btn, f.day, (v) => {
-          f.day = v; btn.textContent = prettyDate(v); closePop(); refreshCheck();
-        });
-      } else {
-        timePickerPopover(pop, dlg, btn, f.time, (v) => {
-          f.time = v; btn.textContent = v; closePop(); refreshCheck();
-        });
-      }
-    };
+  const dur = wireDuration(dlg, () => ({ day: f.day, time: f.time, allDay: false }), f.minutes);
+  const syncMinutes = () => { f.minutes = dur.minutes; refreshCheck(); };
+  dlg.querySelectorAll('[data-cf-dur],[data-cf-dur-custom]').forEach((b) => {
+    b.addEventListener('click', () => setTimeout(syncMinutes, 0));
   });
-  dlg.addEventListener('click', (e) => {
-    if (!pop.hidden && !pop.contains(e.target) && !e.target.closest('[data-picker]')) closePop();
-  });
+  dur.set = (m) => {
+    const btn = dlg.querySelector(`[data-cf-dur="${m}"]`);
+    if (btn) btn.click(); else f.minutes = m;
+  };
 
   let closed = false;
   function close() {

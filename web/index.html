@@ -3983,6 +3983,174 @@ body:has(.lib-page) .rail{display:none}
   background:var(--surface-2);border:1px solid var(--hairline)}
 .qc-title:focus{outline:0;border-color:var(--accent)}
 .qc-when{margin:9px 0 0;font-size:12px;color:var(--muted)}
+/* ══ Shared Calendar fields ═══════════════════════════════════════════════
+   One vocabulary for Event, Reminder, Schedule Task and Birthday. Every rule
+   here is used by all four; nothing below is flow-specific, on purpose. The
+   four modals used to have four date fields, four time controls and four
+   disclosures, which is how they stopped looking like one product. */
+
+.modal.ev-modal,.modal-reminder,.modal-schedule{width:min(544px,calc(100vw - 32px))}
+.cf-body,.ev-body{display:flex;flex-direction:column;gap:10px;
+  max-height:min(68vh,600px);overflow:auto;padding-right:2px}
+
+/* The one prominent field each flow leads with. */
+.cf-title input{width:100%;height:44px;padding:0 12px;border-radius:10px;
+  font:inherit;font-size:17px;font-weight:600;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--hairline)}
+.cf-title input::placeholder{font-weight:500;color:var(--muted)}
+.cf-title input:focus{outline:0;border-color:var(--accent)}
+
+/* Rows: fixed label column, so every modal lines up with every other. */
+.cf-row{display:grid;grid-template-columns:74px 1fr;gap:10px;align-items:center}
+.cf-row-top{align-items:start}
+.cf-row-full{grid-template-columns:1fr}
+.cf-lab{font-size:11.5px;color:var(--muted);padding-top:1px}
+.cf-ctl-wrap{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.cf-group{display:flex;flex-direction:column;gap:9px;padding:11px 12px;border-radius:11px;
+  background:color-mix(in srgb,var(--text) 3%,transparent);border:1px solid var(--hairline)}
+.cf-group.is-quiet{background:none;border-color:transparent;padding:0}
+
+/* One control height, one control look — buttons, inputs and selects alike. */
+.cf-ctl{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 11px;
+  border-radius:8px;font:inherit;font-size:13px;color:var(--text);cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--hairline);
+  transition:border-color var(--t-hover)}
+.cf-ctl:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--hairline))}
+.cf-ctl:focus-visible{outline:0;border-color:var(--accent);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+.cf-input{flex:1 1 180px;cursor:text}
+.cf-textarea{height:auto;min-height:56px;padding:9px 11px;resize:vertical;line-height:1.5}
+.cf-select{position:relative;padding:0;overflow:hidden}
+.cf-select select{appearance:none;height:32px;padding:0 30px 0 11px;border:0;width:100%;
+  font:inherit;font-size:13px;color:var(--text);background:transparent;cursor:pointer}
+/* The option LIST is browser-drawn; color-scheme is the only lever that stops
+   it rendering as a white sheet against a dark app. */
+.cf-select select,.cf-select option{color-scheme:dark;background:var(--surface-1);color:var(--text)}
+.cf-select .cf-chev{position:absolute;right:11px;top:50%;margin-top:-2px;pointer-events:none}
+
+.cf-ico{width:13px;height:13px;flex:0 0 auto;opacity:.65;background:currentColor;
+  -webkit-mask-size:contain;mask-size:contain;
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center}
+.cf-ico-date{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='none' stroke='%23000' stroke-width='1.6' d='M3.5 5.5h13v11h-13zM3.5 8.5h13M7 3.5v3M13 3.5v3'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='none' stroke='%23000' stroke-width='1.6' d='M3.5 5.5h13v11h-13zM3.5 8.5h13M7 3.5v3M13 3.5v3'/%3E%3C/svg%3E")}
+.cf-ico-time{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.6'%3E%3Ccircle cx='10' cy='10' r='6.6'/%3E%3Cpath d='M10 6.4V10l2.6 1.7'/%3E%3C/g%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.6'%3E%3Ccircle cx='10' cy='10' r='6.6'/%3E%3Cpath d='M10 6.4V10l2.6 1.7'/%3E%3C/g%3E%3C/svg%3E")}
+
+.cf-check{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2)}
+.cf-check-sub{padding-left:84px;margin-top:-3px}
+.cf-note{margin:0;font-size:11px;color:var(--muted);line-height:1.45}
+
+/* Pills: duration, and anything else that is a small set of choices. */
+.cf-durs{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.cf-pill{height:28px;padding:0 10px;border-radius:7px;cursor:pointer;font-size:12px;
+  white-space:nowrap;color:var(--text-2);background:var(--surface-2);
+  border:1px solid var(--hairline);transition:border-color var(--t-hover),color var(--t-hover)}
+.cf-pill:hover{border-color:var(--accent)}
+.cf-pill.is-on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.cf-dur-in{width:66px;height:28px;padding:0 8px;border-radius:7px;font:inherit;font-size:12px;
+  color:var(--text);background:var(--surface-2);border:1px solid var(--accent)}
+.cf-ends{margin:2px 0 0;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* One disclosure. Full width, chevron hard right, same in every modal —
+   it used to sit above the label in one and inside a control in another. */
+.cf-more{margin-top:2px}
+.cf-more-btn{display:flex;width:100%;align-items:center;justify-content:space-between;
+  height:36px;padding:0 2px;border:0;background:none;cursor:pointer;
+  font:inherit;font-size:12.5px;color:var(--text-2);border-top:1px solid var(--hairline)}
+.cf-more-btn:hover{color:var(--text)}
+.cf-chev{width:8px;height:8px;border-right:1.6px solid currentColor;
+  border-bottom:1.6px solid currentColor;transform:rotate(45deg);
+  transition:transform 160ms ease;opacity:.7}
+.cf-more-btn.is-open .cf-chev{transform:rotate(-135deg)}
+.cf-more-body{display:flex;flex-direction:column;gap:10px;padding:9px 0 2px}
+
+/* Google reminders — several per event, phrased the way people say them. */
+.cf-rems{position:relative;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cf-rem-list{display:flex;flex-wrap:wrap;gap:5px}
+.cf-rem{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 6px 0 9px;
+  border-radius:7px;font-size:11.5px;color:var(--text-2);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 34%,transparent)}
+.cf-rem-x{border:0;background:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;
+  padding:0 2px;opacity:.75}
+.cf-rem-x:hover{opacity:1;color:var(--danger)}
+.cf-rem-menu{position:absolute;top:100%;left:0;z-index:80;margin-top:5px;min-width:190px;
+  padding:4px;border-radius:9px;background:var(--surface-1);border:1px solid var(--hairline);
+  box-shadow:0 14px 32px rgba(0,0,0,.34);max-height:230px;overflow:auto}
+.cf-rem-menu button{display:block;width:100%;text-align:left;height:29px;padding:0 9px;
+  border:0;border-radius:6px;background:none;color:var(--text);font-size:12.5px;cursor:pointer}
+.cf-rem-menu button:hover{background:var(--surface-2)}
+.cf-rem-custom{display:flex;align-items:center;gap:6px;padding:6px}
+.cf-rem-custom input{width:70px;height:28px;padding:0 8px;border-radius:6px;font:inherit;
+  font-size:12px;color:var(--text);background:var(--surface-2);border:1px solid var(--hairline)}
+.cf-rem-custom span{font-size:11.5px;color:var(--muted)}
+.cf-rem-note{width:100%;margin:2px 0 0;font-size:11px;color:var(--warn)}
+
+/* Recurrence builder — real-world patterns without anyone meeting an RRULE. */
+.cf-rec-wrap{padding-left:84px}
+.cf-rec{display:flex;flex-direction:column;gap:8px;padding:10px 11px;border-radius:10px;
+  background:color-mix(in srgb,var(--text) 4%,transparent);border:1px solid var(--hairline)}
+.cf-rec-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px;
+  color:var(--text-2)}
+.cf-rec input[type=number]{width:58px;height:30px;padding:0 8px;border-radius:7px;font:inherit;
+  font-size:12.5px;color:var(--text);background:var(--surface-2);border:1px solid var(--hairline)}
+.cf-rec input[type=date],.cf-rec select{height:30px;padding:0 8px;border-radius:7px;font:inherit;
+  font-size:12.5px;color:var(--text);background:var(--surface-2);border:1px solid var(--hairline);
+  color-scheme:dark}
+.cf-rec-days{display:flex;flex-wrap:wrap;gap:4px}
+.cf-day{width:38px;height:28px;border-radius:7px;cursor:pointer;font-size:11.5px;
+  color:var(--text-2);background:var(--surface-2);border:1px solid var(--hairline)}
+.cf-day[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
+.cf-rec-month{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--text-2)}
+.cf-rec-month label{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.cf-rec-say{margin:2px 0 0;font-size:11.5px;color:var(--accent)}
+
+/* The popover host, shared by the date and time pickers. */
+.cf-pop{position:absolute;z-index:90}
+
+/* The placement preview. Snapping is only useful if you can see where it
+   snapped BEFORE committing — otherwise the first sign that 10:08 became
+   10:00 is a confirmation dialog. */
+.pl-ghost{position:absolute;left:3%;right:3%;z-index:2;pointer-events:none;
+  display:flex;align-items:flex-start;justify-content:center;padding-top:3px;
+  border-radius:7px;font-size:10.5px;font-variant-numeric:tabular-nums;
+  color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 14%,transparent);
+  border:1px dashed color-mix(in srgb,var(--accent) 55%,transparent)}
+@media (prefers-reduced-motion:no-preference){
+  .pl-ghost{transition:top 90ms ease-out}
+}
+
+/* The time picker: two short columns, not ninety-six rows. */
+.tp{width:212px;padding:8px;border-radius:11px;background:var(--surface-1);
+  border:1px solid var(--hairline);box-shadow:0 16px 38px rgba(0,0,0,.4)}
+.tp-typed{margin-bottom:7px}
+.tp-in{width:100%;height:32px;padding:0 10px;border-radius:8px;font:inherit;font-size:13px;
+  color:var(--text);background:var(--surface-2);border:1px solid var(--hairline);
+  font-variant-numeric:tabular-nums}
+.tp-in:focus{outline:0;border-color:var(--accent)}
+.tp-in.is-bad{border-color:var(--danger)}
+.tp-cols{display:flex;gap:6px}
+.tp-col{flex:1;max-height:168px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;
+  scrollbar-width:thin}
+.tp-mer{flex:0 0 46px}
+.tp-opt{height:28px;border:0;border-radius:6px;background:none;cursor:pointer;
+  color:var(--text);font-size:12.5px;font-variant-numeric:tabular-nums}
+.tp-opt:hover{background:var(--surface-2)}
+.tp-opt.is-sel{background:color-mix(in srgb,var(--accent) 20%,transparent);
+  color:var(--accent);font-weight:600}
+.tp-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;
+  margin-top:7px;padding-top:7px;border-top:1px solid var(--hairline)}
+.tp-clear,.tp-done{height:28px;padding:0 10px;border-radius:7px;cursor:pointer;font-size:12px;
+  border:1px solid var(--hairline);background:var(--surface-2);color:var(--text-2)}
+.tp-done{border-color:var(--accent);color:var(--accent)}
+
+@media (max-width:560px){
+  .cf-row{grid-template-columns:1fr;gap:5px}
+  .cf-check-sub,.cf-rec-wrap{padding-left:0}
+}
+
 /* Reminder and Schedule Task share the composer's grouping, so the three
    creation surfaces read as one family rather than three eras of the app. */
 .modal-reminder .m-title,.modal-schedule .m-title{font-size:17px;font-weight:600}

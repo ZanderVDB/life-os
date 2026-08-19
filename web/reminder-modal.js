@@ -15,7 +15,10 @@
  * timing, area and notes live behind "More options".
  */
 import { reducedMotion, settle } from './motion.js';
-import { datePickerPopover, timePickerPopover } from './pickers.js';
+import {
+  row, section, moreOptions, wireMoreOptions, dateField, timeField, wireDateTime,
+  selectField,
+} from './calendar-fields.js';
 
 const RISE_IN = [{ opacity: 0, translate: '0 10px', scale: '0.985' },
   { opacity: 1, translate: '0 0', scale: '1' }];
@@ -86,55 +89,23 @@ export function openReminderModal(ctx) {
       <button class="m-close" id="rm-close" aria-label="Close">&times;</button>
     </div>
 
-    <div class="m-body ev-body">
-      <!-- One block, because "when" is one decision made of two parts. Two
-           bare rows floating in a modal is what made this feel sparse. -->
-      <section class="ev-group">
-        <div class="ev-row">
-          <span class="ev-lab">When</span>
-          <button type="button" class="ev-ctl" id="rm-date" data-picker="date"
-            data-target="dueDate">${esc(prettyDate(f.dueDate))}</button>
-          <button type="button" class="ev-ctl ev-time" id="rm-time" data-picker="time"
-            data-target="dueTime">${f.dueTime ? esc(f.dueTime) : 'Any time'}</button>
-        </div>
-        <p class="rm-kind">A Life OS reminder — it stays here and never becomes
-          a Google event.</p>
-      </section>
+    <div class="m-body cf-body">
+      ${section(`
+        ${row('When', `${dateField('rm-date', f.dueDate, { label: 'Date' })}
+          ${timeField('rm-time', f.dueTime, { label: 'Time', allowClear: true })}`)}
+        <p class="cf-note">A Life OS reminder — it stays here and never becomes
+          a Google event.</p>`)}
 
-      <button type="button" class="ev-more" id="rm-more" aria-expanded="false">
-        <i class="ev-chev"></i> More options</button>
-
-      <div class="ev-adv" id="rm-adv" hidden>
-        <div class="ev-row">
-          <span class="ev-lab">Repeat</span>
-          <div class="ev-ctl ev-select">
-            <select id="rm-repeat">
-              ${REPEAT.map(([v, l]) => `<option value="${v}"
-                ${v === f.repeat ? 'selected' : ''}>${l}</option>`).join('')}
-            </select><i class="ev-chev"></i></div>
-        </div>
-        <div class="ev-row">
-          <span class="ev-lab">Notify</span>
-          <div class="ev-ctl ev-select">
-            <select id="rm-lead">
-              ${LEAD.map(([v, l]) => `<option value="${v}"
-                ${v === f.leadDays ? 'selected' : ''}>${l}</option>`).join('')}
-            </select><i class="ev-chev"></i></div>
-        </div>
-        <div class="ev-row">
-          <span class="ev-lab">Area</span>
-          <div class="ev-ctl ev-select">
-            <select id="rm-area"><option value="">No area</option>
-              ${areas.map((a) => `<option value="${a.id}"
-                ${a.id === f.areaId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
-            </select><i class="ev-chev"></i></div>
-        </div>
-        <div class="ev-row ev-row-top">
-          <span class="ev-lab">Notes</span>
-          <textarea id="rm-notes" class="ev-ctl ev-input ev-textarea"
-            placeholder="Anything worth remembering">${esc(f.notes)}</textarea>
-        </div>
-      </div>
+      ${moreOptions(`
+        ${row('Repeat', selectField('rm-repeat',
+    REPEAT.map(([v, l]) => ({ id: v, label: l })), f.repeat, 'Repeat'))}
+        ${row('Notify', selectField('rm-lead',
+    LEAD.map(([v, l]) => ({ id: String(v), label: l })), String(f.leadDays), 'Notify'))}
+        ${row('Area', selectField('rm-area',
+    [{ id: '', label: 'No area' }, ...areas.map((a) => ({ id: a.id, label: a.name }))],
+    f.areaId ?? '', 'Area'))}
+        ${row('Notes', `<textarea id="rm-notes" class="cf-ctl cf-input cf-textarea"
+          placeholder="Anything worth remembering">${esc(f.notes)}</textarea>`, { top: true })}`)}
     </div>
 
     <div class="m-foot">
@@ -144,7 +115,7 @@ export function openReminderModal(ctx) {
       <button class="btn btn-primary" id="rm-save">${r ? 'Save' : 'Add reminder'}</button>
     </div>
 
-    <div class="ev-pop" id="rm-pop" hidden></div>`;
+`;   // The popover host is created by wireDateTime, once per dialog.
 
   document.body.append(scrim, dlg);
   document.body.classList.add('modal-open');
@@ -161,50 +132,21 @@ export function openReminderModal(ctx) {
   title.setSelectionRange(title.value.length, title.value.length);
 
   const read = () => ({
-    title: title.value.trim(), dueDate: f.dueDate, dueTime: f.dueTime,
+    title: title.value.trim(),
+    dueDate: dlg.querySelector('#rm-date')?.dataset.value || f.dueDate,
+    dueTime: dlg.querySelector('#rm-time')?.dataset.value || '',
     repeat: $('#rm-repeat').value, leadDays: Number($('#rm-lead').value),
     areaId: $('#rm-area').value, notes: $('#rm-notes').value,
   });
   const initial = JSON.stringify(read());
   const isDirty = () => JSON.stringify(read()) !== initial;
 
-  $('#rm-more').onclick = () => {
-    const adv = $('#rm-adv');
-    const open = adv.hidden;
-    adv.hidden = !open;
-    $('#rm-more').setAttribute('aria-expanded', String(open));
-    $('#rm-more').classList.toggle('is-open', open);
-    if (open && !reducedMotion()) {
-      adv.animate([{ opacity: 0, translate: '0 -6px' }, { opacity: 1, translate: '0 0' }],
-        { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
-    }
-  };
-
-  /* Shared pickers — the same custom controls the event editor uses, so the
-     two modals cannot drift apart visually. */
-  const pop = $('#rm-pop');
-  let popFor = null;
-  const closePop = () => { pop.hidden = true; pop.innerHTML = ''; popFor = null; };
-
-  dlg.querySelectorAll('[data-picker]').forEach((btn) => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const target = btn.dataset.target;
-      if (popFor === target) return closePop();
-      popFor = target;
-      if (btn.dataset.picker === 'date') {
-        datePickerPopover(pop, dlg, btn, f[target], (v) => {
-          f[target] = v; btn.textContent = prettyDate(v); closePop();
-        });
-      } else {
-        timePickerPopover(pop, dlg, btn, f[target], (v) => {
-          f[target] = v; btn.textContent = v || 'Any time'; closePop();
-        }, { allowClear: true, clearLabel: 'Any time' });
-      }
-    };
-  });
-  dlg.addEventListener('click', (e) => {
-    if (!pop.hidden && !pop.contains(e.target) && !e.target.closest('[data-picker]')) closePop();
+  /* Shared controls. The Reminder does not implement a date field, a time
+   * field or a disclosure — it composes them, so an improvement to any of the
+   * three arrives here for free. */
+  wireMoreOptions(dlg);
+  const dt = wireDateTime(dlg, dlg, (kind, value) => {
+    if (kind === 'date') f.dueDate = value; else f.dueTime = value;
   });
 
   let closed = false;

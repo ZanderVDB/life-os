@@ -975,9 +975,22 @@ test('the quick composer confirms like everything else', () => {
 
 test('Plan Week snaps to the half hour and never hijacks an event click', () => {
   const app = read('app.js');
+  /* One rule, used by both the click and the hover preview — if they were
+   * computed separately the preview could point somewhere the click does not
+   * go, which is worse than no preview. */
+  const slot = app.slice(app.indexOf('function planSlotAt(e, canvas)'),
+    app.indexOf('function planCanvasClick(e, canvas)'));
+  assert.match(slot, /Math\.round\(minutes \/ 30\) \* 30/, 'clicks do not snap to 30 minutes');
+  assert.match(slot, /closest\('\[data-event\]/, 'clicking an existing event creates a new one');
+
   const fn = app.slice(app.indexOf('function planCanvasClick(e, canvas)'),
-    app.indexOf('/** Schedules a queued task without dragging'));
-  assert.match(fn, /Math\.round\(minutes \/ 30\) \* 30/, 'clicks do not snap to 30 minutes');
-  assert.match(fn, /closest\('\[data-event\]/, 'clicking an existing event creates a new one');
+    app.indexOf('const planPreviewOff'));
+  assert.match(fn, /planSlotAt\(e, canvas\)/, 'the click computes its own slot');
   assert.match(fn, /openQuickComposer/, 'the click opens the heavy form');
+
+  // The preview uses the same slot and never covers an existing event.
+  const hover = app.slice(app.indexOf('function planCanvasHover(e, canvas)'),
+    app.indexOf('const planPreviewOff'));
+  assert.match(hover, /planSlotAt\(e, canvas\)/, 'the preview snaps by its own rule');
+  assert.match(hover, /if \(!slot\) return planPreviewOff/, 'the preview covers existing events');
 });

@@ -168,7 +168,9 @@ test('add menu: Event, Reminder, Schedule a task — and no Habit', () => {
 
 test('schedule: a real flow with a conflict check before confirming', () => {
   assert.match(scheduleModal, /export function openScheduleTaskModal/, 'no scheduling modal');
-  for (const part of ['st-task', 'st-date', 'st-time', 'st-durations', 'st-check']) {
+  /* `st-durations` became the SHARED duration control — the point of the
+   * consistency pass was that this modal stops owning its own. */
+  for (const part of ['st-task', 'st-date', 'st-time', 'durationField', 'st-check']) {
     assert.ok(scheduleModal.includes(part), `the scheduling flow has no ${part}`);
   }
   assert.match(scheduleModal, /function refreshCheck/, 'conflicts are not previewed');

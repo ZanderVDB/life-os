@@ -110,29 +110,158 @@ export function datePickerPopover(pop, dlg, btn, value, onPick) {
   pop.querySelector('.dp-day.is-sel,.dp-day.is-today')?.focus();
 }
 
+/* ══ Time ════════════════════════════════════════════════════════════════
+ *
+ * Hours and minutes as two short columns, not one list of every quarter hour
+ * in the day. The list version was 96 rows deep: finding 14:30 in it meant
+ * scrolling past ninety other times that were not 14:30, and every one of them
+ * looked identical.
+ *
+ * Minutes go in fives, which is finer than the old quarter hours and still
+ * only twelve options. Typing stays supported for anything else.
+ */
+
+/** 12- or 24-hour, from the locale, decided once so nothing disagrees. */
+export const uses12Hour = (() => {
+  try {
+    return new Intl.DateTimeFormat(undefined, { hour: 'numeric' })
+      .resolvedOptions().hour12 ?? false;
+  } catch { return false; }
+})();
+
+/** The one way a time is written in this app. */
+export function formatTime(hhmm) {
+  if (!hhmm) return '';
+  const [h, m] = String(hhmm).split(':').map(Number);
+  if (!Number.isFinite(h)) return '';
+  if (!uses12Hour) return `${String(h).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`;
+  const suffix = h < 12 ? 'am' : 'pm';
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${String(m || 0).padStart(2, '0')} ${suffix}`;
+}
+
+/** "9", "930", "9:30", "2:30pm", "14:30" → "14:30". Anything else: null. */
+export function parseTime(raw) {
+  const t = String(raw ?? '').trim().toLowerCase();
+  if (!t) return null;
+  const pm = /p/.test(t);
+  const am = /a/.test(t);
+  const digits = t.replace(/[^0-9:.]/g, '').replace('.', ':');
+  if (!digits) return null;
+  let h; let m = 0;
+  if (digits.includes(':')) {
+    const [a, b] = digits.split(':');
+    h = Number(a); m = Number(b || 0);
+  } else if (digits.length <= 2) {
+    h = Number(digits);
+  } else {
+    h = Number(digits.slice(0, digits.length - 2));
+    m = Number(digits.slice(-2));
+  }
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  if (pm && h < 12) h += 12;
+  if (am && h === 12) h = 0;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
+
 /**
- * @param {object} [opts] { allowClear, clearLabel, step }
+ * @param {object} [opts] { allowClear, clearLabel }
  */
 export function timePickerPopover(pop, dlg, btn, value, onPick, opts = {}) {
-  const step = opts.step ?? 15;
-  const rows = [];
-  if (opts.allowClear) {
-    rows.push(`<button type="button" class="tp-opt tp-clear${!value ? ' is-sel' : ''}"
-      data-time="">${opts.clearLabel ?? 'None'}</button>`);
+  const current = parseTime(value);
+  let h = current ? Number(current.slice(0, 2)) : 9;
+  let m = current ? Number(current.slice(3, 5)) : 0;
+
+  const hours = uses12Hour
+    ? Array.from({ length: 12 }, (_, i) => (i === 0 ? 12 : i))
+    : Array.from({ length: 24 }, (_, i) => i);
+
+  const commit = () => onPick(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+  const displayHour = () => (uses12Hour ? (h % 12 === 0 ? 12 : h % 12) : h);
+  const isPm = () => h >= 12;
+
+  const paint = () => {
+    pop.innerHTML = `<div class="tp" role="application" aria-label="Choose a time">
+      <div class="tp-typed">
+        <input class="tp-in" value="${formatTime(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)}"
+          aria-label="Time" inputmode="numeric" autocomplete="off">
+      </div>
+      <div class="tp-cols">
+        <div class="tp-col" role="listbox" aria-label="Hour" data-col="h">
+          ${hours.map((x) => `<button type="button" role="option" data-h="${x}"
+            aria-selected="${x === displayHour()}"
+            class="tp-opt${x === displayHour() ? ' is-sel' : ''}"
+            >${String(x).padStart(2, '0')}</button>`).join('')}
+        </div>
+        <div class="tp-col" role="listbox" aria-label="Minute" data-col="m">
+          ${MINUTES.map((x) => `<button type="button" role="option" data-m="${x}"
+            aria-selected="${x === m}"
+            class="tp-opt${x === m ? ' is-sel' : ''}"
+            >${String(x).padStart(2, '0')}</button>`).join('')}
+        </div>
+        ${uses12Hour ? `<div class="tp-col tp-mer" role="listbox" aria-label="AM or PM">
+          ${['am', 'pm'].map((x) => `<button type="button" role="option" data-mer="${x}"
+            aria-selected="${(x === 'pm') === isPm()}"
+            class="tp-opt${(x === 'pm') === isPm() ? ' is-sel' : ''}">${x.toUpperCase()}</button>`).join('')}
+        </div>` : ''}
+      </div>
+      <div class="tp-foot">
+        ${opts.allowClear ? `<button type="button" class="tp-clear" data-clear
+          >${opts.clearLabel ?? 'Any time'}</button>` : '<span></span>'}
+        <button type="button" class="tp-done" data-done>Done</button>
+      </div>
+    </div>`;
+    wire();
+  };
+
+  function wire() {
+    pop.querySelectorAll('[data-h]').forEach((b) => {
+      b.onclick = () => {
+        const picked = Number(b.dataset.h);
+        h = uses12Hour
+          ? (isPm() ? (picked % 12) + 12 : picked % 12)
+          : picked;
+        paint();
+      };
+    });
+    pop.querySelectorAll('[data-m]').forEach((b) => {
+      b.onclick = () => { m = Number(b.dataset.m); paint(); };
+    });
+    pop.querySelectorAll('[data-mer]').forEach((b) => {
+      b.onclick = () => {
+        const wantPm = b.dataset.mer === 'pm';
+        if (wantPm !== isPm()) h = wantPm ? h + 12 : h - 12;
+        paint();
+      };
+    });
+    pop.querySelector('[data-clear]')?.addEventListener('click', () => onPick(''));
+    pop.querySelector('[data-done]')?.addEventListener('click', commit);
+
+    // Typing wins over clicking: it is faster for anyone who knows the time.
+    const input = pop.querySelector('.tp-in');
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const parsed = parseTime(input.value);
+      if (!parsed) { input.classList.add('is-bad'); return; }
+      onPick(parsed);
+    });
+    input.addEventListener('input', () => input.classList.remove('is-bad'));
+
+    // Keep the chosen option in view without scrolling the whole dialog.
+    pop.querySelectorAll('.tp-col').forEach((col) => {
+      const sel = col.querySelector('.is-sel');
+      if (sel) col.scrollTop = Math.max(0, sel.offsetTop - col.clientHeight / 2 + 14);
+    });
   }
-  for (let h = 0; h < 24; h++) {
-    for (let m = 0; m < 60; m += step) {
-      const v = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      rows.push(`<button type="button" class="tp-opt${v === value ? ' is-sel' : ''}"
-        data-time="${v}">${v}</button>`);
-    }
-  }
-  pop.innerHTML = `<div class="tp" role="listbox" aria-label="Choose a time">${rows.join('')}</div>`;
+
+  paint();
   anchor(pop, dlg, btn);
-  pop.querySelectorAll('[data-time]').forEach((o) => {
-    o.onclick = () => onPick(o.dataset.time);
-  });
-  pop.querySelector('.tp-opt.is-sel')?.scrollIntoView({ block: 'center' });
+  pop.querySelector('.tp-in')?.focus();
+  pop.querySelector('.tp-in')?.select();
 }
 
 export { iso as isoDate, parseIso as parseIsoDate, MONTHS };
