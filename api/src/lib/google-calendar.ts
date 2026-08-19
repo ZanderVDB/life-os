@@ -58,6 +58,53 @@ export const SCOPES_VERSION = 2;
 /** The scope that actually grants writes. Everything else is reading. */
 export const WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 
+/**
+ * Does this grant contain what Life OS actually needs?
+ *
+ * `GOOGLE_SCOPE` is a space-joined REQUEST string; `granted` is an array of
+ * individual scopes. Checking `granted.includes(GOOGLE_SCOPE)` compares an
+ * array against a joined string and is therefore false forever — which is
+ * exactly what happened the moment the single readonly scope became three, and
+ * it rejected every connection with "Google did not grant calendar read
+ * access" while Google had granted everything asked for.
+ *
+ * Required is the smallest set that makes the product work: read/write events,
+ * and the calendar list they live on. `freebusy` is genuinely optional —
+ * without it the conflict warning is skipped and everything else is fine — so
+ * a user who unticks it gets a working calendar, not a wall.
+ *
+ * The legacy full `calendar` scope satisfies both requirements, so anyone
+ * holding one from before is not forced to re-consent for no reason.
+ */
+export const REQUIRED_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+] as const;
+
+const FULL_CALENDAR = 'https://www.googleapis.com/auth/calendar';
+
+export function grantSatisfies(granted: string[] | null | undefined): {
+  ok: boolean; missing: string[];
+} {
+  const have = new Set(granted ?? []);
+  if (have.has(FULL_CALENDAR)) return { ok: true, missing: [] };
+  const missing = REQUIRED_SCOPES.filter((s) => !have.has(s));
+  /* The old read-only scope covers the calendar list too, so a grant that
+   * still carries it only lacks the write half. */
+  if (have.has(`${FULL_CALENDAR}.readonly`)) {
+    return {
+      ok: !missing.includes(REQUIRED_SCOPES[0]),
+      missing: missing.filter((m) => m === REQUIRED_SCOPES[0]),
+    };
+  }
+  return { ok: missing.length === 0, missing };
+}
+
+/** Availability checking is optional; its absence costs only the clash warning. */
+export const grantCanCheckFreeBusy = (granted: string[] | null | undefined): boolean =>
+  (granted ?? []).some((s) => s === 'https://www.googleapis.com/auth/calendar.freebusy'
+    || s === FULL_CALENDAR);
+
 /** Can this grant write events? Google returns what it actually gave us. */
 export const grantCanWrite = (granted: string[] | null | undefined): boolean =>
   (granted ?? []).some((s) => s === WRITE_SCOPE

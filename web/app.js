@@ -2720,8 +2720,13 @@ function connectErrorMessage(reason) {
   return {
     declined: 'You did not approve access, so nothing was connected.',
     expired_state: 'That took too long. Try connecting again.',
-    scope_not_granted: 'Google did not grant calendar read access. Try again and '
-      + 'leave the calendar permission ticked.',
+    /* Named per missing permission, because "tick the calendar box" is not
+     * actionable when the consent screen shows three of them. */
+    scope_not_granted: 'Google did not grant access to your calendar list. Try again '
+      + 'and leave every calendar permission ticked.',
+    events_not_granted: 'Google did not grant permission to add and change events. '
+      + 'Try again and tick “See, edit, share and permanently delete all the '
+      + 'calendars you can access”.',
     no_lasting_grant: 'Google did not return a lasting grant. Try connecting again.',
     not_configured: 'Google Calendar is not configured on this server yet.',
   }[reason] ?? 'Could not finish connecting to Google Calendar.';

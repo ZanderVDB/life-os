@@ -791,3 +791,66 @@ test('the webhook address is derived, so it cannot be forgotten', () => {
   assert.match(fn, /u\.protocol !== 'https:'/, 'a non-HTTPS address would be registered');
   assert.match(fn, /GOOGLE_CALENDAR_WEBHOOK_URL/, 'the explicit override was dropped');
 });
+
+/* ── The grant check, which rejected every good connection ────────────── */
+
+test('a complete grant is accepted', () => {
+  /* The regression: GOOGLE_SCOPE became a space-joined string of three scopes
+   * while `set.scopes` stayed an array of individual ones, so
+   * `set.scopes.includes(GOOGLE_SCOPE)` was false however complete the grant
+   * was. Every single connection failed with "Google did not grant calendar
+   * read access" while Google had granted everything asked for. */
+  const full = [...G.GOOGLE_SCOPES];
+  assert.equal(G.grantSatisfies(full).ok, true, 'the exact scopes we ask for are refused');
+
+  // The bug itself, stated so it cannot return.
+  assert.ok(!full.includes(G.GOOGLE_SCOPE),
+    'GOOGLE_SCOPE is a joined request string and must never be looked for in the array');
+  assert.ok(G.GOOGLE_SCOPE.includes(' '), 'GOOGLE_SCOPE is no longer a joined string');
+});
+
+test('freebusy is optional; events and the calendar list are not', () => {
+  /* Unticking availability costs the clash warning and nothing else, so it
+   * must not be a wall. The other two are the product. */
+  const noFreeBusy = [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  ];
+  assert.equal(G.grantSatisfies(noFreeBusy).ok, true, 'a missing freebusy scope blocks connecting');
+  assert.equal(G.grantCanCheckFreeBusy(noFreeBusy), false);
+  assert.equal(G.grantCanCheckFreeBusy([...G.GOOGLE_SCOPES]), true);
+
+  const noEvents = ['https://www.googleapis.com/auth/calendar.calendarlist.readonly'];
+  const r = G.grantSatisfies(noEvents);
+  assert.equal(r.ok, false, 'a grant with no event access was accepted');
+  assert.ok(r.missing.some((m) => m.endsWith('calendar.events')),
+    'the missing permission is not named, so the message cannot be specific');
+});
+
+test('a legacy full-calendar grant is not forced to re-consent', () => {
+  assert.equal(G.grantSatisfies(['https://www.googleapis.com/auth/calendar']).ok, true,
+    'someone holding the broader grant is told it is insufficient');
+  assert.equal(G.grantCanWrite(['https://www.googleapis.com/auth/calendar']), true);
+});
+
+test('an old read-only grant is refused, and told exactly why', () => {
+  /* It can read but not write. Accepting it would mean the connection looked
+   * healthy and every event creation failed at Google instead. */
+  const readonly = ['https://www.googleapis.com/auth/calendar.readonly'];
+  const r = G.grantSatisfies(readonly);
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.missing, ['https://www.googleapis.com/auth/calendar.events']);
+});
+
+test('the callback names which permission was missing', () => {
+  const route = readFileSync(join('src', 'routes', 'google-calendar.ts'), 'utf8');
+  assert.match(route, /G\.grantSatisfies\(set\.scopes\)/, 'the grant is not checked properly');
+  assert.ok(!/set\.scopes\.includes\(G\.GOOGLE_SCOPE\)/.test(route),
+    'the array-against-joined-string comparison is back');
+  assert.match(route, /events_not_granted/, 'a missing write scope is not distinguished');
+
+  // And both reasons say something a person can act on.
+  const app = read('app.js');
+  assert.match(app, /events_not_granted: /, 'the new reason has no message');
+  assert.match(app, /every calendar permission ticked/);
+});

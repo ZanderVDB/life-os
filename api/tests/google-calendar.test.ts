@@ -168,8 +168,24 @@ test('oauth: state is single-use, expiring, and required', () => {
 });
 
 test('oauth: the granted scope is verified, not assumed', () => {
-  assert.match(route, /if \(!set\.scopes\.includes\(G\.GOOGLE_SCOPE\)\) return fail\('scope_not_granted'\)/,
-    'a partial grant is treated as success');
+  /* This test used to pin the exact line that did the checking — and so it
+   * kept passing when that line stopped working. GOOGLE_SCOPE became a joined
+   * string of three scopes while `set.scopes` stayed an array, making the
+   * comparison false forever and rejecting every valid connection; the
+   * assertion saw the line it wanted and said nothing.
+   *
+   * So it now asserts the BEHAVIOUR instead. A partial grant must be refused,
+   * a complete one accepted, and the check must not be the string comparison
+   * that silently broke. */
+  assert.match(route, /G\.grantSatisfies\(set\.scopes\)/, 'the grant is not verified');
+  assert.match(route, /if \(!grant\.ok\)/, 'an incomplete grant is treated as success');
+  assert.ok(!/set\.scopes\.includes\(G\.GOOGLE_SCOPE\)/.test(route),
+    'comparing the scope array against the joined request string is back');
+
+  assert.equal(G.grantSatisfies([...G.GOOGLE_SCOPES]).ok, true, 'a full grant is refused');
+  assert.equal(G.grantSatisfies([]).ok, false, 'an empty grant is accepted');
+  assert.equal(G.grantSatisfies(['https://www.googleapis.com/auth/calendar.readonly']).ok, false,
+    'a read-only grant is accepted for a product that must write');
 });
 
 test('oauth: user denial and Google errors redirect with a reason', () => {

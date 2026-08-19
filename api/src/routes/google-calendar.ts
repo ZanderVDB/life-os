@@ -118,8 +118,15 @@ export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: G
 
     try {
       const set = await G.exchangeCode(cfg, q.code, entry.verifier);
-      // Refuse anything broader or narrower than what we asked for.
-      if (!set.scopes.includes(G.GOOGLE_SCOPE)) return fail('scope_not_granted');
+      /* Check the scopes INDIVIDUALLY. `GOOGLE_SCOPE` is a joined request
+       * string and `set.scopes` is an array, so comparing them directly is
+       * false however complete the grant is. */
+      const grant = G.grantSatisfies(set.scopes);
+      if (!grant.ok) {
+        log.warn({ granted: set.scopes, missing: grant.missing }, 'google grant incomplete');
+        return fail(grant.missing.some((m) => m.endsWith('calendar.events'))
+          ? 'events_not_granted' : 'scope_not_granted');
+      }
       if (!set.refreshToken) return fail('no_lasting_grant');
 
       const email = await G.fetchAccountEmail(set.accessToken);
