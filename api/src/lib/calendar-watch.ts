@@ -104,6 +104,19 @@ export async function ensureWatches(db: Db, workspaceId: string, log: SyncLogger
       gt(calendarWatchChannels.expiresAt, now),
     )).limit(1);
     if (live) continue;
+
+    /* Some calendars simply cannot be watched — Google answers "Push
+     * notifications are not supported by this resource" for holiday and
+     * birthday calendars, and will answer it again every hour forever. One
+     * recent refusal is enough to stop asking for a day. */
+    const [refused] = await db.select({ at: calendarWatchChannels.updatedAt })
+      .from(calendarWatchChannels).where(and(
+        eq(calendarWatchChannels.calendarId, cal.id),
+        eq(calendarWatchChannels.status, 'failed'),
+        gt(calendarWatchChannels.updatedAt, new Date(Date.now() - 24 * 3600_000)),
+      )).limit(1);
+    if (refused) continue;
+
     if (await openWatch(db, conn, cal, log)) opened++;
   }
   /* Saying WHY nothing happened matters as much as the count: "no calendars

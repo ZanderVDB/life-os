@@ -100,23 +100,27 @@ export function openScheduleTaskModal(ctx) {
         </div>
       </div>
 
-      <div class="ev-row">
-        <span class="ev-lab">When</span>
-        <button type="button" class="ev-ctl" id="st-date" data-picker="date"
-          data-target="day">${esc(prettyDate(f.day))}</button>
-        <button type="button" class="ev-ctl ev-time" id="st-time" data-picker="time"
-          data-target="time">${esc(f.time)}</button>
-      </div>
-
-      <div class="ev-row ev-row-top">
-        <span class="ev-lab">For</span>
-        <div class="st-durations" id="st-durations">
-          ${DURATIONS.map((m) => `<button type="button" class="ev-pill ${m === f.minutes ? 'is-on' : ''}"
-            data-minutes="${m}">${durLabel(m)}</button>`).join('')}
+      <!-- When and for how long are one decision, and the availability answer
+           belongs to it rather than floating underneath as a status strip. -->
+      <section class="ev-group">
+        <div class="ev-row">
+          <span class="ev-lab">When</span>
+          <button type="button" class="ev-ctl" id="st-date" data-picker="date"
+            data-target="day">${esc(prettyDate(f.day))}</button>
+          <button type="button" class="ev-ctl ev-time" id="st-time" data-picker="time"
+            data-target="time">${esc(f.time)}</button>
         </div>
-      </div>
 
-      <div class="st-check" id="st-check" role="status"></div>`}
+        <div class="ev-row ev-row-top">
+          <span class="ev-lab">For</span>
+          <div class="st-durations" id="st-durations">
+            ${DURATIONS.map((m) => `<button type="button" class="ev-pill ${m === f.minutes ? 'is-on' : ''}"
+              data-minutes="${m}">${durLabel(m)}</button>`).join('')}
+          </div>
+        </div>
+
+        <div class="st-check" id="st-check" role="status"></div>
+      </section>`}
     </div>
 
     <div class="m-foot">

@@ -3983,6 +3983,26 @@ body:has(.lib-page) .rail{display:none}
   background:var(--surface-2);border:1px solid var(--hairline)}
 .qc-title:focus{outline:0;border-color:var(--accent)}
 .qc-when{margin:9px 0 0;font-size:12px;color:var(--muted)}
+/* Reminder and Schedule Task share the composer's grouping, so the three
+   creation surfaces read as one family rather than three eras of the app. */
+.modal-reminder .m-title,.modal-schedule .m-title{font-size:17px;font-weight:600}
+.rm-kind{margin:7px 0 0;font-size:10.5px;color:var(--muted);line-height:1.45}
+.ev-group .ev-row{margin:0}
+.ev-group .ev-row + .ev-row{margin-top:7px}
+
+/* Availability reads as part of the time decision, not a status bar bolted
+   underneath it. */
+.st-check{margin-top:9px;padding-top:8px;border-top:1px solid var(--hairline);
+  font-size:11.5px;color:var(--muted);min-height:16px}
+.st-check:empty{display:none}
+.st-check.is-free{color:var(--ok)}
+.st-check.is-busy{color:var(--warn)}
+
+/* The chosen task should be unmistakable — it is the subject of the sentence. */
+.st-task[aria-checked="true"],.st-task.is-on{border-color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.st-task[aria-checked="true"] .st-task-t,.st-task.is-on .st-task-t{font-weight:650;color:var(--text)}
+
 
 @media (max-width:520px){
   .ev-when-row,.ev-row-2{grid-template-columns:1fr}

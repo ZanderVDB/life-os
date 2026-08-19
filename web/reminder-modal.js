@@ -87,13 +87,19 @@ export function openReminderModal(ctx) {
     </div>
 
     <div class="m-body ev-body">
-      <div class="ev-row">
-        <span class="ev-lab">When</span>
-        <button type="button" class="ev-ctl" id="rm-date" data-picker="date"
-          data-target="dueDate">${esc(prettyDate(f.dueDate))}</button>
-        <button type="button" class="ev-ctl ev-time" id="rm-time" data-picker="time"
-          data-target="dueTime">${f.dueTime ? esc(f.dueTime) : 'Any time'}</button>
-      </div>
+      <!-- One block, because "when" is one decision made of two parts. Two
+           bare rows floating in a modal is what made this feel sparse. -->
+      <section class="ev-group">
+        <div class="ev-row">
+          <span class="ev-lab">When</span>
+          <button type="button" class="ev-ctl" id="rm-date" data-picker="date"
+            data-target="dueDate">${esc(prettyDate(f.dueDate))}</button>
+          <button type="button" class="ev-ctl ev-time" id="rm-time" data-picker="time"
+            data-target="dueTime">${f.dueTime ? esc(f.dueTime) : 'Any time'}</button>
+        </div>
+        <p class="rm-kind">A Life OS reminder — it stays here and never becomes
+          a Google event.</p>
+      </section>
 
       <button type="button" class="ev-more" id="rm-more" aria-expanded="false">
         <i class="ev-chev"></i> More options</button>

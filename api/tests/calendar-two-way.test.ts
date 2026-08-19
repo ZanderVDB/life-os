@@ -854,3 +854,130 @@ test('the callback names which permission was missing', () => {
   assert.match(app, /events_not_granted: /, 'the new reason has no message');
   assert.match(app, /every calendar permission ticked/);
 });
+
+/* ── Scheduling a task, and what it does to the task ──────────────────── */
+
+test('scheduling a task sets its time, and never its due date', async () => {
+  /* Calendar scheduling means "I intend to work on this then". Leaving the
+   * task unscheduled while its event sat on the calendar made Today and the
+   * Calendar disagree about the same day. The DUE date is a different
+   * statement and stays untouched. */
+  const h = await connected();
+  const task = (await h.post('/tasks', {
+    title: 'Meet landscaper', bucket: 'today', dueDate: '2026-09-30',
+  })).json().task;
+
+  const g = stubGoogle();
+  try {
+    await h.post('/calendar/events/propose-create', {
+      requestId: 'req-sched-1', calendarId: h.cal.id, draft: aDraft(),
+    });
+    await h.post('/calendar/mutations/req-sched-1/confirm', { taskId: task.id });
+  } finally { g.restore(); }
+
+  const after = (await h.get('/tasks?includeCompleted=false')).json()
+    .tasks.find((t) => t.id === task.id);
+  assert.ok(after.scheduledAt, 'the task was not given the time it was scheduled for');
+  assert.equal(new Date(after.scheduledAt).toISOString(), '2026-09-05T10:00:00.000Z');
+  assert.equal(after.dueDate, '2026-09-30', 'scheduling moved the due date');
+});
+
+test('a failed Google write leaves the task unscheduled', async () => {
+  /* A task claiming to be scheduled for a time Google refused is a lie the
+   * user cannot see. */
+  const h = await connected();
+  const task = (await h.post('/tasks', { title: 'Meet landscaper', bucket: 'today' })).json().task;
+  const g = stubGoogle({ insert: { status: 500, body: { error: { message: 'boom' } } } });
+  try {
+    await h.post('/calendar/events/propose-create', {
+      requestId: 'req-sched-fail', calendarId: h.cal.id, draft: aDraft(),
+    });
+    await h.post('/calendar/mutations/req-sched-fail/confirm', { taskId: task.id });
+  } finally { g.restore(); }
+
+  const after = (await h.get('/tasks?includeCompleted=false')).json()
+    .tasks.find((t) => t.id === task.id);
+  assert.equal(after.scheduledAt, null, 'the task claims a time Google refused');
+});
+
+test('deleting the event frees the task without deleting it', async () => {
+  /* A plan that fell through is not work that stopped mattering. */
+  const h = await connected();
+  const task = (await h.post('/tasks', {
+    title: 'Meet landscaper', bucket: 'today', dueDate: '2026-09-30',
+  })).json().task;
+
+  const g = stubGoogle();
+  try {
+    await h.post('/calendar/events/propose-create', {
+      requestId: 'req-free-1', calendarId: h.cal.id, draft: aDraft(),
+    });
+    await h.post('/calendar/mutations/req-free-1/confirm', { taskId: task.id });
+    const [event] = await h.db.select().from(calendarEvents);
+    await h.post(`/calendar/events/${event.id}/propose-delete`, { requestId: 'req-free-2' });
+    await h.post('/calendar/mutations/req-free-2/confirm');
+  } finally { g.restore(); }
+
+  const after = (await h.get('/tasks?includeCompleted=false')).json()
+    .tasks.find((t) => t.id === task.id);
+  assert.ok(after, 'deleting the event deleted the task');
+  assert.equal(after.scheduledAt, null, 'the task kept a time nothing explains');
+  assert.equal(after.dueDate, '2026-09-30', 'the due date was lost with the event');
+});
+
+test('a birthday is a Google birthday, not an event in a hat', async () => {
+  const h = await connected();
+  const g = stubGoogle();
+  try {
+    await h.post('/calendar/events/propose-create', {
+      requestId: 'req-bday-1',
+      calendarId: h.cal.id,
+      draft: {
+        title: 'Sam’s birthday', isAllDay: true,
+        startDate: '2026-09-05', endDate: '2026-09-05',
+        eventType: 'birthday', recurrence: ['RRULE:FREQ=YEARLY'],
+        transparency: 'transparent', visibility: 'private',
+      },
+    });
+    await h.post('/calendar/mutations/req-bday-1/confirm');
+    const insert = g.calls.find((c) => c.method === 'POST' && /\/events\?/.test(c.url));
+    assert.equal(insert.body.eventType, 'birthday', 'sent as an ordinary event');
+    assert.equal(insert.body.transparency, 'transparent', 'a birthday blocks time');
+    assert.deepEqual(insert.body.recurrence, ['RRULE:FREQ=YEARLY']);
+    assert.ok(insert.body.start.date, 'a birthday was sent as a timed event');
+  } finally { g.restore(); }
+});
+
+test('a birthday that is not all-day or not yearly is refused before Google sees it', async () => {
+  /* Google refuses it with a 400 about eventType that means nothing to anyone. */
+  const h = await connected();
+  const g = stubGoogle();
+  try {
+    const r = await h.post('/calendar/events/propose-create', {
+      requestId: 'req-bday-bad', calendarId: h.cal.id,
+      draft: aDraft({ eventType: 'birthday' }),
+    });
+    assert.equal(r.statusCode, 400, r.body);
+    assert.match(r.json().error.message, /all-day/i);
+  } finally { g.restore(); }
+});
+
+test('the quick composer confirms like everything else', () => {
+  /* Quick means fewer fields, not fewer safeguards. */
+  const src = read('event-composer.js');
+  const fn = src.slice(src.indexOf('export async function openQuickComposer'),
+    src.indexOf('/* ══ Confirmation'));
+  assert.match(fn, /propose-create/, 'the quick composer does not propose');
+  assert.match(fn, /confirmProposal\(r\.proposal/, 'the quick composer skips confirmation');
+  assert.ok(!/\/confirm'/.test(fn), 'the quick composer writes directly');
+  assert.match(fn, /More details/, 'there is no way to reach the full form');
+});
+
+test('Plan Week snaps to the half hour and never hijacks an event click', () => {
+  const app = read('app.js');
+  const fn = app.slice(app.indexOf('function planCanvasClick(e, canvas)'),
+    app.indexOf('/** Schedules a queued task without dragging'));
+  assert.match(fn, /Math\.round\(minutes \/ 30\) \* 30/, 'clicks do not snap to 30 minutes');
+  assert.match(fn, /closest\('\[data-event\]/, 'clicking an existing event creates a new one');
+  assert.match(fn, /openQuickComposer/, 'the click opens the heavy form');
+});
