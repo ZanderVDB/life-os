@@ -644,11 +644,20 @@ test('the scheduler never puts a value into a raw sql template', () => {
    * instead: raw templates may name COLUMNS and nothing else. Values go
    * through eq/lte/inArray, which bind by type.
    */
-  const src = readFileSync(join('src', 'lib', 'calendar-scheduler.ts'), 'utf8');
+  /* Every calendar file, not just the one where this first bit. The identical
+   * mistake reappeared in calendar-watch.ts — `expiresAt > ${now}` — and
+   * killed the whole watch sweep silently, because the rule was pinned to one
+   * filename instead of to the practice. */
+  const files = ['calendar-scheduler.ts', 'calendar-watch.ts', 'calendar-sync.ts',
+    'calendar-mutations.ts'];
+  const src = files.map((f) => readFileSync(join('src', 'lib', f), 'utf8')).join(' ');
   const templates = src.match(/sql`[^`]*`/g) ?? [];
   for (const t of templates) {
     for (const expr of t.match(/\$\{([^}]*)\}/g) ?? []) {
-      assert.match(expr, /^\$\{\s*calendarConnections\.\w+\s*\}$/,
+      /* Any TABLE.COLUMN is fine — that is a column reference, which drizzle
+       * renders as an identifier. What must never appear is a value: a Date,
+       * a string, a variable holding either. */
+      assert.match(expr, /^\$\{\s*[a-z]\w*\.\w+\s*\}$/i,
         `a raw sql template interpolates ${expr}, which is not a column reference`);
     }
   }

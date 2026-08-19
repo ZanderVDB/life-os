@@ -18,7 +18,7 @@
  * job with a margin, not a hope.
  */
 import { randomBytes } from 'node:crypto';
-import { and, eq, lte, ne, or, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { calendarConnections, calendars, calendarWatchChannels } from '../db/schema.js';
 import { redactTokens } from './token-crypto.js';
@@ -95,7 +95,13 @@ export async function ensureWatches(db: Db, workspaceId: string, log: SyncLogger
     const [live] = await db.select().from(calendarWatchChannels).where(and(
       eq(calendarWatchChannels.calendarId, cal.id),
       eq(calendarWatchChannels.status, 'active'),
-      sql`${calendarWatchChannels.expiresAt} > ${now}`,
+      /* `gt`, not a raw template. A Date interpolated into `sql` reaches the
+       * driver verbatim: PGlite accepts it, production Postgres throws
+       * "Received an instance of Date", and the whole sweep dies silently.
+       * The same mistake, in the same shape, as the one that stopped the
+       * scheduler — which is why the rule is now tested across every calendar
+       * file rather than the one where it first bit. */
+      gt(calendarWatchChannels.expiresAt, now),
     )).limit(1);
     if (live) continue;
     if (await openWatch(db, conn, cal, log)) opened++;
@@ -200,7 +206,7 @@ export async function renewWatches(db: Db, log: SyncLogger) {
 
   const due = await db.select().from(calendarWatchChannels).where(and(
     eq(calendarWatchChannels.status, 'active'),
-    or(sql`${calendarWatchChannels.expiresAt} IS NULL`, lte(calendarWatchChannels.expiresAt, soon)),
+    or(isNull(calendarWatchChannels.expiresAt), lte(calendarWatchChannels.expiresAt, soon)),
   )).limit(25);
 
   let renewed = 0;
