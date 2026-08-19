@@ -96,6 +96,12 @@ const status = {
    * indistinguishable from a loop that had never run. Never again. */
   failedPasses: 0,
   lastError: null as string | null,
+  /* The watch sweep's own account of itself. Without it, "no channels" is
+   * indistinguishable from "the sweep never ran" and from "it ran and Google
+   * refused" — three very different problems with the same symptom. */
+  watchSweeps: 0,
+  lastWatchAt: null as string | null,
+  lastWatchResult: null as string | null,
 };
 
 export const schedulerStatus = () => ({ ...status });
@@ -235,8 +241,14 @@ export function startCalendarScheduler(db: Db, log: SyncLogger): SchedulerHandle
     if (stopped || !webhookConfigured()) return;
     try {
       const r = await renewWatches(db, log);
-      if (r.renewed || r.retired) log.info(r, 'calendar watch channels refreshed');
+      status.watchSweeps++;
+      status.lastWatchAt = new Date().toISOString();
+      status.lastWatchResult = `opened ${r.opened ?? 0}, renewed ${r.renewed}, retired ${r.retired}`;
+      if (r.opened || r.renewed || r.retired) log.info(r, 'calendar watch channels refreshed');
     } catch (e) {
+      status.watchSweeps++;
+      status.lastWatchAt = new Date().toISOString();
+      status.lastWatchResult = `failed: ${String((e as any)?.message ?? e).slice(0, 200)}`;
       log.error({ err: redactTokens(e) }, 'calendar watch renewal failed');
     }
   };
