@@ -18,7 +18,7 @@
  * job with a margin, not a hope.
  */
 import { randomBytes } from 'node:crypto';
-import { and, eq, lte, or, sql } from 'drizzle-orm';
+import { and, eq, lte, ne, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { calendarConnections, calendars, calendarWatchChannels } from '../db/schema.js';
 import { redactTokens } from './token-crypto.js';
@@ -84,13 +84,17 @@ export async function ensureWatches(db: Db, workspaceId: string, log: SyncLogger
     eq(calendars.isSynthetic, false),
   ));
 
-  const soon = new Date(Date.now() + RENEW_MARGIN_MS);
+  /* "Has this calendar got a live channel at all?" — NOT "is it comfortably
+   * far from expiry", which is renewWatches's question. Asking the same
+   * question in both places made them both replace the same expiring channel,
+   * doubling every notification until one lapsed. One job each. */
+  const now = new Date();
   let opened = 0;
   for (const cal of cals) {
     const [live] = await db.select().from(calendarWatchChannels).where(and(
       eq(calendarWatchChannels.calendarId, cal.id),
       eq(calendarWatchChannels.status, 'active'),
-      sql`${calendarWatchChannels.expiresAt} > ${soon}`,
+      sql`${calendarWatchChannels.expiresAt} > ${now}`,
     )).limit(1);
     if (live) continue;
     if (await openWatch(db, conn, cal, log)) opened++;
@@ -154,7 +158,26 @@ async function openWatch(db: Db, conn: typeof calendarConnections.$inferSelect,
  * silence this job exists to prevent.
  */
 export async function renewWatches(db: Db, log: SyncLogger) {
-  if (!webhookConfigured()) return { renewed: 0, retired: 0 };
+  if (!webhookConfigured()) return { renewed: 0, retired: 0, opened: 0 };
+
+  /* Open watches for connections that have none.
+   *
+   * They used to be opened only by the OAuth callback, so every account
+   * connected before push existed had no channels and no way to get any short
+   * of disconnecting and reconnecting — for a capability they never knew was
+   * missing. A connection with no live channel is a connection falling back to
+   * the five-minute poll, silently, forever.
+   *
+   * Idempotent, so this costs one indexed query per pass once everyone is
+   * watched. */
+  let opened = 0;
+  const live = await db.select().from(calendarConnections)
+    .where(ne(calendarConnections.status, 'revoked'));
+  for (const conn of live) {
+    const r = await ensureWatches(db, conn.workspaceId, log).catch(() => ({ opened: 0 }));
+    opened += r.opened ?? 0;
+  }
+
   const now = new Date();
   const soon = new Date(now.getTime() + RENEW_MARGIN_MS);
 
@@ -178,7 +201,7 @@ export async function renewWatches(db: Db, log: SyncLogger) {
     if (await openWatch(db, conn, cal, log)) renewed++;
     await retire(db, ch, conn);
   }
-  return { renewed, retired };
+  return { renewed, retired, opened };
 }
 
 /** Close a channel with Google where possible, and stop tracking it. */
