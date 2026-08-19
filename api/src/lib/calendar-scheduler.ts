@@ -243,7 +243,8 @@ export function startCalendarScheduler(db: Db, log: SyncLogger): SchedulerHandle
       const r = await renewWatches(db, log);
       status.watchSweeps++;
       status.lastWatchAt = new Date().toISOString();
-      status.lastWatchResult = `opened ${r.opened ?? 0}, renewed ${r.renewed}, retired ${r.retired}`;
+      status.lastWatchResult = `opened ${r.opened ?? 0}, renewed ${r.renewed}, retired ${r.retired}`
+        + ((r as any).notes?.length ? ` — ${(r as any).notes.join('; ')}` : '');
       if (r.opened || r.renewed || r.retired) log.info(r, 'calendar watch channels refreshed');
     } catch (e) {
       status.watchSweeps++;

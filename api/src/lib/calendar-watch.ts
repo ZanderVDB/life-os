@@ -75,7 +75,8 @@ export async function ensureWatches(db: Db, workspaceId: string, log: SyncLogger
     eq(calendarConnections.workspaceId, workspaceId),
     eq(calendarConnections.provider, 'google'),
   ));
-  if (!conn || conn.status === 'revoked') return { opened: 0, skipped: 'not connected' as const };
+  if (!conn) return { opened: 0, skipped: 'no connection row' as const };
+  if (conn.status === 'revoked') return { opened: 0, skipped: 'connection revoked' as const };
 
   const cals = await db.select().from(calendars).where(and(
     eq(calendars.workspaceId, workspaceId),
@@ -99,7 +100,14 @@ export async function ensureWatches(db: Db, workspaceId: string, log: SyncLogger
     if (live) continue;
     if (await openWatch(db, conn, cal, log)) opened++;
   }
-  return { opened, skipped: null };
+  /* Saying WHY nothing happened matters as much as the count: "no calendars
+   * are visible" and "they all already have channels" look identical from a
+   * zero, and only one of them is a problem. */
+  return {
+    opened,
+    skipped: cals.length ? null : ('no visible calendars' as const),
+    calendars: cals.length,
+  };
 }
 
 /** One channel, recorded before Google is called so a crash cannot orphan it. */
@@ -171,11 +179,20 @@ export async function renewWatches(db: Db, log: SyncLogger) {
    * Idempotent, so this costs one indexed query per pass once everyone is
    * watched. */
   let opened = 0;
+  const notes: string[] = [];
   const live = await db.select().from(calendarConnections)
     .where(ne(calendarConnections.status, 'revoked'));
+  if (!live.length) notes.push('no live connections');
   for (const conn of live) {
-    const r = await ensureWatches(db, conn.workspaceId, log).catch(() => ({ opened: 0 }));
-    opened += r.opened ?? 0;
+    try {
+      const r = await ensureWatches(db, conn.workspaceId, log);
+      opened += r.opened ?? 0;
+      if (r.skipped) notes.push(r.skipped);
+      else if (!r.opened) notes.push(`${(r as any).calendars ?? 0} already watched`);
+    } catch (e) {
+      // Swallowing this is how "opened 0" became unexplainable.
+      notes.push(`error: ${String((e as any)?.message ?? e).slice(0, 120)}`);
+    }
   }
 
   const now = new Date();
@@ -201,7 +218,7 @@ export async function renewWatches(db: Db, log: SyncLogger) {
     if (await openWatch(db, conn, cal, log)) renewed++;
     await retire(db, ch, conn);
   }
-  return { renewed, retired, opened };
+  return { renewed, retired, opened, notes: notes.slice(0, 4) };
 }
 
 /** Close a channel with Google where possible, and stop tracking it. */
