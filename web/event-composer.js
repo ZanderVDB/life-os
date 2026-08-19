@@ -20,7 +20,7 @@
 import {
   row, section, moreOptions, wireMoreOptions, dateField, timeField, wireDateTime,
   durationField, wireDuration, addMinutes, remindersField, wireReminders,
-  recurrenceBuilder, wireRecurrence, describeRecurrence, REPEATS, selectField,
+  recurrenceBuilder, wireRecurrence, describeRecurrence, REPEATS, selectField, wireMenus,
   calendarSelect, formatTime, parseTime, formatDate, isoDate,
 } from './calendar-fields.js';
 
@@ -199,17 +199,17 @@ function wireComposer(dlg, d) {
   const dur = wireDuration(dlg, readWhen, d.duration ?? 60);
   const rems = wireReminders(dlg);
   wireMoreOptions(dlg);
+  // Calendar and Repeat are the shared dark dropdown, not OS menus.
+  const menus = wireMenus(dlg, dlg, (id) => { if (id === 'ev-repeat') syncRepeat(); });
 
-  // The custom recurrence builder appears only when it is asked for.
   const repeat = dlg.querySelector('#ev-repeat');
   const recWrap = dlg.querySelector('[data-rec-wrap]');
   let rec = null;
-  const syncRepeat = () => {
-    const custom = repeat.value === 'custom';
+  function syncRepeat() {
+    const custom = repeat.dataset.value === 'custom';
     if (recWrap) recWrap.hidden = !custom;
     if (custom && !rec) rec = wireRecurrence(dlg);
-  };
-  repeat?.addEventListener('change', syncRepeat);
+  }
   syncRepeat();
 
   const allDay = dlg.querySelector('#ev-allday');
@@ -229,8 +229,8 @@ function wireComposer(dlg, d) {
     get reminders() { return rems.values; },
     get recurrence() {
       if (!repeat) return null;
-      if (repeat.value === 'custom') return rec?.rule ? [rec.rule] : null;
-      return repeat.value ? [repeat.value] : null;
+      if (repeat.dataset.value === 'custom') return rec?.rule ? [rec.rule] : null;
+      return repeat.dataset.value ? [repeat.dataset.value] : null;
     },
     dateTime: dt,
   };
@@ -247,7 +247,7 @@ function readComposer(dlg, ui) {
   const reminders = ui.reminders;
   const recurrence = ui.recurrence;
   return {
-    calendarId: v('ev-cal'),
+    calendarId: dlg.querySelector('#ev-cal')?.dataset.value ?? '',
     duration: mins,
     draft: {
       title: v('ev-title').trim(),
@@ -586,13 +586,14 @@ export async function openBirthdayComposer(prefill = {}) {
          * different kind of form. */
         const dt = wireDateTime(dlg, dlg);
         const rems = wireReminders(dlg);
+        wireMenus(dlg, dlg);
         dlg.querySelector('[data-go]').addEventListener('click', () => {
           const name = dlg.querySelector('#bd-name').value.trim();
           if (!name) { dlg.querySelector('#bd-name').focus(); return; }
           close({
             name,
             day: dt.valueOf('bd-date'),
-            calendarId: dlg.querySelector('#bd-cal').value,
+            calendarId: dlg.querySelector('#bd-cal').dataset.value,
             reminders: rems.values,
           });
         });

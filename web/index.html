@@ -1530,7 +1530,7 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cs-habit-add{width:20px;height:20px;margin-left:auto;border:0;border-radius:6px;cursor:pointer;
   background:var(--surface-2);color:var(--muted);font-size:14px;line-height:1;
   display:inline-flex;align-items:center;justify-content:center}
-.cs-habit-add:hover{color:var(--text);background:var(--surface-1)}
+.cs-habit-add:hover{color:var(--text);background:var(--surface)}
 .cs-habits .cs-lab{display:flex;align-items:center;gap:7px}
 .cs-set{margin-top:11px;padding-top:10px;border-top:1px solid var(--hairline);
   display:flex;flex-direction:column;gap:5px}
@@ -3952,7 +3952,7 @@ body:has(.lib-page) .rail{display:none}
    with quarter hours one keypress away. */
 .ev-time-list{position:absolute;top:100%;left:0;right:0;z-index:70;margin-top:4px;
   max-height:190px;overflow-y:auto;padding:4px;border-radius:9px;
-  background:var(--surface-1);border:1px solid var(--hairline);
+  background:var(--surface);border:1px solid var(--hairline);
   box-shadow:0 14px 32px rgba(0,0,0,.34)}
 .ev-time-list button{display:block;width:100%;text-align:left;height:28px;padding:0 9px;
   border:0;border-radius:6px;background:none;color:var(--text);font-size:12.5px;cursor:pointer;
@@ -4020,13 +4020,64 @@ body:has(.lib-page) .rail{display:none}
   box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
 .cf-input{flex:1 1 180px;cursor:text}
 .cf-textarea{height:auto;min-height:56px;padding:9px 11px;resize:vertical;line-height:1.5}
-.cf-select{position:relative;padding:0;overflow:hidden}
-.cf-select select{appearance:none;height:32px;padding:0 30px 0 11px;border:0;width:100%;
-  font:inherit;font-size:13px;color:var(--text);background:transparent;cursor:pointer}
-/* The option LIST is browser-drawn; color-scheme is the only lever that stops
-   it rendering as a white sheet against a dark app. */
-.cf-select select,.cf-select option{color-scheme:dark;background:var(--surface-1);color:var(--text)}
-.cf-select .cf-chev{position:absolute;right:11px;top:50%;margin-top:-2px;pointer-events:none}
+
+/* ══ The shared Calendar dropdown ═════════════════════════════════════════
+   A native <select> draws its option list with the OPERATING SYSTEM. No CSS
+   reaches it — `color-scheme: dark` restyles the closed control and nothing
+   else — so Calendar, Repeat, Notify and Area opened as bright white sheets
+   in a dark app while the time picker beside them was correctly dark.
+
+   This is a button and a panel, drawn into the same popover host as the date
+   and time pickers, which is how it inherits their placement and their
+   immunity to the modal's own overflow. */
+
+.cf-menu-btn{justify-content:space-between;min-width:120px;max-width:100%;text-align:left}
+.cf-menu-btn .cf-chev{margin-left:auto;flex:0 0 auto}
+.cf-menu-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  /* EXPLICIT, not inherited. The trigger sits on a group background and a
+     muted token here is what made some values almost unreadable. */
+  color:var(--text)}
+.cf-menu-btn[aria-expanded="true"]{border-color:var(--accent)}
+.cf-menu-mark{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+
+.cf-menu{min-width:180px;max-width:min(320px,90vw);max-height:264px;overflow-y:auto;
+  padding:4px;border-radius:10px;
+  background:var(--surface);
+  border:1px solid var(--hairline);
+  box-shadow:0 16px 38px rgba(0,0,0,.42);
+  scrollbar-width:thin}
+.cf-menu:focus{outline:0}
+
+/* Every ordinary option is plainly readable. This is the rule that was
+   broken: a muted token on a dark panel is legible in a mock-up and not on a
+   screen at arm's length. */
+.cf-menu-opt{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  min-height:32px;padding:5px 9px;border:0;border-radius:7px;cursor:pointer;
+  background:none;font:inherit;font-size:12.5px;
+  color:var(--text)}
+.cf-menu-opt:hover{background:var(--surface-2)}
+.cf-menu-opt:focus-visible,.cf-menu-opt:focus{outline:0;background:var(--surface-2);
+  box-shadow:inset 0 0 0 1px var(--accent)}
+.cf-menu-opt.is-on{background:color-mix(in srgb,var(--accent) 20%,transparent);
+  color:var(--accent);font-weight:600}
+.cf-menu-opt[disabled]{cursor:default;color:var(--muted);opacity:.75}
+.cf-menu-opt[disabled]:hover{background:none}
+.cf-menu-l{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Secondary text is quieter but never invisible. */
+.cf-menu-h{flex:0 0 auto;font-size:10.5px;color:var(--text-2);opacity:.85}
+.cf-menu-tick{width:9px;height:5px;flex:0 0 auto;margin-left:2px;
+  border-left:1.8px solid currentColor;border-bottom:1.8px solid currentColor;
+  transform:rotate(-45deg) translate(1px,-2px)}
+
+/* The reminder menu is the same panel, positioned by its own field. */
+.cf-rem-menu{position:absolute;top:100%;left:0;z-index:80;margin-top:5px}
+
+/* The one floating surface per dialog. Appended to the DIALOG rather than the
+   scrolling body, so no panel is ever clipped by the modal's overflow, and
+   above everything inside it. */
+.cf-pop{position:absolute;z-index:200}
+.modal .cf-pop{z-index:200}
+
 
 .cf-ico{width:13px;height:13px;flex:0 0 auto;opacity:.65;background:currentColor;
   -webkit-mask-size:contain;mask-size:contain;
@@ -4075,12 +4126,6 @@ body:has(.lib-page) .rail{display:none}
 .cf-rem-x{border:0;background:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;
   padding:0 2px;opacity:.75}
 .cf-rem-x:hover{opacity:1;color:var(--danger)}
-.cf-rem-menu{position:absolute;top:100%;left:0;z-index:80;margin-top:5px;min-width:190px;
-  padding:4px;border-radius:9px;background:var(--surface-1);border:1px solid var(--hairline);
-  box-shadow:0 14px 32px rgba(0,0,0,.34);max-height:230px;overflow:auto}
-.cf-rem-menu button{display:block;width:100%;text-align:left;height:29px;padding:0 9px;
-  border:0;border-radius:6px;background:none;color:var(--text);font-size:12.5px;cursor:pointer}
-.cf-rem-menu button:hover{background:var(--surface-2)}
 .cf-rem-custom{display:flex;align-items:center;gap:6px;padding:6px}
 .cf-rem-custom input{width:70px;height:28px;padding:0 8px;border-radius:6px;font:inherit;
   font-size:12px;color:var(--text);background:var(--surface-2);border:1px solid var(--hairline)}
@@ -4106,8 +4151,6 @@ body:has(.lib-page) .rail{display:none}
 .cf-rec-month label{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .cf-rec-say{margin:2px 0 0;font-size:11.5px;color:var(--accent)}
 
-/* The popover host, shared by the date and time pickers. */
-.cf-pop{position:absolute;z-index:90}
 
 /* The placement preview. Snapping is only useful if you can see where it
    snapped BEFORE committing — otherwise the first sign that 10:08 became
@@ -4123,7 +4166,7 @@ body:has(.lib-page) .rail{display:none}
 }
 
 /* The time picker: two short columns, not ninety-six rows. */
-.tp{width:212px;padding:8px;border-radius:11px;background:var(--surface-1);
+.tp{width:212px;padding:8px;border-radius:11px;background:var(--surface);
   border:1px solid var(--hairline);box-shadow:0 16px 38px rgba(0,0,0,.4)}
 .tp-typed{margin-bottom:7px}
 .tp-in{width:100%;height:32px;padding:0 10px;border-radius:8px;font:inherit;font-size:13px;
@@ -4308,7 +4351,7 @@ body:has(.lib-page) .rail{display:none}
    nothing else. Positioned above the selection and translated onto it. */
 .bk-pin-bar{position:absolute;transform:translate(-50%,-100%);z-index:60;
   display:flex;gap:2px;padding:3px;border-radius:9px;
-  background:var(--surface-1);border:1px solid var(--hairline);
+  background:var(--surface);border:1px solid var(--hairline);
   box-shadow:0 10px 26px rgba(0,0,0,.3)}
 .bk-pin-bar button{height:26px;padding:0 9px;border:0;border-radius:6px;cursor:pointer;
   background:none;color:var(--text);font-size:11.5px;white-space:nowrap;
@@ -4320,7 +4363,7 @@ body:has(.lib-page) .rail{display:none}
 /* The More sheet: style, frame and arrangement, on demand rather than in the
    bar. Everything here is a second-order choice. */
 .bk-pin-sheet{position:absolute;z-index:61;width:210px;padding:9px 10px 10px;
-  border-radius:11px;background:var(--surface-1);border:1px solid var(--hairline);
+  border-radius:11px;background:var(--surface);border:1px solid var(--hairline);
   box-shadow:0 14px 34px rgba(0,0,0,.34)}
 .bk-sheet-h{margin:0 0 5px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
   color:var(--muted)}

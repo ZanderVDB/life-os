@@ -17,7 +17,7 @@
 import { reducedMotion, settle } from './motion.js';
 import {
   row, section, moreOptions, wireMoreOptions, dateField, timeField, wireDateTime,
-  selectField,
+  selectField, wireMenus,
 } from './calendar-fields.js';
 
 const RISE_IN = [{ opacity: 0, translate: '0 10px', scale: '0.985' },
@@ -135,8 +135,9 @@ export function openReminderModal(ctx) {
     title: title.value.trim(),
     dueDate: dlg.querySelector('#rm-date')?.dataset.value || f.dueDate,
     dueTime: dlg.querySelector('#rm-time')?.dataset.value || '',
-    repeat: $('#rm-repeat').value, leadDays: Number($('#rm-lead').value),
-    areaId: $('#rm-area').value, notes: $('#rm-notes').value,
+    repeat: $('#rm-repeat').dataset.value,
+    leadDays: Number($('#rm-lead').dataset.value),
+    areaId: $('#rm-area').dataset.value, notes: $('#rm-notes').value,
   });
   const initial = JSON.stringify(read());
   const isDirty = () => JSON.stringify(read()) !== initial;
@@ -145,6 +146,8 @@ export function openReminderModal(ctx) {
    * field or a disclosure — it composes them, so an improvement to any of the
    * three arrives here for free. */
   wireMoreOptions(dlg);
+  // Repeat, Notify and Area are the shared dark dropdown, not OS menus.
+  wireMenus(dlg, dlg);
   const dt = wireDateTime(dlg, dlg, (kind, value) => {
     if (kind === 'date') f.dueDate = value; else f.dueTime = value;
   });

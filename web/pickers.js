@@ -35,8 +35,14 @@ function grid(year, month, selected) {
   return cells.join('');
 }
 
-/** Anchors a popover to a control, clamped inside the dialog. */
-function anchor(pop, dlg, btn) {
+/**
+ * Anchors a popover to a control, clamped inside the dialog.
+ *
+ * Exported because every Calendar dropdown now uses it: one placement rule
+ * means a menu never appears somewhere unrelated, and never covers the trigger
+ * that opened it unless there is genuinely no room below.
+ */
+export function anchor(pop, dlg, btn) {
   const b = btn.getBoundingClientRect();
   const d = dlg.getBoundingClientRect();
   pop.hidden = false;

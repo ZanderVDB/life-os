@@ -21,7 +21,7 @@
  * one.
  */
 import {
-  datePickerPopover, timePickerPopover, formatTime, parseTime, isoDate, parseIsoDate,
+  datePickerPopover, timePickerPopover, anchor, formatTime, parseTime, isoDate, parseIsoDate,
 } from './pickers.js';
 
 export { formatTime, parseTime, isoDate, parseIsoDate };
@@ -111,23 +111,36 @@ export const timeField = (id, value, opts = {}) => `<button type="button"
  * One popover host per dialog, so two open pickers can never fight over the
  * same corner. `onChange` is called with (kind, value) after any pick.
  */
-export function wireDateTime(root, dlg, onChange) {
+/**
+ * The one floating surface per dialog, shared by the date picker, the time
+ * picker and every dropdown.
+ *
+ * One host means one set of placement rules and one stacking context to get
+ * right — and it makes "two menus open at once" impossible rather than merely
+ * unlikely. It is appended to the DIALOG, not to the scrolling body, so a
+ * panel can never be clipped by the modal's own overflow.
+ */
+export function popoverHost(dlg) {
   let pop = dlg.querySelector('[data-cf-pop]');
-  if (!pop) {
-    pop = document.createElement('div');
-    pop.className = 'cf-pop';
-    pop.dataset.cfPop = '';
-    pop.hidden = true;
-    /* Clicks inside the popover never reach the dialog.
-     *
-     * Both pickers re-render themselves on every choice, which DETACHES the
-     * element that was clicked. By the time the click bubbles up, the
-     * outside-click check sees a node the popover no longer contains and
-     * closes it — so choosing an hour dismissed the picker before a minute
-     * could be chosen, and nothing was ever committed. */
-    pop.addEventListener('click', (e) => e.stopPropagation());
-    dlg.appendChild(pop);
-  }
+  if (pop) return pop;
+  pop = document.createElement('div');
+  pop.className = 'cf-pop';
+  pop.dataset.cfPop = '';
+  pop.hidden = true;
+  /* Clicks inside the popover never reach the dialog.
+   *
+   * The pickers re-render themselves on every choice, which DETACHES the
+   * element that was clicked. By the time the click bubbles up, the
+   * outside-click check sees a node the popover no longer contains and closes
+   * it — so choosing an hour dismissed the picker before a minute could be
+   * chosen, and nothing was ever committed. */
+  pop.addEventListener('click', (e) => e.stopPropagation());
+  dlg.appendChild(pop);
+  return pop;
+}
+
+export function wireDateTime(root, dlg, onChange) {
+  const pop = popoverHost(dlg);
   let openFor = null;
   const close = () => { pop.hidden = true; pop.innerHTML = ''; openFor = null; };
 
@@ -366,11 +379,13 @@ export function wireReminders(root, opts = {}) {
     if (host.querySelector('[data-cf-rem-menu]')) return;
     const presets = host.dataset.allDay === '1' ? ALL_DAY_PRESETS : REMINDER_PRESETS;
     const menu = document.createElement('div');
-    menu.className = 'cf-rem-menu';
+    menu.className = 'cf-menu cf-rem-menu';
     menu.dataset.cfRemMenu = '';
-    menu.innerHTML = `${presets.map((p) => `<button type="button" data-m="${p.m}"
-      >${esc(p.label)}</button>`).join('')}
-      <button type="button" data-custom>Custom…</button>`;
+    menu.setAttribute('role', 'listbox');
+    menu.innerHTML = `${presets.map((p) => `<button type="button" role="option"
+      class="cf-menu-opt" data-m="${p.m}"><span class="cf-menu-l">${esc(p.label)}</span></button>`).join('')}
+      <button type="button" role="option" class="cf-menu-opt" data-custom>
+        <span class="cf-menu-l">Custom…</span></button>`;
     host.appendChild(menu);
     menu.querySelectorAll('[data-m]').forEach((b) => {
       b.onclick = () => { add(Number(b.dataset.m)); menu.remove(); };
@@ -479,12 +494,10 @@ export const recurrenceBuilder = (day) => `<div class="cf-rec" data-cf-rec data-
   <div class="cf-rec-row">
     <span>Every</span>
     <input type="number" min="1" max="52" value="1" data-rec-interval aria-label="Interval">
-    <select data-rec-freq aria-label="Unit">
-      <option value="DAILY">day</option>
-      <option value="WEEKLY" selected>week</option>
-      <option value="MONTHLY">month</option>
-      <option value="YEARLY">year</option>
-    </select>
+    ${selectField('cf-rec-freq', [
+    { id: 'DAILY', label: 'day' }, { id: 'WEEKLY', label: 'week' },
+    { id: 'MONTHLY', label: 'month' }, { id: 'YEARLY', label: 'year' },
+  ], 'WEEKLY', 'Unit')}
   </div>
 
   <div class="cf-rec-days" data-rec-days>
@@ -497,22 +510,19 @@ export const recurrenceBuilder = (day) => `<div class="cf-rec" data-cf-rec data-
       <span data-rec-onday>on day —</span></label>
     <label><input type="radio" name="cf-rec-mode" value="nth">
       <span>on the
-        <select data-rec-ord aria-label="Which one">
-          ${ORDINALS.map((o) => `<option value="${o.v}">${o.label}</option>`).join('')}
-        </select>
-        <select data-rec-nthday aria-label="Which day">
-          ${WEEKDAYS.map((d) => `<option value="${d.id}">${DAY_NAME[d.id]}</option>`).join('')}
-        </select>
+        ${selectField('cf-rec-ord', ORDINALS.map((o) => ({ id: o.v, label: o.label })),
+    '1', 'Which one')}
+        ${selectField('cf-rec-nthday', WEEKDAYS.map((d) => ({ id: d.id, label: DAY_NAME[d.id] })),
+    'MO', 'Which day')}
       </span></label>
   </div>
 
   <div class="cf-rec-row">
     <span>Ends</span>
-    <select data-rec-end aria-label="When it ends">
-      <option value="never">Never</option>
-      <option value="on">On a date</option>
-      <option value="after">After</option>
-    </select>
+    ${selectField('cf-rec-end', [
+    { id: 'never', label: 'Never' }, { id: 'on', label: 'On a date' },
+    { id: 'after', label: 'After' },
+  ], 'never', 'When it ends')}
     <input type="date" data-rec-until hidden aria-label="Until">
     <span data-rec-count-wrap hidden>
       <input type="number" min="1" max="500" value="10" data-rec-count aria-label="Occurrences">
@@ -530,8 +540,10 @@ export function wireRecurrence(root, onChange) {
   const q = (sel) => host.querySelector(sel);
   const day = host.dataset.day;
 
+  const val = (id) => root.querySelector(`#${id}`)?.dataset.value ?? '';
+
   const build = () => {
-    const freq = q('[data-rec-freq]').value;
+    const freq = val('cf-rec-freq');
     const interval = Math.max(1, Number(q('[data-rec-interval]').value) || 1);
     const parts = [`FREQ=${freq}`];
     if (interval > 1) parts.push(`INTERVAL=${interval}`);
@@ -544,13 +556,13 @@ export function wireRecurrence(root, onChange) {
     if (freq === 'MONTHLY') {
       const mode = host.querySelector('[name="cf-rec-mode"]:checked')?.value ?? 'day';
       if (mode === 'nth') {
-        parts.push(`BYDAY=${q('[data-rec-ord]').value}${q('[data-rec-nthday]').value}`);
+        parts.push(`BYDAY=${val('cf-rec-ord')}${val('cf-rec-nthday')}`);
       } else if (day) {
         parts.push(`BYMONTHDAY=${parseIsoDate(day).getDate()}`);
       }
     }
 
-    const end = q('[data-rec-end]').value;
+    const end = val('cf-rec-end');
     if (end === 'on' && q('[data-rec-until]').value) {
       parts.push(`UNTIL=${q('[data-rec-until]').value.replace(/-/g, '')}T235959Z`);
     } else if (end === 'after') {
@@ -560,11 +572,11 @@ export function wireRecurrence(root, onChange) {
   };
 
   const refresh = () => {
-    const freq = q('[data-rec-freq]').value;
+    const freq = val('cf-rec-freq');
     host.querySelector('[data-rec-days]').hidden = freq !== 'WEEKLY';
     host.querySelector('[data-rec-month]').hidden = freq !== 'MONTHLY';
     if (day) q('[data-rec-onday]').textContent = `on day ${parseIsoDate(day).getDate()}`;
-    const end = q('[data-rec-end]').value;
+    const end = val('cf-rec-end');
     q('[data-rec-until]').hidden = end !== 'on';
     host.querySelector('[data-rec-count-wrap]').hidden = end !== 'after';
     const rule = build();
@@ -574,6 +586,10 @@ export function wireRecurrence(root, onChange) {
 
   host.addEventListener('change', refresh);
   host.addEventListener('input', refresh);
+  /* The builder's own dropdowns are the shared component too — a recurrence
+   * panel with three white OS menus inside a dark one would be the same bug
+   * in a smaller box. */
+  wireMenus(host, root.closest('.modal') ?? root, refresh);
   host.querySelectorAll('[data-rec-day]').forEach((b) => {
     b.addEventListener('click', () => {
       b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
@@ -591,11 +607,176 @@ export function wireRecurrence(root, onChange) {
 
 /* ══ Selects ═════════════════════════════════════════════════════════════ */
 
-export const selectField = (id, options, value, label) => `<div class="cf-ctl cf-select">
-  <select id="${id}" aria-label="${esc(label ?? '')}">
-    ${options.map((o) => `<option value="${esc(o.id ?? o.value ?? '')}"${
-  (o.id ?? o.value ?? '') === (value ?? '') ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
-  </select><i class="cf-chev" aria-hidden="true"></i></div>`;
+/* ══ Choosing one of a list ══════════════════════════════════════════════
+ *
+ * A native `<select>` renders its option list with the OPERATING SYSTEM, not
+ * with the page. `color-scheme: dark` restyles the closed control and does
+ * nothing whatever to the menu, so Calendar, Repeat, Notify and Area all
+ * opened as bright white sheets in the middle of a dark app while the time
+ * picker beside them was correctly dark. There is no CSS that fixes that; the
+ * control has to be ours.
+ *
+ * So this is a button plus a panel, drawn into the SAME popover host the date
+ * and time pickers use — which is how it inherits their placement (below when
+ * there is room, deliberately above when there is not), their layering, and
+ * their immunity to being clipped by the modal's own scroll box.
+ *
+ * Keyboard behaviour is the part a native select gives away for free and a
+ * custom one has to earn: arrows move, Home/End jump, Enter and Space choose,
+ * Escape closes without changing anything, and typing a letter jumps to it.
+ */
 
-export const calendarSelect = (id, calendars, value) =>
-  selectField(id, calendars.map((c) => ({ id: c.id, label: c.name })), value, 'Calendar');
+export const selectField = (id, options, value, label) => {
+  const chosen = options.find((o) => (o.id ?? o.value ?? '') === (value ?? '')) ?? options[0];
+  return `<button type="button" class="cf-ctl cf-menu-btn" id="${id}" data-cf-menu
+    data-value="${esc(chosen?.id ?? chosen?.value ?? '')}"
+    data-options="${esc(JSON.stringify(options))}"
+    aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(label ?? '')}">
+    ${chosen?.mark ? `<i class="cf-menu-mark" style="background:${esc(chosen.mark)}"></i>` : ''}
+    <span class="cf-menu-text" data-cf-menu-text>${esc(chosen?.label ?? '')}</span>
+    <i class="cf-chev" aria-hidden="true"></i>
+  </button>`;
+};
+
+/** Calendars carry their colour, so the menu says which one without reading. */
+export const calendarSelect = (id, calendars, value) => selectField(
+  id,
+  calendars.map((c) => ({
+    id: c.id,
+    label: c.name,
+    hint: c.accountEmail ?? undefined,
+    mark: c.color || undefined,
+  })),
+  value,
+  'Calendar',
+);
+
+/**
+ * Wires every shared dropdown inside `root`.
+ *
+ * `onChange(id, value)` fires only when the value actually changes — a menu
+ * that reports a change for re-picking what was already chosen makes every
+ * listener defensive.
+ */
+export function wireMenus(root, dlg, onChange) {
+  const pop = popoverHost(dlg);
+  let openBtn = null;
+
+  const close = (focusBack = false) => {
+    if (!openBtn) return;
+    openBtn.setAttribute('aria-expanded', 'false');
+    if (focusBack) openBtn.focus();
+    openBtn = null;
+    pop.hidden = true;
+    pop.innerHTML = '';
+  };
+
+  const choose = (btn, opt) => {
+    const before = btn.dataset.value;
+    btn.dataset.value = opt.id ?? opt.value ?? '';
+    const text = btn.querySelector('[data-cf-menu-text]');
+    if (text) text.textContent = opt.label ?? '';
+    const mark = btn.querySelector('.cf-menu-mark');
+    if (mark && opt.mark) mark.style.background = opt.mark;
+    close(true);
+    if (before !== btn.dataset.value) onChange?.(btn.id, btn.dataset.value, opt);
+  };
+
+  const open = (btn) => {
+    if (openBtn === btn) return close();
+    close();
+    openBtn = btn;
+    btn.setAttribute('aria-expanded', 'true');
+
+    let options = [];
+    try { options = JSON.parse(btn.dataset.options || '[]'); } catch { options = []; }
+    const current = btn.dataset.value;
+
+    pop.innerHTML = `<div class="cf-menu" role="listbox" tabindex="-1"
+      aria-label="${esc(btn.getAttribute('aria-label') ?? '')}">
+      ${options.map((o, i) => {
+    const v = o.id ?? o.value ?? '';
+    const on = v === current;
+    return `<button type="button" role="option" class="cf-menu-opt${on ? ' is-on' : ''}"
+          data-i="${i}" aria-selected="${on}"${o.disabled ? ' disabled aria-disabled="true"' : ''}>
+          ${o.mark ? `<i class="cf-menu-mark" style="background:${esc(o.mark)}"></i>` : ''}
+          <span class="cf-menu-l">${esc(o.label ?? '')}</span>
+          ${o.hint ? `<span class="cf-menu-h">${esc(o.hint)}</span>` : ''}
+          ${on ? '<i class="cf-menu-tick" aria-hidden="true"></i>' : ''}
+        </button>`;
+  }).join('')}
+    </div>`;
+    pop.hidden = false;
+    anchor(pop, dlg, btn);
+
+    const panel = pop.querySelector('.cf-menu');
+    const opts = [...panel.querySelectorAll('.cf-menu-opt:not([disabled])')];
+    let at = Math.max(0, opts.findIndex((o) => o.classList.contains('is-on')));
+
+    const focusAt = (i) => {
+      at = Math.max(0, Math.min(opts.length - 1, i));
+      opts[at]?.focus();
+    };
+
+    panel.addEventListener('click', (e) => {
+      const b = e.target.closest('.cf-menu-opt');
+      if (!b || b.disabled) return;
+      choose(btn, options[Number(b.dataset.i)]);
+    });
+    panel.addEventListener('keydown', (e) => {
+      const keys = {
+        ArrowDown: () => focusAt(at + 1),
+        ArrowUp: () => focusAt(at - 1),
+        Home: () => focusAt(0),
+        End: () => focusAt(opts.length - 1),
+      };
+      if (keys[e.key]) { e.preventDefault(); keys[e.key](); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); return; }
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const b = document.activeElement.closest?.('.cf-menu-opt');
+        if (b && !b.disabled) choose(btn, options[Number(b.dataset.i)]);
+        return;
+      }
+      // Type-ahead, which a native select gives for free.
+      if (e.key.length === 1 && /\S/.test(e.key)) {
+        const from = opts.findIndex((o, i) => i > at
+          && o.textContent.trim().toLowerCase().startsWith(e.key.toLowerCase()));
+        const wrap = opts.findIndex((o) => o.textContent.trim().toLowerCase()
+          .startsWith(e.key.toLowerCase()));
+        const next = from > -1 ? from : wrap;
+        if (next > -1) { e.preventDefault(); focusAt(next); }
+      }
+    });
+    // Keep the chosen option in view without moving the modal behind it.
+    const on = panel.querySelector('.is-on');
+    if (on) panel.scrollTop = Math.max(0, on.offsetTop - panel.clientHeight / 2 + 16);
+    focusAt(at);
+  };
+
+  root.querySelectorAll('[data-cf-menu]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); open(btn); });
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open(btn);
+      }
+    });
+  });
+
+  dlg.addEventListener('click', (e) => {
+    if (openBtn && !e.target.closest('[data-cf-menu]')) close();
+  });
+
+  return {
+    close,
+    valueOf: (id) => root.querySelector(`#${id}`)?.dataset.value ?? '',
+    setOptions: (id, options, value) => {
+      const btn = root.querySelector(`#${id}`);
+      if (!btn) return;
+      btn.dataset.options = JSON.stringify(options);
+      const chosen = options.find((o) => (o.id ?? o.value ?? '') === value) ?? options[0];
+      if (chosen) choose(btn, chosen);
+    },
+  };
+}
