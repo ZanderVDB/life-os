@@ -15,7 +15,7 @@
 import { reducedMotion, settle } from './motion.js';
 import {
   row, section, dateField, timeField, wireDateTime, durationField, wireDuration,
-  formatTime,
+  formatTime, fieldError,
 } from './calendar-fields.js';
 
 const RISE_IN = [{ opacity: 0, translate: '0 10px', scale: '0.985' },
@@ -219,7 +219,12 @@ export function openScheduleTaskModal(ctx) {
   $('#st-open-tasks')?.addEventListener('click', () => { close(); ctx.onOpenTasks?.(); });
 
   $('#st-save')?.addEventListener('click', async () => {
-    if (!f.taskId) return;
+    /* A silent return is a dead button: pressing Schedule and seeing nothing
+     * happen reads as broken, not as "pick a task first". */
+    if (!f.taskId) {
+      fieldError($('#st-list'), 'Choose which task you are setting time aside for.');
+      return;
+    }
     const state = $('#st-state');
     const btn = $('#st-save');
     btn.classList.add('is-busy');

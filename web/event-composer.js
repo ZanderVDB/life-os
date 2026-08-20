@@ -21,7 +21,7 @@ import {
   row, section, moreOptions, wireMoreOptions, dateField, timeField, wireDateTime,
   durationField, wireDuration, addMinutes, remindersField, wireReminders,
   recurrenceBuilder, wireRecurrence, describeRecurrence, REPEATS, selectField, wireMenus,
-  calendarSelect, formatTime, parseTime, formatDate, isoDate,
+  calendarSelect, formatTime, parseTime, formatDate, isoDate, fieldError, closePopover,
 } from './calendar-fields.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -46,6 +46,9 @@ function toInstant(day, time) {
 
 
 
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),'
+  + 'select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 let ctx = null;
 /** Wired once by app.js: `api`, `toast`, and a way to refresh the calendar. */
 export function initEventComposer(c) { ctx = c; }
@@ -62,9 +65,17 @@ function modal({ title, body, actions, onMount }) {
     dlg.setAttribute('role', 'dialog');
     dlg.setAttribute('aria-modal', 'true');
     dlg.setAttribute('aria-label', title);
-    dlg.innerHTML = `<div class="m-head"><h2>${esc(title)}</h2></div>
+    /* The same three parts, in the same order, as Reminder and Schedule: a
+     * heading with a way out, the body, then state and actions. Event was the
+     * only one of the four with no close button. */
+    dlg.innerHTML = `<div class="m-head">
+        <h2 class="m-title">${esc(title)}</h2>
+        <button class="m-close" data-close="cancel" aria-label="Close">&times;</button>
+      </div>
       <div class="m-body ev-body">${body}</div>
-      <div class="m-foot ev-foot">${actions}</div>`;
+      <div class="m-foot ev-foot">
+        <span class="m-save-state" data-state role="status"></span>
+        ${actions}</div>`;
     document.body.append(scrim, dlg);
     document.body.classList.add('modal-open');
 
@@ -79,12 +90,32 @@ function modal({ title, body, actions, onMount }) {
       resolve(value);
     };
     scrim.addEventListener('click', () => close(null));
-    dlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(null); });
+
+    /* Escape closes the popover first, then the dialog — and Tab stays inside.
+     * Reminder and Schedule both trapped focus; Event did not, so tabbing
+     * walked out of the dialog and into the calendar behind it. */
+    dlg.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const pop = dlg.querySelector('.cf-pop:not([hidden])');
+        if (pop) { e.preventDefault(); e.stopPropagation(); closePopover(dlg); return; }
+        close(null);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = [...dlg.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const [first, last] = [items[0], items[items.length - 1]];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
     dlg.querySelectorAll('[data-close]').forEach((b) => {
       b.addEventListener('click', () => close(b.dataset.close === 'ok' ? true : null));
     });
     onMount?.(dlg, close);
-    dlg.querySelector('input, select, textarea, button')?.focus();
+    /* The BODY's first control, not the dialog's — otherwise the close button
+     * added to the header takes focus and the first keystroke dismisses. */
+    dlg.querySelector('.m-body input, .m-body select, .m-body textarea, .m-body button')
+      ?.focus();
   });
 }
 
@@ -107,14 +138,20 @@ async function writeState() {
 }
 
 async function blockedByConnection(state) {
+  /* "Reconnect" is wrong for someone who has never connected — and the two
+   * cases are told apart by whether there is a connection to repair. */
+  const everConnected = Boolean(state?.connected || state?.needsReconnect);
+  const verb = everConnected ? 'Reconnect' : 'Connect';
   await modal({
-    title: 'Google Calendar connection required',
+    title: everConnected
+      ? 'Google Calendar needs reconnecting'
+      : 'Google Calendar is not connected yet',
     body: `<p class="ev-note">${esc(state?.reason
       ?? 'Connect Google Calendar to create events.')}</p>
       <p class="ev-sub">A real event lives in Google Calendar. Life OS will not
       pretend to have made one.</p>`,
     actions: `<button class="btn btn-ghost" data-close="cancel">Not now</button>
-      <button class="btn btn-primary" data-go>Reconnect Google Calendar</button>`,
+      <button class="btn btn-primary" data-go>${verb} Google Calendar</button>`,
     onMount: (dlg, close) => {
       dlg.querySelector('[data-go]').addEventListener('click', () => {
         close(null);
@@ -315,7 +352,7 @@ export async function openEventComposer(prefill = {}) {
         dlg.querySelector('[data-go]').addEventListener('click', () => {
           const read = readComposer(dlg, ui);
           if (!read.draft.title) {
-            dlg.querySelector('#ev-title')?.focus();
+            fieldError(dlg.querySelector('#ev-title'), 'An event needs a name.');
             return;
           }
           close(read);
@@ -405,7 +442,7 @@ export async function openQuickComposer({ day, time, duration = 60 }) {
       const field = dlg.querySelector('#qc-title');
       const go = () => {
         const title = field.value.trim();
-        if (!title) { field.focus(); return; }
+        if (!title) { fieldError(field, 'Give it a name.'); return; }
         close({ title });
       };
       // Enter is the whole point of a quick composer.
@@ -589,7 +626,10 @@ export async function openBirthdayComposer(prefill = {}) {
         wireMenus(dlg, dlg);
         dlg.querySelector('[data-go]').addEventListener('click', () => {
           const name = dlg.querySelector('#bd-name').value.trim();
-          if (!name) { dlg.querySelector('#bd-name').focus(); return; }
+          if (!name) {
+            fieldError(dlg.querySelector('#bd-name'), 'Whose birthday is it?');
+            return;
+          }
           close({
             name,
             day: dt.valueOf('bd-date'),
@@ -688,7 +728,10 @@ export async function openEventEditor(ev) {
         const ui = wireComposer(dlg, carry);
         dlg.querySelector('[data-go]').addEventListener('click', () => {
           const read = readComposer(dlg, ui);
-          if (!read.draft.title) { dlg.querySelector('#ev-title')?.focus(); return; }
+          if (!read.draft.title) {
+            fieldError(dlg.querySelector('#ev-title'), 'An event needs a name.');
+            return;
+          }
           close(read);
         });
       },

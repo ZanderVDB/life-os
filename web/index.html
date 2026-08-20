@@ -4130,6 +4130,14 @@ body:has(.lib-page) .rail{display:none}
 
 /* One disclosure. Full width, chevron hard right, same in every modal —
    it used to sit above the label in one and inside a control in another. */
+/* `hidden` must actually hide.
+   The attribute only carries `display:none` from the browser's own stylesheet,
+   which ANY author `display` beats. Several controls here are flex, so setting
+   `hidden` left them fully laid out and still focusable: More options never
+   collapsed, and its six fields stayed tabbable while the section read as
+   closed. This is the standard idiom, scoped to the Calendar forms. */
+.modal [hidden],.cf-pop[hidden]{display:none!important}
+
 .cf-more{margin-top:2px}
 .cf-more-btn{display:flex;width:100%;align-items:center;justify-content:space-between;
   height:36px;padding:0 2px;border:0;background:none;cursor:pointer;
@@ -4214,6 +4222,67 @@ body:has(.lib-page) .rail{display:none}
   border:1px solid var(--hairline);background:var(--surface-2);color:var(--text-2)}
 .tp-done{border-color:var(--accent);color:var(--accent)}
 
+
+/* ══ Calendar form spacing ════════════════════════════════════════════════
+   One set of numbers for all four flows, so spacing is composed rather than
+   nudged control by control. Change a token here and every modal moves
+   together; that is the whole point of having them. */
+:root{
+  --cf-pad:20px;          /* modal horizontal padding */
+  --cf-section-gap:14px;  /* between top-level sections */
+  --cf-field-gap:11px;    /* between rows inside a section */
+  --cf-label-gap:12px;    /* label column to control */
+  --cf-inline-gap:7px;    /* between controls on one row */
+  --cf-label-w:78px;      /* the label column itself */
+}
+
+.modal.ev-modal .m-head,.modal-reminder .m-head,.modal-schedule .m-head,
+.modal.ev-modal .m-body,.modal-reminder .m-body,.modal-schedule .m-body,
+.modal.ev-modal .m-foot,.modal-reminder .m-foot,.modal-schedule .m-foot{
+  padding-left:var(--cf-pad);padding-right:var(--cf-pad)}
+
+.cf-body,.ev-body{gap:var(--cf-section-gap);padding-top:16px;padding-bottom:16px}
+/* The group was a rounded card inset by its own padding, which put every row
+   inside it 15px right of every row outside it — two label columns in one
+   form. As a full-width band its contents sit on the body's inset, so all
+   rows share one column and the grouping still reads. */
+.cf-group{gap:var(--cf-field-gap);
+  margin-inline:calc(-1 * var(--cf-pad));padding:13px var(--cf-pad);
+  border-radius:0;border-left:0;border-right:0}
+.cf-group.is-quiet{margin-inline:0;padding:0;border-top:0;border-bottom:0}
+.cf-row{grid-template-columns:var(--cf-label-w) 1fr;gap:var(--cf-label-gap)}
+.cf-ctl-wrap{gap:var(--cf-inline-gap)}
+.cf-more-body{gap:var(--cf-field-gap);padding:12px 0 4px}
+.cf-check-sub,.cf-rec-wrap{padding-left:calc(var(--cf-label-w) + var(--cf-label-gap))}
+
+/* Headers and footers, identical across the four. */
+.modal.ev-modal .m-head,.modal-reminder .m-head,.modal-schedule .m-head{
+  padding-top:16px;padding-bottom:14px;border-bottom:1px solid var(--hairline)}
+.modal.ev-modal .m-foot,.modal-reminder .m-foot,.modal-schedule .m-foot{
+  padding-top:14px;padding-bottom:16px;gap:9px;
+  border-top:1px solid var(--hairline)}
+.ev-foot{gap:9px}
+
+/* Validation: next to the thing that is wrong, gone as soon as it is fixed. */
+.cf-err{width:100%;margin:5px 0 0;font-size:11.5px;color:var(--danger);line-height:1.4}
+.is-invalid{border-color:var(--danger)!important}
+.cf-title input.is-invalid,.cf-title textarea.is-invalid{border-color:var(--danger)}
+
+/* The leading field is an <input> in three flows and an auto-growing
+   <textarea> in Reminder. Same box either way. */
+.cf-title textarea{width:100%;min-height:44px;padding:11px 12px;border-radius:10px;
+  font:inherit;font-size:17px;font-weight:600;color:var(--text);resize:none;overflow:hidden;
+  background:var(--surface-2);border:1px solid var(--hairline)}
+.cf-title textarea::placeholder{font-weight:500;color:var(--muted)}
+.cf-title textarea:focus{outline:0;border-color:var(--accent)}
+
+/* Heading, close button and state slot are identical in all four. */
+.modal.ev-modal .m-head,.modal-reminder .m-head,.modal-schedule .m-head{
+  display:flex;align-items:center;gap:10px}
+.modal.ev-modal .m-title,.modal-reminder .m-title,.modal-schedule .m-title{
+  flex:1;min-width:0;font-size:17px;font-weight:600;line-height:1.3}
+.modal.ev-modal .m-close{width:30px;height:30px;flex-shrink:0;margin-left:auto}
+
 @media (max-width:560px){
   .cf-row{grid-template-columns:1fr;gap:5px}
   .cf-check-sub,.cf-rec-wrap{padding-left:0}
@@ -4221,7 +4290,6 @@ body:has(.lib-page) .rail{display:none}
 
 /* Reminder and Schedule Task share the composer's grouping, so the three
    creation surfaces read as one family rather than three eras of the app. */
-.modal-reminder .m-title,.modal-schedule .m-title{font-size:17px;font-weight:600}
 .rm-kind{margin:7px 0 0;font-size:10.5px;color:var(--muted);line-height:1.45}
 .ev-group .ev-row{margin:0}
 .ev-group .ev-row + .ev-row{margin-top:7px}

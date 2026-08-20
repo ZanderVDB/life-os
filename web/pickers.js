@@ -185,7 +185,10 @@ export function timePickerPopover(pop, dlg, btn, value, onPick, opts = {}) {
     ? Array.from({ length: 12 }, (_, i) => (i === 0 ? 12 : i))
     : Array.from({ length: 24 }, (_, i) => i);
 
-  const commit = () => onPick(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+  const asIso = () => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const commit = () => onPick(asIso());
+  /* Write through on every click so the choice survives a click-away. */
+  const live = () => opts.onLive?.(asIso());
   const displayHour = () => (uses12Hour ? (h % 12 === 0 ? 12 : h % 12) : h);
   const isPm = () => h >= 12;
 
@@ -230,16 +233,18 @@ export function timePickerPopover(pop, dlg, btn, value, onPick, opts = {}) {
         h = uses12Hour
           ? (isPm() ? (picked % 12) + 12 : picked % 12)
           : picked;
+        live();
         paint();
       };
     });
     pop.querySelectorAll('[data-m]').forEach((b) => {
-      b.onclick = () => { m = Number(b.dataset.m); paint(); };
+      b.onclick = () => { m = Number(b.dataset.m); live(); paint(); };
     });
     pop.querySelectorAll('[data-mer]').forEach((b) => {
       b.onclick = () => {
         const wantPm = b.dataset.mer === 'pm';
         if (wantPm !== isPm()) h = wantPm ? h + 12 : h - 12;
+        live();
         paint();
       };
     });

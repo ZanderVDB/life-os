@@ -17,7 +17,7 @@
 import { reducedMotion, settle } from './motion.js';
 import {
   row, section, moreOptions, wireMoreOptions, dateField, timeField, wireDateTime,
-  selectField, wireMenus,
+  selectField, wireMenus, fieldError,
 } from './calendar-fields.js';
 
 const RISE_IN = [{ opacity: 0, translate: '0 10px', scale: '0.985' },
@@ -84,12 +84,19 @@ export function openReminderModal(ctx) {
   dlg.innerHTML = `
     <div class="m-head">
       <span class="rm-mark" aria-hidden="true"></span>
-      <textarea id="rm-title" class="m-title" rows="1" placeholder="Remind me to…"
-        aria-label="Reminder">${esc(f.title)}</textarea>
+      <h2 class="m-title">${r ? 'Edit reminder' : 'New reminder'}</h2>
       <button class="m-close" id="rm-close" aria-label="Close">&times;</button>
     </div>
 
     <div class="m-body cf-body">
+      <!-- The name goes where Event and Birthday put theirs: the first field
+           in the body, not the dialog's heading. The heading says which of the
+           four things you are making; the field is what you are making. -->
+      <div class="cf-title">
+        <textarea id="rm-title" rows="1" placeholder="Remind me to…"
+          aria-label="Reminder">${esc(f.title)}</textarea>
+      </div>
+
       ${section(`
         ${row('When', `${dateField('rm-date', f.dueDate, { label: 'Date' })}
           ${timeField('rm-time', f.dueTime, { label: 'Time', allowClear: true })}`)}
@@ -190,7 +197,9 @@ export function openReminderModal(ctx) {
   const state = $('#rm-state');
   $('#rm-save').onclick = async () => {
     const v = read();
-    if (!v.title) { title.focus(); state.textContent = 'What should you be reminded about?'; return; }
+    /* Beside the field, not in the footer. A message at the bottom of the
+     * dialog makes the reader hunt for which control it is about. */
+    if (!v.title) { fieldError(title, 'What should you be reminded about?'); return; }
     const btn = $('#rm-save');
     btn.classList.add('is-busy');
     state.textContent = 'Saving…';
@@ -208,8 +217,8 @@ export function openReminderModal(ctx) {
           frequency: { daily: 'DAILY', weekly: 'WEEKLY',
             monthly: 'MONTHLY', yearly: 'YEARLY' }[v.repeat],
           interval: 1,
-          ...(v.repeat === 'weekly' ? { byWeekday: [parseIso(f.dueDate).getDay()] } : {}),
-          ...(v.repeat === 'monthly' ? { byMonthDay: [parseIso(f.dueDate).getDate()] } : {}),
+          ...(v.repeat === 'weekly' ? { byWeekday: [parseIso(v.dueDate).getDay()] } : {}),
+          ...(v.repeat === 'monthly' ? { byMonthDay: [parseIso(v.dueDate).getDate()] } : {}),
         } : null,
       });
       close(true);

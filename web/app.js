@@ -2884,8 +2884,24 @@ function renderCalendarRail() {
       loadCalendar();
     };
   });
+  /* Schedule opens the scheduler; it does not quietly write.
+   *
+   * This used to call `scheduleFromQueue`, which dropped the task into the
+   * first free hour of the week and saved it. Nothing opened and nothing
+   * moved on screen until the next refresh, so the button read as dead while
+   * it was in fact committing a block — and never said which hour it chose.
+   * Now it lands in the same modal as + Add and a clicked Plan slot, with the
+   * task chosen and the conflict check visible before anything is saved. */
   rail.querySelectorAll('[data-schedule]').forEach((b) => {
-    b.onclick = (e) => { e.stopPropagation(); scheduleFromQueue(b.dataset.schedule); };
+    b.onclick = (e) => { e.stopPropagation(); openScheduleTask({ taskId: b.dataset.schedule }); };
+  });
+  // The card claims to work with a keyboard; Enter has to mean the same thing.
+  rail.querySelectorAll('.pq-card[data-queue-task]').forEach((card) => {
+    card.onkeydown = (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      openScheduleTask({ taskId: card.dataset.queueTask });
+    };
   });
   /* The ordinary Add Habit flow, opened from where habits are being looked at
    * — not a Calendar-specific creator, which would be a second place a habit
@@ -4733,23 +4749,6 @@ const addPlanMinutes = (time, mins) => {
 };
 
 /** Schedules a queued task without dragging — keyboard and touch path. */
-async function scheduleFromQueue(taskId) {
-  const hrs = planHours();
-  const week = weekOf(cal.anchor).map(iso);
-  // First free window of at least an hour, from today onward.
-  for (const day of week) {
-    if (day < iso(new Date())) continue;
-    for (const [from, to] of freeWindowsFor(day)) {
-      if (to - from < 60) continue;
-      const mk = (min) => {
-        const [y, m, d] = day.split('-').map(Number);
-        return new Date(y, m - 1, d, Math.floor(min / 60), min % 60).toISOString();
-      };
-      return scheduleTask(taskId, mk(from), mk(from + 60));
-    }
-  }
-  toast('No free hour left this week. Try another week.', true);
-}
 
 /** Drops a task into a time slot. One write, after the drop. */
 async function scheduleTask(taskId, startsAt, endsAt) {

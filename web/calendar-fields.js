@@ -87,6 +87,49 @@ export function wireMoreOptions(root) {
   });
 }
 
+/* ══ Validation ══════════════════════════════════════════════════════════ */
+
+/**
+ * Says what is wrong, where it is wrong.
+ *
+ * Blocking the action and moving focus is a hint, not an explanation: pressing
+ * Continue and watching nothing happen reads as a broken button, not as "this
+ * field is required". The message goes next to the field, and clears the
+ * moment the person starts fixing it rather than staying to nag.
+ */
+export function fieldError(el, message) {
+  if (!el) return;
+  const holder = el.closest('.cf-row, .cf-title, .cf-group') ?? el.parentElement;
+  clearFieldError(holder);
+  el.setAttribute('aria-invalid', 'true');
+  el.classList.add('is-invalid');
+  const note = document.createElement('p');
+  note.className = 'cf-err';
+  note.dataset.cfErr = '';
+  note.setAttribute('role', 'alert');
+  note.textContent = message;
+  (el.closest('.cf-ctl-wrap') ?? holder).appendChild(note);
+  el.focus?.();
+
+  const clear = () => {
+    el.removeAttribute('aria-invalid');
+    el.classList.remove('is-invalid');
+    note.remove();
+    el.removeEventListener('input', clear);
+    el.removeEventListener('change', clear);
+  };
+  el.addEventListener('input', clear);
+  el.addEventListener('change', clear);
+}
+
+export function clearFieldError(root) {
+  root?.querySelectorAll?.('[data-cf-err]').forEach((n) => n.remove());
+  root?.querySelectorAll?.('.is-invalid').forEach((n) => {
+    n.classList.remove('is-invalid');
+    n.removeAttribute('aria-invalid');
+  });
+}
+
 /* ══ Date and time ═══════════════════════════════════════════════════════ */
 
 export const dateField = (id, value, opts = {}) => `<button type="button"
@@ -161,12 +204,12 @@ export function wireDateTime(root, dlg, onChange) {
   const pop = popoverHost(dlg);
   const close = () => closePopover(dlg);
 
-  const set = (btn, value, kind) => {
+  const set = (btn, value, kind, keepOpen) => {
     btn.dataset.value = value ?? '';
     const text = btn.querySelector('[data-cf-text]');
     if (kind === 'date') text.textContent = formatDate(value);
     else text.textContent = value ? formatTime(value) : (btn.dataset.clearLabel || 'Any time');
-    close();
+    if (!keepOpen) close();
     onChange?.(kind, value, btn);
   };
 
@@ -184,6 +227,11 @@ export function wireDateTime(root, dlg, onChange) {
         timePickerPopover(pop, dlg, btn, btn.dataset.value, (v) => set(btn, v, 'time'), {
           allowClear: btn.dataset.clear === '1',
           clearLabel: btn.dataset.clearLabel,
+          /* Choosing an hour has to mean something on its own. Only `Done`
+           * used to commit, so picking 9, then 30, then clicking away threw
+           * both away — while the date picker beside it committed on click.
+           * Now every click writes through; `Done` only closes. */
+          onLive: (v) => set(btn, v, 'time', true),
         });
       }
     });
@@ -524,6 +572,16 @@ export function describeRecurrence(rule) {
 const listWords = (xs) => (xs.length <= 1 ? (xs[0] ?? '')
   : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
+/* "On the ___" should open on the date you are already looking at. It used to
+ * default to the first Monday of the month whatever the event's date was, so
+ * an event on Thursday the 20th proposed "first Monday" and had to be
+ * corrected by hand every time. */
+const nthOf = (day) => {
+  const d = day ? parseIsoDate(day) : new Date();
+  return { ord: String(Math.min(4, Math.ceil(d.getDate() / 7))),
+    wd: ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][d.getDay()] };
+};
+
 export const recurrenceBuilder = (day) => `<div class="cf-rec" data-cf-rec data-day="${esc(day)}">
   <div class="cf-rec-row">
     <span>Every</span>
@@ -545,9 +603,9 @@ export const recurrenceBuilder = (day) => `<div class="cf-rec" data-cf-rec data-
     <label><input type="radio" name="cf-rec-mode" value="nth">
       <span>on the
         ${selectField('cf-rec-ord', ORDINALS.map((o) => ({ id: o.v, label: o.label })),
-    '1', 'Which one')}
+    nthOf(day).ord, 'Which one')}
         ${selectField('cf-rec-nthday', WEEKDAYS.map((d) => ({ id: d.id, label: DAY_NAME[d.id] })),
-    'MO', 'Which day')}
+    nthOf(day).wd, 'Which day')}
       </span></label>
   </div>
 

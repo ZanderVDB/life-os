@@ -473,7 +473,15 @@ test('ui: the plan queue is cards with a non-drag path', () => {
   assert.match(calendar, /data-schedule=/, 'there is no non-drag schedule action');
   assert.match(calendar, /tabindex="0"/, 'queue cards are not keyboard reachable');
   assert.match(html, /\.pq-card\{/, 'queue cards have no styling');
-  assert.match(app, /function scheduleFromQueue/, 'the schedule action is not wired');
+  /* Not "does a scheduling function exist" — that was true the whole time the
+   * button was writing a block with nothing on screen to show for it. What
+   * matters is where the click LANDS. */
+  const handler = app.slice(app.indexOf("rail.querySelectorAll('[data-schedule]')"));
+  assert.match(handler.slice(0, 300), /openScheduleTask\(\{ taskId/,
+    'the queue Schedule button does not open the scheduler');
+  assert.ok(!/scheduleFromQueue\(/.test(app),
+    'a queue click still writes a block without confirmation');
+  assert.match(app, /\.pq-card\[data-queue-task\]/, 'queue cards have no keyboard path');
 });
 
 test('ui: free windows ignore slivers that are not usable work time', () => {
