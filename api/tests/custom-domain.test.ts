@@ -209,15 +209,23 @@ test('the home page explains what the app is for', () => {
     indexHtml.indexOf('</main>')).replace(/\s+/g, ' ');
   // Purpose, not just a product name and a button.
   assert.match(landing, /lp-lede/, 'there is no description of the app');
+  /* One sentence saying what the app IS, in the first screen. A reviewer who
+   * reads nothing else has to come away knowing this much. */
+  assert.match(landing, /Life OS is a personal productivity app/,
+    'the home page never plainly states what Life OS is');
+  assert.match(landing, /<h2>What Life OS is for<\/h2>/, 'there is no purpose section');
   for (const surface of ['Today', 'Calendar', 'Projects', 'Diary', 'Library', 'Habits']) {
-    assert.ok(landing.includes(`<h3>${surface}</h3>`), `the home page does not mention ${surface}`);
+    assert.ok(landing.includes(`<dt>${surface}</dt>`), `the home page does not mention ${surface}`);
   }
   /* And it says why it wants a calendar, in the reviewer's own terms. This is
    * the section the scope review reads. */
   assert.match(landing, /Connecting Google Calendar/, 'the calendar permission is never explained');
   assert.match(landing, /entirely optional/, 'the home page implies calendar access is required');
-  assert.match(landing, /only the specific change you confirm/,
+  assert.match(landing, /only ever writes the specific change you confirm/,
     'the home page does not say writes are confirmed first');
+  // Each scope explained in its own words, not just named.
+  assert.equal((landing.match(/<li><b>/g) ?? []).length, 4,
+    'the four calendar permissions are not each explained');
   // Reachable from the page a reviewer lands on.
   assert.match(landing, /href="\.\/privacy\.html"/, 'the home page does not link the privacy policy');
   assert.match(landing, /href="\.\/terms\.html"/, 'the home page does not link the terms');
@@ -267,4 +275,14 @@ test('the home page is small enough that its content is actually read', () => {
   assert.match(sw, /'\.\/app\.css'/, 'the stylesheet is not precached');
   // And it carries no content hash, so it must not be cached across a deploy.
   assert.match(webServer, /ext === '\.css'/, 'a stale stylesheet can outlive a deploy');
+});
+
+test('nothing stands between a crawler and the public pages', () => {
+  const robots = read(join('..', 'web', 'robots.txt'));
+  assert.match(robots, /User-agent: \*/, 'robots.txt does not address every crawler');
+  assert.match(robots, /Allow: \//, 'the site is not explicitly allowed');
+  assert.ok(!/Disallow: \/\s*$/m.test(robots), 'the whole site is disallowed');
+  // Served as text, or a crawler is handed a download instead of a file.
+  assert.match(webServer, /'\.txt': 'text\/plain/, 'robots.txt is served with the wrong type');
+  assert.match(webServer, /'\.xml': 'application\/xml/, 'the sitemap is served with the wrong type');
 });

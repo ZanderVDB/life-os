@@ -30,6 +30,9 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.webmanifest': 'application/manifest+json',
+  // Served as themselves, or a crawler gets a download prompt instead.
+  '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
 };
 
 /** Env-derived config, or null when nothing is configured. */

@@ -1,0 +1,8 @@
+# Life OS. The app itself is behind a sign-in and has nothing to crawl; the
+# public pages are the home page and the two legal ones. Everything is
+# allowed rather than merely un-forbidden, because a verifier checking this
+# app should never have to wonder whether it was refused.
+User-agent: *
+Allow: /
+
+Sitemap: https://life-os.web-anchor.com/sitemap.xml
