@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · Life OS</title>
+<meta name="description" content="What Life OS stores, where it stores it, and what it does with your Google data.">
+<link rel="icon" href="./icons/app-icon.svg">
+<link rel="stylesheet" href="./legal.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <a class="back" href="./index.html">&larr; Back to Life OS</a>
+  <h1>Privacy Policy</h1>
+  <p class="stamp">Last updated 21 August 2026.</p>
+</header>
+
+<p>This describes exactly what Life OS stores, where it is kept, and what
+  happens to data it receives from Google. It is written to be checked against
+  the software rather than to sound reassuring — if something here does not
+  match what the app does, the policy is the thing that is wrong, and I want to
+  know about it.</p>
+
+<h2>Who runs Life OS</h2>
+<p>Life OS is built and operated by <b>Zander van der Berg</b>, based in South
+  Africa. For any privacy question, to ask for your data, or to have your
+  account deleted, email
+  <a href="mailto:zander.vanderberg1@gmail.com">zander.vanderberg1@gmail.com</a>.</p>
+
+<h2>Signing in</h2>
+<p>Life OS uses <b>Firebase Authentication</b> with Google as the only sign-in
+  method. When you sign in, Life OS receives your <b>name</b>, <b>email
+  address</b>, <b>profile photo URL</b> and a <b>Google account identifier</b>.</p>
+<p>Life OS never sees, receives or stores your Google password. Signing in does
+  <b>not</b> give Life OS access to your calendar — that is a separate
+  permission you grant later, or never.</p>
+
+<h2>What Life OS stores</h2>
+<p>Everything you create lives in a <b>PostgreSQL database</b> hosted on
+  <b>Railway</b>, in a workspace belonging to your account. That includes:</p>
+<ul>
+  <li>Tasks, projects and the areas you file them under</li>
+  <li>Habits and their completion history</li>
+  <li>Diary entries and reflections</li>
+  <li>Library books, their sections, and bookmarks</li>
+  <li>Reminders and scheduled time blocks</li>
+  <li>Your settings and preferences</li>
+</ul>
+
+<h2>Google Calendar</h2>
+<p>Connecting Google Calendar is <b>optional</b>. Life OS works without it, and
+  you can disconnect at any time from Settings &rarr; Integrations.</p>
+
+<h3>What Life OS asks for</h3>
+<ul>
+  <li><code>calendar.events</code> — to read your events, and to create, change
+    and delete events you ask it to</li>
+  <li><code>calendar.calendarlist.readonly</code> — to list which calendars you
+    have, so you can choose where an event goes</li>
+  <li><code>calendar.freebusy</code> — to tell whether a time is already taken</li>
+</ul>
+
+<h3>What Life OS stores from your calendar</h3>
+<p>This is the part most policies are vague about, so plainly: <b>Life OS keeps
+  a copy of your calendar events in its own database.</b> It does not fetch
+  them from Google each time you look. That copy includes the event's
+  <b>title</b>, <b>description</b>, <b>location</b>, <b>start and end times</b>,
+  <b>recurrence rule</b>, <b>status</b>, and the <b>email addresses and names of
+  people invited</b>.</p>
+<p>It is kept so the calendar loads instantly, works when Google is slow, and so
+  Life OS can tell you when something clashes. Google notifies Life OS when
+  something changes, and the copy is updated.</p>
+
+<h3>Writing to your calendar</h3>
+<p>Life OS only creates, changes or deletes a Google event when you explicitly
+  confirm that specific change on screen first. Nothing is written to your
+  calendar in the background.</p>
+
+<h3>Your Google tokens</h3>
+<p>The tokens that let Life OS reach your calendar are <b>encrypted at rest</b>
+  (AES-256-GCM) and never leave the server. They are not sent to your browser.</p>
+
+<h3>Disconnecting</h3>
+<p>Disconnecting removes Life OS's copy of your Google events and ends the
+  connection. Your actual Google Calendar is not changed, and your Life OS
+  tasks, diary, library and habits are untouched.</p>
+
+<div class="note">
+  <p><b>Limited Use.</b> Life OS's use and transfer of information received from
+  Google APIs to any other app will adhere to the
+  <a href="https://developers.google.com/terms/api-services-user-data-policy"
+     target="_blank" rel="noopener">Google API Services User Data Policy</a>,
+  including the Limited Use requirements.</p>
+</div>
+
+<h2>What Life OS does not do</h2>
+<ul>
+  <li><b>No advertising.</b> Your data is never used to target ads.</li>
+  <li><b>No selling or sharing.</b> Your data is not sold, rented or passed to
+    marketing partners.</li>
+  <li><b>No analytics or tracking.</b> There is no analytics service, no
+    tracking pixel and no third-party script in Life OS.</li>
+  <li><b>No training.</b> Your content is not used to train any model. Life OS
+    has no AI features at this time.</li>
+  <li><b>No advertising cookies.</b> In fact no cookies at all — see below.</li>
+  <li><b>No reading your data.</b> I do not read your tasks, diary or calendar.
+    The only exception would be if you asked me to look at something specific
+    to fix a problem.</li>
+</ul>
+
+<h2>What is kept on your device</h2>
+<p>Life OS stores almost nothing locally. Specifically:</p>
+<ul>
+  <li>Your <b>sign-in session</b>, held by Firebase in the browser's own storage</li>
+  <li>Your workspace identifier and which calendar view you last used</li>
+  <li>A cached copy of the <b>application itself</b> — the HTML, styles and
+    scripts — so it opens quickly and survives a poor connection</li>
+</ul>
+<p>Your tasks, diary entries, habits and calendar are <b>not</b> written to your
+  device. That is why Life OS needs a connection to work, and it is also why
+  nothing of yours can be read off a lost or stolen laptop.</p>
+<p>Life OS does not use cookies. Requests to the Life OS API are authenticated
+  with a short-lived token sent in a request header.</p>
+
+<h2>Who else is involved</h2>
+<p>Life OS runs on services that necessarily handle your data in order to
+  operate it:</p>
+<ul>
+  <li><b>Google Firebase</b> — sign-in and identity</li>
+  <li><b>Google Calendar API</b> — only if you connect it</li>
+  <li><b>Railway</b> — hosting for the app, the API and the database</li>
+</ul>
+<p>These are infrastructure providers, not partners with whom your data is
+  shared for their own purposes. There is no one else.</p>
+
+<h2>Logs</h2>
+<p>The server keeps operational logs to diagnose failures. Credentials, tokens
+  and your written content are deliberately stripped out before anything is
+  logged. Logs are not used to build any profile of you.</p>
+
+<h2>Keeping your data separate</h2>
+<p>Each account gets its own workspace. Every request is checked against the
+  identity in your sign-in token, and a request for a workspace you are not a
+  member of is refused. No account can see another account's data.</p>
+
+<h2>Your choices</h2>
+<h3>Getting a copy of your data</h3>
+<p>A self-service export is <b>not built yet</b>. Until it is, email me and I
+  will produce your data by hand.</p>
+<h3>Deleting your account</h3>
+<p>There is <b>no self-service delete yet</b>. Email me and I will delete your
+  account, your workspace, everything in it, and any Google connection. I will
+  confirm when it is done.</p>
+<h3>Withdrawing calendar access</h3>
+<p>Disconnect from Settings &rarr; Integrations at any time. You can also revoke
+  access directly at
+  <a href="https://myaccount.google.com/permissions" target="_blank"
+     rel="noopener">your Google account permissions page</a>.</p>
+
+<h2>How long data is kept</h2>
+<p>Your content is kept until you delete it or ask for your account to be
+  removed. Google calendar copies are removed when you disconnect.</p>
+
+<h2>Children</h2>
+<p>Life OS is not intended for children under 13 and is not directed at them.</p>
+
+<h2>Changes to this policy</h2>
+<p>If what Life OS does with your data changes, this page changes with it and
+  the date at the top moves. Material changes will be mentioned in the app.</p>
+
+<h2>Contact</h2>
+<p>Anything at all:
+  <a href="mailto:zander.vanderberg1@gmail.com">zander.vanderberg1@gmail.com</a>.</p>
+
+<footer>
+  Life OS · <a href="./terms.html">Terms of Service</a> ·
+  <a href="./index.html">Back to the app</a>
+</footer>
+
+</div>
+</body>
+</html>

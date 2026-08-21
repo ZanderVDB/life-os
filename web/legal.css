@@ -1,0 +1,35 @@
+/* Shared by privacy.html and terms.html.
+ *
+ * Deliberately standalone: these two pages must render for someone who is not
+ * signed in, on a cold cache, and for a Google reviewer who will open them
+ * directly. They load no fonts, no scripts and nothing from another origin. */
+:root{
+  --bg:#141220; --surface:#1B1826; --border:rgba(255,255,255,.07);
+  --text:#F4F2FA; --text-2:#C9C4D8; --muted:#8B85A0; --accent:#8A5DFF;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text-2);
+  font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:15px;line-height:1.7;padding:0 24px 96px}
+.wrap{max-width:68ch;margin:0 auto}
+header{padding:40px 0 8px;border-bottom:1px solid var(--border);margin-bottom:34px}
+.back{display:inline-block;font-size:13px;color:var(--muted);text-decoration:none;
+  margin-bottom:26px}
+.back:hover{color:var(--accent)}
+h1{font-size:30px;line-height:1.2;color:var(--text);margin:0 0 10px;letter-spacing:-.02em}
+.stamp{font-size:13px;color:var(--muted);margin:0 0 32px}
+h2{font-size:19px;color:var(--text);margin:38px 0 12px;letter-spacing:-.01em}
+h3{font-size:15px;color:var(--text);margin:26px 0 8px}
+p{margin:0 0 14px}
+ul{margin:0 0 14px;padding-left:22px}
+li{margin-bottom:8px}
+b,strong{color:var(--text);font-weight:600}
+a{color:var(--accent)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;
+  background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:2px 6px}
+.note{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:18px 20px;margin:24px 0}
+.note p:last-child{margin-bottom:0}
+footer{margin-top:52px;padding-top:22px;border-top:1px solid var(--border);
+  font-size:13px;color:var(--muted)}

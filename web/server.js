@@ -131,6 +131,18 @@ const server = createServer(async (req, res) => {
       file = join(file, 'index.html');
       info = await stat(file).catch(() => null);
     }
+    /* `/privacy` should reach `/privacy.html`.
+     *
+     * These two pages get typed by hand, pasted into Google's console and
+     * linked from elsewhere, and a 404 on a privacy policy is worse than
+     * untidy — it is the one page a reviewer definitely opens. The local dev
+     * server resolves extensionless paths, so without this the two behave
+     * differently and only production is wrong. */
+    if (!info && !extname(file)) {
+      const asHtml = `${file}.html`;
+      const alt = await stat(asHtml).catch(() => null);
+      if (alt?.isFile()) { file = asHtml; info = alt; }
+    }
     if (!info) {
       res.writeHead(404, { 'content-type': 'text/plain' });
       return res.end('Not found');

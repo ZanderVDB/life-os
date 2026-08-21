@@ -129,3 +129,50 @@ test('signing in does not depend on Google Calendar', () => {
   assert.ok(!/calendar/i.test(boot), 'boot will not finish without the calendar');
   assert.match(app, /api\('\/api\/v1\/me'\)/, 'boot no longer establishes the identity first');
 });
+
+/* ── Privacy and terms ──────────────────────────────────────────────────
+ * Google requires both to be reachable on a domain we own before an app with
+ * sensitive scopes can be verified. More importantly, the previous pair were
+ * written for the legacy app and said things that were no longer true. */
+const privacy = read(join('..', 'web', 'privacy.html'));
+const terms = read(join('..', 'web', 'terms.html'));
+const settings = read(join('..', 'web', 'settings.js'));
+const webServer = read(join('..', 'web', 'server.js'));
+
+test('the legal pages describe THIS app, not the one before it', () => {
+  for (const [name, src] of [['privacy', privacy], ['terms', terms]] as [string, string][]) {
+    // Every one of these was in the old policy and is false of v2.
+    for (const lie of ['Firestore', 'Outlook', 'Anthropic', 'API key']) {
+      assert.ok(!new RegExp(lie, 'i').test(src), `${name} still claims: ${lie}`);
+    }
+  }
+  // And the things that ARE true, stated rather than skirted around.
+  assert.match(privacy, /PostgreSQL/, 'the privacy policy does not say where data is stored');
+  // Wrapped prose: compare against one flat line rather than fighting newlines.
+  const flat = privacy.replace(/\s+/g, ' ');
+  assert.match(flat, /keeps a copy of your calendar events in its own database/,
+    'the privacy policy does not admit that calendar events are mirrored');
+  assert.match(flat, /email addresses and names of people invited/,
+    'the privacy policy does not disclose that attendee emails are stored');
+  assert.match(privacy, /encrypted at rest/, 'token handling is not described');
+  for (const scope of ['calendar.events', 'calendar.calendarlist.readonly', 'calendar.freebusy']) {
+    assert.ok(privacy.includes(scope), `the privacy policy omits the ${scope} scope`);
+  }
+  // Google will not verify an app whose policy lacks this.
+  assert.match(privacy, /Google API Services User Data Policy/, 'no Limited Use disclosure');
+  assert.match(privacy, /Limited Use/, 'no Limited Use disclosure');
+});
+
+test('the legal pages are reachable and linked from inside the app', () => {
+  // Served from web/, so they exist on whatever origin the app is served from.
+  assert.match(privacy, /<title>Privacy Policy/, 'the privacy page has no title');
+  assert.match(terms, /<title>Terms of Service/, 'the terms page has no title');
+  assert.match(settings, /href="\.\/privacy\.html"/, 'Settings does not link the privacy policy');
+  assert.match(settings, /href="\.\/terms\.html"/, 'Settings does not link the terms');
+  // Each points at the other, so neither is a dead end.
+  assert.match(privacy, /href="\.\/terms\.html"/, 'privacy does not link terms');
+  assert.match(terms, /href="\.\/privacy\.html"/, 'terms does not link privacy');
+  // /privacy must resolve as well as /privacy.html — the URL gets typed by hand.
+  assert.match(webServer, /if \(!info && !extname\(file\)\)/,
+    'an extensionless legal URL 404s in production');
+});

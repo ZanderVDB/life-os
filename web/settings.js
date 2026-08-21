@@ -376,9 +376,23 @@ function dataPanel() {
     + 'including the Google connection.', badge('later', 'By request'))}`)}
 
     ${sec('What leaves Life OS', row('Google Calendar',
-    'If you connect it, calendar data moves both ways with Google — and only '
-    + 'that. Disconnecting stops it immediately.',
-    '<button class="btn" id="go-integrations">Open Integrations</button>'))}`;
+    'If you connect it, calendar data moves both ways with Google — and Life OS '
+    + 'keeps its own copy of those events, including who is invited, so the '
+    + 'calendar loads instantly and can tell you when something clashes. '
+    + 'Disconnecting removes that copy.',
+    '<button class="btn" id="go-integrations">Open Integrations</button>'))}
+
+    ${sec('The written version', `
+      ${row('Privacy Policy',
+    'What is stored, where it is kept, and exactly what happens to anything '
+    + 'Google gives Life OS access to.',
+    '<a class="btn" href="./privacy.html" target="_blank" rel="noopener">Read</a>')}
+      ${row('Terms of Service',
+    'What Life OS promises, what it does not, and how to end it.',
+    '<a class="btn" href="./terms.html" target="_blank" rel="noopener">Read</a>')}`,
+  'These describe the software as it actually behaves. If you find a line that '
+  + 'does not match what Life OS does, the page is the thing that is wrong — '
+  + 'please say so.')}`;
 }
 
 /* ══ The shell ═══════════════════════════════════════════════════════════ */
