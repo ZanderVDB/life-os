@@ -286,3 +286,41 @@ test('nothing stands between a crawler and the public pages', () => {
   assert.match(webServer, /'\.txt': 'text\/plain/, 'robots.txt is served with the wrong type');
   assert.match(webServer, /'\.xml': 'application\/xml/, 'the sitemap is served with the wrong type');
 });
+
+test('the name and the purpose are readable without parsing prose', () => {
+  /* Both remaining verification errors asked machine questions — what is this
+   * app called, and what is it for — and the only machine-readable answers on
+   * the page were <title>Life OS</title> and a meta description reading "Your
+   * calm home for everything", which is a tagline and not a purpose. */
+  const head = indexHtml.slice(0, indexHtml.indexOf('</head>'));
+
+  // The name, stated identically everywhere a reader might look for it.
+  assert.match(head, /<title>Life OS<\/title>/, 'the title is not exactly the app name');
+  for (const tag of ['application-name', 'og:site_name', 'og:title']) {
+    assert.ok(new RegExp(`(name|property)="${tag}" content="Life OS"`).test(head),
+      `${tag} does not carry the app name`);
+  }
+
+  // The purpose, in prose a checker can lift whole.
+  const desc = head.match(/<meta name="description" content="([^"]+)"/);
+  assert.ok(desc, 'there is no meta description');
+  assert.match(desc![1], /^Life OS is a personal productivity app/,
+    'the description is a tagline rather than a statement of purpose');
+  assert.ok(desc![1].length > 90, 'the description is too short to explain anything');
+  assert.match(head, /<meta property="og:description" content="Life OS is a personal/,
+    'the Open Graph description does not state the purpose');
+
+  // Structured data, which has to be valid JSON or it is worse than absent.
+  const ld = head.match(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/);
+  assert.ok(ld, 'there is no structured data');
+  const parsed = JSON.parse(ld![1]) as Record<string, unknown>;
+  assert.equal(parsed['@type'], 'SoftwareApplication', 'the structured data is not an application');
+  assert.equal(parsed.name, 'Life OS', 'the structured data name does not match the consent screen');
+  assert.match(String(parsed.description), /personal productivity app/,
+    'the structured data does not describe the app');
+  assert.equal(parsed.url, 'https://life-os.web-anchor.com/', 'the structured data points elsewhere');
+
+  // And one canonical URL, so there is no argument about which page this is.
+  assert.match(head, /<link rel="canonical" href="https:\/\/life-os\.web-anchor\.com\/">/,
+    'the home page declares no canonical URL');
+});
