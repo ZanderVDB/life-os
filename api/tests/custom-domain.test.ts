@@ -227,8 +227,12 @@ test('the home page explains what the app is for', () => {
   assert.equal((landing.match(/<li><b>/g) ?? []).length, 4,
     'the four calendar permissions are not each explained');
   // Reachable from the page a reviewer lands on.
-  assert.match(landing, /href="\.\/privacy\.html"/, 'the home page does not link the privacy policy');
-  assert.match(landing, /href="\.\/terms\.html"/, 'the home page does not link the terms');
+  // Absolute, so it matches the consent screen string for string — see the
+  // homepage-requirements test below.
+  assert.match(landing, /href="https:\/\/life-os\.web-anchor\.com\/privacy\.html"/,
+    'the home page does not link the privacy policy');
+  assert.match(landing, /href="https:\/\/life-os\.web-anchor\.com\/terms\.html"/,
+    'the home page does not link the terms');
 });
 
 test('a returning visitor does not watch the landing page flash past', () => {
@@ -323,4 +327,45 @@ test('the name and the purpose are readable without parsing prose', () => {
   // And one canonical URL, so there is no argument about which page this is.
   assert.match(head, /<link rel="canonical" href="https:\/\/life-os\.web-anchor\.com\/">/,
     'the home page declares no canonical URL');
+});
+
+test("the home page meets Google's published homepage requirements", () => {
+  const landing = indexHtml.slice(indexHtml.indexOf('id="landing"'),
+    indexHtml.indexOf('</main>')).replace(/\s+/g, ' ');
+
+  /* "Include a link to your privacy policy (this link should match the link
+   * you added on your consent screen configuration)."
+   *
+   * The consent screen carries a full URL. ./privacy.html resolves to the same
+   * page in a browser and is not the same string, so a checker comparing the
+   * two finds nothing. Absolute, character for character. */
+  const POLICY = 'https://life-os.web-anchor.com/privacy.html';
+  assert.ok(landing.includes(`href="${POLICY}"`),
+    'the privacy link does not match the consent screen configuration');
+  assert.ok(!/href="\.\/privacy\.html"/.test(landing),
+    'a relative privacy link is back on the home page');
+
+  // "Accurately represent and identify your app or brand."
+  assert.ok(indexHtml.includes('<h1>Life OS</h1>'), 'the app is not identified by name');
+
+  // "Fully describe your app's functionality to users."
+  assert.ok((landing.match(/<dt>/g) ?? []).length >= 6,
+    'the functionality is not described in any detail');
+
+  /* "Explain with transparency the purpose for which your app requests user
+   * data" — each scope, and what it is wanted for, not just its name. */
+  assert.match(landing, /If you connect it, Life OS asks Google for permission to/,
+    'the home page does not explain why user data is requested');
+  assert.equal((landing.match(/<li><b>/g) ?? []).length, 4,
+    'not every requested permission is explained');
+
+  /* Google's branding rules: no Google product name in the app's own name, and
+   * no Google mark as the app's icon. Referring to Google Calendar as the
+   * thing being connected to is exactly what those rules permit. */
+  assert.equal(indexHtml.match(/<h1>(.*?)<\/h1>/)![1], 'Life OS',
+    'the app name contains something it should not');
+  for (const tag of ['og:site_name', 'og:title']) {
+    const m = indexHtml.match(new RegExp(`property="${tag}" content="([^"]+)"`));
+    assert.ok(m && !/google/i.test(m[1]), `${tag} puts a Google product name in the app name`);
+  }
 });
