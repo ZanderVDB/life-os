@@ -21,7 +21,7 @@ const strip = (src: string) => src
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\r\n]*/g, '$1');
 const appCode = strip(read('app.js'));
 const pjCode = strip(read('projects.js'));
-const css = strip(read('index.html'));
+const css = strip(read('index.html') + read('app.css'));
 
 function body(src: string, decl: string): string {
   const at = src.indexOf(decl);

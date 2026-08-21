@@ -31,7 +31,7 @@ const code = (src: string) => src
 const shelf = code(raw('library-shelf.js'));
 const view = code(raw('library-view.js'));
 const book = code(raw('library-book.js'));
-const html = raw('index.html');
+const html = raw('index.html') + raw('app.css');
 /* The Library region of the stylesheet, bounded at both ends — an unbounded
  * slice is how three L3.4 assertions once ended up reading the component lab. */
 const css = html.slice(html.indexOf('LIBRARY (Phase F2)'), html.indexOf('DIARY', html.indexOf('LIBRARY (Phase F2)')));

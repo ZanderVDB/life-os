@@ -28,6 +28,7 @@ const CACHE_PREFIX = 'life-os-v2-';
 const SHELL = [
   './',
   './index.html',
+  './app.css',
   './app.js',
   './routes.js',
   './pwa.js',

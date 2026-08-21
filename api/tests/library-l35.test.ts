@@ -41,7 +41,8 @@ const web = (f: string) => code(readFileSync(join(WEB, f), 'utf8'));
 const libShelf = web('library-shelf.js');
 const libBook = web('library-book.js');
 const libView = web('library-view.js');
-const indexHtml = readFileSync(join(WEB, 'index.html'), 'utf8');
+const indexHtml = readFileSync(join(WEB, 'index.html'), 'utf8')
+  + readFileSync(join(WEB, 'app.css'), 'utf8');
 
 /* Re-implementations of the rules, so the assertions are about behaviour rather
  * than about the shape of the source. */

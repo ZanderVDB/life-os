@@ -23,7 +23,10 @@ const client = readFileSync(join('src', 'lib', 'google-calendar.ts'), 'utf8');
 const crypto = readFileSync(join('src', 'lib', 'token-crypto.ts'), 'utf8');
 const calendar = read('calendar.js');
 const app = read('app.js');
-const html = read('index.html');
+/* index.html + app.css: the stylesheet moved out of the page so the home
+ * page is 5KB instead of 350KB. These assertions are about the app's CSS,
+ * which is still the app's CSS — it just has its own file now. */
+const html = read('index.html') + read('app.css');
 
 /** The source of one declaration, so a rule can be asserted where it lives. */
 function body(src: string, decl: string): string {

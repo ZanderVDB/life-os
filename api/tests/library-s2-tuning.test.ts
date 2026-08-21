@@ -17,7 +17,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const WEB = join('..', 'web');
-const html = readFileSync(join(WEB, 'index.html'), 'utf8');
+const html = readFileSync(join(WEB, 'index.html'), 'utf8')
+  + readFileSync(join(WEB, 'app.css'), 'utf8');
 const shelf = readFileSync(join(WEB, 'library-shelf.js'), 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\r\n]*/g, '$1');
 /* Bounded at both ends — an unbounded slice reads whatever was appended next. */

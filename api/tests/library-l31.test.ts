@@ -44,7 +44,10 @@ const code = (src: string) => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/(^|[^:])\/\/[^\r\n]*/g, '$1');
 
-const html = read('index.html');
+/* index.html + app.css: the stylesheet moved out of the page so the home
+ * page is 5KB instead of 350KB. These assertions are about the app's CSS,
+ * which is still the app's CSS — it just has its own file now. */
+const html = read('index.html') + read('app.css');
 const shelf = code(read('library-shelf.js'));
 const overview = code(read('library-overview.js'));
 const view = code(read('library-view.js'));

@@ -237,3 +237,34 @@ test('a returning visitor does not watch the landing page flash past', () => {
   assert.match(app, /if \(localStorage\.getItem\(SEEN\)\) showSpinner\(\);/,
     'the only read of the hint does something other than choose a screen');
 });
+
+test('the home page is small enough that its content is actually read', () => {
+  /* This is the one that cost two verification rounds.
+   *
+   * The landing page was correct, present, and static — and Google still
+   * reported that the home page did not explain the app and did not carry its
+   * name. Both were true of the rendered page and false of the fetched bytes:
+   * index.html opened with a 350KB inline <style> block, so every word of
+   * content sat past byte 353,000, beyond whatever the verifier was willing to
+   * read. Nothing was wrong with the markup. It was just too far down. */
+  const bytes = Buffer.byteLength(indexHtml, 'utf8');
+  assert.ok(bytes < 24_000,
+    `index.html is ${bytes} bytes — content is being pushed out of reach again`);
+
+  // The name and the purpose have to be near the top, not merely present.
+  const at = (needle: string) => Buffer.byteLength(indexHtml.slice(0, indexHtml.indexOf(needle)), 'utf8');
+  assert.ok(indexHtml.includes('<h1>Life OS</h1>'), 'the app name is gone from the home page');
+  assert.ok(at('<h1>Life OS</h1>') < 8_000, 'the app name is buried too deep to be read');
+  assert.ok(at('Connecting Google Calendar') < 16_000, 'the calendar explanation is buried');
+
+  // The stylesheet is a file, and the page links it rather than carrying it.
+  assert.match(indexHtml, /<link rel="stylesheet" href="\.\/app\.css">/,
+    'the stylesheet is inline again');
+  assert.ok(!/<style>/.test(indexHtml), 'an inline style block is back in the home page');
+
+  // It is part of the shell, or an offline launch renders unstyled.
+  const sw = read(join('..', 'web', 'sw.js'));
+  assert.match(sw, /'\.\/app\.css'/, 'the stylesheet is not precached');
+  // And it carries no content hash, so it must not be cached across a deploy.
+  assert.match(webServer, /ext === '\.css'/, 'a stale stylesheet can outlive a deploy');
+});

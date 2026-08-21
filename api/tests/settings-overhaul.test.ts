@@ -16,7 +16,10 @@ const read = (f: string) => readFileSync(join(WEB, f), 'utf8');
 
 const settings = read('settings.js');
 const app = read('app.js');
-const html = read('index.html');
+/* index.html + app.css: the stylesheet moved out of the page so the home
+ * page is 5KB instead of 350KB. These assertions are about the app's CSS,
+ * which is still the app's CSS — it just has its own file now. */
+const html = read('index.html') + read('app.css');
 const menu = read('menu.js');
 
 test('the dropdown is app-wide, not a Calendar part borrowed by Settings', () => {

@@ -29,7 +29,7 @@ const app = code(raw('app.js'));
 const projects = raw('projects.js');
 const view = code(raw('library-view.js'));
 const shelf = code(raw('library-shelf.js'));
-const html = raw('index.html');
+const html = raw('index.html') + raw('app.css');
 const css = html.slice(html.indexOf('LIBRARY (Phase F2)'), html.indexOf('DIARY', html.indexOf('LIBRARY (Phase F2)')));
 
 /* ══ §1/§21  The Project menu ═════════════════════════════════════════════

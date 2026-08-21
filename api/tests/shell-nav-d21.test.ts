@@ -19,7 +19,10 @@ const app = code(read('app.js'));
 const dragJs = code(read('drag.js'));
 const libView = code(read('library-view.js'));
 const diaView = code(read('diary-view.js'));
-const html = read('index.html');
+/* index.html + app.css: the stylesheet moved out of the page so the home
+ * page is 5KB instead of 350KB. These assertions are about the app's CSS,
+ * which is still the app's CSS — it just has its own file now. */
+const html = read('index.html') + read('app.css');
 
 /* ══ The navigation token ══════════════════════════════════════════════ */
 

@@ -23,7 +23,10 @@ const pickers = read('pickers.js');
 const composer = read('event-composer.js');
 const reminder = read('reminder-modal.js');
 const schedule = read('schedule-task-modal.js');
-const html = read('index.html');
+/* index.html + app.css: the stylesheet moved out of the page so the home
+ * page is 5KB instead of 350KB. These assertions are about the app's CSS,
+ * which is still the app's CSS — it just has its own file now. */
+const html = read('index.html') + read('app.css');
 /* The dropdown moved out of the Calendar's field library and into menu.js when
  * Settings needed the same control. It was never Calendar-specific — a native
  * <select> opens as an operating-system sheet wherever it appears — so the

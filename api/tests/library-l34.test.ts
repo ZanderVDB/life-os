@@ -44,7 +44,8 @@ const css = read('lab.css');
 const WEB = join('..', 'web');
 const libShelf = code(readFileSync(join(WEB, 'library-shelf.js'), 'utf8'));
 const libView = code(readFileSync(join(WEB, 'library-view.js'), 'utf8'));
-const indexHtml = readFileSync(join(WEB, 'index.html'), 'utf8');
+const indexHtml = readFileSync(join(WEB, 'index.html'), 'utf8')
+  + readFileSync(join(WEB, 'app.css'), 'utf8');
 
 /* The C2 region of the stylesheet, bounded at BOTH ends. Open-ended at the top
  * let a rule from one of the six

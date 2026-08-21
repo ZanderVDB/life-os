@@ -514,7 +514,8 @@ test('the Calendar separates trouble from a grant that is actually gone', () => 
   const health = cal.slice(cal.indexOf('function connHealth'), cal.indexOf('function connStatusWord'));
   assert.match(health, /needsReconnect\(conn\)\) return 'is-error'/);
   assert.match(health, /is-warn/);
-  const html = readFileSync(join('..', 'web', 'index.html'), 'utf8');
+  const html = readFileSync(join('..', 'web', 'index.html'), 'utf8')
+    + readFileSync(join('..', 'web', 'app.css'), 'utf8');
   assert.match(html, /\.cs-acct-dot\.is-warn\{background:var\(--warn\)\}/,
     'the amber state has no colour, so it renders as no dot at all');
 });

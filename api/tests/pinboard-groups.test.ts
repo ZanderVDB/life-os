@@ -399,7 +399,7 @@ test('the page menu asks what the page is FOR before what shape it is', () => {
   assert.match(menu, /lib-menu-foot/, 'bookmark and archive are not set apart');
   assert.ok(menu.indexOf('data-act="archive"') > menu.indexOf('lib-menu-foot'),
     'archive is not in the separated footer');
-  assert.match(read('index.html'), /\.lib-menu-foot\{[^}]*border-top/,
+  assert.match(read('app.css'), /\.lib-menu-foot\{[^}]*border-top/,
     'the separation is claimed but not drawn');
 });
 

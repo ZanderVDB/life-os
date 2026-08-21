@@ -168,7 +168,7 @@ const server = createServer(async (req, res) => {
      * Images and fonts keep their cache — their content genuinely does not
      * change under a given name.
      */
-    const mutable = ext === '.html' || ext === '.js' || ext === '.json';
+    const mutable = ext === '.html' || ext === '.js' || ext === '.json' || ext === '.css';
     res.writeHead(200, {
       'content-type': TYPES[ext] ?? 'application/octet-stream',
       'cache-control': mutable ? 'no-store' : 'public, max-age=300',

@@ -503,7 +503,8 @@ test('habits: the tick is the same checkmark the rest of the app draws', () => {
   // leaning crucifix rather than a tick.
   assert.match(calCode, /m4\.5 10\.5 3\.5 3\.5 7\.5-8/,
     'the habit tick does not use the shared checkmark glyph');
-  const css = readFileSync(join(here, '..', '..', 'web', 'index.html'), 'utf8');
+  const css = readFileSync(join(here, '..', '..', 'web', 'index.html'), 'utf8')
+    + readFileSync(join(here, '..', '..', 'web', 'app.css'), 'utf8');
   const rule = css.slice(css.indexOf('.cs-habit-tick{'), css.indexOf('.cs-habit-n{'));
   assert.ok(!/linear-gradient/.test(rule), 'the gradient cross is back');
   assert.match(rule, /color:transparent/, 'the glyph is not hidden until done');

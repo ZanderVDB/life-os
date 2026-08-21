@@ -28,7 +28,7 @@ const strip = (src: string) => src
 const appCode = strip(readWeb('app.js'));
 const stepsCode = strip(readWeb('steps.js'));
 const modalCode = strip(readWeb('task-modal.js'));
-const css = readWeb('index.html');
+const css = readWeb('index.html') + readWeb('app.css');
 
 function body(src: string, decl: string): string {
   const at = src.indexOf(decl);
