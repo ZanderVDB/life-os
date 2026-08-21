@@ -369,3 +369,36 @@ test("the home page meets Google's published homepage requirements", () => {
     assert.ok(m && !/google/i.test(m[1]), `${tag} puts a Google product name in the app name`);
   }
 });
+
+test('the scopes Life OS requests are exactly the three it declares', () => {
+  /* Google verifies the scopes you DECLARE. If the declaration and the
+   * authorize request disagree, the approval covers the wrong thing and the
+   * app keeps asking for something unverified. The console was still
+   * declaring calendar.readonly, which this app has not requested since
+   * two-way sync landed — and which cannot write at all. */
+  const lib = read(join('src', 'lib', 'google-calendar.ts'));
+  const list = lib.slice(lib.indexOf('export const GOOGLE_SCOPES'),
+    lib.indexOf('] as const;'));
+  const found = [...list.matchAll(/auth\/([a-z.]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(found,
+    ['calendar.events', 'calendar.calendarlist.readonly', 'calendar.freebusy'],
+    'the requested scope set changed — the Google verification submission must change with it');
+
+  // The two that would make verification far harder, and are not needed.
+  const code = lib.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!/'https:\/\/www\.googleapis\.com\/auth\/calendar'/.test(
+    code.slice(code.indexOf('GOOGLE_SCOPES'), code.indexOf('] as const;'))),
+  'full calendar control is being requested');
+  assert.ok(!found.includes('calendar.readonly'), 'the superseded read-only scope is back');
+});
+
+test('the file that answers "what does this request" does not lie', () => {
+  /* The header claimed READ-ONLY and "no insert, patch or delete function
+   * anywhere" long after both stopped being true. It is the first thing read
+   * when someone has to state the app's access in a form. */
+  const lib = read(join('src', 'lib', 'google-calendar.ts'));
+  const header = lib.slice(0, lib.indexOf('import '));
+  assert.ok(!/READ-ONLY client/.test(header), 'the header calls a read-write client read-only');
+  assert.ok(!/Scope is `calendar\.readonly` and nothing else/.test(header),
+    'the header names a scope the app does not request');
+});

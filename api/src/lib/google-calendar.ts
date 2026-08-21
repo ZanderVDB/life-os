@@ -1,10 +1,15 @@
 /**
- * Google Calendar — READ-ONLY client and sync engine.
+ * Google Calendar — client and sync engine.
  *
- * Scope is `calendar.readonly` and nothing else. There is deliberately no
- * insert, patch or delete function anywhere in this file: a write path that
- * does not exist cannot be called by accident, which is a stronger guarantee
- * than a permission check someone might later remove.
+ * This header used to say READ-ONLY, and that the scope was
+ * `calendar.readonly` and nothing else. Both stopped being true when two-way
+ * sync landed, and a stale comment about scopes is worse than none: it is the
+ * first thing anyone reads when asked what this app requests, including when
+ * filling in Google's verification form.
+ *
+ * What is true: writes exist, they live in calendar-mutations.ts, and every
+ * one of them goes through propose → confirm, so nothing reaches a calendar
+ * that the person has not agreed to on screen.
  *
  * Two token systems live in this app and must never be confused:
  *   - Firebase ID tokens answer "who is signed into Life OS?"
