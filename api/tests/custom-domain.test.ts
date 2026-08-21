@@ -183,6 +183,11 @@ test('the legal pages are reachable and linked from inside the app', () => {
  * It was behind a login, it did not say what the app was for, and the app's
  * own name was not on it in a form a reviewer could read. */
 const indexHtml = read(join('..', 'web', 'index.html'));
+/* The h1 carries the wordmark class, so it is not a bare <h1>. What matters is
+ * its TEXT — that is what a name check compares — not its attributes. */
+const H1 = /<h1[^>]*>([^<]*)<\/h1>/;
+const h1Text = () => indexHtml.match(H1)?.[1].trim();
+const H1_MARKUP = indexHtml.match(H1)?.[0] ?? '';
 
 test('the home page is readable without signing in, and without JavaScript', () => {
   // The landing is static markup in index.html, not something app.js renders.
@@ -198,9 +203,8 @@ test('the home page is readable without signing in, and without JavaScript', () 
 test('the home page carries the app name Google was given', () => {
   /* The consent screen says "Life OS". If the home page does not say the same
    * thing, verification fails on a name mismatch — which it did. */
-  const h1 = indexHtml.match(/<h1>([^<]*)<\/h1>/);
-  assert.ok(h1, 'the home page has no h1');
-  assert.equal(h1![1].trim(), 'Life OS', 'the h1 does not match the OAuth app name');
+  assert.ok(h1Text(), 'the home page has no h1');
+  assert.equal(h1Text(), 'Life OS', 'the h1 does not match the OAuth app name');
   assert.match(indexHtml, /<title>Life OS<\/title>/, 'the page title is not the app name');
 });
 
@@ -220,7 +224,10 @@ test('the home page explains what the app is for', () => {
   /* And it says why it wants a calendar, in the reviewer's own terms. This is
    * the section the scope review reads. */
   assert.match(landing, /Connecting Google Calendar/, 'the calendar permission is never explained');
-  assert.match(landing, /entirely optional/, 'the home page implies calendar access is required');
+  // Optional has to be said, not merely implied by omission.
+  assert.match(landing, /Optional, reversible/, 'the home page implies calendar access is required');
+  assert.match(landing, /Life OS works fully without one/,
+    'the home page does not say the app works with no calendar at all');
   assert.match(landing, /only ever writes the specific change you confirm/,
     'the home page does not say writes are confirmed first');
   // Each scope explained in its own words, not just named.
@@ -265,8 +272,8 @@ test('the home page is small enough that its content is actually read', () => {
 
   // The name and the purpose have to be near the top, not merely present.
   const at = (needle: string) => Buffer.byteLength(indexHtml.slice(0, indexHtml.indexOf(needle)), 'utf8');
-  assert.ok(indexHtml.includes('<h1>Life OS</h1>'), 'the app name is gone from the home page');
-  assert.ok(at('<h1>Life OS</h1>') < 8_000, 'the app name is buried too deep to be read');
+  assert.equal(h1Text(), 'Life OS', 'the app name is gone from the home page');
+  assert.ok(at(H1_MARKUP) < 8_000, 'the app name is buried too deep to be read');
   assert.ok(at('Connecting Google Calendar') < 16_000, 'the calendar explanation is buried');
 
   // The stylesheet is a file, and the page links it rather than carrying it.
@@ -346,7 +353,7 @@ test("the home page meets Google's published homepage requirements", () => {
     'a relative privacy link is back on the home page');
 
   // "Accurately represent and identify your app or brand."
-  assert.ok(indexHtml.includes('<h1>Life OS</h1>'), 'the app is not identified by name');
+  assert.equal(h1Text(), 'Life OS', 'the app is not identified by name');
 
   // "Fully describe your app's functionality to users."
   assert.ok((landing.match(/<dt>/g) ?? []).length >= 6,
@@ -354,16 +361,18 @@ test("the home page meets Google's published homepage requirements", () => {
 
   /* "Explain with transparency the purpose for which your app requests user
    * data" — each scope, and what it is wanted for, not just its name. */
-  assert.match(landing, /If you connect it, Life OS asks Google for permission to/,
+  assert.match(landing, /What Life OS asks Google for/,
     'the home page does not explain why user data is requested');
+  /* And the counterpoint, which is what makes the list credible rather than a
+   * shopping list of permissions. */
+  assert.match(landing, /What it never does/, 'the home page never states the limits');
   assert.equal((landing.match(/<li><b>/g) ?? []).length, 4,
     'not every requested permission is explained');
 
   /* Google's branding rules: no Google product name in the app's own name, and
    * no Google mark as the app's icon. Referring to Google Calendar as the
    * thing being connected to is exactly what those rules permit. */
-  assert.equal(indexHtml.match(/<h1>(.*?)<\/h1>/)![1], 'Life OS',
-    'the app name contains something it should not');
+  assert.equal(h1Text(), 'Life OS', 'the app name contains something it should not');
   for (const tag of ['og:site_name', 'og:title']) {
     const m = indexHtml.match(new RegExp(`property="${tag}" content="([^"]+)"`));
     assert.ok(m && !/google/i.test(m[1]), `${tag} puts a Google product name in the app name`);
@@ -401,4 +410,33 @@ test('the file that answers "what does this request" does not lie', () => {
   assert.ok(!/READ-ONLY client/.test(header), 'the header calls a read-write client read-only');
   assert.ok(!/Scope is `calendar\.readonly` and nothing else/.test(header),
     'the header names a scope the app does not request');
+});
+
+test('every custom property the home page uses actually exists', () => {
+  /* An undefined custom property does not fall back — it invalidates the whole
+   * declaration. Two of the seven capability tiles drew no accent at all
+   * because --ci-blu and --ci-lav are defined on .dia-checkin, a Diary
+   * component, and mean nothing anywhere else. This has now cost four separate
+   * bugs in this codebase, so it is checked rather than remembered. */
+  const css = read(join('..', 'web', 'app.css'));
+
+  // Everything declared at :root, plus the landing block's own :root additions.
+  const defined = new Set<string>();
+  for (const block of css.match(/:root\s*\{[^}]*\}/g) ?? []) {
+    for (const m of block.matchAll(/(--[a-z0-9-]+)\s*:/g)) defined.add(m[1]);
+  }
+
+  // Everything the landing markup and the landing stylesheet reference.
+  const landing = indexHtml.slice(indexHtml.indexOf('id="landing"'), indexHtml.indexOf('</main>'));
+  const lpCss = css.slice(css.indexOf('.lp{'), css.indexOf('html[data-motion="reduced"]'));
+  const used = new Set<string>();
+  for (const src of [landing, lpCss]) {
+    for (const m of src.matchAll(/var\((--[a-z0-9-]+)/g)) used.add(m[1]);
+  }
+  // --c and --gut are set by the landing itself, on the element or in .lp.
+  used.delete('--c'); used.delete('--gut'); used.delete('--rule');
+
+  const missing = [...used].filter((v) => !defined.has(v));
+  assert.deepEqual(missing, [],
+    `the home page uses custom properties that are not defined at :root: ${missing.join(', ')}`);
 });

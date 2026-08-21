@@ -56,155 +56,233 @@
 </head>
 <body>
 <div id="root"><main class="lp" id="landing">
-  <div class="lp-nav">
+
+  <header class="lp-nav">
     <div class="lp-brand">
-      <svg class="logo-mark" width="26" height="26" viewBox="0 0 24 24" role="img" aria-label="Life OS">
-        <defs><linearGradient id="lpg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#A78BFA"/><stop offset="1" stop-color="#7C3AED"/>
-        </linearGradient></defs>
-        <path d="M12 2.6c2.1 3.3 5.6 4.4 5.6 8.4a5.6 5.6 0 0 1-11.2 0c0-4 3.5-5.1 5.6-8.4Z" fill="url(#lpg)"/>
-        <path d="M12 12.2v9.2" stroke="#A78BFA" stroke-width="1.5" stroke-linecap="round" opacity=".55"/>
-      </svg>
-      <div class="logo-word">Life OS</div>
+      <svg class="logo-mark" width="30" height="30" viewBox="0 0 24 24" role="img" aria-label="Life OS">
+        <defs><linearGradient id="lpLotus" gradientUnits="userSpaceOnUse" x1="4" y1="21" x2="20" y2="3">
+          <stop offset="0" stop-color="#7C4DFF"/><stop offset="1" stop-color="#C28DFF"/></linearGradient></defs>
+        <path d="M12 20.4C6.9 17.6 3.4 13.1 3.4 8.5 7.1 9.2 10.1 13 12 20.4Z" fill="url(#lpLotus)" fill-opacity=".82"/>
+        <path d="M12 20.4c5.1-2.8 8.6-7.3 8.6-11.9-3.7.7-6.7 4.5-8.6 11.9Z" fill="url(#lpLotus)" fill-opacity=".82"/>
+        <path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z" fill="url(#lpLotus)"/></svg>
+      <span class="logo-word">Life OS</span>
     </div>
-    <button class="btn btn-primary" id="si-top">Sign in</button>
-  </div>
+    <nav class="lp-nav-links">
+      <a href="https://life-os.web-anchor.com/privacy.html">Privacy</a>
+      <button class="btn btn-primary lp-nav-cta" id="si-top">Sign in</button>
+    </nav>
+  </header>
 
   <section class="lp-hero">
-    <h1>Life OS</h1>
-    <p class="lp-lede">Life OS is a personal productivity app that keeps your
-      tasks, your calendar, your diary and your habits in one place.</p>
-    <p class="lp-sub">Most people run their life across a to-do app, a calendar,
-      a notes app and a journal — four tools that each know a quarter of what is
-      going on, and none of which can tell you what today actually looks like.
-      Life OS is the one screen that can.</p>
-    <div class="lp-cta">
-      <button class="btn btn-primary" id="si">Continue with Google</button>
-      <span class="lp-cta-note">Free. Sign in with your Google account.</span>
+    <div class="lp-hero-copy">
+      <h1 class="logo-word">Life OS</h1>
+      <p class="lp-display">Everything you are trying to keep track of,
+        on one screen.</p>
+      <p class="lp-lede">Life OS is a personal productivity app that keeps your
+        tasks, your calendar, your diary and your habits in one place.</p>
+      <p class="lp-sub">Most people run their life across four apps that each
+        know a quarter of it — and none of which can answer the only question
+        that matters in the morning: what does today actually look like.</p>
+      <div class="lp-cta">
+        <button class="btn btn-primary lp-cta-main" id="si">Continue with Google</button>
+        <span class="lp-cta-note">Free · No card · Google Calendar optional</span>
+      </div>
     </div>
 
-    <div class="lp-shot" role="img" aria-label="The Today screen: your tasks for today, this week and this month, with your habits alongside">
-      <div class="lp-shot-bar">
-        <i class="lp-dot"></i><i class="lp-dot"></i><i class="lp-dot"></i>
-      </div>
-      <div class="lp-shot-body">
-        <div class="lp-side">
-          <span></span><span></span><span></span><span></span><span></span>
+    <div class="lp-hero-shot">
+      <div class="lp-shot" role="img" aria-label="The Today screen in Life OS: tasks grouped into today, this week and this month, with the day's habits alongside">
+        <div class="lp-shot-bar">
+          <i class="lp-dot"></i><i class="lp-dot"></i><i class="lp-dot"></i>
+          <span class="lp-shot-url">life-os.web-anchor.com</span>
         </div>
-        <div class="lp-main">
-          <div class="lp-greet">Good morning, Zander.</div>
-          <div class="lp-cols">
-            <div class="lp-col"><div class="lp-cap">Today</div>
-              <div class="lp-card"></div><div class="lp-card b"></div></div>
-            <div class="lp-col"><div class="lp-cap">This week</div>
-              <div class="lp-card c"></div><div class="lp-card"></div><div class="lp-card b"></div></div>
-            <div class="lp-col"><div class="lp-cap">This month</div>
-              <div class="lp-card"></div><div class="lp-card c"></div></div>
+        <div class="lp-shot-body">
+          <div class="lp-side">
+            <div class="lp-side-brand">
+              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z" fill="#A78BFA"/></svg>
+              <span></span>
+            </div>
+            <span class="lp-nav-item is-on"></span>
+            <span class="lp-nav-item"></span>
+            <span class="lp-nav-item"></span>
+            <span class="lp-nav-item"></span>
+            <span class="lp-nav-item"></span>
+          </div>
+          <div class="lp-main">
+            <div class="lp-greet">Good morning, Zander.</div>
+            <div class="lp-cols">
+              <div class="lp-col">
+                <div class="lp-cap">Today</div>
+                <div class="lp-card"><i style="--c:var(--p-high)"></i><span></span></div>
+                <div class="lp-card"><i style="--c:var(--accent)"></i><span class="w70"></span></div>
+              </div>
+              <div class="lp-col">
+                <div class="lp-cap">This week</div>
+                <div class="lp-card"><i style="--c:var(--ok)"></i><span class="w80"></span></div>
+                <div class="lp-card"><i style="--c:var(--accent)"></i><span></span></div>
+                <div class="lp-card"><i style="--c:#8FA6F5"></i><span class="w60"></span></div>
+              </div>
+              <div class="lp-col">
+                <div class="lp-cap">This month</div>
+                <div class="lp-card"><i style="--c:#B69BF0"></i><span class="w70"></span></div>
+                <div class="lp-card"><i style="--c:var(--a-gold)"></i><span></span></div>
+              </div>
+            </div>
+          </div>
+          <div class="lp-rail">
+            <div class="lp-rail-h">Habits today</div>
+            <div class="lp-habit is-done"><i></i><span></span></div>
+            <div class="lp-habit is-done"><i></i><span class="w70"></span></div>
+            <div class="lp-habit"><i></i><span class="w80"></span></div>
+            <div class="lp-habit"><i></i><span class="w60"></span></div>
           </div>
         </div>
-        <div class="lp-rail">
-          <div class="lp-rail-h">Habits today</div>
-          <div class="lp-habit done"><i class="lp-ring"></i><span></span></div>
-          <div class="lp-habit done"><i class="lp-ring"></i><span></span></div>
-          <div class="lp-habit"><i class="lp-ring"></i><span></span></div>
-          <div class="lp-habit"><i class="lp-ring"></i><span></span></div>
-        </div>
       </div>
     </div>
   </section>
 
-  <section class="lp-sec">
-    <h2>What Life OS is for</h2>
-    <p class="lp-body">Life OS is for organising your own life — the work you owe
-      other people, the things you keep meaning to get to, and the handful of
-      habits you are trying to hold on to. It is built around one idea: that the
-      question worth answering every morning is <b>what does today actually look
-      like</b>, and that no single app usually knows.</p>
-    <p class="lp-body">So Life OS puts your real calendar next to your real
-      tasks. It knows that Thursday already has three meetings before you try to
-      promise yourself an afternoon of deep work. It keeps your diary and your
-      notes in the same place as the work they are about, and it asks nothing of
-      you beyond writing things down.</p>
-    <p class="lp-body">It is free, there is no advertising, and nothing you write
-      is read, sold, or used to train anything. Life OS is built and run by one
-      person — Zander van der Berg, in South Africa.</p>
+  <section class="lp-sec" id="about">
+    <div class="lp-sec-head">
+      <h2>What Life OS is for</h2>
+      <p class="lp-sec-lede">Organising your own life — the work you owe other
+        people, the things you keep meaning to get to, and the few habits you
+        are trying to hold on to.</p>
+    </div>
+    <div class="lp-prose">
+      <p>It is built around one idea: the question worth answering every
+        morning is <b>what does today actually look like</b>, and no single app
+        usually knows. Your meetings are in one place, your tasks in another,
+        and the thing you promised yourself you would do every day is in a
+        third.</p>
+      <p>So Life OS puts your real calendar next to your real work. It knows
+        Thursday already has three meetings before you promise yourself an
+        afternoon of deep work. It keeps your diary and your notes beside the
+        work they are about, and asks nothing of you beyond writing things
+        down.</p>
+      <p>It is free. There is no advertising, no analytics, and no third-party
+        tracking. Nothing you write is read, sold, or used to train anything.
+        Life OS is built and run by one person — Zander van der Berg, in
+        South Africa.</p>
+    </div>
   </section>
 
   <section class="lp-sec">
-    <h2>What you can do with it</h2>
-    <dl class="lp-list">
-      <div class="lp-line"><dt>Today</dt>
+    <div class="lp-sec-head">
+      <h2>What you can do with it</h2>
+      <p class="lp-sec-lede">Seven surfaces, one workspace. Nothing here is a
+        separate app you have to keep in step.</p>
+    </div>
+    <dl class="lp-grid">
+      <div class="lp-tile is-wide" style="--c:var(--accent)">
+        <dt>Today</dt>
         <dd>The work actually in front of you, sorted into today, this week and
           this month — instead of one endless list of everything you have ever
-          written down.</dd></div>
-      <div class="lp-line"><dt>Calendar</dt>
+          written down. It is the screen Life OS opens on.</dd>
+      </div>
+      <div class="lp-tile" style="--c:#8FA6F5">
+        <dt>Calendar</dt>
         <dd>Your real Google Calendar, with the time you have set aside for your
           own tasks shown beside your meetings. Create, move and delete events
-          without leaving Life OS.</dd></div>
-      <div class="lp-line"><dt>Projects</dt>
-        <dd>Bigger things broken into steps, so a project is never just a word on
-          a list you feel guilty about.</dd></div>
-      <div class="lp-line"><dt>Diary</dt>
-        <dd>Somewhere to write the day down, kept private, searchable, and beside
-          the work it refers to.</dd></div>
-      <div class="lp-line"><dt>Library</dt>
+          without leaving Life OS.</dd>
+      </div>
+      <div class="lp-tile" style="--c:var(--p-high)">
+        <dt>Projects</dt>
+        <dd>Bigger things broken into steps, so a project is never just a word
+          on a list you feel guilty about.</dd>
+      </div>
+      <div class="lp-tile" style="--c:var(--a-peach)">
+        <dt>Diary</dt>
+        <dd>Somewhere to write the day down — private, searchable, and beside
+          the work it refers to.</dd>
+      </div>
+      <div class="lp-tile" style="--c:var(--a-gold)">
+        <dt>Library</dt>
         <dd>Notes, ideas and reference kept as books with sections, so you can
-          find something again six months later.</dd></div>
-      <div class="lp-line"><dt>Habits</dt>
-        <dd>The few things you want to do regularly, ticked off without ceremony,
-          with the streak kept quietly in the background.</dd></div>
-      <div class="lp-line"><dt>Reminders</dt>
+          find something again six months later.</dd>
+      </div>
+      <div class="lp-tile" style="--c:var(--ok)">
+        <dt>Habits</dt>
+        <dd>The few things you want to do regularly, ticked off without
+          ceremony, with the streak kept quietly in the background.</dd>
+      </div>
+      <div class="lp-tile" style="--c:#B69BF0">
+        <dt>Reminders</dt>
         <dd>The things that are not tasks and do not belong in a calendar —
-          renew the passport, ring the dentist.</dd></div>
+          renew the passport, ring the dentist.</dd>
+      </div>
     </dl>
   </section>
 
-  <section class="lp-sec">
-    <h2>Connecting Google Calendar</h2>
-    <p class="lp-body">Life OS can connect to your Google Calendar so your real
-      schedule appears alongside your work, and so you can create and change
-      events without switching apps. This is <b>entirely optional</b> — you can
-      create an account and use everything else without it, and you can
-      disconnect at any time from Settings.</p>
+  <section class="lp-sec" id="calendar">
+    <div class="lp-sec-head">
+      <h2>Connecting Google Calendar</h2>
+      <p class="lp-sec-lede">Optional, reversible, and explained in full before
+        you agree to anything.</p>
+    </div>
 
-    <div class="lp-cal">
-      <h3>If you connect it, Life OS asks Google for permission to:</h3>
-      <ul class="lp-perm">
-        <li><b>See the events in your calendars</b>
-          So your meetings and your tasks appear on one screen, and Life OS can
-          tell you when something you are planning collides with something you
-          have already agreed to.</li>
-        <li><b>Create, change and delete events</b>
-          So an event you make in Life OS is a real event in Google Calendar.
-          Life OS only ever writes the specific change you confirm on screen
-          first — it never edits your calendar in the background.</li>
-        <li><b>See the list of calendars you have</b>
-          So you can choose which calendar a new event belongs to, rather than
-          everything landing in one.</li>
-        <li><b>See when you are free or busy</b>
-          So it can warn you before you schedule work over something else.</li>
-      </ul>
-      <p class="lp-note">Life OS keeps a copy of your events so the calendar
-        loads instantly and can spot clashes without asking Google every time.
-        Disconnecting removes that copy. Exactly what is stored, and for how
-        long, is set out in the <a href="https://life-os.web-anchor.com/privacy.html">Privacy Policy</a>.</p>
+    <div class="lp-panels">
+      <div class="lp-panel">
+        <h3>What Life OS asks Google for</h3>
+        <ul class="lp-perm">
+          <li><b>See the events in your calendars</b>
+            So your meetings and your tasks appear on one screen, and Life OS
+            can tell you when something you are planning collides with
+            something you have already agreed to.</li>
+          <li><b>Create, change and delete events</b>
+            So an event you make in Life OS is a real event in Google Calendar.
+            Life OS only ever writes the specific change you confirm on screen
+            first — it never edits your calendar in the background.</li>
+          <li><b>See the list of calendars you have</b>
+            So you can choose which calendar a new event belongs to, rather
+            than everything landing in one.</li>
+          <li><b>See when you are free or busy</b>
+            So it can warn you before you schedule work over something else.</li>
+        </ul>
+      </div>
+
+      <aside class="lp-panel lp-panel-quiet">
+        <h3>What it never does</h3>
+        <ul class="lp-never">
+          <li>Write to your calendar without you confirming that exact change</li>
+          <li>Create, delete or re-share a calendar</li>
+          <li>Read your email, contacts, files or location</li>
+          <li>Sell, share or advertise against anything it holds</li>
+          <li>Require a calendar at all — Life OS works fully without one</li>
+        </ul>
+        <p class="lp-note">Life OS keeps a copy of your events so the calendar
+          loads instantly and can spot clashes without asking Google every
+          time. Disconnecting removes that copy. The full detail is in the
+          <a href="https://life-os.web-anchor.com/privacy.html">Privacy
+          Policy</a>.</p>
+      </aside>
     </div>
   </section>
 
-  <!-- Absolute on purpose.
-       Google's homepage requirement is that the privacy policy link "should
-       match the link you added on your consent screen configuration". The
-       consent screen carries the full URL; ./privacy.html resolves to the
-       same page in a browser but is not the same string, and a checker
-       comparing them finds no match. -->
-  <div class="lp-foot">
-    <span>Life OS — built and run by Zander van der Berg, South Africa.</span>
-    <nav>
+  <section class="lp-close">
+    <h2>Start with today.</h2>
+    <p>Sign in with Google and Life OS opens on the work in front of you.
+      Connect your calendar later, or never.</p>
+    <button class="btn btn-primary lp-cta-main" id="si-end">Continue with Google</button>
+  </section>
+
+  <footer class="lp-foot">
+    <div class="lp-foot-brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" role="img" aria-label="Life OS">
+        <defs><linearGradient id="lpLotusF" gradientUnits="userSpaceOnUse" x1="4" y1="21" x2="20" y2="3">
+          <stop offset="0" stop-color="#7C4DFF"/><stop offset="1" stop-color="#C28DFF"/></linearGradient></defs>
+        <path d="M12 20.4C6.9 17.6 3.4 13.1 3.4 8.5 7.1 9.2 10.1 13 12 20.4Z" fill="url(#lpLotusF)" fill-opacity=".82"/>
+        <path d="M12 20.4c5.1-2.8 8.6-7.3 8.6-11.9-3.7.7-6.7 4.5-8.6 11.9Z" fill="url(#lpLotusF)" fill-opacity=".82"/>
+        <path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z" fill="url(#lpLotusF)"/></svg>
+      <span class="logo-word">Life OS</span>
+    </div>
+    <p class="lp-foot-by">Built and run by Zander van der Berg, South Africa.</p>
+    <nav class="lp-foot-links">
       <a href="https://life-os.web-anchor.com/privacy.html">Privacy Policy</a>
       <a href="https://life-os.web-anchor.com/terms.html">Terms of Service</a>
       <a href="mailto:zander.vanderberg1@gmail.com">Contact</a>
     </nav>
-  </div>
+  </footer>
+
 </main></div>
 <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
 

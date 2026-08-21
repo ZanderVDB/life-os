@@ -401,7 +401,9 @@ const LANDING = root.innerHTML;
 function renderSignIn(onClick) {
   document.body.classList.remove('drawer-open');
   if (!document.getElementById('landing')) root.innerHTML = LANDING;
-  root.querySelectorAll('#si, #si-top').forEach((b) => { b.onclick = onClick; });
+  // Every sign-in button on the landing page — header, hero and closing
+  // call to action — goes to the same place.
+  root.querySelectorAll('#si, #si-top, #si-end').forEach((b) => { b.onclick = onClick; });
 }
 
 const renderFatal = (title, body) => {
