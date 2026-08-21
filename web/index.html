@@ -578,67 +578,157 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .placeholder .ph-note{font-size:12.5px;color:var(--muted);margin-top:20px;padding-top:18px;
   border-top:1px solid var(--hairline);line-height:1.65}
 
-/* ── Settings — ported from Legacy's tabbed .setting-row structure ──── */
-.settings{max-width:760px}
-.settings-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 20px;padding-bottom:2px}
-.stab{border-radius:9px;padding:8px 14px;font-size:12.5px;color:var(--muted);
-  transition:background var(--t-hover),color var(--t-hover)}
-.stab:hover{background:rgba(255,255,255,.045);color:var(--text-2)}
-.stab[aria-selected="true"]{background:var(--accent-soft);color:#fff;font-weight:600}
-.settings-panel{display:flex;flex-direction:column;gap:10px}
-.setting-row{display:flex;align-items:center;justify-content:space-between;gap:16px;
-  padding:14px 16px;background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius)}
-.setting-label-wrap{min-width:0}
-.setting-label{font-size:13px;font-weight:500;color:var(--text)}
-.setting-desc{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.55}
-.setting-right{flex-shrink:0;display:flex;align-items:center;gap:8px}
-.setting-intro{font-size:12.5px;color:var(--muted);line-height:1.65;margin:0 0 6px;max-width:60ch}
-.setting-ok{font-size:12px;font-weight:600;color:var(--ok);background:rgba(0,217,163,.12);
-  border-radius:7px;padding:4px 10px}
-.setting-pending{font-size:11.5px;color:var(--muted);background:var(--surface-2);
-  border-radius:7px;padding:4px 10px}
-.setting-help{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-  padding:15px 17px;font-size:12.5px;color:var(--text-2);line-height:1.7}
-.setting-help b{display:block;color:var(--text);font-size:13px;font-weight:600;margin-bottom:8px}
-.setting-help ul{margin:0;padding-left:18px}
-.setting-help li{margin-bottom:5px}
-.setting-preview{background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius);padding:15px 17px}
-.sp-label{display:block;font-size:9.5px;font-weight:600;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--muted);margin-bottom:11px}
-.sp-demo{display:flex;align-items:center;gap:9px}
-.sp-swatch{width:22px;height:22px;border-radius:7px;flex-shrink:0}
-.sp-brand{background:var(--brand)}.sp-surface{background:var(--surface-2)}
-.sp-ok{background:var(--ok)}.sp-danger{background:var(--danger)}
-.sp-text{font-size:12px;color:var(--muted);margin-left:4px}
+/* ── Settings ────────────────────────────────────────────────────────────
+   A category column and one panel. Settings is an administrative surface:
+   the job is to find a control, understand what it does, and change it —
+   so consistency and scanability beat expression everywhere on this page. */
+
+/* The Habits rail belongs to Today, not here. Same mechanism the Calendar,
+   Projects, Library and Diary already use to claim the full width. */
+body:has(.set-page) .main-wrap{grid-template-columns:minmax(0,1fr) 0}
+body:has(.set-page) .rail{display:none}
+
+:root{--set-nav-w:196px}
+.set-page{display:grid;grid-template-columns:var(--set-nav-w) minmax(0,1fr);
+  gap:38px;max-width:1080px;align-items:start;
+  /* The one positioned ancestor the shared dropdown anchors inside. */
+  position:relative}
+
+/* ── Category column ──────────────────────────────────────────────────── */
+.set-nav{display:flex;flex-direction:column;gap:1px;position:sticky;top:22px}
+.set-nav-item{text-align:left;padding:9px 12px;border-radius:9px;font-size:13px;
+  color:var(--muted);transition:background var(--t-hover),color var(--t-hover)}
+.set-nav-item:hover{background:rgba(255,255,255,.045);color:var(--text-2)}
+.set-nav-item:focus-visible{outline:0;box-shadow:0 0 0 2px var(--accent)}
+.set-nav-item[aria-current="page"]{background:var(--accent-soft);color:#fff;font-weight:600}
+
+/* ── Panel ────────────────────────────────────────────────────────────── */
+.set-main{min-width:0;display:flex;flex-direction:column;gap:26px}
+.set-head{display:flex;flex-direction:column;gap:5px}
+.set-head h2{font-size:19px;font-weight:600;color:var(--text);margin:0;letter-spacing:-.01em}
+.set-head p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.6;max-width:64ch}
+
+.set-sec{display:flex;flex-direction:column;gap:9px}
+/* The group title sits ABOVE its card. A card inside a card is just noise. */
+.set-sec-h{margin:0;font-size:10.5px;font-weight:600;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted)}
+.set-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);overflow:hidden}
+.set-sec-note{margin:0;font-size:12px;color:var(--muted);line-height:1.65;max-width:72ch}
+
+/* Rows are divided, not stacked as separate cards, so a group reads as one
+   object rather than as five things that happen to be near each other. */
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:22px;
+  padding:15px 18px}
+.set-row + .set-row{border-top:1px solid var(--hairline)}
+.set-row-text{min-width:0;display:flex;flex-direction:column;gap:4px}
+.set-label{font-size:13px;font-weight:500;color:var(--text)}
+.set-desc{font-size:12px;color:var(--muted);line-height:1.6;max-width:62ch}
+.set-desc b{color:var(--text-2);font-weight:600}
+.set-ctl{flex-shrink:0;display:flex;align-items:center;gap:9px}
+.set-row-full{display:block}
+
+/* Read-only facts: two columns where there is room, one where there is not. */
+.set-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  gap:2px 26px}
+.set-fact{display:flex;flex-direction:column;gap:3px;padding:5px 0}
+.set-fact-k{font-size:10.5px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.set-fact-v{font-size:13.5px;color:var(--text);word-break:break-word}
+.set-role{font-size:11px;color:var(--muted);text-transform:capitalize}
+
+/* ── Status ───────────────────────────────────────────────────────────── */
+.set-badge{flex-shrink:0;font-size:11px;font-weight:600;border-radius:7px;
+  padding:4px 10px;white-space:nowrap}
+.set-badge.is-on{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.set-badge.is-warn{color:#F0913D;background:color-mix(in srgb,#F0913D 14%,transparent)}
+.set-badge.is-off{color:var(--muted);background:var(--surface-2)}
+.set-badge.is-later{color:var(--muted);background:var(--surface-2);font-weight:500}
+.set-stamp{font-size:12px;color:var(--text-2);font-variant-numeric:tabular-nums}
+
+/* ── Editable list rows: areas and habits ─────────────────────────────── */
+.set-item{gap:12px;justify-content:flex-start}
+.set-item-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.set-item-dot-ok{background:var(--ok)}
+.set-item-name{flex:1;min-width:0;background:transparent;border:1px solid transparent;
+  border-radius:8px;padding:6px 9px;font-size:13.5px;color:var(--text);
+  transition:background var(--t-hover),border-color var(--t-hover)}
+.set-item-name:hover{background:rgba(255,255,255,.035)}
+.set-item-name:focus{outline:0;background:var(--surface-2);border-color:var(--accent)}
+/* Fixed width, or the column of dropdowns beside it steps in and out by
+   however long "3 days running" happens to be against "No streak yet". */
+.set-item-meta{font-size:11.5px;color:var(--muted);flex:0 0 108px;text-align:right;
+  font-variant-numeric:tabular-nums}
+/* Named, not a bare arrow. The old down-arrow gave no clue what it would do. */
+.set-item-x{flex-shrink:0;font-size:11.5px;color:var(--muted);border-radius:7px;
+  padding:5px 10px;transition:background var(--t-hover),color var(--t-hover)}
+.set-item-x:hover{background:color-mix(in srgb,var(--danger) 16%,transparent);
+  color:var(--danger)}
+.set-item-x:focus-visible{outline:0;box-shadow:0 0 0 2px var(--accent)}
+.set-item .cf-menu-btn{flex:0 0 170px;height:32px}
+
+.set-add{display:flex;gap:9px}
+.set-add .input{flex:1;background:var(--surface-2)}
+.set-empty{margin:0;font-size:12.5px;color:var(--muted);line-height:1.65;max-width:72ch}
+
+/* ── Colour legend ────────────────────────────────────────────────────── */
+.set-legend{display:flex;flex-direction:column;gap:11px}
+.set-legend-row{display:grid;grid-template-columns:18px 62px 1fr;align-items:center;gap:12px}
+.set-sw{width:18px;height:18px;border-radius:6px}
+.set-sw-brand{background:var(--brand)}
+.set-sw-ok{background:var(--ok)}
+.set-sw-warn{background:#F0913D}
+.set-sw-danger{background:var(--danger)}
+.set-legend-n{font-size:12.5px;font-weight:600;color:var(--text)}
+.set-legend-m{font-size:12px;color:var(--muted);line-height:1.5}
+
+/* ── Prose and diagnostics ────────────────────────────────────────────── */
+.set-prose{font-size:12.5px;color:var(--text-2);line-height:1.7}
+.set-prose p{margin:0 0 10px}
+.set-prose ul{margin:0;padding-left:18px}
+.set-prose li{margin-bottom:6px}
+.set-prose b{color:var(--text)}
+.set-build{font-size:11.5px;color:var(--text-2);background:var(--surface-2);
+  border-radius:6px;padding:4px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+/* Scopes and error strings are real, and belong behind a disclosure rather
+   than in the middle of a page someone is trying to read. */
+.set-diag summary{font-size:12px;color:var(--muted);cursor:pointer;
+  list-style:none;display:inline-flex;align-items:center;gap:7px}
+.set-diag summary::-webkit-details-marker{display:none}
+.set-diag summary::before{content:'';width:5px;height:5px;border-right:1.5px solid currentColor;
+  border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform var(--t-hover)}
+.set-diag[open] summary::before{transform:rotate(45deg)}
+.set-diag summary:hover{color:var(--text-2)}
+.set-diag-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:4px 26px;margin-top:12px;padding-top:12px;border-top:1px solid var(--hairline)}
+
+/* ── Narrow ───────────────────────────────────────────────────────────── */
+@media (max-width:900px){
+  .set-page{grid-template-columns:1fr;gap:20px}
+  /* The column becomes a strip that scrolls sideways — a squeezed desktop
+     column is worse than either shape. */
+  .set-nav{position:static;flex-direction:row;gap:4px;overflow-x:auto;
+    padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .set-nav::-webkit-scrollbar{display:none}
+  .set-nav-item{flex:0 0 auto;padding:8px 14px;white-space:nowrap}
+  .set-row{flex-direction:column;align-items:stretch;gap:11px}
+  .set-ctl{justify-content:flex-start;flex-wrap:wrap}
+  .set-item{flex-direction:row;flex-wrap:wrap;align-items:center}
+  .set-item-name{flex:1 1 100%;order:-1}
+  .set-item-meta{flex:0 0 auto;text-align:left}
+  .set-item .cf-menu-btn{flex:1 1 auto}
+  .set-legend-row{grid-template-columns:18px 1fr;gap:8px}
+  .set-legend-m{grid-column:2}
+}
+
 .seg{display:flex;background:var(--surface-2);border-radius:9px;padding:3px;gap:2px;flex-shrink:0}
 .seg button{padding:6px 13px;border-radius:7px;font-size:12px;color:var(--text-2);
   transition:background var(--t-hover),color var(--t-hover)}
+.seg button:focus-visible{outline:0;box-shadow:0 0 0 2px var(--accent)}
 .seg button[aria-pressed="true"]{background:var(--accent-soft);color:#fff;font-weight:600}
-
-.area-list{display:flex;flex-direction:column;gap:8px}
-.area-row{display:flex;align-items:center;gap:11px;padding:10px 14px;background:var(--surface);
-  border:1px solid var(--border);border-radius:var(--radius)}
-.area-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
-.area-input{flex:1;min-width:0;background:transparent;border:1px solid transparent;
-  border-radius:8px;padding:5px 8px;font-size:13.5px;color:var(--text);
-  transition:background var(--t-hover),border-color var(--t-hover)}
-.area-input:hover{background:rgba(255,255,255,.035)}
-.area-input:focus{outline:none;background:var(--surface-2);border-color:var(--accent)}
-.area-meta{font-size:11px;color:var(--muted);flex-shrink:0}
-.area-lock{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-  background:var(--surface-2);border-radius:6px;padding:3px 8px;flex-shrink:0}
-.habit-list{display:flex;flex-direction:column;gap:8px}
-.habit-row{display:flex;align-items:center;gap:11px;padding:10px 14px;background:var(--surface);
-  border:1px solid var(--border);border-radius:var(--radius)}
-.habit-dot{width:8px;height:8px;border-radius:50%;background:var(--hc,var(--ok));flex-shrink:0}
-.habit-freq{flex:0 0 128px}
 .page-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-shrink:0}
 .pa-count{font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-2);
   border-radius:6px;padding:1px 7px;font-variant-numeric:tabular-nums}
-.area-add{display:flex;gap:9px;margin-top:12px}
-.area-add .input{flex:1}
 
 /* ── Dialog / panel / menu ──────────────────────────────────────────── */
 .scrim{position:fixed;inset:0;background:rgba(10,8,16,.62);z-index:150;

@@ -14,6 +14,7 @@ import {
   bumpNav, navToken, navStale, setHash, hashWasOurs,
 } from './nav.js';
 import { formatTime as fmtPlanTime } from './calendar-fields.js';
+import { wireMenus } from './menu.js';
 import { flip, pulse, collapseOut, reducedMotion, afterTransition, settle } from './motion.js';
 import { openUtilityMenu, openUtilitySurface, closeUtility,
   utilityTriggerHtml } from './utility-menu.js';
@@ -74,6 +75,9 @@ const state = {
   me: null, prefs: {}, token: null,
   tasks: [], history: [], historyTotal: 0,
   route: 'today', areaFilter: null, menu: null, settingsTab: 'account',
+  /* undefined = never asked, null = asked and this server has none.
+   * Settings must be able to tell "checking" from "there is nothing". */
+  integration: undefined,
   /* Whether the board is showing the work of projects that are paused, filed
    * or archived. Off by default; the notice above the buckets says so. */
   showHeld: false,
@@ -458,6 +462,7 @@ async function loadTasks() {
   const r = await api(`/api/v1/workspaces/${ws()}/tasks?includeCompleted=false`);
   state.tasks = r.tasks;
   state.projectsById = r.projects ?? {};
+  state.tasksLoaded = true;
 }
 async function loadHistory(reset = false) {
   if (reset) { state.history = []; state.historyTotal = 0; }
@@ -943,8 +948,9 @@ async function loadRoute(nav = navToken()) {
   }
 
   if (state.route === 'settings') {
-    head.innerHTML = `<p class="eyebrow">Life OS</p><h1>Settings</h1>
-      <p class="sub">Your account, your workspace, and how the app behaves.</p>`;
+    /* No sub-line: every Settings panel states its own purpose directly below
+     * this, and two descriptions stacked on top of each other is one too many. */
+    head.innerHTML = '<p class="eyebrow">Life OS</p><h1>Settings</h1>';
     renderSettings();
     return;
   }
@@ -2469,14 +2475,25 @@ function wireSettings() {
     });
     el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); if (e.key === 'Escape') el.value = original; };
   });
-  document.querySelectorAll('[data-habit-freq]').forEach((el) => {
-    el.onchange = () => run(async () => {
-      await api(`/api/v1/workspaces/${ws()}/habits/${el.dataset.habitFreq}`,
-        { method: 'PATCH', body: { frequencyType: el.value } });
-      await loadHabits(); renderSettings(); renderRail();
-      toast('Schedule updated');
+  /* Habit frequency is the shared Life OS dropdown, not a <select>.
+   *
+   * A native select draws its options with the operating system, so this one
+   * opened as a bright white sheet in a dark app with text you could barely
+   * read. The scope passed here is the Settings page rather than a dialog —
+   * that is the whole point of the component being app-wide. */
+  const page = document.querySelector('.set-page');
+  if (page) {
+    wireMenus(page, page, (id, value) => {
+      if (!id.startsWith('habit-freq-')) return;
+      const habitId = id.slice('habit-freq-'.length);
+      run(async () => {
+        await api(`/api/v1/workspaces/${ws()}/habits/${habitId}`,
+          { method: 'PATCH', body: { frequencyType: value } });
+        await loadHabits(); renderSettings(); renderRail();
+        toast('Schedule updated');
+      });
     });
-  });
+  }
   document.querySelectorAll('[data-habit-archive]').forEach((el) => {
     el.onclick = () => run(async () => {
       const h = (state.habits ?? []).find((x) => x.id === el.dataset.habitArchive);
@@ -2508,11 +2525,110 @@ function wireSettings() {
     const found = await window.__checkForUpdate?.();
     el.textContent = found ? 'An update is ready — see the prompt.' : 'You are on the latest version.';
   }));
+
+  wireIntegrations();
+}
+
+/* ── Integrations ─────────────────────────────────────────────────────────
+ * The same four endpoints the Calendar rail uses. What differs is where the
+ * result is reported: in Settings the button says what happened, in place,
+ * because there is no calendar on screen to show the change. */
+function wireIntegrations() {
+  const goConnect = (btn, label) => run(async () => {
+    btn.disabled = true;
+    btn.textContent = 'Opening Google…';
+    try {
+      const r = await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar/connect`,
+        { method: 'POST' });
+      window.location.href = r.authorizeUrl;
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = label;
+      throw e;
+    }
+  });
+  document.getElementById('gc-connect')
+    ?.addEventListener('click', (e) => goConnect(e.currentTarget, 'Connect'));
+  document.getElementById('gc-reconnect')
+    ?.addEventListener('click', (e) => goConnect(e.currentTarget, 'Reconnect'));
+
+  document.getElementById('gc-sync')?.addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    if (btn.dataset.syncState === 'busy') return;
+    const say = (stateName, label) => {
+      if (!btn.isConnected) return;
+      btn.dataset.syncState = stateName;
+      btn.disabled = stateName === 'busy';
+      const el = btn.querySelector('[data-sync-label]');
+      if (el) el.textContent = label;
+    };
+    say('busy', 'Syncing…');
+    run(async () => {
+      try {
+        const r = await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar/sync`,
+          { method: 'POST' });
+        const n = (r.created ?? 0) + (r.updated ?? 0);
+        await loadIntegration();
+        say('ok', n ? `Synced ${n} change${n === 1 ? '' : 's'}` : 'Synced just now');
+        // Re-render for the new timestamp, but leave the button's own report.
+        const stamp = document.querySelector('#gc-sync')?.closest('.set-row')
+          ?.querySelector('.set-stamp');
+        if (stamp) stamp.textContent = 'just now';
+      } catch (err) {
+        say('failed', 'Sync failed — retry');
+        throw err;
+      }
+    });
+  });
+
+  document.getElementById('gc-disconnect')?.addEventListener('click', () => run(async () => {
+    if (!confirm(`Disconnect Google Calendar?
+
+Google’s events are removed from Life OS and the connection ends. Nothing in \
+Google Calendar itself is changed, and your tasks, reminders and diary are \
+untouched.`)) return;
+    await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar/disconnect`,
+      { method: 'POST' });
+    cal.data = null;
+    await loadIntegration();
+    renderSettings();
+    toast('Google Calendar disconnected');
+  }));
+
+  document.getElementById('go-integrations')?.addEventListener('click', () => {
+    state.settingsTab = 'integrations';
+    renderSettings();
+  });
 }
 
 function renderSettings() {
   document.getElementById('main-scroll').innerHTML = settingsHtml(state);
   wireSettings();
+  /* Integrations is the one panel whose truth lives on the server. It renders
+   * "Checking the connection…" first and asks once; every later visit uses
+   * what is already known rather than blinking. */
+  if (state.settingsTab === 'integrations' && state.integration === undefined) {
+    loadIntegration().then(() => {
+      if (state.route === 'settings' && state.settingsTab === 'integrations') renderSettings();
+    });
+  }
+  /* Areas counts how many tasks carry each label. Landing straight on Settings
+   * never loads the task list, so every area read "0 tasks" — a number, stated
+   * plainly, that was simply not true. */
+  if (state.settingsTab === 'areas' && !state.tasksLoaded) {
+    loadTasks().then(() => {
+      if (state.route === 'settings' && state.settingsTab === 'areas') renderSettings();
+    }).catch(() => {});
+  }
+}
+
+async function loadIntegration() {
+  try {
+    state.integration = await api(`/api/v1/workspaces/${ws()}/integrations/google-calendar`);
+  } catch (e) {
+    // A failed check is not "disconnected" — say which it is.
+    state.integration = { configured: true, connection: null, unreachable: e.message };
+  }
 }
 
 initAuth();

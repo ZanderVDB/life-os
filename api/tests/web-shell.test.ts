@@ -190,18 +190,56 @@ test('nav indicator uses Legacy geometry, not the button gradient', () => {
   assert.ok(!/var\(--brand\)/.test(rule), 'the indicator reuses the button gradient');
 });
 
-test('settings: Legacy tabbed structure with every required group', () => {
-  for (const id of ['account', 'appearance', 'areas', 'app', 'integrations', 'data']) {
-    assert.ok(settings.includes("id: '" + id + "'"), 'the ' + id + ' settings tab is missing');
+test('settings: a category column and one panel, with every required group', () => {
+  for (const id of ['account', 'appearance', 'areas', 'habits', 'integrations', 'app', 'data']) {
+    assert.ok(settings.includes("id: '" + id + "'"), 'the ' + id + ' settings section is missing');
   }
-  assert.match(html, /\.setting-row\{display:flex;align-items:center;justify-content:space-between/,
-    'setting rows are not the Legacy shape');
-  assert.match(html, /\.settings-tabs\{display:flex/, 'settings are not tabbed');
+  /* The tab strip is gone. Seven cramped pills over a 760px column did not
+   * scale and did not read as one workspace; a settings surface is normally a
+   * navigation column beside the panel it selects. */
+  assert.match(html, /\.set-page\{display:grid;grid-template-columns:var\(--set-nav-w\)/,
+    'Settings is not a nav column beside a panel');
+  assert.match(html, /\.set-nav-item\[aria-current="page"\]/,
+    'the selected category is not marked for assistive tech');
+  // Narrow screens get a strip that scrolls, never a squeezed desktop column.
+  assert.match(html, /@media \(max-width:900px\)\{[\s\S]{0,400}\.set-nav\{position:static;flex-direction:row/,
+    'the settings navigation does not collapse on narrow screens');
+
+  // Rows are divided inside one card rather than being a stack of cards, and a
+  // group's title sits above its card — a card inside a card is just noise.
+  assert.match(html, /\.set-row \+ \.set-row\{border-top:1px solid var\(--hairline\)\}/,
+    'settings rows are separate cards again');
+
   // Area management must be complete, not read-only.
   assert.match(settings, /data-area-name=/, 'Areas cannot be renamed');
   assert.match(settings, /data-area-del=/, 'Areas cannot be removed');
   assert.match(settings, /lose this label|never deletes/i, 'removal does not explain reassignment');
   assert.ok(!/profile/i.test(settings), 'settings mention profiles');
+});
+
+test('settings: no control is drawn for something that cannot happen', () => {
+  /* Every badge on this page has to come from something that reported it.
+   * The old page said "Connected" for Google Calendar as a hard-coded string
+   * and "Soon" for a Calendar that had already shipped. */
+  assert.ok(!/pending\('Soon'\)|>Soon</.test(settings), 'Settings still shows a Soon placeholder');
+  assert.match(settings, /state\.integration/, 'Integrations does not read real connection state');
+  assert.match(settings, /g\?\.configured/,
+    'Integrations ignores whether the server can connect at all');
+  assert.match(settings, /c\.canWrite/, 'the read/write permission state is not shown');
+  assert.match(settings, /lastSyncedAt/, 'the last successful sync is not shown');
+
+  // Export and account deletion do not exist; they must not look like buttons.
+  const dataPanel = settings.slice(settings.indexOf('function dataPanel'));
+  assert.ok(!/<button[^>]*id="(export|delete-account)"/.test(dataPanel),
+    'Privacy offers an action that is not implemented');
+  assert.match(dataPanel, /Not built yet/, 'export is not labelled honestly');
+
+  // Version belongs to App alone.
+  const accountPanel = settings.slice(settings.indexOf('function accountPanel'),
+    settings.indexOf('function appearancePanel'));
+  assert.ok(!/LIFE_OS_BUILD/.test(accountPanel), 'the build is still duplicated on Account');
+  assert.match(settings.slice(settings.indexOf('function appPanel')), /LIFE_OS_BUILD/,
+    'App does not own the version');
 });
 
 test('no staging or migration language in the everyday UI', () => {
@@ -497,10 +535,18 @@ test('mobile: the sidebar becomes a drawer and the rail stays reachable', () => 
   // Calendar owns a rail inside its own frame. Projects and Library each
   // deliberately have none — see their product models — and both collapse the
   // grid track as well, so the column is genuinely returned to the content.
+  // Settings is the fifth: it is an administrative surface, the Habits rail has
+  // nothing to say there, and the width is worth more to the settings workspace.
   assert.deepEqual(hides,
-    ['body:has(.cal-head) ', 'body:has(.pj-head) ', 'body:has(.lib-page) ',
-      'body:has(.dia-page) '],
+    ['body:has(.set-page) ', 'body:has(.cal-head) ', 'body:has(.pj-head) ',
+      'body:has(.lib-page) ', 'body:has(.dia-page) '],
     'the rail is hidden with no alternative');
+  // Hiding it is only allowed when the track is collapsed too, or the layout
+  // keeps a column of dead space where the rail used to be.
+  for (const surface of ['set-page', 'cal-head', 'pj-head', 'lib-page', 'dia-page']) {
+    assert.ok(html.includes(`body:has(.${surface}) .main-wrap{grid-template-columns:minmax(0,1fr) 0}`),
+      `${surface} hides the rail without giving the width back`);
+  }
   for (const marker of ['pj-head', 'dia-page', 'lib-page']) {
     assert.ok(html.includes(`body:has(.${marker}) .main-wrap{grid-template-columns:minmax(0,1fr) 0}`),
       `${marker} hides the rail without collapsing its grid track`);

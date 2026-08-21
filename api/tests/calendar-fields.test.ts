@@ -24,6 +24,11 @@ const composer = read('event-composer.js');
 const reminder = read('reminder-modal.js');
 const schedule = read('schedule-task-modal.js');
 const html = read('index.html');
+/* The dropdown moved out of the Calendar's field library and into menu.js when
+ * Settings needed the same control. It was never Calendar-specific — a native
+ * <select> opens as an operating-system sheet wherever it appears — so the
+ * rule is now app-wide and these assertions follow it to its own file. */
+const menu = read('menu.js');
 /** A newline, so a selector can be anchored at column 0. */
 const NL = String.fromCharCode(10);
 
@@ -147,13 +152,16 @@ test('no Calendar dropdown is drawn by the operating system', () => {
    * Calendar, Repeat, Notify and Area opened as bright white sheets while the
    * time picker beside them was correctly dark. The only fix is to own the
    * control. */
-  for (const [name, src] of [...FLOWS, ['shared fields', fields] as [string, string]]) {
+  for (const [name, src] of [...FLOWS,
+    ['shared fields', fields] as [string, string],
+    ['the dropdown', menu] as [string, string]]) {
     assert.ok(!/<select/.test(src.replace(/^.*OPERATING SYSTEM.*$/gm, '')),
       `${name} still uses a native <select>, which will open white`);
     assert.ok(!/type="time"/.test(src), `${name} still uses a native time input`);
   }
-  assert.match(fields, /export function wireMenus/, 'there is no shared dropdown');
-  assert.match(fields, /aria-haspopup="listbox"/, 'the trigger is not a listbox control');
+  assert.match(menu, /export function wireMenus/, 'there is no shared dropdown');
+  assert.match(fields, /from '\.\/menu\.js'/, 'the Calendar does not use the shared dropdown');
+  assert.match(menu, /aria-haspopup="listbox"/, 'the trigger is not a listbox control');
 });
 
 test('every option in a dropdown is actually readable', () => {
@@ -176,9 +184,9 @@ test('a dropdown panel cannot be clipped or hidden behind the modal', () => {
   /* One floating host per dialog, appended to the DIALOG rather than to the
    * scrolling body — a panel inside `overflow:auto` gets cut off, and one
    * inside a transformed ancestor gets a stacking context of its own. */
-  assert.match(fields, /export function popoverHost/, 'there is no single popover host');
-  const host = fields.slice(fields.indexOf('export function popoverHost'),
-    fields.indexOf('export function wireDateTime'));
+  assert.match(menu, /export function popoverHost/, 'there is no single popover host');
+  const host = menu.slice(menu.indexOf('export function popoverHost'),
+    menu.indexOf('export function closePopover'));
   assert.match(host, /dlg\.appendChild\(pop\)/, 'the popover lives inside the scrolling body');
   assert.match(html, /\.cf-pop\{position:absolute;z-index:200\}/,
     'the popover does not sit above the modal content');
@@ -189,7 +197,7 @@ test('a dropdown panel cannot be clipped or hidden behind the modal', () => {
 });
 
 test('the dropdown is keyboard-operable, which a native select gave for free', () => {
-  const fn = fields.slice(fields.indexOf('export function wireMenus'));
+  const fn = menu.slice(menu.indexOf('export function wireMenus'));
   for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape', 'Enter']) {
     assert.ok(fn.includes(key), `the dropdown does not handle ${key}`);
   }
@@ -255,10 +263,12 @@ test('one popover, one owner — a picker and a dropdown cannot disagree', () =>
    * what was open, closing a dropdown left the date picker still believing it
    * was open, so the next click on the date field read as "close the thing
    * already open" and the picker appeared dead until clicked twice. */
-  assert.match(fields, /pop\.__owner = null;/, 'the popover has no single owner');
-  assert.match(fields, /export function closePopover/, 'closing is not shared');
-  assert.ok(!/let openFor = null|let openBtn = null/.test(fields),
-    'a wiring keeps its own open-state again');
+  assert.match(menu, /pop\.__owner = null;/, 'the popover has no single owner');
+  assert.match(menu, /export function closePopover/, 'closing is not shared');
+  for (const [name, src] of [['calendar fields', fields], ['menu', menu]] as [string, string][]) {
+    assert.ok(!/let openFor = null|let openBtn = null/.test(src),
+      `${name} keeps its own open-state again`);
+  }
 });
 
 test('wiring a control twice is harmless', () => {
@@ -266,17 +276,16 @@ test('wiring a control twice is harmless', () => {
    * it appears. Two handlers on one dropdown meant the first opened the panel
    * and the second immediately closed it — the control looked completely
    * dead. Calling a wiring function twice should be a no-op, not destructive. */
-  assert.match(fields, /if \(btn\.dataset\.cfWired\) return;/, 'controls can be double-wired');
-  const count = (fields.match(/dataset\.cfWired = '1'/g) ?? []).length;
-  assert.ok(count >= 2, 'only one control family is protected from double wiring');
+  assert.match(menu, /if \(btn\.dataset\.cfWired\) return;/, 'dropdowns can be double-wired');
+  assert.match(fields, /if \(btn\.dataset\.cfWired\) return;/, 'date and time fields can be double-wired');
 });
 
 test('a menu change is announced to everyone, not just its first wirer', () => {
   /* With wiring idempotent, `onChange` belongs to whoever wired first — so the
    * recurrence builder never heard about its own dropdowns and left its
    * sentence describing the previous choice. An event has no owner. */
-  const fn = fields.slice(fields.indexOf('const choose = (btn, opt)'),
-    fields.indexOf('const open = (btn)'));
+  const fn = menu.slice(menu.indexOf('const choose = (btn, opt)'),
+    menu.indexOf('const open = (btn)'));
   assert.match(fn, /dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/,
     'a menu change is not observable by anyone but the first listener');
   assert.match(fn, /if \(before === btn\.dataset\.value\) return;/,
