@@ -35,11 +35,31 @@ export function loadEnv(raw: NodeJS.ProcessEnv = process.env): AppEnv {
   return env;
 }
 
+/**
+ * The origins Life OS is genuinely served from.
+ *
+ * These are in code, not only in a variable, because CORS is the one setting
+ * that fails completely and silently: the browser refuses the response, the
+ * app sees `TypeError: Failed to fetch`, and nothing on either side says the
+ * word "origin". Moving to the custom domain with the variable still naming
+ * only the Railway host did exactly that — every call from
+ * life-os.web-anchor.com was blocked, and the app sat on a spinner.
+ *
+ * Both are listed on purpose: the custom domain is where Life OS lives, and
+ * the Railway host stays valid so a DNS or certificate problem on one cannot
+ * lock everybody out of the other. This is still an allowlist — adding an
+ * origin means editing this line — and `*` is refused below regardless.
+ */
+export const DEFAULT_WEB_ORIGINS = [
+  'https://life-os.web-anchor.com',
+  'https://life-os-v2-web-staging-v2-staging.up.railway.app',
+] as const;
+
 export function corsOrigins(env: AppEnv): string[] {
   const raw = `${env.CORS_ALLOWED_ORIGINS},${env.CORS_ORIGINS}`;
   const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
   // A wildcard here would be a silent, total hole. Refuse it outright rather
   // than letting a convenient value reach production.
   if (list.includes('*')) throw new Error('CORS_ALLOWED_ORIGINS must not contain "*".');
-  return [...new Set(list)];
+  return [...new Set([...DEFAULT_WEB_ORIGINS, ...list])];
 }

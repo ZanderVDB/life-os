@@ -73,10 +73,15 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+/* No hostname appears here on purpose.
+ *
+ * The fetch handler returns for anything cross-origin before this is reached,
+ * so the old `railway.app` clause could never match — it only pinned the
+ * worker's idea of the API to one host it never saw. A path prefix and an
+ * Authorization header are what actually identify API traffic, on any domain. */
 const isApiRequest = (url, request) =>
   url.pathname.startsWith('/api/')
-  || request.headers.has('Authorization')
-  || url.hostname.includes('railway.app') && url.pathname.startsWith('/api');
+  || request.headers.has('Authorization');
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;

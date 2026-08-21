@@ -73,7 +73,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerPreferenceRoutes(app, db, guards);
   registerHabitRoutes(app, db, guards);
   registerCalendarRoutes(app, db, guards);
-  registerGoogleCalendarRoutes(app, db, guards);
+  registerGoogleCalendarRoutes(app, db, guards, env);
   registerCalendarWriteRoutes(app, db, guards);
   /* Google is not a signed-in user, so its webhook is registered outside the
    * workspace-scoped routes and proves who it is from a channel row instead. */

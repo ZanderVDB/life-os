@@ -25,6 +25,7 @@ import {
   googleConfig, encryptionKey,
 } from '../lib/calendar-sync.js';
 import { SYNC_INTERVAL_MS, BACKOFF_BASE_MS, jitter } from '../lib/calendar-scheduler.js';
+import { corsOrigins, DEFAULT_WEB_ORIGINS, type AppEnv } from '../env.js';
 import { ensureWatches, stopAllWatches } from '../lib/calendar-watch.js';
 
 /**
@@ -38,6 +39,8 @@ import { ensureWatches, stopAllWatches } from '../lib/calendar-watch.js';
  */
 const pending = new Map<string, {
   workspaceId: string; userId: string; verifier: string; expiresAt: number;
+  /** Where to send the browser back to, when it started somewhere we allow. */
+  returnTo?: string;
 }>();
 
 function sweep() {
@@ -45,8 +48,29 @@ function sweep() {
   for (const [k, v] of pending) if (v.expiresAt < now) pending.delete(k);
 }
 
-const postConnectUrl = () =>
-  process.env.GOOGLE_CALENDAR_POST_CONNECT_URL ?? 'https://life-os-v2-web-staging-v2-staging.up.railway.app/#calendar';
+/**
+ * Where the browser lands after Google redirects back.
+ *
+ * Google returns to the API, not to the app, so the API has to know where the
+ * app is. This used to be one hardcoded Railway host, which meant connecting
+ * Calendar from the custom domain dropped the person onto a different origin —
+ * a different Firebase session, a different service worker, and no sign of
+ * what had happened.
+ *
+ * So the origin the connect STARTED from is remembered and used, and only if
+ * it is an origin we already allow. The variable is the fallback for a flow
+ * that has no origin to remember, and the first allowed origin is the
+ * fallback for that.
+ */
+const returnOrigin = (origin: string | undefined, allowed: string[]): string | undefined =>
+  (origin && allowed.includes(origin)) ? origin : undefined;
+
+const postConnectUrl = (from?: string) => {
+  if (from) return `${from}/#calendar`;
+  const configured = process.env.GOOGLE_CALENDAR_POST_CONNECT_URL;
+  if (configured) return configured;
+  return `${DEFAULT_WEB_ORIGINS[0]}/#calendar`;
+};
 
 /** Masks an address for display: z••••@gmail.com. */
 export function maskEmail(email: string | null): string | null {
@@ -56,7 +80,9 @@ export function maskEmail(email: string | null): string | null {
   return `${user.slice(0, 1)}${'•'.repeat(Math.max(3, user.length - 1))}@${domain}`;
 }
 
-export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: Guards) {
+export function registerGoogleCalendarRoutes(
+  app: AppInstance, db: Db, guards: Guards, env: AppEnv,
+) {
   const pre = { preHandler: [guards.authenticate, guards.resolveWorkspace] };
   const log = app.log;
 
@@ -89,6 +115,7 @@ export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: G
         userId: (req as any).user?.uid ?? '',
         verifier,
         expiresAt: Date.now() + 10 * 60_000,
+        returnTo: returnOrigin(req.headers.origin, corsOrigins(env)),
       });
       // Only the URL crosses to the browser. No secret, no verifier.
       return { authorizeUrl: G.authorizeUrl(cfg, state, challenge), scope: G.GOOGLE_SCOPE };
@@ -100,13 +127,17 @@ export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: G
    * to a request WE started, which is why it is single-use and short-lived. */
   app.get('/api/v1/integrations/google-calendar/callback', async (req, reply) => {
     const q = req.query as Record<string, string | undefined>;
+    /* Read the pending entry BEFORE failing, so an error still returns the
+     * person to the origin they left from rather than to a different one. */
+    sweep();
+    const known = q.state ? pending.get(q.state) : undefined;
     const fail = (reason: string) =>
-      reply.redirect(`${postConnectUrl()}?calendar=error&reason=${encodeURIComponent(reason)}`);
+      reply.redirect(`${postConnectUrl(known?.returnTo)}`
+        + `?calendar=error&reason=${encodeURIComponent(reason)}`);
 
     if (q.error) return fail(q.error === 'access_denied' ? 'declined' : 'google_error');
     if (!q.code || !q.state) return fail('missing_code');
 
-    sweep();
     const entry = pending.get(q.state);
     // Single use: consumed whether or not the rest succeeds, so a replayed
     // state cannot mint a second connection.
@@ -173,7 +204,7 @@ export function registerGoogleCalendarRoutes(app: AppInstance, db: Db, guards: G
        * Life OS in seconds rather than waiting for the next five-minute pass.
        * Best effort: a failure here must not cost the user their connection. */
       await ensureWatches(db, entry.workspaceId, log).catch(() => null);
-      return reply.redirect(`${postConnectUrl()}?calendar=connected`);
+      return reply.redirect(`${postConnectUrl(entry.returnTo)}?calendar=connected`);
     } catch (e) {
       log.error({ err: redactTokens(e) }, 'google calendar callback failed');
       return fail('exchange_failed');

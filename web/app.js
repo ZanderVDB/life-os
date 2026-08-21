@@ -328,8 +328,47 @@ async function initAuth() {
       authUser = null;
       return auth.signOut(a);
     };
-    await run(boot);
+    /* NOT `run(boot)`.
+     *
+     * run() reports through a toast, and a toast over the boot spinner is a
+     * message that disappears while the spinner stays forever. That is exactly
+     * what the custom domain looked like before its origin was allowed by the
+     * API: signed in, every request refused by the browser, and a page that
+     * simply never finished loading with nothing on screen saying so. */
+    try {
+      await boot();
+    } catch (e) {
+      renderBootFailure(e);
+    }
   });
+}
+
+/**
+ * The one screen someone sees when Life OS cannot reach its own API.
+ *
+ * `TypeError: Failed to fetch` is what the browser reports for a blocked
+ * origin, a DNS failure and an API that is down alike — indistinguishable from
+ * in here — so this names the possibilities rather than guessing between them,
+ * and always offers the way back.
+ */
+function renderBootFailure(e) {
+  const blocked = e instanceof TypeError || /failed to fetch|networkerror/i.test(e?.message ?? '');
+  root.innerHTML = `<div class="state" style="margin:70px auto;max-width:460px;padding:0 24px">
+    <b>Life OS cannot reach its own service</b>
+    ${blocked
+    ? 'The app loaded, but every request to the Life OS API was refused before it '
+      + 'left the browser. That usually means this address is not one the API '
+      + 'recognises yet, or the service is down.'
+    : esc(e?.message ?? 'Something went wrong while starting up.')}
+    <div style="margin-top:18px;display:flex;gap:9px;justify-content:center">
+      <button class="btn btn-primary" id="boot-retry">Try again</button>
+      <button class="btn" id="boot-out">Sign out</button>
+    </div>
+    <p style="margin-top:16px;font-size:11px;color:var(--muted)">
+      ${esc(location.origin)} → ${esc(CFG.apiBaseUrl || 'no API configured')}</p>
+  </div>`;
+  document.getElementById('boot-retry').onclick = () => location.reload();
+  document.getElementById('boot-out').onclick = () => window.__signOut?.();
 }
 
 function renderSignIn(onClick) {
