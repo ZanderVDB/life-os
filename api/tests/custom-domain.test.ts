@@ -176,3 +176,64 @@ test('the legal pages are reachable and linked from inside the app', () => {
   assert.match(webServer, /if \(!info && !extname\(file\)\)/,
     'an extensionless legal URL 404s in production');
 });
+
+/* ── The public home page ───────────────────────────────────────────────
+ * Google's OAuth verification refused the app on four counts, three of which
+ * were the same root cause: the home page was a lone "Continue with Google".
+ * It was behind a login, it did not say what the app was for, and the app's
+ * own name was not on it in a form a reviewer could read. */
+const indexHtml = read(join('..', 'web', 'index.html'));
+
+test('the home page is readable without signing in, and without JavaScript', () => {
+  // The landing is static markup in index.html, not something app.js renders.
+  const body = indexHtml.slice(indexHtml.indexOf('<body>'));
+  assert.match(body, /<main class="lp" id="landing">/,
+    'the home page is not in the served HTML, so it is behind a login again');
+  // The old arrangement: a spinner, and nothing else, until Firebase answered.
+  assert.ok(!/<div id="root"><div class="state"[^>]*><span class="spinner">/.test(body),
+    'the root element is a bare spinner again');
+  assert.match(body, /id="si"/, 'there is no way to sign in from the home page');
+});
+
+test('the home page carries the app name Google was given', () => {
+  /* The consent screen says "Life OS". If the home page does not say the same
+   * thing, verification fails on a name mismatch — which it did. */
+  const h1 = indexHtml.match(/<h1>([^<]*)<\/h1>/);
+  assert.ok(h1, 'the home page has no h1');
+  assert.equal(h1![1].trim(), 'Life OS', 'the h1 does not match the OAuth app name');
+  assert.match(indexHtml, /<title>Life OS<\/title>/, 'the page title is not the app name');
+});
+
+test('the home page explains what the app is for', () => {
+  const landing = indexHtml.slice(indexHtml.indexOf('id="landing"'),
+    indexHtml.indexOf('</main>')).replace(/\s+/g, ' ');
+  // Purpose, not just a product name and a button.
+  assert.match(landing, /lp-lede/, 'there is no description of the app');
+  for (const surface of ['Today', 'Calendar', 'Projects', 'Diary', 'Library', 'Habits']) {
+    assert.ok(landing.includes(`<h3>${surface}</h3>`), `the home page does not mention ${surface}`);
+  }
+  /* And it says why it wants a calendar, in the reviewer's own terms. This is
+   * the section the scope review reads. */
+  assert.match(landing, /Connecting Google Calendar/, 'the calendar permission is never explained');
+  assert.match(landing, /entirely optional/, 'the home page implies calendar access is required');
+  assert.match(landing, /only the specific change you confirm/,
+    'the home page does not say writes are confirmed first');
+  // Reachable from the page a reviewer lands on.
+  assert.match(landing, /href="\.\/privacy\.html"/, 'the home page does not link the privacy policy');
+  assert.match(landing, /href="\.\/terms\.html"/, 'the home page does not link the terms');
+});
+
+test('a returning visitor does not watch the landing page flash past', () => {
+  /* Firebase takes a moment to restore a session. Without a hint, every return
+   * visit renders the marketing page first and then throws it away. */
+  assert.match(app, /const SEEN = 'los2_signed_in'/, 'there is no returning-visitor hint');
+  assert.match(app, /if \(localStorage\.getItem\(SEEN\)\) showSpinner\(\);/,
+    'a returning visitor is shown the landing page first');
+  assert.match(app, /localStorage\.setItem\(SEEN, '1'\)/, 'the hint is never set');
+  assert.match(app, /localStorage\.removeItem\(SEEN\)/, 'signing out leaves the hint behind');
+  // It is a hint about which screen to draw, never a way in.
+  const reads = app.match(/localStorage\.getItem\(SEEN\)/g) ?? [];
+  assert.equal(reads.length, 1, 'the hint is read somewhere other than the first paint');
+  assert.match(app, /if \(localStorage\.getItem\(SEEN\)\) showSpinner\(\);/,
+    'the only read of the hint does something other than choose a screen');
+});

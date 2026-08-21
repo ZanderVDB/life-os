@@ -5801,12 +5801,159 @@ body:has(.dia-page) .rail{display:none}
   *{animation-duration:1ms!important;animation-iteration-count:1!important;
     transition-duration:1ms!important;scroll-behavior:auto!important}
 }
+/* ── Public landing page ──────────────────────────────────────────────────
+   The home page has to be readable by someone who is not signed in — a
+   visitor deciding whether to try Life OS, and a Google reviewer checking
+   that the app explains itself and names itself before asking for a calendar.
+   Both of those failed when the root URL was a lone "Continue with Google".
+
+   It is written into index.html rather than rendered by app.js so it is on
+   screen before any JavaScript runs, and it is replaced the moment a signed-in
+   session is confirmed. */
+.lp{max-width:940px;margin:0 auto;padding:0 26px 90px}
+.lp-nav{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:26px 0 0}
+.lp-brand{display:flex;align-items:center;gap:11px}
+.lp-brand .logo-word{font-size:21px}
+.lp-hero{padding:86px 0 22px;max-width:34ch}
+.lp-hero h1{font-size:clamp(38px,7vw,60px);line-height:1.04;letter-spacing:-.035em;
+  margin:0 0 20px;color:var(--text);font-weight:700}
+.lp-lede{font-size:17px;line-height:1.65;color:var(--text-2);margin:0 0 30px;max-width:52ch}
+.lp-cta{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.lp-cta .btn{padding:12px 22px;font-size:14px}
+.lp-cta-note{font-size:12.5px;color:var(--muted)}
+
+.lp-rule{height:1px;background:var(--hairline);margin:74px 0 0;border:0}
+
+.lp-what{padding:56px 0 0}
+.lp-h2{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 26px}
+.lp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));
+  gap:2px 38px}
+.lp-item{padding:16px 0;border-top:1px solid var(--hairline)}
+.lp-item h3{font-size:15px;color:var(--text);margin:0 0 6px;font-weight:600}
+.lp-item p{font-size:13.5px;line-height:1.65;color:var(--muted);margin:0}
+
+.lp-cal{margin:56px 0 0;padding:26px 28px;background:var(--surface);
+  border:1px solid var(--border);border-radius:16px}
+.lp-cal h2{font-size:19px;color:var(--text);margin:0 0 12px;letter-spacing:-.01em}
+.lp-cal p{font-size:14px;line-height:1.7;color:var(--text-2);margin:0 0 12px;max-width:66ch}
+.lp-cal ul{margin:0 0 12px;padding-left:20px}
+.lp-cal li{font-size:13.5px;line-height:1.7;color:var(--muted);margin-bottom:5px}
+.lp-cal li b{color:var(--text-2);font-weight:600}
+.lp-cal p:last-child{margin-bottom:0}
+
+.lp-foot{display:flex;align-items:center;justify-content:space-between;gap:18px;
+  flex-wrap:wrap;margin-top:64px;padding-top:24px;border-top:1px solid var(--hairline);
+  font-size:13px;color:var(--muted)}
+.lp-foot a{color:var(--muted);text-decoration:none}
+.lp-foot a:hover{color:var(--accent)}
+.lp-foot nav{display:flex;gap:18px;flex-wrap:wrap}
+
+@media (max-width:640px){
+  .lp{padding:0 20px 70px}
+  .lp-hero{padding:52px 0 18px}
+  .lp-cal{padding:22px 20px}
+  .lp-nav .btn{padding:9px 15px;font-size:13px}
+}
+
 html[data-motion="reduced"] *{animation-duration:1ms!important;transition-duration:1ms!important}
 
 </style>
 </head>
 <body>
-<div id="root"><div class="state" style="padding:60px 34px"><span class="spinner"></span></div></div>
+<div id="root"><main class="lp" id="landing">
+  <div class="lp-nav">
+    <div class="lp-brand">
+      <svg class="logo-mark" width="26" height="26" viewBox="0 0 24 24" role="img" aria-label="Life OS">
+        <defs><linearGradient id="lpg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#A78BFA"/><stop offset="1" stop-color="#7C3AED"/>
+        </linearGradient></defs>
+        <path d="M12 2.6c2.1 3.3 5.6 4.4 5.6 8.4a5.6 5.6 0 0 1-11.2 0c0-4 3.5-5.1 5.6-8.4Z" fill="url(#lpg)"/>
+        <path d="M12 12.2v9.2" stroke="#A78BFA" stroke-width="1.5" stroke-linecap="round" opacity=".55"/>
+      </svg>
+      <div class="logo-word">Life OS</div>
+    </div>
+    <button class="btn btn-primary" id="si-top">Sign in</button>
+  </div>
+
+  <section class="lp-hero">
+    <h1>Life OS</h1>
+    <p class="lp-lede">One calm home for your tasks, your calendar, your diary and
+      the things you are trying to do consistently — instead of five apps that
+      each know a quarter of your life.</p>
+    <div class="lp-cta">
+      <button class="btn btn-primary" id="si">Continue with Google</button>
+      <span class="lp-cta-note">Free. Sign in with your Google account.</span>
+    </div>
+  </section>
+
+  <hr class="lp-rule">
+
+  <section class="lp-what">
+    <h2 class="lp-h2">What Life OS does</h2>
+    <div class="lp-grid">
+      <div class="lp-item">
+        <h3>Today</h3>
+        <p>The work actually in front of you right now, rather than everything
+          you have ever written down.</p>
+      </div>
+      <div class="lp-item">
+        <h3>Calendar</h3>
+        <p>Your real Google Calendar, with the time you have set aside for your
+          own tasks shown beside your meetings.</p>
+      </div>
+      <div class="lp-item">
+        <h3>Projects</h3>
+        <p>Bigger things broken into steps, so a project is never just a word on
+          a list.</p>
+      </div>
+      <div class="lp-item">
+        <h3>Diary</h3>
+        <p>A place to write the day down, kept private and searchable.</p>
+      </div>
+      <div class="lp-item">
+        <h3>Library</h3>
+        <p>Notes, ideas and reference kept as books you can actually find things
+          in later.</p>
+      </div>
+      <div class="lp-item">
+        <h3>Habits</h3>
+        <p>The handful of things you want to do regularly, ticked off without
+          ceremony.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="lp-cal">
+    <h2>Connecting Google Calendar</h2>
+    <p>Life OS can connect to Google Calendar so your real schedule appears
+      alongside your work. This is <b>entirely optional</b> — you can create an
+      account and use everything else without it, and you can disconnect at any
+      time from Settings.</p>
+    <p>If you do connect it, Life OS asks Google for permission to:</p>
+    <ul>
+      <li><b>See your events</b>, so your calendar and your tasks are on one screen</li>
+      <li><b>Create, change and delete events</b> — but only the specific change
+        you confirm on screen first. Life OS never writes to your calendar in
+        the background.</li>
+      <li><b>See which calendars you have</b>, so you can choose where an event goes</li>
+      <li><b>See when you are free or busy</b>, so it can warn you about a clash</li>
+    </ul>
+    <p>Life OS keeps a copy of your events so the calendar loads instantly and
+      can spot clashes. Disconnecting removes that copy. The full detail is in
+      the <a href="./privacy.html">Privacy Policy</a>.</p>
+  </section>
+
+  <div class="lp-foot">
+    <span>Life OS — built and run by Zander van der Berg, South Africa.</span>
+    <nav>
+      <a href="./privacy.html">Privacy</a>
+      <a href="./terms.html">Terms</a>
+      <a href="mailto:zander.vanderberg1@gmail.com">Contact</a>
+    </nav>
+  </div>
+</main></div>
 <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
 
 <script type="module" src="./config.js"></script>

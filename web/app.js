@@ -293,7 +293,21 @@ function devBypass() {
   return token && local ? token : null;
 }
 
+/* A hint, not a gate.
+ *
+ * Firebase takes a moment to restore a session, and until it answers we cannot
+ * know which of the two screens is right. Showing the landing page in the
+ * meantime makes every returning visit flash a marketing page; showing the
+ * spinner makes a first-time visitor stare at nothing. This remembers which
+ * kind of visitor this browser is. It authorises nothing — the real gate is
+ * the token the API verifies. */
+const SEEN = 'los2_signed_in';
+const showSpinner = () => {
+  root.innerHTML = '<div class="state" style="padding:60px 34px"><span class="spinner"></span></div>';
+};
+
 async function initAuth() {
+  if (localStorage.getItem(SEEN)) showSpinner();
   const dev = devBypass();
   if (dev) {
     devToken = dev;
@@ -319,12 +333,14 @@ async function initAuth() {
     // Held so api() can ask for a token per request. No interval: a background
     // timer is exactly what stopped firing and let the token expire.
     authUser = user;
+    localStorage.setItem(SEEN, '1');
     state.token = await user.getIdToken();
     // The token is NOT written to localStorage. Nothing ever read it back, and
     // an ID token on disk outlives the tab that fetched it.
     window.__signOut = () => {
       localStorage.removeItem('los2_token');   // clear any left by an older build
       localStorage.removeItem('los2_ws');
+      localStorage.removeItem(SEEN);
       authUser = null;
       return auth.signOut(a);
     };
@@ -371,17 +387,21 @@ function renderBootFailure(e) {
   document.getElementById('boot-out').onclick = () => window.__signOut?.();
 }
 
+/* The landing page lives in index.html, not here.
+ *
+ * Google's verification refused the old arrangement on three counts at once:
+ * the home page was behind a login, it did not explain what the app was for,
+ * and it did not carry the app's own name where a reviewer could read it. A
+ * lone "Continue with Google" is all three of those.
+ *
+ * So the public page is static markup, on screen before any JavaScript runs,
+ * and this only captures it once so it can be put back after signing out. */
+const LANDING = root.innerHTML;
+
 function renderSignIn(onClick) {
   document.body.classList.remove('drawer-open');
-  root.innerHTML = `<div style="min-height:100vh;display:grid;place-items:center;padding:24px">
-    <div style="max-width:380px;width:100%;text-align:center">
-      <div class="intro" style="display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:24px">
-        ${logoMark(40)}<div class="logo-word" style="font-size:30px">Life OS</div>
-      </div>
-      <p class="sub" style="margin-bottom:26px">Your calm home for everything.</p>
-      <button class="btn btn-primary" id="si" style="width:100%;padding:12px">Continue with Google</button>
-    </div></div>`;
-  document.getElementById('si').onclick = onClick;
+  if (!document.getElementById('landing')) root.innerHTML = LANDING;
+  root.querySelectorAll('#si, #si-top').forEach((b) => { b.onclick = onClick; });
 }
 
 const renderFatal = (title, body) => {
