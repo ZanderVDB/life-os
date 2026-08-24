@@ -2845,6 +2845,51 @@ html[data-motion="reduced"] #los-stars{display:none}
     top:50%;left:0;right:0;height:44px;transform:translateY(-50%)}
 }
 
+/* ── Mobile release pass ──────────────────────────────────────────────────
+   The C4 touch pass already gave the ticks, titles and habit rings a
+   transparent 44px `::after` hit area, and that pattern works — measured on a
+   375px viewport, every one of those controls passes. What it did not cover
+   is below, found by walking every route at phone widths rather than by
+   reading the stylesheet. */
+@media (hover:none),(pointer:coarse),(max-width:768px){
+
+  /* A task row was `20px 89px 160px` on a 375px screen: three 44px controls
+     and a drag grip took 160px of a 291px row and left the title 89px, which
+     truncates almost every task to two words. The controls are right to be
+     44px — they just do not belong on the same line as the title. */
+  .t-row{grid-template-columns:auto minmax(0,1fr);row-gap:9px}
+  .t-actions{grid-column:2;justify-content:flex-start;gap:4px;opacity:1}
+  /* Dragging is a mouse affordance. The touch path is the two Move buttons,
+     which are already there. The existing rule hides `.grip`; the task row
+     uses `.t-grip`, so it was never covered and kept its 22px. */
+  .t-grip{display:none}
+
+  /* The Diary header overflowed the viewport by 26px: `.page-actions` is
+     `flex-shrink:0`, so at 321px of available width its 385px of date
+     navigation simply hung off the right edge. It gets its own row instead. */
+  .page-actions{margin-left:0;width:100%;flex-wrap:wrap;flex-shrink:1}
+
+  /* Controls still under 44px after the C4 pass. Painted size kept where
+     growing it would break the layout; the finger target is the overlay. */
+  .tm-project,.lib-obj-more,.cal-nav,.util-btn{position:relative}
+  .tm-project::after,.lib-obj-more::after,.cal-nav::after,.util-btn::after{
+    content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:max(100%,44px);height:44px}
+
+  /* Wide enough already, just short. These can simply grow. */
+  .cal-today,.cal-layer,.pj-filter,.cal-add,.set-nav-item,
+  .cal-modes [role="tab"]{min-height:44px}
+  .cal-layer{padding:0 12px}
+  .lib-search input,.lib-search .input{min-height:44px}
+
+  /* A row of lifecycle filters must scroll rather than shrink into a row of
+     unreadable stubs. */
+  .pj-filters{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:8px;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .pj-filters::-webkit-scrollbar{display:none}
+  .pj-filter{flex:0 0 auto}
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    LIBRARY (Phase F2)
    The Book's geometry is lifted from docs/library-v2-legacy-book-audit.md,
@@ -5998,3 +6043,101 @@ body:has(.dia-page) .rail{display:none}
 }
 
 html[data-motion="reduced"] *{animation-duration:1ms!important;transition-duration:1ms!important}
+
+/* ── Shelf spacing on touch ───────────────────────────────────────────────
+   Last in the file deliberately. `.lib-rail.is-dense .lib-row{column-gap:0}`
+   is both later and more specific than the mobile block, so setting the
+   tuning token there had no effect on a dense shelf — which is most of them.
+
+   Books touching is right with a mouse and wrong with a thumb: a 30px spine
+   with no air beside it means a slightly-off tap opens the neighbour. Eight
+   pixels is inside the documented 0-14px range and leaves the resting pose,
+   lean and depth untouched. */
+@media (hover:none),(pointer:coarse),(max-width:768px){
+  .lib-rail .lib-row,.lib-rail.is-dense .lib-row{column-gap:8px}
+}
+
+/* ── Calendar sheets on a phone ───────────────────────────────────────────
+   `.modal.ev-modal,.modal-reminder,.modal-schedule{width:min(544px,100vw-32px)}`
+   was added for desktop during the Calendar pass, and it sits AFTER the
+   mobile bottom-sheet rule. At 390px it computed 358px against `left:0`, so
+   the sheet stopped 32px short of the right edge with a strip of the page
+   showing beside it.
+
+   Also dvh rather than vh: on a phone, vh is the tallest the viewport ever
+   gets, so a 92vh sheet is taller than the screen while the browser chrome
+   is showing. */
+@media (max-width:768px){
+  .modal.ev-modal,.modal-reminder,.modal-schedule{
+    left:0;right:0;bottom:0;top:auto;transform:none;
+    width:100%;max-width:100%;max-height:92dvh;
+    border-radius:20px 20px 0 0}
+  .modal.ev-modal .m-body,.modal-reminder .m-body,.modal-schedule .m-body{
+    max-height:none;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+  .modal.ev-modal .m-foot,.modal-reminder .m-foot,.modal-schedule .m-foot{
+    padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+}
+
+/* ── Text entry on touch ──────────────────────────────────────────────────
+   iOS Safari zooms the whole page when a field with font-size under 16px
+   takes focus, and then leaves it zoomed — which is the "the keyboard opens
+   and everything jumps" complaint. The only accessible cure is 16px; the
+   alternative, maximum-scale=1 on the viewport, disables pinch zoom for
+   everyone and is worse.
+
+   The task editor's fields were 13-13.5px, so every task title, step and note
+   on a phone triggered it. */
+@media (hover:none),(pointer:coarse),(max-width:768px){
+  input,textarea,select,
+  .m-input,.m-title,.input,.ta,.cf-input,.set-item-name,.cf-title input,.cf-title textarea,
+  /* Nested rules outrank a bare class inside a media query — media queries add
+     no specificity — so anything that sets its own smaller size is named. */
+  .m-step-add .m-input,.st-list .m-input,.bk-page input,.bk-page textarea{
+    font-size:16px}
+  /* Fields grow to a comfortable target along with the type. */
+  .m-input,.input,.cf-ctl,.set-item-name{min-height:44px}
+  .m-input.m-textarea,textarea.m-input,.ta{min-height:96px}
+}
+
+/* ── Pinboard on touch ────────────────────────────────────────────────────
+   Three things stacked up to make a pin immovable on a phone.
+
+   1. The drag handles called preventDefault() on POINTERDOWN, which does not
+      stop a touch from scrolling — only `touch-action` does. The browser won
+      the gesture, fired pointercancel, and the drag died mid-move. There was
+      no touch-action anywhere in this stylesheet.
+   2. The grip's own marking is drawn on `.bk-pin:hover`, so on a device with
+      no hover it was invisible: the handle existed and nothing showed where.
+   3. It is a 16px strip.
+
+   The handles claim the gesture; the pin body deliberately does not, so the
+   board can still be scrolled by starting a drag anywhere else. */
+@media (hover:none),(pointer:coarse),(max-width:768px){
+  /* Footer and header links on the public page are text, and text is small. */
+  .lp-foot-links a,.lp-nav-links a,.lp-note a{display:inline-flex;align-items:center;min-height:44px}
+
+  .bk-pin-grip,[data-pin-resize],[data-pin-connect]{touch-action:none}
+  .bk-pin-grip{height:28px}
+  .bk-pin-grip::before{opacity:.9;top:12px}
+  [data-pin-resize],[data-pin-connect]{min-width:32px;min-height:32px}
+}
+
+/* ── The task row at laptop widths ────────────────────────────────────────
+   Not a mobile rule, but the same defect and the same cause.
+
+   `.t-actions` is invisible until hover — opacity:0, which hides paint and
+   still reserves layout. Three controls and a grip reserve 118px of every row
+   forever. With three buckets across and the rail beside them, a 1440px
+   window leaves each row about 143px, so the grid resolves to
+   `20px 5px 118px` and the title gets FIVE pixels. Measured, not guessed.
+
+   The band runs from where the buckets go three-across (1025px) to about
+   1700px, which is most laptops. Above it there is room and nothing changes;
+   below it the buckets are already single-column and rows are wide.
+
+   Same answer as the phone: the controls keep their size and move to their
+   own line, so the title always has the full width of the row. */
+@media (min-width:1025px) and (max-width:1700px){
+  .t-row{grid-template-columns:auto minmax(0,1fr);row-gap:6px}
+  .t-actions{grid-column:2;justify-content:flex-start}
+}
