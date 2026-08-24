@@ -627,3 +627,48 @@ test('the Life OS lockup uses an inline self-contained gradient', () => {
   assert.ok(!/\.bk-editor\{[^}]*Playfair/.test(html), 'Book body text is set in Playfair');
   assert.ok(!/\.dia-editor\{[^}]*Playfair/.test(html), 'Diary body text is set in Playfair');
 });
+
+test('the mobile drawer is not trapped inside a stacking context', () => {
+  /* This one was invisible to every check that measures position.
+   *
+   * `.shell{position:relative;z-index:1}` created a STACKING CONTEXT, so the
+   * sidebar's z-index:120 only ever competed with its siblings inside the
+   * shell. From outside, the whole application was z-index:1 — and
+   * `.drawer-scrim`, a body-level child at z-index:110, painted above all of
+   * it. The drawer opened, slid to the right place, dimmed itself, and
+   * swallowed every tap. Today, Calendar, Projects, Diary, Library and
+   * Settings were all unreachable on a phone, and measuring transform, left
+   * and opacity said the drawer was fine, because it was.
+   *
+   * The rule that matters: the scrim and the sidebar must resolve their
+   * z-indexes against each other, which means no ancestor of the sidebar may
+   * open a context the scrim is not also inside. */
+  /* Comments stripped first. The comment explaining why .shell has no z-index
+   * quotes the old rule verbatim, and indexOf finds prose before code. */
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  const zOf = (sel: string) => {
+    const at = css.indexOf(sel + '{');
+    if (at < 0) return null;
+    const block = css.slice(at, css.indexOf('}', at));
+    const m = block.match(/z-index:(-?\d+|auto)/);
+    return m ? m[1] : null;
+  };
+
+  // The shell positions itself and must NOT carry a z-index.
+  const shell = css.slice(css.indexOf('.shell{position:relative'),
+    css.indexOf('}', css.indexOf('.shell{position:relative')));
+  assert.ok(!/z-index/.test(shell),
+    '.shell has a z-index again, which traps the sidebar and kills the drawer');
+
+  // The star field was the only reason the shell ever needed one; it belongs
+  // behind the content rather than in front of the background.
+  assert.equal(zOf('#los-stars'), '-1', 'the star field is not behind the app');
+
+  // And within one shared context, the drawer must outrank its own scrim.
+  // The DRAWER rule, not the desktop one: only the fixed-position sidebar is
+  // the drawer, and only it shares a context with the scrim.
+  const sidebarZ = Number(css.match(/\.sidebar\{position:fixed[^}]*z-index:(\d+)/)?.[1] ?? 0);
+  const scrimZ = Number(css.match(/\.drawer-scrim\{[^}]*z-index:(\d+)/)?.[1] ?? 0);
+  assert.ok(sidebarZ > scrimZ,
+    `the scrim (${scrimZ}) is at or above the drawer (${sidebarZ}) and will swallow its taps`);
+});

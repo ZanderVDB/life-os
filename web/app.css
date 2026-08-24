@@ -2747,13 +2747,27 @@ body:has(.pj-head) .rail{display:none}
 /* ── Ambient stars ──────────────────────────────────────────────────
    Decorative only: behind everything, never interactive, never in the
    layout. Fixed so it does not repaint on scroll. */
-#los-stars{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;
+#los-stars{position:fixed;inset:0;width:100vw;height:100vh;z-index:-1;
   pointer-events:none;user-select:none}
 /* Only the shell needs lifting above the star layer. Listing the fixed
    elements here as well set `position:relative` on them, which silently
    overrode `.modal{position:fixed}` and threw the dialog off centre — every
    one of them already carries its own position and z-index. */
-.shell{position:relative;z-index:1}
+/* No z-index here, deliberately.
+ *
+ * `.shell{position:relative;z-index:1}` existed only to sit above the star
+ * field, and it cost the entire mobile drawer. A positioned element with a
+ * z-index creates a STACKING CONTEXT, so the sidebar's z-index:120 only ever
+ * competed with its siblings inside the shell. From outside, the whole
+ * application was z-index:1 — and `.drawer-scrim`, a body-level child at
+ * z-index:110, therefore painted above all of it. The drawer opened, dimmed
+ * itself, and swallowed every tap: Today, Calendar, Projects, Diary, Library
+ * and Settings alike.
+ *
+ * The star field is background, so it goes behind at -1 and the shell needs
+ * no context at all. Now sidebar 120 > scrim 110 in one shared context, which
+ * is what those numbers were always meant to mean. */
+.shell{position:relative}
 @media (prefers-reduced-motion:reduce){#los-stars{display:none}}
 html[data-motion="reduced"] #los-stars{display:none}
 
