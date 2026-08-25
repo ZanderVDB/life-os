@@ -128,6 +128,42 @@ design pass in its own step.
   never become Personal/Business switching under a new name (see
   `design-system.md` → *One life, one workspace*).
 
+
+## 15. Email Intelligence / Communication Inbox *(captured 2026-08-25 — do not implement)*
+
+Connect one or more external mail accounts — Gmail first, Outlook after — and
+treat mail as a **source of work rather than a place to live in**.
+
+**Not an email client.** Life OS would not thread, compose or replace anybody's
+inbox. It would:
+
+- identify the messages that look important or actionable;
+- summarise them briefly;
+- turn one into a **Task**, a **Project**, a **Book/Page reference**, or an
+  **Event/Reminder**;
+- keep the original message as a **Source** the item can be traced back to;
+- hand off to the provider's own client for the full conversation.
+
+Later, the assistant could classify incoming mail and propose those actions
+rather than waiting to be asked — which is the same propose-then-confirm shape
+the Calendar already uses, and it should reuse it rather than invent a second
+one.
+
+**Architecture note.** Life OS identity stays separate from connected external
+accounts. One Life OS user must eventually be able to connect several Google
+and Microsoft identities — work and personal — without any of them becoming
+the account they sign in with. The Calendar connection is already modelled this
+way (`calendar_connections` hangs off the workspace, not the user's Firebase
+identity), and email should follow it.
+
+**Why this is deferred, specifically.** Gmail mailbox scopes are Google
+**restricted** scopes, not merely sensitive. Unlike the Calendar scopes already
+verified, they require a **CASA security assessment**, independently
+recertified every year, before any external user can grant them. That is a
+standing annual obligation, and it is not worth taking on until the core
+application and the AI layer are finished and the shape of the feature is
+actually known.
+
 ---
 
 ## Unresolved questions

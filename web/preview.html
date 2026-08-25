@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Life OS — viewport preview</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml">
+<style>
+/* ── Viewport preview (development only) ──────────────────────────────────
+   Life OS runs inside an <iframe> sized to the chosen width, which is the
+   whole point: an iframe is a real viewport. Media queries, 100vw, dvh and
+   the app's own innerWidth all resolve against the frame, so what you see is
+   what the layout genuinely does at that width — not a desktop page with a
+   pile of CSS pretending.
+
+   It is a separate page. The application itself has no idea this exists, and
+   there is no setting anywhere that a user could find. Deleting this one file
+   removes the feature completely; web/server.js refuses to serve it when
+   NODE_ENV is production. */
+:root{
+  --bg:#141220; --chrome:#1B1826; --line:rgba(255,255,255,.09);
+  --text:#F4F2FA; --muted:#8B85A0; --accent:#8A5DFF;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.5 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  display:flex;flex-direction:column;overflow:hidden}
+
+.bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:10px 16px;background:var(--chrome);border-bottom:1px solid var(--line)}
+.bar b{font-size:13px;font-weight:600;letter-spacing:-.01em}
+.bar .tag{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 7px}
+
+.sizes{display:flex;gap:4px}
+.sizes button{font:inherit;font-size:12.5px;color:var(--muted);cursor:pointer;
+  background:none;border:1px solid transparent;border-radius:8px;padding:7px 13px}
+.sizes button:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.sizes button[aria-pressed="true"]{background:rgba(138,93,255,.22);color:#fff;
+  border-color:rgba(138,93,255,.5);font-weight:600}
+
+.tools{display:flex;align-items:center;gap:12px;margin-left:auto;color:var(--muted);font-size:12px}
+.tools button{font:inherit;font-size:12px;color:var(--muted);cursor:pointer;background:none;
+  border:1px solid var(--line);border-radius:8px;padding:6px 11px}
+.tools button:hover{color:var(--text);border-color:var(--accent)}
+.tools code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+  color:var(--text);background:rgba(255,255,255,.05);border-radius:5px;padding:2px 7px}
+
+.stage{flex:1;min-height:0;display:grid;place-items:center;padding:20px;overflow:auto}
+.frame-wrap{display:flex;flex-direction:column;align-items:center;gap:9px;
+  max-width:100%;max-height:100%}
+/* content-box on purpose: the 1px border must sit OUTSIDE the chosen width,
+   or a "390" preview hands the app a 388px viewport and every measurement
+   taken inside it is two pixels short. */
+.device{box-sizing:content-box;border:1px solid var(--line);border-radius:14px;
+  overflow:hidden;background:#000;
+  box-shadow:0 30px 70px -30px rgba(0,0,0,.85);max-width:100%}
+.device.is-desktop{border-radius:8px}
+iframe{display:block;border:0;width:100%;height:100%;background:var(--bg)}
+.caption{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>Life OS</b>
+  <span class="tag">Viewport preview</span>
+
+  <div class="sizes" id="sizes" role="group" aria-label="Preview size"></div>
+
+  <div class="tools">
+    <code id="readout">—</code>
+    <button id="rotate" title="Swap width and height">Rotate</button>
+    <button id="reload" title="Reload the frame">Reload</button>
+    <button id="open" title="Open this size in a normal tab">Open direct</button>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="frame-wrap">
+    <div class="device" id="device"><iframe id="app" title="Life OS preview"
+      src="./index.html" allow="clipboard-write"></iframe></div>
+    <div class="caption" id="caption"></div>
+  </div>
+</div>
+
+<script>
+/* Sizes worth having, not every device ever made. */
+const SIZES = [
+  { id: 'desktop', label: 'Desktop',    w: 1440, h: 900,  desktop: true },
+  { id: 'laptop',  label: 'Laptop',     w: 1280, h: 800,  desktop: true },
+  { id: 'tablet',  label: 'Tablet',     w: 768,  h: 1024 },
+  { id: 'm390',    label: 'Phone 390',  w: 390,  h: 844 },
+  { id: 'm430',    label: 'Phone 430',  w: 430,  h: 932 },
+  { id: 'm360',    label: 'Phone 360',  w: 360,  h: 800 },
+];
+const KEY = 'los2_preview_size';
+
+const sizes = document.getElementById('sizes');
+const device = document.getElementById('device');
+const frame = document.getElementById('app');
+const readout = document.getElementById('readout');
+const caption = document.getElementById('caption');
+
+let current = SIZES.find((s) => s.id === localStorage.getItem(KEY)) ?? SIZES[3];
+let rotated = false;
+
+SIZES.forEach((s) => {
+  const b = document.createElement('button');
+  b.textContent = s.label;
+  b.dataset.size = s.id;
+  b.onclick = () => { current = s; rotated = false; localStorage.setItem(KEY, s.id); apply(); };
+  sizes.append(b);
+});
+
+function apply() {
+  const w = rotated ? current.h : current.w;
+  const h = rotated ? current.w : current.h;
+
+  /* Scale DOWN only when the chosen size does not fit on this monitor. The
+     frame keeps its real pixel dimensions — the app is still being asked to
+     lay out at `w` — and only the presentation is shrunk, so a measurement
+     taken inside the frame stays honest. */
+  const stage = document.querySelector('.stage');
+  const avail = { w: stage.clientWidth - 40, h: stage.clientHeight - 60 };
+  const scale = Math.min(1, avail.w / w, avail.h / h);
+
+  device.style.width = w + 'px';
+  device.style.height = h + 'px';
+  device.classList.toggle('is-desktop', !!current.desktop);
+  device.style.transform = scale < 1 ? `scale(${scale})` : '';
+  device.style.transformOrigin = 'top center';
+  // Keep the layout box honest so the caption does not float away.
+  device.style.marginBottom = scale < 1 ? `${-h * (1 - scale)}px` : '';
+
+  sizes.querySelectorAll('button').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.size === current.id));
+  });
+  readout.textContent = `${w} × ${h}`;
+  caption.textContent = scale < 1
+    ? `${current.label} — shown at ${Math.round(scale * 100)}% to fit; the app still lays out at ${w}px`
+    : `${current.label} — actual size`;
+}
+
+document.getElementById('rotate').onclick = () => { rotated = !rotated; apply(); };
+document.getElementById('reload').onclick = () => { frame.contentWindow.location.reload(); };
+document.getElementById('open').onclick = () => { window.open('./index.html', '_blank'); };
+addEventListener('resize', apply);
+apply();
+</script>
+</body>
+</html>

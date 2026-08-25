@@ -412,8 +412,26 @@ const renderFatal = (title, body) => {
 };
 
 /* ── Boot ────────────────────────────────────────────────────────────── */
+/* The section this browser was last in.
+ *
+ * A reload keeps the hash, so refreshing on #calendar already returns to the
+ * Calendar. An installed PWA does not: its start_url is `index.html?source=pwa`
+ * with no hash at all, and so is a bare visit to the domain. Both used to land
+ * on Today regardless of where the person actually was. */
+const LAST_ROUTE = 'los2_route';
+const rememberRoute = (id) => { try { localStorage.setItem(LAST_ROUTE, id); } catch {} };
+
 async function boot() {
+  if (!location.hash) {
+    let last = null;
+    try { last = localStorage.getItem(LAST_ROUTE); } catch {}
+    /* setHash, not a raw write: nav.js records the write so the hashchange it
+     * causes is recognised as ours rather than treated as a navigation. A raw
+     * assignment here is the D2.2 Library regression in a new place. */
+    if (last && ALL_ROUTE_IDS.includes(last)) setHash('#' + last);
+  }
   state.route = routeFromHash();
+  rememberRoute(state.route);
   const [me, prefsRes] = await Promise.all([
     api('/api/v1/me'),
     api('/api/v1/preferences').catch(() => ({ preferences: {} })),
@@ -867,6 +885,7 @@ const projectFromHash = () => {
 };
 
 async function go(id) {
+  rememberRoute(id);
   /* Claimed BEFORE any await. `go` waits on a pending save before it changes
    * the route, and during that wait `state.route` is still the old one — so a
    * second and third click entered here and took the same branch. Three

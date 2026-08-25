@@ -440,3 +440,62 @@ test('every custom property the home page uses actually exists', () => {
   assert.deepEqual(missing, [],
     `the home page uses custom properties that are not defined at :root: ${missing.join(', ')}`);
 });
+
+test('a signed-in reload never flashes the public page', () => {
+  /* The landing page is the initial content of #root, so the browser painted
+   * it as soon as it parsed the body. app.js is a module and therefore
+   * deferred, so the swap could not happen until config.js, app.js and the
+   * whole import graph had loaded and executed — a few hundred milliseconds on
+   * a phone of somebody who is already signed in reading marketing copy.
+   *
+   * The decision has to be made before the body is parsed, which means inline,
+   * synchronous, and in the head. */
+  const head = indexHtml.slice(0, indexHtml.indexOf('</head>'));
+  assert.match(head, /localStorage\.getItem\('los2_signed_in'\)/,
+    'the returning-visitor decision is not made in the head');
+  assert.match(head, /classList\.add\('los-returning'\)/, 'nothing marks a returning visitor');
+  // Inline and blocking: a module or a deferred script runs too late to help.
+  /* Only the OPENING TAG's attributes — the script's own comment explains why
+   * a deferred module was too late, and the word "deferred" in prose is not an
+   * attribute. */
+  const open = head.lastIndexOf('<script', head.indexOf('los2_signed_in'));
+  const tag = head.slice(open, head.indexOf('>', open) + 1);
+  assert.equal(tag, '<script>',
+    `the decision script has attributes (${tag}); deferring it makes it too late`);
+  // Storage can throw in a locked-down browser; the public page is the safe side.
+  assert.match(head, /catch \(e\)/, 'blocked storage would break the first paint');
+
+  // And the two states are mutually exclusive in CSS.
+  const css = read(join('..', 'web', 'app.css'));
+  assert.match(css, /html\.los-returning #landing\{display:none\}/,
+    'a returning visitor still renders the landing page');
+  assert.match(css, /html\.los-returning \.boot-wait\{display:grid\}/,
+    'there is no boot state to show instead');
+  assert.match(css, /\.boot-wait\{display:none/, 'a new visitor would see a spinner');
+  assert.match(indexHtml, /<div class="boot-wait"/, 'the boot state is not in the markup');
+});
+
+test('an installed launch returns to the section you were in', () => {
+  /* A reload keeps the hash, so refreshing on #calendar already works. A PWA
+   * launch does not: start_url is `index.html?source=pwa` with no hash, and so
+   * is a bare visit to the domain. */
+  assert.match(app, /const LAST_ROUTE = 'los2_route'/, 'the last section is never remembered');
+  assert.match(app, /if \(!location\.hash\) \{/, 'a hashless launch does not restore anything');
+  assert.match(app, /ALL_ROUTE_IDS\.includes\(last\)/,
+    'a stale or invented route would be restored unchecked');
+  const go = app.slice(app.indexOf('async function go(id) {'));
+  assert.match(go.slice(0, 120), /rememberRoute\(id\);/,
+    'changing section does not update what would be restored');
+});
+
+test('the viewport preview cannot reach a production visitor', () => {
+  const server = read(join('..', 'web', 'server.js'));
+  assert.match(server, /url\.pathname === '\/preview\.html'/, 'the preview is not gated');
+  assert.match(server, /process\.env\.NODE_ENV === 'production'/,
+    'the preview gate does not check the environment');
+  // It is a page, not a setting: nothing in the app may link to or mention it.
+  for (const [name, src] of [['app.js', app], ['settings.js', settings],
+    ['index.html', indexHtml]] as [string, string][]) {
+    assert.ok(!/preview\.html/.test(src), `${name} references the dev preview`);
+  }
+});

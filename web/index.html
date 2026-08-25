@@ -53,9 +53,28 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./app.css">
+<script>
+/* Which of the two first paints, decided BEFORE the body is parsed.
+ *
+ * The landing page is the initial content of #root, so the browser painted it
+ * the moment it parsed the body. app.js is a module — deferred by definition —
+ * so the swap to the app could not happen until config.js, app.js and its
+ * whole import graph had loaded and run. On a phone that is a few hundred
+ * milliseconds of somebody who is already signed in reading marketing copy
+ * about an app they use every day.
+ *
+ * Six lines, inline and synchronous, so the class is on <html> before the
+ * landing has a chance to paint. It authorises nothing: the real gate is
+ * still the token the API verifies. */
+try {
+  if (localStorage.getItem('los2_signed_in')) {
+    document.documentElement.classList.add('los-returning');
+  }
+} catch (e) { /* storage blocked: fall through to the public page */ }
+</script>
 </head>
 <body>
-<div id="root"><main class="lp" id="landing">
+<div id="root"><div class="boot-wait" aria-hidden="true"><span class="spinner"></span></div><main class="lp" id="landing">
 
   <header class="lp-nav">
     <div class="lp-brand">

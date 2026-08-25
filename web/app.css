@@ -6155,3 +6155,12 @@ html[data-motion="reduced"] *{animation-duration:1ms!important;transition-durati
   .t-row{grid-template-columns:auto minmax(0,1fr);row-gap:6px}
   .t-actions{grid-column:2;justify-content:flex-start}
 }
+
+/* ── Which page a reload lands on ─────────────────────────────────────────
+   Paired with the inline script in index.html. A returning visitor gets the
+   boot state on the FIRST paint and the landing page never appears; a new
+   visitor gets the landing page and never sees a spinner. One transition
+   either way, decided before anything is drawn. */
+.boot-wait{display:none;place-items:center;min-height:60vh}
+html.los-returning .boot-wait{display:grid}
+html.los-returning #landing{display:none}

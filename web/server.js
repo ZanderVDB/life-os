@@ -114,6 +114,18 @@ const server = createServer(async (req, res) => {
       // fall through and serve the committed placeholder file
     }
 
+    /* The viewport preview is a development tool and never reaches a
+     * production visitor. It is not a setting and not linked from anywhere in
+     * the app — but a URL people can guess should still refuse to answer, so
+     * the gate is here rather than relying on obscurity. Deleting
+     * web/preview.html removes the feature outright. */
+    if (url.pathname === '/preview.html' || url.pathname === '/preview') {
+      if (process.env.NODE_ENV === 'production') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        return res.end('Not found');
+      }
+    }
+
     // Resolve inside ROOT only. normalize() collapses any ../ before we join,
     // so a crafted path cannot climb out of the web directory.
     const rel = normalize(decodeURIComponent(url.pathname)).replace(/^([/\\.]+)/, '');
