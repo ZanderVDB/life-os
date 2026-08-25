@@ -19,6 +19,7 @@
  */
 
 import { lib, ACCENT_FALLBACK } from './library-api.js';
+import { isPhone } from './mobile.js';
 import {
   shelfHtml, objectHtml, diaryObjectHtml, recencyLabel, TYPE_LABEL,
   fileSize, duration, domainOf, esc,
@@ -147,6 +148,12 @@ export function filtersHtml() {
   f.id !== 'all' ? `<span class="chip-n">${counts[f.id]}</span>` : ''}</button>`).join('')}
     </div>
     <div class="lib-bar-right">
+      ${isPhone() ? `<div class="lib-view" role="group" aria-label="Library view">
+        <button type="button" class="lib-view-b ${libView() === 'browse' ? 'on' : ''}"
+          data-lib-view="browse" aria-pressed="${libView() === 'browse'}">Browse</button>
+        <button type="button" class="lib-view-b ${libView() === 'shelf' ? 'on' : ''}"
+          data-lib-view="shelf" aria-pressed="${libView() === 'shelf'}">Shelf</button>
+      </div>` : ''}
       <label class="lib-search">
         <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor"
           stroke-width="1.7" stroke-linecap="round" aria-hidden="true"
@@ -217,6 +224,19 @@ export function bodyHtml() {
 
   if (!items.length) return `${filtersHtml()}${emptyHtml()}`;
 
+  /* ── Browse first on a phone (§29) ────────────────────────────────────
+   *
+   * The shelf is the best thing in Library and it is not what a phone is for.
+   * Standing up, one-handed, the question is "where is that thing I saved",
+   * and the answer to that is search and a list — not four horizontally
+   * scrolling shelves of covers, each of which takes a screenful to show
+   * eight items.
+   *
+   * The shelf is one tap away and the choice is remembered, so somebody who
+   * wants the room can have it. Nothing is missing from either view: they
+   * are the same items, arranged for different questions. */
+  if (isPhone() && libView() === 'browse') return browseHtml(items);
+
   const recent = recentItems(items);
   const shelves = SHELVES.map((s) => {
     const own = items.filter((i) => belongsOn(i, s));
@@ -238,6 +258,45 @@ export function bodyHtml() {
   }) : ''}
       ${lib.filter === 'all' || lib.filter === 'book' ? personalShelfHtml() : ''}
       ${shelves}
+    </div>
+    ${pageHitsHtml(lib.pageHits)}`;
+}
+
+/* Which arrangement the phone is showing. Remembered, because it is a
+ * preference about how somebody reads rather than a state of the page. */
+export const libView = () => {
+  try { return localStorage.getItem('los2_lib_view') === 'shelf' ? 'shelf' : 'browse'; }
+  catch { return 'browse'; }
+};
+export const setLibView = (v) => {
+  try { localStorage.setItem('los2_lib_view', v); } catch { /* private mode */ }
+};
+
+/**
+ * Library, arranged for finding rather than for browsing.
+ *
+ * The same items the shelf holds, in the same groups, as a vertical list of
+ * cards. Search is at the top because on a phone it is the most likely first
+ * action, and Recent is directly beneath it because the second most likely
+ * thing you want is the thing you had open last.
+ */
+export function browseHtml(items) {
+  const recent = recentItems(items);
+  const groups = SHELVES
+    .map((sh) => ({ title: sh.title, own: items.filter((i) => belongsOn(i, sh)) }))
+    .filter((g) => g.own.length);
+
+  const sec = (title, list, note = '') => `<section class="lib-sec">
+    <h2 class="lib-sec-h">${esc(title)}${note ? ` <span class="lib-sec-n">${esc(note)}</span>` : ''}</h2>
+    <div class="lib-grid">${list.map(cardHtml).join('')}</div>
+  </section>`;
+
+  return `${filtersHtml()}
+    <div class="lib-browse">
+      ${recent.length ? sec('Recent', recent,
+    recent.every((i) => !i.lastOpenedAt) ? 'by last edit' : '') : ''}
+      ${lib.filter === 'all' || lib.filter === 'book' ? personalShelfHtml() : ''}
+      ${groups.map((g) => sec(g.title, g.own)).join('')}
     </div>
     ${pageHitsHtml(lib.pageHits)}`;
 }
@@ -411,6 +470,15 @@ export function cardHtml(item) {
       <span class="lib-card-icon">${typeIcon(item.type)}</span>
       <span class="lib-card-type">${TYPE_LABEL[item.type] ?? 'Item'}</span>
       ${archived ? '<span class="lib-card-arch">Archived</span>' : ''}
+      <!-- The same overflow the shelf object carries. Browse is not a
+           reduced Library: rename, archive and the rest are here too. -->
+      <button type="button" class="util-btn lib-card-more" data-more="${esc(item.id)}"
+        aria-haspopup="menu" aria-expanded="false"
+        aria-label="Actions for ${esc(item.title)}">
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="4.5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/>
+          <circle cx="15.5" cy="10" r="1.5"/></svg>
+      </button>
     </div>
     <h3 class="lib-card-title">${esc(item.title)}</h3>
     ${item.description ? `<p class="lib-card-desc">${esc(item.description)}</p>` : ''}

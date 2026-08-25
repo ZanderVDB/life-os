@@ -521,25 +521,51 @@ test('mutable assets are served no-store so a deploy cannot leave stale JS', () 
 
 /* ── Responsive and accessible ───────────────────────────────────────── */
 
-test('mobile: the sidebar becomes a drawer and the rail stays reachable', () => {
-  const mobile = html.slice(html.indexOf('@media (max-width:768px)'));
-  assert.match(mobile, /\.sidebar\{position:fixed[^}]*transform:translateX\(-100%\)/,
-    'the sidebar does not become a drawer');
-  assert.match(mobile, /body\.drawer-open \.sidebar\{transform:none\}/);
-  assert.match(mobile, /\.mobile-bar\{display:flex/, 'no mobile navigation bar');
+test('mobile: the sidebar is replaced by a bottom bar, and nothing is lost', () => {
+  const mobile = read('mobile.css');
+  const mob = read('mobile.js');
+
+  /* ── The drawer is gone, not hidden ────────────────────────────────────
+   *
+   * It was a desktop sidebar with a hinge on it: every destination two taps
+   * deep, off-screen, behind a control that says nothing about what is
+   * behind it. It also had a defect that made the entire application
+   * untappable — a scrim painting above the app it was meant to sit behind —
+   * which is a class of bug a bar that is PART of the page cannot have.
+   *
+   * So the rule is now the opposite of the old one: on a phone the sidebar
+   * must not be there at all. */
+  assert.match(mobile, /\.sidebar,\.drawer-scrim,#drawer-btn\{display:none!important\}/,
+    'the sidebar is still on screen on a phone');
+  assert.ok(!/transform:translateX\(-100%\)/.test(mobile), 'the drawer is back');
+  assert.ok(!/drawer-open/.test(read('app.js')), 'something still toggles the drawer');
+
+  // And the five sidebar destinations are all reachable: three in the bar,
+  // two in More, which also carries Habits, Reminders, Completed and Settings.
+  const bar = mob.slice(mob.indexOf('const NAV = ['), mob.indexOf('export const MORE_ITEMS'));
+  for (const want of ['today', 'calendar', 'projects']) {
+    assert.match(bar, new RegExp(`id: '${want}'`), `${want} is not in the bottom bar`);
+  }
+  assert.match(bar, /assistant: true/, 'the assistant is not the centre action');
+  const more = mob.slice(mob.indexOf('export const MORE_ITEMS'), mob.indexOf('const slotFor'));
+  for (const want of ['diary', 'library', 'habits', 'reminders', 'history', 'settings']) {
+    assert.match(more, new RegExp(`id: '${want}'`), `${want} is not reachable from More`);
+  }
+
+  // The bar is a sibling of the shell, never a child — see the stacking
+  // context test below for why that is the whole point.
+  const shell = read('app.js');
+  assert.match(shell, /<\/div>\s*\$\{bottomNavHtml\(\)\}/,
+    'the navigation is nested inside the shell, where a z-index could trap it');
+
+  const html2 = read('index.html') + read('app.css') + mobile;
+  assert.match(html2, /\.mnav\{position:fixed[^}]*z-index:130/, 'the bar is not pinned above the page');
+  assert.match(html2, /padding-bottom:var\(--m-safe-b\)/, 'the bar ignores the safe area');
+  assert.match(html2, /html\.kb-open \.mnav\{display:none\}/,
+    'the bar fights the software keyboard');
+
   // The rail moves below the content — it must never simply disappear.
-  // D4.7 hides the PAGE rail on Calendar only, because Calendar owns a rail
-  // inside its own frame there. Everywhere else the rail must still reflow
-  // below the content rather than simply vanish.
-  // Calendar owns a rail inside its own frame; Projects deliberately has none
-  // (see the product model). Everywhere else the rail must still reflow below
-  // the content rather than simply vanish.
   const hides = [...html.matchAll(/([^\n{]*)\.rail\{display:none/g)].map((m) => m[1]);
-  // Calendar owns a rail inside its own frame. Projects and Library each
-  // deliberately have none — see their product models — and both collapse the
-  // grid track as well, so the column is genuinely returned to the content.
-  // Settings is the fifth: it is an administrative surface, the Habits rail has
-  // nothing to say there, and the width is worth more to the settings workspace.
   assert.deepEqual(hides,
     ['body:has(.set-page) ', 'body:has(.cal-head) ', 'body:has(.pj-head) ',
       'body:has(.lib-page) ', 'body:has(.dia-page) '],
@@ -598,8 +624,14 @@ test('accessibility: focus, landmarks and reduced motion are honoured', () => {
 test('the Life OS lockup uses an inline self-contained gradient', () => {
   // A gradient defined inside a display:none <symbol> does not paint in Chrome
   // — that is exactly how this logo went invisible once before.
-  assert.match(app, /<linearGradient id="lotus\$\{n\}"/, 'the logo gradient is not inlined');
-  assert.ok(!/<use\s/.test(app), 'the logo is drawn from a sprite');
+  /* The lockup lives in icons.js since the bottom navigation, which draws
+   * the same mark the sidebar draws. Two copies of an icon set is how two
+   * navigations end up looking like two applications. */
+  const icons = read('icons.js');
+  assert.match(icons, /<linearGradient id="lotus\$\{n\}"/, 'the logo gradient is not inlined');
+  assert.ok(!/<use\s/.test(icons), 'the logo is drawn from a sprite');
+  assert.match(app, /import \{ icon, logoMark \} from '\.\/icons\.js'/,
+    'the shell defines its own copy of the icon set again');
   assert.match(html, /'Playfair Display'/, 'the wordmark font is missing');
   /* Playfair is for the wordmark — and, since F2, for the Book.
    *
@@ -664,11 +696,34 @@ test('the mobile drawer is not trapped inside a stacking context', () => {
   // behind the content rather than in front of the background.
   assert.equal(zOf('#los-stars'), '-1', 'the star field is not behind the app');
 
-  // And within one shared context, the drawer must outrank its own scrim.
-  // The DRAWER rule, not the desktop one: only the fixed-position sidebar is
-  // the drawer, and only it shares a context with the scrim.
-  const sidebarZ = Number(css.match(/\.sidebar\{position:fixed[^}]*z-index:(\d+)/)?.[1] ?? 0);
-  const scrimZ = Number(css.match(/\.drawer-scrim\{[^}]*z-index:(\d+)/)?.[1] ?? 0);
-  assert.ok(sidebarZ > scrimZ,
-    `the scrim (${scrimZ}) is at or above the drawer (${sidebarZ}) and will swallow its taps`);
+  /* The drawer this was written for is gone. The rule outlives it, and now
+   * guards the thing that replaced it: the bottom navigation and everything
+   * that covers it are siblings of the shell, so their z-indexes resolve
+   * against each other and mean what they say. */
+  const mcss = read('mobile.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  /* The rule the DECLARATION carries, wherever it is written. `.mnav` is
+   * declared twice — once outside the phone query as display:none, once
+   * inside it with everything else — and taking the first block would read a
+   * z-index of nothing from the wrong one. */
+  const zIn = (src: string, sel: string) => {
+    for (let at = 0; ;) {
+      at = src.indexOf(`${sel}{`, at);
+      if (at < 0) return null;
+      const found = src.slice(at, src.indexOf('}', at)).match(/z-index:(\d+)/);
+      if (found) return Number(found[1]);
+      at += 1;
+    }
+  };
+  const nav = zIn(mcss, '.mnav');
+  const scrim = zIn(mcss, '.msheet-scrim');
+  const sheet = zIn(mcss, '.msheet');
+  assert.ok(nav && scrim && sheet, 'the navigation or the sheet has no z-index at all');
+  assert.ok(scrim > nav,
+    `a sheet's scrim (${scrim}) must cover the navigation (${nav}), or the bar sits on top of it`);
+  assert.ok(sheet > scrim, `the sheet (${sheet}) is under its own scrim (${scrim})`);
+  // And the bar gets out of the way entirely while a sheet is open, so there
+  // are never two competing bottom edges on the same 60 pixels.
+  assert.match(read('mobile.css'),
+    /body\.modal-open \.mnav,body\.msheet-open \.mnav\{transform:translateY\(110%\)/,
+    'the navigation stays under an open sheet');
 });

@@ -19,12 +19,38 @@
  */
 import { flip, pulse, reducedMotion, settle } from './motion.js';
 import { utilityTriggerHtml } from './utility-menu.js';
+import { isPhone } from './mobile.js';
 
-const MODES = [
+/* ── Modes, per device ───────────────────────────────────────────────────
+ *
+ * Not the same three. A desktop asks "what does my month look like, and how
+ * do I lay out my week"; a phone asks "what is next, and what does today
+ * look like", and it asks it standing up.
+ *
+ * So Plan week is desktop-only — seven columns of draggable blocks on a
+ * 390px screen is seven columns nobody can read or hit — and Day and 3 day
+ * are the phone's planning views. Month is on both, drawn differently.
+ *
+ * Nothing is lost either way: every event, reminder, block and deadline is
+ * in Agenda on both devices, and Agenda is the phone's default. */
+const DESKTOP_MODES = [
   { id: 'month', label: 'Month' },
   { id: 'agenda', label: 'Agenda' },
   { id: 'plan', label: 'Plan week' },
 ];
+const PHONE_MODES = [
+  { id: 'agenda', label: 'Agenda' },
+  { id: 'day', label: 'Day' },
+  { id: 'three', label: '3 day' },
+  { id: 'month', label: 'Month' },
+];
+/** The modes this device offers, in the order it offers them. */
+const MODES = () => (isPhone() ? PHONE_MODES : DESKTOP_MODES);
+export const modeIds = () => MODES().map((m) => m.id);
+/** The default when nothing is stored, or when a stored mode is not offered. */
+export const defaultMode = () => (isPhone() ? 'agenda' : 'month');
+/** How many days a next/previous press moves. Zero means the view does not. */
+export const modeStep = (mode) => ({ plan: 7, day: 1, three: 3 }[mode] ?? 0);
 const LAYERS = [
   { id: 'events', label: 'Events' },
   { id: 'reminders', label: 'Reminders' },
@@ -108,6 +134,11 @@ function currentRange() {
     const w = weekOf(cal.anchor);
     return { from: iso(w[0]), to: iso(w[6]) };
   }
+  /* Day and 3 day ask for a day either side of what they draw. Swiping to the
+   * next day must not begin with an empty grid while a request goes out for
+   * the day the finger is already on. */
+  if (cal.mode === 'day') return { from: iso(addDays(cal.anchor, -1)), to: iso(addDays(cal.anchor, 1)) };
+  if (cal.mode === 'three') return { from: iso(addDays(cal.anchor, -1)), to: iso(addDays(cal.anchor, 3)) };
   return { from: iso(new Date()), to: iso(addDays(new Date(), 60)) };
 }
 
@@ -185,6 +216,15 @@ function periodLabel() {
     const b = w[6].toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     return `${a} – ${b}`;
   }
+  if (cal.mode === 'day') {
+    return cal.anchor.toLocaleDateString(undefined,
+      { weekday: 'long', day: 'numeric', month: 'short' });
+  }
+  if (cal.mode === 'three') {
+    const a = cal.anchor.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    const b = addDays(cal.anchor, 2).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return `${a} – ${b}`;
+  }
   return 'Next 60 days';
 }
 
@@ -210,7 +250,8 @@ function periodLabel() {
  */
 export function calendarHeaderHtml() {
   if (cal.utility === 'reminders') return remindersHeaderHtml();
-  const active = MODES.findIndex((m) => m.id === cal.mode);
+  const modes = MODES();
+  const active = Math.max(0, modes.findIndex((m) => m.id === cal.mode));
   return `<div class="cal-head">
     <div class="cal-head-row">
       <div class="cal-head-main">
@@ -227,9 +268,9 @@ export function calendarHeaderHtml() {
 
       <div class="cal-head-mid">
         <div class="cal-modes" role="tablist" aria-label="Calendar mode"
-          style="--mode-i:${active};--mode-n:${MODES.length}">
+          style="--mode-i:${active};--mode-n:${modes.length}">
           <span class="cal-mode-pill" aria-hidden="true"></span>
-          ${MODES.map((m) => `<button role="tab" data-mode="${m.id}"
+          ${modes.map((m) => `<button role="tab" data-mode="${m.id}"
             aria-selected="${cal.mode === m.id}"
             tabindex="${cal.mode === m.id ? 0 : -1}">${m.label}</button>`).join('')}
         </div>
@@ -338,6 +379,7 @@ function monthHtml() {
  * a title is worse than an honest "+3 more".
  */
 function monthCellHtml(d, month, todayIso) {
+  if (isPhone()) return phoneMonthCellHtml(d, month, todayIso);
   const day = iso(d);
   const { events, reminders, deadlines, blocks, habit } = itemsForDay(day);
   const outside = d.getMonth() !== month;
@@ -392,6 +434,49 @@ function monthCellHtml(d, month, todayIso) {
         aria-label="${blocks.length} planned work block${blocks.length > 1 ? 's' : ''}">${blocks.length}</span>` : ''}
       ${habitSummaryHtml(habit, day, todayIso)}
     </div>
+  </div>`;
+}
+
+/**
+ * A Month cell on a phone.
+ *
+ * §22: a month is for DATES and DENSITY. Seven columns on a 390px screen give
+ * each day about 50px, which fits a two-digit number and nothing else — so a
+ * title crammed in there is not information, it is the first three letters of
+ * information. Dots say how much is on, the number says which day, and one
+ * tap opens the day itself underneath.
+ *
+ * Nothing is hidden by this: every event in the month is one tap away in the
+ * day panel, and all of them are in Agenda.
+ */
+function phoneMonthCellHtml(d, month, todayIso) {
+  const day = iso(d);
+  const { events, reminders, deadlines, blocks } = itemsForDay(day);
+  const openRem = reminders.filter((r) => r.status !== 'done');
+  const outside = d.getMonth() !== month;
+  const load = workload(day);
+  const overdue = openRem.some((r) => r.dueDate < todayIso);
+
+  /* Colour carries the SOURCE, the same colours the layer control uses, so a
+   * dot in the month and a chip in the agenda mean the same thing. */
+  const dots = [
+    ...events.map((e) => ({ c: e.calendarColor || 'var(--accent)' })),
+    ...deadlines.map(() => ({ c: 'var(--p-low)' })),
+    ...openRem.map(() => ({ c: 'var(--warn)' })),
+    ...blocks.map(() => ({ c: 'var(--p-low)' })),
+  ];
+  const SHOWN = 4;
+
+  return `<div class="cm-cell cm-cell-m ${outside ? 'is-outside' : ''}
+      ${day === todayIso ? 'is-today' : ''} ${cal.selected === day ? 'is-selected' : ''}
+      load-${load}" role="gridcell" tabindex="0" data-day="${day}"
+      aria-label="${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}, ${describeDay(day)}">
+    <span class="cm-date">${d.getDate()}</span>
+    <span class="cm-dots">
+      ${dots.slice(0, SHOWN).map((x) => `<i style="background:${esc(x.c)}"></i>`).join('')}
+      ${dots.length > SHOWN ? `<b class="cm-dots-n">${dots.length}</b>` : ''}
+      ${overdue ? '<i class="cm-dot-warn"></i>' : ''}
+    </span>
   </div>`;
 }
 
@@ -640,15 +725,53 @@ function agendaItemHtml(it) {
 /* ── Plan ─────────────────────────────────────────────────────────────── */
 /** Working hours only by default. An empty 24-hour grid was Day view. */
 function planHtml() {
-  const week = weekOf(cal.anchor);
+  return timeGridHtml(weekOf(cal.anchor), 'is-week');
+}
+
+/**
+ * The hours a set of days actually needs.
+ *
+ * The planning window is 7am to 9pm because an empty 24-hour grid was what
+ * Day view used to be — most of the screen given to hours nothing happens
+ * in. But a window that is fixed HIDES a 6am flight and an 11pm shift, and
+ * a calendar that hides an event is worse than one that wastes space.
+ *
+ * So it starts at the window and grows to contain whatever is really there.
+ */
+function hoursFor(days) {
+  let lo = PLAN_START;
+  let hi = PLAN_END;
+  for (const d of days) {
+    const { events, blocks } = itemsForDay(iso(d));
+    for (const it of [...events, ...blocks]) {
+      if (it.isAllDay || !it.startsAt) continue;
+      const a = new Date(it.startsAt);
+      const b = new Date(it.endsAt ?? it.startsAt);
+      lo = Math.min(lo, a.getHours());
+      hi = Math.max(hi, b.getHours() + (b.getMinutes() > 0 ? 1 : 0));
+    }
+  }
+  return Array.from({ length: Math.max(1, hi - lo) }, (_, i) => lo + i);
+}
+
+/**
+ * One vertical time grid, for any number of days.
+ *
+ * Plan week, Day and 3 day are the same view with a different number of
+ * columns — same hour axis, same event blocks, same now-line, same drop
+ * targets. Writing a second one for the phone would be two implementations
+ * of "where does a 2pm event sit", which is exactly the kind of duplication
+ * that lets a phone drift out of step with what it is a phone for.
+ */
+function timeGridHtml(days, cls) {
   const todayIso = iso(new Date());
-  const hours = Array.from({ length: PLAN_END - PLAN_START }, (_, i) => PLAN_START + i);
-  return `<div class="cal-plan">
-    <div class="pl-grid" style="--pl-hours:${hours.length}">
+  const hours = hoursFor(days);
+  return `<div class="cal-plan ${cls}">
+    <div class="pl-grid" style="--pl-hours:${hours.length};--pl-cols:${days.length}">
       <div class="pl-axis">
         ${hours.map((h) => `<span class="pl-hour">${String(h).padStart(2, '0')}:00</span>`).join('')}
       </div>
-      ${week.map((d) => planDayHtml(d, todayIso, hours)).join('')}
+      ${days.map((d) => planDayHtml(d, todayIso, hours)).join('')}
     </div>
   </div>`;
 }
@@ -1381,14 +1504,16 @@ export function calendarSkeletonHtml() {
     </div>`;
   }
 
-  if (cal.mode === 'plan') {
+  if (cal.mode === 'plan' || cal.mode === 'day' || cal.mode === 'three') {
+    const cols = { plan: 7, day: 1, three: 3 }[cal.mode];
+    const cls = { plan: 'is-week', day: 'is-day', three: 'is-three' }[cal.mode];
     const hours = Array.from({ length: PLAN_END - PLAN_START }, (_, i) => PLAN_START + i);
-    return `<div class="cal-plan is-skeleton" aria-hidden="true">
-      <div class="pl-grid" style="--pl-hours:${hours.length}">
+    return `<div class="cal-plan ${cls} is-skeleton" aria-hidden="true">
+      <div class="pl-grid" style="--pl-hours:${hours.length};--pl-cols:${cols}">
         <div class="pl-axis">
           ${hours.map((h) => `<span class="pl-hour">${String(h).padStart(2, '0')}:00</span>`).join('')}
         </div>
-        ${Array.from({ length: 7 }, (_, i) => `<div class="pl-day sk-day">
+        ${Array.from({ length: cols }, (_, i) => `<div class="pl-day sk-day">
           <div class="pl-day-head">
             <span class="sk-line sk-dow"></span>
             <span class="sk-line sk-num"></span>
@@ -1422,6 +1547,10 @@ function calendarCanvasHtml() {
   }
   if (cal.mode === 'month') return monthHtml();
   if (cal.mode === 'plan') return planHtml();
+  if (cal.mode === 'day') return timeGridHtml([cal.anchor], 'is-day');
+  if (cal.mode === 'three') {
+    return timeGridHtml([0, 1, 2].map((i) => addDays(cal.anchor, i)), 'is-three');
+  }
   return agendaHtml();
 }
 

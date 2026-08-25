@@ -48,29 +48,59 @@ function body(src: string, decl: string): string {
 
 /* ── Product structure ───────────────────────────────────────────────── */
 
-test('calendar: exactly three modes, and Month is the default', () => {
-  assert.match(calCode, /id: 'month'/, 'Month is missing');
-  assert.match(calCode, /id: 'agenda'/, 'Agenda is missing');
-  assert.match(calCode, /id: 'plan'/, 'Plan is missing');
-  // Scoped to the MODES array: LAYERS has the same literal shape, so an
-  // unscoped match counts seven.
-  const modeList = calCode.slice(calCode.indexOf('const MODES'), calCode.indexOf('const LAYERS'));
+test('a desktop has exactly three modes, and Month is the default', () => {
+  const modeList = calCode.slice(calCode.indexOf('const DESKTOP_MODES'),
+    calCode.indexOf('const PHONE_MODES'));
   const modes = modeList.match(/\{ id: '(\w+)', label: '[^']+' \}/g) ?? [];
-  assert.equal(modes.length, 3, `expected 3 modes, found ${modes.length}`);
+  assert.equal(modes.length, 3, `expected 3 desktop modes, found ${modes.length}`);
+  for (const want of ['month', 'agenda', 'plan']) {
+    assert.match(modeList, new RegExp(`id: '${want}'`), `${want} is missing`);
+  }
   assert.match(calCode, /mode: 'month'/, 'Month is not the default mode');
+  assert.match(calCode, /isPhone\(\) \? 'agenda' : 'month'/,
+    'the default is not chosen per device');
 });
 
-test('calendar: Day, 3 Day and Week are gone as modes', () => {
-  // A selected date still opens a focused day view — that is a selection
-  // state, not a mode, and must not reappear in the mode list.
-  const modeBlock = calCode.slice(calCode.indexOf('const MODES'), calCode.indexOf('const LAYERS'));
-  for (const gone of ['day', 'week', '3day', 'threeDay']) {
-    assert.ok(!new RegExp(`id: '${gone}'`, 'i').test(modeBlock), `${gone} is back as a mode`);
+test('a phone gets Agenda, Day, 3 day and Month — and not Plan week', () => {
+  /* Not the same three. Plan week is seven draggable columns; on a 390px
+   * screen that is seven columns nobody can read or hit. Day and 3 day are
+   * the phone's planning views and they are built from the SAME grid, so
+   * there is one answer to "where does a 2pm event sit". */
+  const phone = calCode.slice(calCode.indexOf('const PHONE_MODES'),
+    calCode.indexOf('const MODES ='));
+  const modes = phone.match(/\{ id: '(\w+)', label: '[^']+' \}/g) ?? [];
+  assert.equal(modes.length, 4, `expected 4 phone modes, found ${modes.length}`);
+  assert.ok(!/id: 'plan'/.test(phone), 'Plan week is offered on a phone');
+  assert.match(phone, /id: 'agenda'/, 'Agenda is missing from the phone');
+  assert.match(phone, /\{ id: 'agenda'[^}]*\},[\s\S]{0,6}\{ id: 'day'/,
+    'Agenda is not first, so it is not the phone default');
+
+  // Day and 3 day reuse the plan column rather than reimplementing it.
+  assert.match(calCode, /function timeGridHtml\(days, cls\)/,
+    'the time grid is not shared between the modes that use it');
+  assert.match(calCode, /timeGridHtml\(\[cal\.anchor\], 'is-day'\)/, 'Day draws nothing');
+  assert.match(calCode, /timeGridHtml\(\[0, 1, 2\]\.map/, '3 day draws nothing');
+  // And a mode the device does not offer falls back rather than leaving a
+  // selected tab that is not on screen.
+  const app_ = read('app.js');
+  assert.match(app_, /if \(!MODE_IDS\(\)\.includes\(cal\.mode\)\) cal\.mode = defaultMode\(\)/,
+    'rotating across the breakpoint can leave a mode that is not offered');
+});
+
+test('the modes a device offers are the only modes it offers', () => {
+  /* Week, bars and expanded were removed as concepts and must not come back
+   * by accident. Day and 3 day DID come back — deliberately, on a phone only
+   * — so the rule is now per device rather than absolute. */
+  const desktop = calCode.slice(calCode.indexOf('const DESKTOP_MODES'),
+    calCode.indexOf('const PHONE_MODES'));
+  for (const gone of ['day', 'week', '3day', 'threeDay', 'three', 'bars', 'expanded']) {
+    assert.ok(!new RegExp(`id: '${gone}'`, 'i').test(desktop),
+      `${gone} is a desktop mode again`);
   }
-  // Anchored on mode ids, not the words themselves: the phrase "event bars"
-  // appears in a comment explaining why items are NOT all rendered as one.
-  for (const gone of ['bars', 'expanded']) {
-    assert.ok(!new RegExp(`id: '${gone}'`, 'i').test(modeBlock), `the ${gone} mode is back`);
+  const phone = calCode.slice(calCode.indexOf('const PHONE_MODES'),
+    calCode.indexOf('const MODES ='));
+  for (const gone of ['week', '3day', 'threeDay', 'bars', 'expanded', 'plan']) {
+    assert.ok(!new RegExp(`id: '${gone}'`, 'i').test(phone), `${gone} is a phone mode`);
   }
 });
 

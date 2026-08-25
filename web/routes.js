@@ -39,10 +39,24 @@ export const ROUTES = [
   { id: 'library', label: 'Library', icon: 'library' },
 ];
 
-/** Real routes that are reachable but not in the primary list. */
+/**
+ * Real routes that are reachable but not in the primary list.
+ *
+ * ── Why `ai` is here and not in ROUTES ───────────────────────────────────
+ *
+ * On a phone the assistant is the centre of the navigation bar — it is the
+ * whole point of picking the phone up. On a desktop it is not built yet: the
+ * composer at the foot of the screen still says so, and putting a sixth item
+ * in the sidebar would advertise a finished feature that is a prototype.
+ *
+ * So it is a real route, so `#ai` resolves on any device and a refresh or a
+ * shared link lands somewhere real, and it is absent from the desktop chrome
+ * until there is something behind it worth advertising.
+ */
 export const SECONDARY_ROUTES = [
   { id: 'history', label: 'Completed' },
   { id: 'settings', label: 'Settings' },
+  { id: 'ai', label: 'Assistant' },
 ];
 
 export const ALL_ROUTE_IDS = [...ROUTES, ...SECONDARY_ROUTES].map((r) => r.id);

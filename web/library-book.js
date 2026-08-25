@@ -31,6 +31,8 @@ import {
 } from './editor-blocks.js';
 
 import { mountPinboard } from './pinboard.js';
+import { attachPinViewport, pinViewportControlsHtml } from './pinboard-touch.js';
+import { isPhone } from './mobile.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -300,8 +302,16 @@ function pinboardPageHtml(page, section) {
           aria-label="Actions for this page" aria-haspopup="menu">${dots()}</button>
       </div>
     </div>
-    <div class="bk-board" data-board="${page.id}" tabindex="0"
-      aria-label="Pinboard. Double-click to write a note; paste a picture or a link."></div>
+    <!-- The board keeps its geometry and the SCREEN moves over it (§33).
+         The viewport is inert on a desktop, where the whole spread already
+         fits; on a phone it pans and pinches. Same board either way — a
+         Pinboard flattened into a list would destroy the arrangement, which
+         is the only place the thought was written down. -->
+    <div class="pin-vp" data-pin-vp>
+      <div class="bk-board" data-board="${page.id}" tabindex="0"
+        aria-label="Pinboard. Double-click to write a note; paste a picture or a link."></div>
+      ${pinViewportControlsHtml()}
+    </div>
   </div>`;
 }
 
@@ -353,6 +363,11 @@ function mountPinboards(root, { onDirty, toast }) {
       lookupRef,
       toast,
     }));
+    /* Only where the board cannot be seen whole. On a desktop the spread
+     * already fits, and a pan-and-zoom layer over something that fits is a
+     * way to get lost inside a page you were looking at. */
+    const host = board.closest('[data-pin-vp]');
+    if (host && isPhone()) boards.push(attachPinViewport(host, board));
   });
 }
 
@@ -382,6 +397,69 @@ export function lookupRef(type, id) {
   }
   const i = (refs.items ?? []).find((x) => x.id === id);
   return i ? { ...i, kindLabel: i.type === 'book' ? 'Book' : 'Resource' } : null;
+}
+
+/**
+ * The Book's phone bar (§27).
+ *
+ * A tab strip is a desktop control: it shows every section at once because
+ * there is room to. On a phone it is a horizontal scroller where the section
+ * you are in may be off-screen, above a page that has already lost a third of
+ * its width to arrows.
+ *
+ * So the sections collapse into ONE control that says where you are — the
+ * section, and the page within it — and opens the contents. Everything the
+ * tab strip could do is in that sheet, plus the bookmarks and the search that
+ * were separate rows above it.
+ *
+ * Rendered at every width and shown only on a phone: the alternative is a
+ * resize that has to re-render the book, and re-rendering a book is how you
+ * lose a caret mid-sentence.
+ */
+export function bookMobileBarHtml(project = null) {
+  const section = currentSection();
+  const pages = section?.pages ?? [];
+  const pageNo = Math.min(pages.length, lib.spreadIdx * 2 + lib.half + 1);
+  const open = project ? (lib.projectTasks ?? []).filter((t) => t.status === 'open').length : null;
+  return `<div class="bk-mbar">
+    <button type="button" class="bk-mbar-x" id="bk-mback" aria-label="Back to Library">
+      ${chev('left')}</button>
+    <button type="button" class="bk-mbar-mid" id="bk-contents" aria-haspopup="dialog">
+      <span class="bk-mbar-sec">${esc(section?.title ?? 'Contents')}</span>
+      <span class="bk-mbar-n">${pages.length ? `${pageNo} / ${pages.length}` : '—'}</span>
+    </button>
+    ${project ? `<button type="button" class="bk-mbar-tasks" id="bk-tasks-btn">
+      <span>Tasks</span>${open === null ? '' : `<b>${open}</b>`}</button>` : ''}
+  </div>`;
+}
+
+/** The contents sheet's body: sections, bookmarks, and a way to search. */
+export function bookContentsHtml() {
+  const sections = lib.book?.sections ?? [];
+  const marks = lib.book?.bookmarks ?? [];
+  return `<div class="msheet-group">Sections</div>
+    ${sections.map((sec, i) => `<button type="button" class="msheet-row"
+      data-go-section="${i}" ${i === lib.sectionIdx ? 'aria-current="page"' : ''}>
+      <i class="bk-mdot" style="background:var(--a-${esc(sec.accent)})"></i>
+      <span><span class="msheet-label">${esc(sec.title)}</span></span>
+      <span class="msheet-r">${sec.pages.length} page${sec.pages.length === 1 ? '' : 's'}</span>
+    </button>`).join('')}
+    <button type="button" class="msheet-row" id="bk-msec-add">
+      <span class="msheet-ico">+</span>
+      <span><span class="msheet-label">Add a section</span></span>
+    </button>
+    ${marks.length ? `<div class="msheet-sep"></div>
+      <div class="msheet-group">Bookmarks</div>
+      ${marks.map((m) => `<button type="button" class="msheet-row" data-bookmark="${esc(m.id)}"
+        data-page="${esc(m.pageId)}">
+        <i class="bk-mdot" style="background:var(--a-${esc(m.accent)})"></i>
+        <span><span class="msheet-label">${esc(m.label)}</span></span>
+      </button>`).join('')}` : ''}
+    <div class="msheet-sep"></div>
+    <button type="button" class="msheet-row" id="bk-msearch">
+      <span class="msheet-ico">&#8981;</span>
+      <span><span class="msheet-label">Search this book</span></span>
+    </button>`;
 }
 
 function tabsHtml() {

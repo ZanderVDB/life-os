@@ -34,6 +34,9 @@ export const STATUS_LABEL = {
 };
 export const FOCUS_LABEL = { now: 'Now', upcoming: 'Upcoming', someday: 'Someday' };
 
+// The shared dropdown (§38). One grammar everywhere; a sheet on a phone.
+import { selectField } from './menu.js';
+
 const fmtDate = (iso) => (iso
   ? new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
   : '');
@@ -275,17 +278,12 @@ export function projectDetailHeaderHtml(p, areaName) {
     ${p.outcome ? `<p class="pjd-outcome">${esc(p.outcome)}</p>` : ''}
     <div class="pjd-meta">
       ${area ? `<span class="pj-area">${esc(area)}</span>` : ''}
-      <label class="pjd-sel"><span class="sr-only">Status</span>
-        <select id="pjd-status">
-          ${['planning', 'active', 'on_hold'].map((s) => `<option value="${s}"
-            ${p.status === s ? 'selected' : ''}>${STATUS_LABEL[s]}</option>`).join('')}
-          ${p.status === 'completed' ? '<option value="completed" selected>Completed</option>' : ''}
-        </select></label>
-      <label class="pjd-sel"><span class="sr-only">Focus</span>
-        <select id="pjd-focus">
-          ${Object.entries(FOCUS_LABEL).map(([v, l]) => `<option value="${v}"
-            ${p.focus === v ? 'selected' : ''}>${l}</option>`).join('')}
-        </select></label>
+      ${selectField('pjd-status', [
+    ...['planning', 'active', 'on_hold'].map((s) => ({ id: s, label: STATUS_LABEL[s] })),
+    ...(p.status === 'completed' ? [{ id: 'completed', label: 'Completed' }] : []),
+  ], p.status, 'Status')}
+      ${selectField('pjd-focus',
+    Object.entries(FOCUS_LABEL).map(([v, l]) => ({ id: v, label: l })), p.focus, 'Focus')}
       ${p.targetDate ? `<span class="pj-target">Target ${esc(fmtDate(p.targetDate))}</span>` : ''}
       <span class="pj-progress" id="pjd-progress">${esc(progressText(p))}</span>
     </div>

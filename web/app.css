@@ -807,7 +807,6 @@ body:has(.set-page) .rail{display:none}
 
 /* ── Mobile shell ───────────────────────────────────────────────────── */
 .mobile-bar{display:none}
-.drawer-scrim{display:none}
 
 /* ── Modal — centred, never a drawer ────────────────────────────────
    A dialog over the board keeps context visible; the old right drawer covered
@@ -2591,9 +2590,10 @@ body:has(.pj-head) .rail{display:none}
 .pjd-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;
   border-radius:11px;background:var(--surface)}
 .pjd-meta .pj-area{background:var(--surface-2)}
-.pjd-sel select{height:28px;border-radius:8px;background:var(--surface-2);color:var(--text-2);
-  font-size:11.5px;padding:0 8px;border:none;cursor:pointer}
-.pjd-sel select:hover{color:var(--text)}
+/* Status and Focus are the shared dropdown now, not native <select>s. The
+   meta row keeps them small so they read as metadata rather than as a form. */
+.pjd-meta .cf-ctl{height:30px;font-size:12px;padding:0 9px}
+.pjd-meta .cf-menu-btn{min-width:0}
 .pjd-meta .pj-progress{margin-left:auto;font-size:12px}
 .pjd-health{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
 .pjd-health-why{font-size:12.5px;color:var(--text-2)}
@@ -2741,7 +2741,7 @@ body:has(.pj-head) .rail{display:none}
   .tp-row{padding:13px}
   .tp-hint{padding:0 16px 12px}
   .pjd-meta{gap:7px}
-  .pjd-sel select{height:38px}
+  .pjd-meta .cf-ctl{min-height:38px}
 }
 
 /* ── Ambient stars ──────────────────────────────────────────────────
@@ -2764,9 +2764,11 @@ body:has(.pj-head) .rail{display:none}
  * itself, and swallowed every tap: Today, Calendar, Projects, Diary, Library
  * and Settings alike.
  *
- * The star field is background, so it goes behind at -1 and the shell needs
- * no context at all. Now sidebar 120 > scrim 110 in one shared context, which
- * is what those numbers were always meant to mean. */
+ * The drawer has since been replaced by the bottom navigation, but the rule
+ * outlives the surface that taught it: the star field is background, so it
+ * goes behind at -1, and the shell takes no stacking context. Anything fixed
+ * and above the application — a sheet, a modal, the navigation bar — is a
+ * sibling of the shell and its z-index means what it says. */
 .shell{position:relative}
 @media (prefers-reduced-motion:reduce){#los-stars{display:none}}
 html[data-motion="reduced"] #los-stars{display:none}
@@ -2787,30 +2789,24 @@ html[data-motion="reduced"] #los-stars{display:none}
   .buckets{grid-template-columns:1fr;gap:16px}
   .bucket.future{grid-column:auto}
 }
+/* ── The drawer is gone ──────────────────────────────────────────────────
+   The sidebar used to slide in from the left on a phone behind a hamburger,
+   over a fixed scrim. Two things were wrong with it and only one was a bug.
+
+   The bug: `.shell` carried `position:relative;z-index:1`, which made it a
+   stacking context, so the scrim — a sibling at z-110 — painted above the
+   entire application and swallowed every tap. Nothing in the app could be
+   used while the drawer was open, including closing it.
+
+   The design problem is the one that mattered: a drawer is a desktop
+   sidebar with a hinge. Every destination sat two taps deep, off-screen,
+   behind a control that says nothing about what is behind it.
+
+   Both are answered by the bottom navigation in mobile.css, which is part
+   of the page and cannot paint over it. The phone rules that were in this
+   block moved there with it. */
+
 @media (max-width:768px){
-  :root{--sidebar-w:0px;--composer-h:58px}
-  .shell{grid-template-columns:1fr}
-  /* Sidebar becomes a drawer (§11: architected for it from the start). */
-  .sidebar{position:fixed;top:0;bottom:0;left:0;width:270px;transform:translateX(-100%);
-    transition:transform var(--d-slow) var(--e-out);box-shadow:var(--e3);z-index:120;height:100dvh}
-  body.drawer-open .sidebar{transform:none}
-  .drawer-scrim{display:block;position:fixed;inset:0;background:rgba(10,8,16,.6);z-index:110;
-    opacity:0;pointer-events:none;transition:opacity var(--d-base) var(--e-out)}
-  body.drawer-open .drawer-scrim{opacity:1;pointer-events:auto}
-
-  .mobile-bar{display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;
-    background:rgba(23,21,31,.94);backdrop-filter:blur(12px);padding:10px 14px;
-    padding-top:calc(10px + env(safe-area-inset-top))}
-  .mobile-bar .m-btn{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;
-    color:var(--text-2);transition:background var(--t-hover)}
-  .mobile-bar .m-btn:hover{background:rgba(255,255,255,.06)}
-  .mobile-bar .m-title{font-family:'Playfair Display',Georgia,serif;font-size:17px;font-weight:500}
-
-  .main-wrap{padding:16px 16px calc(150px + env(safe-area-inset-bottom));gap:22px}
-  .main-col{gap:20px}
-  h1{font-size:25px;letter-spacing:-.6px}
-  .rail{grid-template-columns:1fr}
-  .composer{left:0;right:0;padding:10px 16px calc(12px + env(safe-area-inset-bottom))}
   .hist-row{grid-template-columns:18px 1fr;row-gap:4px}
   .hist-meta{grid-column:2}
   /* Bottom sheet, not a desktop dialog crushed to 375px. */

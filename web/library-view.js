@@ -27,7 +27,7 @@ import {
 } from './library-api.js';
 import {
   headerHtml, bodyHtml, cardHtml, addMenuHtml, itemMenuHtml, visibleItems,
-  pageHitsHtml, TYPE_LABEL, typeIcon, metaLine, when, esc,
+  pageHitsHtml, TYPE_LABEL, typeIcon, metaLine, when, esc, setLibView,
 } from './library-overview.js';
 import {
   wireRail, restoreShelfScroll, captureShelfScroll, markReturn, syncSteps,
@@ -36,8 +36,9 @@ import {
 import {
   coverHtml, spreadHtml, toolbarHtml, mountSpread, wireToolbar, wireSaveStatus,
   searchBook, searchPanelHtml, locateHit, canGoNext, ACCENTS, LAYOUTS, layoutLabel,
-  PURPOSES, purposeLabel, lookupRef,
+  PURPOSES, purposeLabel, lookupRef, bookMobileBarHtml, bookContentsHtml,
 } from './library-book.js';
+import { isPhone, openSheet, onSwipe } from './mobile.js';
 import { setRefLookup } from './editor-doc.js';
 import {
   flush, flushAll, hasUnsaved, retry, statusOf, entryOf, onSaveStatus,
@@ -340,6 +341,10 @@ function wireOverview(scroll) {
   scroll.querySelectorAll('[data-new]').forEach((b) => {
     b.addEventListener('click', () => void createOfType(b.dataset.new));
   });
+  // Browse or Shelf (§29). A phone control; a desktop is shelf-first always.
+  scroll.querySelectorAll('[data-lib-view]').forEach((b) => {
+    b.addEventListener('click', () => { setLibView(b.dataset.libView); paintOverview(scroll); });
+  });
 
   const q = scroll.querySelector('#lib-q');
   if (q) {
@@ -395,6 +400,28 @@ function wireOverview(scroll) {
       e.preventDefault();
       if (obj === pulledObject()) openShelfObject(obj);
       else pullForward(obj);
+    });
+  });
+
+  /* Browse (§29): a card is one tap, not two.
+   *
+   * A shelf object has two stages — pull it forward, then open it — because
+   * on a shelf you are choosing between covers and the first tap is what
+   * tells you which one you have got. A card in a list is already labelled,
+   * so a second confirming tap would be a tap that does nothing. Both end at
+   * the same `openShelfObject`, so what happens next is identical. */
+  scroll.querySelectorAll('.lib-browse').forEach((browse) => {
+    browse.addEventListener('click', (e) => {
+      const more = e.target.closest('[data-more]');
+      if (more) { e.stopPropagation(); openItemMenu(more, more.dataset.more); return; }
+      const card = e.target.closest('.lib-card');
+      if (card) openShelfObject(card);
+    });
+    browse.addEventListener('keydown', (e) => {
+      const card = e.target.closest('.lib-card');
+      if (!card || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      openShelfObject(card);
     });
   });
 
@@ -976,6 +1003,7 @@ function paintBookBody(scroll = document.getElementById('main-scroll')) {
    * re-renders whenever a task changes; the book does not, because re-rendering
    * an editor is how a cursor is lost mid-sentence. */
   scroll.innerHTML = `<div class="bk-layout${lib.project ? ' has-rail' : ''}">
+    ${bookMobileBarHtml(lib.project)}
     <div class="bk">
       ${toolbarHtml()}
       ${spreadHtml()}
@@ -1159,7 +1187,64 @@ function wireBook(scroll) {
     if (b) void ctx.run(() => retry(b.dataset.retry));
   });
   scroll.querySelector('#bk-search-btn')?.addEventListener('click', () => openBookSearch(scroll));
+  wireBookPhone(scroll);
   applyHalf(scroll);
+}
+
+/* ── The Book on a phone ─────────────────────────────────────────────────
+ * One page, a bar that says where you are, and two sheets behind it. */
+function wireBookPhone(scroll) {
+  scroll.querySelector('#bk-mback')?.addEventListener('click', () => void leaveBook('#library'));
+
+  scroll.querySelector('#bk-contents')?.addEventListener('click', () => {
+    openSheet({
+      title: 'Contents',
+      sub: lib.book?.title ?? '',
+      body: bookContentsHtml(),
+      onMount: (rootEl, close) => {
+        rootEl.querySelectorAll('[data-go-section]').forEach((b) => {
+          b.onclick = () => { close(); void navigate('section', Number(b.dataset.goSection)); };
+        });
+        rootEl.querySelectorAll('[data-bookmark]').forEach((b) => {
+          b.onclick = () => { close(); void goToPage(b.dataset.page, null); };
+        });
+        rootEl.querySelector('#bk-msec-add')?.addEventListener('click', () => {
+          close();
+          document.getElementById('bk-add-section')?.click();
+        });
+        rootEl.querySelector('#bk-msearch')?.addEventListener('click', () => {
+          close();
+          openBookSearch(scroll);
+        });
+      },
+    });
+  });
+
+  /* §28 The Project rail becomes a sheet — and it is the SAME rail, moved
+   * rather than redrawn. A second copy would be a second list of tasks that
+   * can disagree with the first, and every drag, tick and link already wired
+   * into these nodes survives being moved. */
+  scroll.querySelector('#bk-tasks-btn')?.addEventListener('click', () => {
+    const rail = document.getElementById('bk-rail');
+    if (!rail) return;
+    const home = rail.parentElement;
+    openSheet({
+      title: 'Project tasks',
+      onMount: (rootEl) => { rootEl.querySelector('.msheet-body').append(rail); },
+      onClose: () => home.append(rail),
+    });
+  });
+
+  /* Turning a page by thumb. The arrows stay exactly where they were (§41),
+   * and an editor being typed into is never a page turn. */
+  const stage = scroll.querySelector('.bk-stage');
+  if (stage && isPhone()) {
+    onSwipe(stage, {
+      onLeft: () => void navigate('next'),
+      onRight: () => void navigate('prev'),
+      ignore: '[data-editor],[contenteditable="true"],.bk-pin,.bk-ref,button',
+    });
+  }
 }
 
 /* The one-page-at-a-time treatment below 820px. The spread stays a spread in
@@ -1196,6 +1281,16 @@ function applyHalf(scroll = document) {
   const next = document.getElementById('bk-next');
   const wantDisabled = !canGoNext();
   if (next && next.disabled !== wantDisabled) next.disabled = wantDisabled;
+  /* The phone bar says which page you are on, and showing the other half IS
+   * moving a page — so the number has to move with it. Without this, turning
+   * a page on a phone left "3 / 14" reading whatever the last full repaint
+   * said, which is worse than not showing a number at all. */
+  const n = document.querySelector('.bk-mbar-n');
+  if (n) {
+    const pages = currentSection()?.pages ?? [];
+    n.textContent = pages.length
+      ? `${Math.min(pages.length, lib.spreadIdx * 2 + lib.half + 1)} / ${pages.length}` : '—';
+  }
 }
 
 /* ── Navigation ──────────────────────────────────────────────────────── */

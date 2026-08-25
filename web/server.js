@@ -69,6 +69,14 @@ window.LIFE_OS_CONFIG = {
 window.LIFE_OS_CONFIG.isConfigured = ${JSON.stringify(configured)}
   && Boolean(window.LIFE_OS_CONFIG.apiBaseUrl);
 window.LIFE_OS_BUILD = ${JSON.stringify(BUILD_ID)};
+/* Development tools on a DEPLOYED service, asked for by name.
+ *
+ * The same switch that exposes /preview.html: a deployment somebody is
+ * actively working on. It gates the viewport preview and the assistant's
+ * A/B/C listening-style selector — neither of which is a user feature, and
+ * both of which have to be reachable on the staging deployment that is
+ * being worked on. Delete DEV_PREVIEW to turn both off. */
+window.LIFE_OS_CONFIG.devTools = ${JSON.stringify(process.env.DEV_PREVIEW === '1')};
 `;
 }
 

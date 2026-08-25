@@ -82,10 +82,16 @@ test('the wait is drawn in the shape of what is coming', () => {
     calendar.indexOf('function calendarCanvasHtml()'));
   // Each mode gets its own geometry, reusing the real containers.
   assert.match(sk, /cal-month is-skeleton/, 'month has no skeleton');
-  assert.match(sk, /cal-plan is-skeleton/, 'plan week has no skeleton');
+  assert.match(sk, /cal-plan \$\{cls\} is-skeleton/, 'the time grid has no skeleton');
   assert.match(sk, /cal-agenda is-skeleton/, 'agenda has no skeleton');
   assert.match(sk, /length: 42/, 'the month skeleton is not a full grid');
-  assert.match(sk, /length: 7 /, 'the plan skeleton is not a full week');
+  /* The column count comes from the mode now, because the same grid draws
+   * Plan week (7), 3 day (3) and Day (1) — see timeGridHtml. A hard-coded 7
+   * would pass while a phone waited behind a seven-column skeleton for a
+   * one-column view. */
+  assert.match(sk, /\{ plan: 7, day: 1, three: 3 \}/,
+    'the time-grid skeleton does not carry a column count per mode');
+  assert.match(sk, /length: cols \}/, 'the skeleton draws a fixed number of columns');
   // The plan column borrows the REAL canvas class, so the height matches.
   assert.match(sk, /class="pl-canvas sk-col"/,
     'the plan skeleton column will not be the height of the real one');

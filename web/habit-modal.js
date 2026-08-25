@@ -6,6 +6,9 @@
  * Settings keeps the full list for bulk work; this is the focused path.
  */
 import { reducedMotion, settle } from './motion.js';
+// The shared dropdown (§38): one grammar everywhere, and on a phone it opens
+// as a sheet rather than as a panel that can be clipped by the sheet it is in.
+import { selectField, wireMenus, closePopover } from './menu.js';
 
 /**
  * Entrance/exit keyframes for a dialog.
@@ -70,9 +73,8 @@ export function openHabitModal(ctx) {
       </div>` : ''}
 
       <label class="m-field"><span>How often</span>
-        <select id="h-freq" class="m-input">
-          ${FREQ.map((f) => `<option value="${f.id}" ${(h?.frequencyType ?? 'daily') === f.id ? 'selected' : ''}>${f.label}</option>`).join('')}
-        </select></label>
+        ${selectField('h-freq', FREQ.map((f) => ({ id: f.id, label: f.label })),
+    h?.frequencyType ?? 'daily', 'How often')}</label>
 
       <div class="m-field h-days ${(h?.frequencyType ?? 'daily') === 'specific_days' ? '' : 'is-hidden'}" id="h-days-field">
         <span>Which days</span>
@@ -86,10 +88,9 @@ export function openHabitModal(ctx) {
         <label class="m-field"><span>Times per day</span>
           <input id="h-target" type="number" min="1" max="20" class="m-input"
             value="${h?.targetCount ?? 1}"></label>
-        <label class="m-field"><span>Area</span>
-          <select id="h-area" class="m-input"><option value="">No area</option>
-            ${areas.map((a) => `<option value="${a.id}" ${h?.areaId === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
-          </select></label>
+        <div class="m-field"><span>Area</span>
+          ${selectField('h-area', [{ id: '', label: 'No area' },
+    ...areas.map((a) => ({ id: a.id, label: a.name }))], h?.areaId ?? '', 'Area')}</div>
       </div>
 
       ${h && recent.length ? `<div class="h-recent">
@@ -128,9 +129,10 @@ export function openHabitModal(ctx) {
   // "Certain days" is the only frequency that needs a day picker; showing it
   // otherwise is a control that does nothing.
   const freq = dlg.querySelector('#h-freq');
-  freq.onchange = () => {
-    dlg.querySelector('#h-days-field').classList.toggle('is-hidden', freq.value !== 'specific_days');
-  };
+  wireMenus(dlg, dlg, (id, value) => {
+    if (id !== 'h-freq') return;
+    dlg.querySelector('#h-days-field').classList.toggle('is-hidden', value !== 'specific_days');
+  });
   dlg.querySelectorAll('.h-day').forEach((b) => {
     b.onclick = () => b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
   });
@@ -155,7 +157,13 @@ export function openHabitModal(ctx) {
   }
 
   function onKey(e) {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      // One layer at a time: an open dropdown closes before the dialog does.
+      if (dlg.querySelector('.cf-pop:not([hidden])')) { closePopover(dlg); return; }
+      close();
+      return;
+    }
     if (e.key !== 'Tab') return;
     const items = [...dlg.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null);
     if (!items.length) return;
@@ -172,9 +180,9 @@ export function openHabitModal(ctx) {
   dlg.querySelector('#h-save').onclick = async () => {
     const body = {
       name: name.value.trim(),
-      frequencyType: freq.value,
+      frequencyType: freq.dataset.value,
       targetCount: Math.max(1, Number(dlg.querySelector('#h-target').value) || 1),
-      areaId: dlg.querySelector('#h-area').value || null,
+      areaId: dlg.querySelector('#h-area').dataset.value || null,
     };
     if (body.frequencyType === 'specific_days') {
       body.frequencyConfig = {

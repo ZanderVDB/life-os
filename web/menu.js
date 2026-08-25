@@ -22,6 +22,7 @@
  * two controls can never both believe they are open.
  */
 import { anchor } from './pickers.js';
+import { isPhone, openSheet } from './mobile.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -125,12 +126,56 @@ export function wireMenus(root, dlg, onChange) {
   const open = (btn) => {
     if (pop.__owner === btn) return close();
     close();
-    pop.__owner = btn;
-    btn.setAttribute('aria-expanded', 'true');
 
     let options = [];
     try { options = JSON.parse(btn.dataset.options || '[]'); } catch { options = []; }
     const current = btn.dataset.value;
+
+    /* ── On a phone, a dropdown is a sheet ────────────────────────────────
+     *
+     * §38 asks for ONE dropdown grammar. On a phone that grammar is already
+     * the sheet: More is a sheet, Quick add is a sheet, editing a proposal's
+     * field is a sheet. A menu anchored to its control would be a second one.
+     *
+     * It also removes the whole class of clipping problems by construction.
+     * An anchored popover has to be measured against the dialog, the
+     * viewport, and — once a software keyboard is up — a visual viewport
+     * that is a different size again. A sheet is attached to the bottom of
+     * the screen and there is nothing left to get wrong. */
+    if (isPhone()) {
+      btn.setAttribute('aria-expanded', 'true');
+      openSheet({
+        title: btn.getAttribute('aria-label') || 'Choose',
+        body: options.map((o, i) => {
+          const v = o.id ?? o.value ?? '';
+          const on = v === current;
+          return `<button type="button" class="msheet-row cf-sheet-opt" data-i="${i}"
+            ${o.disabled ? 'disabled' : ''} ${on ? 'aria-current="page"' : ''}>
+            ${o.mark ? `<i class="cf-menu-mark" style="background:${esc(o.mark)}"></i>` : ''}
+            <span><span class="msheet-label">${esc(o.label ?? '')}</span>
+              ${o.hint ? `<span class="msheet-row-desc">${esc(o.hint)}</span>` : ''}</span>
+            ${on ? '<span class="msheet-r cf-menu-tick" aria-hidden="true"></span>' : ''}
+          </button>`;
+        }).join(''),
+        onClose: () => btn.setAttribute('aria-expanded', 'false'),
+        onMount: (rootEl, closeSheetFn) => {
+          rootEl.querySelectorAll('[data-i]').forEach((el) => {
+            el.onclick = () => {
+              const opt = options[Number(el.dataset.i)];
+              closeSheetFn();
+              // `choose` closes the anchored popover, which is not open here;
+              // that is a no-op, and the value write and the change event are
+              // the same ones the desktop path takes.
+              choose(btn, opt);
+            };
+          });
+        },
+      });
+      return undefined;
+    }
+
+    pop.__owner = btn;
+    btn.setAttribute('aria-expanded', 'true');
 
     pop.innerHTML = `<div class="cf-menu" role="listbox" tabindex="-1"
       aria-label="${esc(btn.getAttribute('aria-label') ?? '')}">

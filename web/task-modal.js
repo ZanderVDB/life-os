@@ -10,6 +10,10 @@
  * unusable.
  */
 import { reducedMotion, settle } from './motion.js';
+/* The SAME dropdown Calendar and Settings use. A native <select> opens as a
+ * white operating-system sheet in the middle of a dark application, and §38
+ * asks for one dropdown grammar everywhere — not one per surface. */
+import { selectField, wireMenus, closePopover } from './menu.js';
 // The SAME step control Today uses. One control, one geometry, everywhere.
 import { stepTickHtml } from './steps.js';
 
@@ -97,21 +101,18 @@ export function openTaskModal(ctx) {
     </div>` : ''}
 
     <div class="m-body">
+      <!-- PRIMARY first, and only primary. What it is, when it is, whose it
+           is. Priority, the due date, delete and archive are all real and all
+           below — see the disclosure at the foot of the body. On a phone this
+           is the difference between a sheet that answers "what am I doing"
+           and a form that asks fourteen questions. -->
       <div class="m-grid">
-        <label class="m-field"><span>When</span>
-          <select id="m-bucket" class="m-input">
-            ${BUCKETS.map((b) => `<option value="${b.id}" ${t?.bucket === b.id ? 'selected' : ''}>${b.label}</option>`).join('')}
-          </select></label>
-        <label class="m-field"><span>Priority</span>
-          <select id="m-priority" class="m-input pri-select" data-pri="${t?.priority ?? 'medium'}">
-            ${PRIORITIES.map((p) => `<option value="${p.id}" ${(t?.priority ?? 'medium') === p.id ? 'selected' : ''}>${p.label}</option>`).join('')}
-          </select></label>
-        <label class="m-field"><span>Area</span>
-          <select id="m-area" class="m-input"><option value="">No area</option>
-            ${areas.map((a) => `<option value="${a.id}" ${t?.areaId === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
-          </select></label>
-        <label class="m-field"><span>Due date</span>
-          <input id="m-due" type="date" class="m-input" value="${t?.dueDate ?? ''}"></label>
+        <div class="m-field"><span id="m-bucket-l">When</span>
+          ${selectField('m-bucket', BUCKETS.map((b) => ({ id: b.id, label: b.label })),
+    t?.bucket ?? 'today', 'When')}</div>
+        <div class="m-field"><span id="m-area-l">Area</span>
+          ${selectField('m-area', [{ id: '', label: 'No area' },
+    ...areas.map((a) => ({ id: a.id, label: a.name }))], t?.areaId ?? '', 'Area')}</div>
       </div>
 
       ${t?.legacyScheduledTimeRaw ? `<div class="m-legacy">
@@ -134,6 +135,24 @@ export function openTaskModal(ctx) {
 
       <label class="m-field m-notes-field"><span>Notes</span>
         <textarea id="m-notes" class="m-input m-notes" placeholder="Anything worth remembering">${esc(t?.notes ?? '')}</textarea></label>
+
+      <!-- Progressive disclosure, not removal (§17). Everything that was on
+           the desktop form is here; it is one tap away instead of competing
+           with the title for the first screenful. Open by default when the
+           task already carries a value in it, because a set field must never
+           be hidden behind a closed section. -->
+      <details class="m-more" ${t?.priority && t.priority !== 'medium'
+    ? 'open' : t?.dueDate ? 'open' : ''}>
+        <summary><span>Priority, dates and more</span>
+          <i class="m-more-chev" aria-hidden="true"></i></summary>
+        <div class="m-grid">
+          <div class="m-field"><span id="m-priority-l">Priority</span>
+            ${selectField('m-priority', PRIORITIES.map((p) => ({ id: p.id, label: p.label })),
+    t?.priority ?? 'medium', 'Priority')}</div>
+          <label class="m-field"><span>Due date</span>
+            <input id="m-due" type="date" class="m-input" value="${t?.dueDate ?? ''}"></label>
+        </div>
+      </details>
 
       <!-- Shown only when the task actually belongs to a project. Naming the
            field with a "coming soon" tag made every task editor carry a
@@ -164,9 +183,9 @@ export function openTaskModal(ctx) {
   /* ── Unsaved-change tracking ──────────────────────────────────────── */
   const read = () => ({
     title: dlg.querySelector('#m-title').value.trim(),
-    bucket: dlg.querySelector('#m-bucket').value,
-    priority: dlg.querySelector('#m-priority').value,
-    areaId: dlg.querySelector('#m-area').value || null,
+    bucket: dlg.querySelector('#m-bucket').dataset.value,
+    priority: dlg.querySelector('#m-priority').dataset.value,
+    areaId: dlg.querySelector('#m-area').dataset.value || null,
     dueDate: dlg.querySelector('#m-due').value || null,
     notes: dlg.querySelector('#m-notes').value || null,
   });
@@ -208,7 +227,13 @@ export function openTaskModal(ctx) {
 
   /* ── Focus trap ───────────────────────────────────────────────────── */
   function onKey(e) {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      // One layer at a time: an open dropdown closes before the dialog does.
+      if (dlg.querySelector('.cf-pop:not([hidden])')) { closePopover(dlg); return; }
+      close();
+      return;
+    }
     if (e.key !== 'Tab') return;
     const items = [...dlg.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null);
     if (!items.length) return;
@@ -235,10 +260,16 @@ export function openTaskModal(ctx) {
   title.focus();
   title.setSelectionRange(title.value.length, title.value.length);
 
-  // The priority select carries its own colour, so the control looks like what
-  // it sets rather than being a neutral dropdown next to a coloured card.
+  /* The shared dropdown, anchored inside the dialog so it cannot be clipped
+   * by the sheet's own overflow — the popover host is the dialog itself. */
   const pri = dlg.querySelector('#m-priority');
-  pri.addEventListener('change', () => { pri.dataset.pri = pri.value; });
+  pri.classList.add('pri-select');
+  pri.dataset.pri = t?.priority ?? 'medium';
+  wireMenus(dlg, dlg, (id, value) => {
+    // The priority control carries its own colour, so it looks like what it
+    // sets rather than being a neutral dropdown next to a coloured card.
+    if (id === 'm-priority') pri.dataset.pri = value;
+  });
 
   /* ── Actions ──────────────────────────────────────────────────────── */
   const state = dlg.querySelector('#m-save-state');

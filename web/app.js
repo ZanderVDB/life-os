@@ -8,7 +8,15 @@
  * indicator — nothing else. That is what makes transitions continuous instead
  * of a full-page flash (design-system.md §11).
  */
-import { ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
+import { ROUTES, SECONDARY_ROUTES, PLACEHOLDERS, ALL_ROUTE_IDS } from './routes.js';
+import { icon, logoMark } from './icons.js';
+import {
+  isPhone, isTablet, mobileMode, initMobileShell, bottomNavHtml, wireMobileNav,
+  syncMobileNav, openSheet, closeSheet, sheetRow, openMoreSheet, sheetIsOpen, onSwipe, rowSwipe,
+} from './mobile.js';
+import {
+  renderAssistant, leaveAssistant, assistantInviteHtml, mountInviteOrb, devTools,
+} from './assistant.js';
 import { initServiceWorker } from './pwa.js';
 import {
   bumpNav, navToken, navStale, setHash, hashWasOurs,
@@ -50,7 +58,7 @@ import { initHoverPreview, closeHoverPreview } from './hover-preview.js';
 import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHtml,
   planHours, itemsForDay, hoverRender, freeWindowsFor, legendHtml, sourcesPopoverHtml,
   railIsOpen,
-  recurrenceWords,
+  recurrenceWords, modeIds, defaultMode, modeStep,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { habitSummaryHtml } from './calendar.js';
 import { settingsHtml } from './settings.js';
@@ -240,47 +248,6 @@ function toast(msg, isError = false, action = null) {
 const run = async (fn) => { try { await fn(); } catch (e) { toast(e.message, true); } };
 
 /* ── Icons — one system, one stroke weight ───────────────────────────── */
-const ICON = {
-  today: '<rect x="3" y="4.5" width="14" height="13" rx="2.5"/><path d="M3 8.5h14M7 3v3M13 3v3"/><circle cx="10" cy="13" r="1.6" fill="currentColor" stroke="none"/>',
-  calendar: '<rect x="3" y="4.5" width="14" height="13" rx="2.5"/><path d="M3 8.5h14M7 3v3M13 3v3"/>',
-  projects: '<path d="M3 5.5A1.5 1.5 0 0 1 4.5 4h3l1.5 2h6.5A1.5 1.5 0 0 1 17 7.5v7A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5v-9Z"/>',
-  diary: '<path d="M5.5 3.5h9A1.5 1.5 0 0 1 16 5v10a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 4 15V5a1.5 1.5 0 0 1 1.5-1.5Z"/><path d="M7 3.5v13M9.5 7.5h4M9.5 10.5h4"/>',
-  library: '<path d="M4 4h2.6v13H4zM8 4h2.6v13H8z"/><path d="m12.6 4.6 2.5.7-2.8 12-2.5-.7z"/>',
-  settings: '<circle cx="10" cy="10" r="2.6"/><path d="M10 2.6v2M10 15.4v2M17.4 10h-2M4.6 10h-2M15.2 4.8l-1.4 1.4M6.2 13.8l-1.4 1.4M15.2 15.2l-1.4-1.4M6.2 6.2 4.8 4.8"/>',
-  search: '<circle cx="9" cy="9" r="5.2"/><path d="m13 13 4 4"/>',
-  menu: '<path d="M3.5 6h13M3.5 10h13M3.5 14h13"/>',
-  sparkle: '<path d="M10 3.5 11.4 8 16 9.4 11.4 10.8 10 15.4 8.6 10.8 4 9.4 8.6 8 10 3.5Z"/>',
-  check: '<path d="m4.5 10.5 3.5 3.5 7.5-8"/>',
-  // Three lines, shortest last — the conventional "sort" mark, at the same
-  // stroke weight as every other icon in the set.
-  sort: '<path d="M4 6h12M4 10h8M4 14h4"/>',
-  chevL: '<path d="m12 5-5 5 5 5"/>',
-  chevR: '<path d="m8 5 5 5-5 5"/>',
-  // Horizontal, matching utilityTriggerHtml. The app had both orientations —
-  // task rows and Today's overflow stacked them vertically, Calendar laid them
-  // flat — so "the ⋯ button" meant two different glyphs depending on where you
-  // were looking. One overflow mark, everywhere.
-  dots: '<circle cx="4.5" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.4" fill="currentColor" stroke="none"/>',
-  grip: '<circle cx="7.5" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="7.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="7.5" cy="15" r="1.2" fill="currentColor" stroke="none"/><circle cx="12.5" cy="15" r="1.2" fill="currentColor" stroke="none"/>',
-  pencil: '<path d="M13.5 3.5 16.5 6.5 7 16H4v-3z"/>',
-};
-const icon = (name, size = 20) =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name] ?? ''}</svg>`;
-
-/**
- * The Life OS lockup. The gradient is inlined and self-contained rather than
- * referenced from a sprite: a gradient defined inside a `display:none` <symbol>
- * does not paint in Chrome, which is exactly how this logo went invisible once.
- */
-const logoMark = (n = 26) => `<svg class="logo-mark" width="${n}" height="${n}" viewBox="0 0 24 24"
-    role="img" aria-label="Life OS">
-  <defs><linearGradient id="lotus${n}" gradientUnits="userSpaceOnUse" x1="4" y1="21" x2="20" y2="3">
-    <stop offset="0" stop-color="#7C4DFF"/><stop offset="1" stop-color="#C28DFF"/></linearGradient></defs>
-  <path d="M12 20.4C6.9 17.6 3.4 13.1 3.4 8.5 7.1 9.2 10.1 13 12 20.4Z" fill="url(#lotus${n})" fill-opacity=".82"/>
-  <path d="M12 20.4c5.1-2.8 8.6-7.3 8.6-11.9-3.7.7-6.7 4.5-8.6 11.9Z" fill="url(#lotus${n})" fill-opacity=".82"/>
-  <path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z" fill="url(#lotus${n})"/></svg>`;
-
 /* ── Auth ────────────────────────────────────────────────────────────── */
 /**
  * Local development bypass. Only ever against a localhost API, and worthless
@@ -399,7 +366,6 @@ function renderBootFailure(e) {
 const LANDING = root.innerHTML;
 
 function renderSignIn(onClick) {
-  document.body.classList.remove('drawer-open');
   if (!document.getElementById('landing')) root.innerHTML = LANDING;
   // Every sign-in button on the landing page — header, hero and closing
   // call to action — goes to the same place.
@@ -475,11 +441,28 @@ async function boot() {
   initLibrary(surfaceCtx);
   initDiary(surfaceCtx);
 
+  /* Publishes phone / tablet / desktop on the root element, from the SAME
+   * media query mobile.css uses, and starts watching for the software
+   * keyboard. Before renderShell, so the first paint is already in the right
+   * mode rather than snapping into it. */
+  initMobileShell({
+    onModeChange: () => {
+      /* Crossing the boundary changes the COMPOSITION, not just the styling
+       * — mobile Today is different markup — so the route is re-rendered
+       * rather than left to CSS. Rotating a phone must not leave a desktop
+       * board behind a bottom bar. */
+      if (!state.me) return;
+      setMobileTitle(state.route);
+      syncMobileNav(state.route);
+      loadRoute();
+    },
+  });
+
   renderShell();
   await loadRoute();
   // Habits populate the rail as soon as they arrive. Deliberately not awaited:
   // Today must never wait on a secondary system to appear.
-  loadHabits().then(renderRail).catch(() => {});
+  loadHabits().then(() => { renderRail(); refreshMobileHabits(); }).catch(() => {});
   // The computed Diary habit. Not awaited: the rail must never wait on it.
   loadDiaryStreak().catch(() => {});
   // Kept in state for the account menu's Completed entry; no longer surfaced
@@ -701,11 +684,14 @@ function renderShell() {
       </aside>
 
       <main class="main">
+        <!-- The phone's top bar. No hamburger: navigation is the bar at the
+             BOTTOM, where a thumb reaches, and a drawer that duplicated it
+             would be a second answer to the same question. This says where
+             you are and offers search. -->
         <div class="mobile-bar">
-          <button class="m-btn" id="drawer-btn" aria-label="Open navigation"
-            aria-expanded="false" aria-controls="sidebar">${icon('menu')}</button>
-          <span class="m-title">Life OS</span>
-          <button class="m-btn" id="cmdk-m" style="margin-left:auto"
+          ${logoMark(24)}
+          <span class="m-title" id="m-title">Life OS</span>
+          <button class="m-btn mtop-spacer" id="cmdk-m"
             aria-label="Search and commands">${icon('search')}</button>
         </div>
         <!-- Legacy's nested grid: content and rail sit inside the main column,
@@ -720,6 +706,8 @@ function renderShell() {
         </div>
       </main>
     </div>
+
+    ${bottomNavHtml()}
 
     <div class="composer" id="composer">
       <div class="composer-inner" role="group" aria-disabled="true"
@@ -742,20 +730,25 @@ function wireShell() {
     el.addEventListener('click', (e) => { e.preventDefault(); go(el.dataset.route); });
   });
 
-  const drawerBtn = document.getElementById('drawer-btn');
-  const scrim = document.getElementById('drawer-scrim');
-  const setDrawer = (open) => {
-    document.body.classList.toggle('drawer-open', open);
-    drawerBtn?.setAttribute('aria-expanded', String(open));
-    if (open) document.querySelector('.nav a')?.focus();
-  };
-  drawerBtn?.addEventListener('click', () =>
-    setDrawer(!document.body.classList.contains('drawer-open')));
-  scrim?.addEventListener('click', () => setDrawer(false));
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && document.body.classList.contains('drawer-open')) setDrawer(false);
+  /* ── The phone's navigation ────────────────────────────────────────────
+   * The drawer is gone, not hidden. It put every destination two taps away
+   * behind a hamburger, and it had a defect that made the whole application
+   * untappable — a scrim painting above the app it was meant to sit behind.
+   * A bar that is part of the page cannot do that.
+   *
+   * Nothing was lost: the five sidebar destinations are Today, Calendar and
+   * Projects in the bar, and Diary and Library one tap into More, which also
+   * carries Habits, Reminders, Completed and Settings. */
+  wireMobileNav({
+    go,
+    goHash: (h) => { setHash(h); const r = routeFromHash(); if (r !== state.route) go(r); },
+    currentRoute: () => state.route,
+    assistant: () => go('ai'),
+    quickAdd: () => openQuickAdd(),
+    habits: () => openHabitsSheet(),
+    search: () => toast('The command palette arrives with search in a later phase.'),
   });
-  window.__closeDrawer = () => setDrawer(false);
+  syncMobileNav(state.route);
 
   // One click, straight to Settings. No intermediate menu.
   document.getElementById('account-btn')?.addEventListener('click', () => go('settings'));
@@ -901,9 +894,13 @@ async function go(id) {
      * the section you are already at the top of is still a no-op. */
     const path = location.hash.slice(1).split('?')[0].split('/').filter(Boolean);
     if (path.length > 1) await goToSectionRoot(id, nav);
-    window.__closeDrawer?.();
+    closeSheet(true);
     return;
   }
+  /* Leaving the assistant releases the microphone and the animation loop
+   * FIRST. A live getUserMedia stream behind a page nobody is looking at is
+   * a recording light on somebody's phone with no surface to explain it. */
+  if (state.route === 'ai') leaveAssistant();
   // Leaving Library or Diary while something is being written to must not lose
   // the words. The write is awaited BEFORE the route changes, not alongside it.
   if (state.route === 'library') await libraryWillLeave();
@@ -929,8 +926,8 @@ async function go(id) {
     else a.removeAttribute('aria-current');
   });
   positionPill();
-  /* account popover removed */
-  window.__closeDrawer?.();
+  syncMobileNav(id);
+  closeSheet(true);
   await loadRoute(nav);
 }
 
@@ -964,6 +961,13 @@ async function loadRoute(nav = navToken()) {
   const head = document.getElementById('page-head');
   const scroll = document.getElementById('main-scroll');
   if (!head || !scroll) return;
+  setMobileTitle(state.route);
+  syncMobileNav(state.route);
+
+  if (state.route === 'ai') {
+    renderAssistant(head, scroll, assistantContext());
+    return;
+  }
 
   const route = ROUTES.find((r) => r.id === state.route);
   // Restart the crossfade without redrawing the shell around it.
@@ -986,8 +990,15 @@ async function loadRoute(nav = navToken()) {
       scroll.innerHTML = todayHtml();
       // Refreshed on every entry to Today, so writing in Diary and coming back
       // shows the row already complete.
-      loadDiaryStreak().catch(() => {});
+      loadDiaryStreak().then(refreshMobileHabits).catch(() => {});
       wireToday();
+      if (isPhone()) {
+        wireMobileToday(scroll);
+        /* Not awaited. Today has to paint from the task list alone — the
+         * calendar is a second system and a slow one, and the board must
+         * never wait on it. The Next card fills itself in when it arrives. */
+        loadTodayGlance().then(refreshMobileGlance).catch(() => {});
+      }
       restoreTodayState();
       document.getElementById('today-more')?.addEventListener('click', (e) =>
         openTodayMenu(e.currentTarget));
@@ -1031,6 +1042,13 @@ async function loadRoute(nav = navToken()) {
     /* No sub-line: every Settings panel states its own purpose directly below
      * this, and two descriptions stacked on top of each other is one too many. */
     head.innerHTML = '<p class="eyebrow">Life OS</p><h1>Settings</h1>';
+    /* Arriving fresh on a phone lands on the index. A tab chosen elsewhere —
+     * the habits sheet says "All habits" and means the Habits page — is
+     * honoured, so that route still opens the page it named. */
+    if (isPhone() && state.settingsTab === 'account' && !state.settingsFromMenu) {
+      state.settingsTab = null;
+    }
+    state.settingsFromMenu = false;
     renderSettings();
     return;
   }
@@ -1072,6 +1090,7 @@ function greetingHtml() {
  * eye read a page reload rather than one task changing.
  */
 function todayHtml() {
+  if (isPhone()) return mobileTodayHtml();
   return `<div class="toolbar">
       <button class="btn btn-primary" id="add">Add task</button>
       <div class="filters" role="group" aria-label="Filter by area">
@@ -1459,6 +1478,17 @@ function wireCard(el) {
     };
   });
   wireCardSteps(el, id);
+  if (isPhone()) {
+    /* An accelerator, never a discovery. Every one of these is also a visible
+     * button on the row: the tick completes, the ⋯ opens the same menu. */
+    rowSwipe(el, {
+      onRight: () => toggleTask(id),
+      onLeft: () => openTaskMenu(id, el.querySelector('[data-act="menu"]') ?? el),
+      rightLabel: findTask(id)?.status === 'done' ? 'Not done' : 'Done',
+      leftLabel: 'Actions',
+      ignore: '.t-steps,button,input,a',
+    });
+  }
   el.onkeydown = (e) => {
     // Typing inside a step must not reach the card's shortcuts, or a space in a
     // step name would complete the parent task.
@@ -2478,6 +2508,13 @@ function wireSettings() {
   document.querySelectorAll('[data-stab]').forEach((el) => {
     el.onclick = () => { state.settingsTab = el.dataset.stab; renderSettings(); };
   });
+  /* Back to the index. A phone-only control, because the index is a
+   * phone-only state — on a desktop the nav column is always there. */
+  document.querySelector('[data-stab-back]')?.addEventListener('click', () => {
+    state.settingsTab = null;
+    renderSettings();
+    document.getElementById('main-scroll')?.scrollIntoView({ block: 'start' });
+  });
 
   document.querySelectorAll('[data-pref]').forEach((el) => {
     el.onclick = () => run(async () => {
@@ -2682,7 +2719,7 @@ untouched.`)) return;
 }
 
 function renderSettings() {
-  document.getElementById('main-scroll').innerHTML = settingsHtml(state);
+  document.getElementById('main-scroll').innerHTML = settingsHtml(state, isPhone());
   wireSettings();
   /* Integrations is the one panel whose truth lives on the server. It renders
    * "Checking the connection…" first and asks once; every later visit uses
@@ -2725,8 +2762,13 @@ async function loadCalendar() {
   if (!cal.restored) {
     cal.restored = true;
     const saved_ = localStorage.getItem('los2_cal_mode');
-    if (MODE_IDS.includes(saved_)) cal.mode = saved_;
+    cal.mode = MODE_IDS().includes(saved_) ? saved_ : defaultMode();
   }
+  /* Rotating a tablet, or resizing a window across the boundary, changes
+   * which modes exist. Plan week has no phone equivalent and Day has no
+   * desktop one, so a mode that is no longer offered falls back rather than
+   * leaving a selected tab that is not on screen. */
+  if (!MODE_IDS().includes(cal.mode)) cal.mode = defaultMode();
   // The URL is the source of truth for which surface is open, so a refresh on
   // #calendar/reminders opens reminders rather than Month.
   cal.utility = utilityFromHash();
@@ -3276,7 +3318,7 @@ function wireCalendarHeader() {
       localStorage.setItem('los2_cal_mode', cal.mode);
       // The pill glides because only its --mode-i changes; the buttons are
       // never re-rendered, so nothing flashes.
-      const i = MODE_IDS.indexOf(cal.mode);
+      const i = MODE_IDS().indexOf(cal.mode);
       modes?.style.setProperty('--mode-i', String(i));
       document.querySelectorAll('[data-mode]').forEach((x) => {
         const on = x.dataset.mode === cal.mode;
@@ -3293,15 +3335,15 @@ function wireCalendarHeader() {
       const d = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
       if (!d) return;
       e.preventDefault();
-      const i = (MODE_IDS.indexOf(cal.mode) + d + MODE_IDS.length) % MODE_IDS.length;
-      document.querySelector(`[data-mode="${MODE_IDS[i]}"]`)?.click();
-      document.querySelector(`[data-mode="${MODE_IDS[i]}"]`)?.focus();
+      const i = (MODE_IDS().indexOf(cal.mode) + d + MODE_IDS().length) % MODE_IDS().length;
+      document.querySelector(`[data-mode="${MODE_IDS()[i]}"]`)?.click();
+      document.querySelector(`[data-mode="${MODE_IDS()[i]}"]`)?.focus();
     };
   });
   document.querySelectorAll('[data-cal]').forEach((b) => {
     b.onclick = () => {
       const dir = b.dataset.cal;
-      const step = cal.mode === 'plan' ? 7 : 0;
+      const step = modeStep(cal.mode);
       if (dir === 'today') cal.anchor = new Date();
       else if (cal.mode === 'month') {
         cal.anchor = new Date(cal.anchor.getFullYear(),
@@ -3360,6 +3402,45 @@ function wireCalendar() {
   });
   document.querySelectorAll('[data-reminder]:not(.ag-check)').forEach((el) => {
     el.onclick = (e) => { e.stopPropagation(); openReminderDetail(el.dataset.reminder); };
+  });
+  wireCalendarSwipe();
+  /* An empty slot in Day or 3 day is where a thing goes. The tap already
+   * proposes a time through planCanvasClick; on a phone the target has to be
+   * big enough to hit, which is what the taller hour rows in mobile.css are
+   * for — a 46px hour is a 23px half-hour, and nobody hits that. */
+}
+
+/**
+ * Previous and next by swipe, in the views where "next" means something.
+ *
+ * Agenda is a continuous 60-day scroll and has no next; Month's arrows are a
+ * month apart and are in the header where they are labelled. Day and 3 day
+ * are the two views a thumb moves through, and they are the two that get it.
+ *
+ * The arrows stay. §41: a gesture is never the only way.
+ */
+function wireCalendarSwipe() {
+  if (!isPhone()) return;
+  if (!['day', 'three', 'month'].includes(cal.mode)) return;
+  const canvas = document.getElementById('cal-canvas');
+  if (!canvas) return;
+  const move = (dir) => {
+    const step = modeStep(cal.mode);
+    if (cal.mode === 'month') {
+      cal.anchor = new Date(cal.anchor.getFullYear(),
+        cal.anchor.getMonth() + (dir === 'next' ? 1 : -1), 1);
+    } else {
+      cal.anchor = new Date(cal.anchor.getTime()
+        + (dir === 'next' ? step : -step) * 86400000);
+    }
+    cal.enter = dir;
+    loadCalendar();
+  };
+  onSwipe(canvas, {
+    onLeft: () => move('next'),
+    onRight: () => move('prev'),
+    // A block being dragged onto an hour is not a page turn.
+    ignore: '.pl-ev,.pl-block,.pl-rem,.pl-resize,[data-event],[data-reminder]',
   });
 }
 
@@ -4095,9 +4176,14 @@ async function closeProjectDetail(push = true) {
 function wireProjectDetail() {
   const p = pj.detail?.project;
   if (!p) return;
+  /* Status and Focus are the shared dropdown now, anchored in the page —
+   * §38: one grammar, and on a phone they open as sheets. They still announce
+   * a `change` event, so the handlers below are the same handlers. */
+  const head = document.getElementById('page-head');
+  if (head) wireMenus(head, head, () => {});
 
   document.getElementById('pjd-status')?.addEventListener('change', async (e) => {
-    const status = e.target.value;
+    const status = e.target.dataset.value;
     try {
       await api(`/api/v1/workspaces/${ws()}/projects/${p.id}`, {
         method: 'PATCH', body: { status, expectedUpdatedAt: p.updatedAt },
@@ -4108,7 +4194,7 @@ function wireProjectDetail() {
   });
 
   document.getElementById('pjd-focus')?.addEventListener('change', async (e) => {
-    const focus = e.target.value;
+    const focus = e.target.dataset.value;
     try {
       await api(`/api/v1/workspaces/${ws()}/projects/${p.id}`, {
         method: 'PATCH', body: { focus, expectedUpdatedAt: p.updatedAt },
@@ -4990,7 +5076,10 @@ async function moveBlock(blockId, startsAt, endsAt) {
   }
 }
 
-const MODE_IDS = ['month', 'agenda', 'plan'];
+/* The modes THIS device offers. A function, not a constant: a phone and a
+ * desktop are given different sets, and a stored mode from the other one must
+ * not survive a rotation as a tab that is not on screen. */
+const MODE_IDS = () => modeIds();
 
 /**
  * The legend popover.
@@ -5700,5 +5789,445 @@ async function undoArrange() {
     saved('Order restored');
   } catch (e) {
     toast(`Could not undo: ${e.message}`, true);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MOBILE
+   Where the phone differs from the desktop, and why.
+
+   The rule, kept next to the code that has to obey it:
+
+       MOBILE PRESERVES CAPABILITY AND INFORMATION, NOT DESKTOP GEOMETRY.
+
+   Nothing below removes anything. Today shows what matters now and keeps
+   every other task one tap away; Later holds the three remaining buckets
+   rather than dropping them; the area filter, the held-back notice and the
+   arrangement all survive. What changes is the ORDER things are asked in.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** The route name in the phone's top bar. */
+function setMobileTitle(route) {
+  const el = document.getElementById('m-title');
+  if (!el) return;
+  el.textContent = [...ROUTES, ...SECONDARY_ROUTES]
+    .find((r) => r.id === route)?.label ?? 'Life OS';
+}
+
+/**
+ * Everything the assistant is allowed to know.
+ *
+ * Read-only, and assembled here rather than reached for inside the assistant,
+ * so what a provider can see is one visible list rather than whatever it
+ * happened to import. No token, no workspace id, no `api`.
+ */
+function assistantContext() {
+  const n = nextUp();
+  return {
+    areas: state.me?.areas ?? [],
+    projects: Object.values(state.projectsById ?? {})
+      .map((p) => ({ id: p.id, title: p.title, status: p.status })),
+    counts: {
+      tasks: inBucket('today').length,
+      events: (state.glance?.events ?? []).filter((e) => !e.isAllDay).length,
+      habitsDone: state.habitTotals?.done ?? 0,
+      habitsTotal: state.habitTotals?.due ?? 0,
+    },
+    next: n ? { title: n.title, time: n.timeLabel } : null,
+    toast,
+    quickAdd: () => openQuickAdd(),
+    go: (id) => go(id),
+  };
+}
+
+/* ── Today's glance ──────────────────────────────────────────────────────
+ * One extra request on Today, for the one thing a phone gets picked up to
+ * check: what is next. Deliberately NOT the whole calendar — a single day,
+ * cached on `state`, and never awaited before the board paints. */
+async function loadTodayGlance() {
+  const day = localDate();
+  if (state.glance?.date === day) return;
+  const r = await api(`/api/v1/workspaces/${ws()}/calendar/range?from=${day}&to=${day}`);
+  state.glance = {
+    date: day,
+    events: r.events ?? [],
+    reminders: (r.reminders ?? []).filter((x) => x.status !== 'done'),
+  };
+}
+
+/**
+ * The next thing with a time on it, today.
+ *
+ * Events and timed reminders both count. A phone asking "what is next" does
+ * not care which system the answer came out of, and answering with only one
+ * of them is how somebody misses the other.
+ */
+function nextUp() {
+  const g = state.glance;
+  if (!g) return null;
+  const now = Date.now();
+  const items = [];
+  for (const e of g.events) {
+    if (e.isAllDay || !e.startsAt) continue;
+    const at = new Date(e.startsAt).getTime();
+    if (at >= now) items.push({ at, title: e.title, kind: 'event', event: e });
+  }
+  for (const r of g.reminders) {
+    if (!r.dueTime || r.dueDate !== g.date) continue;
+    const [h, m] = r.dueTime.split(':').map(Number);
+    const at = new Date(`${g.date}T00:00:00`).setHours(h, m, 0, 0);
+    if (at >= now) items.push({ at, title: r.title, kind: 'reminder' });
+  }
+  if (!items.length) return null;
+  items.sort((a, b) => a.at - b.at);
+  const n = items[0];
+  const mins = Math.round((n.at - now) / 60000);
+  return {
+    ...n,
+    timeLabel: new Date(n.at).toLocaleTimeString(undefined,
+      { hour: '2-digit', minute: '2-digit' }),
+    /* "in 48 min" is the number somebody actually wants. A clock time alone
+     * makes them do the subtraction themselves, which on a phone glanced at
+     * while walking is the difference between useful and decorative. */
+    inWords: mins < 1 ? 'now' : mins < 60 ? `in ${mins} min`
+      : mins < 1440 ? `in ${Math.round(mins / 60)} h` : 'later',
+  };
+}
+
+let nextItem = null;
+
+function nextCardHtml() {
+  nextItem = nextUp();
+  if (!nextItem) {
+    return `<section class="m-next is-clear">
+      <span class="m-next-none">Nothing else scheduled today.</span>
+      <button type="button" class="m-next-go" data-goto="calendar">Calendar</button>
+    </section>`;
+  }
+  return `<section class="m-next">
+    <p class="m-sec-h">Next</p>
+    <button type="button" class="m-next-row" id="m-next-open">
+      <span class="m-next-time">${esc(nextItem.timeLabel)}</span>
+      <span class="m-next-body">
+        <span class="m-next-title">${esc(nextItem.title)}</span>
+        <span class="m-next-in">${esc(nextItem.inWords)}</span>
+      </span>
+      <span class="m-next-chev" aria-hidden="true">${icon('chevR', 16)}</span>
+    </button>
+  </section>`;
+}
+
+/** "5 tasks · 2 meetings · 4/7 habits" — the day in one line. */
+function glanceLineHtml() {
+  const todayTasks = inBucket('today').length;
+  const events = (state.glance?.events ?? []).filter((e) => !e.isAllDay).length;
+  const h = state.habitTotals;
+  const bits = [`${todayTasks} task${todayTasks === 1 ? '' : 's'}`];
+  if (events) bits.push(`${events} meeting${events === 1 ? '' : 's'}`);
+  if (h?.due) bits.push(`${h.done}/${h.due} habits`);
+  return `<p class="m-glance" id="m-glance">${esc(bits.join(' · '))}</p>`;
+}
+
+/**
+ * Today, on a phone.
+ *
+ * The buckets are the SAME buckets — same `.drop[data-bucket]` markup — so
+ * every patch, rebuild, drag, count and arrangement in the rest of this file
+ * keeps working untouched. What changes is that Today is open and the other
+ * three are folded into Later, because a phone home screen that opens with
+ * fourteen Future tasks has answered a question nobody asked.
+ *
+ * Every one of those tasks is still here, one tap away, with the same rows
+ * and the same actions.
+ */
+function mobileTodayHtml() {
+  return `${nextCardHtml()}
+
+    <section class="m-ai">
+      ${glanceLineHtml()}
+      ${assistantInviteHtml()}
+    </section>
+
+    <div class="m-toolbar">
+      <button class="btn btn-primary" id="add">Add task</button>
+      <div class="filters" role="group" aria-label="Filter by area">
+        <button class="chip" data-area="" aria-pressed="${!state.areaFilter}">All areas</button>
+        ${state.me.areas.map((a) => `<button class="chip" data-area="${a.id}"
+          aria-pressed="${state.areaFilter === a.id}">${esc(a.name)}</button>`).join('')}
+      </div>
+    </div>
+    ${heldNoticeHtml()}
+
+    <div class="buckets m-buckets">
+      ${bucketHtml(BUCKETS[0])}
+      ${habitsCardHtml()}
+      <div class="m-later">
+        <p class="m-sec-h">Later</p>
+        ${BUCKETS.slice(1).map((b) => `<details class="m-later-b" data-later="${b.id}">
+          <summary>
+            <span class="m-later-l">${b.label}</span>
+            <span class="bucket-count" data-count="${b.id}">${inBucket(b.id).length}</span>
+            <span class="m-later-chev" aria-hidden="true">${icon('chevR', 16)}</span>
+          </summary>
+          ${bucketHtml(b)}
+        </details>`).join('')}
+      </div>
+    </div>`;
+}
+
+/** Habits on the phone home: the count, today's rows, and a way to manage. */
+function habitsCardHtml() {
+  const h = state.habitTotals;
+  const rows = mobileHabitRows();
+  return `<section class="m-habits" id="m-habits">
+    <button type="button" class="m-habits-h" id="m-habits-open">
+      <span class="m-sec-h">Habits</span>
+      <span class="m-habits-n">${h?.due ? `${h.done}/${h.due}` : ''}</span>
+      <span class="m-later-chev" aria-hidden="true">${icon('chevR', 16)}</span>
+    </button>
+    ${rows.length
+    ? `<div class="m-habits-row">${rows.map((x) => `
+        <button type="button" class="m-hb ${x.done ? 'is-done' : ''}"
+          data-mhabit="${esc(x.id)}" ${x.system ? 'data-system="1"' : ''}
+          aria-pressed="${x.done}">
+          <span class="m-hb-tick" aria-hidden="true">${x.done ? '&#10003;' : ''}</span>
+          <span class="m-hb-n">${esc(x.name)}</span>
+        </button>`).join('')}</div>`
+    : `<p class="m-habits-empty">${state.habitsLoaded
+      ? 'Nothing due today.' : 'Loading…'}</p>`}
+  </section>`;
+}
+
+/** Today's habits, including the computed Diary row, in one flat list. */
+function mobileHabitRows() {
+  const rows = (state.habits ?? [])
+    .filter((h) => h.dueToday && !h.archivedAt)
+    .map((h) => ({ id: h.id, name: h.name, done: Boolean(h.completedToday) }));
+  if (state.diaryHabit) {
+    rows.unshift({
+      id: DIARY_HABIT_ID,
+      name: state.diaryHabit.name,
+      done: Boolean(state.diaryHabit.completedToday),
+      system: true,
+    });
+  }
+  return rows;
+}
+
+let inviteTeardown = null;
+
+/** Wires everything mobile Today adds. Called after `wireToday`. */
+function wireMobileToday(scroll) {
+  scroll.querySelector('#ai-invite')?.addEventListener('click', () => go('ai'));
+  inviteTeardown?.();
+  inviteTeardown = mountInviteOrb(scroll);
+
+  scroll.querySelector('[data-goto]')?.addEventListener('click', (e) =>
+    go(e.currentTarget.dataset.goto));
+
+  scroll.querySelector('#m-next-open')?.addEventListener('click', () => {
+    /* The event object came with the glance, so the detail sheet opens
+     * straight from Today without loading the whole calendar first. A
+     * reminder has no equivalent sheet outside Calendar, so it goes to the
+     * list that owns it rather than to a half-populated dialog. */
+    if (nextItem?.kind === 'event' && nextItem.event) openEventDetail(nextItem.event);
+    else { setHash('#calendar/reminders'); go('calendar'); }
+  });
+
+  scroll.querySelector('#m-habits-open')?.addEventListener('click', () => openHabitsSheet());
+  scroll.querySelectorAll('[data-mhabit]').forEach((b) => {
+    b.addEventListener('click', () => {
+      if (b.dataset.system) { go('diary'); return; }
+      toggleHabit(b.dataset.mhabit).then(() => refreshMobileHabits());
+    });
+  });
+}
+
+/** Re-draws the phone's Next card and glance line after data arrives. */
+function refreshMobileGlance() {
+  if (!isPhone() || state.route !== 'today') return;
+  const scroll = document.getElementById('main-scroll');
+  if (!scroll) return;
+  const next = scroll.querySelector('.m-next');
+  if (next) next.outerHTML = nextCardHtml();
+  const line = scroll.querySelector('#m-glance');
+  if (line) line.outerHTML = glanceLineHtml();
+  refreshMobileHabits();
+  wireMobileToday(scroll);
+}
+
+function refreshMobileHabits() {
+  const el = document.getElementById('m-habits');
+  if (!el) return;
+  el.outerHTML = habitsCardHtml();
+  const scroll = document.getElementById('main-scroll');
+  document.getElementById('m-habits-open')?.addEventListener('click', () => openHabitsSheet());
+  scroll?.querySelectorAll('[data-mhabit]').forEach((b) => {
+    b.addEventListener('click', () => {
+      if (b.dataset.system) { go('diary'); return; }
+      toggleHabit(b.dataset.mhabit).then(() => refreshMobileHabits());
+    });
+  });
+  const line = scroll?.querySelector('#m-glance');
+  if (line) line.outerHTML = glanceLineHtml();
+}
+
+/* ── The habits sheet ────────────────────────────────────────────────────
+ * The rail's habit list, on a phone. Every habit, its streak and its Edit
+ * control are here — this is the same information reached a different way,
+ * not a summary of it. */
+function openHabitsSheet() {
+  const draw = () => {
+    const rows = mobileHabitRows();
+    const h = state.habitTotals;
+    return `${rows.length ? rows.map((x) => `
+      <div class="m-hrow ${x.done ? 'is-done' : ''}">
+        <button type="button" class="m-hrow-main" data-hrow="${esc(x.id)}"
+          ${x.system ? 'data-system="1"' : ''} aria-pressed="${x.done}">
+          <span class="m-hrow-tick" aria-hidden="true">${x.done ? '&#10003;' : ''}</span>
+          <span class="m-hrow-t"><span class="msheet-label">${esc(x.name)}</span>
+            ${x.system ? '<span class="msheet-row-desc">Kept from what you write in your Diary</span>' : ''}</span>
+        </button>
+        ${x.system ? '' : `<button type="button" class="btn btn-ghost btn-sm"
+          data-hedit="${esc(x.id)}">Edit</button>`}
+      </div>`).join('')
+    : '<p class="msheet-p">No habits yet.</p>'}
+      <div class="msheet-sep"></div>
+      ${sheetRow({ id: 'hb-new', label: 'Add a habit', icon: 'sparkle',
+    desc: 'Something you want to keep up' })}
+      ${sheetRow({ id: 'hb-manage', label: 'All habits', icon: 'settings',
+    desc: h?.due ? `${h.done} of ${h.due} done today · archive and edit` : 'Archive and edit' })}`;
+  };
+
+  openSheet({
+    title: 'Habits',
+    sub: state.habitTotals?.due ? `${state.habitTotals.done}/${state.habitTotals.due}` : '',
+    body: draw(),
+    onMount: (rootEl, close) => {
+      const wire = () => {
+        rootEl.querySelectorAll('[data-hrow]').forEach((b) => {
+          b.onclick = async () => {
+            if (b.dataset.system) { close(); go('diary'); return; }
+            await toggleHabit(b.dataset.hrow);
+            rootEl.querySelector('.msheet-body').innerHTML = draw();
+            wire();
+            refreshMobileHabits();
+          };
+        });
+        rootEl.querySelectorAll('[data-hedit]').forEach((b) => {
+          b.onclick = () => { close(); editHabit(b.dataset.hedit); };
+        });
+        rootEl.querySelector('[data-more="hb-new"]')?.addEventListener('click', () => {
+          close(); editHabit(null);
+        });
+        rootEl.querySelector('[data-more="hb-manage"]')?.addEventListener('click', () => {
+          close();
+          state.settingsTab = 'habits';
+          state.settingsFromMenu = true;
+          go('settings');
+        });
+      };
+      wire();
+    },
+  });
+}
+
+/* ── Quick add ───────────────────────────────────────────────────────────
+ * §14. Life OS has to be usable with the assistant switched off, and basic
+ * task capture must not wait on a model, a network round trip or a
+ * permission prompt. So the field is at the top of the sheet, it is focused
+ * on open, and Enter creates the task.
+ *
+ * Every row below it opens the SAME editor the desktop opens. Quick add is a
+ * shortcut to existing surfaces, never a second, thinner version of them, and
+ * nothing here is reachable ONLY from here.
+ */
+function openQuickAdd() {
+  openSheet({
+    title: 'Quick add',
+    body: `<div class="msheet-pad">
+        <form class="qa-form" id="qa-form">
+          <input class="m-input" id="qa-title" data-autofocus
+            placeholder="Add a task…" autocomplete="off" enterkeyhint="done">
+          <button type="submit" class="btn btn-primary">Add</button>
+        </form>
+        <p class="qa-hint">Goes straight to Today. Open it afterwards for a project,
+          steps or a date.</p>
+      </div>
+      <div class="msheet-sep"></div>
+      ${sheetRow({ id: 'qa-task', label: 'Task', icon: 'today',
+    desc: 'With project, steps, priority and dates' })}
+      ${sheetRow({ id: 'qa-event', label: 'Event', icon: 'calendar',
+    desc: 'Something that occupies time' })}
+      ${sheetRow({ id: 'qa-reminder', label: 'Reminder', icon: 'sparkle',
+    desc: 'Something to be reminded about' })}
+      ${sheetRow({ id: 'qa-habit', label: 'Habit', icon: 'check',
+    desc: 'Something you want to keep up' })}
+      ${sheetRow({ id: 'qa-capture', label: 'Capture a thought', icon: 'pencil',
+    desc: 'Kept as an undated task in Future until you file it' })}`,
+    onMount: (rootEl, close) => {
+      const input = rootEl.querySelector('#qa-title');
+      rootEl.querySelector('#qa-form').onsubmit = (e) => {
+        e.preventDefault();
+        const title = input.value.trim();
+        if (!title) return;
+        close();
+        quickCreateTask(title, 'today');
+      };
+      const act = {
+        'qa-task': () => openTask(null, input.value.trim()),
+        'qa-event': () => quickCalendar('event'),
+        'qa-reminder': () => quickCalendar('reminder'),
+        'qa-habit': () => editHabit(null),
+        'qa-capture': () => {
+          const title = input.value.trim();
+          if (title) return quickCreateTask(title, 'future');
+          return openTask(null);
+        },
+      };
+      rootEl.querySelectorAll('[data-more]').forEach((el) => {
+        el.onclick = (e) => { e.preventDefault(); close(); act[el.dataset.more]?.(); };
+      });
+    },
+  });
+}
+
+/**
+ * Calendar creation from anywhere.
+ *
+ * The composer needs the workspace's calendar list, and every save path
+ * updates the loaded range in place — so it opens ON the Calendar rather
+ * than over a page that has none of that. The route change is the honest
+ * one: a new event belongs on the calendar you are about to see it on.
+ */
+async function quickCalendar(kind) {
+  if (state.route !== 'calendar') await go('calendar');
+  if (kind === 'reminder') addReminder(null);
+  else openEventComposer({});
+}
+
+/**
+ * The fastest possible capture: one request, and the board updates itself.
+ *
+ * If the write fails the row is not left behind and the failure is named.
+ */
+async function quickCreateTask(title, bucket) {
+  try {
+    const r = await api(`/api/v1/workspaces/${ws()}/tasks`, {
+      method: 'POST',
+      body: { title, bucket, areaId: state.areaFilter ?? null },
+    });
+    const created = { ...r.task, steps: [] };
+    state.tasks.push(created);
+    if (state.route === 'today') {
+      await placeNewTask(created);
+      rebuildBucket(created.bucket);
+      wireBoard();
+      renderRail();
+      refreshMobileGlance();
+    }
+    saved(bucket === 'future' ? 'Captured' : 'Task added');
+  } catch (e) {
+    toast(`Could not add that: ${e.message}`, true);
   }
 }

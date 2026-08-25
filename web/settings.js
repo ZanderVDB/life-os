@@ -397,8 +397,8 @@ function dataPanel() {
 
 /* ══ The shell ═══════════════════════════════════════════════════════════ */
 
-export function settingsHtml(state) {
-  const tab = state.settingsTab || 'account';
+export function settingsHtml(state, phone = false) {
+  const tab = state.settingsTab || (phone ? null : 'account');
   const current = SETTINGS_TABS.find((t) => t.id === tab) ?? SETTINGS_TABS[0];
 
   const panels = {
@@ -410,6 +410,43 @@ export function settingsHtml(state) {
     app: appPanel,
     data: dataPanel,
   };
+
+  /* ── On a phone, Settings is a list of pages ──────────────────────────
+   *
+   * §37. A secondary navigation column beside the content works on a desktop
+   * because there is a desktop's worth of width for two columns. On a phone
+   * it is either a 110px column of clipped labels or a horizontal scroller
+   * hiding half the sections — and in both cases the panel that is open gets
+   * whatever is left.
+   *
+   * So the index IS a page, and a section IS a page. `tab === null` is the
+   * index, which is a state the desktop never enters. Nothing is removed:
+   * every section, and every control inside it, is one tap away. */
+  if (phone && !tab) {
+    return `<div class="set-page set-index">
+      ${SETTINGS_TABS.map((t) => `<button type="button" class="set-idx" data-stab="${t.id}">
+        <span class="set-idx-t">
+          <span class="set-idx-l">${t.label}</span>
+          <span class="set-idx-b">${esc(t.blurb)}</span>
+        </span>
+        <span class="set-idx-chev" aria-hidden="true"></span>
+      </button>`).join('')}
+    </div>`;
+  }
+  if (phone) {
+    return `<div class="set-page set-sub">
+      <div class="set-main">
+        <header class="set-head set-sub-head">
+          <button type="button" class="set-back" data-stab-back>
+            <span class="set-back-chev" aria-hidden="true"></span><span>Settings</span>
+          </button>
+          <h2>${current.label}</h2>
+          <p>${current.blurb}</p>
+        </header>
+        ${panels[tab](state)}
+      </div>
+    </div>`;
+  }
 
   return `<div class="set-page">
     <nav class="set-nav" aria-label="Settings sections">

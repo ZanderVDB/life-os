@@ -53,6 +53,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./app.css">
+<!-- The phone and tablet layer. A separate file because it is a set of
+     COMPOSITIONS, not a tail of overrides — see the note at its top. -->
+<link rel="stylesheet" href="./mobile.css">
 <script>
 /* Which of the two first paints, decided BEFORE the body is parsed.
  *
@@ -303,7 +306,6 @@ try {
   </footer>
 
 </main></div>
-<div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
 
 <script type="module" src="./config.js"></script>
 <script type="module" src="./app.js"></script>

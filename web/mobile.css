@@ -1,0 +1,994 @@
+/* Life OS — the phone and tablet layer.
+ *
+ * ── Why this is a separate file ──────────────────────────────────────────
+ *
+ * The rule this whole file exists to keep:
+ *
+ *     MOBILE PRESERVES CAPABILITY AND INFORMATION, NOT DESKTOP GEOMETRY.
+ *
+ * Not a responsive cleanup of app.css. Life OS on a phone is a different
+ * SHAPE of the same application — a bottom navigation instead of a sidebar,
+ * a command home instead of a four-bucket board, sheets instead of dialogs,
+ * one book page instead of a spread. Those are compositions, not overrides,
+ * and mixing them into 6,000 lines of desktop rules is how a mobile pass
+ * turns into three hundred one-off media queries nobody can reason about.
+ *
+ * Kept here, the rules are legible as a design: three modes, one set of
+ * tokens, and a small number of layout decisions applied consistently.
+ *
+ * ── The three modes ──────────────────────────────────────────────────────
+ *
+ *   PHONE    ≤ 899px wide, or any viewport under 500px TALL and under
+ *            1100px wide. The second half is landscape phones: an iPhone
+ *            14 Pro Max on its side is 932 × 430, which is wider than a
+ *            small tablet and is emphatically not one. Height is what tells
+ *            them apart, so height is what is asked.
+ *
+ *   TABLET   900 – 1099px, plus 1024px landscape tablets. Hybrid: the
+ *            sidebar returns, the rail becomes a row of cards beneath the
+ *            content, and a Book gets its two-page spread back.
+ *
+ *   DESKTOP  1100px and up. Untouched. Every rule in this file is inside a
+ *            phone or tablet query, and nothing here can reach a desktop.
+ *
+ * `html.is-phone` is set by mobile.js from the SAME query, so JavaScript and
+ * CSS can never disagree about which mode is running — a class set from one
+ * breakpoint and a rule written against another is a bug that only appears
+ * in the 40px where they differ.
+ */
+
+:root{
+  /* ── Phone layout tokens ──────────────────────────────────────────────
+     Every phone rule below is written in terms of these. A spacing change
+     is one edit here, not a search across the file. */
+  --m-pad:16px;              /* the page's side margin */
+  --m-gap:14px;              /* between stacked cards */
+  --m-radius:16px;
+  --m-tap:44px;              /* the minimum comfortable touch target */
+  --m-nav-h:60px;            /* the bottom navigation, excluding safe area */
+  --m-top-h:52px;            /* the top bar */
+  --m-safe-b:env(safe-area-inset-bottom,0px);
+  --m-safe-t:env(safe-area-inset-top,0px);
+  /* What content must clear at the bottom of every scrolling page. */
+  --m-bottom-clear:calc(var(--m-nav-h) + var(--m-safe-b) + 18px);
+  --m-sheet-max:min(92dvh,760px);
+  --m-card:var(--surface);
+}
+@media (max-width:400px){
+  :root{--m-pad:14px;--m-gap:12px}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PHONE SHELL
+   The query below is THE phone query. It appears verbatim at the top of
+   every phone block in this file and nowhere else, and mobile.js holds the
+   same string. Do not paraphrase it.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+
+  /* The sidebar does not become a drawer — it is not there at all.
+   *
+   * A drawer is a desktop sidebar with a hinge on it: every destination is
+   * two taps away and the whole navigation lives off-screen behind a
+   * hamburger. It also had a real defect — the scrim painted above the app
+   * and swallowed every tap — which is a class of bug that cannot happen to
+   * a bar that is simply part of the page.
+   *
+   * The bottom navigation replaces it outright. The scrim and the drawer
+   * button go with it so nothing can toggle a body class that no longer
+   * has a surface behind it. */
+  .sidebar,.drawer-scrim,#drawer-btn{display:none!important}
+  .shell{grid-template-columns:minmax(0,1fr)}
+  :root{--sidebar-w:0px}
+
+  /* The desktop composer is the assistant's home on a large screen. On a
+   * phone the assistant is the centre of the bottom bar, so a second fixed
+   * strip at the bottom is a duplicate that covers content — which is
+   * precisely what it did: "Ask Life OS" sat on top of the Settings row. */
+  .composer{display:none!important}
+
+  .main{min-height:100dvh}
+  .main-wrap{grid-template-columns:minmax(0,1fr);gap:var(--m-gap);
+    padding:var(--m-pad) var(--m-pad) var(--m-bottom-clear)}
+  .main-col{gap:18px}
+  .rail{position:static;max-height:none;overflow:visible;
+    display:flex;flex-direction:column;gap:var(--m-gap)}
+
+  /* ── Top bar ────────────────────────────────────────────────────────
+     52px, sticky, and it says where you are. The route name is here as
+     well as in the bottom bar because the bottom bar's label is 10px and
+     this one is the page's identity. */
+  .mobile-bar{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;
+    background:rgba(20,18,30,.86);backdrop-filter:blur(14px);
+    border-bottom:1px solid rgba(255,255,255,.055);
+    height:calc(var(--m-top-h) + var(--m-safe-t));
+    padding:0 10px 0 14px;padding-top:var(--m-safe-t)}
+  .mobile-bar .logo-mark{flex:0 0 auto}
+  .mobile-bar .m-title{font-family:'Playfair Display',Georgia,serif;
+    font-size:17px;font-weight:500;letter-spacing:-.2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .mobile-bar .m-btn{flex:0 0 var(--m-tap);width:var(--m-tap);height:var(--m-tap);
+    border-radius:12px;display:grid;place-items:center;color:var(--text-2)}
+  .mobile-bar .m-btn:active{background:rgba(255,255,255,.07)}
+  .mtop-spacer{margin-left:auto}
+
+  h1{font-size:26px;letter-spacing:-.6px;line-height:1.15}
+  .page-head .sub{font-size:13.5px}
+  .page-actions{margin-left:0;width:100%;flex-wrap:wrap;flex-shrink:1}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   BOTTOM NAVIGATION
+   Today | Calendar | ◎ | Projects | More
+   ══════════════════════════════════════════════════════════════════════ */
+.mnav{display:none}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* A direct child of #root, never of .shell.
+   *
+   * `.shell` was once `position:relative;z-index:1`, which made it a
+   * stacking context and trapped everything inside it below a scrim that
+   * was a sibling. The navigation is the one element that must never be
+   * covered, so it does not live inside anything that could acquire a
+   * z-index later. */
+  .mnav{position:fixed;left:0;right:0;bottom:0;z-index:130;
+    display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:end;
+    height:calc(var(--m-nav-h) + var(--m-safe-b));
+    padding-bottom:var(--m-safe-b);
+    background:rgba(20,18,30,.92);backdrop-filter:blur(18px) saturate(1.3);
+    border-top:1px solid rgba(255,255,255,.07)}
+
+  .mnav-i{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:3px;height:var(--m-nav-h);text-decoration:none;
+    color:var(--muted);font-size:10.5px;font-weight:600;letter-spacing:.01em;
+    background:none;border:0;position:relative;
+    -webkit-tap-highlight-color:transparent;
+    transition:color var(--d-fast) var(--e-out)}
+  .mnav-i .mnav-ico{display:grid;place-items:center;width:24px;height:24px}
+  .mnav-i svg{width:21px;height:21px}
+  /* The current route, said three ways: colour, weight, and a bar at the
+     top edge. Colour alone is not an answer for anyone who cannot see it. */
+  .mnav-i[aria-current="page"]{color:var(--text)}
+  .mnav-i[aria-current="page"]::before{content:'';position:absolute;top:0;
+    left:50%;transform:translateX(-50%);width:22px;height:2.5px;border-radius:0 0 3px 3px;
+    background:var(--accent)}
+  .mnav-i:active{color:var(--text-2)}
+
+  /* ── The centre action ───────────────────────────────────────────────
+     Larger, lifted, and the only gradient in the bar. It is the assistant,
+     and on a phone the assistant is the point. */
+  .mnav-ai{position:relative;display:grid;place-items:center;
+    width:56px;height:56px;margin:0 auto;justify-self:center;
+    align-self:center;transform:translateY(-10px);
+    border-radius:50%;border:0;padding:0;
+    background:var(--brand);color:#fff;
+    box-shadow:0 8px 22px -6px rgba(124,77,255,.7),0 0 0 5px rgba(20,18,30,.92);
+    -webkit-tap-highlight-color:transparent;
+    transition:transform var(--d-fast) var(--e-out),box-shadow var(--d-fast) var(--e-out)}
+  .mnav-ai:active{transform:translateY(-10px) scale(.93)}
+  .mnav-ai svg{width:26px;height:26px}
+  .mnav-ai[aria-current="page"]{box-shadow:0 8px 26px -4px rgba(124,77,255,.9),
+    0 0 0 5px rgba(20,18,30,.92),0 0 0 7px rgba(138,93,255,.5)}
+  /* The long-press affordance: a hint that fades in under the thumb rather
+     than a label nobody reads. */
+  .mnav-ai.is-holding{transform:translateY(-10px) scale(1.08)}
+
+  /* A modal or sheet owns the screen while it is open. Leaving the bar
+     visible under a bottom sheet puts two competing bottom edges on the
+     same 60px, and on a phone the sheet is what the finger is aimed at. */
+  body.modal-open .mnav,body.msheet-open .mnav{transform:translateY(110%);
+    pointer-events:none;transition:transform var(--d-base) var(--e-out)}
+
+  /* ── The virtual keyboard ────────────────────────────────────────────
+     A fixed bottom bar and a software keyboard fight over the same edge.
+     On Android the bar floats halfway up the screen; on iOS it sits on top
+     of the field being typed into. mobile.js watches visualViewport and
+     sets this class, and the bar simply leaves. */
+  html.kb-open .mnav{display:none}
+  html.kb-open .main-wrap{padding-bottom:24px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .mnav-i,.mnav-ai,body.modal-open .mnav,body.msheet-open .mnav{transition:none}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE SHEET
+   One primitive, used by More, Quick Add, a Book's contents, a Project's
+   tasks, and the day list under Month. Building a second sheet for each
+   of those is how an app ends up with five dismissal gestures.
+   ══════════════════════════════════════════════════════════════════════ */
+.msheet-scrim{position:fixed;inset:0;z-index:200;background:rgba(9,8,14,.66);
+  opacity:0;transition:opacity var(--d-base) var(--e-out)}
+.msheet-scrim.is-in{opacity:1}
+.msheet{position:fixed;left:0;right:0;bottom:0;z-index:201;
+  display:flex;flex-direction:column;
+  max-height:var(--m-sheet-max);
+  background:var(--surface);border-radius:22px 22px 0 0;
+  box-shadow:0 -18px 50px rgba(0,0,0,.5);
+  transform:translateY(101%);transition:transform var(--d-slow) var(--e-out);
+  padding-bottom:var(--m-safe-b)}
+.msheet.is-in{transform:none}
+/* On a tablet or a desktop the same component is a centred dialog: a sheet
+   glued to the bottom edge of a 1024px screen is a long way from the hand
+   and from whatever opened it. */
+@media (min-width:900px){
+  .msheet{left:50%;bottom:auto;top:50%;right:auto;
+    width:min(520px,calc(100vw - 64px));transform:translate(-50%,-46%) scale(.98);
+    border-radius:20px;max-height:min(80vh,720px);opacity:0}
+  .msheet.is-in{transform:translate(-50%,-50%);opacity:1}
+}
+
+.msheet-grab{flex:0 0 auto;width:38px;height:4px;border-radius:2px;
+  background:var(--border-strong);margin:9px auto 2px}
+@media (min-width:900px){.msheet-grab{display:none}}
+
+.msheet-head{flex:0 0 auto;display:flex;align-items:center;gap:10px;
+  padding:10px 16px 10px 18px;border-bottom:1px solid var(--hairline)}
+.msheet-head h2{margin:0;font-size:16px;font-weight:600;letter-spacing:-.2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.msheet-head .msheet-sub{font-size:12px;color:var(--muted);margin-left:2px;
+  font-variant-numeric:tabular-nums}
+.msheet-x{margin-left:auto;flex:0 0 var(--m-tap);width:var(--m-tap);height:var(--m-tap);
+  display:grid;place-items:center;border-radius:11px;color:var(--text-2);font-size:19px}
+.msheet-x:active{background:rgba(255,255,255,.07)}
+.msheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;padding:8px 0 14px}
+.msheet-foot{flex:0 0 auto;padding:12px 16px calc(12px + var(--m-safe-b));
+  border-top:1px solid var(--hairline);display:flex;gap:10px}
+.msheet-foot .btn{flex:1;min-height:48px;justify-content:center}
+
+/* A row inside a sheet. 52px, full-bleed press state, chevron on the right. */
+.msheet-row{display:flex;align-items:center;gap:14px;width:100%;
+  min-height:52px;padding:10px 18px;text-align:left;
+  background:none;border:0;color:var(--text);font-size:15px;font-weight:500;
+  text-decoration:none;-webkit-tap-highlight-color:transparent}
+.msheet-row:active{background:rgba(255,255,255,.06)}
+.msheet-row .msheet-ico{flex:0 0 26px;display:grid;place-items:center;color:var(--text-2)}
+.msheet-row .msheet-ico svg{width:20px;height:20px}
+.msheet-row .msheet-r{margin-left:auto;display:flex;align-items:center;gap:8px;
+  color:var(--muted);font-size:12.5px}
+.msheet-row .msheet-chev{color:var(--muted);opacity:.7}
+.msheet-row[aria-current="page"]{color:var(--accent)}
+.msheet-row[aria-current="page"] .msheet-ico{color:var(--accent)}
+.msheet-row-desc{display:block;font-size:12px;font-weight:400;color:var(--muted);
+  margin-top:2px;line-height:1.35}
+.msheet-group{padding:14px 18px 6px;font-size:11px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.msheet-sep{height:1px;background:var(--hairline);margin:8px 0}
+
+@media (prefers-reduced-motion:reduce){
+  .msheet,.msheet-scrim{transition:none}
+  .msheet{transform:none;opacity:1}
+  @media (min-width:900px){.msheet{transform:translate(-50%,-50%)}}
+}
+
+/* Shared bits a sheet's contents need. */
+.msheet-pad{padding:6px 18px 12px}
+.msheet-p{margin:0 0 10px;font-size:13.5px;line-height:1.55;color:var(--text-2)}
+.msheet-list{margin:10px 0 0;padding-left:18px;font-size:13px;color:var(--text-2);line-height:1.7}
+.msheet-label{display:block}
+
+/* ══════════════════════════════════════════════════════════════════════
+   TODAY, ON A PHONE
+   Next -> the day in a line -> the assistant -> today's work -> habits
+   -> everything later. In that order because that is the order the
+   questions are asked in when somebody takes their phone out.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* The rail's only content is Habits, and on a phone Habits are a card in
+     the flow and a sheet behind it — the same information, reached the way a
+     phone reaches things. Not a removal: it is in More as well. */
+  .rail{display:none}
+  .main-wrap{grid-template-columns:minmax(0,1fr)}
+
+  .m-sec-h{margin:0;font-size:11px;font-weight:700;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--muted)}
+
+  /* ── Next ─────────────────────────────────────────────────────────── */
+  .m-next{display:flex;flex-direction:column;gap:7px}
+  .m-next-row{display:flex;align-items:center;gap:13px;width:100%;text-align:left;
+    min-height:66px;padding:12px 14px;border-radius:var(--m-radius);
+    background:linear-gradient(135deg,rgba(138,93,255,.17),rgba(138,93,255,.05));
+    border:1px solid rgba(138,93,255,.24);color:var(--text)}
+  .m-next-row:active{background:rgba(138,93,255,.24)}
+  .m-next-time{flex:0 0 auto;font-size:17px;font-weight:700;letter-spacing:-.4px;
+    font-variant-numeric:tabular-nums}
+  .m-next-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+  .m-next-title{font-size:15px;font-weight:600;line-height:1.25;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .m-next-in{font-size:12.5px;color:var(--accent);font-weight:600}
+  .m-next-chev{color:var(--muted);display:flex}
+  .m-next.is-clear{flex-direction:row;align-items:center;gap:10px;
+    padding:12px 14px;border-radius:var(--m-radius);
+    background:var(--surface);border:1px solid var(--border)}
+  .m-next-none{font-size:13.5px;color:var(--text-2)}
+  .m-next-go{margin-left:auto;min-height:var(--m-tap);padding:0 12px;border-radius:10px;
+    font-size:13px;font-weight:600;color:var(--accent)}
+
+  /* ── The assistant's home state ───────────────────────────────────── */
+  .m-ai{display:flex;flex-direction:column;gap:10px;align-items:stretch}
+  .m-glance{margin:0;font-size:13.5px;color:var(--text-2);font-variant-numeric:tabular-nums}
+  .ai-invite{display:flex;align-items:center;gap:15px;width:100%;text-align:left;
+    padding:13px 16px 13px 10px;border-radius:20px;
+    background:radial-gradient(120% 160% at 12% 50%,rgba(138,93,255,.20),rgba(138,93,255,.04));
+    border:1px solid rgba(138,93,255,.24);color:var(--text);
+    -webkit-tap-highlight-color:transparent}
+  .ai-invite:active{background:rgba(138,93,255,.24)}
+  .ai-invite-t{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .ai-invite-say{font-size:15.5px;font-weight:600;letter-spacing:-.2px}
+  .ai-invite-sub{font-size:12px;color:var(--muted);line-height:1.35}
+
+  /* ── The board ────────────────────────────────────────────────────── */
+  .m-toolbar{display:flex;flex-direction:column;gap:10px;align-items:stretch}
+  .m-toolbar .btn{min-height:46px;justify-content:center}
+  .m-toolbar .filters{display:flex;gap:8px;flex-wrap:nowrap;overflow-x:auto;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;
+    margin-inline:calc(-1 * var(--m-pad));padding-inline:var(--m-pad)}
+  .m-toolbar .filters::-webkit-scrollbar{display:none}
+  .m-toolbar .chip{flex:0 0 auto}
+
+  .m-buckets{display:flex;flex-direction:column;gap:var(--m-gap)}
+  .m-buckets .bucket{min-width:0}
+
+  /* ── Later ────────────────────────────────────────────────────────── */
+  .m-later{display:flex;flex-direction:column;gap:8px}
+  .m-later-b{background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--m-radius);overflow:hidden}
+  .m-later-b > summary{display:flex;align-items:center;gap:10px;
+    min-height:52px;padding:0 14px;cursor:pointer;list-style:none;
+    font-size:14.5px;font-weight:600;-webkit-tap-highlight-color:transparent}
+  .m-later-b > summary::-webkit-details-marker{display:none}
+  .m-later-b > summary:active{background:rgba(255,255,255,.05)}
+  .m-later-l{flex:1;min-width:0}
+  .m-later-b .bucket-count{font-size:12px;font-weight:700;color:var(--muted);
+    font-variant-numeric:tabular-nums;background:rgba(255,255,255,.06);
+    border-radius:999px;padding:2px 9px}
+  .m-later-chev{display:flex;color:var(--muted);
+    transition:transform var(--d-fast) var(--e-out)}
+  .m-later-b[open] > summary .m-later-chev{transform:rotate(90deg)}
+  /* The bucket inside carries its own heading on the desktop; here the
+     summary above IS the heading, and two would be a heading inside a
+     heading. The count in the summary is the one syncBucketCounts finds,
+     because it comes first in document order. */
+  .m-later-b .bucket-head{display:none}
+  .m-later-b .drop{padding:0 8px 10px}
+
+  /* ── Habits ───────────────────────────────────────────────────────── */
+  .m-habits{background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--m-radius);padding:4px 0 12px}
+  .m-habits-h{display:flex;align-items:center;gap:10px;width:100%;
+    min-height:var(--m-tap);padding:0 14px;text-align:left}
+  .m-habits-h .m-sec-h{flex:1}
+  .m-habits-n{font-size:13px;font-weight:700;color:var(--text-2);
+    font-variant-numeric:tabular-nums}
+  .m-habits-row{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 2px;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .m-habits-row::-webkit-scrollbar{display:none}
+  .m-hb{flex:0 0 auto;display:flex;align-items:center;gap:7px;min-height:40px;
+    padding:0 13px 0 9px;border-radius:999px;background:rgba(255,255,255,.05);
+    border:1px solid var(--border);font-size:13px;color:var(--text-2);
+    -webkit-tap-highlight-color:transparent}
+  .m-hb-tick{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
+    border:1.5px solid var(--border-strong);font-size:12px;color:#0E0B16}
+  .m-hb.is-done{background:rgba(0,217,163,.13);border-color:rgba(0,217,163,.4);color:var(--text)}
+  .m-hb.is-done .m-hb-tick{background:var(--ok);border-color:var(--ok)}
+  .m-habits-empty{margin:2px 14px 0;font-size:13px;color:var(--muted)}
+}
+
+/* The habits sheet. Outside the phone query on purpose: the sheet component
+   is used on a tablet too, where it is a centred dialog. */
+.m-hrow{display:flex;align-items:center;gap:8px;padding-right:14px}
+.m-hrow-main{flex:1;display:flex;align-items:center;gap:14px;min-height:54px;
+  padding:8px 0 8px 18px;text-align:left;color:var(--text);
+  -webkit-tap-highlight-color:transparent}
+.m-hrow-main:active{background:rgba(255,255,255,.06)}
+.m-hrow-tick{flex:0 0 24px;width:24px;height:24px;border-radius:50%;
+  display:grid;place-items:center;border:1.5px solid var(--border-strong);
+  font-size:13px;color:#0E0B16}
+.m-hrow.is-done .m-hrow-tick{background:var(--ok);border-color:var(--ok)}
+.m-hrow-t{min-width:0}
+
+/* Quick add. The field is first and focused: capture must never wait on a
+   decision about which KIND of thing is being captured. */
+.qa-form{display:flex;gap:9px;align-items:stretch}
+.qa-form .m-input{flex:1;min-width:0;min-height:48px}
+.qa-form .btn{min-height:48px;padding:0 18px}
+.qa-hint{margin:9px 0 0;font-size:12px;color:var(--muted);line-height:1.45}
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE ASSISTANT
+   Not phone-only: the route resolves at every width so a refresh or a
+   shared link lands somewhere real. It is COMPOSED for a phone, which is
+   where it is meant to be used.
+   ══════════════════════════════════════════════════════════════════════ */
+.asst{display:flex;flex-direction:column;gap:16px;min-height:60vh;
+  max-width:620px;margin:0 auto;width:100%}
+
+/* The label. It is at the top, in the flow, and it does not go away — an
+   assistant that is a prototype has to say so every time it is used, not
+   once in a tooltip somebody dismissed a week ago. */
+.asst-note{display:flex;gap:10px;align-items:flex-start;
+  padding:11px 14px;border-radius:12px;font-size:12.5px;line-height:1.5;
+  background:rgba(255,196,77,.08);border:1px solid rgba(255,196,77,.24);
+  color:var(--text-2)}
+.asst-note b{color:var(--warn)}
+.asst-dot{flex:0 0 8px;width:8px;height:8px;border-radius:50%;
+  background:var(--warn);margin-top:6px}
+
+/* ── The transcript ─────────────────────────────────────────────────────
+   Above the orb, and it only takes space once there are words in it (§10).
+   An empty box reserved for text that has not arrived reads as a failure. */
+.asst-script{min-height:0;max-height:34vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.asst-line{margin:0;font-size:17px;line-height:1.45;letter-spacing:-.2px;color:var(--text)}
+.asst-src{margin:0;font-size:11.5px;color:var(--muted);line-height:1.45;
+  padding:7px 11px;border-radius:9px;background:rgba(255,255,255,.045)}
+.asst-src[hidden]{display:none}
+
+/* ── The stage ─────────────────────────────────────────────────────────
+   The orb, and the one line saying what it is doing. Once a transcript
+   exists the whole stage moves DOWN, opening the space above it — one
+   composited transform, and it reverses cleanly. */
+.asst-stage{display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:10px 0 2px;transition:transform var(--d-slower) var(--e-out)}
+.asst.has-script .asst-stage{transform:translateY(10px)}
+.asst[data-state="proposal"] .asst-stage{transform:scale(.62);
+  transform-origin:top center;margin-bottom:-58px;opacity:.75}
+.asst-say{margin:0;font-size:16px;font-weight:600;letter-spacing:-.2px;text-align:center}
+.asst-sub{margin:0;font-size:12.5px;color:var(--muted);text-align:center;min-height:17px}
+.asst[data-state="listening"] .asst-say,
+.asst[data-state="paused"] .asst-say{color:var(--accent)}
+
+.asst-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.asst-actions .btn{min-height:48px}
+.asst-big{padding:0 26px;font-size:15px}
+
+/* ── The orb ───────────────────────────────────────────────────────────
+   The canvas draws the body and everything the voice does to it. The mark
+   is a DOM element on top, so it stays crisp and is never re-rasterised. */
+.orb{position:relative;display:grid;place-items:center;flex:0 0 auto}
+.orb-lg{width:min(280px,72vw);height:min(280px,72vw)}
+.orb-md{width:88px;height:88px}
+.orb-canvas{position:absolute;inset:0;width:100%;height:100%}
+.orb-mark{position:relative;display:grid;place-items:center;
+  filter:drop-shadow(0 2px 6px rgba(0,0,0,.35))}
+/* The mark rides on top of the body, so it is white rather than the brand
+   gradient — a purple lotus on a purple ball is a lotus nobody can see. */
+.orb-mark svg path{fill:#fff;fill-opacity:.94}
+.orb-mark svg path:first-of-type,.orb-mark svg path:nth-of-type(2){fill-opacity:.72}
+
+/* ── The proposal ──────────────────────────────────────────────────────
+   Once there is something to agree to, it is the page. */
+.asst-review{display:flex;flex-direction:column;gap:12px}
+.asst-h{margin:0;font-size:13px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted)}
+.asst-reply{margin:0;font-size:15.5px;line-height:1.5;color:var(--text)}
+.asst-empty{margin:0;font-size:13px;color:var(--muted)}
+
+.ap{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--m-radius);padding:13px 14px 12px;
+  display:flex;flex-direction:column;gap:7px;
+  transition:opacity var(--d-fast) var(--e-out)}
+.ap.is-off{opacity:.44}
+.ap.is-important{border-color:rgba(255,196,77,.34)}
+.ap-head{display:flex;align-items:center;gap:9px}
+.ap-kind{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:3px 8px}
+.ap.is-important .ap-kind{color:var(--warn);background:rgba(255,196,77,.13)}
+.ap-flag{font-size:11px;color:var(--warn)}
+.ap-on{margin-left:auto;display:grid;place-items:center;
+  width:var(--m-tap);height:var(--m-tap);margin-right:-10px;margin-top:-8px;margin-bottom:-8px}
+.ap-on input{width:22px;height:22px;accent-color:var(--accent)}
+.ap-title{margin:0;font-size:16px;font-weight:600;line-height:1.3;letter-spacing:-.2px}
+.ap-sum{margin:0;font-size:13px;color:var(--text-2)}
+.ap-ctx{margin:0;font-size:12.5px;color:var(--ok)}
+.ap-items{margin:2px 0 0;padding:0;list-style:none;display:flex;flex-direction:column}
+.ap-item{display:flex;align-items:center;gap:11px;min-height:var(--m-tap);
+  font-size:14.5px;cursor:pointer}
+.ap-item input{width:20px;height:20px;accent-color:var(--accent)}
+.ap-fields{display:flex;flex-wrap:wrap;gap:7px;margin-top:3px}
+.ap-field{display:inline-flex;align-items:center;gap:7px;min-height:38px;
+  padding:0 11px;border-radius:10px;background:rgba(255,255,255,.05);
+  border:1px solid var(--border);color:var(--text);font-size:13px;
+  position:relative}
+/* 44px of finger over a 38px control — the row would grow to 44 and the card
+   would become a stack of buttons. The paint stays small; the target does not. */
+.ap-field::after{content:'';position:absolute;top:50%;left:0;right:0;
+  height:var(--m-tap);transform:translateY(-50%)}
+.ap-field:active{background:rgba(255,255,255,.1)}
+.ap-flabel{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em}
+.ap-fvalue{font-weight:600}
+.ap-field svg{color:var(--muted)}
+
+/* Confirm. It counts, and the number is derived from the list above it —
+   see changeCount() for why those two can never disagree. */
+.asst-confirm{position:sticky;bottom:calc(var(--m-nav-h) + var(--m-safe-b) + 8px);
+  display:flex;gap:10px;padding:10px 0 2px;z-index:5}
+.asst-confirm .btn{flex:1;min-height:52px;justify-content:center;font-size:15px}
+.asst-confirm .btn-primary{flex:2}
+@media (min-width:900px){.asst-confirm{bottom:14px}}
+
+.asst-ta{width:100%;min-height:110px;resize:vertical;line-height:1.5}
+.asst-demos{margin-top:12px;display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.asst-demos-h{width:100%;font-size:11px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted)}
+
+/* ── Development panel ─────────────────────────────────────────────────
+   Marked as development, at the bottom, and it disappears with DEV_PREVIEW.
+   One of the three listening styles will be chosen and the other two
+   deleted, so this is not a preference and does not belong in Settings. */
+.asst-dev{margin-top:8px;padding:14px;border-radius:var(--m-radius);
+  border:1px dashed var(--border-strong);background:rgba(255,255,255,.02)}
+.asst-dev h2{margin:0 0 4px;font-size:11px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--muted)}
+.asst-dev-p{margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.5}
+.asst-dev-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}
+.asst-dev-hint{margin:0 0 10px;font-size:12px;color:var(--text-2)}
+
+@media (prefers-reduced-motion:reduce){
+  .asst-stage{transition:none}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   CALENDAR
+   Agenda | Day | 3 day | Month. Not a shrunken desktop calendar: Plan
+   week is not offered here at all, because seven draggable columns on a
+   390px screen is seven columns nobody can read or hit.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .cal-head,.cal-body{margin-left:0;max-width:none}
+  .cal-head-row{flex-direction:column;align-items:stretch;gap:11px}
+  .cal-head-side{justify-content:space-between}
+  /* Four modes across 390px. The pill track fills the row and each tab is a
+     quarter of it — equal, tappable, and never a horizontal scroller, which
+     would hide the mode you are not currently in. */
+  .cal-modes{flex:1;width:100%}
+  .cal-modes [role="tab"]{min-height:42px;padding:0 4px;font-size:12.5px}
+  .cal-period-label{flex:1;min-width:0}
+  .cal-nav,.cal-today{min-height:var(--m-tap)}
+  .cal-body{grid-template-columns:minmax(0,1fr)}
+  .cal-rail{position:static;overflow:visible}
+  .cal-rail-in{width:auto;margin-left:0;margin-top:16px;opacity:1}
+
+  /* ── Agenda ───────────────────────────────────────────────────────────
+     The default, and the view a phone is picked up for. Time on the left,
+     what it is on the right, days as headings. */
+  .cal-agenda{max-width:none}
+  .cal-body .ag-day{grid-template-columns:minmax(0,1fr);gap:6px;padding:4px 0 12px}
+  .ag-item{min-height:52px}
+
+  /* ── Day and 3 day ────────────────────────────────────────────────────
+     The same grid Plan week is built from, with one or three columns. The
+     hour rows are taller than the desktop's 46px: an hour that is 46px tall
+     makes a half-hour 23px, and nothing at 23px can be hit with a thumb. */
+  .cal-plan{overflow-x:visible}
+  .cal-plan.is-day .pl-grid,.cal-plan.is-three .pl-grid{min-width:0;gap:4px}
+  .cal-plan.is-day .pl-grid{grid-template-columns:44px minmax(0,1fr)}
+  .cal-plan.is-three .pl-grid{grid-template-columns:38px repeat(3,minmax(0,1fr))}
+  .cal-plan.is-day .pl-canvas,.cal-plan.is-three .pl-canvas{
+    min-height:calc(var(--pl-hours) * 68px)}
+  .cal-plan.is-day .pl-ev,.cal-plan.is-day .pl-block,
+  .cal-plan.is-three .pl-ev,.cal-plan.is-three .pl-block{font-size:12px;padding:5px 8px}
+  .cal-plan.is-day .pl-ev b,.cal-plan.is-three .pl-ev b{font-size:11px}
+  .cal-plan.is-day .pl-hour,.cal-plan.is-three .pl-hour{font-size:10.5px}
+  .cal-plan.is-day .pl-num{font-size:17px}
+  /* A weekend is not a lesser day on a phone — the narrowing that keeps a
+     seven-column week readable has nothing to narrow here. */
+  .cal-plan.is-day .pl-day.is-weekend .pl-day-head,
+  .cal-plan.is-three .pl-day.is-weekend .pl-day-head{opacity:1}
+  .cal-plan.is-day .pl-day.is-weekend .pl-canvas,
+  .cal-plan.is-three .pl-day.is-weekend .pl-canvas{background:var(--surface)}
+  /* Plan week is not offered on a phone, but a tablet rotating into a phone
+     width mid-render must not leave a 820px grid behind. */
+  .cal-plan.is-week{overflow-x:auto}
+
+  /* ── Month ────────────────────────────────────────────────────────────
+     Dates, density, selection and today. Tap a day and it opens beneath. */
+  .cm-grid{grid-auto-rows:minmax(52px,auto);gap:3px}
+  .cm-cell-m{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+    gap:4px;padding:6px 2px;min-height:52px}
+  .cm-cell-m .cm-date{font-size:14px;font-weight:600;padding:2px 6px}
+  .cm-dots{display:flex;align-items:center;justify-content:center;gap:3px;flex-wrap:wrap;
+    min-height:7px;max-width:100%}
+  .cm-dots i{width:5px;height:5px;border-radius:50%;display:block;flex:0 0 auto}
+  .cm-dots .cm-dot-warn{background:var(--warn)}
+  .cm-dots-n{font-size:9px;font-weight:700;color:var(--muted);
+    font-variant-numeric:tabular-nums;margin-left:1px}
+  .cm-dow{font-size:10px}
+  /* The selected day's panel is the rail, stacked underneath. Same content
+     the desktop shows beside the grid — moved, not reduced. */
+  .cal-rail-in .cs-card,.cal-rail-in .rail-card{width:auto}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   TASKS ON A PHONE
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* The row already reflows (title on its own line, controls beneath) from
+     the touch pass. What it needs here is somewhere for the swipe to happen. */
+  .task{position:relative;overflow:hidden}
+  .task > .t-row,.task > .t-steps{position:relative;z-index:1;background:inherit}
+}
+
+/* The layer behind a swiping row. It says what will happen BEFORE release —
+   a swipe whose outcome is only revealed by doing it is a gamble, and people
+   stop using it after the first time it does the wrong thing. */
+.swipe-back{position:absolute;inset:0;display:flex;align-items:center;
+  padding:0 18px;font-size:13px;font-weight:700;letter-spacing:.02em;
+  color:var(--text);pointer-events:none;border-radius:inherit;opacity:.55}
+.swipe-back.is-right{justify-content:flex-start;background:rgba(0,217,163,.22)}
+.swipe-back.is-left{justify-content:flex-end;background:rgba(138,93,255,.22)}
+.swipe-back.is-armed{opacity:1}
+.swipe-back.is-right.is-armed{background:rgba(0,217,163,.34)}
+.swipe-back.is-left.is-armed{background:rgba(138,93,255,.36)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIALOGS BECOME SHEETS
+   Every modal in the app, at the phone breakpoint — not just the four
+   that were listed by name last time. A dialog centred on a 390px screen
+   is a dialog with 20px of margin pretending to be a desktop.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .modal,.modal-narrow,.modal-event,.modal-reminder,.modal-schedule,
+  .modal-detail,.modal-picker,.modal-choice,.modal.ev-modal{
+    left:0;right:0;bottom:0;top:auto;transform:none;
+    width:100%;max-width:100%;max-height:min(94dvh,100dvh - 24px);
+    border-radius:22px 22px 0 0}
+  /* The head stays put and the body scrolls, so the title of what you are
+     editing does not scroll away from the fields that edit it. */
+  .modal{display:flex;flex-direction:column}
+  .m-head{flex:0 0 auto}
+  .m-body{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding-bottom:16px}
+  /* The footer is pinned, and it rides ABOVE the keyboard rather than under
+     it. --kb-h is published by mobile.js from visualViewport; it is 0 when
+     no keyboard is up, so the safe-area padding is what applies then. */
+  .m-foot{flex:0 0 auto;position:sticky;bottom:0;z-index:2;
+    background:var(--surface);border-top:1px solid var(--hairline);
+    padding-bottom:calc(14px + var(--m-safe-b))}
+  .m-foot .btn{min-height:46px}
+  .m-foot .btn-primary{flex:1;justify-content:center}
+  .m-grid{grid-template-columns:1fr;gap:12px}
+  .m-title{font-size:19px}
+
+  /* §17 The disclosure. Everything the desktop form has is still in the
+     sheet; the second half of it is one tap down rather than competing with
+     the title for the first screenful. */
+  .m-more{border-top:1px solid var(--hairline);margin-top:4px;padding-top:4px}
+  .m-more > summary{display:flex;align-items:center;gap:8px;list-style:none;
+    min-height:var(--m-tap);font-size:13.5px;font-weight:600;color:var(--text-2);
+    cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .m-more > summary::-webkit-details-marker{display:none}
+  .m-more-chev{margin-left:auto;width:8px;height:8px;border-right:1.6px solid currentColor;
+    border-bottom:1.6px solid currentColor;transform:rotate(45deg) translate(-2px,-2px);
+    transition:transform var(--d-fast) var(--e-out)}
+  .m-more[open] .m-more-chev{transform:rotate(225deg) translate(-2px,-2px)}
+  .m-more > .m-grid{padding-bottom:8px}
+
+  /* Anything that was a hover-only affordance inside a dialog is permanent. */
+  .m-steps .ts-row .ts-x{opacity:1}
+}
+
+/* Outside the phone query: the disclosure exists at every width, because the
+   editor is one component and a control that only exists on one device is a
+   control the other device's users get told about and cannot find. */
+.m-more{border-top:1px solid var(--hairline);margin-top:2px}
+.m-more > summary{display:flex;align-items:center;gap:8px;list-style:none;
+  min-height:40px;font-size:13px;font-weight:600;color:var(--text-2);cursor:pointer}
+.m-more > summary::-webkit-details-marker{display:none}
+.m-more-chev{margin-left:auto;width:7px;height:7px;border-right:1.6px solid currentColor;
+  border-bottom:1.6px solid currentColor;transform:rotate(45deg) translate(-2px,-2px);
+  transition:transform var(--d-fast) var(--e-out)}
+.m-more[open] .m-more-chev{transform:rotate(225deg) translate(-2px,-2px)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   ONE DROPDOWN GRAMMAR (§38)
+   On a phone every menu is a sheet. The shared dropdown gets there
+   through mobile.js; the date and time pickers get there through this,
+   because they are anchored panels and an anchored panel near the bottom
+   of a bottom sheet has nowhere left to go.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* Fixed, not absolute: it leaves the dialog's coordinate space entirely,
+     so the inline left/top that anchor() wrote no longer means anything and
+     the panel is simply attached to the bottom of the screen. */
+  .cf-pop:not([hidden]){position:fixed;inset:auto 0 0 0;
+    left:0!important;top:auto!important;width:100%;z-index:210;
+    max-height:min(72dvh,560px);overflow-y:auto;-webkit-overflow-scrolling:touch;
+    background:var(--surface);border-top:1px solid var(--border);
+    border-radius:20px 20px 0 0;box-shadow:0 -16px 44px rgba(0,0,0,.5);
+    padding-bottom:calc(8px + var(--m-safe-b))}
+  .cf-pop .cf-menu,.cf-pop .dp,.cf-pop .tp{max-height:none;width:auto}
+  .cf-pop .dp-day,.cf-pop .tp-opt{min-height:var(--m-tap)}
+  .cf-ctl{height:auto;min-height:var(--m-tap);padding:0 12px}
+  .cf-menu-btn{min-width:0}
+}
+
+/* The dropdown's own rows inside a sheet. */
+.cf-sheet-opt .cf-menu-tick{width:9px;height:5px;
+  border-left:1.8px solid var(--accent);border-bottom:1.8px solid var(--accent);
+  transform:rotate(-45deg) translate(1px,-2px)}
+.cf-sheet-opt[aria-current="page"] .msheet-label{color:var(--accent);font-weight:600}
+.cf-sheet-opt .cf-menu-mark{width:9px;height:9px;border-radius:50%;flex:0 0 auto;
+  margin-left:18px}
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE BOOK ON A PHONE (§27, §28, §30, §31, §32)
+   One readable page. The tab strip becomes one control that says where
+   you are; the Project rail becomes a sheet; the formatting toolbar
+   moves to the keyboard.
+   ══════════════════════════════════════════════════════════════════════ */
+.bk-mbar{display:none}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .bk-mbar{display:flex;align-items:center;gap:8px;width:100%;
+    padding:0 0 10px;border-bottom:1px dashed var(--border);margin-bottom:12px}
+  .bk-mbar-x{flex:0 0 var(--m-tap);width:var(--m-tap);height:var(--m-tap);
+    display:grid;place-items:center;border-radius:11px;color:var(--text-2)}
+  .bk-mbar-x svg{width:20px;height:20px}
+  .bk-mbar-x:active{background:rgba(255,255,255,.07)}
+  .bk-mbar-mid{flex:1;min-width:0;display:flex;align-items:baseline;gap:9px;
+    min-height:var(--m-tap);padding:0 8px;border-radius:11px;text-align:left}
+  .bk-mbar-mid:active{background:rgba(255,255,255,.06)}
+  .bk-mbar-sec{font-family:'Playfair Display',Georgia,serif;font-size:16px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .bk-mbar-n{flex:0 0 auto;font-size:12px;color:var(--muted);
+    font-variant-numeric:tabular-nums}
+  .bk-mbar-tasks{flex:0 0 auto;display:flex;align-items:center;gap:6px;
+    min-height:var(--m-tap);padding:0 12px;border-radius:11px;
+    background:var(--surface-2);border:1px solid var(--border);
+    font-size:12.5px;font-weight:600;color:var(--text-2)}
+  .bk-mbar-tasks b{font-variant-numeric:tabular-nums;color:var(--accent)}
+
+  /* The tab strip and the bookmark row are IN the contents sheet now. They
+     are not gone — they are one tap away, and the page has its width back. */
+  .bk-tabs,.bk-marks{display:none}
+
+  /* The rail lives in a sheet on a phone; hiding the aside also collapses
+     the column it sat in, or the book keeps a 320px gap beside it. */
+  .bk-layout.has-rail{grid-template-columns:minmax(0,1fr)}
+  .bk-rail{display:none}
+  /* …except while it is inside one, where it is the sheet's contents. */
+  .msheet .bk-rail{display:block;position:static;max-height:none;width:auto;
+    background:none;border:0;padding:0 16px 8px}
+  .msheet .bk-rail-in{width:auto}
+
+  /* One page, always. Text at reading size, phone margins, and the arrows
+     over the outer edges rather than beside the page — see app.css, which
+     already does this below 480px; this brings it to every phone width. */
+  .bk-book.bk-spread:not(.dia-book){aspect-ratio:auto;min-height:60dvh;
+    grid-template-columns:minmax(0,1fr);max-width:none}
+  .bk-page{padding:20px 16px 14px 40px;font-size:15px}
+  .bk-page-right{padding:20px 40px 14px 16px}
+  .bk-page::before{left:32px}
+  .bk-page-right::before{left:auto;right:32px}
+  .bk-stage{position:relative;gap:0}
+  .bk-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:3;
+    width:var(--m-tap);height:var(--m-tap);
+    background:rgba(20,18,32,.72);backdrop-filter:blur(6px);
+    border-color:rgba(255,255,255,.1)}
+  .bk-arrow:disabled{opacity:.22}
+  #bk-prev{left:2px}
+  #bk-next{right:2px}
+
+  /* ── §32 The formatting toolbar goes to the keyboard ──────────────────
+     A toolbar at the top of the page is several hundred pixels from a caret
+     at the bottom of it, and once the keyboard is up it may not be on screen
+     at all. --kb-h is the measured keyboard height, published by mobile.js.
+     When no keyboard is up the toolbar stays where it was. */
+  html.kb-open .bk-toolbar{position:fixed;left:0;right:0;bottom:var(--kb-h,0px);
+    z-index:140;margin:0;border-radius:0;
+    background:rgba(23,21,31,.97);backdrop-filter:blur(14px);
+    border-top:1px solid var(--border);
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));
+    display:flex;flex-wrap:nowrap;overflow-x:auto;gap:4px;
+    scrollbar-width:none}
+  html.kb-open .bk-toolbar::-webkit-scrollbar{display:none}
+  html.kb-open .bk-toolbar .bk-tb{flex:0 0 auto;min-width:42px;min-height:42px}
+  html.kb-open .bk-toolbar .bk-tb-style{flex:0 0 auto;min-height:42px}
+  /* Room under the page for it, so the last line is never behind the bar. */
+  html.kb-open .bk-page{padding-bottom:64px}
+
+  .bk-toolbar{width:100%;justify-content:flex-start;overflow-x:auto;
+    flex-wrap:nowrap;scrollbar-width:none}
+  .bk-toolbar::-webkit-scrollbar{display:none}
+  .bk-tb{min-width:40px;min-height:40px}
+  .bk-search{position:fixed;left:12px;right:12px;top:64px;width:auto;z-index:150}
+}
+
+.bk-mdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-left:18px}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PINBOARD (§33, §34)
+   The board keeps its geometry and the screen moves over it.
+   ══════════════════════════════════════════════════════════════════════ */
+.pin-vp{position:relative;width:100%;height:100%;min-height:0}
+.pin-ctl{display:none}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* Full-bleed: a pinboard on a phone is the page. */
+  .bk-l-pinboard{padding:12px 10px 10px}
+  .bk-l-pinboard .bk-page-hdr{height:auto;flex-wrap:wrap;gap:8px}
+  .bk-pin-tools{display:flex;gap:6px;flex-wrap:wrap;width:100%}
+  .bk-pin-tools .btn{min-height:40px}
+
+  /* touch-action:none is the whole of §34's second half. Without it the
+     browser claims the gesture for page scrolling and the canvas gets a
+     stream of pointercancel events instead of a pan. */
+  .pin-vp{overflow:hidden;touch-action:none;overscroll-behavior:contain;
+    min-height:58dvh;border-radius:12px;background:rgba(0,0,0,.16);
+    border:1px solid var(--border)}
+  .pin-vp > .bk-board{position:absolute;top:0;left:0;
+    /* A design size, not the viewport: the board has to have a real box for
+       percentage coordinates to mean anything, and it is then scaled to fit
+       rather than squashed to the screen.
+       Narrower than a desktop spread on purpose — the whole board is fitted
+       on open, and every pixel of design width is a pixel the fit has to
+       shrink, so a 1300px spread would open at 24% and be unreadable before
+       anybody had touched it. */
+    width:720px;height:500px;transform-origin:0 0;will-change:transform}
+
+  /* Every control the board offers, at a size a finger can hit. The grip,
+     the resize handle and the connector are 44px targets over their painted
+     size — a 12px handle is a handle for a mouse. */
+  .bk-pin-grip,[data-pin-resize],[data-pin-connect]{touch-action:none;position:relative}
+  .bk-pin-grip::after,[data-pin-resize]::after,[data-pin-connect]::after{
+    content:'';position:absolute;top:50%;left:50%;width:38px;height:38px;
+    transform:translate(-50%,-50%)}
+  /* Permanently visible: there is no hover to reveal them with (§47). */
+  .bk-pin .bk-pin-grip,.bk-pin [data-pin-resize],.bk-pin [data-pin-connect]{opacity:1}
+
+  .pin-ctl{display:flex;align-items:center;gap:2px;position:absolute;
+    right:10px;bottom:10px;z-index:4;padding:3px;border-radius:12px;
+    background:rgba(20,18,32,.86);backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,.1)}
+  .pin-ctl-b{min-width:40px;min-height:40px;display:grid;place-items:center;
+    border-radius:9px;color:var(--text-2);font-size:16px;font-weight:600}
+  .pin-ctl-b:active{background:rgba(255,255,255,.09)}
+  .pin-ctl-fit{font-size:12.5px;padding:0 12px}
+  .pin-ctl-z{min-width:44px;text-align:center;font-size:11.5px;color:var(--muted);
+    font-variant-numeric:tabular-nums}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PROJECTS (§25, §26)
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .pj-head,.pj-list{margin-left:0;max-width:none}
+  .pj-head-row{flex-direction:column;align-items:stretch;gap:12px}
+  .pj-head-side{justify-content:space-between}
+  .pj-list{gap:18px}
+
+  /* Title, next action, progress, lifecycle. The area, the focus and the
+     target date are all on the project's own page — one tap, not gone. */
+  .pj-row{padding:14px 12px 12px 14px;gap:8px}
+  .pj-title{font-size:16.5px;white-space:normal}
+  .pj-outcome{display:none}
+  .pj-area,.pj-target{display:none}
+  .pj-foot{gap:7px}
+  /* Always visible: there is no hover to reveal it with (§47). */
+  .pj-row .pj-more{opacity:1;width:var(--m-tap);height:var(--m-tap);margin-top:-2px}
+  .pj-next-t{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;
+    -webkit-box-orient:vertical;overflow:hidden}
+
+  /* ── Detail ───────────────────────────────────────────────────────── */
+  .pjd-head .pj-head-row{gap:8px}
+  .pjd-left{min-width:0}
+  .pjd-left h1{font-size:24px;white-space:normal}
+  .pjd-meta{flex-wrap:wrap;gap:7px}
+  .pjd-meta .cf-ctl{min-height:38px}
+  .pjd-book{width:100%;justify-content:center;min-height:var(--m-tap)}
+  .pj-head-side{width:100%;gap:8px}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SETTINGS (§37)
+   An index of pages, and a page. No secondary column.
+   ══════════════════════════════════════════════════════════════════════ */
+.set-index,.set-sub{display:block}
+.set-idx{display:none}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .set-page{grid-template-columns:minmax(0,1fr);gap:0}
+  .set-nav{display:none}
+  .set-index{display:flex;flex-direction:column;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--m-radius);overflow:hidden}
+  .set-idx{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    min-height:60px;padding:11px 16px;color:var(--text);
+    -webkit-tap-highlight-color:transparent}
+  .set-idx + .set-idx{border-top:1px solid var(--hairline)}
+  .set-idx:active{background:rgba(255,255,255,.06)}
+  .set-idx-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .set-idx-l{font-size:15px;font-weight:600;letter-spacing:-.15px}
+  .set-idx-b{font-size:12px;color:var(--muted);line-height:1.35}
+  .set-idx-chev{flex:0 0 auto;width:8px;height:8px;color:var(--muted);
+    border-right:1.7px solid currentColor;border-bottom:1.7px solid currentColor;
+    transform:rotate(-45deg)}
+
+  .set-back{display:inline-flex;align-items:center;gap:7px;min-height:var(--m-tap);
+    margin:0 0 6px -8px;padding:0 10px;border-radius:11px;
+    font-size:13.5px;font-weight:600;color:var(--text-2)}
+  .set-back:active{background:rgba(255,255,255,.06)}
+  .set-back-chev{width:8px;height:8px;border-left:1.8px solid currentColor;
+    border-bottom:1.8px solid currentColor;transform:rotate(45deg)}
+  .set-sub-head h2{font-size:22px}
+  .set-row{flex-wrap:wrap;gap:8px;min-height:52px}
+  .set-row .btn,.set-row .cf-ctl{min-height:var(--m-tap)}
+  .set-item{min-height:52px}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   LIBRARY, DIARY AND HISTORY
+   ══════════════════════════════════════════════════════════════════════ */
+.lib-view{display:none}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .lib-bar{flex-direction:column;align-items:stretch;gap:10px;margin-bottom:16px}
+  .lib-bar-right{margin-left:0;width:100%;gap:8px}
+  .lib-search{flex:1;min-height:var(--m-tap)}
+  .lib-search input{width:100%}
+  .lib-filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+    margin-inline:calc(-1 * var(--m-pad));padding-inline:var(--m-pad)}
+  .lib-filters::-webkit-scrollbar{display:none}
+  .lib-filters .chip{flex:0 0 auto}
+  .lib-view{display:inline-flex;gap:2px;padding:2px;border-radius:11px;
+    background:var(--surface-2);border:1px solid var(--border);flex:0 0 auto}
+  .lib-view-b{min-height:38px;padding:0 13px;border-radius:9px;font-size:12.5px;
+    font-weight:600;color:var(--muted)}
+  .lib-view-b.on{background:var(--accent-soft);color:#fff}
+  .lib-browse{display:flex;flex-direction:column;gap:22px}
+  .lib-grid{grid-template-columns:minmax(0,1fr);gap:10px}
+  .lib-card{min-height:0;padding:13px 14px 12px 18px}
+  /* Always visible: no hover to reveal it with. */
+  .lib-obj-more,.lib-card .lib-card-more{opacity:1}
+
+  /* Diary already stacks — the writing above, the check-in below — and its
+     day navigation is in the header where it is labelled. What it needs here
+     is room and reachable controls. */
+  .dia-book.bk-spread{max-width:none}
+  .dia-left,.dia-right{padding:16px 14px}
+  .dia-toolbar .btn,.dia-toolbar button{min-height:40px}
+
+  .hist-row{grid-template-columns:20px minmax(0,1fr);row-gap:4px;min-height:52px}
+  .hist-meta{grid-column:2}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   WHAT WALKING IT AT 390px FOUND
+   Each of these was measured in a browser rather than reasoned about
+   from the stylesheet, which is the only way any of them show up.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* Today overflowed the viewport by 51px. A flex item's `min-width` is
+     `auto`, so the horizontally-scrolling habit row refused to shrink below
+     its content and dragged its parent — and therefore the page — wider than
+     the screen. The scroller is the thing that scrolls; its container is not. */
+  .m-buckets > *{min-width:0;width:100%}
+  .m-habits{min-width:0;overflow:hidden}
+  /* The scroller is the thing that scrolls. Sized to its parent explicitly
+     rather than trusting the cross-axis stretch: the row's content is wider
+     than the screen by design, and anything that lets that width escape takes
+     the whole page with it. */
+  .m-habits-row{width:100%;max-width:100%;min-width:0}
+  .m-toolbar .filters{min-width:0}
+
+  /* Text buttons: the paint stays the size the design wants and the finger
+     target is an overlay, because a 44px-tall project title would put three
+     projects on a screen. */
+  .pj-title,.pj-attention-act,.hist-restore,.dia-title{position:relative}
+  .pj-title::after,.pj-attention-act::after,.hist-restore::after,.dia-title::after{
+    content:'';position:absolute;top:50%;left:-6px;right:-6px;height:var(--m-tap);
+    transform:translateY(-50%)}
+
+  /* Wide enough already, just short. */
+  .dia-prompt-a,.lib-view-b,.bk-tb,.set-idx-chev{min-height:42px}
+  .lib-view{padding:3px}
+  .dia-prompt-a{padding:10px 12px}
+}
+
+/* The browse card's overflow. Painted small, hit big, always visible — there
+   is no hover on a phone to reveal it with. */
+.lib-card-more{margin-left:auto;width:30px;height:30px;flex:0 0 auto;position:relative}
+.lib-card-more::after{content:'';position:absolute;top:50%;left:50%;
+  width:44px;height:44px;transform:translate(-50%,-50%)}

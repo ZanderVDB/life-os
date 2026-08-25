@@ -498,6 +498,11 @@ test('the viewport preview cannot reach a production visitor', () => {
     'the preview cannot be turned on where it is actually needed');
   assert.match(server, /process\.env\.NODE_ENV !== 'production'/,
     'local development does not get the preview for free');
+  /* One switch, two consumers. The assistant's A/B/C listening selector is
+   * a development control too — it disappears when a style is chosen — and
+   * it has to be reachable on the deployment being worked on. */
+  assert.match(server, /window\.LIFE_OS_CONFIG\.devTools = \$\{JSON\.stringify\(process\.env\.DEV_PREVIEW === '1'\)\}/,
+    'the development tools flag is not published to the client');
   // It is a page, not a setting: nothing in the app may link to or mention it.
   for (const [name, src] of [['app.js', app], ['settings.js', settings],
     ['index.html', indexHtml]] as [string, string][]) {
