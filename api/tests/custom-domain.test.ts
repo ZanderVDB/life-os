@@ -491,8 +491,13 @@ test('an installed launch returns to the section you were in', () => {
 test('the viewport preview cannot reach a production visitor', () => {
   const server = read(join('..', 'web', 'server.js'));
   assert.match(server, /url\.pathname === '\/preview\.html'/, 'the preview is not gated');
-  assert.match(server, /process\.env\.NODE_ENV === 'production'/,
-    'the preview gate does not check the environment');
+  /* Deployed services run with NODE_ENV=production — staging included — so
+   * the environment alone cannot be the switch, or the tool is hidden from the
+   * only place it is meant to be used. It has to be asked for by name. */
+  assert.match(server, /process\.env\.DEV_PREVIEW !== '1'/,
+    'the preview cannot be turned on where it is actually needed');
+  assert.match(server, /process\.env\.NODE_ENV !== 'production'/,
+    'local development does not get the preview for free');
   // It is a page, not a setting: nothing in the app may link to or mention it.
   for (const [name, src] of [['app.js', app], ['settings.js', settings],
     ['index.html', indexHtml]] as [string, string][]) {

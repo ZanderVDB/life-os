@@ -120,7 +120,15 @@ const server = createServer(async (req, res) => {
      * the gate is here rather than relying on obscurity. Deleting
      * web/preview.html removes the feature outright. */
     if (url.pathname === '/preview.html' || url.pathname === '/preview') {
-      if (process.env.NODE_ENV === 'production') {
+      /* Local development always has it. A DEPLOYED service needs somebody to
+       * ask for it by name — the staging web service runs with
+       * NODE_ENV=production like the real thing, so keying off that alone hid
+       * the tool from the one place it was meant to be used.
+       *
+       * To turn it on:  DEV_PREVIEW=1 on the web service.
+       * To turn it off: delete the variable. */
+      const local = process.env.NODE_ENV !== 'production';
+      if (!local && process.env.DEV_PREVIEW !== '1') {
         res.writeHead(404, { 'content-type': 'text/plain' });
         return res.end('Not found');
       }
