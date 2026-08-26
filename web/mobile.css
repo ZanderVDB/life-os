@@ -1652,8 +1652,16 @@
    label above the scale rather than beside it, which turns a 184px track
    into a 284px one, and the chips lose the padding they did not need. */
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
-  .dia-rhythm{display:flex;flex-direction:column;gap:13px}
-  .dia-rh-row{display:flex;flex-direction:column;gap:6px}
+  /* Four scales of four options each. One button per row turned that into a
+     column forty rows deep; a 2 x 2 grid says the same thing in a quarter of
+     the height and gives all four categories one interaction to learn.
+
+     The width is STATED rather than inferred: `auto-fit` was sizing the
+     track from its own content, which in a shrink-to-fit box settles on one
+     column and produced exactly the tall form this replaces. */
+  .dia-rhythm{display:flex;flex-direction:column;gap:14px}
+  .dia-rh-row{display:flex;flex-direction:column;gap:7px;align-items:stretch;width:100%}
+  .dia-chips-rhythm{width:100%;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
   .dia-rh-l{font-size:10px}
   .dia-chip{padding:0 4px}
   .dia-chip-t{font-size:11px;letter-spacing:-.1px}
@@ -1677,10 +1685,17 @@
   .dia-ci-head{padding-top:2px}
   .dia-ci-title{font-size:19px}
 
-  /* §12 The Diary keeps the day it is showing; the word "Diary" is in the
-     bar above it. */
-  body:has(.dia-page) .page-head.m-dupe > .sub{display:block;
-    font-size:13.5px;color:var(--text-2);margin-bottom:2px}
+  /* The Diary's header says nothing about the date.
+
+     It said "Wednesday, 26 August 2026" directly above the day navigation —
+     and the page beneath it, which is the diary itself, prints exactly the
+     same civil date as its own heading. The one on the page is part of the
+     book and stays; the one in the header was a copy of it three lines
+     above, pushing the writing surface down the screen for nothing.
+
+     Nothing is lost: previous / Today / next, the month and History are all
+     still there, and that row is now the whole of the header. */
+  body:has(.dia-page) .page-head.m-dupe > .sub{display:none}
 }
 .dia-ci-page{display:none}
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
@@ -1748,6 +1763,36 @@
   .dia-step,.dia-today{min-height:38px}
   .dia-step{width:38px}
   .dia-today{padding:0 10px}
+}
+
+/* ── The metadata line stops abbreviating the one thing that identifies ──
+   `Personal · 29 Aug · Ra… · NEXT ACTION`. Four things competing for 250px,
+   and the one that lost was the project name — cut to two letters and an
+   ellipsis, which is not a shorter version of the information, it is the
+   absence of it.
+
+   The line wraps instead. It stays one line whenever it fits, and when the
+   project name would be squeezed it takes the second line whole:
+
+       Personal · 29 Aug
+       Rage 2026 planning   NEXT ACTION
+
+   Fifteen pixels on the tasks that have a project and none on the ones that
+   do not. The card stays compact and the project stays identifiable. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .t-meta{flex-wrap:wrap;row-gap:3px;white-space:normal;overflow:visible;
+    text-overflow:clip;align-items:center}
+  /* The name takes what it needs, and only ellipsises if it alone is wider
+     than the whole row — which is honest rather than arbitrary. */
+  .tm-project{max-width:100%;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;flex:0 1 auto}
+  .tm-next,.tm-area,.tm-due{flex:0 0 auto}
+  /* A separator must never be the last thing on a line.
+     `:last-child` was not enough: the dot before NEXT ACTION is not last in
+     the list, it is only last on the LINE once the badge wraps beneath it —
+     which it does on exactly the rows this change is for. */
+  .t-meta .tm-sep:last-child,
+  .t-meta .tm-sep:has(+ .tm-next){display:none}
 }
 
 /* ── The right margin was wider than the left ────────────────────────────

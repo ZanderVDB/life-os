@@ -408,9 +408,12 @@ export function projectDetailBodyHtml(p, tasks, taskHtml) {
         data-bucket="project">
         ${open.length
     ? open.map((t) => `${taskHtml(t)}${taskContextHtml(t)}`).join('')
+    /* No button in here. The section heading directly above already carries
+     * Add task, and two primary actions six pixels apart for the same thing
+     * is one of them wasted — the empty state's job is to say what the state
+     * IS, in the height of a single row. */
     : '<div class="pj-empty pj-empty-inline"><span class="pj-empty-t">Nothing planned yet</span>'
-      + '<span class="pj-empty-s">Add the first thing that has to happen.</span>'
-      + '<button type="button" class="btn btn-sm pj-empty-a" data-pjd-empty-add>Add task</button></div>'}
+      + '<span class="pj-empty-s">Add the first task to get this project moving.</span></div>'}
       </div>
       ${closed.length ? `<details class="pjd-done">
         <summary>${closed.length} finished</summary>

@@ -258,12 +258,15 @@ test('one page title, and only where it would be a repeat', () => {
   assert.match(app, /const REPEATS_TITLE = \['calendar', 'projects', 'library', 'settings', 'history', 'ai', 'diary'\]/,
     'the list of repeated titles changed without this test changing');
   assert.ok(!/REPEATS_TITLE = \[[^\]]*'today'/.test(app), 'the greeting is being hidden');
-  /* Diary joined the list: its heading was literally the word "Diary" under a
-   * bar saying Diary. Its SUB-line is kept by a rule of its own, because that
-   * line says which day is open — the one fact the header carries that
-   * nothing else on the screen does. */
-  assert.match(mobileCss, /body:has\(\.dia-page\) \.page-head\.m-dupe > \.sub\{display:block/,
-    'the diary lost the line saying which day is open');
+  /* Diary's whole header goes on a phone. Its heading was literally the word
+   * "Diary" under a bar saying Diary, and its sub-line was the full civil
+   * date — which the diary PAGE prints as its own heading three lines below.
+   * Two copies of one date, one of which is part of the book. The page keeps
+   * it; the header does not repeat it. */
+  assert.match(mobileCss, /body:has\(\.dia-page\) \.page-head\.m-dupe > \.sub\{display:none\}/,
+    'the diary header is repeating the date the page already prints');
+  assert.match(read('diary-entry.js'), /<h2 class="dia-date"/,
+    'the date printed inside the diary page is gone, so nothing says the day');
   assert.match(app, /head\.classList\.toggle\('m-dupe', isPhone\(\) && REPEATS_TITLE\.includes\(state\.route\)\)/,
     'nothing marks the header as a repeat');
   // The page actions — Diary's date navigation, Calendar's controls — are

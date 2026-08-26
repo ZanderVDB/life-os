@@ -4333,9 +4333,6 @@ function wireProjectDetail() {
   });
 
   document.getElementById('pjd-add-task')?.addEventListener('click', () => addProjectTask(p));
-  // The action inside the empty state, which is the only reason an empty
-  // state earns its space on a phone.
-  document.querySelector('[data-pjd-empty-add]')?.addEventListener('click', () => addProjectTask(p));
   document.getElementById('pjd-next-add')?.addEventListener('click', () => addProjectTask(p));
   document.getElementById('pjd-add-existing')?.addEventListener('click', () => addExistingTask(p));
   document.querySelectorAll('[data-pjd-open-task]').forEach((b) => {
