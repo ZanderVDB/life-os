@@ -396,3 +396,23 @@ test('a touch-target floor is never applied to a drawn glyph', () => {
   assert.match(mobileCss, /\.set-idx-chev\{flex:0 0 auto;width:8px;height:8px/,
     'the Settings arrow is no longer an 8px glyph');
 });
+
+test('a hidden heading does not leave its row behind', () => {
+  /* Projects hides its <h1> on a phone — the bar above already says the word,
+   * and §"one page title" is explicit about the repeat. What was left was a
+   * 56px row containing one button. New project joins the lifecycle strip,
+   * which then scrolls in what remains and fades against the button instead
+   * of against the screen edge.
+   *
+   * Scoped away from `.pjd-head`: the project DETAIL header shares the class
+   * and is a column of title, next action and progress. */
+  assert.match(mobileCss, /\.pj-head:not\(\.pjd-head\)\{flex-direction:row/,
+    'the Projects header is still two rows on a phone');
+  assert.match(mobileCss, /\.pj-head:not\(\.pjd-head\) \.pj-head-row\{order:2/,
+    'New project is not placed after the filters');
+  assert.match(mobileCss, /\.pj-head:not\(\.pjd-head\) \.pj-filters\{order:1;flex:1 1 auto;min-width:0;\s*overflow-x:auto/,
+    'the lifecycle strip cannot scroll in the space the button leaves');
+  // The strip bleeds left to the screen edge and stops at the button.
+  assert.match(mobileCss, /\.pj-filters\{gap:7px;margin-inline:calc\(-1 \* var\(--m-pad\)\) 0;/,
+    'the filter strip still bleeds past the New project button');
+});
