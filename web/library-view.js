@@ -976,6 +976,12 @@ function paintBookHead(head = document.getElementById('page-head')) {
       <button class="btn btn-ghost" id="bk-back">Back to Library</button>
       ${lib.cover ? '' : '<button class="btn" id="bk-cover-btn">Cover</button>'}
     </div>`;
+  /* §34 On a phone the top bar carries the Book's name, and the page header
+   * beneath it is hidden — the Book's own bar already has the way back, the
+   * section and the page number, and three rows of chrome above one page of
+   * writing is a reading surface nobody can read on. */
+  const bar = document.getElementById('m-title');
+  if (bar) bar.textContent = item.title;
   head.querySelector('#bk-back').onclick = () => void leaveBook('#library');
   head.querySelector('#bk-cover-btn')?.addEventListener('click', () => void (async () => {
     await flushAll();
@@ -1218,6 +1224,11 @@ function wireBookPhone(scroll) {
         rootEl.querySelector('#bk-msearch')?.addEventListener('click', () => {
           close();
           openBookSearch(scroll);
+        });
+        // The Cover, which lived in the page header the phone no longer shows.
+        rootEl.querySelector('#bk-mcover')?.addEventListener('click', () => {
+          close();
+          document.getElementById('bk-cover-btn')?.click();
         });
       },
     });

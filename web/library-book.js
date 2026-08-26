@@ -456,6 +456,10 @@ export function bookContentsHtml() {
         <span><span class="msheet-label">${esc(m.label)}</span></span>
       </button>`).join('')}` : ''}
     <div class="msheet-sep"></div>
+    <button type="button" class="msheet-row" id="bk-mcover">
+      <span class="msheet-ico">&#9670;</span>
+      <span><span class="msheet-label">Cover</span></span>
+    </button>
     <button type="button" class="msheet-row" id="bk-msearch">
       <span class="msheet-ico">&#8981;</span>
       <span><span class="msheet-label">Search this book</span></span>

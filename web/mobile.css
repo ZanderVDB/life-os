@@ -1501,3 +1501,49 @@
   .page-head{gap:0}
   h1{font-size:20px}
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   WHAT THE SCREENSHOTS SHOWED
+   Three things that only became obvious once the phone layout was
+   photographed rather than measured.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* 1. The orphaned overflow.
+     `.page-actions` holding a single ⋯ took a whole 50px row under the
+     greeting and under a project's title — a lone dot-dot-dot floating in
+     the middle of nowhere. It belongs on the heading line, at the top right,
+     which is where the same control sits on every other surface.
+     Scoped with :has() so Diary's date navigation — several controls, and
+     genuinely its own row — is untouched. */
+  .page-head{position:relative}
+  .page-actions:has(> .util-btn:only-child){position:absolute;top:0;right:0;
+    width:auto;margin:0}
+  .page-head.m-dupe .page-actions:has(> .util-btn:only-child){top:-4px}
+  .page-actions .util-btn{width:var(--m-tap);height:var(--m-tap)}
+
+  /* A project's title row keeps its overflow beside the title too, rather
+     than stretching the side group across the full width below it. */
+  .pjd-head .pj-head-row{flex-direction:row;align-items:flex-start;gap:10px}
+  .pjd-head .pjd-left{flex:1;min-width:0}
+  .pjd-head .pj-head-side{width:auto;flex:0 0 auto}
+
+  /* 2. One empty state, not an empty state inside an empty state.
+     `.pjd-tasks.is-empty` draws a dashed frame and the card inside it draws
+     a solid one, so the compact card ended up centred inside a large dashed
+     rectangle — exactly the decoration §28 asked to remove. */
+  .pjd-tasks.is-empty{border:0;padding:0;background:none}
+  .pj-empty,.pj-empty-inline{padding:13px 14px}
+
+  /* 3. A Book is for reading.
+     The top bar carries the Book's name (see library-view.js) and the Book's
+     own bar carries the way back, the section and the page. The page header
+     between them was a third row saying the same things. */
+  body:has(.bk-mbar) .page-head{display:none}
+}
+
+/* The empty card fills the row it is in. Centred, it read as a floating
+   panel inside a container rather than as the state of the list. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .pj-empty,.pj-empty-inline{align-self:stretch;width:100%;align-items:flex-start}
+  .pj-empty-s{max-width:none}
+}
