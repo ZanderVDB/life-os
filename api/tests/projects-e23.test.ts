@@ -297,7 +297,15 @@ test('ui: Today shows the project by name, as a link, never as colour alone', ()
   assert.match(fn, /Next action</, 'the marker is not a word');
   assert.match(css, /\.tm-project\{/, 'the project chip has no styling');
   // The chip sits in the existing meta line, so adding it cannot move the title.
-  assert.match(fn, /bits\.push\(`<button class="tm-project"/,
+  // It is pushed to `ctx` rather than `bits` — a second group inside the SAME
+  // `.t-meta` div, so the project can wrap to its own line on a phone without
+  // dragging a dangling separator with it. Still the meta line, still no title
+  // movement; the assertion is on where it lands, not on which array it uses.
+  assert.match(fn, /ctx\.push\(`<button class="tm-project"/,
+    'the project name is no longer built into a meta group');
+  const meta = fn.match(/<div class="t-meta">[\s\S]*?<\/div>/)?.[0] ?? '';
+  assert.match(meta, /bits\.join/, 'the meta line no longer renders its own bits');
+  assert.match(meta, /ctx\.join/,
     'the project name is added outside the meta line, so it shifts the title');
 });
 

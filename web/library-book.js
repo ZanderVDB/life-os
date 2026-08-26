@@ -310,8 +310,11 @@ function pinboardPageHtml(page, section) {
     <div class="pin-vp" data-pin-vp>
       <div class="bk-board" data-board="${page.id}" tabindex="0"
         aria-label="Pinboard. Double-click to write a note; paste a picture or a link."></div>
-      ${pinViewportControlsHtml()}
     </div>
+    <!-- Outside the viewport, not over it. The whole canvas is a pan target,
+         and a control floating on it is a control you hit while trying to
+         move the board. Hidden entirely on a desktop, where there is no pan. -->
+    ${pinViewportControlsHtml()}
   </div>`;
 }
 

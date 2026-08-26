@@ -741,7 +741,22 @@ function wireShell() {
    * carries Habits, Reminders, Completed and Settings. */
   wireMobileNav({
     go,
-    goHash: (h) => { setHash(h); const r = routeFromHash(); if (r !== state.route) go(r); },
+    /* A BARE section hash is a tab press, and a tab press opens the section's
+     * front door — so it goes through `go()`, which is what knows how to do
+     * that. Writing the hash first would make the section look like it was
+     * already open and skip the reset entirely, which is exactly how Settings
+     * kept landing back inside whichever page you left it on.
+     *
+     * A DEEPER hash is a destination: Reminders is `#calendar/reminders`, and
+     * asking for it must not be flattened into "go to Calendar". */
+    goHash: (h) => {
+      const target = h.slice(1).split('?')[0].split('/')[0];
+      if (h === `#${target}`) return void go(target);
+      setHash(h);
+      const r = routeFromHash();
+      if (r !== state.route) go(r);
+      return undefined;
+    },
     currentRoute: () => state.route,
     assistant: () => go('ai'),
     quickAdd: () => openQuickAdd(),
@@ -920,7 +935,7 @@ async function go(id) {
    * `#diary/2026-08-05` arriving from Calendar is a request for that day, and
    * flattening it to `#diary` would silently open today instead. */
   const inSection = location.hash.slice(1).split('?')[0].split('/')[0] === id;
-  if (!inSection) setHash(`#${id}`);
+  if (!inSection) { resetSectionRoot(id); setHash(`#${id}`); }
   document.querySelectorAll('[data-route]').forEach((a) => {
     if (a.dataset.route === id && a.closest('.nav')) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -929,6 +944,49 @@ async function go(id) {
   syncMobileNav(id);
   closeSheet(true);
   await loadRoute(nav);
+}
+
+/**
+ * Arriving at a section from somewhere else opens its FRONT DOOR.
+ *
+ * ── The rule ─────────────────────────────────────────────────────────────
+ *
+ * Tapping Settings from Today opens the Settings menu — not whatever page of
+ * Settings you happened to be inside last week. A tab is a place, and going
+ * to a place means going to the place, not to the last room in it.
+ *
+ * ── Why this is only a few lines ─────────────────────────────────────────
+ *
+ * Most sections already do it, because most of them keep their position in
+ * the URL: Library's open book is `#library/book/<id>`, Diary's day is
+ * `#diary/<date>`, a project is `#projects/<id>`, and Calendar's reminder
+ * list is `#calendar/reminders`. `go()` writes `#<section>` on the way in, so
+ * every one of those resolves back to its root without being told to.
+ *
+ * What needs telling is state that lives in JavaScript instead — Settings'
+ * open panel is the only one — and that is exactly what this is for.
+ *
+ * ── What is deliberately NOT reset ───────────────────────────────────────
+ *
+ * The Calendar's mode. Month against Agenda is a preference about how you
+ * read time, not a position inside a section; it survives a reload on
+ * purpose and would be strange to forget on a tab change.
+ *
+ * Today's area filter and expanded steps, for the same reason.
+ *
+ * And nothing that could be holding words. This runs only when the section
+ * being LEFT has already flushed — `go()` awaits `libraryWillLeave()` and
+ * `diaryWillLeave()` above — so returning to a Book's shelf or a different
+ * diary day cannot lose writing, because the writing was saved before the
+ * route changed at all.
+ *
+ * @param {string} id  the section being entered
+ */
+function resetSectionRoot(id) {
+  /* `settingsFromMenu` is somebody asking for a specific page BY NAME — the
+   * habits sheet's "All habits" means the Habits page, not the index — and
+   * that is a destination, not a leftover. Everything else is a leftover. */
+  if (id === 'settings' && !state.settingsFromMenu) state.settingsTab = null;
 }
 
 /**
@@ -1045,9 +1103,10 @@ async function loadRoute(nav = navToken()) {
     /* No sub-line: every Settings panel states its own purpose directly below
      * this, and two descriptions stacked on top of each other is one too many. */
     head.innerHTML = '<p class="eyebrow">Life OS</p><h1>Settings</h1>';
-    /* Arriving fresh on a phone lands on the index. A tab chosen elsewhere —
-     * the habits sheet says "All habits" and means the Habits page — is
-     * honoured, so that route still opens the page it named. */
+    /* `resetSectionRoot` has already cleared the open panel for anybody who
+     * arrived from another section. A tab chosen deliberately elsewhere —
+     * the habits sheet says "All habits" and means the Habits page — sets it
+     * again afterwards, so that route still opens the page it named. */
     if (isPhone() && state.settingsTab === 'account' && !state.settingsFromMenu) {
       state.settingsTab = null;
     }
@@ -1283,13 +1342,20 @@ function taskHtml(t) {
    * and a task that belongs to one should be able to take you there. The
    * next-action marker is a word for the same reason. */
   const project = t.projectId ? state.projectsById[t.projectId] : null;
+  /* Project context is its own GROUP, not more items in the same list.
+   *
+   * Joining everything with separators and letting it wrap put a dot at the
+   * end of a line whenever the wrap fell between two items — a separator
+   * separating a line from nothing. Two groups, joined by a space rather
+   * than a dot, wrap as units and cannot produce one. */
+  const ctx = [];
   if (project) {
     // The RESOLVED next action, so the badge appears on inferred next actions
     // too — not only on ones somebody picked by hand.
     const isNext = project.nextActionId === t.id;
-    bits.push(`<button class="tm-project" data-open-project="${project.id}"
+    ctx.push(`<button class="tm-project" data-open-project="${project.id}"
       title="Open ${esc(project.title)}">${esc(project.title)}</button>`);
-    if (isNext) bits.push('<span class="tm-next">Next action</span>');
+    if (isNext) ctx.push('<span class="tm-next">Next action</span>');
   } else if (t.projectId) {
     /* It HAS a project; we just could not load it.
      *
@@ -1297,7 +1363,7 @@ function taskHtml(t) {
      * like a standalone task, and then the daily arranger — which is not
      * allowed near project work — would happily reorder it. A failed request
      * must not silently change what a task is. */
-    bits.push('<span class="tm-project is-missing" title="This task belongs to a project that could not be loaded">Project unavailable</span>');
+    ctx.push('<span class="tm-project is-missing" title="This task belongs to a project that could not be loaded">Project unavailable</span>');
   }
 
   /* The steps panel is INSIDE the article, never a sibling.
@@ -1317,7 +1383,9 @@ function taskHtml(t) {
       ${parentTickHtml(t)}
       <div class="t-main">
         <button class="t-title" data-act="open" title="${esc(t.title)}">${esc(t.title)}</button>
-        ${bits.length ? `<div class="t-meta">${bits.join('<span class="tm-sep">·</span>')}</div>` : ''}
+        ${bits.length || ctx.length ? `<div class="t-meta">${
+  bits.join('<span class="tm-sep">·</span>')}${
+  ctx.length ? `<span class="t-meta-ctx">${ctx.join('')}</span>` : ''}</div>` : ''}
       </div>
       <div class="t-actions">
         <button class="t-btn" data-act="back" aria-label="Move to previous bucket" title="Move earlier (Alt ←)">${icon('chevL', 16)}</button>
@@ -6141,13 +6209,16 @@ function mobileTodayHtml() {
 /**
  * Habits on the phone home: the count, a preview, and the way to the rest.
  *
- * Three, as complete rows. It was a horizontal strip of pills, and a pill cut
- * through the middle of "Read 20 pages" at the card's edge reads as a
- * rendering fault however deliberate the fade behind it is — Today is a
- * glance, and a glance must not contain half a word. Everything else is one
- * tap away in the sheet, which is where streaks and editing already live.
+ * A grid of tiles: the ring above, the name under it. Rows of a list read as
+ * an inventory; a rank of rings reads as a set of things you are keeping up,
+ * and it is what the eye can count without reading. Three across, so an
+ * ordinary habit name sits on one line at 360px.
+ *
+ * Six shown rather than three — two rows of tiles is the same height three
+ * rows of text was, and it covers most people's whole day. Everything beyond
+ * that, plus streaks and editing, is one tap away in the sheet.
  */
-const PREVIEW = 3;
+const PREVIEW = 6;
 
 function habitsCardHtml() {
   const h = state.habitTotals;
@@ -6163,11 +6234,16 @@ function habitsCardHtml() {
         <button type="button" class="m-hb ${x.done ? 'is-done' : ''}"
           data-mhabit="${esc(x.id)}" ${x.system ? 'data-system="1"' : ''}
           aria-pressed="${x.done}">
-          <span class="m-hb-tick" aria-hidden="true">${x.done ? '&#10003;' : ''}</span>
+          <span class="m-hb-tick" aria-hidden="true">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <circle class="m-hb-ring" cx="16" cy="16" r="14"></circle>
+              <path class="m-hb-mark" d="m9.5 16.4 4.4 4.4 8.6-9.2"></path>
+            </svg>
+          </span>
           <span class="m-hb-n">${esc(x.name)}</span>
-        </button>`).join('')}
+        </button>`).join('')}</div>
         ${rows.length > PREVIEW ? `<button type="button" class="m-habits-more"
-          id="m-habits-more">${rows.length - PREVIEW} more · See all</button>` : ''}</div>`
+          id="m-habits-more">${rows.length - PREVIEW} more · See all</button>` : ''}`
     : `<p class="m-habits-empty">${state.habitsLoaded
       ? 'Nothing due today.' : 'Loading…'}</p>`}
   </section>`;

@@ -111,7 +111,14 @@ test('a hash already inside the target section survives the navigation', () => {
    * a Calendar habit row would silently open TODAY. A deep link is a request
    * for a place, and normalising it away answers a different question. */
   assert.match(app, /const inSection = location\.hash\.slice\(1\)[\s\S]{0,80}=== id;/);
-  assert.match(app, /if \(!inSection\) setHash\(`#\$\{id\}`\)/);
+  assert.match(app, /if \(!inSection\) \{ resetSectionRoot\(id\); setHash\(`#\$\{id\}`\); \}/);
+  /* The same condition now also opens the section's front door: arriving
+   * from somewhere else clears state that is NOT in the URL. A deep link is
+   * still a request for a place — `inSection` is true for it, so neither the
+   * hash nor the section's own state is touched. */
+  assert.match(app, /function resetSectionRoot\(id\)/, 'nothing resets a section on entry');
+  assert.match(app, /id === 'settings' && !state\.settingsFromMenu/,
+    "Settings' open panel survives a tab change");
 });
 
 /* ══ §2 THE LOADING LIFECYCLE ══════════════════════════════════════════ */

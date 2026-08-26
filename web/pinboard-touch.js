@@ -49,9 +49,13 @@ export function attachPinViewport(host, board) {
   let panFrom = null;
   let pinchFrom = null;
 
+  /* The zoom controls sit BESIDE the viewport, not inside it, so they are
+     looked up from the page rather than from the host. */
+  const ctl = host.closest('.bk-l-pinboard') ?? host;
+
   const apply = () => {
     board.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) scale(${k.toFixed(3)})`;
-    const label = host.querySelector('[data-pin-zoom]');
+    const label = ctl.querySelector('[data-pin-zoom]');
     if (label) label.textContent = `${Math.round(k * 100)}%`;
   };
 
@@ -145,12 +149,12 @@ export function attachPinViewport(host, board) {
     zoomAbout(e.clientX, e.clientY, k * (1 - e.deltaY / 400));
   }, { passive: false });
 
-  host.querySelector('[data-pin-fit]')?.addEventListener('click', fit);
-  host.querySelector('[data-pin-in]')?.addEventListener('click', () => {
+  ctl.querySelector('[data-pin-fit]')?.addEventListener('click', fit);
+  ctl.querySelector('[data-pin-in]')?.addEventListener('click', () => {
     const r = host.getBoundingClientRect();
     zoomAbout(r.left + r.width / 2, r.top + r.height / 2, k * 1.25);
   });
-  host.querySelector('[data-pin-out]')?.addEventListener('click', () => {
+  ctl.querySelector('[data-pin-out]')?.addEventListener('click', () => {
     const r = host.getBoundingClientRect();
     zoomAbout(r.left + r.width / 2, r.top + r.height / 2, k / 1.25);
   });
@@ -189,7 +193,7 @@ export function attachPinViewport(host, board) {
   };
 }
 
-/** The controls that sit over the canvas. Buttons, because §34 is not enough. */
+/** The controls, in a row under the canvas. Buttons, because §34 is not enough. */
 export const pinViewportControlsHtml = () => `<div class="pin-ctl">
   <button type="button" class="pin-ctl-b" data-pin-out aria-label="Zoom out">&minus;</button>
   <span class="pin-ctl-z" data-pin-zoom aria-live="polite">100%</span>

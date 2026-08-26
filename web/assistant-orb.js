@@ -175,27 +175,110 @@ export class Orb {
     else this.drawConcentric(cx, cy, R, amp, breathe, reduce);
   }
 
-  /** The body. Shared by every variant so they are visibly the same object. */
+  /**
+   * The body.
+   *
+   * ── What makes this read as an object rather than a coloured circle ──────
+   *
+   * Five passes, in the order light actually behaves. A single radial
+   * gradient plus one flat bloom — which is what this was — gives a disc: a
+   * flat shape with a bright spot painted on it. What is missing is the
+   * evidence that light came from somewhere and that the surface is curved.
+   *
+   *   1  ambient bloom   wide, very faint, no edge you can find
+   *   2  the sphere      four stops, the darkest at the rim, so the body
+   *                      turns away from the light instead of stopping
+   *   3  terminator      a shadow gathered on the lower-right, which is what
+   *                      tells the eye the top-left is nearer
+   *   4  rim light       a thin bright arc on the shadow side — bounced
+   *                      light, and the single cheapest thing that makes a
+   *                      sphere look solid
+   *   5  specular        one small soft highlight, off-centre, not a stripe
+   *
+   * All of it is gradients and arcs. No shadowBlur anywhere: a canvas shadow
+   * on a shape that moves every frame is the most expensive thing a phone
+   * GPU can be asked for, and it is what the old bloom would have become.
+   */
   drawCore(cx, cy, r) {
     const { ctx } = this;
-    const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.42, r * 0.1, cx, cy, r);
-    g.addColorStop(0, '#C8A0FF');
-    g.addColorStop(0.55, '#8A5DFF');
-    g.addColorStop(1, '#5B2FD6');
+
+    /* 1 — Ambient. Two stops rather than one, so the falloff is a curve
+     * instead of a cone: the old version reached zero in a straight line and
+     * that hard-edged cone is exactly what reads as a cheap glow. */
+    const bloom = ctx.createRadialGradient(cx, cy, r * 0.82, cx, cy, r * 2.35);
+    bloom.addColorStop(0, 'rgba(138,93,255,.26)');
+    bloom.addColorStop(0.42, 'rgba(124,77,255,.10)');
+    bloom.addColorStop(1, 'rgba(124,77,255,0)');
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, TAU);
-    ctx.fillStyle = g;
-    ctx.fill();
-    // The bloom. Drawn as a second, softer fill rather than a shadow: a
-    // canvas shadowBlur on a moving shape is the single most expensive thing
-    // a phone GPU can be asked to do here.
-    const bloom = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, r * 1.9);
-    bloom.addColorStop(0, 'rgba(138,93,255,.34)');
-    bloom.addColorStop(1, 'rgba(138,93,255,0)');
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 1.9, 0, TAU);
+    ctx.arc(cx, cy, r * 2.35, 0, TAU);
     ctx.fillStyle = bloom;
     ctx.fill();
+
+    // 2 — The sphere. Light from the upper left, dark at the far rim.
+    const body = ctx.createRadialGradient(
+      cx - r * 0.34, cy - r * 0.40, r * 0.06,
+      cx - r * 0.05, cy - r * 0.05, r * 1.08,
+    );
+    body.addColorStop(0, '#CBA8FF');
+    body.addColorStop(0.30, '#A177FF');
+    body.addColorStop(0.62, '#8552F4');
+    body.addColorStop(0.88, '#5E31CE');
+    body.addColorStop(1, '#46209E');
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.fillStyle = body;
+    ctx.fill();
+
+    /* 3 — The terminator, clipped to the sphere. Where a lit ball goes dark
+     * is a soft band, not the edge — putting the shadow ON the edge is what
+     * makes a gradient circle look like a sticker. */
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.clip();
+    const shade = ctx.createRadialGradient(
+      cx + r * 0.42, cy + r * 0.52, r * 0.1,
+      cx + r * 0.30, cy + r * 0.38, r * 1.25,
+    );
+    shade.addColorStop(0, 'rgba(30,10,74,.42)');
+    shade.addColorStop(0.55, 'rgba(30,10,74,.14)');
+    shade.addColorStop(1, 'rgba(30,10,74,0)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.restore();
+
+    /* 4 — Rim light on the shadow side. Drawn as a stroke just inside the
+     * silhouette so it never widens the ball. */
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.985, Math.PI * 0.12, Math.PI * 0.92);
+    const rim = ctx.createLinearGradient(cx - r, cy + r * 0.3, cx + r, cy - r * 0.3);
+    rim.addColorStop(0, 'rgba(214,186,255,0)');
+    rim.addColorStop(0.45, 'rgba(226,204,255,.5)');
+    rim.addColorStop(1, 'rgba(214,186,255,0)');
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = Math.max(0.8, r * 0.035);
+    ctx.stroke();
+    ctx.restore();
+
+    /* 5 — One specular highlight. An ellipse, tilted, well inside the edge:
+     * a highlight touching the rim reads as a reflection of the screen
+     * rather than of a light. */
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.clip();
+    ctx.translate(cx - r * 0.33, cy - r * 0.40);
+    ctx.rotate(-0.5);
+    const spec = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.42);
+    spec.addColorStop(0, 'rgba(255,255,255,.5)');
+    spec.addColorStop(0.45, 'rgba(255,255,255,.16)');
+    spec.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = spec;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.42, r * 0.26, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
   }
 
   /* ── A — Concentric pulse ──────────────────────────────────────────────

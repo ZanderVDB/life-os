@@ -691,14 +691,22 @@
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
   /* Fixed, not absolute: it leaves the dialog's coordinate space entirely,
      so the inline left/top that anchor() wrote no longer means anything and
-     the panel is simply attached to the bottom of the screen. */
-  .cf-pop:not([hidden]){position:fixed;inset:auto 0 0 0;
+     the panel is simply attached to the bottom of the screen.
+
+     Scoped away from the three creation flows, which are centred dialogs on
+     a phone now (§9) — inside a card that is not touching the bottom edge,
+     a picker glued to the bottom edge belongs to neither. */
+  .modal:not(.ev-modal):not(.modal-reminder):not(.modal-schedule) .cf-pop:not([hidden]){
+    position:fixed;inset:auto 0 0 0;
     left:0!important;top:auto!important;width:100%;z-index:210;
     max-height:min(72dvh,560px);overflow-y:auto;-webkit-overflow-scrolling:touch;
     background:var(--surface);border-top:1px solid var(--border);
     border-radius:20px 20px 0 0;box-shadow:0 -16px 44px rgba(0,0,0,.5);
     padding-bottom:calc(8px + var(--m-safe-b))}
-  .cf-pop .cf-menu,.cf-pop .dp,.cf-pop .tp{max-height:none;width:auto}
+  .modal:not(.ev-modal):not(.modal-reminder):not(.modal-schedule) .cf-pop .cf-menu,
+  .modal:not(.ev-modal):not(.modal-reminder):not(.modal-schedule) .cf-pop .dp,
+  .modal:not(.ev-modal):not(.modal-reminder):not(.modal-schedule) .cf-pop .tp{
+    max-height:none;width:auto}
   .cf-pop .dp-day,.cf-pop .tp-opt{min-height:var(--m-tap)}
   .cf-ctl{height:auto;min-height:var(--m-tap);padding:0 12px}
   .cf-menu-btn{min-width:0}
@@ -807,26 +815,50 @@
 
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
   /* Full-bleed: a pinboard on a phone is the page. */
-  .bk-l-pinboard{padding:12px 10px 10px}
-  .bk-l-pinboard .bk-page-hdr{height:auto;flex-wrap:wrap;gap:8px}
-  .bk-pin-tools{display:flex;gap:6px;flex-wrap:wrap;width:100%}
-  .bk-pin-tools .btn{min-height:40px}
+  /* Room at the foot for the page arrows, which must not sit on the canvas:
+     the whole surface is a pan target, and a control floating in the middle
+     of it is a control you hit while trying to move the board. */
+  /* A pinboard page is exactly as tall as the spread plus its controls. The
+     60dvh floor every other page gets would leave a band of empty paper
+     between the zoom row and the page arrows. */
+  /* By id, because two later rules set a dvh floor on the same two classes
+     and a third would just be another thing to keep in order. */
+  #bk-book.bk-spread:has(.bk-l-pinboard){min-height:0}
+  .bk-l-pinboard{padding:10px 8px 54px;display:flex;flex-direction:column;gap:8px}
+  .bk-l-pinboard .bk-page-hdr{height:auto;flex-wrap:wrap;gap:6px;margin:0}
+  .bk-l-pinboard .bk-page-title{font-size:17px;padding:0 2px}
+  /* One row that scrolls, not three that wrap: the board is the page, and
+     every line the toolbar takes is a line the board does not get. */
+  .bk-pin-tools{display:flex;gap:6px;width:100%;flex-wrap:nowrap;
+    overflow-x:auto;scrollbar-width:none}
+  .bk-pin-tools::-webkit-scrollbar{display:none}
+  .bk-pin-tools .btn{min-height:38px;flex:0 0 auto}
+  .bk-pin-tools .bk-page-more{margin-left:auto;flex:0 0 auto}
 
   /* touch-action:none is the whole of §34's second half. Without it the
      browser claims the gesture for page scrolling and the canvas gets a
      stream of pointercancel events instead of a pan. */
+  /* The viewport takes the board's own proportions, so a landscape spread
+     does not sit in a portrait box with a third of the screen empty above
+     and below it. It is short — a spread across 390px is — and that is what
+     the pinch is for. */
+  /* height:auto or the base rule's height:100% wins and the aspect ratio is
+     never consulted — the spread would sit in a portrait box again. */
   .pin-vp{overflow:hidden;touch-action:none;overscroll-behavior:contain;
-    min-height:58dvh;border-radius:12px;background:rgba(0,0,0,.16);
+    aspect-ratio:420/297;height:auto;min-height:0;max-height:60dvh;
+    border-radius:12px;background:rgba(0,0,0,.16);
     border:1px solid var(--border)}
   .pin-vp > .bk-board{position:absolute;top:0;left:0;
-    /* A design size, not the viewport: the board has to have a real box for
+    /* A design size, not the viewport: the board needs a real box for its
        percentage coordinates to mean anything, and it is then scaled to fit
        rather than squashed to the screen.
-       Narrower than a desktop spread on purpose — the whole board is fitted
-       on open, and every pixel of design width is a pixel the fit has to
-       shrink, so a 1300px spread would open at 24% and be unreadable before
-       anybody had touched it. */
-    width:720px;height:500px;transform-origin:0 0;will-change:transform}
+
+       420 x 297 — the SPREAD's own proportions, the same ones the desktop
+       board has. A pinboard is spatial, and its shape is part of what is
+       arranged: reshaping it for a phone would move every object relative to
+       every other one, which is the one thing a board must never do. It
+       opens fitted and is pinched into. */
+    width:980px;height:693px;transform-origin:0 0;will-change:transform}
 
   /* Every control the board offers, at a size a finger can hit. The grip,
      the resize handle and the connector are 44px targets over their painted
@@ -838,11 +870,11 @@
   /* Permanently visible: there is no hover to reveal them with (§47). */
   .bk-pin .bk-pin-grip,.bk-pin [data-pin-resize],.bk-pin [data-pin-connect]{opacity:1}
 
-  .pin-ctl{display:flex;align-items:center;gap:2px;position:absolute;
-    right:10px;bottom:10px;z-index:4;padding:3px;border-radius:12px;
-    background:rgba(20,18,32,.86);backdrop-filter:blur(10px);
-    border:1px solid rgba(255,255,255,.1)}
-  .pin-ctl-b{min-width:40px;min-height:40px;display:grid;place-items:center;
+  /* A row of its own under the board. Nothing floats on a pan surface. */
+  .pin-ctl{display:flex;align-items:center;gap:2px;align-self:center;
+    padding:3px;border-radius:12px;background:var(--surface);
+    border:1px solid var(--border)}
+  .pin-ctl-b{min-width:44px;min-height:40px;display:grid;place-items:center;
     border-radius:9px;color:var(--text-2);font-size:16px;font-weight:600}
   .pin-ctl-b:active{background:rgba(255,255,255,.09)}
   .pin-ctl-fit{font-size:12.5px;padding:0 12px}
@@ -981,8 +1013,12 @@
     content:'';position:absolute;top:50%;left:-6px;right:-6px;height:var(--m-tap);
     transform:translateY(-50%)}
 
-  /* Wide enough already, just short. */
-  .dia-prompt-a,.lib-view-b,.bk-tb,.set-idx-chev{min-height:42px}
+  /* Wide enough already, just short. Real controls only: `.set-idx-chev` was
+     in this list and is an 8px rotated-border arrow inside a 76px row — a
+     min-height stretched it into a 42px diagonal stroke down the side of the
+     card, which is the stray mark that showed up in Settings. The row is the
+     tap target; the arrow is decoration and is aria-hidden. */
+  .dia-prompt-a,.lib-view-b,.bk-tb{min-height:42px}
   .lib-view{padding:3px}
   .dia-prompt-a{padding:10px 12px}
 }
@@ -1098,7 +1134,13 @@
   .m-next-row{min-height:var(--m-row-lg);padding:11px 13px}
   .m-next.is-clear{min-height:52px;padding:0 13px}
   .m-ai{gap:8px}
-  .ai-invite{padding:11px 14px 11px 8px;gap:12px;border-radius:18px}
+  .ai-invite{padding:12px 15px 12px 9px;gap:13px;border-radius:19px;
+    background:
+      radial-gradient(74% 130% at 14% 46%, rgba(146,100,255,.26) 0%, rgba(138,93,255,.05) 58%, rgba(138,93,255,0) 100%),
+      linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,0) 42%),
+      var(--surface);
+    border:1px solid rgba(138,93,255,.22);
+    box-shadow:0 1px 2px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.05)}
   .orb-md{width:74px;height:74px}
   .ai-invite-say{font-size:14.5px}
   .ai-invite-sub{font-size:11.5px}
@@ -1150,17 +1192,45 @@
 .mnav-ai .logo-mark{filter:drop-shadow(0 1px 3px rgba(24,10,60,.45))}
 
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
-  /* A resting glow, not a pulse. Something that throbs in the corner of a
-     screen all day is something people learn to ignore, and then stop
-     seeing when it has a reason to move. */
-  .mnav-ai{background:radial-gradient(120% 120% at 32% 22%,#A87BFF 0%,#8A5DFF 46%,#6234DC 100%);
-    box-shadow:0 6px 18px -4px rgba(124,77,255,.62),0 0 0 5px rgba(20,18,30,.92)}
-  /* Current section: the same object, a ring around it. Not a different
-     component — §11 — because the thing you are in should still look like
+  /* ── The centre button, lit rather than glowing ──────────────────────
+     It was a flat radial fill under one wide solid shadow, and a solid
+     shadow is the thing that reads as cheap: the light had a findable edge,
+     which nothing lit ever does.
+     Same five ideas as the orb's body, in CSS. The bloom is a pseudo-element
+     BEHIND the button so it can be soft without bleeding over the mark; the
+     sheen is a pseudo-element in front of the fill and behind the mark. */
+  .mnav-ai{
+    background:
+      radial-gradient(72% 68% at 32% 20%, rgba(255,255,255,.30) 0%, rgba(255,255,255,0) 62%),
+      radial-gradient(120% 118% at 34% 22%, #B78FFF 0%, #9264FF 38%, #7241E8 68%, #4E27B4 100%);
+    box-shadow:
+      0 0 0 5px rgba(20,18,30,.94),                 /* the bar, cut around it */
+      inset 0 1px 0 rgba(255,255,255,.40),          /* top rim */
+      inset 0 -7px 12px -7px rgba(26,8,64,.85),     /* the ball turning away */
+      0 5px 12px -5px rgba(58,22,140,.7),           /* contact shadow, tight */
+      0 1px 3px rgba(0,0,0,.35)}
+  .mnav-ai::before{
+    content:'';position:absolute;inset:-16px;border-radius:50%;z-index:-1;
+    background:radial-gradient(circle,
+      rgba(138,93,255,.32) 0%, rgba(130,84,255,.14) 44%, rgba(124,77,255,0) 72%);
+    transition:opacity var(--d-base) var(--e-out)}
+  .mnav-ai::after{
+    content:'';position:absolute;inset:0;border-radius:50%;z-index:1;
+    background:linear-gradient(158deg,
+      rgba(255,255,255,.24) 0%, rgba(255,255,255,.05) 30%, rgba(255,255,255,0) 54%)}
+  .mnav-ai .logo-mark{position:relative;z-index:2}
+  /* Current section: the same object with the light turned up, never a
+     different component (§11) — the thing you are in should still look like
      the thing you pressed. */
   .mnav-ai[aria-current="page"]{
-    box-shadow:0 8px 24px -4px rgba(124,77,255,.85),0 0 0 5px rgba(20,18,30,.92),
-      0 0 0 7.5px rgba(138,93,255,.55)}
+    box-shadow:
+      0 0 0 5px rgba(20,18,30,.94),
+      0 0 0 7px rgba(150,110,255,.42),
+      inset 0 1px 0 rgba(255,255,255,.5),
+      inset 0 -7px 12px -7px rgba(26,8,64,.85),
+      0 6px 16px -5px rgba(88,40,200,.8),
+      0 1px 3px rgba(0,0,0,.35)}
+  .mnav-ai[aria-current="page"]::before{opacity:1.4}
   .mnav-ai[aria-current="page"] .logo-mark path{fill-opacity:1}
 }
 
@@ -1808,4 +1878,265 @@
   body:has(.pj-head) .main-wrap,
   body:has(.set-page) .main-wrap,
   body:has(.dia-page) .main-wrap{grid-template-columns:minmax(0,1fr)}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   POLISH PASS
+   Spacing, light, and the small consistencies that separate a mobile
+   layout from a mobile PRODUCT.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Today's vertical rhythm ─────────────────────────────────────────────
+   Next, the day in a line, the assistant, the areas and the board were four
+   blocks stacked with nothing between them — measured, the gaps were 0, 0
+   and 0, because each is a direct child of the scrolling column and only
+   `.main-col` had a gap, which applies one level up.
+
+   One rule, on the column that holds them, so the rhythm is a decision
+   rather than the sum of whatever margins the blocks happened to carry. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  #main-scroll:has(> .m-next){display:flex;flex-direction:column;gap:20px}
+  .m-ai{gap:10px}
+  .m-next{gap:8px}
+  /* The area chips sit closer to the board they filter than to the card
+     above them — proximity is what says which of the two they belong to. */
+  #main-scroll:has(> .m-next) > .m-toolbar{margin-bottom:-6px}
+  .m-buckets{gap:16px}
+  .bucket-head{margin-bottom:10px}
+  .m-sec-h{font-size:10.5px;letter-spacing:.13em}
+
+  /* ── Habits, as a rank of rings ───────────────────────────────────────
+     The ring is the same shape the desktop rail uses, at the size a thumb
+     wants, with the name beneath it. Three across: an ordinary habit name
+     fits on one line even at 360px, and two rows cover most days. */
+  .m-habits{padding:2px 0 12px}
+  .m-habits-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:4px;padding:4px 8px 0;overflow:visible}
+  .m-hb{flex-direction:column;align-items:center;justify-content:flex-start;
+    gap:7px;min-height:0;width:auto;padding:10px 4px 9px;border-radius:14px;
+    background:none;border:0;text-align:center;color:var(--text-2)}
+  .m-hb:active{background:rgba(255,255,255,.05)}
+  .m-hb-tick{width:34px;height:34px;flex:0 0 34px;border:0;background:none;
+    display:grid;place-items:center;padding:0}
+  .m-hb-tick svg{width:34px;height:34px;overflow:visible}
+  .m-hb-ring{fill:none;stroke:var(--border-strong);stroke-width:2.4;
+    transition:stroke var(--d-base) var(--e-out)}
+  .m-hb-mark{fill:none;stroke:transparent;stroke-width:3;stroke-linecap:round;
+    stroke-linejoin:round;stroke-dasharray:22;stroke-dashoffset:22;
+    transition:stroke-dashoffset var(--d-slow) var(--e-out),stroke var(--d-fast)}
+  .m-hb.is-done .m-hb-ring{stroke:var(--ok)}
+  .m-hb.is-done .m-hb-mark{stroke:var(--ok);stroke-dashoffset:0}
+  .m-hb.is-done{background:none}
+  .m-hb.is-done .m-hb-n{color:var(--text)}
+  .m-hb-n{font-size:11.5px;line-height:1.3;font-weight:500;white-space:normal;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden;text-overflow:clip;min-width:0}
+  .m-habits-more{width:100%;justify-content:center;margin:6px 0 0}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .m-hb-ring,.m-hb-mark{transition:none}
+}
+
+/* ── The calendar's view switcher, centred in its own track ──────────────
+   The track is 38px tall with 3px of padding — 32px of room — and the tabs
+   were given a 42px minimum for the finger. Ten pixels of tab hung out of
+   the bottom of the container, which is exactly the "sitting too low" the
+   review saw. The track grows to fit the target instead of the target
+   overflowing the track. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .cal-modes{height:auto;padding:4px;align-items:stretch}
+  .cal-modes [role="tab"]{height:auto;min-height:42px;display:grid;
+    place-items:center;line-height:1}
+  .cal-mode-pill{top:4px;bottom:4px;left:4px}
+}
+
+/* ── The sky, quieter up close ───────────────────────────────────────────
+   Ambience on a 27-inch display is texture; the same marks 30cm from your
+   face are specks. Fewer of them (see stars.js) and dimmer. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  #los-stars{opacity:.5}
+}
+
+/* ── The Diary page's margin stripe ──────────────────────────────────────
+   A ruled page has a margin, and the stripe belongs IN it. The stripe was
+   left at the desktop's 32px while the phone's page padding came down to
+   15px, so the line ran straight through the first character of every line
+   of writing. The margin comes back — narrower than a desktop's, wide enough
+   to be one — and the stripe sits inside it. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .dia-left,.dia-right{padding:16px 16px 18px 34px}
+  .dia-left::before,.dia-right::before{left:22px}
+  .dia-ci-head,.dia-ci-group,.dia-rhythm{margin-left:0}
+
+  /* The two pages are one book, joined deliberately: the seam is a fold, not
+     two boxes touching. The lower page keeps the same radius as the upper
+     one at its own outer corners and squares only where they meet, which is
+     what a spread folded in half actually does. */
+  .dia-book.bk-spread{border-radius:16px;overflow:hidden;
+    box-shadow:var(--paper-shadow)}
+  .dia-left{border-radius:16px 16px 0 0;box-shadow:none;
+    border-bottom:1px solid rgba(255,255,255,.07)}
+  .dia-right{border-radius:0 0 16px 16px;margin-top:0;border-top:0;
+    background:
+      linear-gradient(180deg,rgba(0,0,0,.22) 0,rgba(0,0,0,0) 26px),
+      var(--paper-2);
+    box-shadow:inset 0 9px 16px -14px rgba(0,0,0,.95)}
+  /* The fold itself: a hairline of light on the lower page's top edge, the
+     way the far side of a crease catches it. */
+  .dia-right::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,
+      rgba(255,255,255,0) 0%, rgba(255,255,255,.10) 18%,
+      rgba(255,255,255,.10) 82%, rgba(255,255,255,0) 100%)}
+}
+
+/* ── A task's steps, as a nested block rather than a stray panel ─────────
+   The panel was indented 31px on the left — the desktop's title column — and
+   flush to the right, which on a 362px card reads as something that has come
+   loose rather than as part of it. It gets a rule and an even inset, the
+   controls get a thumb's worth of room, and the delete stops being visible
+   only on hover, which on a phone means visible never. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  :root{--step-tick:22px}
+  .t-steps{margin:10px 4px 2px 10px;padding-left:12px;
+    border-left:1px solid var(--hairline);gap:1px}
+  .ts-row{padding:5px 4px 5px 5px;min-height:40px;border-radius:9px}
+  /* An <input> cannot wrap, so a long step is going to end somewhere: an
+     ellipsis says "there is more" and a hard cut says the layout broke. */
+  .ts-name{font-size:12.5px;padding:3px;text-overflow:ellipsis}
+  .ts-del{color:var(--muted);width:28px;height:28px;font-size:16px}
+  .ts-trail-spacer{width:28px}
+  /* The labels align with the panel, not with the step text: a second indent
+     inside an already-indented block reads as drift. */
+  .ts-label{padding-left:2px}
+  .ts-group{margin-top:9px}
+  /* A dashed hairline ring is invisible against a tinted card at arm's
+     length — the step reads as having no control at all. Same shape, enough
+     contrast to be seen as "not yet" rather than as "missing". */
+  .step-tick.is-locked{border-color:var(--border-strong);opacity:.85}
+  /* Flush with the panel, not indented to the text column: a 32px step-in on
+     a 317px row costs a tenth of the field and reads as misalignment. */
+  .ts-more,.ts-add,.ts-ready,.ts-error{margin-left:0}
+  .ts-more{min-height:34px;display:flex;align-items:center;
+    text-decoration:none;padding:0 3px}
+  .ts-add{margin-top:6px;gap:8px}
+  .ts-add .m-input,.ts-add input{min-height:38px}
+  .ts-add-btn{min-height:38px;padding:0 12px}
+  .ts-label{font-size:9px}
+  .tm-steps{min-height:26px}
+}
+
+/* ── The Book's cover ────────────────────────────────────────────────────
+   64px of Playfair on a 340px page is two words per line and a title that
+   pushes Open book off the bottom. The type scales with the page instead of
+   being fixed, and the composition tightens: the cover is a cover, and the
+   one action on it has to stay on it. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* The closed cover is one page of the open book — same width the reading
+     page gets, so opening it does not change the size of the object in your
+     hand. `height:100%` inside an auto-height frame collapsed it to 236px,
+     which is a thumbnail, not a book. */
+  .bk-cover-frame{aspect-ratio:auto;height:auto;width:100%}
+  .bk-stage-cover .bk-book{aspect-ratio:210/297;width:100%;height:auto;
+    max-width:none;max-height:64dvh;margin:0 auto}
+  .bk-cover{padding:26px 22px 22px;gap:0}
+  .bk-cover-mark{font-size:12px}
+  .bk-cover-pre{font-size:9.5px;letter-spacing:.26em;margin-bottom:10px}
+  /* Scales with the page, floors at something still book-like, and never
+     grows past what two lines of it can occupy. */
+  .bk-cover-title{font-size:clamp(26px,8.4vw,38px);line-height:1.1;
+    overflow-wrap:anywhere}
+  .bk-cover-sub{font-size:14px;margin-top:9px}
+  .bk-cover-rule{width:96px;margin:18px 0}
+  .bk-cover-author{font-size:9.5px;letter-spacing:.14em}
+  .bk-open{margin-top:22px;min-height:44px;padding:0 22px}
+  .bk-stage-cover{gap:0}
+  .bk-stage-cover .bk-arrow-ghost{display:none}
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   §9 CREATING SOMETHING IS A DIALOG, NOT A DRAWER
+   A bottom sheet is right for a MENU — a short list you pick from and
+   dismiss. The four creation flows are forms: a name, a date, a time, a
+   repeat, a calendar, and a decision at the end. Attached to the bottom
+   edge they read as a drawer somebody pulled up, they put the primary
+   action within a thumb's width of the navigation, and the top of the form
+   is the furthest thing from the eye.
+
+   So they are centred cards on a phone, the way they are on a desktop:
+   air on every side, the title at the top, the action at the foot of the
+   CARD rather than the foot of the screen. Everything else — More, Quick
+   add, the task actions, a Book's contents — stays a sheet, because those
+   really are menus.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .modal.ev-modal,.modal-reminder,.modal-schedule{
+    left:50%;right:auto;top:50%;bottom:auto;
+    transform:translate(-50%,-50%);
+    width:calc(100vw - 28px);max-width:460px;
+    max-height:min(84dvh,720px);
+    border-radius:18px;
+    box-shadow:0 24px 64px -16px rgba(0,0,0,.72),0 0 0 1px rgba(255,255,255,.05)}
+  /* The footer belongs to the card. It keeps the safe-area padding only
+     when the card actually reaches the bottom of the screen, which it does
+     not — so the extra inset would be a gap inside a dialog. */
+  .modal.ev-modal .m-foot,.modal-reminder .m-foot,.modal-schedule .m-foot{
+    position:static;padding-bottom:14px;border-radius:0 0 18px 18px}
+  .modal.ev-modal .m-body,.modal-reminder .m-body,.modal-schedule .m-body{
+    padding-bottom:12px}
+  /* A dialog that is not attached to the bottom edge must not have its
+     pickers attached to it either — they open where the control is, which
+     is what `anchor()` writes as an inline position. Nothing here declares
+     left or top, so that inline value is what applies. */
+  .modal.ev-modal .cf-pop:not([hidden]),
+  .modal-reminder .cf-pop:not([hidden]),
+  .modal-schedule .cf-pop:not([hidden]){
+    position:absolute;width:auto;max-height:min(58dvh,420px);
+    border-radius:14px;z-index:210;overflow-y:auto;
+    background:var(--surface);border:1px solid var(--border);
+    box-shadow:0 18px 44px -12px rgba(0,0,0,.7)}
+  /* The navigation steps aside for a dialog exactly as it does for a sheet. */
+  body.modal-open .mnav{transform:translateY(110%)}
+}
+
+/* ── Two artefacts on a task that has steps ──────────────────────────────
+   The blocked tick is a progress ring with its own 44px hit area on
+   `::before`. The generic touch rule ALSO targets `.t-tick::after` — and
+   `::after` is the ring's dark centre. The two collided and the centre was
+   drawn at 44px: a black disc the size of the whole control, hanging off the
+   left edge of any task with unfinished steps. The ring keeps its own
+   geometry; the generic overlay does not apply to it. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .t-tick.is-blocked::after{width:auto;height:auto;inset:3px;
+    top:auto;left:auto;transform:none}
+  .t-tick.is-blocked{width:22px;height:22px}
+  .t-tick.is-blocked::before{inset:-11px}
+
+  /* Project and its badge travel together and wrap as one, so a separator is
+     never left at the end of a line with nothing after it — and no dot joins
+     the two groups, because the project's own colour and the badge beside it
+     already say where one ends and the other begins. */
+  .t-meta-ctx{display:inline-flex;align-items:center;gap:6px;min-width:0;
+    max-width:100%;margin-left:2px}
+}
+.t-meta-ctx{display:inline-flex;align-items:center;gap:6px;min-width:0}
+
+/* ── A pinboard's page arrows leave the canvas ───────────────────────────
+   They are centred over the page everywhere else, which is right for a page
+   of writing and wrong for a board: the whole surface pans, so a button
+   floating in the middle of it is something you press while trying to move
+   the board. They go to the foot of the page, inside the padding reserved
+   for them, clear of the zoom cluster in the canvas's own corner. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .bk-stage:has(.bk-l-pinboard) .bk-arrow{top:auto;bottom:10px;transform:none;
+    width:40px;height:40px}
+  .bk-stage:has(.bk-l-pinboard) .bk-arrow:hover:not(:disabled){transform:none}
+  .bk-stage:has(.bk-l-pinboard) #bk-prev{left:14px}
+  .bk-stage:has(.bk-l-pinboard) #bk-next{right:14px}
+  /* The board's own controls stay in the canvas, on the opposite side from
+     nothing — the arrows are outside it now, so the corner is free. */
+  .pin-ctl{right:8px;bottom:8px}
+  .bk-l-pinboard .bk-page-title{font-size:15px}
+  .bk-pin-tools .btn{min-height:36px;font-size:12.5px;padding:0 11px}
 }

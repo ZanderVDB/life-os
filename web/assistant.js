@@ -110,7 +110,10 @@ export function assistantInviteHtml() {
     ${orbHtml({ size: 'md', id: 'orb-today' })}
     <span class="ai-invite-t">
       <span class="ai-invite-say">${COPY.idle.say}</span>
-      <span class="ai-invite-sub">Tap to speak · hold ${'◎'} below for Quick add</span>
+      <!-- The button is NAMED, not drawn: a glyph standing in for a control
+           reads as a font that failed to load, and there is no character in
+           any font that means "the round one in the middle of the bar". -->
+      <span class="ai-invite-sub">Tap to speak · hold the centre button for Quick add</span>
     </span>
   </button>`;
 }

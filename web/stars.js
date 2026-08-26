@@ -51,10 +51,18 @@ const TINTS = ['#C9B0FF', '#A98CFF', '#8A5DFF', '#D8CBFF'];
 export function renderStars(opts = {}) {
   document.getElementById('los-stars')?.remove();
 
-  // Density scales with area but is capped: a large display should not pay for
-  // thousands of nodes, and past a point more stars read as noise, not depth.
+  /* Density scales with area but is capped: a large display should not pay
+   * for thousands of nodes, and past a point more stars read as noise, not
+   * depth.
+   *
+   * The FLOOR was the problem on a phone. `max(28, …)` meant a 390 x 844
+   * screen — a third of a laptop's area — still got 28 marks, so the sky was
+   * three times denser per square inch than the one it was designed for.
+   * Held at arm's length that is not atmosphere, it is dust on the screen,
+   * and it was being reported as a stray mark beside the content. Nine is a
+   * floor for "the sky is not empty"; the arithmetic does the rest. */
   const area = window.innerWidth * window.innerHeight;
-  const count = opts.count ?? Math.min(90, Math.max(28, Math.round(area / 26000)));
+  const count = opts.count ?? Math.min(90, Math.max(9, Math.round(area / 26000)));
   const rand = seeded(opts.seed ?? 20260731);
 
   const W = 1000;

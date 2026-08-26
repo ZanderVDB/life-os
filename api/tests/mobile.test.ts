@@ -334,3 +334,65 @@ test('the density scale is a set of tokens, not a pile of margins', () => {
     assert.ok(mobileCss.includes(t), `the density scale is missing ${t}`);
   }
 });
+
+test('the pinboard stays a spread, and nothing floats on the pan surface', () => {
+  /* The board keeps its geometry and the screen moves over it. Two things
+   * follow, and both were wrong before this pass:
+   *
+   * The viewport has to take the SPREAD's proportions, or a landscape board
+   * sits in a portrait box with a third of the screen empty. `aspect-ratio`
+   * alone does not do it — the base rule sets `height:100%`, and a box with
+   * both dimensions resolved never consults its ratio.
+   *
+   * And every control has to be somewhere other than on the canvas. The whole
+   * surface is a pan target; a button floating in the middle of one is a
+   * button you hit while trying to move the board. */
+  const book = read('library-book.js');
+  const touch = read('pinboard-touch.js');
+
+  assert.match(mobileCss, /aspect-ratio:420\/297;height:auto/,
+    'the viewport can be given a height, so the spread lands in a portrait box');
+  assert.match(mobileCss, /#bk-book\.bk-spread:has\(\.bk-l-pinboard\)\{min-height:0\}/,
+    'the pinboard page keeps the dvh floor, so a band of empty paper follows it');
+
+  // The controls are a SIBLING of the viewport, not a child of it.
+  const page = book.match(/function pinboardPageHtml[\s\S]*?\n\}/)?.[0] ?? '';
+  const vp = page.match(/<div class="pin-vp"[\s\S]*?<\/div>/)?.[0] ?? '';
+  assert.ok(vp.length > 0, 'the pinboard viewport is gone');
+  assert.ok(!vp.includes('pinViewportControlsHtml'), 'the zoom controls sit on the canvas');
+  assert.match(page, /<\/div>\s*(?:<!--[\s\S]*?-->\s*)?\$\{pinViewportControlsHtml\(\)\}/,
+    'the zoom controls are not rendered beside the viewport');
+  // ...which means they can no longer be found from the host.
+  assert.match(touch, /const ctl = host\.closest\('\.bk-l-pinboard'\) \?\? host;/,
+    'the controls are still looked up inside the viewport, so they are dead');
+  for (const b of ['[data-pin-fit]', '[data-pin-in]', '[data-pin-out]']) {
+    assert.ok(!touch.includes(`host.querySelector('${b}')`), `${b} is still bound to the host`);
+  }
+});
+
+test('an inline step list is legible and reachable at arm\u2019s length', () => {
+  // A dashed hairline ring on a tinted card reads as a MISSING control, not as
+  // a locked one; and an 18px text link is not a tap target.
+  assert.match(mobileCss, /\.step-tick\.is-locked\{border-color:var\(--border-strong\)/,
+    'the locked step tick is still a hairline');
+  assert.match(mobileCss, /\.ts-more,\.ts-add,\.ts-ready,\.ts-error\{margin-left:0\}/,
+    'the panel footer is still indented to the desktop text column');
+  assert.match(mobileCss, /\.ts-more\{min-height:34px/, '"n more steps" is not a tap target');
+});
+
+test('a touch-target floor is never applied to a drawn glyph', () => {
+  /* `.set-idx-chev` is an 8x8 span with two borders and a 45-degree rotation.
+   * It was swept into the "wide enough already, just short" rule, and a 42px
+   * floor turned it into a 42px diagonal stroke running down the side of the
+   * Settings card — the stray mark in the review. The row is the tap target;
+   * the arrow is decoration, and `aria-hidden` says so. */
+  const settings = read('settings.js');
+  assert.match(settings, /class="set-idx-chev" aria-hidden="true"/,
+    'the Settings arrow is no longer decorative');
+  const floor = mobileCss.match(/^\s*[^\n]*\{min-height:42px\}$/m)?.[0] ?? '';
+  assert.ok(floor.length > 0, 'the 42px floor rule is gone');
+  assert.ok(!floor.includes('set-idx-chev'),
+    'a drawn glyph is being stretched to a touch-target height');
+  assert.match(mobileCss, /\.set-idx-chev\{flex:0 0 auto;width:8px;height:8px/,
+    'the Settings arrow is no longer an 8px glyph');
+});
