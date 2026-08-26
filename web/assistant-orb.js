@@ -207,7 +207,7 @@ export class Orb {
   drawConcentric(cx, cy, R, amp, breathe, reduce) {
     const { ctx } = this;
     const idle = this.state === 'idle' || this.state === 'starting';
-    const r = R * (1 + (idle ? breathe * 0.02 : amp * 0.13));
+    const r = R * (1 + (idle ? breathe * 0.02 : amp * 0.18));
 
     if (reduce) {
       /* Reduced motion still has to say "listening" (§49). It says it with
@@ -225,11 +225,18 @@ export class Orb {
       return;
     }
 
-    // Emit. Loud voices emit more often as well as more strongly.
-    const gap = 240 - amp * 150;
+    /* Emit. A loud voice emits more often AND more strongly, and near-silence
+     * emits rarely and faintly — it does not stop, because a listening orb
+     * that goes completely still reads as one that has stopped listening
+     * (§9). The two cadences are far enough apart that the difference
+     * between speaking and not speaking is obvious across the room. */
+    const speaking = amp > 0.06;
+    const gap = speaking ? 210 - amp * 150 : 620;
     if (!this.lastEmit || this.t - this.lastEmit > gap) {
-      const strength = this.state === 'listening' ? Math.max(amp, 0.06) : breathe * 0.05;
-      if (strength > 0.04) {
+      const strength = this.state === 'listening'
+        ? (speaking ? amp : 0.05 + breathe * 0.02)
+        : breathe * 0.04;
+      if (strength > 0.03) {
         this.lastEmit = this.t;
         this.rings.push({ r: R, born: this.t, strength, wob: (this.rings.length % 5) * 1.3 });
       }
@@ -238,7 +245,11 @@ export class Orb {
     const reach = Math.min(this.w, this.h) / 2;
     this.rings = this.rings.filter((ring) => {
       const age = (this.t - ring.born) / 1;
-      const travel = age * (0.035 + ring.strength * 0.055);
+      /* Travel scales hard with the loudness the ring was born with: a shout
+       * throws a ring across the whole field in about a second, a murmur
+       * puts one just past the edge of the orb. That correspondence is the
+       * point — the waves ARE the sound, not a decoration timed to it. */
+      const travel = age * (0.022 + ring.strength * 0.095);
       const rad = R + travel;
       if (rad > reach * 1.02) return false;
       const life = 1 - (rad - R) / (reach - R);
@@ -260,7 +271,7 @@ export class Orb {
       }
       ctx.closePath();
       ctx.strokeStyle = `rgba(186,150,255,${alpha})`;
-      ctx.lineWidth = Math.max(0.6, (1.2 + ring.strength * 4.5) * life);
+      ctx.lineWidth = Math.max(0.5, (0.9 + ring.strength * 6) * life);
       ctx.stroke();
       return true;
     });

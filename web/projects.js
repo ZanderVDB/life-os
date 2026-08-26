@@ -261,8 +261,8 @@ export function projectDetailHeaderHtml(p, areaName) {
       <div class="pj-head-side">
         ${p.book ? `<button class="btn btn-ghost pjd-book" id="pjd-book"
           data-book="${esc(p.book.bookId)}">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
-            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 4.5h5.5a2 2 0 0 1 2 2V16a1.6 1.6 0 0 0-1.6-1.5H4z"/>
             <path d="M16 4.5h-4.5a2 2 0 0 0-2 2V16a1.6 1.6 0 0 1 1.6-1.5H16z"/></svg>
           <span>Project Book</span>
@@ -406,13 +406,34 @@ export function projectDetailBodyHtml(p, tasks, taskHtml) {
         ${open.length
     ? open.map((t) => `${taskHtml(t)}${taskContextHtml(t)}`).join('')
     : '<div class="pj-empty pj-empty-inline"><span class="pj-empty-t">Nothing planned yet</span>'
-      + '<span class="pj-empty-s">Add the first thing that has to happen.</span></div>'}
+      + '<span class="pj-empty-s">Add the first thing that has to happen.</span>'
+      + '<button type="button" class="btn btn-sm pj-empty-a" data-pjd-empty-add>Add task</button></div>'}
       </div>
       ${closed.length ? `<details class="pjd-done">
         <summary>${closed.length} finished</summary>
         <div class="pjd-tasks pjd-tasks-done">${closed.map((t) => taskHtml(t)).join('')}</div>
       </details>` : ''}
     </section>
+
+    ${p.book ? `<!-- §27: below Tasks on a phone, because the phone's job is
+         execution — what is next, then what is left, then the place you
+         write about it. The header keeps the same action on a desktop, where
+         there is room for both. -->
+    <section class="pjd-sec pjd-book-sec">
+      <button type="button" class="pjd-book-card" data-book="${esc(p.book.bookId)}">
+        <span class="pjd-book-ico" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4.5h5.5a2 2 0 0 1 2 2V16a1.6 1.6 0 0 0-1.6-1.5H4z"/>
+            <path d="M16 4.5h-4.5a2 2 0 0 0-2 2V16a1.6 1.6 0 0 1 1.6-1.5H16z"/></svg>
+        </span>
+        <span class="pjd-book-t">
+          <span class="pjd-book-l">Project Book</span>
+          <span class="pjd-book-s">${esc(p.book.title ?? p.title)}</span>
+        </span>
+        <span class="pjd-book-go" aria-hidden="true">›</span>
+      </button>
+    </section>` : ''}
 
     <section class="pjd-sec">
       <div class="pjd-sec-head">

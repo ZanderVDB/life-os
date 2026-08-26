@@ -275,8 +275,15 @@ export function openSheet(o) {
   wireSheetDrag(sheet, close);
 
   openSheetState = { sheet, scrim, close };
-  // One frame, so the transform transition has a starting point to leave.
-  requestAnimationFrame(() => { scrim.classList.add('is-in'); sheet.classList.add('is-in'); });
+  /* One frame, so the transform transition has a starting point to leave —
+   * and a timer as well, because requestAnimationFrame does not fire in a
+   * tab that is not compositing. Without the fallback the sheet never gets
+   * `is-in`, which means it never leaves `translateY(101%)`: it is mounted,
+   * focus-trapped, and entirely below the bottom of the screen. Both paths
+   * add the same class, and adding it twice is nothing. */
+  const reveal = () => { scrim.classList.add('is-in'); sheet.classList.add('is-in'); };
+  requestAnimationFrame(reveal);
+  setTimeout(reveal, 24);
 
   o.onMount?.(sheet, close);
   sheet.querySelector('[data-autofocus]')?.focus?.();

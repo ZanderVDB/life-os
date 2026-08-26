@@ -992,3 +992,512 @@
 .lib-card-more{margin-left:auto;width:30px;height:30px;flex:0 0 auto;position:relative}
 .lib-card-more::after{content:'';position:absolute;top:50%;left:50%;
   width:44px;height:44px;transform:translate(-50%,-50%)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE DENSITY PASS
+   ══════════════════════════════════════════════════════════════════════
+
+   The first mobile build was responsive and correct and still read as a
+   desktop application that had been narrowed: a task carrying a title and a
+   project name occupied 126px, so four of them filled a phone screen.
+
+   The rule this section holds:
+
+       PRESERVE ALL CAPABILITY AND INFORMATION.
+       THE IMMEDIATE SURFACE IS COMPACT AND MADE FOR TOUCH.
+
+   Nothing below removes an action. It removes the permanent FOOTPRINT of
+   actions that already exist somewhere else — the two arrow buttons on every
+   task row are in the ⋯ sheet, where they are labelled — and it takes the air
+   out of everything that was breathing at desktop scale.
+
+   Reduce empty padding, never the tap target. Where a control has to stay
+   small to keep a row short, it keeps its painted size and grows a
+   transparent 44px overlay. */
+
+:root{
+  /* ── The scale ────────────────────────────────────────────────────────
+     Five numbers, and everything on a phone is expressed in them. */
+  --m-row:60px;        /* a compact interactive row */
+  --m-row-lg:76px;     /* a row carrying two lines and a number */
+  --m-card:96px;       /* a card with real information in it */
+  --m-sec:22px;        /* between sections */
+  --m-list:8px;        /* between items in a list */
+}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* Typography, once. The desktop task size is 13px; on a phone held at
+     arm's length that is small, and the fix is a bigger FONT in a shorter
+     row rather than the reverse. */
+  :root{--fs-task:14.5px;--stack-gap:var(--m-sec)}
+  .main-col{gap:var(--m-sec)}
+  .main-wrap{gap:var(--m-sec)}
+
+  /* ── One page title ───────────────────────────────────────────────────
+     The top bar already says which section this is. `.page-actions` stays:
+     Diary's date navigation and Calendar's controls live there. */
+  .page-head.m-dupe{gap:0}
+  .page-head.m-dupe > h1,
+  .page-head.m-dupe > .eyebrow,
+  .page-head.m-dupe > .sub{display:none}
+  .page-head.m-dupe:empty{display:none}
+
+  /* ── Task rows ────────────────────────────────────────────────────────
+     One line for the title, one for the context, and the ⋯ back on the
+     title line where it started. Around 60px instead of 126. */
+  .t-row{grid-template-columns:auto minmax(0,1fr) auto;row-gap:0;gap:12px;
+    align-items:center}
+  .task{padding:9px 4px 9px 14px}
+  .t-actions{grid-column:auto;justify-content:flex-end;gap:0;opacity:1;
+    align-self:center}
+  /* The arrows and the grip go. Both moves are the first two rows of the ⋯
+     sheet, named — "Move earlier · To This Week" says more than a chevron
+     ever did — and dragging is a mouse affordance. */
+  .t-actions .t-btn[data-act="back"],
+  .t-actions .t-btn[data-act="fwd"],
+  .t-grip{display:none}
+  .t-btn[data-act="menu"]{width:var(--m-tap);height:var(--m-tap)}
+  .t-title{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;
+    -webkit-box-orient:vertical;overflow:hidden;padding:0}
+  .t-title::after{display:none}       /* the row itself is the target now */
+  .t-meta{margin-top:2px;font-size:11.5px;gap:5px}
+  .t-tick{width:22px;height:22px}
+  .drop{display:flex;flex-direction:column;gap:var(--m-list);padding:0}
+  .bucket{background:none;padding:0}
+
+  /* ── Bucket heading, with the Add control in it ───────────────────────
+     `TODAY  7  + Add` — one line, and manual capture is beside the thing it
+     adds to instead of being a second full-width purple button competing
+     with the assistant card above it. */
+  .bucket-head{display:flex;align-items:center;gap:9px;margin:0 0 9px;
+    padding:0 2px}
+  .bucket-head h2{font-size:11px;font-weight:700;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--muted);margin:0}
+  .m-add{margin-left:auto;display:inline-flex;align-items:center;
+    min-height:34px;padding:0 12px;border-radius:9px;font-size:12.5px;
+    font-weight:600;color:var(--accent);background:var(--accent-soft);
+    position:relative}
+  .m-add::after{content:'';position:absolute;top:50%;left:50%;
+    width:calc(100% + 12px);height:var(--m-tap);transform:translate(-50%,-50%)}
+  .m-add:active{background:rgba(138,93,255,.3)}
+
+  /* ── One scrolling row of areas, and it looks deliberate ──────────────
+     The mask is the difference between "there is more to the right" and "a
+     chip got cut in half". */
+  .m-toolbar{gap:0}
+  .m-toolbar .filters{gap:7px;padding:2px var(--m-pad) 2px var(--m-pad);
+    -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 26px),transparent 100%);
+    mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 26px),transparent 100%)}
+  .m-toolbar .chip{min-height:36px;padding:0 13px;font-size:12.5px}
+  .m-toolbar .chip[aria-pressed="true"]{background:var(--accent-soft);color:#fff;
+    border-color:rgba(138,93,255,.5);font-weight:600}
+
+  /* ── The day, above the board ─────────────────────────────────────────
+     Next, the summary line and the assistant are the reason to pick the
+     phone up. They keep their weight; they just stop being tall. */
+  .m-next-row{min-height:var(--m-row-lg);padding:11px 13px}
+  .m-next.is-clear{min-height:52px;padding:0 13px}
+  .m-ai{gap:8px}
+  .ai-invite{padding:11px 14px 11px 8px;gap:12px;border-radius:18px}
+  .orb-md{width:74px;height:74px}
+  .ai-invite-say{font-size:14.5px}
+  .ai-invite-sub{font-size:11.5px}
+  .m-glance{font-size:13px}
+
+  /* ── Habits ───────────────────────────────────────────────────────────
+     `HABITS  0/7  ›` and one scrolling row of pills that ends on purpose.
+     The pills used to reach the card's edge and stop mid-shape, which reads
+     as a rendering fault rather than as a scroller. */
+  .m-habits{padding:0 0 10px;border-radius:var(--m-radius)}
+  .m-habits-h{min-height:46px;padding:0 12px 0 14px;gap:8px}
+  .m-habits-row{gap:7px;padding:2px 14px 2px 14px;
+    -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 24px),transparent 100%);
+    mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 24px),transparent 100%)}
+  .m-hb{min-height:36px;padding:0 12px 0 8px;font-size:12.5px}
+  .m-hb-tick{width:18px;height:18px;font-size:11px}
+
+  /* ── Later ────────────────────────────────────────────────────────────
+     `This Week  6  ›`. Already right; only the height changes. */
+  .m-later{gap:var(--m-list)}
+  .m-later-b > summary{min-height:var(--m-row);padding:0 13px;font-size:14px}
+  .m-later-b .drop{padding:2px 8px 10px}
+  .m-later .m-sec-h{margin-bottom:2px}
+
+  /* ── Empty states, everywhere ─────────────────────────────────────────
+     A short sentence and the action, on one row. The dashed rectangle with
+     two lines of encouragement in it was 130px of a phone screen spent
+     saying that nothing had happened. */
+  .empty,.state,.pjd-empty,.bk-rail-empty,.rail-quiet{
+    padding:12px 14px;min-height:0;border-radius:12px;font-size:13px;
+    line-height:1.45;text-align:left}
+  .empty{border-style:solid;border-color:var(--border);background:var(--surface)}
+  .empty br{display:none}
+  .empty .btn,.state .btn{min-height:38px;margin-top:8px}
+  .state b{font-size:14px}
+}
+
+/* ── The centre action, and what it is ────────────────────────────────────
+   It was a plain purple circle: the lotus was in it, drawn with the brand
+   gradient, which is purple on purple and therefore invisible. The mark has
+   to read as LIFE OS ASSISTANT at a glance, not as an unlabelled action.
+
+   CSS beats a presentation attribute, so `fill` here overrides the
+   `fill="url(#lotus26)"` the mark carries. */
+.mnav-ai .logo-mark path{fill:#fff}
+.mnav-ai .logo-mark path:nth-of-type(1),
+.mnav-ai .logo-mark path:nth-of-type(2){fill-opacity:.66}
+.mnav-ai .logo-mark path:nth-of-type(3){fill-opacity:1}
+.mnav-ai .logo-mark{filter:drop-shadow(0 1px 3px rgba(24,10,60,.45))}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  /* A resting glow, not a pulse. Something that throbs in the corner of a
+     screen all day is something people learn to ignore, and then stop
+     seeing when it has a reason to move. */
+  .mnav-ai{background:radial-gradient(120% 120% at 32% 22%,#A87BFF 0%,#8A5DFF 46%,#6234DC 100%);
+    box-shadow:0 6px 18px -4px rgba(124,77,255,.62),0 0 0 5px rgba(20,18,30,.92)}
+  /* Current section: the same object, a ring around it. Not a different
+     component — §11 — because the thing you are in should still look like
+     the thing you pressed. */
+  .mnav-ai[aria-current="page"]{
+    box-shadow:0 8px 24px -4px rgba(124,77,255,.85),0 0 0 5px rgba(20,18,30,.92),
+      0 0 0 7.5px rgba(138,93,255,.55)}
+  .mnav-ai[aria-current="page"] .logo-mark path{fill-opacity:1}
+}
+
+@media (prefers-reduced-motion:reduce){.mnav-ai{transition:none}}
+
+/* ── The assistant, tightened ─────────────────────────────────────────── */
+.asst-note{display:flex;align-items:center;gap:8px;margin:0;
+  font-size:12px;color:var(--muted);letter-spacing:.01em}
+.asst-note .asst-dot{flex:0 0 7px;width:7px;height:7px;border-radius:50%;
+  background:var(--warn);margin:0;box-shadow:0 0 0 3px rgba(255,196,77,.14)}
+.asst-mic{flex:0 0 auto;gap:7px}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .asst{gap:14px;min-height:0}
+  .asst-stage{padding:4px 0 0;gap:8px}
+  .orb-lg{width:min(248px,66vw);height:min(248px,66vw)}
+  .asst-say{font-size:15.5px}
+  .asst-actions{gap:8px}
+  .asst-actions .btn{min-height:46px}
+  .asst-dev{padding:12px;margin-top:2px}
+}
+
+/* ── Settings and Reminders row density ──────────────────────────────── */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .set-idx{min-height:var(--m-row-lg);padding:10px 14px}
+  .set-idx-b{font-size:11.5px}
+  .set-sec{gap:12px}
+  .set-card{border-radius:var(--m-radius)}
+  .set-row{min-height:var(--m-row);padding:10px 14px}
+  .set-item{min-height:var(--m-row);padding:8px 14px}
+  .set-sec-h{margin-bottom:8px}
+
+  /* Reminders: Pause and Edit move into the overflow, which every other row
+     in the app already uses. The card keeps everything it said. */
+  .rv-row{min-height:var(--m-row-lg);padding:10px 12px}
+  .rv-actions .btn{min-height:38px}
+  .hist-row{padding:10px 12px}
+}
+
+/* ── Today's greeting ─────────────────────────────────────────────────────
+   The one heading on a phone that is NOT a repeat of the top bar, so it
+   stays — but at 144px it was pushing the first task below the fold on its
+   own. The sub-line goes: "Here is what is in front of you" is a promise the
+   rest of the screen keeps for itself. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .page-head{gap:1px}
+  .page-head .eyebrow{font-size:10.5px;letter-spacing:.12em}
+  h1{font-size:23px;letter-spacing:-.5px;line-height:1.15}
+  .page-head > .sub{display:none}
+  .page-actions{margin-top:8px}
+}
+
+/* ── Titles that are nested ───────────────────────────────────────────────
+   Calendar and Projects render their own headers INTO `.page-head`, so their
+   h1 is not a direct child and the rule above missed it. A detail page's h1
+   is the name of the THING — a project, a book — and must never be hidden. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .page-head.m-dupe .cal-head h1,
+  .page-head.m-dupe .pj-head:not(.pjd-head) h1,
+  .page-head.m-dupe .lib-page ~ h1{display:none}
+
+  /* ── §23 Calendar chrome ──────────────────────────────────────────────
+     292px before the calendar began. Three stacked rows of controls with
+     desktop gaps between them, above a title that the top bar had already
+     said. What is left is: the period and Today, the four modes, the layer
+     filters — the same controls, on three tight rows. */
+  .cal-head{gap:9px}
+  .cal-head-row{gap:9px}
+  .cal-head-main{gap:0;min-width:0}
+  .cal-period{gap:4px;min-width:0}
+  /* Shrinks rather than wrapping the row. "Wednesday 26 Aug" is nice to have
+     and the row fitting on one line is not negotiable. */
+  .cal-period-label{flex:1 1 0%;min-width:0;font-size:15px;font-weight:650;
+    letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cal-nav{width:38px;height:38px}
+  .cal-today{padding:0 10px}
+  .cal-add span{display:none}            /* the + says it */
+  .cal-add{padding:0;width:38px;justify-content:center}
+  .cal-nav{width:var(--m-tap);height:var(--m-tap);flex:0 0 auto}
+  .cal-today{min-height:36px;padding:0 12px;font-size:12.5px;flex:0 0 auto}
+  .cal-head-side{gap:6px;flex:0 0 auto}
+  .cal-add{min-height:36px;padding:0 12px;font-size:12.5px}
+  /* The period row and the Add control share one line. */
+  /* `flex-direction:row` said out loud: app.css turns this row into a column
+     below 900px, and setting `display:flex` alone leaves that direction in
+     place — so the three groups each took a line and the calendar started
+     292px down the page. */
+  .cal-head-row:first-child{display:flex;flex-direction:row;align-items:center;
+    flex-wrap:wrap;row-gap:9px;gap:8px}
+  /* Two rows, not three. The period and the Add control share the first
+     line — they are both "what am I looking at and what would I add to it" —
+     and the four modes get the second to themselves, because four tabs
+     across 390px need the whole width to stay readable. */
+  .cal-head-main{flex:1 1 0%;order:1;min-width:0}
+  .cal-head-side{order:2;flex:0 0 auto;margin-left:auto;justify-content:flex-end}
+  .cal-head-mid{flex:1 1 100%;order:3;min-width:0}
+  .cal-head-main .cal-period{display:flex;align-items:center}
+  /* Layers: one scrolling row that ends on purpose, like every other chip
+     row on the phone. */
+  .cal-head-sub{margin:0}
+  .cal-layers{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px;
+    scrollbar-width:none;
+    margin-inline:calc(-1 * var(--m-pad));padding-inline:var(--m-pad);
+    -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 24px),transparent 100%);
+    mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 24px),transparent 100%)}
+  .cal-layers::-webkit-scrollbar{display:none}
+  .cal-layer{flex:0 0 auto;min-height:36px;padding:0 11px;font-size:12px}
+
+  /* ── §25 Projects: a deliberate tab row, not six squeezed buttons ────── */
+  .pj-head{gap:10px}
+  .pj-filters{gap:7px;margin-inline:calc(-1 * var(--m-pad));padding-inline:var(--m-pad);
+    -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 24px),transparent 100%);
+    mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 24px),transparent 100%)}
+  .pj-filter{min-height:38px;padding:0 13px;font-size:13px;white-space:nowrap}
+  .pj-head-side{width:auto}
+  .pj-head-side .btn{min-height:38px;padding:0 12px;font-size:12.5px}
+
+  /* §24 Project cards stay compact: title, next action, a little status. */
+  .pj-row{padding:12px 10px 11px 13px;gap:6px}
+  .pj-main{gap:4px}
+  .pj-title{font-size:15.5px}
+  .pj-foot{margin-top:1px;gap:6px}
+  .pj-progress{font-size:11px}
+  .pj-state,.pj-focus{font-size:10px;padding:2px 6px}
+  .pj-list{gap:14px}
+}
+
+/* ── Project cards: the attention line stops being a paragraph ────────────
+   The "why" sentence wrapped to three lines and took 68px of a 185px card,
+   which is a card explaining itself at length on a screen where the point is
+   to scan six projects. The label and the action stay — they are the signal
+   and the way to act on it — and the sentence is clamped to one line. The
+   whole of it is on the project's own page. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .pj-attention{flex-wrap:nowrap;align-items:center;gap:7px;min-width:0}
+  .pj-attention-l{font-size:10px;padding:2px 6px;flex:0 0 auto}
+  .pj-attention-w{flex:1 1 auto;min-width:0;font-size:12px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pj-attention-act{flex:0 0 auto;font-size:12px;position:relative}
+  .pj-attention-act::after{content:'';position:absolute;top:50%;left:-6px;right:-6px;
+    height:var(--m-tap);transform:translateY(-50%)}
+  .pj-row .pj-more{align-self:flex-start}
+}
+
+/* ── §26 The Project Book, at the size of a link rather than a poster ─────
+   The header button's SVG carried a viewBox and no dimensions. On a desktop
+   it sat inside an auto-width button and nobody noticed; stretched to the
+   full width of a phone it grew to fill the button, and a book illustration
+   took a third of the first screen of every project. The icon has a size
+   now, and on a phone the whole action moves below Tasks as a compact card. */
+.pjd-book svg{flex:0 0 18px;width:18px;height:18px}
+.pjd-book-sec{display:none}
+
+.pjd-book-card{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  min-height:72px;padding:12px 14px;border-radius:var(--m-radius);
+  background:var(--surface);border:1px solid var(--border);color:var(--text)}
+.pjd-book-card:active{background:var(--surface-2)}
+.pjd-book-ico{flex:0 0 40px;width:40px;height:40px;display:grid;place-items:center;
+  border-radius:11px;background:var(--accent-soft);color:var(--accent)}
+.pjd-book-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pjd-book-l{font-size:10.5px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--muted)}
+.pjd-book-s{font-size:15px;font-weight:600;letter-spacing:-.15px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pjd-book-go{flex:0 0 auto;color:var(--muted);font-size:20px;line-height:1}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .pjd-book-sec{display:block}
+  #pjd-book{display:none}          /* the header copy; the card replaces it */
+
+  /* ── §26/§28 the detail page, in execution order ─────────────────────── */
+  .pjd-head{gap:9px}
+  .pjd-left h1{font-size:21px}
+  .pjd-outcome{font-size:12.5px;-webkit-line-clamp:2;display:-webkit-box;
+    -webkit-box-orient:vertical;overflow:hidden}
+  .pjd-meta{gap:6px}
+  .pjd-health{gap:5px;font-size:12px}
+  .pjd-body{gap:18px}
+  .pjd-sec{gap:9px}
+  .pjd-sec-head{gap:8px;flex-wrap:wrap}
+  .pjd-sec-actions .btn{min-height:36px;padding:0 11px;font-size:12.5px}
+  .pjd-notes{min-height:110px}
+  .pjd-tasks{gap:var(--m-list)}
+
+  /* Empty states: a sentence and the action, on one card. Not 150px of
+     dashed rectangle announcing that nothing has happened. */
+  .pj-empty,.pj-empty-inline{display:flex;flex-direction:column;align-items:flex-start;
+    gap:6px;padding:13px 14px;min-height:0;border-radius:12px;text-align:left;
+    border:1px solid var(--border);background:var(--surface)}
+  .pj-empty-t{font-size:13.5px;font-weight:600}
+  .pj-empty-s{font-size:12px;color:var(--muted)}
+  .pj-empty-a{min-height:36px;margin-top:2px}
+  .pjd-next.is-empty{padding:12px 14px;min-height:0}
+}
+
+/* ── The project card is a ROW again ──────────────────────────────────────
+   app.css turns `.pj-row` into a column below 900px, from a time when the ⋯
+   was revealed on hover and had nowhere sensible to sit. Two consequences,
+   both invisible until measured: the ⋯ dropped onto its own line and added
+   48px to every card, and `align-items:flex-start` in a column container
+   means children size to MAX-CONTENT — so `.pj-main` laid out at 446px
+   inside a 362px card and pushed the page sideways.
+
+   Back to a row: title and status on the left, ⋯ on the right, where it is
+   on every other list in the application. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .pj-row{flex-direction:row;align-items:flex-start;gap:10px}
+  .pj-main{min-width:0;width:auto;flex:1 1 0%}
+  .pj-row .pj-more{flex:0 0 var(--m-tap);margin-top:-4px;margin-right:-6px}
+}
+
+/* ── §30/§32 Library Browse rows ─────────────────────────────────────────
+   The Diary is a row here, not a single cover standing in an empty shelf. */
+.lib-row-card{display:none}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .lib-row-card{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    min-height:var(--m-row-lg);padding:11px 14px;border-radius:var(--m-radius);
+    background:var(--surface);border:1px solid var(--border);color:var(--text)}
+  .lib-row-card:active{background:var(--surface-2)}
+  .lib-row-ico{flex:0 0 40px;width:40px;height:40px;display:grid;place-items:center;
+    border-radius:11px;background:rgba(182,155,240,.16);color:var(--a-lavender)}
+  .lib-row-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .lib-row-title{font-size:15px;font-weight:600;letter-spacing:-.15px}
+  .lib-row-meta{font-size:11.5px;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lib-row-go{flex:0 0 auto;color:var(--muted);font-size:20px;line-height:1}
+
+  /* Cards: a row's worth of height, not a tile's. */
+  .lib-sec{margin-bottom:0}
+  .lib-sec-h{font-size:11px;letter-spacing:.11em;margin-bottom:9px}
+  .lib-sec-n{font-weight:400;letter-spacing:0;text-transform:none;opacity:.7}
+  .lib-card{min-height:var(--m-row-lg);padding:11px 12px 11px 17px;gap:4px;
+    border-radius:var(--m-radius)}
+  .lib-card-top{gap:7px}
+  .lib-card-type{font-size:9.5px}
+  .lib-card-title{font-size:15px;line-height:1.25}
+  .lib-card-desc{display:none}
+  .lib-card-foot{margin-top:2px;font-size:11px}
+  .lib-browse{gap:20px}
+}
+
+/* ── §36/§37 Reading, then writing ───────────────────────────────────────
+   The toolbar is not there while you read. It arrives when an editor takes
+   focus and sits on the keyboard, where the caret is. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .bk-toolbar{display:none}
+  html.bk-editing .bk-toolbar{display:flex;position:fixed;left:0;right:0;
+    bottom:var(--kb-h,0px);z-index:140;margin:0;border-radius:0;
+    background:rgba(23,21,31,.97);backdrop-filter:blur(14px);
+    border-top:1px solid var(--border);
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));
+    flex-wrap:nowrap;overflow-x:auto;gap:4px;scrollbar-width:none}
+  html.bk-editing .bk-toolbar::-webkit-scrollbar{display:none}
+  html.bk-editing .bk-toolbar .bk-tb{flex:0 0 auto;min-width:42px;min-height:42px}
+  html.bk-editing .bk-toolbar .bk-tb-style{flex:0 0 auto;min-height:42px}
+  /* Room under the last line for it, and the bottom bar steps aside. */
+  html.bk-editing .bk-page{padding-bottom:62px}
+  html.bk-editing .mnav{display:none}
+
+  /* §33 The page reflows. Not an A4 spread scaled down — text at reading
+     size, phone margins, and the paper identity kept: the ruled surface, the
+     margin stripe and the Playfair headings are all still here. */
+  .bk-page{font-size:15.5px;line-height:1.62}
+  .bk-page-hdr{height:auto;min-height:38px}
+  .bk-page-title{font-size:17px}
+  .bk-book.bk-spread:not(.dia-book){min-height:64dvh}
+  .bk-foot{padding:8px 0 0;font-size:11.5px}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   §40 THE DIARY, AS TWO PAGES ONE ABOVE THE OTHER
+   The semantic stays: page one is what you write, page two is what you tap.
+   What changes is that they are stacked rather than facing — and stacked
+   with a visible seam, so it still reads as a diary being turned rather
+   than as a web form with a textarea at the top.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .dia-book.bk-spread{max-width:none;gap:0;border-radius:14px;overflow:hidden}
+  .dia-left,.dia-right{padding:16px 15px 18px}
+
+  /* The seam. A dashed hairline said "two boxes"; this says "the next page",
+     which is what it is — the page edge, its stitching, and a label. */
+  .dia-right{border-top:0;position:relative;
+    background:linear-gradient(180deg,rgba(0,0,0,.16),transparent 34px),var(--paper-2)}
+  .dia-right::before{content:'CHECK-IN';position:absolute;top:0;left:0;right:0;
+    height:26px;display:flex;align-items:center;padding-left:15px;
+    font-size:9.5px;font-weight:700;letter-spacing:.16em;color:var(--paper-ink-2);
+    border-top:1px solid rgba(255,255,255,.09);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+  .dia-right > *{margin-top:26px}
+  .dia-right > * ~ *{margin-top:0}
+
+  .dia-date{font-size:20px}
+  .dia-head{gap:6px}
+  .dia-toolbar{gap:4px;padding:4px 0}
+  .dia-chip{min-height:38px;padding:0 11px}
+  .dia-prompt-a{font-size:13px}
+  /* Date navigation and History stay in the header where they are labelled
+     (§41) — never behind a menu. */
+  .dia-daynav{display:flex;align-items:center;gap:4px}
+  .dia-step,.dia-today{min-height:var(--m-tap)}
+
+  /* ── §20 Calendar Day: what is grouped is obvious ─────────────────────
+     The all-day items and the timed reminders shared one unlabelled strip
+     above the grid, so a birthday and a 4pm reminder looked like the same
+     kind of thing stacked in the same box. */
+  .cal-plan.is-day .pl-allday,.cal-plan.is-three .pl-allday{
+    position:relative;gap:4px;margin:0 0 8px;padding:20px 0 8px;
+    border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline)}
+  .cal-plan.is-day .pl-allday::before,.cal-plan.is-three .pl-allday::before{
+    content:'ALL DAY';position:absolute;top:4px;left:0;
+    font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--muted)}
+  .cal-plan.is-day .pl-ad,.cal-plan.is-day .pl-rem-ad{min-height:34px;
+    display:flex;align-items:center;font-size:12.5px;padding:0 9px}
+  .cal-plan.is-day .pl-day-head{height:auto;padding-bottom:8px;gap:8px}
+  .cal-plan.is-day .pl-canvas{position:relative}
+}
+
+/* ── A phone on its side ──────────────────────────────────────────────────
+   390px of height, 60 of which is the navigation. Everything that was sized
+   against WIDTH has to answer to height as well here, or the orb alone takes
+   two thirds of the screen. */
+@media (max-height:500px) and (max-width:1099px){
+  :root{--m-nav-h:52px}
+  .mnav-ai{width:48px;height:48px;transform:translateY(-8px)}
+  .mnav-ai:active{transform:translateY(-8px) scale(.93)}
+  .mnav-ai svg{width:22px;height:22px}
+  .mnav-i{font-size:10px}
+  .orb-lg{width:min(248px,66vw,46dvh);height:min(248px,66vw,46dvh)}
+  .asst{gap:10px}
+  .asst-script{max-height:26dvh}
+  .m-ai{flex-direction:row;align-items:center;gap:12px}
+  .m-glance{flex:0 0 auto}
+  .ai-invite{flex:1;min-width:0}
+  .orb-md{width:58px;height:58px}
+  .msheet{max-height:94dvh}
+  .page-head{gap:0}
+  h1{font-size:20px}
+}

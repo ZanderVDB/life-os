@@ -146,11 +146,13 @@ export function renderAssistant(head, scroll, ctx) {
     <p class="sub">Say what is going on. Life OS proposes the changes; you confirm them.</p>`;
 
   scroll.innerHTML = `<div class="asst" id="asst" data-state="idle">
-    <div class="asst-note">
-      <span class="asst-dot" aria-hidden="true"></span>
-      <span><b>Prototype.</b> The assistant is not connected yet — it will show you
-      what it understood, and nothing is saved.</span>
-    </div>
+    <!-- One line. It was a full amber panel, which is the right weight for a
+         warning about losing data and the wrong weight for a standing fact —
+         it drew the eye before the orb did, every single time the screen
+         opened. The full explanation is still given at the moment it matters,
+         on the confirmation. -->
+    <p class="asst-note"><span class="asst-dot" aria-hidden="true"></span>
+      Prototype · nothing will be saved</p>
 
     <p class="asst-src" id="asst-src" hidden></p>
     <div class="asst-script" id="asst-script" role="log" aria-live="polite"></div>
@@ -212,11 +214,17 @@ function renderActions() {
   const s = session.state;
 
   if (s === 'listening' || s === 'paused') {
+    /* Typing is offered WHILE listening, not only instead of it. Somebody who
+     * realises the room is too loud should not have to cancel, work out that
+     * the button they want is the one that was there a moment ago, and start
+     * again — the way out of speaking is a way into typing. */
     box.innerHTML = `<button type="button" class="btn btn-primary asst-big" id="asst-done">
         ${icon('check', 18)}<span>Done</span></button>
+      <button type="button" class="btn btn-ghost" id="asst-type">Type instead</button>
       <button type="button" class="btn btn-ghost" id="asst-cancel">Cancel</button>`;
     box.querySelector('#asst-done').onclick = finishListening;
     box.querySelector('#asst-cancel').onclick = cancelListening;
+    box.querySelector('#asst-type').onclick = () => { stopCapture(); setState('idle'); openTypeSheet(); };
     return;
   }
   if (s === 'processing') { box.innerHTML = ''; return; }
@@ -619,9 +627,13 @@ function openTypeSheet() {
           data-demo="${esc(m.id)}">${esc(m.label)}</button>`).join('')}
       </div>` : ''}
     </div>`,
-    foot: '<button type="button" class="btn btn-primary" id="asst-send">Send</button>',
+    foot: `<button type="button" class="btn btn-ghost asst-mic" id="asst-tomic"
+        aria-label="Speak instead">${icon('sparkle', 18)}<span>Speak</span></button>
+      <button type="button" class="btn btn-primary" id="asst-send">Send</button>`,
     onMount: (rootEl, close) => {
       const ta = rootEl.querySelector('#asst-text');
+      // The way back to the microphone, from inside the typing sheet (§15).
+      rootEl.querySelector('#asst-tomic').onclick = () => { close(); startListening(); };
       rootEl.querySelectorAll('[data-demo]').forEach((b) => {
         b.onclick = () => { ta.value = MOCK_TRANSCRIPTS.find((m) => m.id === b.dataset.demo).text; };
       });

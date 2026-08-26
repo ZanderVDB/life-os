@@ -414,6 +414,9 @@ function wireOverview(scroll) {
     browse.addEventListener('click', (e) => {
       const more = e.target.closest('[data-more]');
       if (more) { e.stopPropagation(); openItemMenu(more, more.dataset.more); return; }
+      // The Diary leaves Library entirely, so the SHELL routes it — the same
+      // rule the shelf object follows.
+      if (e.target.closest('[data-system="diary"]')) { ctx.goRoute('diary'); return; }
       const card = e.target.closest('.lib-card');
       if (card) openShelfObject(card);
     });
@@ -1235,6 +1238,34 @@ function wireBookPhone(scroll) {
     });
   });
 
+  /* ── §36 Reading and writing are different states ─────────────────────
+   *
+   * On a desktop the formatting toolbar sits above the page all the time and
+   * costs nothing. On a phone it is a permanent strip of controls above
+   * something somebody is trying to READ, and by the time they are writing
+   * the caret is at the bottom of the screen and the toolbar is four hundred
+   * pixels away from it.
+   *
+   * So it appears when an editor takes focus and goes when it loses it. Not
+   * a read-only mode with an Edit button: tapping a page and typing is what
+   * a phone does, and a mode you can forget to leave is a mode that loses
+   * words. The state is a class on the root element, which is where
+   * mobile.js already publishes the keyboard height the toolbar sits on. */
+  const editing = (on) => document.documentElement.classList.toggle('bk-editing', on);
+  scroll.addEventListener('focusin', (e) => {
+    if (e.target.closest('[data-editor],[contenteditable="true"]')) editing(true);
+  });
+  scroll.addEventListener('focusout', (e) => {
+    /* Deferred one tick: pressing a toolbar button blurs the editor before the
+     * button takes focus, and hiding the toolbar under the finger that is
+     * pressing it would make every button work exactly never. */
+    if (!e.target.closest('[data-editor],[contenteditable="true"]')) return;
+    setTimeout(() => {
+      const live = document.activeElement;
+      if (!live?.closest?.('[data-editor],[contenteditable="true"],.bk-toolbar')) editing(false);
+    }, 0);
+  });
+
   /* Turning a page by thumb. The arrows stay exactly where they were (§41),
    * and an editor being typed into is never a page turn. */
   const stage = scroll.querySelector('.bk-stage');
@@ -1863,6 +1894,7 @@ function wireHits(panel) {
  * whole discarded page alive to answer one question.
  */
 export async function leaveBook(next) {
+  document.documentElement.classList.remove('bk-editing');
   const ok = await flushAll();
   if (!ok && hasUnsaved()) {
     ctx.toast('Some changes did not save. They are still here — try again.', true);

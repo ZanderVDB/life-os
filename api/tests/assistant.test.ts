@@ -137,8 +137,15 @@ test('the mock says what it is, everywhere it appears', () => {
   /* A fake that writes real rows is indistinguishable from a working
    * assistant right up until somebody trusts it with a real calendar. */
   const surface = read('assistant.js');
+  /* One line, in the flow, and it never goes away. It used to be a full amber
+   * panel: the right weight for "you are about to lose data" and the wrong
+   * weight for a standing fact, and it drew the eye before the orb did every
+   * time the screen opened. It still has to SAY the two things that matter. */
   assert.match(surface, /class="asst-note"/, 'the surface does not label itself');
-  assert.match(surface, /<b>Prototype\.<\/b>/, 'the label does not say what it is');
+  assert.match(surface, /Prototype/, 'the label does not say it is a prototype');
+  assert.match(surface, /nothing will be saved/, 'the label does not say nothing is saved');
+  assert.ok(!/class="asst-note"[\s\S]{0,200}<b>/.test(surface),
+    'the standing label has grown a panel again');
   assert.match(surface, /nothing has been saved/, 'confirming does not say nothing was saved');
   assert.match(mock.mockProvider.label, /Prototype/);
 });

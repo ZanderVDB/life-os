@@ -963,6 +963,9 @@ async function loadRoute(nav = navToken()) {
   if (!head || !scroll) return;
   setMobileTitle(state.route);
   syncMobileNav(state.route);
+  /* Set BEFORE the header is written, because every branch below writes its
+   * own header and the class has to be on the element they write into. */
+  head.classList.toggle('m-dupe', isPhone() && REPEATS_TITLE.includes(state.route));
 
   if (state.route === 'ai') {
     renderAssistant(head, scroll, assistantContext());
@@ -1068,6 +1071,21 @@ async function loadRoute(nav = navToken()) {
   scroll.innerHTML = placeholderHtml(route, ph);
 }
 
+/**
+ * Routes whose page heading is just the section name.
+ *
+ * The top bar already says Calendar. A 34px "Calendar" immediately beneath it
+ * says it again, costs 60px of a 844px screen, and weakens the hierarchy it
+ * was meant to establish — the first real thing on the page should be the
+ * date controls, not a second label.
+ *
+ * Today is deliberately absent: its heading is the greeting and the date,
+ * which is not the word "Today". Diary is absent for the same reason — its
+ * heading is the day being written. A detail page keeps its own title, which
+ * is the name of the thing, not the name of the section.
+ */
+const REPEATS_TITLE = ['calendar', 'projects', 'library', 'settings', 'history', 'ai'];
+
 const errorHtml = (msg) => `<div class="state"><b>That did not load</b>${esc(msg)}
   <div style="margin-top:16px"><button class="btn" id="retry">Try again</button></div></div>`;
 
@@ -1131,9 +1149,14 @@ function heldNoticeHtml() {
 
 function bucketHtml(b) {
   const list = inBucket(b.id);
+  /* On a phone the Add control lives HERE, beside the count, rather than as a
+   * full-width button above the board. Same action, same id, a tenth of the
+   * visual weight — and it is next to the thing it adds to. */
+  const add = isPhone() && b.id === 'today'
+    ? '<button type="button" class="m-add" id="add" aria-label="Add a task">+ Add</button>' : '';
   return `<section class="bucket ${b.id === 'future' ? 'future' : ''}" aria-label="${b.label}">
     <div class="bucket-head"><h2>${b.label}</h2>
-      <span class="bucket-count" data-count="${b.id}">${list.length}</span></div>
+      <span class="bucket-count" data-count="${b.id}">${list.length}</span>${add}</div>
     <div class="drop${list.length ? '' : ' is-empty'}" data-bucket="${b.id}">
       ${list.length ? bucketInnerHtml(list) : emptyHtml(b)}
     </div></section>`;
@@ -1216,6 +1239,10 @@ function syncBucketHeads() {
   });
 }
 
+/* Compact on a phone, and the action is IN it. A dashed rectangle with two
+ * lines of encouragement inside it is 130px of a 844px screen saying nothing
+ * happened — see mobile.css, where the same treatment is applied to every
+ * empty state on the phone rather than only to this one. */
 const emptyHtml = (b) => `<div class="empty">${
   b.id === 'today' ? 'Nothing planned for today' : 'Empty'}</div>`;
 
@@ -1387,7 +1414,8 @@ function restoreTodayState() {
 }
 
 function wireToday() {
-  document.getElementById('add').onclick = () => openTask(null);
+  const addBtn = document.getElementById('add');
+  if (addBtn) addBtn.onclick = () => openTask(null);
   document.querySelectorAll('[data-open-project]').forEach((b) => {
     b.onclick = (e) => {
       e.stopPropagation();
@@ -1795,6 +1823,15 @@ function saved(msg = 'Saved') {
 function openTaskMenu(id, anchorEl) {
   closeMenu();
   const t = findTask(id);
+  if (!t) return;
+  /* On a phone this is a sheet.
+   *
+   * The desktop version is a popover placed from the button's rectangle, and
+   * a popover placed from a button near the bottom of a 390px screen has
+   * nowhere to go — it is the clipped-menu problem §47 exists to prevent.
+   * The ACTIONS are identical; only the surface differs, and the surface is
+   * the one every other menu on a phone already uses. */
+  if (isPhone()) return openTaskSheet(t);
   const r = anchorEl.getBoundingClientRect();
   const m = document.createElement('div');
   m.className = 'menu';
@@ -1845,6 +1882,62 @@ function openTaskMenu(id, anchorEl) {
   state.menu = m;
   setTimeout(() => document.addEventListener('click', closeMenu, { once: true }), 0);
 }
+/**
+ * Everything the ⋯ offers, as a sheet.
+ *
+ * This is where the two arrow buttons went. §4 removed their permanent
+ * footprint from every task row — three controls and a drag grip on every
+ * line, on a screen where the title had already been truncated to fit them —
+ * and it removed the footprint only. Move earlier and Move later are the
+ * first two rows here, and moving to any bucket by name is directly beneath.
+ */
+function openTaskSheet(t) {
+  const at = BUCKETS.findIndex((b) => b.id === t.bucket);
+  const row = (id, label, desc, icoName) => sheetRow({ id, label, desc, icon: icoName });
+  openSheet({
+    title: t.title,
+    body: `<div class="msheet-group">Move</div>
+      ${row('back', 'Move earlier', at > 0 ? `To ${BUCKETS[at - 1].label}` : 'Already the soonest', 'chevL')}
+      ${row('fwd', 'Move later', at < BUCKETS.length - 1 ? `To ${BUCKETS[at + 1].label}` : 'Already the furthest', 'chevR')}
+      ${row('up', 'Move up', '', 'sort')}
+      ${row('down', 'Move down', '', 'sort')}
+      <div class="msheet-sep"></div>
+      <div class="msheet-group">Put it in</div>
+      ${BUCKETS.map((b) => sheetRow({
+    id: `b:${b.id}`, label: b.label, current: b.id === t.bucket,
+    right: b.id === t.bucket ? 'Current' : '',
+  })).join('')}
+      <div class="msheet-sep"></div>
+      ${row('steps', 'Add a step', '', 'check')}
+      ${row('calendar', 'Add to Calendar', 'Set aside time for this', 'calendar')}
+      ${row('open', 'Open task', 'Project, steps, priority and dates', 'pencil')}`,
+    onMount: (rootEl, close) => {
+      rootEl.querySelectorAll('[data-more]').forEach((el) => {
+        el.onclick = (e) => {
+          e.preventDefault();
+          close();
+          const k = el.dataset.more;
+          if (k === 'open') return openTask(t.id);
+          if (k === 'steps') return expandSteps(t.id);
+          if (k === 'calendar') {
+            return void addTaskToCalendar(t, t.projectId ? state.projectsById?.[t.projectId] : null);
+          }
+          if (k === 'back') return shiftBucket(t.id, -1);
+          if (k === 'fwd') return shiftBucket(t.id, 1);
+          if (k === 'up') return nudge(t.id, -1);
+          if (k === 'down') return nudge(t.id, 1);
+          if (k.startsWith('b:')) {
+            const b = k.slice(2);
+            if (b === t.bucket) return undefined;
+            return moveTask(t.id, b, boundaryAnchor(t, b));
+          }
+          return undefined;
+        };
+      });
+    },
+  });
+}
+
 function closeMenu() { state.menu?.remove(); state.menu = null; }
 
 /* ── Task modal ──────────────────────────────────────────────────────── */
@@ -3647,8 +3740,13 @@ function wireProjectsHeader() {
    * `setHash`, never a raw `location.hash`: every hash this app writes goes
    * through the one record the shell consults, or the write is counted as a
    * navigation and invalidates the render that just made it. See nav.js. */
-  document.getElementById('pjd-book')?.addEventListener('click', (e) => {
-    setHash(`#library/book/${e.currentTarget.dataset.book}`);
+  /* One handler, two triggers: the header button on a desktop and the card
+   * beneath Tasks on a phone (§27). Both carry the book id, so neither has
+   * to know which one the person pressed. */
+  document.querySelectorAll('#pjd-book,.pjd-book-card').forEach((b) => {
+    b.addEventListener('click', (e) => {
+      setHash(`#library/book/${e.currentTarget.dataset.book}`);
+    });
   });
   /* A Task's linked Book context, followed to the exact page and block (§13).
    * Page and block travel as IDS: a stored page NUMBER stops being true the
@@ -4205,6 +4303,9 @@ function wireProjectDetail() {
   });
 
   document.getElementById('pjd-add-task')?.addEventListener('click', () => addProjectTask(p));
+  // The action inside the empty state, which is the only reason an empty
+  // state earns its space on a phone.
+  document.querySelector('[data-pjd-empty-add]')?.addEventListener('click', () => addProjectTask(p));
   document.getElementById('pjd-next-add')?.addEventListener('click', () => addProjectTask(p));
   document.getElementById('pjd-add-existing')?.addEventListener('click', () => addExistingTask(p));
   document.querySelectorAll('[data-pjd-open-task]').forEach((b) => {
@@ -5948,8 +6049,13 @@ function mobileTodayHtml() {
       ${assistantInviteHtml()}
     </section>
 
+    <!-- No full-width primary button here any more. Manual capture is not
+         less available, it is less LOUD: a second giant purple call to action
+         beside the assistant card made the phone home screen ask two
+         questions at once. Add now sits in the Today heading, beside the
+         count. (No backticks in this comment: it is inside a template
+         literal, and a backtick here ends the string.) -->
     <div class="m-toolbar">
-      <button class="btn btn-primary" id="add">Add task</button>
       <div class="filters" role="group" aria-label="Filter by area">
         <button class="chip" data-area="" aria-pressed="${!state.areaFilter}">All areas</button>
         ${state.me.areas.map((a) => `<button class="chip" data-area="${a.id}"
@@ -6145,14 +6251,18 @@ function openHabitsSheet() {
 function openQuickAdd() {
   openSheet({
     title: 'Quick add',
+    /* The field said "Add a task…" with a row labelled "Task" directly below
+     * it — two controls, the same name, different behaviour. It is a QUICK
+     * CAPTURE now: type the words, they land on Today, and the rows beneath
+     * are for when you already know it is an event, a habit or something that
+     * needs a date. One is for speed; the others are for precision. */
     body: `<div class="msheet-pad">
         <form class="qa-form" id="qa-form">
           <input class="m-input" id="qa-title" data-autofocus
-            placeholder="Add a task…" autocomplete="off" enterkeyhint="done">
+            placeholder="Quick capture…" autocomplete="off" enterkeyhint="done">
           <button type="submit" class="btn btn-primary">Add</button>
         </form>
-        <p class="qa-hint">Goes straight to Today. Open it afterwards for a project,
-          steps or a date.</p>
+        <p class="qa-hint">Lands on Today. Pick below if it is something else.</p>
       </div>
       <div class="msheet-sep"></div>
       ${sheetRow({ id: 'qa-task', label: 'Task', icon: 'today',

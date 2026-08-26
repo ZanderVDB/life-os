@@ -197,3 +197,132 @@ test('Settings is an index and a page, and every section survives', () => {
     'the phone index is a hand-written copy of the section list');
   assert.match(mobileCss, /\.set-nav\{display:none\}/, 'the desktop column is still beside it');
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE DENSITY PASS
+   The version before this was responsive and correct and still read as a
+   narrowed desktop: a task carrying a title and a project name occupied
+   126px, so four of them filled a phone screen. These hold the rules that
+   fixed it, and the one rule that keeps it honest — nothing was removed,
+   only relocated.
+   ══════════════════════════════════════════════════════════════════════ */
+
+test('the arrows left the task row and arrived in the sheet', () => {
+  /* §4. Two chevrons, an overflow and a drag grip on every row, on a screen
+   * where the title had already been truncated to make space for them. The
+   * FOOTPRINT goes; the actions do not — and in the sheet they are labelled,
+   * which a chevron never was. */
+  assert.match(mobileCss, /\.t-grip\{display:none\}/,
+    'the permanent arrow row is back on the task card');
+  assert.match(mobileCss, /data-act="back"/, 'the move-earlier arrow is on the row again');
+  assert.match(mobileCss, /data-act="fwd"/, 'the move-later arrow is on the row again');
+
+  const sheet = app.slice(app.indexOf('function openTaskSheet('), app.indexOf('function closeMenu('));
+  for (const [what, re] of [
+    ['move earlier', /'back', 'Move earlier'/],
+    ['move later', /'fwd', 'Move later'/],
+    ['move up', /'up', 'Move up'/],
+    ['move down', /'down', 'Move down'/],
+    ['every bucket by name', /BUCKETS\.map/],
+    ['add a step', /'steps', 'Add a step'/],
+    ['add to calendar', /'calendar', 'Add to Calendar'/],
+    ['open the task', /'open', 'Open task'/],
+  ] as [string, RegExp][]) {
+    assert.match(sheet, re, `${what} is not reachable from the task sheet`);
+  }
+  // And it IS a sheet on a phone, not the desktop popover placed from a
+  // button near the bottom of the screen, which has nowhere to go (§47).
+  assert.match(app, /if \(isPhone\(\)\) return openTaskSheet\(t\);/,
+    'the task menu is still an anchored popover on a phone');
+});
+
+test('manual capture stays, at a tenth of the weight', () => {
+  /* §5. A full-width purple button beside the assistant card made the home
+   * screen ask two questions at once. It is a compact Add in the Today
+   * heading now — same id, same handler, beside the count it adds to. */
+  assert.match(app, /class="m-add" id="add"/, 'the Add control lost its id or its place');
+  assert.match(app, /isPhone\(\) && b\.id === 'today'/,
+    'the Add control is drawn on every bucket, or on none');
+  const today = app.slice(app.indexOf('function mobileTodayHtml()'), app.indexOf('function habitsCardHtml'));
+  assert.ok(!/btn-primary" id="add"/.test(today), 'the full-width primary button is back');
+  // Never assumed: a route with no board has no Add button.
+  assert.match(app, /const addBtn = document\.getElementById\('add'\);/,
+    'wireToday assumes the button exists');
+});
+
+test('one page title, and only where it would be a repeat', () => {
+  /* §17. The top bar says Calendar; a 34px "Calendar" beneath it says it
+   * again and costs 60px. Today and Diary are deliberately absent — their
+   * heading is the greeting and the day, which is not the section name — and
+   * a detail page keeps its own title, which is the name of the thing. */
+  assert.match(app, /const REPEATS_TITLE = \['calendar', 'projects', 'library', 'settings', 'history', 'ai'\]/,
+    'the list of repeated titles changed without this test changing');
+  assert.ok(!/REPEATS_TITLE = \[[^\]]*'today'/.test(app), 'the greeting is being hidden');
+  assert.ok(!/REPEATS_TITLE = \[[^\]]*'diary'/.test(app), "the diary's date heading is being hidden");
+  assert.match(app, /head\.classList\.toggle\('m-dupe', isPhone\(\) && REPEATS_TITLE\.includes\(state\.route\)\)/,
+    'nothing marks the header as a repeat');
+  // The page actions — Diary's date navigation, Calendar's controls — are
+  // never hidden with it.
+  const rule = mobileCss.slice(mobileCss.indexOf('.page-head.m-dupe'), mobileCss.indexOf('.page-head.m-dupe') + 240);
+  assert.ok(!/page-actions/.test(rule), 'the header hid its controls too');
+});
+
+test('the project card is a row, and the Book is not a poster', () => {
+  /* Both were invisible until measured. app.css turns `.pj-row` into a
+   * column below 900px, and `align-items:flex-start` in a column container
+   * sizes children to MAX-CONTENT — so a 362px card laid out at 446px and
+   * pushed the page sideways, with the overflow menu on its own line adding
+   * 48px to every project. */
+  assert.match(mobileCss, /\.pj-row\{flex-direction:row;align-items:flex-start/,
+    'the project card is a column again');
+  /* And the Book button's icon had a viewBox and no dimensions: stretched to
+   * the full width of a phone it grew to fill the button. */
+  const projects = read('projects.js');
+  assert.match(projects, /<svg width="18" height="18" viewBox="0 0 20 20"/,
+    'the Project Book icon has no size again');
+  assert.match(mobileCss, /\.pjd-book svg\{flex:0 0 18px/, 'the icon can still grow');
+  // §27: below Tasks on a phone, in the header on a desktop, one handler.
+  assert.match(projects, /class="pjd-book-card"/, 'there is no compact Book card');
+  assert.match(app, /querySelectorAll\('#pjd-book,\.pjd-book-card'\)/,
+    'the two Book triggers do not share a handler');
+  assert.match(mobileCss, /#pjd-book\{display:none\}/, 'both Book controls show on a phone');
+});
+
+test('a sheet appears even when nothing is compositing', () => {
+  /* requestAnimationFrame does not fire in a tab that is not painting. The
+   * reveal class was added from one, so the sheet mounted, trapped focus,
+   * and stayed entirely below the bottom of the screen. The same lesson the
+   * pinboard's fit taught. */
+  assert.match(mobileJs, /const reveal = \(\) => \{ scrim\.classList\.add\('is-in'\); sheet\.classList\.add\('is-in'\); \};/);
+  assert.match(mobileJs, /requestAnimationFrame\(reveal\);\s*\n\s*setTimeout\(reveal, 24\);/,
+    'the sheet reveal depends on a frame being painted');
+});
+
+test('the orb answers the room, and answers it differently when quiet', () => {
+  /* §13. A fixed decorative animation that looks the same whether somebody
+   * is speaking or silent fails the one thing the orb exists to say. */
+  const orb = read('assistant-orb.js');
+  assert.match(orb, /const speaking = amp > 0\.06;/, 'silence and speech are not told apart');
+  assert.match(orb, /const gap = speaking \? 210 - amp \* 150 : 620;/,
+    'the emit cadence does not change with the voice');
+  assert.match(orb, /const travel = age \* \(0\.022 \+ ring\.strength \* 0\.095\);/,
+    'a loud ring does not travel further than a quiet one');
+  // Near-silence still emits: an orb that goes completely still reads as one
+  // that has stopped listening (§9).
+  assert.match(orb, /\(speaking \? amp : 0\.05 \+ breathe \* 0\.02\)/,
+    'the resting state stops moving entirely');
+});
+
+test('quick capture stops pretending to be the Task row below it', () => {
+  // §16. Two controls, the same name, different behaviour.
+  assert.match(app, /placeholder="Quick capture…"/, 'the field still says "Add a task"');
+  assert.match(app, /Lands on Today\. Pick below if it is something else\./,
+    'the field does not say where it goes');
+});
+
+test('the density scale is a set of tokens, not a pile of margins', () => {
+  // §1. One place to change a number, and every phone rule written in it.
+  for (const t of ['--m-row:', '--m-row-lg:', '--m-card:', '--m-sec:', '--m-list:']) {
+    assert.ok(mobileCss.includes(t), `the density scale is missing ${t}`);
+  }
+});

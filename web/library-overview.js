@@ -295,10 +295,35 @@ export function browseHtml(items) {
     <div class="lib-browse">
       ${recent.length ? sec('Recent', recent,
     recent.every((i) => !i.lastOpenedAt) ? 'by last edit' : '') : ''}
-      ${lib.filter === 'all' || lib.filter === 'book' ? personalShelfHtml() : ''}
+      ${lib.filter === 'all' || lib.filter === 'book' ? personalRowHtml() : ''}
       ${groups.map((g) => sec(g.title, g.own)).join('')}
     </div>
     ${pageHitsHtml(lib.pageHits)}`;
+}
+
+/**
+ * The Diary, in Browse (§32).
+ *
+ * On a shelf it is a lavender volume standing among the books, and that is
+ * right — it is one of your books. In a LIST it was a single cover stranded
+ * in an otherwise empty shelf rail, which reads as a rendering accident
+ * rather than as a section with one thing in it.
+ *
+ * So in Browse it is a row like every other row, and it keeps its identity
+ * where identity belongs: on the cover, when you open it.
+ */
+export function personalRowHtml() {
+  return `<section class="lib-sec">
+    <h2 class="lib-sec-h">Personal</h2>
+    <button type="button" class="lib-row-card" data-system="diary">
+      <span class="lib-row-ico" data-accent="lavender">${typeIcon('book', 20)}</span>
+      <span class="lib-row-t">
+        <span class="lib-row-title">My Diary</span>
+        <span class="lib-row-meta">Life OS Journal · part of Life OS</span>
+      </span>
+      <span class="lib-row-go" aria-hidden="true">&rsaquo;</span>
+    </button>
+  </section>`;
 }
 
 /**
