@@ -398,6 +398,14 @@ export function checkinHtml(entry, refl) {
 
   return `<div class="dia-checkin"${tone}>
     <header class="dia-ci-head">
+      <!-- The second page says which page it is. On a phone the two pages are
+           stacked rather than facing, so the boundary has to be stated: this
+           is where "things you write" ends and "things you tap" begins. A
+           real element rather than a ::before, because a generated label
+           cannot be measured, cannot be read by anything, and wrapped to
+           CHECK- / IN the moment the box it was in stopped being the width
+           anybody assumed. -->
+      <p class="dia-ci-page" aria-hidden="true">Check-in</p>
       <h3 class="dia-ci-title">How was it?</h3>
       <p class="dia-ci-sub">A few taps. Nothing here is required.</p>
     </header>

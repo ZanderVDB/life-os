@@ -206,9 +206,20 @@ function conflictsOn(dayIso) {
 }
 
 /* ── Header ───────────────────────────────────────────────────────────── */
+/**
+ * What the header says you are looking at.
+ *
+ * Written twice, deliberately. A desktop has room for "Wednesday 26 August"
+ * and a phone does not — and the answer to that is not a smaller font or an
+ * ellipsis, both of which read as unfinished. It is a shorter sentence that
+ * says the same thing: `Wed 26 Aug`, `26–28 Aug`. Every ordinary state of
+ * every view fits on one line at 360px without truncating.
+ */
 function periodLabel() {
+  const phone = isPhone();
   if (cal.mode === 'month') {
-    return cal.anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    return cal.anchor.toLocaleDateString(undefined,
+      phone ? { month: 'long', year: 'numeric' } : { month: 'long', year: 'numeric' });
   }
   if (cal.mode === 'plan') {
     const w = weekOf(cal.anchor);
@@ -217,12 +228,20 @@ function periodLabel() {
     return `${a} – ${b}`;
   }
   if (cal.mode === 'day') {
-    return cal.anchor.toLocaleDateString(undefined,
-      { weekday: 'long', day: 'numeric', month: 'short' });
+    return cal.anchor.toLocaleDateString(undefined, phone
+      ? { weekday: 'short', day: 'numeric', month: 'short' }
+      : { weekday: 'long', day: 'numeric', month: 'short' });
   }
   if (cal.mode === 'three') {
+    const end = addDays(cal.anchor, 2);
+    const b = end.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    /* Within one month the month is said once: `26–28 Aug`, not
+     * `26 Aug – 28 Aug`, which is the same information and eight characters
+     * longer than the row has. */
+    if (phone && cal.anchor.getMonth() === end.getMonth()) {
+      return `${cal.anchor.getDate()}–${b}`;
+    }
     const a = cal.anchor.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-    const b = addDays(cal.anchor, 2).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     return `${a} – ${b}`;
   }
   return 'Next 60 days';

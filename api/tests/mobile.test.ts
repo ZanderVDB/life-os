@@ -255,10 +255,15 @@ test('one page title, and only where it would be a repeat', () => {
    * again and costs 60px. Today and Diary are deliberately absent — their
    * heading is the greeting and the day, which is not the section name — and
    * a detail page keeps its own title, which is the name of the thing. */
-  assert.match(app, /const REPEATS_TITLE = \['calendar', 'projects', 'library', 'settings', 'history', 'ai'\]/,
+  assert.match(app, /const REPEATS_TITLE = \['calendar', 'projects', 'library', 'settings', 'history', 'ai', 'diary'\]/,
     'the list of repeated titles changed without this test changing');
   assert.ok(!/REPEATS_TITLE = \[[^\]]*'today'/.test(app), 'the greeting is being hidden');
-  assert.ok(!/REPEATS_TITLE = \[[^\]]*'diary'/.test(app), "the diary's date heading is being hidden");
+  /* Diary joined the list: its heading was literally the word "Diary" under a
+   * bar saying Diary. Its SUB-line is kept by a rule of its own, because that
+   * line says which day is open — the one fact the header carries that
+   * nothing else on the screen does. */
+  assert.match(mobileCss, /body:has\(\.dia-page\) \.page-head\.m-dupe > \.sub\{display:block/,
+    'the diary lost the line saying which day is open');
   assert.match(app, /head\.classList\.toggle\('m-dupe', isPhone\(\) && REPEATS_TITLE\.includes\(state\.route\)\)/,
     'nothing marks the header as a repeat');
   // The page actions — Diary's date navigation, Calendar's controls — are

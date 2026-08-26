@@ -29,6 +29,7 @@
  */
 
 import { docToHtml } from './editor-doc.js';
+import { isPhone } from './mobile.js';
 import { BLOCK_STYLES } from './editor-blocks.js';
 import {
   dia, formatLong, dayName, relativeDay, localToday, monthName, monthGrid, formatShort,
@@ -60,9 +61,16 @@ const icon = (name, size = 15) => `<svg viewBox="0 0 20 20" width="${size}" heig
 export function headerHtml() {
   const today = localToday();
   const isToday = dia.date === today;
+  /* On a phone the bar above already says Diary, and the sub-line saying
+   * "Today" sat directly beside a button saying Today. It says WHICH DAY is
+   * open instead — the one fact this header has that nothing else on screen
+   * carries — and the button keeps its job of getting back to today. */
+  const when = isPhone()
+    ? formatLong(dia.date)
+    : relativeDay(dia.date, today);
   return `<p class="eyebrow dia-page">Life OS</p>
     <h1>Diary</h1>
-    <p class="sub">${esc(relativeDay(dia.date, today))}</p>
+    <p class="sub">${esc(when)}</p>
     <div class="page-actions dia-actions">
       <div class="dia-daynav" role="group" aria-label="Move between days">
         <button type="button" class="dia-step" data-go="prev-day"

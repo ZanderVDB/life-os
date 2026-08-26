@@ -61,7 +61,7 @@ import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHt
   recurrenceWords, modeIds, defaultMode, modeStep,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { habitSummaryHtml } from './calendar.js';
-import { settingsHtml } from './settings.js';
+import { settingsHtml, SETTINGS_TABS } from './settings.js';
 import {
   initLibrary, renderLibrary, libraryHashChanged, libraryWillLeave,
 } from './library-view.js';
@@ -1080,11 +1080,15 @@ async function loadRoute(nav = navToken()) {
  * date controls, not a second label.
  *
  * Today is deliberately absent: its heading is the greeting and the date,
- * which is not the word "Today". Diary is absent for the same reason — its
- * heading is the day being written. A detail page keeps its own title, which
- * is the name of the thing, not the name of the section.
+ * which is not the word "Today". A detail page keeps its own title, which is
+ * the name of the thing, not the name of the section.
+ *
+ * Diary IS here, and its sub-line is kept by a rule in mobile.css: the
+ * heading was literally "Diary" under a bar saying Diary, but the line
+ * beneath it says which day is open, which is the one thing on that header
+ * worth 20 pixels.
  */
-const REPEATS_TITLE = ['calendar', 'projects', 'library', 'settings', 'history', 'ai'];
+const REPEATS_TITLE = ['calendar', 'projects', 'library', 'settings', 'history', 'ai', 'diary'];
 
 const errorHtml = (msg) => `<div class="state"><b>That did not load</b>${esc(msg)}
   <div style="margin-top:16px"><button class="btn" id="retry">Try again</button></div></div>`;
@@ -2814,6 +2818,20 @@ untouched.`)) return;
 function renderSettings() {
   document.getElementById('main-scroll').innerHTML = settingsHtml(state, isPhone());
   wireSettings();
+  /* The bar carries the nested page's own name, and the chevron replaces the
+   * in-page back link — which mobile.css hides, because two ways back from
+   * one page is one too many. */
+  if (isPhone()) {
+    const tab = state.settingsTab
+      ? SETTINGS_TABS.find((t) => t.id === state.settingsTab) : null;
+    if (tab) {
+      setMobileBar(tab.label, () => {
+        state.settingsTab = null;
+        renderSettings();
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      });
+    } else setMobileBar('Settings');
+  }
   /* Integrations is the one panel whose truth lives on the server. It renders
    * "Checking the connection…" first and asks once; every later visit uses
    * what is already known rather than blinking. */
@@ -4194,6 +4212,18 @@ async function renderProjectDetail(scroll) {
     const data = await api(`/api/v1/workspaces/${ws()}/projects/${pj.openId}`);
     if (pj.openId !== data.project.id) return;
     pj.detail = data;
+    /* The task rows on this page belong to THIS project, and the row renderer
+     * looks its name up in `state.projectsById` — which is filled by the task
+     * list on Today and is empty when somebody lands here directly. Every row
+     * then read "Project unavailable" on the project's own page, which is a
+     * lookup miss rendered as a fact. The project is right here; put it in. */
+    state.projectsById[data.project.id] = {
+      id: data.project.id,
+      title: data.project.title,
+      status: data.project.status,
+      focus: data.project.focus,
+      nextActionId: data.project.nextAction?.id ?? null,
+    };
     head.innerHTML = projectDetailHeaderHtml(data.project, areaName);
     scroll.innerHTML = projectDetailBodyHtml(data.project, data.tasks, taskHtml);
     wireProjectsHeader();
@@ -5907,12 +5937,42 @@ async function undoArrange() {
    arrangement all survive. What changes is the ORDER things are asked in.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/** The route name in the phone's top bar. */
-function setMobileTitle(route) {
+/**
+ * The phone's top bar: what it says, and whether it goes back.
+ *
+ * §19. A nested Settings page used to say "Settings" in the bar, then
+ * "‹ Settings" in the page, then "Areas" — three labels before the thing you
+ * opened. One grammar instead: the bar becomes `‹ Areas`, and the chevron is
+ * the way back to the index. The mark steps aside when the chevron is there,
+ * because two glyphs in the top-left corner is two answers to "where am I".
+ */
+function setMobileBar(title, onBack = null) {
   const el = document.getElementById('m-title');
-  if (!el) return;
-  el.textContent = [...ROUTES, ...SECONDARY_ROUTES]
-    .find((r) => r.id === route)?.label ?? 'Life OS';
+  if (el) el.textContent = title;
+  const bar = document.querySelector('.mobile-bar');
+  if (!bar) return;
+  let back = bar.querySelector('#m-back');
+  if (onBack) {
+    if (!back) {
+      back = document.createElement('button');
+      back.id = 'm-back';
+      back.className = 'm-btn m-back';
+      back.setAttribute('aria-label', 'Back');
+      back.innerHTML = icon('chevL', 22);
+      bar.prepend(back);
+    }
+    back.onclick = onBack;
+    bar.classList.add('has-back');
+  } else if (back) {
+    back.remove();
+    bar.classList.remove('has-back');
+  }
+}
+
+/** The route name in the phone's top bar, and no way back from a top level. */
+function setMobileTitle(route) {
+  setMobileBar([...ROUTES, ...SECONDARY_ROUTES]
+    .find((r) => r.id === route)?.label ?? 'Life OS');
 }
 
 /**
@@ -6081,7 +6141,17 @@ function mobileTodayHtml() {
     </div>`;
 }
 
-/** Habits on the phone home: the count, today's rows, and a way to manage. */
+/**
+ * Habits on the phone home: the count, a preview, and the way to the rest.
+ *
+ * Three, as complete rows. It was a horizontal strip of pills, and a pill cut
+ * through the middle of "Read 20 pages" at the card's edge reads as a
+ * rendering fault however deliberate the fade behind it is — Today is a
+ * glance, and a glance must not contain half a word. Everything else is one
+ * tap away in the sheet, which is where streaks and editing already live.
+ */
+const PREVIEW = 3;
+
 function habitsCardHtml() {
   const h = state.habitTotals;
   const rows = mobileHabitRows();
@@ -6092,13 +6162,15 @@ function habitsCardHtml() {
       <span class="m-later-chev" aria-hidden="true">${icon('chevR', 16)}</span>
     </button>
     ${rows.length
-    ? `<div class="m-habits-row">${rows.map((x) => `
+    ? `<div class="m-habits-row">${rows.slice(0, PREVIEW).map((x) => `
         <button type="button" class="m-hb ${x.done ? 'is-done' : ''}"
           data-mhabit="${esc(x.id)}" ${x.system ? 'data-system="1"' : ''}
           aria-pressed="${x.done}">
           <span class="m-hb-tick" aria-hidden="true">${x.done ? '&#10003;' : ''}</span>
           <span class="m-hb-n">${esc(x.name)}</span>
-        </button>`).join('')}</div>`
+        </button>`).join('')}
+        ${rows.length > PREVIEW ? `<button type="button" class="m-habits-more"
+          id="m-habits-more">${rows.length - PREVIEW} more · See all</button>` : ''}</div>`
     : `<p class="m-habits-empty">${state.habitsLoaded
       ? 'Nothing due today.' : 'Loading…'}</p>`}
   </section>`;
@@ -6141,6 +6213,7 @@ function wireMobileToday(scroll) {
   });
 
   scroll.querySelector('#m-habits-open')?.addEventListener('click', () => openHabitsSheet());
+  scroll.querySelector('#m-habits-more')?.addEventListener('click', () => openHabitsSheet());
   scroll.querySelectorAll('[data-mhabit]').forEach((b) => {
     b.addEventListener('click', () => {
       if (b.dataset.system) { go('diary'); return; }
@@ -6168,6 +6241,7 @@ function refreshMobileHabits() {
   el.outerHTML = habitsCardHtml();
   const scroll = document.getElementById('main-scroll');
   document.getElementById('m-habits-open')?.addEventListener('click', () => openHabitsSheet());
+  document.getElementById('m-habits-more')?.addEventListener('click', () => openHabitsSheet());
   scroll?.querySelectorAll('[data-mhabit]').forEach((b) => {
     b.addEventListener('click', () => {
       if (b.dataset.system) { go('diary'); return; }

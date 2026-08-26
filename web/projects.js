@@ -342,9 +342,12 @@ export function taskContextHtml(task) {
 export function nextActionSlotHtml(p) {
   const next = p.nextAction;
   if (!next) {
-    return `<span class="pj-next-none">No next action — add one</span>
-      <button type="button" class="btn btn-sm" id="pjd-next-add">Add a task</button>
-      <button type="button" class="btn btn-ghost btn-sm" id="pjd-next-choose">Choose</button>`;
+    /* No sentence here. The health line directly above already says "No next
+     * action" and explains why, and repeating it inside the card turns one
+     * fact into two — the second of which is a large empty box saying the
+     * thing you have just read. What is left is what you would do about it. */
+    return `<button type="button" class="btn btn-sm" id="pjd-next-add">Add a task</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="pjd-next-choose">Choose existing</button>`;
   }
   // The same facts the row in the list below shows. A next action that told
   // you less than the task list did was the same Task pretending to be a

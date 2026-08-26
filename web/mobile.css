@@ -1231,12 +1231,18 @@
   .cal-head-row{gap:9px}
   .cal-head-main{gap:0;min-width:0}
   .cal-period{gap:4px;min-width:0}
-  /* Shrinks rather than wrapping the row. "Wednesday 26 Aug" is nice to have
-     and the row fitting on one line is not negotiable. */
-  .cal-period-label{flex:1 1 0%;min-width:0;font-size:15px;font-weight:650;
-    letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* §7 The label is never shortened by the layout.
+     It used to be `flex:1 1 0%; min-width:0`, which let the row squeeze it to
+     93px and ellipsis the last two characters of every ordinary state —
+     `Next 60 d…`, `August 20…`. The LABELS are short now (periodLabel writes
+     a phone version of each), so the rule is the opposite: it takes the width
+     its own text needs and the row gives way. If something one day genuinely
+     does not fit, the row wraps, which is honest; an ellipsis on a date is
+     not. */
+  .cal-period-label{flex:0 1 auto;min-width:max-content;font-size:15px;
+    font-weight:650;letter-spacing:-.2px;white-space:nowrap}
   .cal-nav{width:38px;height:38px}
-  .cal-today{padding:0 10px}
+  .cal-today{padding:0 9px;font-size:12px}
   .cal-add span{display:none}            /* the + says it */
   .cal-add{padding:0;width:38px;justify-content:center}
   .cal-nav{width:var(--m-tap);height:var(--m-tap);flex:0 0 auto}
@@ -1546,4 +1552,215 @@
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
   .pj-empty,.pj-empty-inline{align-self:stretch;width:100%;align-items:flex-start}
   .pj-empty-s{max-width:none}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   FINAL VISUAL QA
+   Seventeen screenshots, read carefully, and the defects they showed.
+   Nothing here changes an approved composition; each is a geometry or a
+   contrast fault in something that was otherwise right.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── §1 The top bar is opaque ─────────────────────────────────────────────
+   The bar was `rgba(20,18,30,.86)` with a blur behind it, and a sticky bar
+   you can see through does not hide what scrolls under it — it smears it. A
+   project's title passing beneath read as a title cut in half.
+
+   The layout was never wrong: the bar is sticky at the top of the scrolling
+   column and the content column starts beneath it, which is exactly right.
+   What was wrong was that the bar was not a surface. It is one now — no
+   z-index changed, no offset invented, and one fewer compositing layer for a
+   phone to maintain, which the blur was costing on every scroll frame. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .mobile-bar{background:#191622;backdrop-filter:none;
+    border-bottom:1px solid rgba(255,255,255,.06)}
+  /* And a shadow once something is behind it, so the edge is legible
+     against content rather than only against the page. */
+  .mobile-bar{box-shadow:0 1px 0 rgba(0,0,0,.35)}
+
+  /* §19 The bar goes back. */
+  .mobile-bar.has-back .logo-mark{display:none}
+  .m-back{margin-left:-6px}
+  .m-back svg{width:22px;height:22px}
+}
+
+/* ── §3 The confirmation is a footer, not something floating over cards ──
+   It was sticky inside the scrolling review, which meant it sat ON TOP of
+   whatever card happened to be under it — the last proposal was never fully
+   readable, and the button competed with the navigation beneath it.
+
+   A real footer instead: fixed above the navigation, with the review given
+   exactly its height as bottom padding, so every card scrolls clear of it.
+   One shared number, `--m-cta-h`, does both jobs — the alternative is a
+   margin tuned to one demo that is wrong for every other list length. */
+:root{--m-cta-h:76px}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .asst-confirm{position:fixed;left:0;right:0;
+    bottom:calc(var(--m-nav-h) + var(--m-safe-b));z-index:118;
+    display:flex;gap:10px;align-items:center;
+    height:var(--m-cta-h);
+    /* The extra bottom padding is the centre navigation button, which is 56px
+       lifted 10px above the bar and ringed — it reaches into the bottom of
+       anything sitting directly on top of the bar. The buttons sit above its
+       reach; the bar's own background still runs behind it, which is what it
+       is supposed to do. */
+    padding:10px var(--m-pad) 22px;
+    background:#191622;border-top:1px solid var(--border);
+    box-shadow:0 -10px 24px -12px rgba(0,0,0,.7)}
+  .asst-confirm .btn{min-height:44px}
+  /* The room it takes, given back to the list above it. */
+  .asst[data-state="proposal"] .asst-review{padding-bottom:calc(var(--m-cta-h) + 14px)}
+  /* A keyboard replaces the navigation as the thing below, so the footer
+     sits on the keyboard instead. */
+  html.kb-open .asst-confirm{bottom:var(--kb-h,0px)}
+
+  /* §5 The development panel is last, and it is labelled as development.
+     It also clears the footer, which is the one thing that could have made
+     it interfere with ordinary testing. */
+  .asst[data-state="proposal"] .asst-dev{display:none}
+  .asst-dev{border-style:dashed;border-color:var(--border-strong);opacity:.9}
+  .asst-dev h2::before{content:'⚙ ';opacity:.6}
+}
+
+/* ── §6 Habits: a preview, not a sliced scroller ─────────────────────────
+   The pills scrolled correctly and looked broken: a pill cut through the
+   middle of "Read 20 pages" reads as a rendering fault however deliberate
+   the mask behind it is. Today only needs a PREVIEW — the whole list, with
+   streaks and editing, is one tap away in the sheet — so it shows the first
+   three as complete rows and says how many more there are. Nothing is cut. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .m-habits-row{display:flex;flex-direction:column;gap:2px;overflow:visible;
+    padding:2px 8px 0;-webkit-mask-image:none;mask-image:none}
+  .m-hb{width:100%;min-height:42px;justify-content:flex-start;gap:11px;
+    padding:0 10px;border:0;background:none;border-radius:10px;
+    font-size:14px;color:var(--text)}
+  .m-hb:active{background:rgba(255,255,255,.05)}
+  .m-hb-tick{flex:0 0 20px;width:20px;height:20px}
+  .m-hb.is-done{background:none}
+  .m-hb.is-done .m-hb-n{color:var(--muted);text-decoration:line-through;
+    text-decoration-color:rgba(255,255,255,.28)}
+  .m-hb-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .m-habits-more{display:flex;align-items:center;min-height:40px;padding:0 10px;
+    margin-top:2px;font-size:12.5px;font-weight:600;color:var(--accent)}
+  .m-habits-more:active{background:rgba(255,255,255,.05);border-radius:10px}
+}
+
+/* ── §14 Check-in options that can be read ───────────────────────────────
+   `Medium` needed 38px and had 30. The answer is not a smaller font — it is
+   giving the chips the width the page already has: the rhythm rows put their
+   label above the scale rather than beside it, which turns a 184px track
+   into a 284px one, and the chips lose the padding they did not need. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .dia-rhythm{display:flex;flex-direction:column;gap:13px}
+  .dia-rh-row{display:flex;flex-direction:column;gap:6px}
+  .dia-rh-l{font-size:10px}
+  .dia-chip{padding:0 4px}
+  .dia-chip-t{font-size:11px;letter-spacing:-.1px}
+  .dia-rh-row .dia-chip{min-height:34px;padding:5px 3px;font-size:11px}
+  .dia-chips{gap:5px}
+
+  /* ── §13 The page boundary ───────────────────────────────────────────
+     A real label in the check-in's own header, not a generated one that
+     could not be measured and wrapped to CHECK- / IN. The seam is a gap and
+     an edge: page one ends, page two begins. */
+  .dia-book.bk-spread{gap:0;overflow:visible}
+  .dia-right::before{content:none}
+  .dia-right > *{margin-top:0}
+  .dia-right{margin-top:12px;border-top:1px solid rgba(255,255,255,.10);
+    border-radius:0 0 14px 14px;
+    box-shadow:inset 0 12px 22px -18px rgba(0,0,0,.9);
+    background:linear-gradient(180deg,rgba(0,0,0,.14),transparent 40px),var(--paper-2)}
+  .dia-left{border-radius:14px 14px 0 0}
+  .dia-ci-page{margin:0 0 3px;font-size:9.5px;font-weight:700;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--paper-ink-2);white-space:nowrap}
+  .dia-ci-head{padding-top:2px}
+  .dia-ci-title{font-size:19px}
+
+  /* §12 The Diary keeps the day it is showing; the word "Diary" is in the
+     bar above it. */
+  body:has(.dia-page) .page-head.m-dupe > .sub{display:block;
+    font-size:13.5px;color:var(--text-2);margin-bottom:2px}
+}
+.dia-ci-page{display:none}
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .dia-ci-page{display:block}
+}
+
+/* ── §10 Library's toolbar, on two deliberate rows ───────────────────────
+   Five controls of different kinds were sharing one line: type filters, a
+   view switch, a search field and Archived. Search ended up narrow enough
+   that its own placeholder was clipped, which is the one control on the
+   screen that has to look like it can be typed into.
+
+   Row one: the type filters, scrolling, full bleed.
+   Row two: search taking the width it needs, then Browse/Shelf, then
+   Archived — the two least-used controls, at the end, at a size a thumb can
+   still hit. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .lib-bar{gap:9px}
+  .lib-bar-right{flex-wrap:wrap;gap:8px}
+  .lib-search{order:1;flex:1 1 100%;min-height:44px;padding:0 13px}
+  .lib-search input{width:100%;font-size:14px}
+  .lib-view{order:2;flex:0 0 auto}
+  .lib-bar-right > .btn{order:3;flex:0 0 auto;min-height:38px;padding:0 13px;
+    font-size:12.5px}
+
+  /* §19 One way back, and it is the chevron in the bar. */
+  .set-back{display:none}
+  .set-sub-head h2{display:none}
+  .set-sub-head p{margin-top:0}
+  .set-sub-head{margin-bottom:2px}
+
+  /* §20 Completed: the gap above the first row was a heading's worth of
+     space with no heading in it. */
+  .page-head.m-dupe .page-actions{position:static;width:auto}
+  body:has(.hist-list) .page-head.m-dupe{margin-bottom:-8px}
+  .hist-group{margin-top:14px}
+}
+
+/* ── §21 One bottom inset, in one place ──────────────────────────────────
+   Every scrolling page clears the navigation through `--m-bottom-clear` on
+   `.main-wrap`, which is the shell. The two surfaces that do NOT scroll
+   inside it — a sheet, and the assistant's fixed footer — carry the safe
+   area themselves. Nothing gets its own hand-tuned padding-bottom. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .main-wrap{padding-bottom:var(--m-bottom-clear)}
+  /* A Book's page and a pinboard are the tallest things on the phone and
+     the likeliest to end underneath the bar; they inherit the same number
+     rather than inventing one. */
+  .bk-layout,.lib-page,.dia-page{padding-bottom:0}
+}
+
+/* ── §12 The Diary's controls on one row ─────────────────────────────────
+   Previous / Today / next, the month, and History — five controls that were
+   wrapping to two lines and costing 60px above a writing surface. They fit
+   on one: the month button keeps its label, History keeps its word, and the
+   arrows are the 44px they have to be. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .dia-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;
+    width:100%;margin-top:6px}
+  .dia-daynav{flex:0 0 auto;gap:2px;padding:0;background:none}
+  .dia-actions #dia-jump{flex:1 1 auto;min-width:0;justify-content:center;
+    min-height:38px;padding:0 8px}
+  .dia-actions #dia-jump span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dia-actions #dia-history{flex:0 0 auto;min-height:38px;padding:0 11px}
+  .dia-step,.dia-today{min-height:38px}
+  .dia-step{width:38px}
+  .dia-today{padding:0 10px}
+}
+
+/* ── The right margin was wider than the left ────────────────────────────
+   Calendar, Projects, Library, Settings and Diary each collapse the rail by
+   setting `grid-template-columns: minmax(0,1fr) 0` — which leaves a zero
+   column, and a zero column still gets the grid GAP. Every one of those
+   pages was therefore inset 14px further on the right than on the left: not
+   enough to notice on one screen, and unmistakable once five of them are
+   photographed side by side. One column on a phone, and no gap to lose. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  body:has(.lib-page) .main-wrap,
+  body:has(.cal-head) .main-wrap,
+  body:has(.pj-head) .main-wrap,
+  body:has(.set-page) .main-wrap,
+  body:has(.dia-page) .main-wrap{grid-template-columns:minmax(0,1fr)}
 }
