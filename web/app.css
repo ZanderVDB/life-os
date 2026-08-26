@@ -18,6 +18,9 @@
 :root{
   /* Canvas & surfaces */
   --app-bg:linear-gradient(180deg,#1A1624 0%,#141220 52%,#111018 100%);
+  /* The ramp's midpoint, as a solid: what shows behind the gradient layer,
+     in the overscroll bounce, and in <meta name="theme-color">. */
+  --app-bg-flat:#141220;
   --sidebar:#17151F; --rail:#1A1824;
   --surface:#211E2C; --surface-2:#2A2536; --surface-3:#322C40;
   --border:#332E43; --border-strong:#3d3652; --hairline:#332E43;
@@ -100,9 +103,27 @@ html{scrollbar-gutter:stable}
 html,body{margin:0;height:100%}
 body{
   font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
-  background:var(--app-bg);background-attachment:fixed;color:var(--text);
+  /* A flat colour, and the ramp on a layer of its own below. This is also
+     what the rubber-band overscroll area shows on a phone, and it is the
+     value in <meta name="theme-color">, so the status bar, the bounce and
+     the page agree. */
+  background:var(--app-bg-flat);color:var(--text);
   -webkit-font-smoothing:antialiased;overflow-x:hidden;
 }
+/* ── The canvas gradient ────────────────────────────────────────────────
+   `background: var(--app-bg); background-attachment: fixed` on <body> is what
+   this used to be, and iOS Safari does not honour `fixed` on the scrolling
+   root — it falls back to `scroll`, which sizes the ramp to the body box and
+   then TILES it. Measured on a 390x844 phone: at the foot of Diary the left
+   column reads #191622 - #100f19 - #171320, darkening and then jumping back
+   light again, which is a seam across the page. Under `fixed` the same column
+   is #191622 - #11101c - #100f18 at the top of the page and at the bottom.
+
+   A real fixed layer behaves the same in every browser. -2 sits below the
+   star field, which is already -1, and body creates no stacking context so
+   both stay behind the app. */
+body::before{content:'';position:fixed;inset:0;z-index:-2;
+  background:var(--app-bg);pointer-events:none}
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;border:none;background:none}
 a{color:inherit}

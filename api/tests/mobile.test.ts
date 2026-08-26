@@ -416,3 +416,33 @@ test('a hidden heading does not leave its row behind', () => {
   assert.match(mobileCss, /\.pj-filters\{gap:7px;margin-inline:calc\(-1 \* var\(--m-pad\)\) 0;/,
     'the filter strip still bleeds past the New project button');
 });
+
+test('the canvas gradient is a layer, not a fixed background attachment', () => {
+  /* `body { background: var(--app-bg); background-attachment: fixed }` is what
+   * this was. iOS Safari has a long-standing quirk here: it does not honour
+   * `fixed` on the scrolling root and falls back to `scroll`, which sizes the
+   * ramp to the body box and then TILES it.
+   *
+   * Simulated by forcing `background-attachment: scroll` on a 390x844 phone:
+   * at the foot of Diary the left column read #191622 - #100f19 - #171320 —
+   * darkening and then jumping back light, a seam across the page. Under
+   * `fixed` the same column is #191622 - #11101c - #100f18 at both ends of
+   * the page. With the layer, forcing `scroll` changes nothing at all.
+   *
+   * The layer is inert everywhere that already worked: desktop and phone mean
+   * luminance were identical to five decimals before and after. */
+  const appCss = read('app.css');
+  assert.match(appCss, /body::before\{content:'';position:fixed;inset:0;z-index:-2;\s*background:var\(--app-bg\);pointer-events:none\}/,
+    'the canvas ramp is not painted by a fixed layer');
+  assert.ok(!/background-attachment:fixed/.test(appCss),
+    'a fixed background attachment is back, and iOS does not honour it');
+  // Behind the star field, which is -1, and body must stay context-free or
+  // both would be trapped behind the page instead of behind the content.
+  assert.match(appCss, /#los-stars\{position:fixed;inset:0;width:100vw;height:100vh;z-index:-1/,
+    'the star layer moved, so -2 may no longer be below it');
+  // The flat colour under the layer is what the overscroll bounce and the
+  // status bar show, so it has to match <meta name="theme-color">.
+  assert.match(appCss, /--app-bg-flat:#141220;/, 'the flat canvas colour is gone');
+  assert.match(read('index.html'), /<meta name="theme-color" content="#141220">/,
+    'theme-color and the flat canvas colour have drifted apart');
+});
