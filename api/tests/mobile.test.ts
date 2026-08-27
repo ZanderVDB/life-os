@@ -446,3 +446,61 @@ test('the canvas gradient is a layer, not a fixed background attachment', () => 
   assert.match(read('index.html'), /<meta name="theme-color" content="#141220">/,
     'theme-color and the flat canvas colour have drifted apart');
 });
+
+test('the surface ladder is lifted for a phone, and only for a phone', () => {
+  /* The canvas is 0.69% of white and a card is 1.43%: 1.132:1, which is the
+   * entire separation between "card" and "background". A laptop IPS panel
+   * leaks backlight, so the whole range floats up off true black and the eye
+   * reads it. An OLED phone renders #141220 at essentially no emission and
+   * auto-brightness pulls the rest down with it, the two collapse together,
+   * and the screen reads as one flat dark mass.
+   *
+   * Each value is its desktop colour scaled in LINEAR light, so the hue is
+   * preserved exactly and only the luminance moves. Measured after: desktop
+   * mean luminance unchanged within capture noise, phone +4.5% to +22.2%. */
+  const lift = mobileCss.match(/@media \(max-width:899px\),\(max-height:500px\) and \(max-width:1099px\)\{\s*:root\{\s*--surface:[^}]*\}/);
+  assert.ok(lift, 'the phone surface ladder is gone');
+  const rule = lift[0];
+  for (const [token, value] of Object.entries({
+    '--surface': '#2c2839', '--surface-2': '#352f43', '--surface-3': '#3d364d',
+    '--border': '#3e3851', '--border-strong': '#473f5f', '--hairline': '#3e3851',
+    '--paper': '#2f2a3e', '--paper-2': '#2b273a',
+  })) {
+    assert.ok(rule.includes(`${token}:${value}`), `${token} is not the lifted value`);
+  }
+  // The CANVAS does not move. Lifting it would just make the app grey.
+  assert.ok(!/--app-bg/.test(rule), 'the canvas was lifted along with the surfaces');
+  // Paper stays lighter than the surfaces, which is the Library's own rule.
+  const Y = (h: string) => {
+    const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
+      .map((s) => (s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  assert.ok(Y('#2f2a3e') > Y('#2c2839'),
+    'paper is no longer lighter than the surfaces around it');
+  assert.ok(Y('#2c2839') < Y('#352f43') && Y('#352f43') < Y('#3d364d'),
+    'the lifted ladder is out of order');
+});
+
+test('Appearance offers no control that does nothing', () => {
+  /* Theme was System / Always dark and nothing read the value — there is no
+   * light palette and no prefers-color-scheme rule anywhere — so both
+   * settings rendered the same screen. It is where you go looking when the
+   * app seems too dark, and it answered by doing nothing. */
+  const settings = read('settings.js');
+  const panel = settings.slice(settings.indexOf('function appearancePanel'),
+    settings.indexOf('function areasPanel') >= 0
+      ? settings.indexOf('function areasPanel') : undefined);
+  assert.ok(!/segment\('appearance'/.test(panel), 'the inert Theme control is back');
+  // The markup, not the prose: the note explaining why it went names it.
+  assert.ok(!/row\('Theme'/.test(settings), 'the Theme row is back');
+  // Motion and Sounds ARE wired up, and stay.
+  assert.match(panel, /segment\('reducedMotion'/, 'Motion left with it');
+  assert.match(panel, /segment\('sounds'/, 'Sounds left with it');
+  assert.match(app, /document\.documentElement\.dataset\.motion =/,
+    'nothing applies the motion preference, so that one is inert too');
+  // Still accepted and stored, so a real light theme needs no migration.
+  const prefs = readFileSync(join('src', 'routes', 'preferences.ts'), 'utf8');
+  assert.match(prefs, /appearance: \{ values: \['system', 'dark'\]/,
+    'the stored preference was dropped along with the control');
+});

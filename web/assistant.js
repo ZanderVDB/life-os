@@ -112,8 +112,11 @@ export function assistantInviteHtml() {
       <span class="ai-invite-say">${COPY.idle.say}</span>
       <!-- The button is NAMED, not drawn: a glyph standing in for a control
            reads as a font that failed to load, and there is no character in
-           any font that means "the round one in the middle of the bar". -->
-      <span class="ai-invite-sub">Tap to speak · hold the centre button for Quick add</span>
+           any font that means "the round one in the middle of the bar".
+           "below" rather than "the centre button" because the longer phrase
+           wrapped to two lines at 360 and 390, and the only thing below is
+           the bar this refers to. -->
+      <span class="ai-invite-sub">Tap to speak · hold below for Quick add</span>
     </span>
   </button>`;
 }

@@ -104,15 +104,20 @@ function accountPanel(state) {
     '<button class="btn" id="sign-out">Sign out</button>'))}`;
 }
 
+/* There is no Theme control here.
+ *
+ * It offered System / Always dark, and nothing read the value: there is no
+ * light palette and no `prefers-color-scheme` rule anywhere in the
+ * stylesheets, so both settings rendered exactly the same screen. A control
+ * that does nothing is worse than no control — this is where you go looking
+ * when the app seems too dark, and it answered by doing nothing.
+ *
+ * The server still accepts and stores the preference (routes/preferences.ts),
+ * so a real light theme can pick it up later without a migration. */
 function appearancePanel(state) {
   const p = state.prefs;
   return `
     ${sec('Appearance', `
-      ${row('Theme',
-    'Life OS is designed dark. <b>System</b> follows your device in case that '
-    + 'ever changes; <b>Always dark</b> ignores it.',
-    segment('appearance', p.appearance ?? 'system',
-      [['system', 'System'], ['dark', 'Always dark']]))}
       ${row('Motion',
     'Panels slide, ticks settle, the calendar eases between weeks. '
     + '<b>Reduce</b> cuts that to near-instant — and <b>Follow system</b> already '

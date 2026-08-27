@@ -59,6 +59,48 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   THE SURFACE LADDER, LIFTED FOR A PHONE
+
+   The canvas is unchanged. Only the things sitting ON it move.
+
+   Measured on the desktop palette: the canvas is 0.69% of white, a card is
+   1.43%, and the contrast between them is 1.132:1. That is the whole visual
+   separation between "card" and "background". A laptop's IPS panel leaks
+   backlight, so the entire range floats up off true black and the eye reads
+   the difference easily. An OLED phone renders #141220 at essentially no
+   emission, and auto-brightness pulls the rest down with it because the
+   content is so dark to begin with — 0.69% and 1.43% of a much dimmer
+   maximum are the same colour to the eye, the cards stop separating, and the
+   screen reads as one flat dark mass. Which is the report: "a few shades
+   darker on my phone".
+
+   Each value below is its desktop colour scaled in LINEAR light, so the
+   R:G:B relationship — the hue — is preserved exactly and only the
+   luminance moves. The ladder keeps its order and its steps:
+
+     surface        1.43% -> 2.35%   contrast vs canvas 1.132 -> 1.292
+     surface-2      2.08% -> 3.20%                      1.246 -> 1.441
+     surface-3      2.85% -> 4.17%                      1.381 -> 1.612
+     border         3.06% -> 4.45%                      1.418 -> 1.661
+     border-strong  4.24% -> 5.72%                      1.625 -> 1.886
+     paper          1.80% -> 2.61%                      1.195 -> 1.338
+
+   Paper stays lighter than the surfaces around it, which is the rule the
+   Library sets: a page reads as paper on a desk, not as another panel. Ink
+   on the lifted paper is 11.63:1 and 6.23:1, both still well past AA.
+
+   Desktop is untouched. This block is phone-only on purpose — the approved
+   desktop palette is not being restated here.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  :root{
+    --surface:#2c2839; --surface-2:#352f43; --surface-3:#3d364d;
+    --border:#3e3851; --border-strong:#473f5f; --hairline:#3e3851;
+    --paper:#2f2a3e; --paper-2:#2b273a;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    PHONE SHELL
    The query below is THE phone query. It appears verbatim at the top of
    every phone block in this file and nowhere else, and mobile.js holds the
