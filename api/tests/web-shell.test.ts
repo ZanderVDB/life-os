@@ -15,6 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
 import { join } from 'node:path';
 
 const WEB = join('..', 'web');
@@ -259,9 +260,9 @@ test('icons: every required file exists at the right dimensions', () => {
     return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
   };
   const expected: Record<string, number> = {
-    'icon-192.v2.png': 192, 'icon-256.v2.png': 256, 'icon-512.v2.png': 512,
-    'maskable-192.v2.png': 192, 'maskable-512.v2.png': 512,
-    'apple-touch-icon.v2.png': 180, 'favicon-32.v2.png': 32,
+    'icon-192.v3.png': 192, 'icon-256.v3.png': 256, 'icon-512.v3.png': 512,
+    'maskable-192.v3.png': 192, 'maskable-512.v3.png': 512,
+    'apple-touch-icon.v3.png': 180, 'favicon-32.v3.png': 32,
   };
   for (const [file, size] of Object.entries(expected)) {
     const d = dims(file);
@@ -441,9 +442,11 @@ test('manifest: meets the installability requirements', () => {
   assert.ok(manifest.id, 'no manifest id');
   assert.ok(!String(manifest.id).includes('web-anchor'), 'the v2 manifest borrows the Legacy identity');
 
-  // Versioned filenames, so a cached old icon can never be served.
+  // Versioned filenames, so a cached old icon can never be served. The
+  // NUMBER is not the point — bumping it is how a redrawn icon reaches a
+  // phone at all, since Android bakes the icon into the WebAPK at install.
   for (const i of pngs) {
-    assert.match(i.src, /\.v2\.png$/, i.src + ' is not a versioned v2 filename');
+    assert.match(i.src, /\.v\d+\.png$/, i.src + ' is not a versioned filename');
   }
   assert.ok(!JSON.stringify(manifest).includes('/icon.svg'),
     'the old icon filename is still referenced');
@@ -453,7 +456,7 @@ test('manifest: meets the installability requirements', () => {
     assert.ok(existsSync(join(WEB, i.src.replace('./', ''))), `${i.src} does not exist`);
   }
   assert.match(html, /<link rel="manifest"/);
-  assert.match(html, /rel="apple-touch-icon" href="\.\/icons\/apple-touch-icon\.v2\.png"/,
+  assert.match(html, /rel="apple-touch-icon" href="\.\/icons\/apple-touch-icon\.v\d+\.png"/,
     'no Apple touch icon');
   assert.ok(!/icons\/icon\.svg|icon-192\.png"/.test(html), 'the head references old icon files');
 });
@@ -726,4 +729,80 @@ test('the mobile drawer is not trapped inside a stacking context', () => {
   assert.match(read('mobile.css'),
     /body\.modal-open \.mnav,body\.msheet-open \.mnav\{transform:translateY\(110%\)/,
     'the navigation stays under an open sheet');
+});
+
+test('no app icon has a transparent corner for a plate to show through', () => {
+  /* The tile used to be deep graphite with a 114px corner radius, which left
+   * the four corners transparent. Any surface that composites the icon onto
+   * white then shows a white, square-cornered wedge through it — which is
+   * what Android's splash screen was drawing, and it was reported as "a white
+   * corner that is squared off instead of rounded off".
+   *
+   * Rounding is the platform's job: Android masks to the launcher's shape and
+   * iOS applies its superellipse. Shipping the rounding ourselves only meant
+   * shipping the holes with it. So: opaque, edge to edge, every icon.
+   *
+   * Reads the alpha channel directly rather than trusting the drawing. */
+  const alphaHoles = (file: string) => {
+    const buf = readFileSync(join(WEB, 'icons', file));
+    const w = buf.readUInt32BE(16);
+    const h = buf.readUInt32BE(20);
+    const colourType = buf[25];
+    if (colourType !== 6) return { w, h, hasAlphaChannel: false, holes: 0 };
+
+    // Concatenate the IDAT chunks, inflate, and un-filter the scanlines.
+    const idat: Buffer[] = [];
+    let at = 8;
+    while (at < buf.length) {
+      const len = buf.readUInt32BE(at);
+      const type = buf.subarray(at + 4, at + 8).toString('ascii');
+      if (type === 'IDAT') idat.push(buf.subarray(at + 8, at + 8 + len));
+      at += len + 12;
+    }
+    const raw = inflateSync(Buffer.concat(idat));
+    const bpp = 4;
+    const stride = w * bpp;
+    const out = Buffer.alloc(h * stride);
+    let pos = 0;
+    for (let y = 0; y < h; y += 1) {
+      const filter = raw[pos];
+      pos += 1;
+      for (let x = 0; x < stride; x += 1) {
+        const cur = raw[pos + x];
+        const a = x >= bpp ? out[y * stride + x - bpp] : 0;
+        const b = y > 0 ? out[(y - 1) * stride + x] : 0;
+        const c = x >= bpp && y > 0 ? out[(y - 1) * stride + x - bpp] : 0;
+        let v = cur;
+        if (filter === 1) v = cur + a;
+        else if (filter === 2) v = cur + b;
+        else if (filter === 3) v = cur + ((a + b) >> 1);
+        else if (filter === 4) {
+          const p = a + b - c;
+          const pa = Math.abs(p - a);
+          const pb = Math.abs(p - b);
+          const pc = Math.abs(p - c);
+          v = cur + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c);
+        }
+        out[y * stride + x] = v & 0xff;
+      }
+      pos += stride;
+    }
+    let holes = 0;
+    for (let i = 3; i < out.length; i += bpp) if (out[i] < 250) holes += 1;
+    return { w, h, hasAlphaChannel: true, holes };
+  };
+
+  for (const file of ['icon-192.v3.png', 'icon-256.v3.png', 'icon-512.v3.png',
+    'maskable-192.v3.png', 'maskable-512.v3.png',
+    'apple-touch-icon.v3.png', 'favicon-32.v3.png']) {
+    const { holes } = alphaHoles(file);
+    assert.equal(holes, 0, `${file} has ${holes} non-opaque pixels`);
+  }
+
+  // And the drawings they come from carry no rounding of their own.
+  for (const svg of ['app-icon.svg', 'app-icon-maskable.svg']) {
+    const src = readFileSync(join(WEB, 'icons', svg), 'utf8');
+    assert.ok(!/\brx=/.test(src), `${svg} rounds its own corners, which is the platform's job`);
+    assert.match(src, /<rect width="512" height="512"/, `${svg} does not bleed to its edges`);
+  }
 });
