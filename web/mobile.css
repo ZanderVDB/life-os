@@ -53,10 +53,6 @@
   --m-bottom-clear:calc(var(--m-nav-h) + var(--m-safe-b) + 18px);
   --m-sheet-max:min(92dvh,760px);
   --m-card:var(--surface);
-  /* The bottom bar's material. The centre button cuts a ring in the bar, and
-     that ring was a separate literal — so lifting the bar turned the ring into
-     a black halo around the button. One value, used by both. */
-  --m-bar:rgba(38,33,56,.92);
 }
 @media (max-width:400px){
   :root{--m-pad:14px;--m-gap:12px}
@@ -98,12 +94,29 @@
    ══════════════════════════════════════════════════════════════════════ */
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
   :root{
-    --surface:#2c2839; --surface-2:#352f43; --surface-3:#3d364d;
-    --border:#3e3851; --border-strong:#473f5f; --hairline:#3e3851;
-    --paper:#2f2a3e; --paper-2:#2b273a;
-    /* 1.93% -> 3.12%, 1.220:1 -> 1.429:1. This is the card you spend the day
-       looking at, and it was the one surface the first lift missed. */
-    --task:#342f3f; --task-hover:#3f3a4e;
+    /* THE CANVAS MOVES TOO.
+       The first two passes held the canvas at #141220 — 0.69% of white — and
+       lifted only what sat on it. That was the wrong half. A laptop's IPS
+       panel cannot switch its backlight off per pixel, so it renders 0.69% as
+       a visibly lifted grey and the whole palette floats up with it. An OLED
+       phone renders 0.69% as very nearly no light at all, and no amount of
+       lifting the CARDS changes the fact that the ground they sit on is
+       black. Raising the canvas to 1.48% is what the laptop's black floor was
+       doing all along, done deliberately instead of by accident of hardware.
+
+       Everything is its desktop colour scaled in LINEAR light, so hue is
+       preserved exactly and only luminance moves. Separation improves even
+       though the ground rises: the task card goes 1.428:1 -> 1.632:1. */
+    --app-bg:linear-gradient(180deg,#292336 0%,#211e32 52%,#1d1c27 100%);
+    --app-bg-flat:#211e32;
+    --surface:#3c374d; --surface-2:#453e57; --surface-3:#4e4562;
+    --border:#4f4866; --border-strong:#594f75; --hairline:#4f4866;
+    --paper:#3f3952; --paper-2:#3c364e;
+    /* The card you spend the day looking at: 1.93% -> 5.61%. */
+    --task:#464054; --task-hover:#524c64;
+    /* The bar's material, read by the bar AND by the ring the centre button
+       cuts in it. 2.91% against a 1.48% canvas. */
+    --m-bar:rgba(51,45,73,.92);
   }
 }
 
@@ -421,10 +434,7 @@
     padding:0 13px 0 9px;border-radius:999px;background:rgba(255,255,255,.05);
     border:1px solid var(--border);font-size:13px;color:var(--text-2);
     -webkit-tap-highlight-color:transparent}
-  .m-hb-tick{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
-    border:1.5px solid var(--border-strong);font-size:12px;color:#0E0B16}
   .m-hb.is-done{background:rgba(0,217,163,.13);border-color:rgba(0,217,163,.4);color:var(--text)}
-  .m-hb.is-done .m-hb-tick{background:var(--ok);border-color:var(--ok)}
   .m-habits-empty{margin:2px 14px 0;font-size:13px;color:var(--muted)}
 }
 
@@ -1208,7 +1218,6 @@
     -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 24px),transparent 100%);
     mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 24px),transparent 100%)}
   .m-hb{min-height:36px;padding:0 12px 0 8px;font-size:12.5px}
-  .m-hb-tick{width:18px;height:18px;font-size:11px}
 
   /* ── Later ────────────────────────────────────────────────────────────
      `This Week  6  ›`. Already right; only the height changes. */
@@ -1718,7 +1727,7 @@
    z-index changed, no offset invented, and one fewer compositing layer for a
    phone to maintain, which the blur was costing on every scroll frame. */
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
-  .mobile-bar{background:#232032;backdrop-filter:none;
+  .mobile-bar{background:#302a46;backdrop-filter:none;
     border-bottom:1px solid rgba(255,255,255,.06)}
   /* And a shadow once something is behind it, so the edge is legible
      against content rather than only against the page. */
@@ -1752,7 +1761,7 @@
        reach; the bar's own background still runs behind it, which is what it
        is supposed to do. */
     padding:10px var(--m-pad) 22px;
-    background:#232032;border-top:1px solid var(--border);
+    background:#302a46;border-top:1px solid var(--border);
     box-shadow:0 -10px 24px -12px rgba(0,0,0,.7)}
   .asst-confirm .btn{min-height:44px}
   /* The room it takes, given back to the list above it. */
@@ -1782,7 +1791,8 @@
     padding:0 10px;border:0;background:none;border-radius:10px;
     font-size:14px;color:var(--text)}
   .m-hb:active{background:rgba(255,255,255,.05)}
-  .m-hb-tick{flex:0 0 20px;width:20px;height:20px}
+  .m-hb .hb-ring{flex:0 0 26px;width:26px;height:26px}
+  .m-hb .hb-ring>svg.hr-svg{width:26px;height:26px}
   .m-hb.is-done{background:none}
   .m-hb.is-done .m-hb-n{color:var(--muted);text-decoration:line-through;
     text-decoration-color:rgba(255,255,255,.28)}
@@ -1992,18 +2002,19 @@
     gap:7px;min-height:0;width:auto;padding:10px 4px 9px;border-radius:14px;
     background:none;border:0;text-align:center;color:var(--text-2)}
   .m-hb:active{background:rgba(255,255,255,.05)}
-  .m-hb-tick{width:34px;height:34px;flex:0 0 34px;border:0;background:none;
-    display:grid;place-items:center;padding:0}
-  .m-hb-tick svg{width:34px;height:34px;overflow:visible}
-  .m-hb-ring{fill:none;stroke:var(--border-strong);stroke-width:2.4;
-    transition:stroke var(--d-base) var(--e-out)}
-  .m-hb-mark{fill:none;stroke:transparent;stroke-width:3;stroke-linecap:round;
-    stroke-linejoin:round;stroke-dasharray:22;stroke-dashoffset:22;
-    transition:stroke-dashoffset var(--d-slow) var(--e-out),stroke var(--d-fast)}
-  .m-hb.is-done .m-hb-ring{stroke:var(--ok)}
-  .m-hb.is-done .m-hb-mark{stroke:var(--ok);stroke-dashoffset:0}
+  /* The rail's ring at tile size. HOW it fills — the track, the green sweep,
+     the seam, the check settling into the middle — all lives in app.css and
+     is shared; the only thing that differs here is the diameter. */
+  .m-hb .hb-ring{width:34px;height:34px;flex:0 0 34px}
+  .m-hb .hb-ring>svg.hr-svg{width:34px;height:34px}
+  /* The rail keys the finished state off `.hb-row.is-done`, and on a phone
+     the button IS the row. Same declarations, different ancestor. */
+  .m-hb.is-done .hr-mark{opacity:1;transform:scale(1)}
   .m-hb.is-done{background:none}
-  .m-hb.is-done .m-hb-n{color:var(--text)}
+  /* As the rail does it: the finished habit's name goes quiet. No strike —
+     that came from the list layout's rule further up and the desktop has
+     never had one; the ring is the signal. */
+  .m-hb.is-done .m-hb-n{color:var(--muted);text-decoration:none}
   .m-hb-n{font-size:11.5px;line-height:1.3;font-weight:500;white-space:normal;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
     overflow:hidden;text-overflow:clip;min-width:0}
@@ -2011,7 +2022,7 @@
 }
 
 @media (prefers-reduced-motion:reduce){
-  .m-hb-ring,.m-hb-mark{transition:none}
+  .hr-fill,.hr-mark{transition:none}
 }
 
 /* ── The calendar's view switcher, centred in its own track ──────────────

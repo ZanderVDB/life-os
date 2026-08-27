@@ -481,7 +481,10 @@ test('the sweep animates, and the dash is dropped once it has arrived', () => {
   assert.match(fn.slice(0, 700), /setAttribute\('stroke-dasharray', 'none'\)/);
   assert.match(fn.slice(0, 700), /transitionend', drop, \{ once: true \}/);
   assert.match(fn.slice(0, 700), /setTimeout\(drop, 320\)/);
-  const patch = app.slice(app.indexOf('function patchHabitRow'));
+  /* The sweep lives in `paintHabitRing` now — one painter for the rail's row
+     and the phone's tile, because they are the same component and a second
+     copy is a second thing to keep in step. */
+  const patch = app.slice(app.indexOf('function paintHabitRing'));
   assert.match(patch.slice(0, 1600), /if \(h\.completedToday\) \{[\s\S]{0,200}settleDash\(fill\)/);
 });
 

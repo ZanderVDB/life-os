@@ -2479,17 +2479,23 @@ async function loadHabits() {
  * of filling. Measured: 60ms after a click the offset was already final.
  * Mutating the existing nodes is what makes the fill animate at all.
  */
-function patchHabitRow(id) {
-  const row = document.querySelector(`.hb-row[data-habit="${id}"]`);
-  const h = (state.habits ?? []).find((x) => x.id === id);
-  if (!row || !h) return renderRail();
-
+/**
+ * Paints one habit's ring, wherever that habit is drawn.
+ *
+ * The rail's row and the phone's tile are the SAME component — same <svg>,
+ * same classes, same states — so they take the same update rather than each
+ * carrying a private idea of what "done" looks like. Mutating the existing
+ * nodes is also the only thing that makes the fill animate: re-rendering the
+ * card hands you the end state with no sweep, which is what the phone used
+ * to do.
+ */
+function paintHabitRing(root, h) {
   const target = Math.max(1, h.targetCount ?? 1);
   const pct = habitPct(h);
 
-  row.classList.toggle('is-done', !!h.completedToday);
+  root.classList.toggle('is-done', !!h.completedToday);
 
-  const fill = row.querySelector('.hr-fill');
+  const fill = root.querySelector('.hr-fill');
   if (fill) {
     // Toggle emptiness BEFORE the offset so the fade and the sweep run together.
     fill.classList.toggle('is-empty', pct === 0);
@@ -2507,42 +2513,56 @@ function patchHabitRow(id) {
     }
   }
 
-  const ring = row.querySelector('.hb-ring');
+  const ring = root.querySelector('.hb-ring');
   ring?.setAttribute('aria-pressed', String(!!h.completedToday));
   ring?.setAttribute('aria-label',
     `${h.completedToday ? 'Undo' : (target > 1 ? 'Add one to' : 'Complete')} ${h.name}`);
   if (target > 1) ring?.setAttribute('aria-valuenow', String(h.todayCount ?? 0));
 
   // Centre content is the only part that genuinely changes shape.
-  const centre = row.querySelector('.hr-mark,.hr-count');
+  const centre = root.querySelector('.hr-mark,.hr-count');
   const wanted = habitCentre(h);
   if (centre && centre.outerHTML !== wanted) centre.outerHTML = wanted;
 
-  const prog = row.querySelector('.hb-prog');
+  // Neither of these exists on the phone tile, and both are optional here.
+  const prog = root.querySelector('.hb-prog');
   if (prog) prog.textContent = `${h.todayCount ?? 0}/${target}`;
-
-  const streak = row.querySelector('.hb-streak');
+  const streak = root.querySelector('.hb-streak');
   if (streak) streak.outerHTML = streakHtml(h);
+}
 
-  /* The header tally stays honest without redrawing the card.
-   *
-   * The optimistic tick has already changed `state.habits` but the server has
-   * not answered, so the totals it sent are one press out of date. They are
-   * ADJUSTED here rather than recomputed: the diary half of the sum is not
-   * something this screen knows how to derive, and deriving it locally is the
-   * second calculation §6 exists to prevent. `loadHabits` replaces the whole
-   * object with the server's answer on the next refresh. */
-  if (state.habitTotals) {
-    const ordinary = (state.habits ?? []).filter((x) => x.dueToday && !x.archivedAt);
-    const done = ordinary.filter((x) => x.completedToday).length
-      + (state.diaryHabit?.completedToday ? 1 : 0);
-    state.habitTotals = { due: state.habitTotals.due, done };
-  }
+/**
+ * The tally, kept honest without redrawing anything.
+ *
+ * The optimistic tick has already changed `state.habits` but the server has
+ * not answered, so the totals it sent are one press out of date. They are
+ * ADJUSTED here rather than recomputed: the diary half of the sum is not
+ * something this screen knows how to derive, and deriving it locally is the
+ * second calculation §6 exists to prevent. `loadHabits` replaces the whole
+ * object with the server's answer on the next refresh.
+ */
+function syncHabitTotals() {
+  if (!state.habitTotals) return;
+  const ordinary = (state.habits ?? []).filter((x) => x.dueToday && !x.archivedAt);
+  const done = ordinary.filter((x) => x.completedToday).length
+    + (state.diaryHabit?.completedToday ? 1 : 0);
+  state.habitTotals = { due: state.habitTotals.due, done };
+}
+
+function patchHabitRow(id) {
+  const row = document.querySelector(`.hb-row[data-habit="${id}"]`);
+  const h = (state.habits ?? []).find((x) => x.id === id);
+  if (!row || !h) return renderRail();
+
+  paintHabitRing(row, h);
+  syncHabitTotals();
+
   const badge = document.querySelector('.hb-count');
   if (badge && state.habitTotals) {
     const text = `${state.habitTotals.done}/${state.habitTotals.due}`;
     if (badge.textContent !== text) { badge.textContent = text; pulse(badge); }
   }
+  return undefined;
 }
 
 /**
@@ -6232,13 +6252,15 @@ function habitsCardHtml() {
     ${rows.length
     ? `<div class="m-habits-row">${rows.slice(0, PREVIEW).map((x) => `
         <button type="button" class="m-hb ${x.done ? 'is-done' : ''}"
-          data-mhabit="${esc(x.id)}" ${x.system ? 'data-system="1"' : ''}
+          data-mhabit="${esc(x.id)}" data-habit="${esc(x.id)}"
+          ${x.system ? 'data-system="1"' : ''}
           aria-pressed="${x.done}">
-          <span class="m-hb-tick" aria-hidden="true">
-            <svg viewBox="0 0 32 32" aria-hidden="true">
-              <circle class="m-hb-ring" cx="16" cy="16" r="14"></circle>
-              <path class="m-hb-mark" d="m9.5 16.4 4.4 4.4 8.6-9.2"></path>
-            </svg>
+          ${/* The rail's ring, not a phone copy of it: same <svg>, same
+                classes, same states, so both take the same in-place update
+                and a target-count habit shows its partial sweep and its
+                count here exactly as it does on a desktop. */''}
+          <span class="hb-ring" aria-hidden="true">
+            ${ringSvg(x.h)}${habitCentre(x.h)}
           </span>
           <span class="m-hb-n">${esc(x.name)}</span>
         </button>`).join('')}</div>
@@ -6251,15 +6273,19 @@ function habitsCardHtml() {
 
 /** Today's habits, including the computed Diary row, in one flat list. */
 function mobileHabitRows() {
+  /* `h` is the habit itself, because the ring is drawn from it — a row that
+     carried only {id, name, done} could not show a partial sweep or a count,
+     and those are the two things a target-count habit is about. */
   const rows = (state.habits ?? [])
     .filter((h) => h.dueToday && !h.archivedAt)
-    .map((h) => ({ id: h.id, name: h.name, done: Boolean(h.completedToday) }));
+    .map((h) => ({ id: h.id, name: h.name, done: Boolean(h.completedToday), h }));
   if (state.diaryHabit) {
     rows.unshift({
       id: DIARY_HABIT_ID,
       name: state.diaryHabit.name,
       done: Boolean(state.diaryHabit.completedToday),
       system: true,
+      h: state.diaryHabit,
     });
   }
   return rows;
@@ -6290,9 +6316,33 @@ function wireMobileToday(scroll) {
   scroll.querySelectorAll('[data-mhabit]').forEach((b) => {
     b.addEventListener('click', () => {
       if (b.dataset.system) { go('diary'); return; }
-      toggleHabit(b.dataset.mhabit).then(() => refreshMobileHabits());
+      toggleHabit(b.dataset.mhabit).then(() => patchMobileHabit(b.dataset.mhabit));
     });
   });
+}
+
+/**
+ * One habit tile, updated in place.
+ *
+ * The card used to be rebuilt with `outerHTML` on every tap, which replaced
+ * the ring's nodes — and a brand new <circle> has nothing to transition FROM,
+ * so the phone jumped straight to the finished state while the rail swept.
+ * Same painter as the rail now, on the same markup.
+ */
+function patchMobileHabit(id) {
+  const tile = document.querySelector(`.m-hb[data-habit="${id}"]`);
+  const h = (state.habits ?? []).find((x) => x.id === id);
+  if (!tile || !h) { refreshMobileHabits(); return; }
+
+  paintHabitRing(tile, h);
+  tile.setAttribute('aria-pressed', String(!!h.completedToday));
+  syncHabitTotals();
+
+  const tally = document.querySelector('.m-habits-n');
+  if (tally && state.habitTotals) {
+    const text = `${state.habitTotals.done}/${state.habitTotals.due}`;
+    if (tally.textContent !== text) { tally.textContent = text; pulse(tally); }
+  }
 }
 
 /** Re-draws the phone's Next card and glance line after data arrives. */
@@ -6318,7 +6368,7 @@ function refreshMobileHabits() {
   scroll?.querySelectorAll('[data-mhabit]').forEach((b) => {
     b.addEventListener('click', () => {
       if (b.dataset.system) { go('diary'); return; }
-      toggleHabit(b.dataset.mhabit).then(() => refreshMobileHabits());
+      toggleHabit(b.dataset.mhabit).then(() => patchMobileHabit(b.dataset.mhabit));
     });
   });
   const line = scroll?.querySelector('#m-glance');

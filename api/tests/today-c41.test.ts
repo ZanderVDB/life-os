@@ -91,11 +91,24 @@ test('habits: the row is mutated in place so the fill can transition', () => {
   // `outerHTML =` gives the browser a new <circle> already at its final offset,
   // so the CSS transition has no start value and the ring snaps. Measured: the
   // offset was final 60ms after the click.
-  const fn = body(appCode, 'function patchHabitRow(id)');
-  assert.ok(!/row\.outerHTML\s*=/.test(fn), 'the row is replaced, killing the transition');
+  const fn = body(appCode, 'function paintHabitRing(root, h)');
+  assert.ok(!/root\.outerHTML\s*=/.test(fn), 'the row is replaced, killing the transition');
   assert.match(fn, /fill\.setAttribute\('stroke-dashoffset'/, 'the offset is not updated in place');
-  assert.match(fn, /row\.classList\.toggle\('is-done'/, 'completion state is not toggled in place');
+  assert.match(fn, /root\.classList\.toggle\('is-done'/, 'completion state is not toggled in place');
   assert.match(html, /transition:stroke-dashoffset var\(--d-slow\)/, 'the fill does not transition');
+
+  /* And the phone takes the SAME painter. It used to rebuild the whole card
+     with `outerHTML` on every tap, which replaced the ring's nodes — a brand
+     new <circle> has nothing to transition from, so the tile jumped to the
+     finished state while the rail swept. */
+  const phone = body(appCode, 'function patchMobileHabit(id)');
+  assert.match(phone, /paintHabitRing\(tile, h\)/, 'the phone tile does not use the shared painter');
+  assert.ok(!/el\.outerHTML/.test(phone), 'the phone still rebuilds the card on a tap');
+  const card = body(appCode, 'function habitsCardHtml()');
+  assert.match(card, /class="hb-ring"/, 'the phone tile no longer draws the rail ring');
+  assert.match(card, /\$\{ringSvg\(x\.h\)\}\$\{habitCentre\(x\.h\)\}/,
+    'the phone tile draws its own tick instead of the rail ring');
+  assert.ok(!/m-hb-tick|m-hb-mark/.test(appCode), 'the bespoke phone tick is back');
 });
 
 test('habits: check and undo share one path, and rollback restores state', () => {

@@ -458,27 +458,34 @@ test('the surface ladder is lifted for a phone, and only for a phone', () => {
    * Each value is its desktop colour scaled in LINEAR light, so the hue is
    * preserved exactly and only the luminance moves. Measured after: desktop
    * mean luminance unchanged within capture noise, phone +4.5% to +22.2%. */
-  const lift = mobileCss.match(/@media \(max-width:899px\),\(max-height:500px\) and \(max-width:1099px\)\{\s*:root\{\s*--surface:[^}]*\}/);
-  assert.ok(lift, 'the phone surface ladder is gone');
-  const rule = lift[0];
+  const at = mobileCss.indexOf('THE CANVAS MOVES TOO');
+  assert.ok(at > 0, 'the phone surface ladder is gone');
+  const rule = mobileCss.slice(at, mobileCss.indexOf('}', mobileCss.indexOf('--m-bar:', at)));
   for (const [token, value] of Object.entries({
-    '--surface': '#2c2839', '--surface-2': '#352f43', '--surface-3': '#3d364d',
-    '--border': '#3e3851', '--border-strong': '#473f5f', '--hairline': '#3e3851',
-    '--paper': '#2f2a3e', '--paper-2': '#2b273a',
+    '--surface': '#3c374d', '--surface-2': '#453e57', '--surface-3': '#4e4562',
+    '--border': '#4f4866', '--border-strong': '#594f75', '--hairline': '#4f4866',
+    '--paper': '#3f3952', '--paper-2': '#3c364e',
   })) {
     assert.ok(rule.includes(`${token}:${value}`), `${token} is not the lifted value`);
   }
-  // The CANVAS does not move. Lifting it would just make the app grey.
-  assert.ok(!/--app-bg/.test(rule), 'the canvas was lifted along with the surfaces');
+  /* THE CANVAS MOVES TOO. Two passes held it at 0.69% of white and lifted only
+     what sat on it, and the phone still read as black — because the ground it
+     all sits on WAS black. A laptop's IPS panel cannot switch its backlight
+     off per pixel, so it renders 0.69% as a lifted grey and floats the whole
+     palette up. 1.48% is that, done deliberately. */
+  assert.match(rule, /--app-bg:linear-gradient\(180deg,#292336 0%,#211e32 52%,#1d1c27 100%\)/,
+    'the canvas is back at true black on a phone');
+  assert.match(rule, /--app-bg-flat:#211e32/,
+    'the overscroll bounce and the status bar disagree with the canvas');
   // Paper stays lighter than the surfaces, which is the Library's own rule.
   const Y = (h: string) => {
     const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
       .map((s) => (s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4));
     return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   };
-  assert.ok(Y('#2f2a3e') > Y('#2c2839'),
+  assert.ok(Y('#3f3952') > Y('#3c374d'),
     'paper is no longer lighter than the surfaces around it');
-  assert.ok(Y('#2c2839') < Y('#352f43') && Y('#352f43') < Y('#3d364d'),
+  assert.ok(Y('#3c374d') < Y('#453e57') && Y('#453e57') < Y('#4e4562'),
     'the lifted ladder is out of order');
 });
 
@@ -521,7 +528,7 @@ test('no surface sits out the phone lift by being written as a literal', () => {
   const appCss = read('app.css');
   assert.match(appCss, /--task:#282431; --task-hover:#312D3D;/,
     'the task card has no token, so the next lift will miss it again');
-  assert.match(mobileCss, /--task:#342f3f; --task-hover:#3f3a4e;/,
+  assert.match(mobileCss, /--task:#464054; --task-hover:#524c64;/,
     'the task card is not lifted on a phone');
 
   // Every rule that paints the card must go through the token.
@@ -546,7 +553,7 @@ test('no surface sits out the phone lift by being written as a literal', () => {
 
   // And the two bars were the canvas: 1.002:1 and 1.037:1, which is to say
   // they were not there at all.
-  assert.match(mobileCss, /--m-bar:rgba\(38,33,56,\.92\);/,
+  assert.match(mobileCss, /--m-bar:rgba\(51,45,73,\.92\);/,
     'the bottom bar is back to being indistinguishable from the background');
   assert.match(mobileCss, /background:var\(--m-bar\);backdrop-filter:blur\(18px\)/,
     'the bar no longer paints from the shared value');
@@ -555,7 +562,7 @@ test('no surface sits out the phone lift by being written as a literal', () => {
    * place that draws bar-coloured material reads the one token. */
   assert.ok(!/rgba\(20,18,30,\.9/.test(mobileCss),
     'a bar colour is hardcoded again, so the ring and the bar can drift apart');
-  assert.match(mobileCss, /\.mobile-bar\{background:#232032;/, 'the top bar is back to the canvas colour');
+  assert.match(mobileCss, /\.mobile-bar\{background:#302a46;/, 'the top bar is back to the canvas colour');
 });
 
 test('the centre button glows from a shadow, not from a layer over its face', () => {
