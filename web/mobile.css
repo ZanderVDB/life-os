@@ -53,6 +53,10 @@
   --m-bottom-clear:calc(var(--m-nav-h) + var(--m-safe-b) + 18px);
   --m-sheet-max:min(92dvh,760px);
   --m-card:var(--surface);
+  /* The bottom bar's material. The centre button cuts a ring in the bar, and
+     that ring was a separate literal — so lifting the bar turned the ring into
+     a black halo around the button. One value, used by both. */
+  --m-bar:rgba(38,33,56,.92);
 }
 @media (max-width:400px){
   :root{--m-pad:14px;--m-gap:12px}
@@ -97,6 +101,9 @@
     --surface:#2c2839; --surface-2:#352f43; --surface-3:#3d364d;
     --border:#3e3851; --border-strong:#473f5f; --hairline:#3e3851;
     --paper:#2f2a3e; --paper-2:#2b273a;
+    /* 1.93% -> 3.12%, 1.220:1 -> 1.429:1. This is the card you spend the day
+       looking at, and it was the one surface the first lift missed. */
+    --task:#342f3f; --task-hover:#3f3a4e;
   }
 }
 
@@ -142,7 +149,7 @@
      this one is the page's identity. */
   .mobile-bar{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;
     background:rgba(20,18,30,.86);backdrop-filter:blur(14px);
-    border-bottom:1px solid rgba(255,255,255,.055);
+    border-bottom:1px solid rgba(255,255,255,.085);
     height:calc(var(--m-top-h) + var(--m-safe-t));
     padding:0 10px 0 14px;padding-top:var(--m-safe-t)}
   .mobile-bar .logo-mark{flex:0 0 auto}
@@ -177,8 +184,11 @@
     display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:end;
     height:calc(var(--m-nav-h) + var(--m-safe-b));
     padding-bottom:var(--m-safe-b);
-    background:rgba(20,18,30,.92);backdrop-filter:blur(18px) saturate(1.3);
-    border-top:1px solid rgba(255,255,255,.07)}
+    /* 1.002:1 against the canvas — the bar was not a bar, it was the
+       background with icons floating in it. 1.174:1 reads as a band and
+       still sits well below the task card, so it recedes. */
+    background:var(--m-bar);backdrop-filter:blur(18px) saturate(1.3);
+    border-top:1px solid rgba(255,255,255,.10)}
 
   .mnav-i{display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:3px;height:var(--m-nav-h);text-decoration:none;
@@ -204,13 +214,13 @@
     align-self:center;transform:translateY(-10px);
     border-radius:50%;border:0;padding:0;
     background:var(--brand);color:#fff;
-    box-shadow:0 8px 22px -6px rgba(124,77,255,.7),0 0 0 5px rgba(20,18,30,.92);
+    box-shadow:0 8px 22px -6px rgba(124,77,255,.7),0 0 0 5px var(--m-bar);
     -webkit-tap-highlight-color:transparent;
     transition:transform var(--d-fast) var(--e-out),box-shadow var(--d-fast) var(--e-out)}
   .mnav-ai:active{transform:translateY(-10px) scale(.93)}
   .mnav-ai svg{width:26px;height:26px}
   .mnav-ai[aria-current="page"]{box-shadow:0 8px 26px -4px rgba(124,77,255,.9),
-    0 0 0 5px rgba(20,18,30,.92),0 0 0 7px rgba(138,93,255,.5)}
+    0 0 0 5px var(--m-bar),0 0 0 7px rgba(138,93,255,.5)}
   /* The long-press affordance: a hint that fades in under the thumb rather
      than a label nobody reads. */
   .mnav-ai.is-holding{transform:translateY(-10px) scale(1.08)}
@@ -1242,20 +1252,31 @@
      BEHIND the button so it can be soft without bleeding over the mark; the
      sheen is a pseudo-element in front of the fill and behind the mark. */
   .mnav-ai{
+    /* The dark end of the ramp was #4E27B4 — 6.37% of white, which is navy
+       once a phone's display adds saturation, and the button was reported as
+       "a dark disc with a light ring". Raised to #6438D8 (10.50%), with the
+       whole ramp lifted to match, so no part of the face can fall to navy. */
     background:
-      radial-gradient(72% 68% at 32% 20%, rgba(255,255,255,.30) 0%, rgba(255,255,255,0) 62%),
-      radial-gradient(120% 118% at 34% 22%, #B78FFF 0%, #9264FF 38%, #7241E8 68%, #4E27B4 100%);
+      radial-gradient(72% 68% at 32% 20%, rgba(255,255,255,.32) 0%, rgba(255,255,255,0) 62%),
+      radial-gradient(120% 118% at 34% 22%, #C4A2FF 0%, #9E72FF 38%, #8355F2 68%, #6438D8 100%);
+    /* The bloom is a SHADOW, not a pseudo-element.
+       It was `::before { z-index:-1 }`, and the comment above it claimed the
+       element was "BEHIND the button". It is not: `transform` makes .mnav-ai a
+       stacking context, and inside one the element's own background paints
+       BEFORE negative-z-index children — so the bloom was laid over the face.
+       Measured here it only cost 1/255 because the veil is nearly the same
+       violet as the button underneath, but that is luck, not design, and it is
+       exactly the kind of thing that renders differently on another engine.
+       A box-shadow is drawn outside the border-box by definition and cannot
+       veil anything, on any browser. */
     box-shadow:
-      0 0 0 5px rgba(20,18,30,.94),                 /* the bar, cut around it */
-      inset 0 1px 0 rgba(255,255,255,.40),          /* top rim */
+      0 0 0 5px var(--m-bar),                       /* the bar, cut around it */
+      inset 0 1px 0 rgba(255,255,255,.42),          /* top rim */
       inset 0 -7px 12px -7px rgba(26,8,64,.85),     /* the ball turning away */
       0 5px 12px -5px rgba(58,22,140,.7),           /* contact shadow, tight */
-      0 1px 3px rgba(0,0,0,.35)}
-  .mnav-ai::before{
-    content:'';position:absolute;inset:-16px;border-radius:50%;z-index:-1;
-    background:radial-gradient(circle,
-      rgba(138,93,255,.32) 0%, rgba(130,84,255,.14) 44%, rgba(124,77,255,0) 72%);
-    transition:opacity var(--d-base) var(--e-out)}
+      0 1px 3px rgba(0,0,0,.35),
+      0 0 16px 3px rgba(138,93,255,.30),            /* the bloom, behind */
+      0 0 30px 8px rgba(124,77,255,.16)}
   .mnav-ai::after{
     content:'';position:absolute;inset:0;border-radius:50%;z-index:1;
     background:linear-gradient(158deg,
@@ -1266,13 +1287,14 @@
      the thing you pressed. */
   .mnav-ai[aria-current="page"]{
     box-shadow:
-      0 0 0 5px rgba(20,18,30,.94),
+      0 0 0 5px var(--m-bar),
       0 0 0 7px rgba(150,110,255,.42),
       inset 0 1px 0 rgba(255,255,255,.5),
       inset 0 -7px 12px -7px rgba(26,8,64,.85),
       0 6px 16px -5px rgba(88,40,200,.8),
-      0 1px 3px rgba(0,0,0,.35)}
-  .mnav-ai[aria-current="page"]::before{opacity:1.4}
+      0 1px 3px rgba(0,0,0,.35),
+      0 0 20px 4px rgba(138,93,255,.42),
+      0 0 36px 10px rgba(124,77,255,.2)}
   .mnav-ai[aria-current="page"] .logo-mark path{fill-opacity:1}
 }
 
@@ -1696,7 +1718,7 @@
    z-index changed, no offset invented, and one fewer compositing layer for a
    phone to maintain, which the blur was costing on every scroll frame. */
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
-  .mobile-bar{background:#191622;backdrop-filter:none;
+  .mobile-bar{background:#232032;backdrop-filter:none;
     border-bottom:1px solid rgba(255,255,255,.06)}
   /* And a shadow once something is behind it, so the edge is legible
      against content rather than only against the page. */
@@ -1730,7 +1752,7 @@
        reach; the bar's own background still runs behind it, which is what it
        is supposed to do. */
     padding:10px var(--m-pad) 22px;
-    background:#191622;border-top:1px solid var(--border);
+    background:#232032;border-top:1px solid var(--border);
     box-shadow:0 -10px 24px -12px rgba(0,0,0,.7)}
   .asst-confirm .btn{min-height:44px}
   /* The room it takes, given back to the list above it. */

@@ -504,3 +504,80 @@ test('Appearance offers no control that does nothing', () => {
   assert.match(prefs, /appearance: \{ values: \['system', 'dark'\]/,
     'the stored preference was dropped along with the control');
 });
+
+test('no surface sits out the phone lift by being written as a literal', () => {
+  /* The first lift moved every token and the phone still read as dark, because
+   * the task card — the thing you actually spend the day looking at — was the
+   * hex #282431 written out in FIVE places (base, hover, two priority tints,
+   * the completing state) plus the blocked tick's centre, which is a hole cut
+   * in the card and has to match it exactly.
+   *
+   * Measured at 360px, painted and composited down to the canvas:
+   *   task card   1.93% of white, 1.220:1   <- the worst on the screen
+   *   habits card 2.35%,          1.292:1   <- had moved
+   * A literal cannot participate in a token override, so it silently kept the
+   * desktop value. Now it is --task, and the phone block lifts it to 3.12% /
+   * 1.429:1, still above --surface exactly as it is on desktop. */
+  const appCss = read('app.css');
+  assert.match(appCss, /--task:#282431; --task-hover:#312D3D;/,
+    'the task card has no token, so the next lift will miss it again');
+  assert.match(mobileCss, /--task:#342f3f; --task-hover:#3f3a4e;/,
+    'the task card is not lifted on a phone');
+
+  // Every rule that paints the card must go through the token.
+  /* `.task::before` is excluded deliberately: it is the priority marker
+   * stripe, and its background is a meaning colour, not a surface. */
+  const painters = (appCss.match(/^\.task(?![\w-])[^{]*\{[^}]*background:[^;}]*/gm) ?? [])
+    .filter((r) => {
+      const sel = r.slice(0, r.indexOf('{'));
+      // The card itself only: no descendant, no pseudo-element.
+      return !/[\s>]/.test(sel) && !/::/.test(sel);
+    });
+  assert.ok(painters.length >= 4, `expected the task card painted in several states, found ${painters.length}`);
+  for (const rule of painters) {
+    assert.ok(/var\(--task\)|var\(--task-hover\)/.test(rule),
+      `a task background is still a literal: ${rule.slice(0, 90)}`);
+  }
+  // The blocked tick is a hole in the card and must track it.
+  const tick = appCss.match(/\.t-tick\.is-blocked::after\{[^}]*\}/)?.[0] ?? '';
+  assert.match(tick, /background:var\(--task\)/, "the blocked tick's centre no longer matches the card");
+  assert.ok(!/#282431|#312D3D/i.test(appCss.replace(/--task[^;]*;/g, '')),
+    'a task colour is still hardcoded somewhere');
+
+  // And the two bars were the canvas: 1.002:1 and 1.037:1, which is to say
+  // they were not there at all.
+  assert.match(mobileCss, /--m-bar:rgba\(38,33,56,\.92\);/,
+    'the bottom bar is back to being indistinguishable from the background');
+  assert.match(mobileCss, /background:var\(--m-bar\);backdrop-filter:blur\(18px\)/,
+    'the bar no longer paints from the shared value');
+  /* The centre button cuts a ring in the bar, and that ring was its own
+   * literal — so lifting the bar turned the ring into a black halo. Every
+   * place that draws bar-coloured material reads the one token. */
+  assert.ok(!/rgba\(20,18,30,\.9/.test(mobileCss),
+    'a bar colour is hardcoded again, so the ring and the bar can drift apart');
+  assert.match(mobileCss, /\.mobile-bar\{background:#232032;/, 'the top bar is back to the canvas colour');
+});
+
+test('the centre button glows from a shadow, not from a layer over its face', () => {
+  /* The bloom was `::before { z-index:-1 }` with a comment claiming it sat
+   * BEHIND the button. It did not: `transform` makes .mnav-ai a stacking
+   * context, and inside one the element's own background paints BEFORE
+   * negative-z-index children — so the bloom was laid over the face. Measured,
+   * it only cost 1/255 because the veil is nearly the same violet as the
+   * button under it, which is luck rather than design and is exactly what
+   * renders differently on another engine.
+   *
+   * A box-shadow is drawn outside the border-box by definition. */
+  assert.ok(!/\.mnav-ai::before/.test(mobileCss),
+    'the bloom is a pseudo-element again, and it paints over the face');
+  const from = mobileCss.indexOf('.mnav-ai{', mobileCss.indexOf('lit rather than glowing'));
+  // Comments stripped: the notes inside the rule name the values they replaced.
+  const btn = mobileCss.slice(from, mobileCss.indexOf('.mnav-ai:active', from))
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(btn, /0 0 16px 3px rgba\(138,93,255,\.30\)/, 'the bloom is gone rather than moved');
+  // The ramp's dark end was #4E27B4 — 6.37% of white, navy once a display
+  // adds saturation, and it was reported as "a dark disc with a light ring".
+  // On the rule, not the file: the note above it names the colour it replaced.
+  assert.ok(!/#4E27B4/i.test(btn), 'the navy end of the button ramp is back');
+  assert.match(btn, /#6438D8 100%/, 'the button ramp does not end on the raised value');
+});

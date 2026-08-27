@@ -23,6 +23,13 @@
   --app-bg-flat:#141220;
   --sidebar:#17151F; --rail:#1A1824;
   --surface:#211E2C; --surface-2:#2A2536; --surface-3:#322C40;
+  /* The task card is its own step, deliberately ABOVE --surface: it is the
+     thing on the board you are actually reading. It was written as a literal
+     in four places, which meant it silently sat out the phone lift and stayed
+     at 1.22:1 against the canvas while everything around it moved. A token,
+     so it cannot be missed again. --task-hover must stay in step with it, and
+     the blocked tick's centre is a hole cut in the card and uses both. */
+  --task:#282431; --task-hover:#312D3D;
   --border:#332E43; --border-strong:#3d3652; --hairline:#332E43;
   /* Text */
   --text:#F4F2FA; --text-2:#B5ABC9; --muted:#766D8B; --label:#CEC7E8;
@@ -368,23 +375,23 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 /* The card is a COLUMN: the task row, then its steps beneath it.
    The three-column grid moved to `.t-row`, so an expanded step panel sits
    under the whole row rather than becoming a fourth grid cell. */
-.task{position:relative;display:block;background:#282431;border-radius:12px;
+.task{position:relative;display:block;background:var(--task);border-radius:12px;
   padding:10px 10px 10px 16px;overflow:hidden;
   box-shadow:0 1px 3px rgba(0,0,0,.16);
   transition:background var(--t-hover),box-shadow var(--t-hover),transform var(--t-hover)}
 .t-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
   align-items:center;gap:11px}
-.task:hover{background:#312D3D;box-shadow:var(--e2)}
+.task:hover{background:var(--task-hover);box-shadow:var(--e2)}
 .task.dragging{opacity:.45}
 .task::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
   background:var(--p-marker,var(--p-someday))}
 
 /* Priority. Urgent alone earns an outline — and a soft one, so it reads as
    important rather than as an invalid form field. */
-.task.pri-urgent{--p-marker:var(--p-urgent);background:linear-gradient(90deg,var(--p-urgent-bg),transparent 46%),#282431;
+.task.pri-urgent{--p-marker:var(--p-urgent);background:linear-gradient(90deg,var(--p-urgent-bg),transparent 46%),var(--task);
   box-shadow:inset 0 0 0 1px rgba(240,86,110,.42),0 1px 3px rgba(0,0,0,.16)}
 .task.pri-urgent:hover{box-shadow:inset 0 0 0 1px rgba(240,86,110,.6),var(--e2)}
-.task.pri-high{--p-marker:var(--p-high);background:linear-gradient(90deg,var(--p-high-bg),transparent 40%),#282431}
+.task.pri-high{--p-marker:var(--p-high);background:linear-gradient(90deg,var(--p-high-bg),transparent 40%),var(--task)}
 .task.pri-medium{--p-marker:var(--p-medium)}
 .task.pri-low{--p-marker:var(--p-low)}
 .task.pri-someday{--p-marker:var(--p-someday)}
@@ -539,8 +546,8 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
   background:conic-gradient(var(--ok) calc(var(--step-frac) * 360deg),
     var(--surface-3) 0)}
 .t-tick.is-blocked::after{content:'';position:absolute;inset:3px;border-radius:50%;
-  background:#282431;transition:background var(--t-hover)}
-.task:hover .t-tick.is-blocked::after{background:#312D3D}
+  background:var(--task);transition:background var(--t-hover)}
+.task:hover .t-tick.is-blocked::after{background:var(--task-hover)}
 /* A 44px hit area on a 22px control, without changing the layout it sits in. */
 .t-tick.is-blocked::before{content:'';position:absolute;inset:-11px;border-radius:50%}
 .t-tick.is-blocked:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
@@ -1021,7 +1028,7 @@ body.modal-open{overflow:hidden}
 
 /* Completion acknowledgement: the tick fills, then the text softens, then the
    card collapses. Restrained on purpose — no confetti, no particles. */
-.task.is-completing{background:linear-gradient(90deg,rgba(0,217,163,.10),transparent 55%),#282431;
+.task.is-completing{background:linear-gradient(90deg,rgba(0,217,163,.10),transparent 55%),var(--task);
   box-shadow:inset 0 0 0 1px rgba(0,217,163,.30)}
 .task.is-completing .t-title{color:var(--muted);text-decoration:line-through;
   text-decoration-color:rgba(0,217,163,.55);transition:color var(--d-fast) var(--e-out)}
