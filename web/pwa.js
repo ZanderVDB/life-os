@@ -100,7 +100,39 @@ export async function initServiceWorker() {
     showUpdatePrompt();
   };
 
-  if (reg.waiting && navigator.serviceWorker.controller) noteWaiting(reg.waiting);
+  /**
+   * A worker that was ALREADY waiting when this page booted is taken NOW,
+   * without asking.
+   *
+   * The policy was to ask every time, and the reason was good: never change
+   * the app under somebody mid-sentence. But at BOOT there is no sentence.
+   * Nothing has been typed, nothing is half-finished, and the reload is
+   * indistinguishable from the load that is already happening — so the
+   * question has no content, and a question with no content is one more
+   * thing to dismiss.
+   *
+   * What it cost: an installed app whose owner tapped "Later" once, or
+   * looked past the toast, stays on that build FOREVER. Every subsequent
+   * deploy installs another worker that also waits behind the same prompt.
+   * Three rounds of "the phone looks exactly the same" were this.
+   *
+   * The prompt survives for updates that arrive DURING a session — that is
+   * the case it was written for, and the only one where the question means
+   * something.
+   */
+  if (reg.waiting && navigator.serviceWorker.controller) {
+    sessionStorage.removeItem('los2_update_dismissed');
+    reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+  }
+
+  /** Applies a waiting update on demand. Returns false if there is none. */
+  window.__applyUpdate = () => {
+    const worker = reg.waiting ?? waitingWorker;
+    if (!worker) return false;
+    sessionStorage.removeItem('los2_update_dismissed');
+    worker.postMessage({ type: 'SKIP_WAITING' });
+    return true;
+  };
 
   reg.addEventListener('updatefound', () => {
     const next = reg.installing;

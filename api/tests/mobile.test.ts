@@ -659,3 +659,38 @@ test('a settle that has not landed is cancelled when the habit is undone', () =>
   assert.match(paint.slice(0, 1400), /\} else \{\s*cancelSettle\(fill\);/,
     'undoing a habit does not cancel the settle that is still pending');
 });
+
+test('an update that was already waiting is taken at boot, not asked about', () => {
+  /* The worker never calls skipWaiting itself, and the page asked before
+   * switching over. The reason was good — never change the app under somebody
+   * mid-sentence — but at BOOT there is no sentence: nothing is typed, nothing
+   * is half-finished, and the reload is indistinguishable from the load
+   * already happening.
+   *
+   * What it cost: an installed app whose owner tapped "Later" once, or looked
+   * past the toast, stays on that build forever, and every later deploy
+   * installs another worker that waits behind the same prompt. Three rounds of
+   * "the phone looks exactly the same" were this, while the same build
+   * rendered correctly in a narrow desktop window that had no worker in the
+   * way. */
+  const pwa = read('pwa.js');
+  assert.match(pwa, /if \(reg\.waiting && navigator\.serviceWorker\.controller\) \{\s*sessionStorage\.removeItem\('los2_update_dismissed'\);\s*reg\.waiting\.postMessage\(\{ type: 'SKIP_WAITING' \}\)/,
+    'a worker waiting at boot is still only offered, never taken');
+
+  // The prompt survives for updates that arrive DURING a session, which is
+  // the only case where the question means anything.
+  assert.match(pwa, /if \(next\.state === 'installed' && navigator\.serviceWorker\.controller\) noteWaiting\(next\)/,
+    'a mid-session update no longer announces itself');
+
+  // And Settings can apply one directly rather than pointing at a prompt.
+  assert.match(pwa, /window\.__applyUpdate = \(\) => \{/, 'there is no way to apply an update on demand');
+  assert.match(app, /window\.__applyUpdate\?\.\(\)/, 'Check now still only reports');
+
+  /* The prompt had NO phone rules, so it used the desktop geometry: pinned
+     above `--composer-h`, a bar a phone does not have. Measured at 360px it
+     was a 253px box floating mid-screen. */
+  assert.match(mobileCss, /\.updater\{left:12px;right:12px;transform:none;max-width:none;/,
+    'the update prompt is back to desktop geometry on a phone');
+  assert.match(mobileCss, /\.updater\{[^}]*bottom:calc\(var\(--m-nav-h\) \+ var\(--m-safe-b\) \+ 12px\)/,
+    'the prompt is not placed against the bottom navigation');
+});

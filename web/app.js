@@ -2878,7 +2878,11 @@ function wireSettings() {
     const el = document.getElementById('update-status');
     el.textContent = 'Checking…';
     const found = await window.__checkForUpdate?.();
-    el.textContent = found ? 'An update is ready — see the prompt.' : 'You are on the latest version.';
+    if (!found) { el.textContent = 'You are on the latest version.'; return; }
+    /* Applies it rather than pointing at a prompt. Somebody who came here and
+       pressed Check now has already answered the question the prompt asks. */
+    el.textContent = 'Updating…';
+    window.__applyUpdate?.();
   }));
 
   wireIntegrations();

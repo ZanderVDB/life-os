@@ -92,6 +92,27 @@
    Desktop is untouched. This block is phone-only on purpose — the approved
    desktop palette is not being restated here.
    ══════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════
+   THE UPDATE PROMPT
+
+   It had no phone rules at all, so it used the desktop geometry: pinned
+   above `--composer-h`, a bar a phone does not have, and centred by
+   `left:50%` at whatever width its content came to — measured at 360px it
+   was a 253px box floating in the middle of the screen. Visible and
+   tappable, but not obviously a thing that needed answering, which is half
+   of why an update could sit unaccepted for a week.
+
+   A phone gets it as a bar above the navigation, the full width of the page.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .updater{left:12px;right:12px;transform:none;max-width:none;
+    bottom:calc(var(--m-nav-h) + var(--m-safe-b) + 12px);
+    padding:12px 14px;gap:10px;flex-wrap:wrap;
+    background:var(--surface-2);border:1px solid var(--border-strong)}
+  .updater .u-text{flex:1 1 100%;font-size:13.5px}
+  .updater .btn{flex:1 1 0;min-height:42px;justify-content:center}
+}
+
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
   :root{
     /* THE CANVAS MOVES TOO.
