@@ -217,10 +217,10 @@ test('habits: partial progress shows for multi-count habits', () => {
 
 test('habits: the streak is shown and updates optimistically', () => {
   assert.ok(appCode.includes('hb-streak'), 'no streak display');
-  assert.ok(appCode.includes('function patchHabitRow'), 'the rail is rebuilt instead of patched');
+  assert.ok(appCode.includes('function patchHabit(id)'), 'the rail is rebuilt instead of patched');
   const t = appCode.indexOf('async function toggleHabit');
   const body = appCode.slice(t, t + 1200);
-  assert.ok(body.includes('patchHabitRow'), 'the toggle does not patch in place');
+  assert.ok(body.includes('patchHabit(id)'), 'the toggle does not patch in place');
   assert.ok(/Object\.assign\(h, before\)/.test(body), 'a failed toggle does not roll back');
 });
 

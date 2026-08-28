@@ -462,9 +462,9 @@ test('the surface ladder is lifted for a phone, and only for a phone', () => {
   assert.ok(at > 0, 'the phone surface ladder is gone');
   const rule = mobileCss.slice(at, mobileCss.indexOf('}', mobileCss.indexOf('--m-bar:', at)));
   for (const [token, value] of Object.entries({
-    '--surface': '#3c374d', '--surface-2': '#453e57', '--surface-3': '#4e4562',
-    '--border': '#4f4866', '--border-strong': '#594f75', '--hairline': '#4f4866',
-    '--paper': '#3f3952', '--paper-2': '#3c364e',
+    '--surface': '#47425b', '--surface-2': '#524967', '--surface-3': '#5b5172',
+    '--border': '#5c5477', '--border-strong': '#685d89', '--hairline': '#5c5477',
+    '--paper': '#4b4562', '--paper-2': '#48415d',
   })) {
     assert.ok(rule.includes(`${token}:${value}`), `${token} is not the lifted value`);
   }
@@ -483,9 +483,9 @@ test('the surface ladder is lifted for a phone, and only for a phone', () => {
       .map((s) => (s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4));
     return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   };
-  assert.ok(Y('#3f3952') > Y('#3c374d'),
+  assert.ok(Y('#4b4562') > Y('#47425b'),
     'paper is no longer lighter than the surfaces around it');
-  assert.ok(Y('#3c374d') < Y('#453e57') && Y('#453e57') < Y('#4e4562'),
+  assert.ok(Y('#47425b') < Y('#524967') && Y('#524967') < Y('#5b5172'),
     'the lifted ladder is out of order');
 });
 
@@ -528,8 +528,14 @@ test('no surface sits out the phone lift by being written as a literal', () => {
   const appCss = read('app.css');
   assert.match(appCss, /--task:#282431; --task-hover:#312D3D;/,
     'the task card has no token, so the next lift will miss it again');
-  assert.match(mobileCss, /--task:#464054; --task-hover:#524c64;/,
+  assert.match(mobileCss, /--task:#58516a; --task-hover:#625b78;/,
     'the task card is not lifted on a phone');
+  /* And an EDGE, not only a lighter fill. A fill difference is a gamma
+     argument — it survives on one panel and collapses on another, which is
+     what happened at 1.220:1, 1.429:1 and 1.632:1. A 1px line either draws
+     or it does not. */
+  assert.match(mobileCss, /box-shadow:inset 0 0 0 1px rgba\(255,255,255,\.09\)/,
+    'the task card has no edge, so it depends on the fill alone');
 
   // Every rule that paints the card must go through the token.
   /* `.task::before` is excluded deliberately: it is the priority marker
@@ -553,16 +559,21 @@ test('no surface sits out the phone lift by being written as a literal', () => {
 
   // And the two bars were the canvas: 1.002:1 and 1.037:1, which is to say
   // they were not there at all.
-  assert.match(mobileCss, /--m-bar:rgba\(51,45,73,\.92\);/,
+  assert.match(mobileCss, /--m-bar:#3b354d;/,
     'the bottom bar is back to being indistinguishable from the background');
-  assert.match(mobileCss, /background:var\(--m-bar\);backdrop-filter:blur\(18px\)/,
-    'the bar no longer paints from the shared value');
+  /* OPAQUE. A 92% ring painted on top of a 92% bar of the same colour
+     composites to 99.4% — visibly lighter than the bar beside it, which is
+     the light ring that kept appearing round the centre button. */
+  assert.ok(!/--m-bar:rgba/.test(mobileCss),
+    'the bar is translucent again, so the button ring will not match it');
+  assert.ok(!/background:var\(--m-bar\);backdrop-filter:blur/.test(mobileCss),
+    'the bar blurs a backdrop it is now opaque over');
   /* The centre button cuts a ring in the bar, and that ring was its own
    * literal — so lifting the bar turned the ring into a black halo. Every
    * place that draws bar-coloured material reads the one token. */
   assert.ok(!/rgba\(20,18,30,\.9/.test(mobileCss),
     'a bar colour is hardcoded again, so the ring and the bar can drift apart');
-  assert.match(mobileCss, /\.mobile-bar\{background:#302a46;/, 'the top bar is back to the canvas colour');
+  assert.match(mobileCss, /\.mobile-bar\{background:var\(--m-bar\);/, 'the two bars are different materials');
 });
 
 test('the centre button glows from a shadow, not from a layer over its face', () => {
@@ -581,10 +592,70 @@ test('the centre button glows from a shadow, not from a layer over its face', ()
   // Comments stripped: the notes inside the rule name the values they replaced.
   const btn = mobileCss.slice(from, mobileCss.indexOf('.mnav-ai:active', from))
     .replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.match(btn, /0 0 16px 3px rgba\(138,93,255,\.30\)/, 'the bloom is gone rather than moved');
+  assert.match(btn, /0 0 18px 2px rgba\(138,93,255,\.34\)/, 'the bloom is gone rather than moved');
   // The ramp's dark end was #4E27B4 — 6.37% of white, navy once a display
   // adds saturation, and it was reported as "a dark disc with a light ring".
   // On the rule, not the file: the note above it names the colour it replaced.
   assert.ok(!/#4E27B4/i.test(btn), 'the navy end of the button ramp is back');
   assert.match(btn, /#6438D8 100%/, 'the button ramp does not end on the raised value');
+});
+
+test('nothing on the centre button can draw a ring', () => {
+  /* Reported three times as a light ring around the button, never once
+   * reproducible here. Three declarations could draw one: a `0 0 0 5px`
+   * cut-out meant to punch the bar away from it, and two dark contact
+   * shadows under it. All three are hard-edged annuli, and an annulus is
+   * only invisible while it happens to match whatever is behind it — which
+   * is a bet on somebody else's display.
+   *
+   * A spread step on a non-inset shadow is what makes an edge. So: none. */
+  const from = mobileCss.indexOf('.mnav-ai{', mobileCss.indexOf('lit rather than glowing'));
+  const btn = mobileCss.slice(from, mobileCss.indexOf('.mnav-ai:active', from))
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const shadows = btn.slice(btn.indexOf('box-shadow:'));
+  for (const line of shadows.split(',')) {
+    if (line.includes('inset')) continue;               // inset shades cannot ring
+    const spread = line.trim().match(/^0 0 \d+px (\d+)px/);
+    if (!spread) continue;
+    assert.ok(!/^0 0 0/.test(line.trim()),
+      `a zero-blur spread draws a hard ring: ${line.trim()}`);
+  }
+  assert.ok(!/0 0 0 5px|0 0 0 7px/.test(btn), 'the cut-out ring is back');
+  assert.ok(!/rgba\(0,0,0,\.35\)/.test(btn),
+    'the black contact shadow is back, and the bar is light enough to show it');
+  assert.match(btn, /0 0 18px 2px rgba\(138,93,255,\.34\)/, 'the glow is gone');
+});
+
+test('the habits row is a row you scroll, not a grid with a "more" button', () => {
+  /* Six tiles and "3 more · See all" underneath. The button was a second way
+   * to reach a page the header chevron already reaches, and it cost a line to
+   * say so. A row you push sideways shows every habit due today.
+   *
+   * `display:flex` does NOT reset an inherited `flex-direction:column`, and
+   * the list layout above this one sets exactly that — which stacked the
+   * tiles vertically and showed one habit. */
+  assert.match(mobileCss, /\.m-habits-row\{display:flex;flex-direction:row;/,
+    'the row can inherit a column direction again');
+  assert.match(mobileCss, /\.m-habits-row\{[^}]*overflow-x:auto/, 'the row does not scroll');
+  assert.match(mobileCss, /\.m-hb\{flex:0 0 92px;scroll-snap-align:start;/,
+    'the tiles have no fixed width, so they squeeze instead of scrolling');
+  assert.ok(!/m-habits-more/.test(mobileCss + app), 'the "see all" button is back');
+  assert.ok(!/const PREVIEW/.test(app), 'the habits list is capped again');
+  // The mark is what tells you it worked; it was drawn for a 13px rail row.
+  assert.match(mobileCss, /\.m-hb \.hr-mark\{width:20px;height:20px\}/, 'the check is small again');
+  assert.match(mobileCss, /\.m-hb \.hb-ring\{width:40px;height:40px/, 'the ring is small again');
+});
+
+test('a settle that has not landed is cancelled when the habit is undone', () => {
+  /* Unchecking within the 320ms left the drop pending, and it fired on a ring
+   * that was no longer complete — writing `stroke-dasharray:none` and
+   * `stroke-dashoffset:0`, which is a FULL ring. `.is-empty` hid it at
+   * opacity 0, so it read as a faint green ghost rather than an obvious bug,
+   * and the next check had nothing left to animate from. */
+  assert.match(app, /function cancelSettle\(fill\)/, 'a pending settle cannot be stopped');
+  assert.match(app, /fill\.removeEventListener\('transitionend', fill\._drop\)/,
+    'the transitionend listener outlives the settle');
+  const paint = app.slice(app.indexOf('function paintHabitRing'));
+  assert.match(paint.slice(0, 1400), /\} else \{\s*cancelSettle\(fill\);/,
+    'undoing a habit does not cancel the settle that is still pending');
 });

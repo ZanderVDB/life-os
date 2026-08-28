@@ -2381,14 +2381,33 @@ const ringSvg = (h) => `<svg class="hr-svg" viewBox="0 0 32 32" aria-hidden="tru
  * animation house rule applied to a stroke instead of a layout.
  */
 function settleDash(fill) {
-  clearTimeout(fill._dashT);
+  cancelSettle(fill);
   const drop = () => {
     if (!fill.isConnected) return;
     fill.setAttribute('stroke-dasharray', 'none');
     fill.setAttribute('stroke-dashoffset', '0');
+    fill._drop = null;
   };
+  fill._drop = drop;
   fill.addEventListener('transitionend', drop, { once: true });
   fill._dashT = setTimeout(drop, 320);
+}
+
+/**
+ * Stops a settle that has not landed yet.
+ *
+ * Unchecking within the 320ms left the drop pending, and it then fired on a
+ * ring that was no longer complete — writing `stroke-dasharray:none` and
+ * `stroke-dashoffset:0`, which is a FULL ring. `.is-empty` hid it at
+ * opacity 0, so it read as a faint green ghost rather than an obvious bug,
+ * and the next check had nothing left to animate from.
+ */
+function cancelSettle(fill) {
+  clearTimeout(fill._dashT);
+  if (fill._drop) {
+    fill.removeEventListener('transitionend', fill._drop);
+    fill._drop = null;
+  }
 }
 
 /** Centre content: check when complete, count while partial, nothing at zero. */
@@ -2508,6 +2527,7 @@ function paintHabitRing(root, h) {
       fill.setAttribute('stroke-dashoffset', '0');
       settleDash(fill);
     } else {
+      cancelSettle(fill);
       fill.setAttribute('stroke-dasharray', '100');
       fill.setAttribute('stroke-dashoffset', (100 - pct * 100).toFixed(2));
     }
@@ -2549,18 +2569,45 @@ function syncHabitTotals() {
   state.habitTotals = { due: state.habitTotals.due, done };
 }
 
-function patchHabitRow(id) {
-  const row = document.querySelector(`.hb-row[data-habit="${id}"]`);
-  const h = (state.habits ?? []).find((x) => x.id === id);
-  if (!row || !h) return renderRail();
+/**
+ * Every node this habit is drawn in.
+ *
+ * The rail has a row and the phone has a tile, and only one of them exists at
+ * a time — but which one is not something the toggle should have to know.
+ * `patchHabitRow` used to look for `.hb-row` alone, so on a phone the
+ * OPTIMISTIC paint found nothing and fell through to `renderRail()`, which
+ * repaints a sidebar that is not on screen. The tile then updated only when
+ * the request came back, which is why ticking a habit felt like it was
+ * waiting for something. It was.
+ */
+function habitNodes(id) {
+  return [
+    document.querySelector(`.hb-row[data-habit="${id}"]`),
+    document.querySelector(`.m-hb[data-habit="${id}"]`),
+  ].filter(Boolean);
+}
 
-  paintHabitRing(row, h);
+/** Paints a habit wherever it is on screen, and keeps both tallies honest. */
+function patchHabit(id) {
+  const h = (state.habits ?? []).find((x) => x.id === id);
+  const nodes = habitNodes(id);
+  if (!h || !nodes.length) return renderRail();
+
+  for (const node of nodes) {
+    paintHabitRing(node, h);
+    // The tile IS the control; the rail's row contains one.
+    if (node.classList.contains('m-hb')) {
+      node.setAttribute('aria-pressed', String(!!h.completedToday));
+    }
+  }
   syncHabitTotals();
 
-  const badge = document.querySelector('.hb-count');
-  if (badge && state.habitTotals) {
+  if (state.habitTotals) {
     const text = `${state.habitTotals.done}/${state.habitTotals.due}`;
-    if (badge.textContent !== text) { badge.textContent = text; pulse(badge); }
+    for (const sel of ['.hb-count', '.m-habits-n']) {
+      const badge = document.querySelector(sel);
+      if (badge && badge.textContent !== text) { badge.textContent = text; pulse(badge); }
+    }
   }
   return undefined;
 }
@@ -2591,7 +2638,7 @@ async function toggleHabit(id) {
     h.streak = nowDone ? (h.streak ?? 0) + 1 : Math.max(0, (h.streak ?? 1) - 1);
   }
   h._busy = true;
-  patchHabitRow(id);
+  patchHabit(id);
   if (nowDone && !wasDone) celebrateHabit(id);
 
   try {
@@ -2608,7 +2655,7 @@ async function toggleHabit(id) {
     toast(e.message, true);
   } finally {
     h._busy = false;
-    patchHabitRow(id);
+    patchHabit(id);
   }
 }
 
@@ -2617,12 +2664,18 @@ async function toggleHabit(id) {
  * No confetti, no particles, no bounce.
  */
 function celebrateHabit(id) {
+  /* A short tick under the thumb. A phone can answer a press with something
+     a desktop cannot, and a checkbox that only changes colour is the thing
+     that feels inert on a touch screen. Guarded: unsupported everywhere
+     Apple ships, and silently ignored without a user gesture. */
+  if (isPhone()) { try { navigator.vibrate?.(12); } catch { /* not available */ } }
   if (reducedMotion()) return;
-  const ring = document.querySelector(`.hb-row[data-habit="${id}"] .hb-ring`);
-  ring?.animate(
-    [{ transform: 'scale(1)' }, { transform: 'scale(1.10)' }, { transform: 'scale(1)' }],
-    { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' },
-  );
+  for (const node of habitNodes(id)) {
+    node.querySelector('.hb-ring')?.animate(
+      [{ transform: 'scale(1)' }, { transform: 'scale(1.14)' }, { transform: 'scale(1)' }],
+      { duration: 280, easing: 'cubic-bezier(.2,.7,.2,1)' },
+    );
+  }
 }
 
 /** Recent-history dots for the habit modal, oldest first. */
@@ -6238,7 +6291,6 @@ function mobileTodayHtml() {
  * rows of text was, and it covers most people's whole day. Everything beyond
  * that, plus streaks and editing, is one tap away in the sheet.
  */
-const PREVIEW = 6;
 
 function habitsCardHtml() {
   const h = state.habitTotals;
@@ -6250,7 +6302,7 @@ function habitsCardHtml() {
       <span class="m-later-chev" aria-hidden="true">${icon('chevR', 16)}</span>
     </button>
     ${rows.length
-    ? `<div class="m-habits-row">${rows.slice(0, PREVIEW).map((x) => `
+    ? `<div class="m-habits-row">${rows.map((x) => `
         <button type="button" class="m-hb ${x.done ? 'is-done' : ''}"
           data-mhabit="${esc(x.id)}" data-habit="${esc(x.id)}"
           ${x.system ? 'data-system="1"' : ''}
@@ -6263,9 +6315,7 @@ function habitsCardHtml() {
             ${ringSvg(x.h)}${habitCentre(x.h)}
           </span>
           <span class="m-hb-n">${esc(x.name)}</span>
-        </button>`).join('')}</div>
-        ${rows.length > PREVIEW ? `<button type="button" class="m-habits-more"
-          id="m-habits-more">${rows.length - PREVIEW} more · See all</button>` : ''}`
+        </button>`).join('')}</div>`
     : `<p class="m-habits-empty">${state.habitsLoaded
       ? 'Nothing due today.' : 'Loading…'}</p>`}
   </section>`;
@@ -6312,37 +6362,12 @@ function wireMobileToday(scroll) {
   });
 
   scroll.querySelector('#m-habits-open')?.addEventListener('click', () => openHabitsSheet());
-  scroll.querySelector('#m-habits-more')?.addEventListener('click', () => openHabitsSheet());
   scroll.querySelectorAll('[data-mhabit]').forEach((b) => {
     b.addEventListener('click', () => {
       if (b.dataset.system) { go('diary'); return; }
-      toggleHabit(b.dataset.mhabit).then(() => patchMobileHabit(b.dataset.mhabit));
+      toggleHabit(b.dataset.mhabit);
     });
   });
-}
-
-/**
- * One habit tile, updated in place.
- *
- * The card used to be rebuilt with `outerHTML` on every tap, which replaced
- * the ring's nodes — and a brand new <circle> has nothing to transition FROM,
- * so the phone jumped straight to the finished state while the rail swept.
- * Same painter as the rail now, on the same markup.
- */
-function patchMobileHabit(id) {
-  const tile = document.querySelector(`.m-hb[data-habit="${id}"]`);
-  const h = (state.habits ?? []).find((x) => x.id === id);
-  if (!tile || !h) { refreshMobileHabits(); return; }
-
-  paintHabitRing(tile, h);
-  tile.setAttribute('aria-pressed', String(!!h.completedToday));
-  syncHabitTotals();
-
-  const tally = document.querySelector('.m-habits-n');
-  if (tally && state.habitTotals) {
-    const text = `${state.habitTotals.done}/${state.habitTotals.due}`;
-    if (tally.textContent !== text) { tally.textContent = text; pulse(tally); }
-  }
 }
 
 /** Re-draws the phone's Next card and glance line after data arrives. */
@@ -6364,11 +6389,10 @@ function refreshMobileHabits() {
   el.outerHTML = habitsCardHtml();
   const scroll = document.getElementById('main-scroll');
   document.getElementById('m-habits-open')?.addEventListener('click', () => openHabitsSheet());
-  document.getElementById('m-habits-more')?.addEventListener('click', () => openHabitsSheet());
   scroll?.querySelectorAll('[data-mhabit]').forEach((b) => {
     b.addEventListener('click', () => {
       if (b.dataset.system) { go('diary'); return; }
-      toggleHabit(b.dataset.mhabit).then(() => patchMobileHabit(b.dataset.mhabit));
+      toggleHabit(b.dataset.mhabit);
     });
   });
   const line = scroll?.querySelector('#m-glance');

@@ -109,14 +109,23 @@
        though the ground rises: the task card goes 1.428:1 -> 1.632:1. */
     --app-bg:linear-gradient(180deg,#292336 0%,#211e32 52%,#1d1c27 100%);
     --app-bg-flat:#211e32;
-    --surface:#3c374d; --surface-2:#453e57; --surface-3:#4e4562;
-    --border:#4f4866; --border-strong:#594f75; --hairline:#4f4866;
-    --paper:#3f3952; --paper-2:#3c364e;
-    /* The card you spend the day looking at: 1.93% -> 5.61%. */
-    --task:#464054; --task-hover:#524c64;
-    /* The bar's material, read by the bar AND by the ring the centre button
-       cuts in it. 2.91% against a 1.48% canvas. */
-    --m-bar:rgba(51,45,73,.92);
+    --surface:#47425b; --surface-2:#524967; --surface-3:#5b5172;
+    --border:#5c5477; --border-strong:#685d89; --hairline:#5c5477;
+    --paper:#4b4562; --paper-2:#48415d;
+    /* The card you spend the day looking at: 1.93% -> 9.00%, which is
+       2.161:1 against the canvas. Reported three times as the same colour as
+       the background at 1.220:1, 1.429:1 and 1.632:1 — so this stops being a
+       nudge. The edge below is the belt to this pair of braces. */
+    --task:#58516a; --task-hover:#625b78;
+    /* The bar's material — OPAQUE, and read by the bar AND by the ring the
+       centre button cuts in it.
+
+       It was `rgba(...,.92)`, and that is what put a light ring round the
+       button. The ring is painted ON TOP of the bar, so a 92% colour over a
+       92% colour of itself composites to 99.4% — visibly lighter than the
+       bar beside it, and lighter still wherever content had scrolled under
+       the bar to tint it. Two identical opaque values cannot disagree. */
+    --m-bar:#3b354d;
   }
 }
 
@@ -200,7 +209,10 @@
     /* 1.002:1 against the canvas — the bar was not a bar, it was the
        background with icons floating in it. 1.174:1 reads as a band and
        still sits well below the task card, so it recedes. */
-    background:var(--m-bar);backdrop-filter:blur(18px) saturate(1.3);
+    /* No backdrop-filter: with an opaque bar there is nothing behind to
+       blur, and it was the heaviest compositing step on the one element
+       that must never render oddly. */
+    background:var(--m-bar);
     border-top:1px solid rgba(255,255,255,.10)}
 
   .mnav-i{display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -227,13 +239,13 @@
     align-self:center;transform:translateY(-10px);
     border-radius:50%;border:0;padding:0;
     background:var(--brand);color:#fff;
-    box-shadow:0 8px 22px -6px rgba(124,77,255,.7),0 0 0 5px var(--m-bar);
+    box-shadow:0 0 18px 2px rgba(138,93,255,.34);
     -webkit-tap-highlight-color:transparent;
     transition:transform var(--d-fast) var(--e-out),box-shadow var(--d-fast) var(--e-out)}
   .mnav-ai:active{transform:translateY(-10px) scale(.93)}
   .mnav-ai svg{width:26px;height:26px}
   .mnav-ai[aria-current="page"]{box-shadow:0 8px 26px -4px rgba(124,77,255,.9),
-    0 0 0 5px var(--m-bar),0 0 0 7px rgba(138,93,255,.5)}
+    0 0 22px 4px rgba(138,93,255,.5)}
   /* The long-press affordance: a hint that fades in under the thumb rather
      than a label nobody reads. */
   .mnav-ai.is-holding{transform:translateY(-10px) scale(1.08)}
@@ -1145,7 +1157,11 @@
      title line where it started. Around 60px instead of 126. */
   .t-row{grid-template-columns:auto minmax(0,1fr) auto;row-gap:0;gap:12px;
     align-items:center}
-  .task{padding:9px 4px 9px 14px}
+  .task{padding:9px 4px 9px 14px;
+    /* A fill difference is a gamma argument — it survives on one panel and
+       collapses on another, which is exactly what happened three times. An
+       edge is not: a 1px line either draws or it does not. */
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),0 1px 3px rgba(0,0,0,.22)}
   .t-actions{grid-column:auto;justify-content:flex-end;gap:0;opacity:1;
     align-self:center}
   /* The arrows and the grip go. Both moves are the first two rows of the ⋯
@@ -1278,14 +1294,21 @@
        exactly the kind of thing that renders differently on another engine.
        A box-shadow is drawn outside the border-box by definition and cannot
        veil anything, on any browser. */
+    /* Every ring-shaped declaration is gone.
+       There was a `0 0 0 5px` cut-out meant to punch the bar away from the
+       button, and two dark contact shadows underneath it. All three draw a
+       hard-edged annulus, and an annulus is only invisible while it happens
+       to match what is behind it — which is why this button kept being
+       reported with a ring around it on a real phone and never here. The
+       bar is one opaque colour now, so there is nothing to cut out of, and a
+       shadow that only shows up on somebody else's display is not worth the
+       depth it buys. What is left cannot produce an edge: two INSET shades
+       for the sphere, and a soft glow with no spread step. */
     box-shadow:
-      0 0 0 5px var(--m-bar),                       /* the bar, cut around it */
       inset 0 1px 0 rgba(255,255,255,.42),          /* top rim */
       inset 0 -7px 12px -7px rgba(26,8,64,.85),     /* the ball turning away */
-      0 5px 12px -5px rgba(58,22,140,.7),           /* contact shadow, tight */
-      0 1px 3px rgba(0,0,0,.35),
-      0 0 16px 3px rgba(138,93,255,.30),            /* the bloom, behind */
-      0 0 30px 8px rgba(124,77,255,.16)}
+      0 0 18px 2px rgba(138,93,255,.34),            /* the bloom, behind */
+      0 0 34px 10px rgba(124,77,255,.16)}
   .mnav-ai::after{
     content:'';position:absolute;inset:0;border-radius:50%;z-index:1;
     background:linear-gradient(158deg,
@@ -1296,14 +1319,10 @@
      the thing you pressed. */
   .mnav-ai[aria-current="page"]{
     box-shadow:
-      0 0 0 5px var(--m-bar),
-      0 0 0 7px rgba(150,110,255,.42),
       inset 0 1px 0 rgba(255,255,255,.5),
       inset 0 -7px 12px -7px rgba(26,8,64,.85),
-      0 6px 16px -5px rgba(88,40,200,.8),
-      0 1px 3px rgba(0,0,0,.35),
-      0 0 20px 4px rgba(138,93,255,.42),
-      0 0 36px 10px rgba(124,77,255,.2)}
+      0 0 22px 4px rgba(138,93,255,.5),
+      0 0 40px 12px rgba(124,77,255,.22)}
   .mnav-ai[aria-current="page"] .logo-mark path{fill-opacity:1}
 }
 
@@ -1727,7 +1746,7 @@
    z-index changed, no offset invented, and one fewer compositing layer for a
    phone to maintain, which the blur was costing on every scroll frame. */
 @media (max-width:899px),(max-height:500px) and (max-width:1099px){
-  .mobile-bar{background:#302a46;backdrop-filter:none;
+  .mobile-bar{background:var(--m-bar);backdrop-filter:none;
     border-bottom:1px solid rgba(255,255,255,.06)}
   /* And a shadow once something is behind it, so the edge is legible
      against content rather than only against the page. */
@@ -1761,7 +1780,7 @@
        reach; the bar's own background still runs behind it, which is what it
        is supposed to do. */
     padding:10px var(--m-pad) 22px;
-    background:#302a46;border-top:1px solid var(--border);
+    background:var(--m-bar);border-top:1px solid var(--border);
     box-shadow:0 -10px 24px -12px rgba(0,0,0,.7)}
   .asst-confirm .btn{min-height:44px}
   /* The room it takes, given back to the list above it. */
@@ -1797,9 +1816,6 @@
   .m-hb.is-done .m-hb-n{color:var(--muted);text-decoration:line-through;
     text-decoration-color:rgba(255,255,255,.28)}
   .m-hb-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .m-habits-more{display:flex;align-items:center;min-height:40px;padding:0 10px;
-    margin-top:2px;font-size:12.5px;font-weight:600;color:var(--accent)}
-  .m-habits-more:active{background:rgba(255,255,255,.05);border-radius:10px}
 }
 
 /* ── §14 Check-in options that can be read ───────────────────────────────
@@ -1991,22 +2007,41 @@
   .bucket-head{margin-bottom:10px}
   .m-sec-h{font-size:10.5px;letter-spacing:.13em}
 
-  /* ── Habits, as a rank of rings ───────────────────────────────────────
+  /* ── Habits, as a rank of rings you scroll ────────────────────────────
      The ring is the same shape the desktop rail uses, at the size a thumb
-     wants, with the name beneath it. Three across: an ordinary habit name
-     fits on one line even at 360px, and two rows cover most days. */
+     wants, with the name beneath it.
+
+     A ROW, not a grid of six with a "3 more · See all" underneath. The
+     button was a second way to reach a page that the header chevron already
+     reaches, and it cost a line to say so; a row you push sideways shows
+     every habit due today and needs no explanation. The fade at the right
+     edge is the only affordance it needs. */
   .m-habits{padding:2px 0 12px}
-  .m-habits-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:4px;padding:4px 8px 0;overflow:visible}
-  .m-hb{flex-direction:column;align-items:center;justify-content:flex-start;
-    gap:7px;min-height:0;width:auto;padding:10px 4px 9px;border-radius:14px;
+  .m-habits-row{display:flex;flex-direction:row;grid-template-columns:none;gap:2px;
+    align-items:flex-start;justify-content:flex-start;
+    padding:4px 10px 2px;overflow-x:auto;overflow-y:visible;
+    scroll-snap-type:x proximity;scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+    -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 26px),transparent 100%);
+    mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 26px),transparent 100%)}
+  .m-habits-row::-webkit-scrollbar{display:none}
+  .m-hb{flex:0 0 92px;scroll-snap-align:start;
+    flex-direction:column;align-items:center;justify-content:flex-start;
+    gap:8px;min-height:0;width:auto;padding:10px 4px 9px;border-radius:14px;
     background:none;border:0;text-align:center;color:var(--text-2)}
   .m-hb:active{background:rgba(255,255,255,.05)}
   /* The rail's ring at tile size. HOW it fills — the track, the green sweep,
      the seam, the check settling into the middle — all lives in app.css and
-     is shared; the only thing that differs here is the diameter. */
-  .m-hb .hb-ring{width:34px;height:34px;flex:0 0 34px}
-  .m-hb .hb-ring>svg.hr-svg{width:34px;height:34px}
+     is shared; the only thing that differs here is the diameter.
+     40px rather than 34, and the check inside it 20px rather than 14: the
+     mark is what tells you it worked, and it was reading as a tick drawn for
+     a 13px sidebar row because it was one. */
+  .m-hb .hb-ring{width:40px;height:40px;flex:0 0 40px}
+  .m-hb .hb-ring>svg.hr-svg{width:40px;height:40px}
+  .m-hb .hr-track,.m-hb .hr-fill{stroke-width:2.9}
+  .m-hb .hr-mark{width:20px;height:20px}
+  .m-hb .hr-mark>svg{width:20px;height:20px}
+  .m-hb .hr-count{font-size:12px}
   /* The rail keys the finished state off `.hb-row.is-done`, and on a phone
      the button IS the row. Same declarations, different ancestor. */
   .m-hb.is-done .hr-mark{opacity:1;transform:scale(1)}
@@ -2018,7 +2053,6 @@
   .m-hb-n{font-size:11.5px;line-height:1.3;font-weight:500;white-space:normal;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
     overflow:hidden;text-overflow:clip;min-width:0}
-  .m-habits-more{width:100%;justify-content:center;margin:6px 0 0}
 }
 
 @media (prefers-reduced-motion:reduce){

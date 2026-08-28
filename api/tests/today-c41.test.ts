@@ -97,13 +97,20 @@ test('habits: the row is mutated in place so the fill can transition', () => {
   assert.match(fn, /root\.classList\.toggle\('is-done'/, 'completion state is not toggled in place');
   assert.match(html, /transition:stroke-dashoffset var\(--d-slow\)/, 'the fill does not transition');
 
-  /* And the phone takes the SAME painter. It used to rebuild the whole card
-     with `outerHTML` on every tap, which replaced the ring's nodes — a brand
-     new <circle> has nothing to transition from, so the tile jumped to the
-     finished state while the rail swept. */
-  const phone = body(appCode, 'function patchMobileHabit(id)');
-  assert.match(phone, /paintHabitRing\(tile, h\)/, 'the phone tile does not use the shared painter');
-  assert.ok(!/el\.outerHTML/.test(phone), 'the phone still rebuilds the card on a tap');
+  /* ONE patcher for both surfaces. `patchHabitRow` looked for `.hb-row`
+     alone, so on a phone the OPTIMISTIC paint found nothing and fell through
+     to `renderRail()` — a sidebar that is not on screen. The tile then
+     updated only when the request came back, which is why ticking a habit
+     felt like it was waiting for something. It was. */
+  const patch = body(appCode, 'function patchHabit(id)');
+  assert.match(patch, /paintHabitRing\(node, h\)/, 'the shared painter is not used');
+  const nodes = body(appCode, 'function habitNodes(id)');
+  assert.match(nodes, /\.hb-row\[data-habit=/, 'the rail row is no longer found');
+  assert.match(nodes, /\.m-hb\[data-habit=/, 'the phone tile is no longer found');
+  assert.ok(!/patchMobileHabit/.test(appCode), 'a second phone-only patcher is back');
+  // The celebration reaches the phone too; it used to be rail-only.
+  const cheer = body(appCode, 'function celebrateHabit(id)');
+  assert.match(cheer, /for \(const node of habitNodes\(id\)\)/, 'the phone gets no pulse');
   const card = body(appCode, 'function habitsCardHtml()');
   assert.match(card, /class="hb-ring"/, 'the phone tile no longer draws the rail ring');
   assert.match(card, /\$\{ringSvg\(x\.h\)\}\$\{habitCentre\(x\.h\)\}/,
