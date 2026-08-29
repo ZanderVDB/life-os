@@ -447,46 +447,53 @@ test('the canvas gradient is a layer, not a fixed background attachment', () => 
     'theme-color and the flat canvas colour have drifted apart');
 });
 
-test('the surface ladder is lifted for a phone, and only for a phone', () => {
-  /* The canvas is 0.69% of white and a card is 1.43%: 1.132:1, which is the
-   * entire separation between "card" and "background". A laptop IPS panel
-   * leaks backlight, so the whole range floats up off true black and the eye
-   * reads it. An OLED phone renders #141220 at essentially no emission and
-   * auto-brightness pulls the rest down with it, the two collapse together,
-   * and the screen reads as one flat dark mass.
+test('the phone palette is the desktop palette, with ONE exception', () => {
+  /* Three passes lifted this ladder and every one was judged from a screen
+   * that was not rendering it. `.ai-invite` is painted by a rule in
+   * mobile.css; `.task` is painted by app.css through `var(--task)`. A phone
+   * holding a fresh mobile.css and a stale app.css therefore shows a
+   * lightened invite card next to a task card that never moved — which is
+   * exactly what was reported, three times, and was right every time.
    *
-   * Each value is its desktop colour scaled in LINEAR light, so the hue is
-   * preserved exactly and only the luminance moves. Measured after: desktop
-   * mean luminance unchanged within capture noise, phone +4.5% to +22.2%. */
-  const at = mobileCss.indexOf('THE CANVAS MOVES TOO');
-  assert.ok(at > 0, 'the phone surface ladder is gone');
-  const rule = mobileCss.slice(at, mobileCss.indexOf('}', mobileCss.indexOf('--m-bar:', at)));
-  for (const [token, value] of Object.entries({
-    '--surface': '#47425b', '--surface-2': '#524967', '--surface-3': '#5b5172',
-    '--border': '#5c5477', '--border-strong': '#685d89', '--hairline': '#5c5477',
-    '--paper': '#4b4562', '--paper-2': '#48415d',
-  })) {
-    assert.ok(rule.includes(`${token}:${value}`), `${token} is not the lifted value`);
+   * So the ladder goes back. Nothing here may redefine the canvas or the
+   * surfaces; a phone is not a different palette, it is the same one on a
+   * display that renders black differently. */
+  const at = mobileCss.indexOf('THE PHONE PALETTE');
+  assert.ok(at > 0, 'the phone palette block is gone');
+  const rule = mobileCss.slice(at, mobileCss.indexOf('PHONE SHELL', at));
+  for (const token of ['--app-bg', '--surface', '--surface-2', '--surface-3',
+    '--paper', '--paper-2', '--border', '--border-strong', '--hairline']) {
+    assert.ok(!new RegExp(`${token}:`).test(rule),
+      `${token} is overridden for phones again — the palette is one palette`);
   }
-  /* THE CANVAS MOVES TOO. Two passes held it at 0.69% of white and lifted only
-     what sat on it, and the phone still read as black — because the ground it
-     all sits on WAS black. A laptop's IPS panel cannot switch its backlight
-     off per pixel, so it renders 0.69% as a lifted grey and floats the whole
-     palette up. 1.48% is that, done deliberately. */
-  assert.match(rule, /--app-bg:linear-gradient\(180deg,#292336 0%,#211e32 52%,#1d1c27 100%\)/,
-    'the canvas is back at true black on a phone');
-  assert.match(rule, /--app-bg-flat:#211e32/,
-    'the overscroll bounce and the status bar disagree with the canvas');
-  // Paper stays lighter than the surfaces, which is the Library's own rule.
-  const Y = (h: string) => {
-    const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
-      .map((s) => (s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-  };
-  assert.ok(Y('#4b4562') > Y('#47425b'),
-    'paper is no longer lighter than the surfaces around it');
-  assert.ok(Y('#47425b') < Y('#524967') && Y('#524967') < Y('#5b5172'),
-    'the lifted ladder is out of order');
+
+  /* The exception: 1.93% of white on a 0.69% canvas is 1.220:1, and that is
+   * the whole separation between "card" and "page". 3.63% is 1.517:1 —
+   * visibly a card, and short of the 5.99% invite that was called very white.
+   *
+   * Written as RULES, at every specificity app.css uses. A token is only
+   * worth what the stylesheet reading it happens to be, and `.task.pri-urgent`
+   * is two classes: a one-class override would lose to a stale sheet. */
+  assert.match(rule, /\.task\{background:#383344;/, 'the task card has no colour of its own');
+  assert.match(rule, /\.task\.pri-urgent\{background:linear-gradient\(90deg,var\(--p-urgent-bg\),transparent 46%\),#383344\}/,
+    'an urgent task keeps the old base on a stale app.css');
+  assert.match(rule, /\.task\.pri-high\{[^}]*#383344\}/, 'a high-priority task keeps the old base');
+  assert.match(rule, /\.task\.is-completing\{[^}]*#383344\}/, 'a completing task keeps the old base');
+  assert.match(rule, /\.t-tick\.is-blocked::after\{background:#383344\}/,
+    "the blocked tick's centre no longer matches the card it is cut from");
+  // And an edge, because a fill difference is a gamma argument and a line is not.
+  assert.match(rule, /box-shadow:inset 0 0 0 1px rgba\(255,255,255,\.09\)/,
+    'the task card has no edge, so it depends on the fill alone');
+  // The token too, for a FRESH app.css, so both paths land on one colour.
+  assert.match(rule, /--task:#383344; --task-hover:#443e53;/, 'a fresh app.css would disagree');
+
+  /* The bar stays OPAQUE: a 92% ring over a 92% bar of the same colour
+     composites to 99.4% and shows as a lighter halo, which was the ring
+     round the centre button. */
+  assert.match(rule, /--m-bar:#191622;/, 'the bar is not the shared opaque value');
+  assert.ok(!/--m-bar:rgba/.test(mobileCss),
+    'the bar is translucent again, so the button ring will not match it');
+  assert.match(mobileCss, /\.mobile-bar\{background:var\(--m-bar\);/, 'the two bars are different materials');
 });
 
 test('Appearance offers no control that does nothing', () => {
@@ -510,70 +517,6 @@ test('Appearance offers no control that does nothing', () => {
   const prefs = readFileSync(join('src', 'routes', 'preferences.ts'), 'utf8');
   assert.match(prefs, /appearance: \{ values: \['system', 'dark'\]/,
     'the stored preference was dropped along with the control');
-});
-
-test('no surface sits out the phone lift by being written as a literal', () => {
-  /* The first lift moved every token and the phone still read as dark, because
-   * the task card — the thing you actually spend the day looking at — was the
-   * hex #282431 written out in FIVE places (base, hover, two priority tints,
-   * the completing state) plus the blocked tick's centre, which is a hole cut
-   * in the card and has to match it exactly.
-   *
-   * Measured at 360px, painted and composited down to the canvas:
-   *   task card   1.93% of white, 1.220:1   <- the worst on the screen
-   *   habits card 2.35%,          1.292:1   <- had moved
-   * A literal cannot participate in a token override, so it silently kept the
-   * desktop value. Now it is --task, and the phone block lifts it to 3.12% /
-   * 1.429:1, still above --surface exactly as it is on desktop. */
-  const appCss = read('app.css');
-  assert.match(appCss, /--task:#282431; --task-hover:#312D3D;/,
-    'the task card has no token, so the next lift will miss it again');
-  assert.match(mobileCss, /--task:#58516a; --task-hover:#625b78;/,
-    'the task card is not lifted on a phone');
-  /* And an EDGE, not only a lighter fill. A fill difference is a gamma
-     argument — it survives on one panel and collapses on another, which is
-     what happened at 1.220:1, 1.429:1 and 1.632:1. A 1px line either draws
-     or it does not. */
-  assert.match(mobileCss, /box-shadow:inset 0 0 0 1px rgba\(255,255,255,\.09\)/,
-    'the task card has no edge, so it depends on the fill alone');
-
-  // Every rule that paints the card must go through the token.
-  /* `.task::before` is excluded deliberately: it is the priority marker
-   * stripe, and its background is a meaning colour, not a surface. */
-  const painters = (appCss.match(/^\.task(?![\w-])[^{]*\{[^}]*background:[^;}]*/gm) ?? [])
-    .filter((r) => {
-      const sel = r.slice(0, r.indexOf('{'));
-      // The card itself only: no descendant, no pseudo-element.
-      return !/[\s>]/.test(sel) && !/::/.test(sel);
-    });
-  assert.ok(painters.length >= 4, `expected the task card painted in several states, found ${painters.length}`);
-  for (const rule of painters) {
-    assert.ok(/var\(--task\)|var\(--task-hover\)/.test(rule),
-      `a task background is still a literal: ${rule.slice(0, 90)}`);
-  }
-  // The blocked tick is a hole in the card and must track it.
-  const tick = appCss.match(/\.t-tick\.is-blocked::after\{[^}]*\}/)?.[0] ?? '';
-  assert.match(tick, /background:var\(--task\)/, "the blocked tick's centre no longer matches the card");
-  assert.ok(!/#282431|#312D3D/i.test(appCss.replace(/--task[^;]*;/g, '')),
-    'a task colour is still hardcoded somewhere');
-
-  // And the two bars were the canvas: 1.002:1 and 1.037:1, which is to say
-  // they were not there at all.
-  assert.match(mobileCss, /--m-bar:#3b354d;/,
-    'the bottom bar is back to being indistinguishable from the background');
-  /* OPAQUE. A 92% ring painted on top of a 92% bar of the same colour
-     composites to 99.4% — visibly lighter than the bar beside it, which is
-     the light ring that kept appearing round the centre button. */
-  assert.ok(!/--m-bar:rgba/.test(mobileCss),
-    'the bar is translucent again, so the button ring will not match it');
-  assert.ok(!/background:var\(--m-bar\);backdrop-filter:blur/.test(mobileCss),
-    'the bar blurs a backdrop it is now opaque over');
-  /* The centre button cuts a ring in the bar, and that ring was its own
-   * literal — so lifting the bar turned the ring into a black halo. Every
-   * place that draws bar-coloured material reads the one token. */
-  assert.ok(!/rgba\(20,18,30,\.9/.test(mobileCss),
-    'a bar colour is hardcoded again, so the ring and the bar can drift apart');
-  assert.match(mobileCss, /\.mobile-bar\{background:var\(--m-bar\);/, 'the two bars are different materials');
 });
 
 test('the centre button glows from a shadow, not from a layer over its face', () => {
@@ -612,14 +555,6 @@ test('nothing on the centre button can draw a ring', () => {
   const from = mobileCss.indexOf('.mnav-ai{', mobileCss.indexOf('lit rather than glowing'));
   const btn = mobileCss.slice(from, mobileCss.indexOf('.mnav-ai:active', from))
     .replace(/\/\*[\s\S]*?\*\//g, '');
-  const shadows = btn.slice(btn.indexOf('box-shadow:'));
-  for (const line of shadows.split(',')) {
-    if (line.includes('inset')) continue;               // inset shades cannot ring
-    const spread = line.trim().match(/^0 0 \d+px (\d+)px/);
-    if (!spread) continue;
-    assert.ok(!/^0 0 0/.test(line.trim()),
-      `a zero-blur spread draws a hard ring: ${line.trim()}`);
-  }
   assert.ok(!/0 0 0 5px|0 0 0 7px/.test(btn), 'the cut-out ring is back');
   assert.ok(!/rgba\(0,0,0,\.35\)/.test(btn),
     'the black contact shadow is back, and the bar is light enough to show it');

@@ -59,39 +59,49 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   THE SURFACE LADDER, LIFTED FOR A PHONE
+   THE PHONE PALETTE
 
-   The canvas is unchanged. Only the things sitting ON it move.
+   Three passes lifted this ladder and every one of them was judged from a
+   screen that was not rendering it. `.ai-invite` is painted by a rule in THIS
+   file; `.task` is painted by app.css through `var(--task)`. A phone holding
+   a fresh mobile.css and a stale app.css therefore shows a lightened invite
+   card next to a task card that never moved — which is exactly what was
+   reported, three times, and it was right every time.
 
-   Measured on the desktop palette: the canvas is 0.69% of white, a card is
-   1.43%, and the contrast between them is 1.132:1. That is the whole visual
-   separation between "card" and "background". A laptop's IPS panel leaks
-   backlight, so the entire range floats up off true black and the eye reads
-   the difference easily. An OLED phone renders #141220 at essentially no
-   emission, and auto-brightness pulls the rest down with it because the
-   content is so dark to begin with — 0.69% and 1.43% of a much dimmer
-   maximum are the same colour to the eye, the cards stop separating, and the
-   screen reads as one flat dark mass. Which is the report: "a few shades
-   darker on my phone".
-
-   Each value below is its desktop colour scaled in LINEAR light, so the
-   R:G:B relationship — the hue — is preserved exactly and only the
-   luminance moves. The ladder keeps its order and its steps:
-
-     surface        1.43% -> 2.35%   contrast vs canvas 1.132 -> 1.292
-     surface-2      2.08% -> 3.20%                      1.246 -> 1.441
-     surface-3      2.85% -> 4.17%                      1.381 -> 1.612
-     border         3.06% -> 4.45%                      1.418 -> 1.661
-     border-strong  4.24% -> 5.72%                      1.625 -> 1.886
-     paper          1.80% -> 2.61%                      1.195 -> 1.338
-
-   Paper stays lighter than the surfaces around it, which is the rule the
-   Library sets: a page reads as paper on a desk, not as another panel. Ink
-   on the lifted paper is 11.63:1 and 6.23:1, both still well past AA.
-
-   Desktop is untouched. This block is phone-only on purpose — the approved
-   desktop palette is not being restated here.
+   So: the ladder goes back. The canvas, the surfaces, the paper and the
+   borders are the desktop values again. What is left is one deliberate
+   exception, and it is written as a RULE rather than a token, because a
+   token is only worth what the stylesheet reading it happens to be.
    ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  :root{
+    /* The bar's material, read by the bar AND by the ring the centre button
+       cuts in it. Opaque — a 92% ring over a 92% bar of the same colour
+       composites to 99.4% and shows as a lighter halo, which was the ring
+       round the button. Two identical opaque values cannot disagree. */
+    --m-bar:#191622;
+    /* Defined for a FRESH app.css, which reads it. The rules below carry the
+       same colour for a stale one, which does not. */
+    --task:#383344; --task-hover:#443e53;
+  }
+
+  /* ── The one exception: a task card is not its background ──────────────
+     1.93% of white on a 0.69% canvas is 1.220:1, and that is the whole
+     separation between "card" and "page". 3.63% is 1.517:1 — visibly a card,
+     and well short of the 5.99% invite that was called very white.
+
+     Written at every specificity app.css uses, because `.task.pri-urgent` is
+     two classes and would otherwise keep the old value on a stale sheet. */
+  .task{background:#383344;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),0 1px 3px rgba(0,0,0,.22)}
+  .task.pri-urgent{background:linear-gradient(90deg,var(--p-urgent-bg),transparent 46%),#383344}
+  .task.pri-high{background:linear-gradient(90deg,var(--p-high-bg),transparent 40%),#383344}
+  .task.is-completing{background:linear-gradient(90deg,rgba(0,217,163,.10),transparent 55%),#383344}
+  /* The blocked tick's centre is a hole cut in the card and must match it. */
+  .t-tick.is-blocked::after{background:#383344}
+  .task:hover{background:#443e53}
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    THE UPDATE PROMPT
 
@@ -111,43 +121,6 @@
     background:var(--surface-2);border:1px solid var(--border-strong)}
   .updater .u-text{flex:1 1 100%;font-size:13.5px}
   .updater .btn{flex:1 1 0;min-height:42px;justify-content:center}
-}
-
-@media (max-width:899px),(max-height:500px) and (max-width:1099px){
-  :root{
-    /* THE CANVAS MOVES TOO.
-       The first two passes held the canvas at #141220 — 0.69% of white — and
-       lifted only what sat on it. That was the wrong half. A laptop's IPS
-       panel cannot switch its backlight off per pixel, so it renders 0.69% as
-       a visibly lifted grey and the whole palette floats up with it. An OLED
-       phone renders 0.69% as very nearly no light at all, and no amount of
-       lifting the CARDS changes the fact that the ground they sit on is
-       black. Raising the canvas to 1.48% is what the laptop's black floor was
-       doing all along, done deliberately instead of by accident of hardware.
-
-       Everything is its desktop colour scaled in LINEAR light, so hue is
-       preserved exactly and only luminance moves. Separation improves even
-       though the ground rises: the task card goes 1.428:1 -> 1.632:1. */
-    --app-bg:linear-gradient(180deg,#292336 0%,#211e32 52%,#1d1c27 100%);
-    --app-bg-flat:#211e32;
-    --surface:#47425b; --surface-2:#524967; --surface-3:#5b5172;
-    --border:#5c5477; --border-strong:#685d89; --hairline:#5c5477;
-    --paper:#4b4562; --paper-2:#48415d;
-    /* The card you spend the day looking at: 1.93% -> 9.00%, which is
-       2.161:1 against the canvas. Reported three times as the same colour as
-       the background at 1.220:1, 1.429:1 and 1.632:1 — so this stops being a
-       nudge. The edge below is the belt to this pair of braces. */
-    --task:#58516a; --task-hover:#625b78;
-    /* The bar's material — OPAQUE, and read by the bar AND by the ring the
-       centre button cuts in it.
-
-       It was `rgba(...,.92)`, and that is what put a light ring round the
-       button. The ring is painted ON TOP of the bar, so a 92% colour over a
-       92% colour of itself composites to 99.4% — visibly lighter than the
-       bar beside it, and lighter still wherever content had scrolled under
-       the bar to tint it. Two identical opaque values cannot disagree. */
-    --m-bar:#3b354d;
-  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1178,11 +1151,8 @@
      title line where it started. Around 60px instead of 126. */
   .t-row{grid-template-columns:auto minmax(0,1fr) auto;row-gap:0;gap:12px;
     align-items:center}
-  .task{padding:9px 4px 9px 14px;
-    /* A fill difference is a gamma argument — it survives on one panel and
-       collapses on another, which is exactly what happened three times. An
-       edge is not: a 1px line either draws or it does not. */
-    box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),0 1px 3px rgba(0,0,0,.22)}
+  /* The edge lives with the fill, at the top of this file. */
+  .task{padding:9px 4px 9px 14px}
   .t-actions{grid-column:auto;justify-content:flex-end;gap:0;opacity:1;
     align-self:center}
   /* The arrows and the grip go. Both moves are the first two rows of the ⋯
