@@ -269,8 +269,40 @@ function devBypass() {
  * kind of visitor this browser is. It authorises nothing — the real gate is
  * the token the API verifies. */
 const SEEN = 'los2_signed_in';
+
+/* The SAME mark index.html already painted, in case this runs on a page that
+ * never had one — a first visit whose browser has been here before. Kept as a
+ * string rather than imported, because it has to exist before any module the
+ * app loads and it is nine lines. */
+const BOOT_MARK = '<div class="boot-wait is-on" aria-hidden="true"><span class="boot-mark">'
+  + '<svg viewBox="0 0 24 24" aria-hidden="true">'
+  + '<defs><linearGradient id="waitLotus" gradientUnits="userSpaceOnUse" x1="4" y1="21" x2="20" y2="3">'
+  + '<stop offset="0" stop-color="#7C4DFF"/><stop offset="1" stop-color="#C28DFF"/></linearGradient></defs>'
+  + '<path d="M12 20.4C6.9 17.6 3.4 13.1 3.4 8.5 7.1 9.2 10.1 13 12 20.4Z" fill="url(#waitLotus)" fill-opacity=".82"/>'
+  + '<path d="M12 20.4c5.1-2.8 8.6-7.3 8.6-11.9-3.7.7-6.7 4.5-8.6 11.9Z" fill="url(#waitLotus)" fill-opacity=".82"/>'
+  + '<path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z" fill="url(#waitLotus)"/></svg>'
+  + '</span></div>';
+
+/**
+ * The wait, while Firebase restores the session.
+ *
+ * This used to write a 17px spinner into a left-aligned `.state` block, which
+ * put it in the TOP-LEFT CORNER — so one launch showed three different
+ * loading screens in a row: the system splash, the breathing mark index.html
+ * paints, and then a spinner in the corner. Three states for one wait.
+ *
+ * The node index.html already painted is KEPT rather than replaced. Its
+ * animation is mid-cycle and re-rendering it would restart the breath, which
+ * is a visible hitch at the exact moment nothing should be happening.
+ */
 const showSpinner = () => {
-  root.innerHTML = '<div class="state" style="padding:60px 34px"><span class="spinner"></span></div>';
+  const existing = root.querySelector('.boot-wait');
+  if (existing) {
+    existing.classList.add('is-on');
+    for (const node of [...root.children]) if (node !== existing) node.remove();
+    return;
+  }
+  root.innerHTML = BOOT_MARK;
 };
 
 async function initAuth() {
@@ -366,6 +398,12 @@ function renderBootFailure(e) {
 const LANDING = root.innerHTML;
 
 function renderSignIn(onClick) {
+  /* The class index.html set from `los2_signed_in` is a GUESS about which of
+   * two screens to paint first, and this is the moment the guess is answered:
+   * there is no session. Leaving it on hides #landing and shows the waiting
+   * mark instead, so a signed-out returning visitor — or anyone whose session
+   * simply expired — sits on a loading screen that never resolves. */
+  document.documentElement.classList.remove('los-returning');
   if (!document.getElementById('landing')) root.innerHTML = LANDING;
   // Every sign-in button on the landing page — header, hero and closing
   // call to action — goes to the same place.

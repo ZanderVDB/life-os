@@ -469,7 +469,10 @@ test('a signed-in reload never flashes the public page', () => {
   const css = read(join('..', 'web', 'app.css'));
   assert.match(css, /html\.los-returning #landing\{display:none\}/,
     'a returning visitor still renders the landing page');
-  assert.match(css, /html\.los-returning \.boot-wait\{display:grid\}/,
+  /* The selector gained `.boot-wait.is-on`, so the SAME node can stay on
+     screen once app.js takes over from the markup — one waiting screen for
+     the whole launch rather than a corner spinner after it. */
+  assert.match(css, /html\.los-returning \.boot-wait,\.boot-wait\.is-on\{display:grid\}/,
     'there is no boot state to show instead');
   assert.match(css, /\.boot-wait\{display:none/, 'a new visitor would see a spinner');
   assert.match(indexHtml, /<div class="boot-wait"/, 'the boot state is not in the markup');

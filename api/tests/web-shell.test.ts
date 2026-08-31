@@ -806,3 +806,41 @@ test('no app icon has a transparent corner for a plate to show through', () => {
     assert.match(src, /<rect width="512" height="512"/, `${svg} does not bleed to its edges`);
   }
 });
+
+test('one waiting screen for the whole launch, and it never restarts', () => {
+  /* A single launch used to show three: the system splash, the breathing mark
+   * index.html paints, and then a 17px spinner in a left-aligned `.state`
+   * block — which put it in the TOP-LEFT CORNER while Firebase restored the
+   * session. Three states for one wait.
+   *
+   * The node index.html painted is KEPT rather than replaced. Re-rendering it
+   * would restart the 2.6s breath at the exact moment nothing should move.
+   * Verified in a browser: stamped before app.js ran, still stamped after
+   * showSpinner, centred at 50%/50% throughout. */
+  const app = readFileSync(join(WEB, 'app.js'), 'utf8');
+  const html = readFileSync(join(WEB, 'index.html'), 'utf8');
+  const css = readFileSync(join(WEB, 'app.css'), 'utf8');
+
+  assert.match(html, /<div class="boot-wait" aria-hidden="true"><span class="boot-mark">/,
+    'index.html no longer paints the waiting mark');
+  assert.ok(!/<span class="spinner"><\/span><\/div>/.test(html),
+    'the first paint is a spinner again');
+
+  const fn = app.slice(app.indexOf('const showSpinner = () =>'),
+    app.indexOf('async function initAuth'));
+  assert.match(fn, /const existing = root\.querySelector\('\.boot-wait'\)/,
+    'the waiting node is replaced rather than kept, so the breath restarts');
+  assert.ok(!/class="spinner"/.test(fn), 'the corner spinner is back');
+  assert.match(fn, /existing\.classList\.add\('is-on'\)/, 'the kept node is not shown');
+  assert.match(css, /html\.los-returning \.boot-wait,\.boot-wait\.is-on\{display:grid\}/,
+    'a waiting mark shown after boot has no rule to display it');
+
+  /* And the guess gets answered. `los-returning` is set from localStorage
+     before the body parses, and it HIDES #landing — so leaving it on when
+     there turns out to be no session strands a signed-out visitor on a
+     loading screen that never resolves. */
+  const signIn = app.slice(app.indexOf('function renderSignIn(onClick)'),
+    app.indexOf('const renderFatal'));
+  assert.match(signIn, /document\.documentElement\.classList\.remove\('los-returning'\)/,
+    'a signed-out returning visitor still sits behind a hidden landing page');
+});

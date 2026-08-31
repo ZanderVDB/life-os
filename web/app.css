@@ -6195,7 +6195,7 @@ html[data-motion="reduced"] *{animation-duration:1ms!important;transition-durati
 /* The full height, so the mark is in the MIDDLE of the screen. 60vh centred
    it in the top three-fifths, which put it a third of the way down. */
 .boot-wait{display:none;place-items:center;min-height:100dvh}
-html.los-returning .boot-wait{display:grid}
+html.los-returning .boot-wait,.boot-wait.is-on{display:grid}
 .boot-mark{position:relative;display:grid;place-items:center;width:96px;height:96px}
 .boot-mark svg{position:relative;z-index:1;width:46px;height:46px;
   animation:bootBreath 2.6s var(--e-inout) infinite}
