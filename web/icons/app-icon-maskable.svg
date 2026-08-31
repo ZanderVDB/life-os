@@ -19,7 +19,11 @@
   </defs>
   <rect width="512" height="512" fill="url(#mtile)"/>
   <rect width="512" height="512" fill="url(#mrim)"/>
-  <g transform="translate(256 256) scale(11.4) translate(-12 -11.4)" fill="#fff">
+  <!-- 11.4 put the lotus across 38% of the canvas. Android 12 draws a launcher
+       icon very large on its own splash screen, and at that scale it filled
+       most of the phone. 8.6 is 29% — still the dominant thing in the icon,
+       and a mark rather than a poster once the system blows it up. -->
+  <g transform="translate(256 256) scale(8.6) translate(-12 -11.4)" fill="#fff">
     <path d="M12 20.4C6.9 17.6 3.4 13.1 3.4 8.5 7.1 9.2 10.1 13 12 20.4Z" fill-opacity=".66"/>
     <path d="M12 20.4c5.1-2.8 8.6-7.3 8.6-11.9-3.7.7-6.7 4.5-8.6 11.9Z" fill-opacity=".66"/>
     <path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z"/>

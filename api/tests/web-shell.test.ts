@@ -261,7 +261,7 @@ test('icons: every required file exists at the right dimensions', () => {
   };
   const expected: Record<string, number> = {
     'icon-192.v3.png': 192, 'icon-256.v3.png': 256, 'icon-512.v3.png': 512,
-    'maskable-192.v3.png': 192, 'maskable-512.v3.png': 512,
+    'maskable-192.v4.png': 192, 'maskable-512.v4.png': 512,
     'apple-touch-icon.v3.png': 180, 'favicon-32.v3.png': 32,
   };
   for (const [file, size] of Object.entries(expected)) {
@@ -793,7 +793,7 @@ test('no app icon has a transparent corner for a plate to show through', () => {
   };
 
   for (const file of ['icon-192.v3.png', 'icon-256.v3.png', 'icon-512.v3.png',
-    'maskable-192.v3.png', 'maskable-512.v3.png',
+    'maskable-192.v4.png', 'maskable-512.v4.png',
     'apple-touch-icon.v3.png', 'favicon-32.v3.png']) {
     const { holes } = alphaHoles(file);
     assert.equal(holes, 0, `${file} has ${holes} non-opaque pixels`);

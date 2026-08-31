@@ -6185,6 +6185,32 @@ html[data-motion="reduced"] *{animation-duration:1ms!important;transition-durati
    boot state on the FIRST paint and the landing page never appears; a new
    visitor gets the landing page and never sees a spinner. One transition
    either way, decided before anything is drawn. */
-.boot-wait{display:none;place-items:center;min-height:60vh}
+/* ── The wait before the app paints ───────────────────────────────────
+   A 17px spinner said "something is loading" and nothing else. The mark
+   breathing says the same thing in the app's own voice, and it is the
+   right length of statement for a wait that is usually under a second.
+
+   The aura is a pseudo-element BEHIND the mark, so the glow swells without
+   the lotus swelling with it — the light moves, the object does not. */
+/* The full height, so the mark is in the MIDDLE of the screen. 60vh centred
+   it in the top three-fifths, which put it a third of the way down. */
+.boot-wait{display:none;place-items:center;min-height:100dvh}
 html.los-returning .boot-wait{display:grid}
+.boot-mark{position:relative;display:grid;place-items:center;width:96px;height:96px}
+.boot-mark svg{position:relative;z-index:1;width:46px;height:46px;
+  animation:bootBreath 2.6s var(--e-inout) infinite}
+.boot-mark::before{content:'';position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle,
+    rgba(138,93,255,.40) 0%, rgba(130,84,255,.16) 42%, rgba(124,77,255,0) 70%);
+  animation:bootAura 2.6s var(--e-inout) infinite}
+@keyframes bootAura{
+  0%,100%{opacity:.34;transform:scale(.82)}
+  50%    {opacity:1;  transform:scale(1.14)}}
+@keyframes bootBreath{
+  0%,100%{opacity:.82}
+  50%    {opacity:1}}
+/* A wait is not a place to insist on movement. */
+@media (prefers-reduced-motion:reduce){
+  .boot-mark svg,.boot-mark::before{animation:none}
+  .boot-mark::before{opacity:.62}}
 html.los-returning #landing{display:none}

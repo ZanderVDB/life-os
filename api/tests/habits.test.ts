@@ -70,7 +70,12 @@ test('habits: CRUD, and archiving keeps history instead of destroying it', async
     { name: 'Read at night' })).body.habit;
   assert.equal(renamed.name, 'Read at night');
 
-  await call('POST', `/api/v1/workspaces/${ws}/habits/${created.id}/check`, { date: '2026-07-30' });
+  /* TODAY, not a literal. This was '2026-07-30', and `historyCount` only
+     counts entries inside `historyDays` back from the current date — so the
+     test passed until the wall clock walked past the window and then failed
+     every day after, for a reason that had nothing to do with archiving. */
+  const day = new Date().toISOString().slice(0, 10);
+  await call('POST', `/api/v1/workspaces/${ws}/habits/${created.id}/check`, { date: day });
 
   // Default delete ARCHIVES — a habit's value is its history.
   const del = await call('DELETE', `/api/v1/workspaces/${ws}/habits/${created.id}`);

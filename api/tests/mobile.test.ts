@@ -447,55 +447,34 @@ test('the canvas gradient is a layer, not a fixed background attachment', () => 
     'theme-color and the flat canvas colour have drifted apart');
 });
 
-test('the phone palette is the desktop palette, with ONE exception', () => {
-  /* Three passes lifted this ladder and every one was judged from a screen
-   * that was not rendering it. `.ai-invite` is painted by a rule in
-   * mobile.css; `.task` is painted by app.css through `var(--task)`. A phone
-   * holding a fresh mobile.css and a stale app.css therefore shows a
-   * lightened invite card next to a task card that never moved — which is
-   * exactly what was reported, three times, and was right every time.
+test('a phone renders the desktop palette, unchanged', () => {
+  /* There is no phone palette, and the whole detour that produced one was a
+   * bad install: the app had been added to the home screen from a browser
+   * other than Chrome, and that WebAPK rendered it wrongly. On a correct
+   * install #282431 on #141220 reads exactly as it does on a desktop.
    *
-   * So the ladder goes back. Nothing here may redefine the canvas or the
-   * surfaces; a phone is not a different palette, it is the same one on a
-   * display that renders black differently. */
+   * What survives is this test. A phone is not a different palette — it is
+   * the same one on a display that renders black differently — so anything
+   * that wants to fork it has to argue with this first. */
   const at = mobileCss.indexOf('THE PHONE PALETTE');
-  assert.ok(at > 0, 'the phone palette block is gone');
+  assert.ok(at > 0, 'the phone palette note is gone');
   const rule = mobileCss.slice(at, mobileCss.indexOf('PHONE SHELL', at));
   for (const token of ['--app-bg', '--surface', '--surface-2', '--surface-3',
-    '--paper', '--paper-2', '--border', '--border-strong', '--hairline']) {
+    '--paper', '--paper-2', '--border', '--border-strong', '--hairline',
+    '--task', '--task-hover']) {
     assert.ok(!new RegExp(`${token}:`).test(rule),
-      `${token} is overridden for phones again — the palette is one palette`);
+      `${token} is overridden for phones — the palette is one palette`);
   }
+  // Nowhere else either: the exception used to be written as rules.
+  assert.ok(!/\.task\{background:#/.test(mobileCss), 'a phone task card has its own fill again');
 
-  /* The exception: 1.93% of white on a 0.69% canvas is 1.220:1, and that is
-   * the whole separation between "card" and "page". 3.63% is 1.517:1 —
-   * visibly a card, and short of the 5.99% invite that was called very white.
-   *
-   * Written as RULES, at every specificity app.css uses. A token is only
-   * worth what the stylesheet reading it happens to be, and `.task.pri-urgent`
-   * is two classes: a one-class override would lose to a stale sheet. */
-  assert.match(rule, /\.task\{background:#383344;/, 'the task card has no colour of its own');
-  assert.match(rule, /\.task\.pri-urgent\{background:linear-gradient\(90deg,var\(--p-urgent-bg\),transparent 46%\),#383344\}/,
-    'an urgent task keeps the old base on a stale app.css');
-  assert.match(rule, /\.task\.pri-high\{[^}]*#383344\}/, 'a high-priority task keeps the old base');
-  assert.match(rule, /\.task\.is-completing\{[^}]*#383344\}/, 'a completing task keeps the old base');
-  assert.match(rule, /\.t-tick\.is-blocked::after\{background:#383344\}/,
-    "the blocked tick's centre no longer matches the card it is cut from");
-  // And an edge, because a fill difference is a gamma argument and a line is not.
-  assert.match(rule, /box-shadow:inset 0 0 0 1px rgba\(255,255,255,\.09\)/,
-    'the task card has no edge, so it depends on the fill alone');
-  // The token too, for a FRESH app.css, so both paths land on one colour.
-  assert.match(rule, /--task:#383344; --task-hover:#443e53;/, 'a fresh app.css would disagree');
-
-  /* The bar stays OPAQUE: a 92% ring over a 92% bar of the same colour
-     composites to 99.4% and shows as a lighter halo, which was the ring
-     round the centre button. */
+  /* The bar stays OPAQUE, and that is not a palette change — it is what
+     stops the ring the centre button cuts in it from showing. A 92% ring
+     over a 92% bar of the same colour composites to 99.4%. */
   assert.match(rule, /--m-bar:#191622;/, 'the bar is not the shared opaque value');
   assert.ok(!/--m-bar:rgba/.test(mobileCss),
     'the bar is translucent again, so the button ring will not match it');
-  assert.match(mobileCss, /\.mobile-bar\{background:var\(--m-bar\);/, 'the two bars are different materials');
 });
-
 test('Appearance offers no control that does nothing', () => {
   /* Theme was System / Always dark and nothing read the value — there is no
    * light palette and no prefers-color-scheme rule anywhere — so both
