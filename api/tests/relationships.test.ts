@@ -71,10 +71,18 @@ test('links: the entity list is the active systems, and excludes what was never 
   assert.ok(!ENTITY_TYPES.includes('brain' as never), 'a retired type is linkable');
   assert.ok(!ENTITY_TYPES.includes('board' as never), 'a retired type is linkable');
   for (const t of ['task', 'project', 'area', 'habit', 'reminder',
-    'event', 'block', 'library', 'book_page', 'diary']) {
+    'event', 'library', 'book_page', 'diary']) {
     assert.ok(isEntityType(t), `${t} cannot take part in a relationship`);
   }
   assert.ok(!isEntityType('anything'), 'the type guard accepts nonsense');
+});
+
+test('links: a schedule block is not linkable, because it cannot be inspected', () => {
+  /* The decision, held down so it cannot be undone by accident. A block is
+   * time set aside FOR a task: no title of its own, no detail surface, nothing
+   * to open. Linking to one would create a relationship that its own end could
+   * never show. See docs/relationships.md §4. */
+  assert.ok(!isEntityType('block'), 'a block became linkable again without a surface');
 });
 
 test('links: every kind reads correctly from BOTH ends', () => {

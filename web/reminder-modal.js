@@ -113,6 +113,14 @@ export function openReminderModal(ctx) {
     f.areaId ?? '', 'Area'))}
         ${row('Notes', `<textarea id="rm-notes" class="cf-ctl cf-input cf-textarea"
           placeholder="Anything worth remembering">${esc(f.notes)}</textarea>`, { top: true })}`)}
+
+      <!-- A reminder is the one Calendar object that is entirely ours, which
+           makes it the safest thing in the app to attach context to. Outside
+           "More options" on purpose: what a reminder is FOR is not an advanced
+           setting, and burying it is how the event editor's links went unread
+           for a whole phase. Only on an existing reminder — there is nothing
+           to link to a record that has not been saved yet. -->
+      ${r ? `<div class="rel-host" data-rel-host="reminder:${esc(r.id)}"></div>` : ''}
     </div>
 
     <div class="m-foot">

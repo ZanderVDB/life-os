@@ -90,6 +90,8 @@ export function openDetailSheet(ctx) {
     }
     // Focus returns to the event that opened this, so the calendar keeps its place.
     if (opener?.isConnected) opener.focus();
+    // Lets the caller drop a deep-link route that only made sense while open.
+    ctx.onClose?.();
   }
 
   function onKey(e) {

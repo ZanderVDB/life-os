@@ -46,6 +46,7 @@ import {
   partition, isStandalone, arrangeStandalone, insertionIndex, orderChanged, localDate,
 } from './arrange.js';
 import { openHabitModal } from './habit-modal.js';
+import { openAreaModal } from './area-modal.js';
 import { initRelated, setRelatedOpener, mountRelated } from './related.js';
 import { initStars } from './stars.js';
 import { initDrag, isDragging } from './drag.js';
@@ -837,6 +838,14 @@ function wireShell() {
       if (u === 'reminders') openRemindersView(false);
       else closeRemindersView(false);
     }
+    /* `#calendar/event/<id>` while already ON Calendar — Back and Forward
+     * between two events, or a link followed from one event's Related list to
+     * another. Without this the URL changes and nothing happens, because the
+     * route did not change and only `go()` re-renders. */
+    if (r === 'calendar' && u === 'none'
+      && eventFromHash() !== (cal.linkedEvent?.id ?? null)) {
+      void loadCalendar();
+    }
     if (r === 'projects') {
       const id = projectFromHash();
       if (id !== pj.openId) {
@@ -951,10 +960,22 @@ function mountRelatedHosts(root = document) {
  * URL already, so it navigates, and refresh lands in the same place.
  */
 function openLinkedEntity({ type, id, href }) {
+  /* Things whose editor IS their detail surface. Opening a read-only copy of
+     a task instead would be a second task screen. */
   if (type === 'task') { closeAnyModal(); return openTask(id); }
   if (type === 'habit') { closeAnyModal(); return editHabit(id); }
+  if (type === 'area') { closeAnyModal(); return openAreaById(id); }
+  if (type === 'reminder') { closeAnyModal(); return void openReminderById(id); }
+  /* An event has a route of its own now, so a link to one lands ON it rather
+     than on the month containing it — and a refresh lands there too. */
+  if (type === 'event') { closeAnyModal(); return goToHash(`#calendar/event/${id}`); }
   if (!href) return undefined;
   closeAnyModal();
+  return goToHash(href);
+}
+
+/** Navigate to a hash, entering its route if that is a different section. */
+function goToHash(href) {
   setHash(href);
   const r = routeFromHash();
   if (r !== state.route) return go(r);
@@ -978,6 +999,23 @@ const utilityFromHash = () => {
   const path = (location.hash || '').slice(1).split('?')[0];
   const sub = path.split('/')[1];
   return sub === 'reminders' ? 'reminders' : 'none';
+};
+
+/**
+ * `#calendar/event/<id>` — one exact event.
+ *
+ * The id is the LOCAL `calendar_events` row, and that is the whole design.
+ * Google is polled with `singleEvents: true`, so a repeating series arrives
+ * already expanded into occurrences, each with its own provider id; the upsert
+ * is keyed on that, so each occurrence keeps one stable local uuid for ever.
+ * A link therefore names one occurrence and needs no series id, no start time
+ * and no calendar in the URL — and "the 9am one on Tuesday" can never resolve
+ * to a different Tuesday.
+ */
+const eventFromHash = () => {
+  const path = (location.hash || '').slice(1).split('?')[0];
+  const [route, sub, id] = path.split('/');
+  return route === 'calendar' && sub === 'event' && id ? id : null;
 };
 
 /** `#projects/<id>` opens that project directly — refresh included. */
@@ -2877,30 +2915,95 @@ function wireSettings() {
     const save = () => run(async () => {
       const name = el.value.trim();
       if (!name || name === original) { el.value = original; return; }
-      await api(`/api/v1/workspaces/${ws()}/areas/${id}`, { method: 'PATCH', body: { name } });
-      state.me = await api('/api/v1/me');
-      renderSettings(); renderRail();
-      toast('Area renamed');
+      await renameArea(id, name);
     });
     el.onblur = save;
     el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); if (e.key === 'Escape') el.value = original; };
   });
 
+/* ── Areas ───────────────────────────────────────────────────────────────
+ *
+ * One rename and one remove, called from two places: the Settings list, which
+ * is for bulk work, and the inspector, which is for one area at a time. Two
+ * copies would be two confirmations to keep in step, and the copy that drifts
+ * is always the one that deletes something.
+ */
+async function renameArea(id, name) {
+  await api(`/api/v1/workspaces/${ws()}/areas/${id}`, { method: 'PATCH', body: { name } });
+  state.me = await api('/api/v1/me');
+  if (state.route === 'settings') renderSettings();
+  renderRail();
+  toast('Area renamed');
+}
+
+async function removeArea(id) {
+  const area = (state.me?.areas ?? []).find((a) => a.id === id);
+  if (!area) return;
+  const n = state.tasksLoaded ? state.tasks.filter((t) => t.areaId === id).length : 0;
+  const msg = n
+    ? `Remove "${area.name}"? Its ${n} task${n === 1 ? '' : 's'} will stay — they just lose this label.`
+    : `Remove "${area.name}"?`;
+  if (!confirm(msg)) return;
+  await api(`/api/v1/workspaces/${ws()}/areas/${id}`, { method: 'DELETE' });
+  state.me = await api('/api/v1/me');
+  await loadTasks();
+  if (state.route === 'settings') renderSettings();
+  renderRail();
+  toast('Area removed. Its tasks were kept.');
+}
+
+/**
+ * One area, on its own.
+ *
+ * Counts come from what is already in memory: a number that is not loaded is
+ * passed as null and simply not shown, rather than rendered as a zero that is
+ * wrong until the fetch lands.
+ */
+function openAreaById(id) {
+  const area = (state.me?.areas ?? []).find((a) => a.id === id);
+  if (!area) { toast('That area is no longer here.', true); return undefined; }
+  return openAreaModal({
+    area,
+    counts: {
+      tasks: state.tasksLoaded ? state.tasks.filter((t) => t.areaId === id).length : null,
+      /* Deduped by id: the overview payload carries several VIEWS of the same
+         projects, so a flat count would count most of them more than once. */
+      projects: pj.data
+        ? new Set(Object.values(pj.data.views ?? {}).flat()
+          .flatMap((g) => g.projects ?? [])
+          .filter((p) => p.areaId === id).map((p) => p.id)).size
+        : null,
+      habits: state.habits ? state.habits.filter((h) => h.areaId === id).length : null,
+      reminders: cal.reminders ? cal.reminders.filter((r) => r.areaId === id).length : null,
+    },
+    onSave: ({ name }) => renameArea(id, name),
+    onDelete: () => removeArea(id),
+  });
+}
+
+/**
+ * One reminder, from anywhere.
+ *
+ * Reminders live behind `#calendar/reminders` and are loaded with it, so a
+ * link followed from Today has nothing in memory to open. This fetches the
+ * list first and only then opens the editor — the alternative is a click that
+ * silently does nothing on one screen and works on another.
+ */
+async function openReminderById(id) {
+  if (!cal.reminders) await loadReminders();
+  if (!(cal.reminders ?? []).some((x) => x.id === id)) {
+    toast('That reminder is no longer here.', true);
+    return;
+  }
+  editReminder(id, cal.reminders);
+}
+
+  document.querySelectorAll('[data-area-open]').forEach((el) => {
+    el.onclick = () => { openAreaById(el.dataset.areaOpen); mountRelatedHosts(); };
+  });
+
   document.querySelectorAll('[data-area-del]').forEach((el) => {
-    el.onclick = () => run(async () => {
-      const id = el.dataset.areaDel;
-      const area = state.me.areas.find((a) => a.id === id);
-      const n = state.tasks.filter((t) => t.areaId === id).length;
-      const msg = n
-        ? `Remove "${area.name}"? Its ${n} task${n === 1 ? '' : 's'} will stay — they just lose this label.`
-        : `Remove "${area.name}"?`;
-      if (!confirm(msg)) return;
-      await api(`/api/v1/workspaces/${ws()}/areas/${id}`, { method: 'DELETE' });
-      state.me = await api('/api/v1/me');
-      await loadTasks();
-      renderSettings(); renderRail();
-      toast('Area removed. Its tasks were kept.');
-    });
+    el.onclick = () => run(() => removeArea(el.dataset.areaDel));
   });
 
   const addArea = () => run(async () => {
@@ -3128,6 +3231,37 @@ async function loadCalendar() {
   // #calendar/reminders opens reminders rather than Month.
   cal.utility = utilityFromHash();
   if (cal.utility === 'reminders' && !cal.reminders) await loadReminders();
+
+  /* A deep link to ONE event, resolved before the range is chosen.
+   *
+   * The event is usually not in the period on screen — a link followed from a
+   * task in August pointing at a meeting in September — so the calendar has to
+   * move to it BEFORE the fetch, or the fetch is for the wrong month and the
+   * event is not in the answer. Agenda mode ignores the anchor entirely and
+   * always asks for the next sixty days, which is the other reason the
+   * resolved event is added to the payload below rather than hunted for in it.
+   */
+  let openLinked = null;
+  const wantEvent = eventFromHash();
+  if (!wantEvent) cal.linkedEvent = null;
+  else if (cal.linkedEvent?.id !== wantEvent) {
+    /* CLAIMED BEFORE THE AWAIT, and that ordering is the whole point.
+     *
+     * Following a link writes the hash and calls `go('calendar')`; the
+     * resulting `hashchange` arrives while `go` is still awaiting, sees an
+     * event id it does not recognise, and starts a SECOND render. Both then
+     * resolved the same event and both opened it — two identical dialogs
+     * stacked on top of each other. Recording the id first makes the second
+     * render find it already claimed and skip straight past. */
+    cal.linkedEvent = { id: wantEvent, event: null };
+    const found = await resolveLinkedEvent(wantEvent);
+    if (found) {
+      cal.linkedEvent = { id: wantEvent, event: found.event };
+      openLinked = found;
+      if (found.day) { cal.selected = found.day; cal.anchor = parseIso(found.day); }
+    }
+  }
+
   const head = document.getElementById('page-head');
   const scroll = document.getElementById('main-scroll');
   if (head) head.innerHTML = calendarHeaderHtml();
@@ -3169,6 +3303,13 @@ async function loadCalendar() {
     cal.error = e.message;
   }
   cal.loading = false;
+  /* The linked event belongs on the day it happens, and every surface reads
+     from this one array — so it is added here rather than passed sideways to
+     the opener. A `range` that already contains it is the normal case and this
+     changes nothing. */
+  if (openLinked && cal.data && !cal.data.events.some((e) => e.id === openLinked.event.id)) {
+    cal.data.events.push(openLinked.event);
+  }
   if (state.route !== 'calendar') return;
   startCalendarLive();
   scroll.innerHTML = cal.utility === 'reminders'
@@ -3182,6 +3323,10 @@ async function loadCalendar() {
   // list, but not the events — a long import must not hold the redirect open.
   // Run that first sync here instead, so connecting produces a calendar with
   // things in it rather than an empty grid and an unexplained "Sync now".
+  /* Opened AFTER the paint, so the sheet lands on a calendar that is already
+     showing the right day rather than over a skeleton. */
+  if (openLinked) openEvent(openLinked.event.id);
+
   const back = new URLSearchParams(location.hash.split('?')[1] ?? '');
   if (back.get('calendar') === 'connected' && !cal.firstSyncDone) {
     cal.firstSyncDone = true;
@@ -3191,6 +3336,40 @@ async function loadCalendar() {
     history.replaceState(null, '', '#calendar');
     toast(connectErrorMessage(back.get('reason')), true);
   }
+}
+
+/**
+ * Resolves `#calendar/event/<id>` to an event, or explains why it cannot.
+ *
+ * A link outlives the thing it points at — the meeting was cancelled in
+ * Google, the calendar was disconnected, someone pasted an old URL. None of
+ * those may leave a broken page: the hash goes back to plain `#calendar`, the
+ * calendar renders normally, and the person is told in a sentence what
+ * happened instead of being shown an empty grid they have to interpret.
+ */
+async function resolveLinkedEvent(id) {
+  try {
+    return await api(`/api/v1/workspaces/${ws()}/calendar/events/${id}`);
+  } catch (e) {
+    cal.linkedEvent = null;
+    // replaceState, not setHash: a dead link must not become a Back step.
+    history.replaceState(null, '', '#calendar');
+    toast(e.message || 'That event is no longer in your calendar.', true);
+    return null;
+  }
+}
+
+/**
+ * Leaving the event route when its surface closes.
+ *
+ * The URL says what is open, so a closed sheet must not leave one claiming an
+ * event is. Only rewritten when the hash is still THIS event's — closing after
+ * navigating somewhere else must not drag the person back to Calendar.
+ */
+function releaseLinkedEvent(id) {
+  if (eventFromHash() !== id) return;
+  cal.linkedEvent = null;
+  history.replaceState(null, '', '#calendar');
 }
 
 /* ── Keeping the calendar current ───────────────────────────────────────
@@ -3832,6 +4011,7 @@ function openEvent(id, defaultDay = null) {
     event: ev,
     calendars: cal.data?.calendars ?? [],
     defaultDay,
+    onClose: () => { if (id) releaseLinkedEvent(id); },
     links: (cal.data?.links ?? []).filter((l) => l.sourceId === id),
     onSave: async (body) => {
       const r = ev
@@ -5531,6 +5711,7 @@ function openEventDetail(ev) {
     title: ev.title,
     accent: ev.calendarColor,
     relatedHost: `event:${ev.id}`,
+    onClose: () => releaseLinkedEvent(ev.id),
     rows: [
       ['When', when],
       ['Calendar', ev.calendarName],
@@ -5604,7 +5785,11 @@ function openReminderDetail(id, from = null) {
     actions: [
       { label: done ? 'Mark not done' : 'Mark done', primary: !done,
         onClick: () => toggleReminder(id) },
-      { label: 'Edit', onClick: () => editReminder(id) },
+      /* `from` is passed ON, not dropped. The Reminders view hands its own
+         list in because a reminder due in three months is not in the
+         calendar's loaded range — and without this, Edit opened nothing at
+         all for exactly those reminders. */
+      { label: 'Edit', onClick: () => editReminder(id, from) },
     ],
   });
 }
@@ -5612,7 +5797,7 @@ function openReminderDetail(id, from = null) {
 function editReminder(id, from = null) {
   const r = (from ?? cal.data?.reminders ?? []).find((x) => x.id === id);
   if (!r) return;
-  openReminderModal({
+  const opened = openReminderModal({
     reminder: r,
     areas: state.me?.areas ?? [],
     onSave: async (body) => {
@@ -5631,6 +5816,8 @@ function editReminder(id, from = null) {
       saved('Reminder deleted');
     },
   });
+  mountRelatedHosts();
+  return opened;
 }
 
 

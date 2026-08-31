@@ -158,6 +158,8 @@ function areasPanel(state) {
         <input class="set-item-name" value="${esc(a.name)}" data-area-name="${a.id}"
           aria-label="Name of the ${esc(a.name)} area">
         <span class="set-item-meta">${n === null ? '' : `${n} ${n === 1 ? 'task' : 'tasks'}`}</span>
+        <button class="set-item-go" data-area-open="${a.id}"
+          aria-label="Open the ${esc(a.name)} area">Details</button>
         ${a.isSystem
     ? `${badge('off', 'Built in')}`
     : `<button class="set-item-x" data-area-del="${a.id}"
@@ -171,7 +173,8 @@ function areasPanel(state) {
       </div>`)}`,
   'Removing an area never deletes the work inside it — those tasks stay exactly '
   + 'where they are and simply lose the label. Built-in areas are part of how '
-  + 'Life OS files things and cannot be removed.')}`;
+  + 'Life OS files things and cannot be removed. Details opens one area on its '
+  + 'own, with what it holds and what it is connected to.')}`;
 }
 
 const HABIT_FREQ = [

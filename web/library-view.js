@@ -834,8 +834,14 @@ async function renderItem(id, head, scroll, nav = navToken()) {
          Life OS keeps the address and what you said about it; the page itself
          stays where it is.`}
       </div>
+
+      <!-- A Library item is a resource that exists once and is pointed AT from
+           everywhere else, so what points at it is the most useful thing on
+           this page. -->
+      <div class="rel-host" data-rel-host="library:${esc(item.id)}"></div>
     </div>
   </div>`;
+  window.__mountRelated?.(scroll);
 
   head.querySelector('[data-back]').onclick = () => setHashAndRender('#library');
   head.querySelectorAll('[data-act]').forEach((b) => {
@@ -999,6 +1005,7 @@ function paintBookBody(scroll = document.getElementById('main-scroll')) {
   stopSaveWatch?.();
   if (lib.cover) {
     scroll.innerHTML = `<div class="bk">${coverHtml()}</div>`;
+    window.__mountRelated?.(scroll);
     scroll.querySelector('#bk-open').addEventListener('click', () => {
       lib.cover = false;
       paintBookHead();

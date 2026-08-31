@@ -211,6 +211,19 @@ backlinks come from a single stored row, never a second one. Ten typed kinds
 ends. Endpoints: `GET /links?type=&id=`, `GET /links/search?q=`,
 `GET /links/kinds`, `POST /links`, `DELETE /links/:id`.
 
+**Nine linkable types, and every one of them is inspectable.** task, project,
+area, habit, reminder, event, library, book_page, diary — each has a Related
+section on its own surface, so a relationship the AI creates can be found by
+the person it was created for. `block` is deliberately NOT linkable: a
+schedule block has no detail surface, so a link to one could never be seen from
+its own end. See `relationships.md` §2.
+
+**An event can be pointed at exactly**: `#calendar/event/<local id>` opens that
+event in its normal surface, and because Google is polled with
+`singleEvents: true`, that id names ONE OCCURRENCE of a recurring series rather
+than the series. A proposal that mentions a meeting can therefore link to the
+meeting.
+
 Exactly one kind carries behaviour: `scheduled_as` couples a task to the event
 holding its hour, and only the TIME syncs — never titles, never in a way that
 reaches Google without the existing confirmation. Everything else is

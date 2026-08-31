@@ -439,6 +439,7 @@ export function openEventModal(ctx) {
       settle(dlg.animate(RISE_OUT, { duration: 160, easing: 'cubic-bezier(.4,0,.9,.4)' }), 160, done);
     }
     if (opener?.isConnected) opener.focus();
+    ctx.onClose?.();
   }
 
   function onKey(e) {

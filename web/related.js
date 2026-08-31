@@ -55,7 +55,6 @@ const ENTITY_LABEL = {
   habit: 'Habit',
   reminder: 'Reminder',
   event: 'Calendar',
-  block: 'Scheduled',
   library: 'Library',
   book_page: 'Book page',
   diary: 'Diary',

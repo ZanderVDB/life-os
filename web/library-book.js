@@ -71,6 +71,22 @@ export function coverHtml() {
     </div>
     </div>
     <span class="bk-arrow bk-arrow-ghost" aria-hidden="true"></span>
+  </div>
+
+  <!-- THE BOOK, not its pages.
+       Three different things live near each other here and conflating them
+       would make all three useless:
+         · Book → Section → Page is OWNERSHIP, and structural. It is the
+           contents list, not a relationship, and never appears here.
+         · What THIS BOOK is about is a relationship belonging to the library
+           item — it sits on the cover, which is the book as an object.
+         · What one PAGE is connected to belongs to that page, and is shown on
+           the spread when the page is open.
+       Page links are deliberately NOT rolled up onto the cover: a book with
+       forty pages would show forty relationships that are not about the book,
+       and the one that IS about the book would be lost among them. -->
+  <div class="bk-cover-rel">
+    <div class="rel-host" data-rel-host="library:${esc(item.id)}"></div>
   </div>`;
 }
 

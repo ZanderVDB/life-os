@@ -33,7 +33,7 @@ import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import {
   itemLinks, tasks, projects, areas, habits, reminders, calendarEvents,
-  taskScheduleBlocks, libraryItems, libraryBooks, bookSections, bookPages,
+  libraryItems, libraryBooks, bookSections, bookPages,
   diaryEntries,
 } from '../db/schema.js';
 import { badRequest, notFound } from './errors.js';
@@ -44,7 +44,24 @@ import { badRequest, notFound } from './errors.js';
  * to something else. `brain` and `board` were named in the original comment
  * on this table as future targets; neither system was built, no row has ever
  * carried either value, and they are not listed here. If they arrive, they
- * are added here and nowhere else. */
+ * are added here and nowhere else.
+ *
+ * ── Why `block` is NOT here ──────────────────────────────────────────────
+ *
+ * A task schedule block is time set aside FOR a task. It has no title of its
+ * own, no detail surface, and nothing to open: on the Plan canvas it is a
+ * rectangle you drag and resize showing its task's name. There is nowhere a
+ * person could go to discover a relationship attached to one, so a link to a
+ * block would exist and never be seen from the block's end.
+ *
+ * The rule this obeys: an entity that can take part in a relationship must be
+ * inspectable from its own side. A block is not, so it is not linkable.
+ * Nothing is lost — the thing a person means when they point at a block is
+ * the TASK, which is linkable and is where the block's identity already comes
+ * from. The row stays a first-class domain object with its own table and its
+ * own FK to that task; it is simply not a semantic endpoint.
+ *
+ * `scheduled_as` is unaffected: it couples a task to an EVENT, never a block. */
 export const ENTITY_TYPES = [
   'task',
   'project',
@@ -52,7 +69,6 @@ export const ENTITY_TYPES = [
   'habit',
   'reminder',
   'event',        // a calendar event, usually Google's
-  'block',        // a Life OS schedule block: time set aside for a task
   'library',      // any library item — book, document, image, link, file
   'book_page',    // a single page inside a Book
   'diary',        // one day's diary entry
@@ -136,7 +152,6 @@ const TABLE: Record<EntityType, { table: any; id: any; ws: any }> = {
   habit: { table: habits, id: habits.id, ws: habits.workspaceId },
   reminder: { table: reminders, id: reminders.id, ws: reminders.workspaceId },
   event: { table: calendarEvents, id: calendarEvents.id, ws: calendarEvents.workspaceId },
-  block: { table: taskScheduleBlocks, id: taskScheduleBlocks.id, ws: taskScheduleBlocks.workspaceId },
   library: { table: libraryItems, id: libraryItems.id, ws: libraryItems.workspaceId },
   book_page: { table: bookPages, id: bookPages.id, ws: bookPages.workspaceId },
   diary: { table: diaryEntries, id: diaryEntries.id, ws: diaryEntries.workspaceId },
@@ -177,6 +192,12 @@ export type Summary = {
 };
 
 const byId = <T extends { id: string }>(rows: T[]) => new Map(rows.map((r) => [r.id, r]));
+
+/** What the Library calls each type on screen. `book` reads oddly lowercase. */
+const LIBRARY_LABEL: Record<string, string> = {
+  book: 'Book', document: 'Document', image: 'Image',
+  video: 'Video', link: 'Link', file: 'File',
+};
 
 /**
  * A date a person can read, from the server.
@@ -239,7 +260,10 @@ export async function summarise(db: Db, ws: string, refs: Ref[]): Promise<Map<st
   if (ids('area').length) {
     for (const r of await db.select({ id: areas.id, name: areas.name })
       .from(areas).where(and(eq(areas.workspaceId, ws), inArray(areas.id, ids('area'))))) {
-      put({ type: 'area', id: r.id, title: r.name, href: null });
+      /* An Area has no page of its own — it is a label, and a page for it
+         would be a second Today. Its inspector is a modal, so the client is
+         told how to open one rather than where to navigate. */
+      put({ type: 'area', id: r.id, title: r.name, href: null, open: { kind: 'area', id: r.id } });
     }
   }
 
@@ -253,8 +277,10 @@ export async function summarise(db: Db, ws: string, refs: Ref[]): Promise<Map<st
   if (ids('reminder').length) {
     for (const r of await db.select({ id: reminders.id, title: reminders.title, dueDate: reminders.dueDate })
       .from(reminders).where(and(eq(reminders.workspaceId, ws), inArray(reminders.id, ids('reminder'))))) {
-      put({ type: 'reminder', id: r.id, title: r.title, subtitle: whenLabel(null, r.dueDate),
-        href: '#calendar/reminders' });
+      put({
+        type: 'reminder', id: r.id, title: r.title, subtitle: whenLabel(null, r.dueDate),
+        href: '#calendar/reminders', open: { kind: 'reminder', id: r.id },
+      });
     }
   }
 
@@ -273,30 +299,22 @@ export async function summarise(db: Db, ws: string, refs: Ref[]): Promise<Map<st
     }
   }
 
-  if (ids('block').length) {
-    const rows = await db.select({
-      id: taskScheduleBlocks.id, taskId: taskScheduleBlocks.taskId,
-      startsAt: taskScheduleBlocks.startsAt,
-    }).from(taskScheduleBlocks)
-      .where(and(eq(taskScheduleBlocks.workspaceId, ws), inArray(taskScheduleBlocks.id, ids('block'))));
-    const t = byId(await db.select({ id: tasks.id, title: tasks.title }).from(tasks)
-      .where(and(eq(tasks.workspaceId, ws), inArray(tasks.id, rows.map((r) => r.taskId)))));
-    for (const r of rows) {
-      /* A block has no title of its own — deliberately. It is time set aside
-         FOR a task, so its name is that task's name, read live. */
-      put({
-        type: 'block', id: r.id, title: t.get(r.taskId)?.title ?? 'Scheduled time',
-        subtitle: whenLabel(r.startsAt), at: r.startsAt.toISOString(), href: '#calendar',
-      });
-    }
-  }
-
   if (ids('library').length) {
-    for (const r of await db.select({ id: libraryItems.id, title: libraryItems.title, type: libraryItems.type })
-      .from(libraryItems)
-      .where(and(eq(libraryItems.workspaceId, ws), inArray(libraryItems.id, ids('library'))))) {
-      put({ type: 'library', id: r.id, title: r.title, subtitle: r.type,
-        href: r.type === 'book' ? `#library/book/${r.id}` : '#library' });
+    /* A Book is addressed by its `library_books` id, NOT by the library item's
+       — `#library/book/<libraryItemId>` resolves to nothing. Everything else
+       has its own item page. Neither route is the shelf: landing a person on
+       the shelf and letting them find it is not following a link. */
+    const rows = await db.select({
+      id: libraryItems.id, title: libraryItems.title, type: libraryItems.type,
+      bookId: libraryBooks.id,
+    }).from(libraryItems)
+      .leftJoin(libraryBooks, eq(libraryBooks.libraryItemId, libraryItems.id))
+      .where(and(eq(libraryItems.workspaceId, ws), inArray(libraryItems.id, ids('library'))));
+    for (const r of rows) {
+      put({
+        type: 'library', id: r.id, title: r.title, subtitle: LIBRARY_LABEL[r.type] ?? r.type,
+        href: r.bookId ? `#library/book/${r.bookId}` : `#library/item/${r.id}`,
+      });
     }
   }
 
@@ -561,6 +579,15 @@ export async function searchLinkable(db: Db, ws: string, q: string, opts: {
     .where(and(eq(bookPages.workspaceId, ws), hit(bookPages.title))).limit(per));
   add('library', await db.select({ id: libraryItems.id }).from(libraryItems)
     .where(and(eq(libraryItems.workspaceId, ws), hit(libraryItems.title))).limit(per));
+  add('area', await db.select({ id: areas.id }).from(areas)
+    .where(and(eq(areas.workspaceId, ws), hit(areas.name))).limit(per));
+  /* A diary day is usually untitled, so its date is what a person searches
+     for. Cast rather than `lower()`: there is no lower(date). */
+  add('diary', await db.select({ id: diaryEntries.id }).from(diaryEntries)
+    .where(and(eq(diaryEntries.workspaceId, ws), or(
+      hit(diaryEntries.title),
+      sql`${diaryEntries.entryDate}::text like ${like}`,
+    ))).limit(per));
 
   const summaries = await summarise(db, ws, refs);
   return {

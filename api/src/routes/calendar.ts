@@ -397,6 +397,67 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
     return { event: row };
   });
 
+  /**
+   * One event, by its Life OS id — the resolver behind `#calendar/event/<id>`.
+   *
+   * ── Why a local id is the right handle ─────────────────────────────────
+   *
+   * Google is polled with `singleEvents: true`, which expands a recurring
+   * series into its OCCURRENCES. Each occurrence arrives with its own
+   * `providerEventId` (`<series>_<utcStart>`), and the upsert is keyed on
+   * `(calendarId, providerEventId)` — so every occurrence has its own row and
+   * that row's uuid is stable across every future sync.
+   *
+   * A link therefore points at ONE occurrence, unambiguously, and needs no
+   * series id, no start time and no calendar in the URL. `recurringEventId`
+   * and `originalStartTime` come back in the payload so the surface opening
+   * it can say which occurrence of what it is, but they are never how it is
+   * FOUND. Matching on a title and a date would be a guess, and the day two
+   * occurrences share a title is the day it silently opens the wrong one.
+   *
+   * 404 is a real answer here: the event was deleted in Google, or the whole
+   * calendar was disconnected. The client turns it into an explanation.
+   */
+  app.get('/api/v1/workspaces/:workspaceId/calendar/events/:id', pre, async (req) => {
+    const { workspaceId, id } = req.params as { workspaceId: string; id: string };
+    if (!z.string().uuid().safeParse(id).success) {
+      throw notFound('That event link is not valid.');
+    }
+    const [row] = await db.select().from(calendarEvents).where(and(
+      eq(calendarEvents.workspaceId, workspaceId), eq(calendarEvents.id, id),
+    ));
+    if (!row) throw notFound('That event is no longer in your calendar.');
+
+    const [cal] = await db.select().from(calendars).where(and(
+      eq(calendars.workspaceId, workspaceId), eq(calendars.id, row.calendarId),
+    ));
+    const attendees = await db.select().from(calendarEventAttendees)
+      .where(eq(calendarEventAttendees.eventId, row.id));
+
+    /* The same shape `/calendar/range` sends, so the detail sheet and the
+     * editor take it without a second code path. */
+    return {
+      event: {
+        ...row,
+        calendarName: cal?.name ?? null,
+        calendarColor: cal?.color ?? null,
+        calendarReadOnly: cal?.isReadOnly ?? true,
+        isReadOnly: cal?.isReadOnly ?? true,
+        attendees,
+      },
+      /** The civil day to move the Calendar to before opening it. */
+      day: row.startDate ?? (row.startsAt
+        ? new Date(row.startsAt).toISOString().slice(0, 10) : null),
+      /** Present when this row is one occurrence of a repeating series. */
+      occurrence: row.recurringEventId
+        ? {
+          seriesId: row.recurringEventId,
+          originalStartTime: row.originalStartTime,
+        }
+        : null,
+    };
+  });
+
   app.patch('/api/v1/workspaces/:workspaceId/calendar/events/:id', pre, async (req) => {
     const { workspaceId, id } = req.params as { workspaceId: string; id: string };
     const b = EventBody.partial().safeParse(req.body);
