@@ -20,6 +20,7 @@ import {
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { cleanupLinksFor } from '../lib/relationships.js';
+import { createReminder } from '../lib/actions/reminders.js';
 import { habitHistory } from '../lib/habit-history.js';
 import {
   writtenDays, diaryHabitSince, addDiaryToHabitDays, diaryHabitEnabled,
@@ -510,30 +511,9 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
     const { workspaceId } = req.params as { workspaceId: string };
     const b = ReminderBody.safeParse(req.body);
     if (!b.success) throw badRequest(b.error.issues[0]!.message);
-    const { recurrence, ...fields } = b.data;
-
-    // Reminders created through the app are the user's own records, not
-    // demonstration data — `isSynthetic` was left true from the seed work and
-    // would have made real reminders eligible for the staging cleanup.
-    const [row] = await db.insert(reminders).values({
-      workspaceId, ...fields, isSynthetic: false,
-    }).returning();
-    if (!row) throw badRequest('Could not create the reminder.');
-
-    if (recurrence) {
-      await db.insert(reminderRecurrenceRules).values({
-        workspaceId,
-        reminderId: row.id,
-        frequency: recurrence.frequency,
-        interval: recurrence.interval,
-        byWeekday: recurrence.byWeekday ?? null,
-        byMonthDay: recurrence.byMonthDay ?? null,
-        until: recurrence.until ?? null,
-        count: recurrence.count ?? null,
-      });
-    }
+    const reminder = await createReminder(db, workspaceId, b.data);
     reply.code(201);
-    return { reminder: { ...row, recurrence: recurrence ?? null } };
+    return { reminder };
   });
 
   /**

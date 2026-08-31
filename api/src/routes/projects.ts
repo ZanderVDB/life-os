@@ -30,6 +30,7 @@ import {
 } from '../db/schema.js';
 import { ensureProjectBook, PAGE_TARGET } from '../lib/book-links.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+import { updateProject } from '../lib/actions/projects.js';
 import { cleanupLinksFor } from '../lib/relationships.js';
 // TEMPORARY — sample data for E2 review. Delete with src/lib/sample-projects.ts.
 import {
@@ -643,25 +644,9 @@ export function registerProjectRoutes(
     const parsed = ProjectUpdate.safeParse(req.body);
     if (!parsed.success) throw badRequest(parsed.error.issues[0]?.message ?? 'Invalid change.');
     const ws = wsId(req);
-    const current = await load(ws, id);
-    assertFresh(current, parsed.data.expectedUpdatedAt);
-
-    const { expectedUpdatedAt, ...body } = parsed.data;
-    if (body.status === 'completed') {
-      throw badRequest('Use POST …/complete — completing a project has to ask about open tasks.');
-    }
-    if (current.archivedAt && Object.keys(body).length > 0) {
-      throw conflict('This project is archived. Restore it before changing it.');
-    }
-
-    const set: Record<string, unknown> = { ...body };
-    // Leaving Completed means it is no longer completed. The timestamp is a
-    // fact about a state the project is no longer in. (`body.status` cannot be
-    // 'completed' here — that path threw above.)
-    if (body.status && current.status === 'completed') set.completedAt = null;
-    const [row] = await touch(ws, id, set);
+    const row = await updateProject(db, ws, id, parsed.data);
     const list = await tasksOf(ws, id);
-    return { project: shape(row!, list) };
+    return { project: shape(row, list) };
   });
 
   /* ── Next action ───────────────────────────────────────────────────── */

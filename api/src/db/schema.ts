@@ -12,7 +12,7 @@
  *  • UUID primary keys — the legacy 7-char random ids were collision-prone.
  */
 import {
-  pgTable, uuid, text, boolean, integer, timestamp, date, jsonb,
+  pgTable, uuid, text, boolean, integer, real, timestamp, date, jsonb,
   index, uniqueIndex, check,
 } from 'drizzle-orm/pg-core';
 import { sql, relations } from 'drizzle-orm';
@@ -1211,6 +1211,114 @@ export const diaryEntries = pgTable('diary_entries', {
   energyCheck: check('diary_entries_energy_check',
     sql`${t.energy} is null or ${t.energy} in ('very_low','low','medium','high','very_high')`),
 }));
+
+
+/* ══ Personal Memory ═════════════════════════════════════════════════════
+ *
+ * What Life OS knows about the person using it, as opposed to what the person
+ * has written down. "Prefers afternoon meetings" is memory. "Haircut tomorrow"
+ * is a task, and putting it here instead would be a second, worse task list
+ * that nothing renders.
+ *
+ * Three properties earn a row a place: DURABLE, USEFUL, PERSONALLY RELEVANT.
+ * A fact that will be false next week, or that changes no future answer, is
+ * conversational trivia and belongs nowhere.
+ *
+ * Workspace-scoped like everything else, and additionally user-scoped: a
+ * workspace can have members, and "prefers concise emails" is about a person.
+ */
+export const MEMORY_CATEGORIES = [
+  'profile',        // who they are: role, where they work
+  'preferences',    // likes, dislikes, defaults they keep choosing
+  'people',         // who matters, and how they relate
+  'places',         // home, office, the usual gym
+  'routines',       // when they do things
+  'work_style',     // how they like to work
+  'communication',  // how they like to be written to
+  'defaults',       // "groceries go in the Groceries list"
+  'interests',
+  'other',
+] as const;
+
+/** How the memory got here. Provenance decides how much to trust it. */
+export const MEMORY_SOURCES = ['user', 'assistant', 'derived', 'import'] as const;
+
+export const aiMemories = pgTable('ai_memories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  category: text('category').notNull().default('other'),
+  /** One durable sentence. Not a transcript fragment. */
+  fact: text('fact').notNull(),
+  /** 0..1. A stated preference is not as certain as one the user confirmed. */
+  confidence: real('confidence').notNull().default(0.6),
+  source: text('source').notNull().default('assistant'),
+  /**
+   * The user said this is right. Pinned memory is never superseded
+   * automatically and never expires — it is the one thing the assistant is
+   * not allowed to quietly change its mind about.
+   */
+  isPinned: boolean('is_pinned').notNull().default(false),
+  /**
+   * Replaced by a newer statement of the same thing.
+   *
+   * Superseded rather than deleted: "used to prefer mornings" is context, and
+   * an assistant that silently loses the change has no way to explain why its
+   * answers changed. Nothing reads a superseded row into a prompt.
+   */
+  supersededById: uuid('superseded_by_id'),
+  supersededAt: timestamp('superseded_at', { withTimezone: true }),
+  /** Where it came from, when it came from something with an id. */
+  sourceRefType: text('source_ref_type'),
+  sourceRefId: uuid('source_ref_id'),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byOwner: index('ai_memories_owner_idx').on(t.workspaceId, t.userId),
+  live: index('ai_memories_live_idx').on(t.workspaceId, t.userId, t.supersededAt),
+  categoryCheck: check('ai_memories_category',
+    sql`${t.category} IN ('profile','preferences','people','places','routines','work_style','communication','defaults','interests','other')`),
+  sourceCheck: check('ai_memories_source',
+    sql`${t.source} IN ('user','assistant','derived','import')`),
+}));
+
+/**
+ * Something a model noticed, not yet believed.
+ *
+ * A model that writes directly into memory writes whatever it misheard, and a
+ * wrong durable fact is worse than a wrong answer: it is a wrong answer that
+ * repeats. So extraction produces CANDIDATES, and a candidate becomes a memory
+ * only when the service accepts it — after deduplication against what is
+ * already known, and after the user has had the chance to see it.
+ */
+export const aiMemoryCandidates = pgTable('ai_memory_candidates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  category: text('category').notNull().default('other'),
+  fact: text('fact').notNull(),
+  confidence: real('confidence').notNull().default(0.5),
+  /** pending | accepted | rejected */
+  status: text('status').notNull().default('pending'),
+  /** The memory this would replace, when the model recognised a change. */
+  supersedesId: uuid('supersedes_id'),
+  /** Which memory it became, once accepted. */
+  memoryId: uuid('memory_id'),
+  /** Kept short and only for review — never a whole transcript. */
+  evidence: text('evidence'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+}, (t) => ({
+  byOwner: index('ai_memory_candidates_owner_idx').on(t.workspaceId, t.userId, t.status),
+  statusCheck: check('ai_memory_candidates_status',
+    sql`${t.status} IN ('pending','accepted','rejected')`),
+}));
+
+export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
+export type MemorySource = (typeof MEMORY_SOURCES)[number];
 
 /* ── relations ───────────────────────────────────────────────────────── */
 export const calendarConnectionsRelations = relations(calendarConnections, ({ many }) => ({

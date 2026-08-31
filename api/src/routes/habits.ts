@@ -19,6 +19,7 @@ import {
 import { badRequest, notFound } from '../lib/errors.js';
 import { cleanupLinksFor } from '../lib/relationships.js';
 // One implementation of "due and done on a day", shared with Calendar.
+import { checkHabit, HabitCheckInput } from '../lib/actions/habits.js';
 import { habitHistory } from '../lib/habit-history.js';
 /* The computed `Write in Diary` habit. Habits, Calendar and Today all go
  * through this one provider — §6 of D2.2 exists because they did not. */
@@ -352,43 +353,10 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
   app.post(`${base}/habits/:habitId/check`, pre, async (req) => {
     const wsId = req.workspaceId!;
     const { habitId } = req.params as { habitId: string };
-    const body = z.object({
-      date: z.string().regex(ISO_DATE).optional(),
-      count: z.number().int().min(0).max(100).optional(),
-    }).parse(req.body ?? {});
-
-    const habit = (await db.select().from(habits)
-      .where(and(eq(habits.id, habitId), eq(habits.workspaceId, wsId))).limit(1))[0];
-    if (!habit) throw notFound('Habit not found.');
-
-    const day = body.date ?? new Date().toISOString().slice(0, 10);
-    const existing = (await db.select().from(habitEntries)
-      .where(and(eq(habitEntries.habitId, habitId), eq(habitEntries.entryDate, day))).limit(1))[0];
-    const next = body.count ?? (existing ? existing.completedCount + 1 : 1);
-
-    if (next <= 0) {
-      // Undo removes the row entirely rather than storing a zero — an absent
-      // entry and a zero entry would otherwise both mean "not done".
-      if (existing) await db.delete(habitEntries).where(eq(habitEntries.id, existing.id));
-      return { habitId, date: day, completedCount: 0, completed: false };
-    }
-
-    const row = existing
-      ? (await db.update(habitEntries)
-        .set({ completedCount: next, completedAt: new Date(), updatedAt: new Date() })
-        .where(eq(habitEntries.id, existing.id)).returning())[0]!
-      : (await db.insert(habitEntries).values({
-        habitId, workspaceId: wsId, entryDate: day,
-        completedCount: next, completedAt: new Date(), source: 'user',
-      }).returning())[0]!;
-
-    return {
-      habitId, date: day, completedCount: row.completedCount,
-      completed: row.completedCount >= habit.targetCount,
-    };
+    const body = HabitCheckInput.parse(req.body ?? {});
+    return checkHabit(db, wsId, habitId, body);
   });
 
-  /** POST …/habits/:id/uncheck — the explicit undo. */
   app.post(`${base}/habits/:habitId/uncheck`, pre, async (req) => {
     const wsId = req.workspaceId!;
     const { habitId } = req.params as { habitId: string };

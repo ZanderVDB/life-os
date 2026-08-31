@@ -56,12 +56,22 @@ test('recurrence: the API accepts it — this is the bug that shipped', () => {
 });
 
 test('recurrence: a real reminder is not flagged as demonstration data', () => {
-  // It was `isSynthetic: true`, which made every user reminder eligible for the
-  // staging cleanup. Scoping a destructive op correctly is not enough if the
-  // flag it scopes on is applied to the wrong rows.
-  const fn = calRoute.slice(calRoute.indexOf("app.post('/api/v1/workspaces/:workspaceId/reminders'"));
-  assert.match(fn.slice(0, 1400), /isSynthetic: false/,
+  /* It was `isSynthetic: true`, which made every user reminder eligible for
+   * the staging cleanup. Scoping a destructive op correctly is not enough if
+   * the flag it scopes on is applied to the wrong rows.
+   *
+   * The rule moved out of the route into `lib/actions/reminders.ts` when the
+   * write side became callable by the assistant as well as by the UI. The
+   * assertion follows it: the route now hands over, so reading the route for
+   * this would prove nothing about what actually runs. */
+  const service = readFileSync(join('src', 'lib', 'actions', 'reminders.ts'), 'utf8');
+  const fn = service.slice(service.indexOf('export async function createReminder'));
+  assert.match(fn, /isSynthetic: false/,
     'user-created reminders are flagged synthetic and would be deleted by cleanup');
+  // …and the route really does delegate rather than keeping a second copy.
+  const route = calRoute.slice(calRoute.indexOf("app.post('/api/v1/workspaces/:workspaceId/reminders'"));
+  assert.match(route.slice(0, 900), /createReminder\(/,
+    'the reminder route stopped using the shared service');
 });
 
 test('recurrence: weekly advances to the same weekday', () => {

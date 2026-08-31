@@ -20,6 +20,12 @@ import { cleanupLinksFor } from '../lib/relationships.js';
 // Two implementations of "which task is next" would disagree, and the badge on
 // Today would point at a different task than the project itself does.
 import { nextActionFor } from './projects.js';
+/* The rules for creating, editing and completing a task live in one place, so
+ * the assistant and this route cannot drift apart. See lib/actions/tasks.ts. */
+import {
+  createTask, updateTask, setTaskDone,
+  TaskCreateInput, TaskUpdateInput,
+} from '../lib/actions/tasks.js';
 
 /** Sparse spacing so a single move rewrites one row, not the whole bucket. */
 const GAP = 1000;
@@ -179,30 +185,7 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
   app.post(`${base}/tasks`, pre, async (req, reply) => {
     const wsId = req.workspaceId!;
     const body = TaskCreate.parse(req.body);
-    if (body.areaId) {
-      const a = (await db.select().from(areas)
-        .where(and(eq(areas.id, body.areaId), eq(areas.workspaceId, wsId), isNull(areas.deletedAt))).limit(1))[0];
-      if (!a) throw badRequest('That Area does not exist in this workspace.');
-    }
-    if (body.projectId) {
-      const p = (await db.select().from(projects)
-        .where(and(eq(projects.id, body.projectId), eq(projects.workspaceId, wsId))).limit(1))[0];
-      if (!p) throw badRequest('That project does not exist in this workspace.');
-    }
-    const row = await db.transaction(async (tx) => {
-      const position = await endPosition(tx, wsId, body.bucket);
-      const created = (await tx.insert(tasks).values({
-        workspaceId: wsId, title: body.title, notes: body.notes ?? null,
-        bucket: body.bucket, priority: body.priority, areaId: body.areaId ?? null,
-        projectId: body.projectId ?? null,
-        dueDate: body.dueDate ?? null,
-        scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
-        estimatedMinutes: body.estimatedMinutes ?? null,
-        position,
-      }).returning())[0]!;
-      await logActivity(tx, wsId, created.id, req.principal!.userId, 'created');
-      return created;
-    });
+    const row = await createTask(db, wsId, { userId: req.principal!.userId }, body);
     reply.code(201);
     return { task: { ...row, steps: [] } };
   });
@@ -226,32 +209,7 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
     const body = TaskUpdate.parse(req.body);
     if (Object.keys(body).length === 0) throw badRequest('No fields to update.');
 
-    const updated = await db.transaction(async (tx) => {
-      const existing = (await tx.select().from(tasks)
-        .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, wsId))).limit(1))[0];
-      if (!existing) throw notFound('Task not found.');
-
-      const patch: Record<string, unknown> = { updatedAt: new Date() };
-      if (body.title !== undefined) patch['title'] = body.title;
-      if (body.notes !== undefined) patch['notes'] = body.notes ?? null;
-      if (body.priority !== undefined) patch['priority'] = body.priority;
-      if (body.areaId !== undefined) patch['areaId'] = body.areaId ?? null;
-      if (body.dueDate !== undefined) patch['dueDate'] = body.dueDate ?? null;
-      if (body.scheduledAt !== undefined) patch['scheduledAt'] = body.scheduledAt ? new Date(body.scheduledAt) : null;
-      if (body.estimatedMinutes !== undefined) patch['estimatedMinutes'] = body.estimatedMinutes ?? null;
-      if (body.bucket !== undefined && body.bucket !== existing.bucket) {
-        patch['bucket'] = body.bucket;
-        patch['position'] = await endPosition(tx, wsId, body.bucket);
-      }
-      if (body.status !== undefined) {
-        patch['status'] = body.status;
-        patch['completedAt'] = body.status === 'done' ? new Date() : null;
-      }
-      const row = (await tx.update(tasks).set(patch)
-        .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, wsId))).returning())[0]!;
-      await logActivity(tx, wsId, taskId, req.principal!.userId, 'edited', { fields: Object.keys(body) });
-      return row;
-    });
+    const updated = await updateTask(db, wsId, { userId: req.principal!.userId }, taskId, body);
     return { task: updated };
   });
 
@@ -393,37 +351,9 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
       const edits = TaskUpdate.omit({ status: true, bucket: true }).strict()
         .parse(req.body ?? {});
 
-      const row = await db.transaction(async (tx) => {
-        const patch: Record<string, unknown> = {
-          status: done ? 'done' : 'open',
-          completedAt: done ? new Date() : null,
-          updatedAt: new Date(),
-        };
-        if (edits.title !== undefined) patch['title'] = edits.title;
-        if (edits.notes !== undefined) patch['notes'] = edits.notes ?? null;
-        if (edits.priority !== undefined) patch['priority'] = edits.priority;
-        if (edits.areaId !== undefined) patch['areaId'] = edits.areaId ?? null;
-        if (edits.dueDate !== undefined) patch['dueDate'] = edits.dueDate ?? null;
-        if (edits.scheduledAt !== undefined) {
-          patch['scheduledAt'] = edits.scheduledAt ? new Date(edits.scheduledAt) : null;
-        }
-        if (edits.estimatedMinutes !== undefined) {
-          patch['estimatedMinutes'] = edits.estimatedMinutes ?? null;
-        }
-        // `bucket` is intentionally NOT accepted here. A task being completed
-        // is leaving the board; moving it between buckets on the way out would
-        // rewrite a position for a row nothing is going to show.
-
-        const r = (await tx.update(tasks).set(patch)
-          .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, wsId))).returning())[0];
-        if (!r) throw notFound('Task not found.');
-        const fields = Object.keys(edits);
-        if (fields.length) {
-          await logActivity(tx, wsId, taskId, req.principal!.userId, 'edited', { fields });
-        }
-        await logActivity(tx, wsId, taskId, req.principal!.userId, done ? 'completed' : 'reopened');
-        return r;
-      });
+      const row = await setTaskDone(
+        db, wsId, { userId: req.principal!.userId }, taskId, done, edits,
+      );
       return { task: row };
     });
   }

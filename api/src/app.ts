@@ -21,6 +21,8 @@ import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerGoogleCalendarRoutes } from './routes/google-calendar.js';
 import { registerCalendarWriteRoutes, registerCalendarWebhook } from './routes/calendar-write.js';
 import { registerLinkRoutes } from './routes/links.js';
+import { registerAiRoutes } from './routes/ai.js';
+import { createAssistant } from './ai/index.js';
 
 export const API_VERSION = '0.1.0';
 
@@ -77,6 +79,10 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerGoogleCalendarRoutes(app, db, guards, env);
   registerCalendarWriteRoutes(app, db, guards);
   registerLinkRoutes(app, db, guards);
+  /* Built once. The module list is fixed at build time; which of them are
+     AVAILABLE is asked per request, so two workspaces get different answers
+     from the same registry. */
+  registerAiRoutes(app, db, guards, createAssistant());
   /* Google is not a signed-in user, so its webhook is registered outside the
    * workspace-scoped routes and proves who it is from a channel row instead. */
   registerCalendarWebhook(app, db);

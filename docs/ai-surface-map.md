@@ -9,6 +9,9 @@ built today**, from the Postgres schema and the live route handlers.
 > of that shape.
 >
 > `ai-contract.md` **is** current, and is the safety model this must obey.
+> `ai-system.md` is the canonical AI architecture document and supersedes this
+> file wherever the two disagree about what the assistant can do — this map
+> describes what EXISTS to reason about; that one describes the reasoning.
 > `relationships.md` is the canonical map of how anything here refers to
 > anything else, and supersedes §3 below wherever the two disagree.
 
@@ -272,9 +275,13 @@ Editable field types the proposal UI can render: `text`, `date`, `time`,
 
 ## 5. Gaps worth naming before designing
 
-Things the app can do that the assistant currently has **no proposal kind
-for** — each is a deliberate decision to make, not an oversight to fix
-silently:
+**As of the AI foundation pass, the authoritative answer to "what can the
+assistant do" is `GET /ai/capabilities`, built from module registration.** The
+list below is the remaining gap between what the app can do and what any module
+has registered — see `ai-system.md` §19.
+
+Things the app can do that the assistant currently has **no capability for** —
+each is a deliberate decision, not an oversight to fix silently:
 
 - Creating or editing **Projects** (only `project.update` exists), **Areas**,
   **Habits** (only `check`), or **Books/Sections/Pages** beyond appending
@@ -283,9 +290,15 @@ silently:
   (`task.update` may cover this; the contract does not say)
 - **Reminder recurrence** — `reminder.create` exists; series control does not
 
-**Relationships are no longer on that list.** `link.create` and `link.remove`
-exist in the contract, and go through the service rather than the table.
-`link.remove` is marked *important*: it destroys a judgement somebody made.
+**Relationships are no longer on that list.** `link.inspect`, `link.traverse`,
+`link.create` and `link.remove` are registered capabilities and go through the
+relationship service rather than the table. `link.remove` is *important*: it
+destroys a judgement somebody made.
+
+**Nor are Habits and Reminders.** `habit.check` and `reminder.create` are
+registered, and both call the same application service the UI calls. Projects
+gained `project.update`; creating and completing one are still absent, with
+reasons recorded in `ai-system.md` §19.
 
 And two facts an AI planner needs to hold:
 
