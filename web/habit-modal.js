@@ -101,6 +101,11 @@ export function openHabitModal(ctx) {
         </div>
         <span class="h-recent-note">last 14 days · oldest left</span>
       </div>` : ''}
+
+      <!-- A habit can support a project without the project owning any part
+           of its completion history. The edge lives in the relationship
+           layer; the ticks stay here. -->
+      ${h ? `<div class="rel-host" data-rel-host="habit:${esc(h.id)}"></div>` : ''}
     </div>
 
     <div class="m-foot">

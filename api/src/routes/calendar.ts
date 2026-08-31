@@ -19,6 +19,7 @@ import {
   reminderRecurrenceRules,
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
+import { cleanupLinksFor } from '../lib/relationships.js';
 import { habitHistory } from '../lib/habit-history.js';
 import {
   writtenDays, diaryHabitSince, addDiaryToHabitDays, diaryHabitEnabled,
@@ -554,6 +555,9 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       eq(reminders.id, id), eq(reminders.workspaceId, workspaceId),
     )).returning({ id: reminders.id });
     if (!gone.length) throw notFound('Reminder not found.');
+    // The recurrence rule cascades; the semantic edges do not — nothing in the
+    // database points from a polymorphic edge back to a reminder.
+    await cleanupLinksFor(db, workspaceId, 'reminder', id);
     reply.code(204);
     return null;
   });

@@ -6214,3 +6214,80 @@ html.los-returning .boot-wait,.boot-wait.is-on{display:grid}
   .boot-mark svg,.boot-mark::before{animation:none}
   .boot-mark::before{opacity:.62}}
 html.los-returning #landing{display:none}
+
+/* ══════════════════════════════════════════════════════════════════════
+   RELATED — the semantic relationship layer, wherever an object is open
+
+   Secondary by construction. Nobody opens a task to read its graph, so this
+   sits at the foot of a surface in label type, and renders nothing at all
+   when there is nothing to show: an empty "Related" heading on every object
+   in the application would be a standing advertisement for a feature rather
+   than a useful fact.
+   ══════════════════════════════════════════════════════════════════════ */
+.rel{margin-top:18px;padding-top:14px;border-top:1px solid var(--hairline)}
+.rel-h{display:flex;align-items:center;gap:8px;margin:0 0 8px;
+  font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted)}
+.rel-n{display:grid;place-items:center;min-width:17px;height:17px;padding:0 5px;
+  border-radius:9px;background:var(--surface-2);color:var(--text-2);
+  font-size:10px;letter-spacing:0}
+.rel-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.rel-row{display:flex;align-items:center;gap:4px;border-radius:9px;
+  transition:background var(--t-hover)}
+.rel-row:hover{background:rgba(255,255,255,.035)}
+.rel-go{flex:1;min-width:0;display:flex;align-items:center;gap:10px;
+  padding:7px 8px;text-align:left;border-radius:9px;color:inherit}
+/* The type, not an icon. "Book page" and "Calendar" are two words that need no
+   legend; a glyph for each of ten types is a legend nobody reads. */
+.rel-kind{flex:0 0 auto;font-size:9.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);min-width:62px}
+.rel-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.rel-title{font-size:12.5px;color:var(--text-2);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.rel-row:hover .rel-title{color:var(--text)}
+.rel-sub{font-size:10.5px;color:var(--muted);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+/* How they are related, at the quiet end of the row: it qualifies the link
+   rather than naming the thing, so it must never outrank the title. */
+.rel-rel{flex:0 0 auto;font-size:10.5px;color:var(--muted);
+  max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rel-x{flex:0 0 auto;width:26px;height:26px;border-radius:7px;color:transparent;
+  font-size:16px;line-height:1;display:grid;place-items:center;
+  transition:background var(--t-hover),color var(--t-hover)}
+.rel-row:hover .rel-x,.rel-x:focus-visible{color:var(--muted)}
+.rel-x:hover{background:rgba(255,100,110,.12);color:var(--danger)}
+/* A coupled edge — today only `scheduled_as`. It is shown and marked, and it
+   has no unlink: the way to undo "this task is scheduled as that event" is to
+   unschedule it, not to cut a wire and leave two half-orphaned records. */
+.rel-row.is-coupled .rel-rel{color:var(--accent)}
+.rel-lock{flex:0 0 auto;width:26px;height:26px;display:grid;place-items:center}
+.rel-lock::after{content:'';width:5px;height:5px;border-radius:50%;
+  background:var(--accent);opacity:.55}
+
+/* The dense form: a count, where a list would be noise. */
+.rel-badge{display:inline-grid;place-items:center;min-width:15px;height:15px;
+  padding:0 4px;border-radius:8px;background:var(--surface-2);
+  color:var(--muted);font-size:9.5px;font-weight:700;
+  font-variant-numeric:tabular-nums}
+
+/* ── Making a link ────────────────────────────────────────────────────
+   Search first, then say what the connection means. The other order — pick a
+   type, pick a kind, then search inside it — asks two questions before the
+   one the person came to answer. */
+.rel-add{margin-left:auto;font-size:10.5px;font-weight:600;letter-spacing:.02em;
+  text-transform:none;color:var(--accent);padding:2px 4px;border-radius:6px}
+.rel-add:hover{background:var(--accent-soft)}
+.rel-add-only{margin:0;font-size:11.5px}
+.rel-empty{border-top:1px solid var(--hairline);padding-top:12px}
+.rel-pick{max-width:520px;width:calc(100vw - 40px)}
+.rel-pick-h{margin:0;font-size:15px;font-weight:600}
+.rel-pick-body{display:flex;flex-direction:column;gap:11px;min-height:220px}
+.rel-pick-q{width:100%}
+.rel-pick-kind{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.rel-pick-kind select{flex:1;min-width:0}
+.rel-pick-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
+  gap:2px;max-height:46vh;overflow-y:auto}
+.rel-pick-row{width:100%;display:flex;align-items:center;gap:10px;padding:8px;
+  border-radius:9px;text-align:left;color:inherit;transition:background var(--t-hover)}
+.rel-pick-row:hover{background:rgba(255,255,255,.05)}
+.rel-pick-hint{margin:0;font-size:11.5px;color:var(--muted)}

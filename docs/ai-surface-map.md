@@ -9,6 +9,8 @@ built today**, from the Postgres schema and the live route handlers.
 > of that shape.
 >
 > `ai-contract.md` **is** current, and is the safety model this must obey.
+> `relationships.md` is the canonical map of how anything here refers to
+> anything else, and supersedes §3 below wherever the two disagree.
 
 Everything below lives inside one **workspace**. Every table carries
 `workspace_id`; every route is `/api/v1/workspaces/:workspaceId/…`. There is
@@ -200,6 +202,20 @@ deadline for that task", "this book page answers that question" are all the
 same row shape. **If the AI needs a new relationship, it belongs here — not in
 a new table.**
 
+**This is now a real service, not just a table.** `lib/relationships.ts` owns
+every write, validates both ends, refuses self-links and duplicates, and
+answers `linksFor(type, id)` with outgoing AND incoming edges in one shape —
+backlinks come from a single stored row, never a second one. Ten typed kinds
+(`related`, `context`, `resource`, `preparation`, `discussed_in`, `result`,
+`deadline`, `follow_up`, `supports`, `scheduled_as`), each phrased for both
+ends. Endpoints: `GET /links?type=&id=`, `GET /links/search?q=`,
+`GET /links/kinds`, `POST /links`, `DELETE /links/:id`.
+
+Exactly one kind carries behaviour: `scheduled_as` couples a task to the event
+holding its hour, and only the TIME syncs — never titles, never in a way that
+reaches Google without the existing confirmation. Everything else is
+informational. See `relationships.md` §7.
+
 One rule: links are **never** written into Google event fields. If one is ever
 mirrored it goes in a *private* extended property, and the user is told
 plainly that other Google users will not see it.
@@ -229,6 +245,7 @@ Proposal kinds that already exist:
 | `habit.check` | Habits | |
 | `project.update` | Projects | *important* |
 | `list.add` `library.append` | Library | |
+| `link.create` `link.remove` | Relationships | `remove` is *important* |
 | `answer` | — | not a change; no confirmation, not counted |
 
 *Important* = never committed on a voice command alone, however confident the
@@ -249,12 +266,13 @@ silently:
 - Creating or editing **Projects** (only `project.update` exists), **Areas**,
   **Habits** (only `check`), or **Books/Sections/Pages** beyond appending
 - Writing a **Diary** entry or a check-in field
-- Creating **`item_links`** — the AI can propose objects but not the
-  relationships between them, which is arguably the most valuable thing it
-  could infer
 - **Reordering** anything, or moving a task between buckets
   (`task.update` may cover this; the contract does not say)
 - **Reminder recurrence** — `reminder.create` exists; series control does not
+
+**Relationships are no longer on that list.** `link.create` and `link.remove`
+exist in the contract, and go through the service rather than the table.
+`link.remove` is marked *important*: it destroys a judgement somebody made.
 
 And two facts an AI planner needs to hold:
 

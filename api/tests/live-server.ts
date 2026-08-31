@@ -16,7 +16,7 @@ import { buildApp } from '../src/app.js';
 import { loadEnv } from '../src/env.js';
 import { freshDb } from './helpers.js';
 import { seedSampleProjects } from '../src/lib/sample-projects.js';
-import { habits, habitEntries } from '../src/db/schema.js';
+import { habits, habitEntries, calendars, calendarEvents } from '../src/db/schema.js';
 
 const TOKEN = 'dev-verify-token';
 const PORT = 8080;
@@ -80,6 +80,33 @@ for (let back = 1; back <= 14; back++) {
   }
 }
 if (entries.length) await db.insert(habitEntries).values(entries);
+
+/* One writable local calendar and a few events on it. Without these the
+ * Calendar page has nothing to render, and no local object can point at an
+ * hour. Synthetic and local_only: nothing here ever reaches Google. */
+const [localCal] = await db.insert(calendars).values({
+  workspaceId: ws, providerCalendarId: 'local:sample', name: 'Life OS',
+  color: '#8b7ff5', accessRole: 'owner', isPrimary: true,
+  isDefaultTarget: true, isReadOnly: false, isSynthetic: true,
+}).returning();
+
+const at = (back: number, hh: number, mins = 0) => {
+  const d = new Date();
+  d.setDate(d.getDate() - back);
+  d.setHours(hh, mins, 0, 0);
+  return d;
+};
+const ev = (title: string, back: number, hh: number, len: number, location?: string) => ({
+  workspaceId: ws, calendarId: localCal!.id, title, location: location ?? null,
+  isAllDay: false, startsAt: at(back, hh), endsAt: at(back, hh + len),
+  syncState: 'local_only' as const, isSynthetic: true,
+});
+await db.insert(calendarEvents).values([
+  ev('Client call — Trifusion', -2, 12, 1, 'Google Meet'),
+  ev('Design review', -1, 9, 1),
+  ev('Gym', 0, 18, 1),
+  ev('Handover walkthrough', -5, 14, 2, 'Their office'),
+]);
 
 await app.listen({ port: PORT, host: '127.0.0.1' });
 // eslint-disable-next-line no-console

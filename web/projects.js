@@ -421,6 +421,13 @@ export function projectDetailBodyHtml(p, tasks, taskHtml) {
       </details>` : ''}
     </section>
 
+    <!-- Everything else this project is involved with: the habits that
+         support it, the meetings about it, the diary entries that mention it.
+         Structural relationships — its tasks, its Book — are the sections
+         above and stay where they are; this is only what the canonical model
+         has no column for. -->
+    <div class="rel-host pjd-rel" data-rel-host="project:${esc(p.id)}"></div>
+
     ${p.book ? `<!-- §27: below Tasks on a phone, because the phone's job is
          execution — what is next, then what is left, then the place you
          write about it. The header keeps the same action on a desktop, where

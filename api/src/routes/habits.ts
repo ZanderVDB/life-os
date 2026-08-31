@@ -17,6 +17,7 @@ import {
   habits, habitEntries, areas, diaryEntries, FREQUENCY_TYPES,
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
+import { cleanupLinksFor } from '../lib/relationships.js';
 // One implementation of "due and done on a day", shared with Calendar.
 import { habitHistory } from '../lib/habit-history.js';
 /* The computed `Write in Diary` habit. Habits, Calendar and Today all go
@@ -330,6 +331,8 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
     if (q.permanent === 'true') {
       const gone = await db.delete(habits)
         .where(and(eq(habits.id, habitId), eq(habits.workspaceId, wsId))).returning();
+      // Only the hard delete. Archiving keeps the habit, so it keeps its links.
+      if (gone.length) await cleanupLinksFor(db, wsId, 'habit', habitId);
       if (!gone.length) throw notFound('Habit not found.');
       return { deleted: true, archived: false };
     }

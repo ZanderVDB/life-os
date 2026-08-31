@@ -53,6 +53,10 @@ export function openDetailSheet(ctx) {
           </div>`).join('')}
       </dl>
       ${ctx.note ? `<p class="dt-note">${esc(ctx.note)}</p>` : ''}
+      <!-- What this is connected to. A type and an id, nothing more: app.js
+           fills it, so a sheet does not need to know the relationship layer
+           exists in order to show one. -->
+      ${ctx.relatedHost ? `<div class="rel-host" data-rel-host="${esc(ctx.relatedHost)}"></div>` : ''}
     </div>
 
     <div class="m-foot dt-foot">

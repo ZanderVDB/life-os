@@ -30,6 +30,7 @@ import {
 } from '../db/schema.js';
 import { ensureProjectBook, PAGE_TARGET } from '../lib/book-links.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+import { cleanupLinksFor } from '../lib/relationships.js';
 // TEMPORARY — sample data for E2 review. Delete with src/lib/sample-projects.ts.
 import {
   seedSampleProjects, removeSampleProjects, sampleFootprint, isSampleAllowed,
@@ -1126,6 +1127,12 @@ export function registerProjectRoutes(
     }
 
     await db.delete(projects).where(and(eq(projects.workspaceId, ws), eq(projects.id, id)));
+    /* Edges only, and only the project's own. A task that was deleted with the
+       project cleaned up its own above; a task that was merely ORPHANED keeps
+       every link it had, because it still exists and those links are still
+       true. */
+    await cleanupLinksFor(db, ws, 'project', id);
+    for (const t of removed) await cleanupLinksFor(db, ws, 'task', t.id);
     return {
       deleted: true,
       tasksKept: orphaned.length,

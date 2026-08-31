@@ -257,10 +257,11 @@ export function openEventModal(ctx) {
         <!-- Life OS-only. Kept visually apart so it is never mistaken for
              something Google will show to other guests. -->
         <div class="ev-los">
-          <span class="ev-los-lab">Life OS links</span>
-          ${links.length
-            ? `<div class="ev-los-list">${links.map((l) => `<span class="chip">${esc(l.kind.replace('_', ' '))}</span>`).join('')}</div>`
-            : '<span class="ev-hint">No linked tasks or projects yet.</span>'}
+          ${/* Was a row of bare chips reading "preparation", "context" — the
+               KIND of each link and nothing about what was at the other end,
+               with no way to go there. The real section names the thing, says
+               which way the relationship runs, and opens it. */''}
+          ${ev ? `<div class="rel-host" data-rel-host="event:${esc(ev.id)}"></div>` : ''}
           <span class="ev-hint">Stored in Life OS only. Other people looking at
             this event in Google Calendar will not see these.</span>
         </div>

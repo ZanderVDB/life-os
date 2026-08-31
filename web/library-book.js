@@ -247,6 +247,12 @@ function pageHtml(page, side, section, isLast = false) {
         aria-label="Actions for this page" aria-haspopup="menu">${dots()}</button>
     </div>
     ${pageBodyHtml(page, layout)}
+    <!-- What points AT this page. References the page itself contains are
+         mirrored out of the document by book-links.ts and appear here as
+         incoming edges from the other side; a task that names this page as a
+         resource appears here too, which is the half that was previously
+         invisible from the Book. -->
+    <div class="rel-host bk-page-rel" data-rel-host="book_page:${esc(page.id)}"></div>
   </div>`;
 }
 

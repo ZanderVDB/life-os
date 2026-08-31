@@ -15,6 +15,7 @@ import {
   BUCKETS, PRIORITIES,
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
+import { cleanupLinksFor } from '../lib/relationships.js';
 // The next action is resolved with the SAME function the Projects page uses.
 // Two implementations of "which task is next" would disagree, and the badge on
 // Today would point at a different task than the project itself does.
@@ -446,6 +447,10 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
     const { taskId } = req.params as { taskId: string };
     const r = (await db.delete(tasks)
       .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, wsId))).returning())[0];
+    /* `item_links` is polymorphic, so it has no foreign key to a task and
+       nothing in the database will tidy up after one. Edges only — whatever
+       sat at the other end is somebody else's row and is left alone. */
+    if (r) await cleanupLinksFor(db, wsId, 'task', taskId);
     if (!r) throw notFound('Task not found.');
     reply.code(204);
     return null;

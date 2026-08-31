@@ -2231,3 +2231,34 @@
   .bk-l-pinboard .bk-page-title{font-size:15px}
   .bk-pin-tools .btn{min-height:36px;font-size:12.5px;padding:0 11px}
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   RELATED, on a phone
+
+   Same information, same order. The type moves ABOVE the title rather than
+   beside it — a 62px label column on a 360px screen leaves the title about
+   forty characters, and a truncated title is the one part of a link that has
+   to survive.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .rel{margin-top:16px;padding-top:12px}
+  .rel-go{min-height:var(--m-tap);padding:8px;gap:8px;
+    display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:'kind rel' 'body body';align-items:center}
+  .rel-kind{grid-area:kind;min-width:0}
+  .rel-rel{grid-area:rel;max-width:none;text-align:right}
+  .rel-body{grid-area:body}
+  .rel-title{font-size:13.5px;white-space:normal;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .rel-x{width:34px;height:34px;color:var(--muted)}
+  .rel-row:active{background:rgba(255,255,255,.05)}
+}
+
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .rel-pick{width:calc(100vw - 24px);max-width:none}
+  .rel-pick-body{min-height:0}
+  .rel-pick-kind{flex-direction:column;align-items:stretch;gap:5px}
+  .rel-pick-row{min-height:var(--m-tap)}
+  .rel-pick-list{max-height:40dvh}
+  .rel-add{min-height:32px;display:inline-flex;align-items:center}
+}

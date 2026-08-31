@@ -47,6 +47,15 @@ export const KINDS = {
   'project.update': { label: 'Project', system: 'Projects', mutates: true, important: true },
   'list.add': { label: 'Add to list', system: 'Library', mutates: true },
   'library.append': { label: 'Write to Book', system: 'Library', mutates: true },
+  /* Relationships. The assistant will spend most of its time noticing that
+     two things belong together — "the notes for that meeting are on page 4",
+     "this task came out of Tuesday" — and without these it would have to
+     express that as prose nobody can navigate.
+     Both go through the relationship service, never through `item_links`. A
+     link is cheap and reversible, so `link.create` is ordinary; removing one
+     destroys a judgement somebody made, so `link.remove` is important. */
+  'link.create': { label: 'Link', system: 'Relationships', mutates: true },
+  'link.remove': { label: 'Unlink', system: 'Relationships', mutates: true, important: true },
   /* Not a change. A question answered, or a fact recalled. It carries no
    * confirmation and contributes nothing to the count, because agreeing with
    * an answer is not an action. */

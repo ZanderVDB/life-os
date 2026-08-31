@@ -310,6 +310,7 @@ function paintOverview(scroll = document.getElementById('main-scroll')) {
    * next click on the same book open it instead of pulling it forward. */
   clearPulled();
   scroll.innerHTML = bodyHtml();
+  window.__mountRelated?.(scroll);
   wireOverview(scroll);
   bindPullDismiss();
   /* Position first, THEN identify. Restoring the scroll and then highlighting
@@ -1019,6 +1020,10 @@ function paintBookBody(scroll = document.getElementById('main-scroll')) {
     </div>
     ${lib.project ? '<aside class="bk-rail" id="bk-rail" aria-label="Project"></aside>' : ''}
   </div>`;
+  /* Here rather than in renderBook: a page turn repaints the spread without
+     going near the route, so mounting at route level would attach the Related
+     sections once and then hand every later page an unmounted host. */
+  window.__mountRelated?.(scroll);
   wireBook(scroll);
   if (lib.project) paintRail();
   setHash(bookHash());

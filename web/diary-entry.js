@@ -166,6 +166,13 @@ export function spreadHtml() {
       <div class="bk-page bk-page-right dia-right" data-accent="lavender">
         <div class="dia-scroll">
           ${checkinHtml(e, dia.reflection)}
+          <!-- A day is about things. Which project the work was for, which
+               meeting it followed, which task came out of it — none of which
+               the diary's own columns can hold, and all of which are exactly
+               what a future assistant will be asked to recall. Only ever
+               present once the entry exists: there is nothing to link TO
+               until the day has a row. -->
+          ${e?.id ? `<div class="rel-host dia-rel" data-rel-host="diary:${esc(e.id)}"></div>` : ''}
         </div>
       </div>
     </div>

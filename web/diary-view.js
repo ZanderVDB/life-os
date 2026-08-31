@@ -167,6 +167,7 @@ async function renderEntry(
 function paintSheet(scroll = document.getElementById('main-scroll'), animate = null) {
   stopSaveWatch?.();
   scroll.innerHTML = `<div class="dia">${spreadHtml()}</div>`;
+  window.__mountRelated?.(scroll);
   wireSheet(scroll);
   if (animate && !reducedMotion()) {
     const book = scroll.querySelector('.dia-book');

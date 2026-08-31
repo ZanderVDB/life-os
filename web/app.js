@@ -46,6 +46,7 @@ import {
   partition, isStandalone, arrangeStandalone, insertionIndex, orderChanged, localDate,
 } from './arrange.js';
 import { openHabitModal } from './habit-modal.js';
+import { initRelated, setRelatedOpener, mountRelated } from './related.js';
 import { initStars } from './stars.js';
 import { initDrag, isDragging } from './drag.js';
 import { openEventModal, openAddMenu } from './event-modal.js';
@@ -497,6 +498,11 @@ async function boot() {
   });
 
   renderShell();
+  /* One authenticated caller, one opener. Done here rather than at module
+     load because both need the workspace, which does not exist until now. */
+  initRelated(relApi);
+  setRelatedOpener(openLinkedEntity);
+  window.__mountRelated = mountRelatedHosts;
   await loadRoute();
   // Habits populate the rail as soon as they arrive. Deliberately not awaited:
   // Today must never wait on a secondary system to appear.
@@ -911,6 +917,57 @@ function positionPill(snap = false) {
  * reminders URL must open reminders, and Back must leave it — neither of which
  * a piece of in-memory state can do.
  */
+/* ══ The relationship layer, wherever an object is open ══════════════════
+ *
+ * A surface says WHAT it is showing by dropping a host element with a type
+ * and an id in it; nothing else. It does not fetch, render, wire or know that
+ * `item_links` exists — which is what keeps nine detail screens from growing
+ * nine slightly different ideas of what a link looks like.
+ */
+const relApi = (path, opts) => api(`/api/v1/workspaces/${ws()}${path}`, opts);
+
+/* Reached through the window because diary-view and library-book render on
+   their own schedules and importing app.js from either would be a cycle. One
+   global, set once, rather than threading a callback through two module
+   boundaries that exist for other reasons. */
+/** Mounts every unmounted Related host under `root`. Safe to call twice. */
+function mountRelatedHosts(root = document) {
+  root.querySelectorAll('[data-rel-host]').forEach((host) => {
+    if (host.dataset.relMounted) return;
+    host.dataset.relMounted = '1';
+    const raw = host.dataset.relHost || '';
+    const at = raw.indexOf(':');
+    if (at < 1) return;
+    mountRelated(host, raw.slice(0, at), raw.slice(at + 1));
+  });
+}
+
+/**
+ * Following a link.
+ *
+ * A task and a habit open in their own editors, which is where they are
+ * edited from everywhere else — a link that opened a different, read-only
+ * version of a task would be a second task screen. Everything else has a real
+ * URL already, so it navigates, and refresh lands in the same place.
+ */
+function openLinkedEntity({ type, id, href }) {
+  if (type === 'task') { closeAnyModal(); return openTask(id); }
+  if (type === 'habit') { closeAnyModal(); return editHabit(id); }
+  if (!href) return undefined;
+  closeAnyModal();
+  setHash(href);
+  const r = routeFromHash();
+  if (r !== state.route) return go(r);
+  return loadRoute();
+}
+
+/** A link may be followed from inside a modal, which has to get out of the way. */
+function closeAnyModal() {
+  document.querySelector('.modal-scrim')?.remove();
+  document.querySelector('.modal')?.remove();
+  document.body.classList.remove('modal-open');
+}
+
 const routeFromHash = () => {
   const path = (location.hash || '#today').slice(1).split('?')[0];
   const id = path.split('/')[0];
@@ -2119,6 +2176,9 @@ function openTask(id, prefillTitle = '') {
     steps: t ? taskStepsCtx(t, () => syncTaskEverywhere(t.id)) : null,
     onRestore: t ? () => restoreTask(t.id) : null,
   });
+  // The modal is in the document by the time openTaskModal returns.
+  mountRelatedHosts();
+  return ctl;
 }
 
 /**
@@ -2769,6 +2829,7 @@ function editHabit(id) {
       saved('Deleted');
     },
   });
+  mountRelatedHosts();
 }
 
 /* ── Placeholders ────────────────────────────────────────────────────── */
@@ -3767,7 +3828,7 @@ function openEvent(id, defaultDay = null) {
   const ev = id ? cal.data?.events.find((x) => x.id === id) : null;
   if (id && !ev) return;
   if (ev && ev.syncState === 'synced') return openEventDetail(ev);
-  openEventModal({
+  const opened = openEventModal({
     event: ev,
     calendars: cal.data?.calendars ?? [],
     defaultDay,
@@ -3802,6 +3863,8 @@ function openEvent(id, defaultDay = null) {
       saved('Event deleted');
     },
   });
+  mountRelatedHosts();
+  return opened;
 }
 
 /** A brief highlight so a saved event is findable on the canvas. */
@@ -4411,6 +4474,7 @@ async function renderProjectDetail(scroll) {
     scroll.innerHTML = projectDetailBodyHtml(data.project, data.tasks, taskHtml);
     wireProjectsHeader();
     wireProjectDetail();
+    mountRelatedHosts(scroll);
     assertOneRowPerTask(document.getElementById('pjd-tasks'));
     if (!reducedMotion()) {
       scroll.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.2,.7,.2,1)' });
@@ -5466,6 +5530,7 @@ function openEventDetail(ev) {
   openDetailSheet({
     title: ev.title,
     accent: ev.calendarColor,
+    relatedHost: `event:${ev.id}`,
     rows: [
       ['When', when],
       ['Calendar', ev.calendarName],
@@ -5493,6 +5558,7 @@ function openEventDetail(ev) {
     note: editable ? null
       : 'Google does not allow this kind of event to be changed from another app.',
   });
+  mountRelatedHosts();
 }
 
 const prettyDay = (d) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined,

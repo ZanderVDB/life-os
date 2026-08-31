@@ -20,6 +20,7 @@ import { registerHabitRoutes } from './routes/habits.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerGoogleCalendarRoutes } from './routes/google-calendar.js';
 import { registerCalendarWriteRoutes, registerCalendarWebhook } from './routes/calendar-write.js';
+import { registerLinkRoutes } from './routes/links.js';
 
 export const API_VERSION = '0.1.0';
 
@@ -75,6 +76,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   registerCalendarRoutes(app, db, guards);
   registerGoogleCalendarRoutes(app, db, guards, env);
   registerCalendarWriteRoutes(app, db, guards);
+  registerLinkRoutes(app, db, guards);
   /* Google is not a signed-in user, so its webhook is registered outside the
    * workspace-scoped routes and proves who it is from a channel row instead. */
   registerCalendarWebhook(app, db);

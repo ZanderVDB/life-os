@@ -162,6 +162,12 @@ export function openTaskModal(ctx) {
         <span class="m-project-lbl">Project</span>
         <span class="m-project-name">${esc(project.title)}</span>
       </div>` : ''}
+
+      <!-- Everything this task is connected to, in both directions. Empty
+           until there is something in it: the section renders nothing at all
+           rather than an empty heading. Filled by app.js, which owns the one
+           authenticated caller. -->
+      ${t ? `<div class="rel-host" data-rel-host="task:${esc(t.id)}"></div>` : ''}
     </div>
 
     <div class="m-foot">
