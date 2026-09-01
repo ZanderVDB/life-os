@@ -356,7 +356,9 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 /* The assistant's half is rendered prose, not one string: paragraphs, a bold
    run, a short list. The subset is fixed in assistant-prose.js, so these are
    the only elements that can appear here. */
-.asstp-line.is-los > p{margin:0}
+/* `> *` rather than `> p`, or the type selector outspecifies the sibling rule
+   below it and the paragraphs run together with no gap at all. */
+.asstp-line.is-los > *{margin:0}
 .asstp-line.is-los > * + *{margin-top:8px}
 .asstp-line.is-los ul,.asstp-line.is-los ol{margin:0;padding-left:19px;
   display:flex;flex-direction:column;gap:4px}

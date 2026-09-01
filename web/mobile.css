@@ -511,7 +511,7 @@
   text-transform:uppercase;color:var(--muted)}
 .asst-reply{margin:0;font-size:15.5px;line-height:1.5;color:var(--text)}
 /* Same fixed subset as the desktop panel. See assistant-prose.js. */
-.asst-reply > p{margin:0}
+.asst-reply > *{margin:0}
 .asst-reply > * + *{margin-top:9px}
 .asst-reply ul,.asst-reply ol{margin:0;padding-left:20px;
   display:flex;flex-direction:column;gap:5px}
