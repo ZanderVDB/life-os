@@ -138,6 +138,18 @@ export function sourcesHtml(sources = [], { limit = 5 } = {}) {
  * Shown INSTEAD of guessing, and only when the server said so — several
  * meetings match and moving the wrong one is not recoverable. Everything
  * unambiguous in the same request is still proposed alongside it.
+ *
+ * ── The id, not the label ────────────────────────────────────────────────
+ *
+ * `data-clarify` carries the OPTION ID. The server holds what each option
+ * stands for, so choosing one continues the original request with an exact
+ * entity. It used to carry the label, which was then sent back as a fresh
+ * sentence for the planner to re-interpret — asking a model to work out a
+ * second time something that was known precisely the first time, and losing
+ * the answer in the round trip.
+ *
+ * The line under each label is what tells two things called "Invoice" apart.
+ * It is built from what was already retrieved, so it costs nothing.
  */
 export function clarificationHtml(clarification) {
   if (!clarification) return '';
@@ -145,7 +157,10 @@ export function clarificationHtml(clarification) {
     <p class="ap-ask-q">${esc(clarification.question)}</p>
     <div class="ap-ask-opts">
       ${clarification.options.map((o) => `<button type="button" class="btn btn-ghost ap-ask-o"
-        data-clarify="${esc(o.label)}">${esc(o.label)}</button>`).join('')}
+        data-clarify="${esc(o.id)}"${o.ref ? ` data-clarify-type="${esc(o.ref.type)}"` : ''}>
+        <span class="ap-ask-l">${esc(o.label)}</span>
+        ${o.detail ? `<span class="ap-ask-d">${esc(o.detail)}</span>` : ''}
+      </button>`).join('')}
     </div>
   </div>`;
 }

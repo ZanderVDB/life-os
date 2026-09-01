@@ -230,25 +230,57 @@ export function rank(sources: ContextSource[], opts: RankOptions, limit = 24): S
 }
 
 /**
+ * Categories that are STANDING context rather than episodic.
+ *
+ * A preference influences a request it shares no word with — "prefers
+ * afternoon meetings" should shape "find me time with John" — so these go in
+ * whether or not the request mentions them. Everything else has to earn its
+ * place by being about the request.
+ */
+const STANDING = new Set(['preferences', 'defaults', 'routines', 'work_style', 'communication']);
+
+/**
  * Which memories to put in front of the model.
  *
- * Pinned first because the user said so, then confidence, then whether the
- * memory has anything to do with the request. Relevance is last rather than
- * first on purpose: a standing preference ("prefers afternoon meetings") often
- * shares no word with the request it should influence.
+ * ── The rule, and why it is not "the top twelve" ─────────────────────────
+ *
+ * Sending every known fact on every turn is how a memory system stops helping.
+ * It costs tokens linearly in how much the assistant knows, and it dilutes:
+ * a model given fourteen facts about somebody, two of which matter, reasons
+ * about the wrong two often enough to notice. So a memory is included when it
+ * is one of three things:
+ *
+ *   pinned      the user said it is right, so it is always context
+ *   standing    a preference or default, which applies without being named
+ *   relevant    it shares a distinctive word with the request
+ *
+ * A profile fact about a person the request does not mention is none of those,
+ * and it stays out. The bound on standing memories is what stops a long list
+ * of preferences becoming the same problem by another route.
  */
-export function rankMemories<T extends { category: string; fact: string; isPinned?: boolean; confidence?: number }>(
-  memories: T[], query: string, limit = 12,
-): T[] {
+export function rankMemories<T extends {
+  category: string; fact: string; isPinned?: boolean; confidence?: number;
+}>(memories: T[], query: string, limit = 10): T[] {
   const q = new Set(tokens(query));
-  return [...memories]
-    .map((m) => {
-      const hits = tokens(m.fact).filter((t) => q.has(t)).length;
-      return {
-        m,
-        s: (m.isPinned ? 100 : 0) + (m.confidence ?? 0.5) * 10 + hits * 3,
-      };
-    })
+  const scored = memories.map((m) => {
+    const hits = tokens(m.fact).filter((t) => q.has(t)).length;
+    const standing = STANDING.has(m.category);
+    return {
+      m,
+      hits,
+      keep: Boolean(m.isPinned) || hits > 0 || standing,
+      s: (m.isPinned ? 100 : 0) + hits * 20 + (standing ? 5 : 0) + (m.confidence ?? 0.5) * 3,
+    };
+  });
+
+  /* Standing memories are capped separately, so somebody with thirty recorded
+     preferences does not push out the one fact the request is actually
+     about. */
+  const relevant = scored.filter((x) => x.keep && (x.m.isPinned || x.hits > 0));
+  const standing = scored.filter((x) => x.keep && !x.m.isPinned && !x.hits)
+    .sort((a, b) => b.s - a.s).slice(0, 4);
+
+  return [...relevant, ...standing]
     .sort((a, b) => b.s - a.s)
     .slice(0, limit)
     .map((x) => x.m);

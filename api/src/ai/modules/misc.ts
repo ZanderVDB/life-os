@@ -88,13 +88,66 @@ export const habitsModule: AiModule = {
       },
     },
     {
+      /**
+       * Habits were the one module with no search at all.
+       *
+       * `habit.list` answers "what am I tracking", which is not the same
+       * question as "which of these is Morning walk". Without this, naming a
+       * habit found nothing: retrieval had no way to turn the words into an
+       * id, so "complete Morning walk" reached the planner with no habit in
+       * context and was answered as though the habit did not exist.
+       */
+      id: 'habit.search',
+      module: 'habits',
+      kind: 'search',
+      label: 'Find habits',
+      description: 'Find habits by words in their name, with how many times each has been '
+        + 'done today.',
+      input: z.object({
+        query: z.string().trim().min(2).max(200),
+        limit: z.number().int().min(1).max(20).default(10),
+      }).strict(),
+      risk: 'safe',
+      async run(ctx, input: { query: string; limit: number }) {
+        const ws = ctx.request.workspaceId;
+        const rows = await ctx.db.select().from(habits).where(and(
+          eq(habits.workspaceId, ws), isNull(habits.archivedAt),
+          ilike(habits.name, `%${input.query}%`),
+        )).limit(input.limit);
+        if (!rows.length) return [];
+        const entries = await ctx.db.select().from(habitEntries).where(and(
+          eq(habitEntries.workspaceId, ws), eq(habitEntries.entryDate, ctx.request.today),
+        ));
+        const byHabit = new Map(entries.map((e) => [e.habitId, e.completedCount]));
+        return rows.map<ContextSource>((h) => ({
+          ref: { type: 'habit', id: h.id },
+          module: 'habits',
+          title: h.name,
+          summary: `${byHabit.get(h.id) ?? 0}/${h.targetCount} today`,
+          data: {
+            targetCount: h.targetCount,
+            doneToday: byHabit.get(h.id) ?? 0,
+            isActive: h.isActive,
+            areaId: h.areaId,
+          },
+          via: 'direct',
+          level: 2,
+        }));
+      },
+    },
+    {
       id: 'habit.check',
       module: 'habits',
       kind: 'mutate',
       label: 'Tick a habit',
       description: 'Record a habit as done for a day. Omit count to add one to whatever is '
         + 'already recorded; send 0 to undo.',
-      input: z.object({ id: uuid }).and(HabitCheckInput),
+      /* `.extend`, not `.and`. An intersection runs BOTH schemas over the whole
+         payload, and `HabitCheckInput` is strict — so `{ id }` was rejected as
+         an unknown key by the half that did not declare it, and this
+         capability refused every payload it was ever given. Extending keeps
+         the strictness and adds the field. */
+      input: HabitCheckInput.extend({ id: uuid }),
       risk: 'confirm',
       async execute(ctx, input: { id: string; date?: string; count?: number }) {
         const { id, ...rest } = input;

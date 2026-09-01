@@ -1342,7 +1342,8 @@ export type MemorySource = (typeof MEMORY_SOURCES)[number];
  * their text. Storing the latter would make this table a second copy of the
  * user's diary, and it is not one.
  */
-export const TURN_STATUSES = ['planning', 'proposed', 'answered', 'executed', 'failed', 'cancelled'] as const;
+export const TURN_STATUSES = ['planning', 'proposed', 'answered', 'clarifying',
+  'executed', 'failed', 'cancelled'] as const;
 
 export const aiConversations = pgTable('ai_conversations', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -1391,6 +1392,16 @@ export const aiTurns = pgTable('ai_turns', {
   version: integer('version').notNull().default(1),
   /** Entity refs only: `[{type,id}]`. Never their content. */
   sources: jsonb('sources').$type<unknown[]>().notNull().default([]),
+  /**
+   * The question the assistant asked back, with its options.
+   *
+   * Server-held for the same reason the proposal set is. An option the user
+   * picks resolves to a stable entity id here; sending the LABEL of a button
+   * back through the planner would be a second guess at something already
+   * known exactly, and the second guess is the one that picks the wrong
+   * meeting.
+   */
+  clarification: jsonb('clarification').$type<Record<string, unknown> | null>(),
   /** What the executor did, once. Its presence is what makes replay a no-op. */
   results: jsonb('results').$type<unknown[]>(),
   executedAt: timestamp('executed_at', { withTimezone: true }),
@@ -1402,7 +1413,7 @@ export const aiTurns = pgTable('ai_turns', {
   byConversation: index('ai_turns_conversation_idx').on(t.conversationId, t.createdAt),
   byOwner: index('ai_turns_owner_idx').on(t.workspaceId, t.userId, t.createdAt),
   statusCheck: check('ai_turns_status',
-    sql`${t.status} IN ('planning','proposed','answered','executed','failed','cancelled')`),
+    sql`${t.status} IN ('planning','proposed','answered','clarifying','executed','failed','cancelled')`),
 }));
 
 export type TurnStatus = (typeof TURN_STATUSES)[number];

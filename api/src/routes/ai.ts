@@ -19,7 +19,8 @@ import type { Db } from '../db/client.js';
 import type { Assistant } from '../ai/index.js';
 import { gather } from '../ai/context.js';
 import { changeCount } from '../ai/executor.js';
-import { runTurn, editTurn, readTurn } from '../ai/turn.js';
+import { runTurn, editTurn, readTurn, resolveClarification } from '../ai/turn.js';
+import { forRequest } from '../ai/registry.js';
 import { confirmTurn, cancelTurn } from '../ai/confirm.js';
 import * as memory from '../ai/memory.js';
 import type { AiRequestContext } from '../ai/types.js';
@@ -66,7 +67,10 @@ export function registerAiRoutes(
    * beside them, which is how a planner ends up proposing them anyway.
    */
   app.get(`${base}/ai/capabilities`, pre, async (req) => {
-    const ctx = { db, request: requestCtx(req) };
+    /* `forRequest` rather than a bare object: three questions are about to be
+       asked of the same registry, and each of them would otherwise re-ask
+       every module whether it is available. */
+    const ctx = forRequest(db, requestCtx(req));
     const [status, described, all] = await Promise.all([
       assistant.registry.status(ctx),
       assistant.registry.describe(ctx),
@@ -83,6 +87,10 @@ export function registerAiRoutes(
       })),
       plannable: described.capabilities.map((c) => c.id),
       unavailable: described.unavailable,
+      /* Readable, not writable. The client needs the distinction to say "I can
+         see that meeting, but calendar changes aren't available" rather than
+         behaving as though Calendar had vanished. */
+      readOnly: described.readOnly,
       providers: assistant.providers.list(),
       /* Said plainly rather than implied by an empty list: there is no planner
          until a model is configured, and the caller should not have to infer
@@ -111,10 +119,7 @@ export function registerAiRoutes(
       seeds: z.array(z.object({ type: z.string().max(40), id: uuid })).max(10).optional(),
     }).strict().parse(req.body ?? {});
 
-    const ctx = {
-      db,
-      request: requestCtx(req, { surface: (b.surface ?? null) as any }),
-    };
+    const ctx = forRequest(db, requestCtx(req, { surface: (b.surface ?? null) as any }));
     const r = await gather(ctx, assistant.registry, {
       ...(b.query ? { query: b.query } : {}),
       ...(b.level ? { level: b.level } : {}),
@@ -233,6 +238,26 @@ export function registerAiRoutes(
       count: b.count,
       importantAccepted: b.importantAccepted,
     });
+  });
+
+  /**
+   * The user picked one of the options the assistant offered.
+   *
+   * The body names an OPTION, never an entity and never a label. The server
+   * holds the option set, so the choice resolves to the exact id the
+   * assistant was already looking at — which is the whole difference between
+   * this and sending the button's text back through the planner to be guessed
+   * at a second time.
+   */
+  app.post(`${base}/ai/turn/:id/clarify`, pre, async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ optionId: z.string().min(1).max(80) }).strict().parse(req.body ?? {});
+    const request = requestCtx(req);
+    if (!request.userId) throw badRequest('The assistant needs a signed-in user.');
+    return resolveClarification(
+      { db, registry: assistant.registry, providers: assistant.providers, request },
+      id, b.optionId,
+    );
   });
 
   /** Throw a proposal away without running any of it. */

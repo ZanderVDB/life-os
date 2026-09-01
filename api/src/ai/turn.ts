@@ -1,35 +1,51 @@
 /**
  * One turn of the assistant.
  *
- * ── The whole flow, in order ─────────────────────────────────────────────
+ * ── Three routes in, one set of rules out ────────────────────────────────
+ *
+ *   FAST      an obvious command — "add milk", "complete Morning walk".
+ *             Parsed deterministically, no model, no reasoning chain.
+ *   AMEND     a correction to something already on the table — "actually
+ *             Saturday". Edits the PENDING proposal rather than proposing
+ *             something new about a thing that does not exist yet.
+ *   PLAN      everything else. Interpret, retrieve, rank, remember, plan,
+ *             validate, preview, persist.
+ *
+ * They differ in how the actions are arrived at and in nothing else. All three
+ * produce raw actions that go through the same normalisation: resolved through
+ * the registry, validated against the capability's own schema, risk assigned
+ * by the server, written into the same proposal row, run only by the same
+ * confirmation gate. There is no downstream branch that knows which route a
+ * proposal came from — which is what makes "the fast path is as safe as the
+ * planner" a structural claim rather than a promise.
+ *
+ * ── The full route, in order ─────────────────────────────────────────────
  *
  *   interpret     what is this about, and which modules does it touch
  *   gather        surface → targeted search → relationship traversal
+ *   fallback      a second, broader pass when the first found suspiciously
+ *                 little for a request that implies something exists
  *   rank          twenty of two hundred rows, by signals Life OS already has
- *   memory        a bounded set of durable facts about this person
+ *   memory        the durable facts that are relevant, not all of them
  *   plan          capabilities and rules FROM THE REGISTRY, never a prompt list
+ *   validate      does the card say what the payload does — deterministically
  *   preview       calendar actions go through the mutation ledger, here
  *   persist       the proposal set is written down; the client gets its id
  *
  * The model appears once, in the middle, and is handed data. Everything before
  * it decides what it may see; everything after it decides what may happen.
- *
- * ── Why the proposal is written down ─────────────────────────────────────
- *
- * Phase 1 let the client hand the executor a set. Safe, because every action
- * still had to name a registered capability and pass its schema — but it meant
- * the client could confirm a set the planner never produced. Now the planner
- * writes the set here and confirmation names its id and version. What runs is
- * what was planned.
  */
 import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { aiConversations, aiTurns } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
-import type { CapabilityRegistry, CapabilityCtx } from './registry.js';
+import { forRequest, type CapabilityRegistry, type CapabilityCtx } from './registry.js';
 import type { ProviderRouter } from './provider.js';
 import { gather, forPrompt } from './context.js';
 import { rank, rankMemories, tokens } from './ranking.js';
+import { tryFastPath, isMiss, type RawAction } from './fastpath.js';
+import { validatePlan, repairBrief, type Finding } from './validate.js';
+import { structure, type Clarification } from './clarify.js';
 import * as memory from './memory.js';
 import type {
   AiRequestContext, ProposalAction, ContextSource, Confidence, EntityRef,
@@ -46,6 +62,14 @@ export type TurnInput = {
   text: string;
   /** Continues an existing thread. Omitted starts a new one. */
   conversationId?: string | null;
+  /**
+   * The entity the user picked from a clarification.
+   *
+   * Set only by `resolveClarification`. It is seeded into retrieval and named
+   * to the planner by id, which is the whole point: the choice was already
+   * exact and must not be re-derived from the text of a button.
+   */
+  resolved?: { ref: EntityRef | null; label: string } | null;
 };
 
 const refKey = (r: { type: string; id: string }) => `${r.type}:${r.id}`;
@@ -62,7 +86,7 @@ const parseRef = (s: string): EntityRef | null => {
  * What a follow-up needs to understand "actually make it Saturday".
  *
  * Deliberately NOT a transcript. What is needed is the last thing proposed and
- * the last thing answered — a few hundred bytes — and resending everything
+ * the last thing asked — a few hundred bytes — and resending everything
  * forever gets more expensive and less accurate with every turn.
  */
 export type ConversationState = {
@@ -73,7 +97,8 @@ export type ConversationState = {
     turnId: string;
     version: number;
     understood: string;
-    actions: { id: string; capability: string; title: string }[];
+    request: string;
+    actions: ProposalAction[];
   } | null;
 };
 
@@ -102,9 +127,8 @@ async function loadConversation(
         turnId: last.id,
         version: last.version,
         understood: last.understood ?? '',
-        actions: (last.actions as any[]).map((a) => ({
-          id: a.id, capability: a.capability, title: a.title,
-        })),
+        request: last.request,
+        actions: last.actions as unknown as ProposalAction[],
       } : null,
     };
   }
@@ -124,13 +148,31 @@ export type TurnResult = {
   understood: string;
   answer: string | null;
   actions: ProposalAction[];
-  clarification: { question: string; options: { id: string; label: string; ref?: EntityRef }[] } | null;
+  clarification: Clarification | null;
   /** What was asked for but could not be turned into a real action. */
   note: string | null;
+  /** True when this turn changed a proposal that was already on the table. */
+  amended?: boolean;
   /** What informed this, for the "where did you get that" question. */
   sources: { ref: EntityRef; title: string; module: string; via: string; path?: unknown }[];
   metrics: Record<string, unknown>;
 };
+
+/**
+ * Words that mean "change what you just offered me".
+ *
+ * Used as a CHEAP gate, never as the decision. Matching means the pending
+ * proposal is handed to the planner WITHOUT a retrieval pass first, because a
+ * correction to something on the table refers to the table. The planner still
+ * decides whether it is an amendment; not matching simply means retrieval runs
+ * first, and an amendment is still possible after it.
+ */
+const AMENDMENT = new RegExp([
+  '^\\s*(actually|no,|no\\.|wait|sorry|scratch that|instead)\\b',
+  '^\\s*(make it|change it|change that|change the|set it|move it|push it)\\b',
+  "^\\s*(don'?t|do not|drop|remove|cancel|skip|forget)\\b",
+  '^\\s*(only|just)\\s+(the|those|these|do)\\b',
+].join('|'), 'i');
 
 export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnResult> {
   const started = Date.now();
@@ -138,119 +180,75 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
   const text = input.text.trim();
   if (!text) throw badRequest('Say something first.');
 
+  const ctx = forRequest(db, request);
+  const conversation = await loadConversation(db, request, input.conversationId);
+
+  /* ── Route 1: the obvious command ─────────────────────────────────── */
+  const fast = input.resolved
+    ? { reason: 'continuing a clarification' } as const
+    : await tryFastPath({
+      text, ctx, registry, hasPending: Boolean(conversation.pending),
+    });
+
+  if (!isMiss(fast)) {
+    const built = await buildActions(deps, ctx, fast.actions, new Map());
+    /* If anything at all went wrong turning the fast reading into a real
+       action, this was not the obvious command it looked like. Fall through to
+       the planner rather than showing a note about a failure the user could
+       not have caused. */
+    if (built.actions.length === fast.actions.length && !built.rejected.length) {
+      return persistTurn(deps, {
+        conversation,
+        text,
+        understood: fast.understood,
+        answer: null,
+        actions: built.actions,
+        clarification: null,
+        note: null,
+        ranked: [],
+        metrics: { ms: Date.now() - started, route: 'fast', shape: fast.shape, model: null },
+      });
+    }
+  }
+  const fastMiss = isMiss(fast) ? fast.reason : 'the fast reading did not hold up';
+
   const planner = providers.for('plan');
   if (!planner?.plan) {
     throw badRequest('The assistant is not connected to a model yet.');
   }
 
-  const ctx: CapabilityCtx = { db, request };
-  const conversation = await loadConversation(db, request, input.conversationId);
+  /* ── Route 2: amend what is already on the table ───────────────────── */
+  /* A short correction to a pending proposal needs no retrieval: everything it
+     refers to is in the proposal itself. Skipping the search is most of the
+     latency of a follow-up. */
+  const amendOnly = Boolean(conversation.pending)
+    && AMENDMENT.test(text) && text.split(/\s+/).length <= 14;
 
   /* ── 1. Interpret ─────────────────────────────────────────────────── */
   const status = await registry.status(ctx);
   const enabled = status.filter((s) => s.enabled);
   const moduleIds = enabled.map((s) => s.id);
 
-  const interpreter = providers.for('interpret');
+  const interpreter = amendOnly ? null : providers.for('interpret');
   const read = interpreter?.interpret
     ? await interpreter.interpret({ text, request, modules: moduleIds }).catch(() => null)
     : null;
 
   /* ── 2. Retrieve ──────────────────────────────────────────────────── */
-  /* ── What to search for ─────────────────────────────────────────────
-   *
-   * Search is `ILIKE '%…%'`, which matches a SUBSTRING. A phrase almost never
-   * is one: "reconciling against the bank" appears in no title, while
-   * "reconcile" and "bank" both do. So whatever the interpreter returns —
-   * phrases, or nothing at all — it is expanded into distinctive words, and
-   * the phrases are kept as well because an exact title match outranks
-   * everything and is worth the one extra query.
-   *
-   * Getting this wrong is silent: retrieval returns nothing, the planner is
-   * handed an empty context, and it proposes actions with no ids in them. */
-  const phrases = (read?.queries?.length ? read.queries : [text]).slice(0, 5);
-  const words = tokens(phrases.join(' '));
-  /* ── Stems, crudely ─────────────────────────────────────────────────
-   * "I finished pricing three options" has to find the task called "Price
-   * three options", and `%pricing%` does not match it. A real stemmer is a
-   * dependency and a vocabulary; a prefix of a long word is neither, and it
-   * catches the English inflections that actually come up — price/pricing,
-   * book/booking, reconcile/reconciling. A wrong extra hit costs one row in a
-   * ranked list; a miss costs the whole action. */
-  const stems = words
-    .filter((w) => w.length >= 6)
-    .map((w) => w.slice(0, Math.max(4, w.length - 3)));
-  const queries = [...new Set([
-    ...phrases.filter((q) => q.trim().length >= 2 && q.trim().split(/\s+/).length <= 4),
-    ...words,
-    ...stems,
-  ])].slice(0, 10);
-  const collected: ContextSource[] = [];
-  const usedCaps = new Set<string>();
-  const failedCaps: { capability: string; reason: string }[] = [];
-
-  for (const q of queries) {
-    const g = await gather(ctx, registry, {
-      query: q,
-      level: 2,
-      traverseDepth: 2,
-      limit: 80,
-      ...(conversation.pending ? {} : {}),
-    });
-    collected.push(...g.sources);
-    g.used.forEach((u) => usedCaps.add(u));
-    failedCaps.push(...g.failed);
-  }
-  // Level 1 always: what is on screen matters even when nothing was searched.
-  if (request.surface?.entity) {
-    const g = await gather(ctx, registry, { level: 1, traverseDepth: 1, limit: 20 });
-    collected.push(...g.sources);
-    g.used.forEach((u) => usedCaps.add(u));
-    failedCaps.push(...g.failed);
-  }
-
-  /* ── Deduplicate across queries ─────────────────────────────────────
-     Each `gather` deduplicates its own result; the UNION of three does not.
-     Sending the same project twice wastes context and lets one row vote twice
-     in the ranking. Lowest level wins, as it does inside `gather`. */
-  const seen = new Map<string, (typeof collected)[number]>();
-  for (const src of collected) {
-    const k = refKey(src.ref);
-    const prev = seen.get(k);
-    if (!prev || src.level < prev.level) seen.set(k, src);
-  }
-  let pool = [...seen.values()];
-
-  /* ── Expand the strongest hits STRUCTURALLY ─────────────────────────
-     A project's own tasks are not `item_links` — they are a foreign key — so
-     traversal never reaches them. Without this the assistant finds the project
-     the question is about and then says it would need to read it, which is
-     both true and useless. So the top few hits are read in full, which is what
-     a person would have clicked. */
-  const preliminary = rank(pool, {
-    query: queries.join(' '),
-    today: request.today,
-    surface: request.surface?.entity ?? null,
-  }, 6);
-
-  for (const top of preliminary) {
-    const owner = registry.moduleForEntity(top.ref.type);
-    const readCap = owner && (await registry.capabilities(ctx))
-      .find((c) => c.kind === 'read' && c.module === owner.id && c.id.endsWith('.read'));
-    if (!readCap?.run) continue;
-    const parsed = readCap.input.safeParse({ id: top.ref.id });
-    if (!parsed.success) continue;
-    usedCaps.add(readCap.id);
-    const rows = await readCap.run(ctx, parsed.data).catch(() => []);
-    for (const r of rows) {
-      const k = refKey(r.ref);
-      if (!seen.has(k)) { seen.set(k, r); pool.push(r); }
+  const retrieval = amendOnly
+    ? {
+      pool: [] as ContextSource[], used: new Set<string>(),
+      failed: [] as { capability: string; reason: string }[],
+      queries: [] as string[], broadened: false,
     }
-  }
-  pool = [...seen.values()];
+    : await retrieve(deps, ctx, {
+      text,
+      queries: read?.queries ?? [],
+      seeds: input.resolved?.ref ? [input.resolved.ref] : [],
+    });
 
-  const ranked = rank(pool, {
-    query: queries.join(' '),
+  const ranked = amendOnly ? [] : rank(retrieval.pool, {
+    query: retrieval.queries.join(' '),
     today: request.today,
     surface: request.surface?.entity ?? null,
   }, 24);
@@ -258,41 +256,333 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
   /* ── 3. Memory ────────────────────────────────────────────────────── */
   const owner = { workspaceId: request.workspaceId, userId: request.userId };
   const known = await memory.list(db, owner).catch(() => []);
-  const relevant = rankMemories(known, text, 12);
+  const relevant = rankMemories(known, text, 10);
+  /* Noted as used, so the ones that earn their place stay near the top. Never
+     blocks the turn. */
+  if (relevant.length) {
+    void memory.touchUsed(db, owner, relevant.map((m) => m.id)).catch(() => {});
+  }
 
   /* ── 4. Plan ──────────────────────────────────────────────────────── */
   const described = await registry.describe(ctx);
-  const plan = await planner.plan({
-    text: conversation.pending
-      /* A follow-up is given what is still on the table, so "make it Saturday"
-         has something to be about. Bounded to titles and capability ids —
-         re-sending the whole prior plan would grow every turn. */
-      ? `${text}\n\n(Continuing. Still pending from the last turn: ${
-        conversation.pending.actions.map((a) => `${a.id}=${a.title}`).join('; ')})`
-      : text,
+  const planInput = {
+    text,
     request,
     capabilities: described.capabilities,
     rules: enabled.map((s) => ({ module: s.id, rules: s.rules })),
+    /* Readable but not writable — stated rather than left to be inferred from
+       an absence, so "I can see that meeting but cannot move it" is reachable. */
+    readOnly: described.readOnly,
     sources: forPrompt(ranked),
     memory: relevant.map((m) => ({ category: m.category, fact: m.fact })),
-  });
+    ...(conversation.pending ? {
+      pending: {
+        understood: conversation.pending.understood,
+        request: conversation.pending.request,
+        actions: conversation.pending.actions.map((a) => ({
+          id: a.id, capability: a.capability, title: a.title,
+          payload: a.payload, enabled: a.enabled,
+        })),
+      },
+    } : {}),
+    ...(input.resolved ? { resolved: input.resolved } : {}),
+  };
+  let plan = await planner.plan(planInput as any);
 
-  /* ── 5. Normalise into server-authored actions ────────────────────── */
-  const byKey = new Map(ranked.map((s) => [refKey(s.ref), s]));
+  /* ── Route 2, continued: an amendment is an EDIT ───────────────────── */
+  const amendments = ((plan as any).amend ?? []) as {
+    actionId: string; enabled?: boolean | null; fields?: Record<string, any> | null;
+  }[];
+  if (amendments.length && conversation.pending) {
+    return applyAmendment(deps, conversation, plan.understood, amendments, text, {
+      ms: Date.now() - started, route: 'amend', model: planner.model ?? null,
+    });
+  }
+
+  /* ── 5. Consistency, before anything is shown ──────────────────────── */
+  const knownIds = new Set<string>(ranked.map((s) => refKey(s.ref)));
+  if (request.surface?.entity) knownIds.add(refKey(request.surface.entity));
+  if (input.resolved?.ref) knownIds.add(refKey(input.resolved.ref));
+  for (const a of conversation.pending?.actions ?? []) {
+    if (a.target) knownIds.add(refKey(a.target));
+  }
+
+  const schemas = await schemaMap(deps, ctx, (plan.actions ?? []) as any);
+  let findings = validatePlan({
+    actions: (plan.actions ?? []) as any, schemas, knownIds, today: request.today,
+  });
+  let repaired = 0;
+
+  if (findings.some((f) => f.repairable)) {
+    /* ONE attempt, with the specific complaint. A model told exactly which
+       field contradicts which sentence usually fixes it; a model asked twice
+       is a model that is going to keep being wrong more slowly. */
+    const brief = repairBrief(findings, (plan.actions ?? []) as any);
+    const retry = await planner.plan({
+      ...planInput,
+      repair: { problems: brief, previous: plan.actions },
+    } as any).catch(() => null);
+    if (retry) {
+      const retrySchemas = await schemaMap(deps, ctx, (retry.actions ?? []) as any);
+      const after = validatePlan({
+        actions: (retry.actions ?? []) as any,
+        schemas: retrySchemas,
+        knownIds,
+        today: request.today,
+      });
+      /* Kept only if it is actually better. A repair that trades one
+         inconsistency for another is not a repair. */
+      if (after.length < findings.length) {
+        plan = retry;
+        findings = after;
+        repaired = 1;
+        for (const [id, s] of retrySchemas) schemas.set(id, s);
+      }
+    }
+  }
+
+  /* ── 6. Normalise into server-authored actions ────────────────────── */
+  const dropped = new Set(findings.map((f) => f.index));
+  const built = await buildActions(
+    deps, ctx, (plan.actions ?? []) as any,
+    new Map(ranked.map((s) => [refKey(s.ref), s as ContextSource])),
+    dropped,
+  );
+
+  /* An action withheld by validation is a change the user asked for and is not
+     going to get. It is named, in words about the request rather than about
+     the check that stopped it. */
+  for (const f of findings) {
+    const a = ((plan.actions ?? []) as any[])[f.index];
+    built.rejected.push({
+      capability: a?.capability ?? 'unknown',
+      reason: humanFinding(f, a?.title ?? ''),
+    });
+  }
+
+  const note = built.rejected.length
+    ? `${built.rejected.length === 1 ? 'One thing' : `${built.rejected.length} things`} could not be prepared: `
+      + `${[...new Set(built.rejected.map((r) => r.reason))].join('; ')}.`
+    : null;
+
+  /* ── 7. Clarification, made addressable ───────────────────────────── */
+  const clarification = structure((plan as any).clarification, ranked);
+
+  return persistTurn(deps, {
+    conversation,
+    text,
+    understood: plan.understood,
+    answer: plan.answer ?? null,
+    actions: built.actions,
+    clarification,
+    note,
+    ranked,
+    metrics: {
+      ms: Date.now() - started,
+      route: 'planner',
+      /* Why the cheap route declined. Operating information, never shown. */
+      fastPathMiss: fastMiss,
+      amendOnly,
+      retrieved: retrieval.pool.length,
+      broadened: retrieval.broadened,
+      ranked: ranked.length,
+      queries: retrieval.queries.length,
+      actions: built.actions.length,
+      rejected: built.rejected.length,
+      inconsistencies: findings.map((f) => f.code),
+      repaired,
+      memoriesUsed: relevant.length,
+      capabilitiesUsed: [...retrieval.used],
+      /* Empty in normal operation. Anything here means retrieval was quietly
+         worse than it should have been, which is the hardest kind of fault to
+         notice from the outside. */
+      retrievalFailures: retrieval.failed,
+      model: planner.model ?? null,
+    },
+    rejectedDetail: built.rejected,
+  });
+}
+
+/* ══ Retrieval ═══════════════════════════════════════════════════════════ */
+
+/**
+ * Search hard, then search harder if the first pass looks wrong.
+ *
+ * ── Why the queries are not the sentence ─────────────────────────────────
+ *
+ * Search is `ILIKE '%…%'`, which matches a SUBSTRING. A phrase almost never is
+ * one: "reconciling against the bank" appears in no title, while "reconcile"
+ * and "bank" both do. So the interpreter's phrases are expanded into
+ * distinctive words, crude stems and singular/plural variants — and the
+ * phrases are kept as well, because an exact title match outranks everything
+ * and is worth the one extra query.
+ *
+ * Getting this wrong is silent: retrieval returns nothing, the planner is
+ * handed an empty context, and it reports that the thing does not exist.
+ */
+async function retrieve(
+  deps: TurnDeps, ctx: CapabilityCtx,
+  opts: { text: string; queries: string[]; seeds: EntityRef[] },
+) {
+  const { registry, request } = deps;
+  const phrases = (opts.queries.length ? opts.queries : [opts.text]).slice(0, 5);
+  const words = tokens(phrases.join(' '));
+
+  /* ── Stems and number, crudely ───────────────────────────────────────
+   * "I finished pricing three options" has to find the task called "Price
+   * three options", and `%pricing%` does not match it. A real stemmer is a
+   * dependency and a vocabulary; a prefix of a long word is neither, and it
+   * catches the English inflections that actually come up. Singular/plural is
+   * the other half of the same problem: "invoices" has to find "Invoice". A
+   * wrong extra hit costs one row in a ranked list; a miss costs the whole
+   * action. */
+  const variants = new Set<string>();
+  for (const w of words) {
+    if (w.length >= 6) variants.add(w.slice(0, Math.max(4, w.length - 3)));
+    if (w.endsWith('ies') && w.length > 4) variants.add(`${w.slice(0, -3)}y`);
+    else if (w.endsWith('es') && w.length > 4) variants.add(w.slice(0, -2));
+    else if (w.endsWith('s') && !w.endsWith('ss') && w.length > 3) variants.add(w.slice(0, -1));
+    else variants.add(`${w}s`);
+  }
+
+  const queries = [...new Set([
+    ...phrases.filter((q) => q.trim().length >= 2 && q.trim().split(/\s+/).length <= 4),
+    ...words,
+    ...variants,
+  ])].slice(0, 12);
+
+  const used = new Set<string>();
+  const failed: { capability: string; reason: string }[] = [];
+  const seen = new Map<string, ContextSource>();
+  const absorb = (rows: ContextSource[]) => {
+    for (const src of rows) {
+      const k = refKey(src.ref);
+      const prev = seen.get(k);
+      /* Lowest level wins: something found on the current surface is a better
+         description of itself than the same thing found again by a broad
+         search, and the surface copy carries the fuller data. */
+      if (!prev || src.level < prev.level) seen.set(k, src);
+    }
+  };
+
+  /* Every query CONCURRENTLY. Twelve independent searches finish in the time
+     of the slowest, not the sum of all twelve. */
+  const run = async (qs: string[], level: 1 | 2 | 3, depth: number) => {
+    const results = await Promise.all(qs.map((q) => gather(ctx, registry, {
+      query: q, level, traverseDepth: depth, limit: 80,
+    })));
+    for (const g of results) {
+      absorb(g.sources);
+      g.used.forEach((u) => used.add(u));
+      failed.push(...g.failed);
+    }
+  };
+
+  await Promise.all([
+    run(queries, 2, 2),
+    /* Level 1 always: what is on screen matters even when nothing was
+       searched, and a clarification's chosen entity is a seed of the same
+       kind — known exactly, and read in full. */
+    (async () => {
+      if (!request.surface?.entity && !opts.seeds.length) return;
+      const g = await gather(ctx, registry, {
+        level: 1, traverseDepth: 1, limit: 24, seeds: opts.seeds,
+      });
+      absorb(g.sources);
+      g.used.forEach((u) => used.add(u));
+      failed.push(...g.failed);
+    })(),
+  ]);
+
+  /* ── Structural expansion ────────────────────────────────────────────
+     A project's own tasks are not `item_links` — they are a foreign key — so
+     traversal never reaches them. Without this the assistant finds the project
+     the question is about and then says it would need to read it, which is
+     both true and useless. So the top few hits are read in full, which is what
+     a person would have clicked. */
+  await expand(deps, ctx, seen, used, queries.join(' '), 6);
+
+  /* ── The low-result fallback ─────────────────────────────────────────
+     A request that acts on something — "complete the invoice", "move the
+     handover" — asserts that the something exists. When a targeted pass found
+     almost nothing, the likely explanation is that the words in the request
+     are not the words in the title, not that the workspace is empty. Going
+     broad costs one more round of reads, and it is the difference between "I
+     could not find it" and finding it. */
+  const implied = /\b(complete|finish|finished|done|move|update|change|reschedule|delete|remove|archive|link|remaining|left|outstanding)\b/i
+    .test(opts.text);
+  let broadened = false;
+  if (seen.size < 3 && implied) {
+    broadened = true;
+    await run(queries.slice(0, 6), 3, 2);
+    await expand(deps, ctx, seen, used, queries.join(' '), 4);
+  }
+
+  return { pool: [...seen.values()], used, failed, queries, broadened };
+}
+
+/** Read the strongest hits in full, so their structural children come too. */
+async function expand(
+  deps: TurnDeps, ctx: CapabilityCtx, seen: Map<string, ContextSource>,
+  used: Set<string>, query: string, howMany: number,
+) {
+  const pool = [...seen.values()];
+  if (!pool.length) return;
+  const preliminary = rank(pool, {
+    query, today: deps.request.today, surface: deps.request.surface?.entity ?? null,
+  }, howMany);
+
+  const caps = await deps.registry.capabilities(ctx);
+  const reads = await Promise.all(preliminary.map(async (top) => {
+    const owner = deps.registry.moduleForEntity(top.ref.type);
+    const cap = owner && caps.find((c) => c.kind === 'read' && c.module === owner.id
+      && c.id.endsWith('.read'));
+    if (!cap?.run) return [] as ContextSource[];
+    const parsed = cap.input.safeParse({ id: top.ref.id });
+    if (!parsed.success) return [] as ContextSource[];
+    used.add(cap.id);
+    return cap.run(ctx, parsed.data).catch(() => [] as ContextSource[]);
+  }));
+  for (const rows of reads) {
+    for (const r of rows) {
+      const k = refKey(r.ref);
+      if (!seen.has(k)) seen.set(k, r);
+    }
+  }
+}
+
+/* ══ Turning a plan into server-authored actions ═════════════════════════ */
+
+/** The capability schemas the plan actually names, for the consistency pass. */
+async function schemaMap(deps: TurnDeps, ctx: CapabilityCtx, actions: { capability: string }[]) {
+  const out = new Map<string, any>();
+  for (const a of actions ?? []) {
+    if (!a?.capability || out.has(a.capability)) continue;
+    const cap = await deps.registry.resolve(ctx, a.capability);
+    if (cap) out.set(a.capability, cap.input);
+  }
+  return out;
+}
+
+async function buildActions(
+  deps: TurnDeps, ctx: CapabilityCtx, raws: RawAction[],
+  byKey: Map<string, ContextSource>, skip: Set<number> = new Set(),
+) {
   const actions: ProposalAction[] = [];
   const rejected: { capability: string; reason: string }[] = [];
 
-  for (const [i, a] of (plan.actions ?? []).entries()) {
-    const raw = a as unknown as {
-      capability: string; title: string; summary?: string | null;
-      payload: Record<string, unknown>; confidence?: Confidence;
-      assumptions?: string[]; warnings?: string[]; sources?: string[];
-    };
-    /* Resolved through the REGISTRY, so a capability the model invented, or
-       one belonging to a module that is off, never becomes a card. */
-    const cap = await registry.resolve(ctx, raw.capability);
+  for (const [i, raw] of (raws ?? []).entries()) {
+    if (skip.has(i)) continue;
+    /* Resolved through the REGISTRY, so a capability the model invented, one
+       belonging to a module that is off, and one belonging to a module that
+       has gone read-only all fail here identically. */
+    const cap = await deps.registry.resolve(ctx, raw.capability);
     if (!cap || cap.kind !== 'mutate') {
-      rejected.push({ capability: raw.capability, reason: 'not an available change' });
+      const why = await deps.registry.explain(ctx, raw.capability);
+      rejected.push({
+        capability: raw.capability,
+        reason: why.available ? 'that is not a change Life OS can make' : why.reason,
+      });
       continue;
     }
     const parsed = cap.input.safeParse(raw.payload);
@@ -300,7 +590,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
       /* Rejected HERE rather than at execution. A card the user confirms and
          which then fails on a shape error is the worst of both: they agreed to
          it and it did not happen.
-         
+
          The reason is written for a person. Zod's own message is a field-level
          fragment — "Required" — which says nothing on its own; naming the
          action and the field is the difference between a note somebody can act
@@ -318,6 +608,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     }
 
     const warnings = [...(raw.warnings ?? [])];
+    let summary = raw.summary ?? null;
     let payload: Record<string, unknown> = parsed.data as Record<string, unknown>;
 
     /* ── Calendar preview, at plan time ─────────────────────────────
@@ -329,9 +620,10 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
       try {
         const pv = await cap.preview(ctx, parsed.data);
         warnings.push(...(pv.warnings ?? []));
-        if (pv.summary) raw.summary = pv.summary;
-        /* The confirmed action carries the ledger handle and nothing else. */
-        if (pv.handle) payload = { requestId: pv.handle };
+        if (pv.summary) summary = pv.summary;
+        /* The confirmed action carries the ledger handle, plus anything the
+           preview explicitly asked to keep and has already validated. */
+        if (pv.handle) payload = { requestId: pv.handle, ...(pv.carry ?? {}) };
       } catch (e) {
         rejected.push({ capability: raw.capability, reason: (e as Error).message });
         continue;
@@ -343,14 +635,14 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
       .filter((r) => byKey.has(refKey(r!))) as EntityRef[];
 
     actions.push({
-      id: `a${i + 1}`,
+      id: `a${actions.length + 1}`,
       capability: cap.id,
       module: cap.module,
       title: raw.title,
-      summary: raw.summary ?? null,
+      summary,
       payload,
       target: sources[0] ?? null,
-      confidence: raw.confidence ?? 'medium',
+      confidence: (raw.confidence ?? 'medium') as Confidence,
       assumptions: (raw.assumptions ?? []).slice(0, 6),
       warnings: warnings.slice(0, 6),
       /* The SERVER decides what needs confirming, from the capability's risk.
@@ -362,73 +654,159 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
       sources,
     });
   }
+  return { actions, rejected };
+}
 
-  /* ── Say what could not be prepared ─────────────────────────────────
-     An action that failed validation at plan time is a change the user asked
-     for and is not going to get. Dropping it silently is the worst option:
-     they said four things, three cards appear, and nothing accounts for the
-     fourth. */
-  const note = rejected.length
-    ? `${rejected.length === 1 ? 'One thing' : `${rejected.length} things`} could not be prepared: `
-      + `${[...new Set(rejected.map((r) => r.reason))].join('; ')}.`
-    : null;
-  const answer = plan.answer ?? null;
-  const clarification = (plan as any).clarification ?? null;
+/** A validation finding, said in terms of the request rather than the check. */
+function humanFinding(f: Finding, title: string): string {
+  const what = title ? `“${title}”` : 'one change';
+  switch (f.code) {
+    case 'date_missing': case 'date_not_supported':
+      return `${what} named a date the change would not actually have set`;
+    case 'time_missing':
+      return `${what} named a time the change would not actually have set`;
+    case 'due_vs_scheduled': case 'scheduled_vs_due':
+      return `${what} mixed up a deadline with when to do it`;
+    case 'kind_mismatch':
+      return `${what} would have created something new rather than changing what exists`;
+    case 'unknown_id':
+      return `${what} referred to something not found in your workspace`;
+    case 'ends_before_starts':
+      return `${what} ended before it began`;
+    case 'time_without_date':
+      return `${what} had a time but no day`;
+    case 'empty_change':
+      return `${what} would not have changed anything`;
+    default:
+      return `${what} did not hold together`;
+  }
+}
 
-  /* ── 6. Persist ───────────────────────────────────────────────────── */
-  const sourceRefs = ranked.slice(0, 20).map((s) => ({
-    ref: s.ref, title: s.title, module: s.module, via: s.via, ...(s.path ? { path: s.path } : {}),
+/* ══ Persisting ══════════════════════════════════════════════════════════ */
+
+async function persistTurn(deps: TurnDeps, p: {
+  conversation: ConversationState;
+  text: string;
+  understood: string;
+  answer: string | null;
+  actions: ProposalAction[];
+  clarification: Clarification | null;
+  note: string | null;
+  ranked: ContextSource[];
+  metrics: Record<string, unknown>;
+  rejectedDetail?: unknown;
+}): Promise<TurnResult> {
+  const { db, request } = deps;
+  const sourceRefs = p.ranked.slice(0, 20).map((s) => ({
+    ref: s.ref, title: s.title, module: s.module, via: s.via,
+    ...(s.path ? { path: s.path } : {}),
   }));
 
-  const metrics = {
-    ms: Date.now() - started,
-    retrieved: collected.length,
-    ranked: ranked.length,
-    actions: actions.length,
-    rejected: rejected.length,
-    memoriesUsed: relevant.length,
-    capabilitiesUsed: [...usedCaps],
-    /* Empty in normal operation. Anything here means retrieval was quietly
-       worse than it should have been, which is the hardest kind of fault to
-       notice from the outside. */
-    retrievalFailures: failedCaps,
-    model: planner.model ?? null,
-  };
+  /* A turn that asked a question of its own is neither answered nor proposed.
+     Saying so is what lets the client tell "I need something from you" apart
+     from "here is your answer", and lets the choice be resolved by id. */
+  const status = p.actions.length ? 'proposed'
+    : p.clarification ? 'clarifying' : 'answered';
 
   const [row] = await db.insert(aiTurns).values({
     workspaceId: request.workspaceId,
     userId: request.userId,
-    conversationId: conversation.conversationId,
-    request: text,
-    understood: plan.understood,
-    answer,
-    status: actions.length ? 'proposed' : 'answered',
-    actions: actions as unknown[],
+    conversationId: p.conversation.conversationId,
+    request: p.text,
+    understood: p.understood,
+    answer: p.answer,
+    status,
+    actions: p.actions as unknown[],
+    clarification: (p.clarification ?? null) as any,
     sources: sourceRefs as unknown[],
-    metrics,
+    metrics: p.metrics,
   }).returning();
 
   await db.update(aiConversations)
     .set({ lastTurnAt: new Date(), updatedAt: new Date() })
-    .where(eq(aiConversations.id, conversation.conversationId));
+    .where(eq(aiConversations.id, p.conversation.conversationId));
 
   /* Memory extraction runs AFTER the answer is ready, and never blocks it. A
      durable fact is worth noticing; it is not worth making the user wait. */
-  void extractMemories(deps, text).catch(() => {});
+  void extractMemories(deps, p.text).catch(() => {});
+  void sweep(deps).catch(() => {});
 
   return {
     turnId: row!.id,
-    conversationId: conversation.conversationId,
+    conversationId: p.conversation.conversationId,
     version: row!.version,
     status: row!.status,
-    understood: plan.understood,
-    answer,
-    /** What was asked for and could not be prepared. Shown, never swallowed. */
-    note,
-    actions,
-    clarification,
+    understood: p.understood,
+    answer: p.answer,
+    note: p.note,
+    actions: p.actions,
+    clarification: p.clarification,
     sources: sourceRefs,
-    metrics: { ...metrics, rejectedDetail: rejected },
+    metrics: { ...p.metrics, ...(p.rejectedDetail ? { rejectedDetail: p.rejectedDetail } : {}) },
+  };
+}
+
+/* ══ Amending a pending proposal ═════════════════════════════════════════ */
+
+/**
+ * "Actually Saturday" — applied to the proposal that is still on the table.
+ *
+ * The failure this removes: the assistant heard "actually Saturday", searched
+ * for a haircut task, found none — because it had only been PROPOSED, never
+ * created — and reported that the thing did not exist. A pending proposal is
+ * part of the conversation, and it is addressable before it becomes a Life OS
+ * object.
+ *
+ * The amendment goes through `editTurn`, which is the same validated path the
+ * card's own edit control uses: every field checked against the capability's
+ * schema, the version bumped, the confirmation gate untouched. Saying a
+ * correction has exactly the power of typing one into the card, and no more.
+ */
+async function applyAmendment(
+  deps: TurnDeps, conversation: ConversationState, understood: string,
+  amendments: { actionId: string; enabled?: boolean | null; fields?: Record<string, any> | null }[],
+  text: string, metrics: Record<string, unknown>,
+): Promise<TurnResult> {
+  const pending = conversation.pending!;
+  const edits = amendments
+    .filter((a) => pending.actions.some((x) => x.id === a.actionId))
+    .map((a) => ({
+      actionId: a.actionId,
+      ...(a.enabled === true || a.enabled === false ? { enabled: a.enabled } : {}),
+      ...(a.fields && Object.keys(a.fields).length ? { fields: a.fields } : {}),
+    }))
+    .filter((e) => 'enabled' in e || 'fields' in e);
+
+  if (!edits.length) throw badRequest('That does not match anything still waiting for you.');
+
+  const applied = await editTurn(deps, pending.turnId, pending.version, edits);
+
+  /* Recorded on the proposal itself rather than as a second proposal row.
+     There is one set of changes on the table; amending it must not produce a
+     second set the user could confirm by accident. */
+  const [row] = await deps.db.select().from(aiTurns)
+    .where(eq(aiTurns.id, pending.turnId)).limit(1);
+  const prior = (row?.metrics ?? {}) as Record<string, unknown>;
+  const history = Array.isArray(prior['amendments']) ? prior['amendments'] as unknown[] : [];
+  await deps.db.update(aiTurns).set({
+    understood,
+    metrics: { ...prior, amendments: [...history, { text, at: new Date().toISOString() }] } as any,
+    updatedAt: new Date(),
+  }).where(eq(aiTurns.id, pending.turnId));
+
+  return {
+    turnId: pending.turnId,
+    conversationId: conversation.conversationId,
+    version: applied.version,
+    status: 'proposed',
+    understood,
+    answer: null,
+    actions: applied.actions,
+    clarification: null,
+    note: null,
+    amended: true,
+    sources: (row?.sources ?? []) as any,
+    metrics: { ...metrics, amended: edits.length },
   };
 }
 
@@ -460,6 +838,30 @@ function editableFor(capabilityId: string, payload: Record<string, unknown>) {
      about. The way to change one is to say so, which re-plans and re-previews. */
   if (capabilityId.startsWith('event.')) return [];
   return out;
+}
+
+/* ══ Housekeeping ════════════════════════════════════════════════════════ */
+
+/**
+ * Retention, run occasionally and never in the user's way.
+ *
+ * There is no scheduler in Life OS and adding one for this would be the wrong
+ * shape of solution: the work is seconds of deletes, a few times a day, for a
+ * workspace somebody is actively using. So it rides along behind a turn that
+ * has already been answered, at most once every six hours per workspace, and a
+ * failure is silent because nothing depends on it having run.
+ */
+const swept = new Map<string, number>();
+const SWEEP_EVERY_MS = 6 * 60 * 60 * 1000;
+
+async function sweep(deps: TurnDeps) {
+  const key = `${deps.request.workspaceId}:${deps.request.userId}`;
+  const last = swept.get(key) ?? 0;
+  if (Date.now() - last < SWEEP_EVERY_MS) return;
+  swept.set(key, Date.now());
+  await memory.housekeeping(deps.db, {
+    workspaceId: deps.request.workspaceId, userId: deps.request.userId,
+  });
 }
 
 /* ══ Memory extraction ═══════════════════════════════════════════════════ */
@@ -501,7 +903,7 @@ export async function editTurn(
   deps: TurnDeps, turnId: string, version: number, edits: ProposalEdit[],
 ) {
   const { db, registry, request } = deps;
-  const ctx: CapabilityCtx = { db, request };
+  const ctx = forRequest(db, request);
   const [row] = await db.select().from(aiTurns).where(and(
     eq(aiTurns.id, turnId),
     eq(aiTurns.workspaceId, request.workspaceId),
@@ -522,7 +924,10 @@ export async function editTurn(
     if (!edit.fields) continue;
 
     const cap = await registry.resolve(ctx, action.capability);
-    if (!cap) throw badRequest('That is no longer something Life OS can do.');
+    if (!cap) {
+      const why = await registry.explain(ctx, action.capability);
+      throw badRequest(why.available ? 'That is no longer something Life OS can do.' : why.reason);
+    }
 
     /* Applied to a COPY and validated before it is kept. An edit that makes
        the payload invalid is rejected with the reason, rather than accepted
@@ -552,6 +957,48 @@ export async function editTurn(
     .set({ actions: actions as unknown[], version: row.version + 1, updatedAt: new Date() })
     .where(eq(aiTurns.id, turnId)).returning();
   return { turnId, version: updated!.version, actions };
+}
+
+/* ══ Resolving a clarification ═══════════════════════════════════════════ */
+
+/**
+ * The user picked one of the options. Continue the ORIGINAL request with it.
+ *
+ * The entity is looked up server-side from the stored option, seeded into
+ * retrieval and named to the planner by id. The client sent an option id and
+ * nothing else, so there is no path by which the label could be guessed at a
+ * second time.
+ */
+export async function resolveClarification(
+  deps: TurnDeps, turnId: string, optionId: string,
+): Promise<TurnResult> {
+  const [row] = await deps.db.select().from(aiTurns).where(and(
+    eq(aiTurns.id, turnId),
+    eq(aiTurns.workspaceId, deps.request.workspaceId),
+    eq(aiTurns.userId, deps.request.userId),
+  )).limit(1);
+  if (!row) throw notFound('That question is no longer here.');
+  const clarification = row.clarification as unknown as Clarification | null;
+  if (!clarification) throw badRequest('There was nothing to choose from.');
+  /* Answering moves the turn out of `clarifying`, so a second choice - a
+     double tap, a stale panel - cannot start the request again with a
+     different option and produce two proposals from one question. */
+  if (row.status !== 'clarifying') throw badRequest('That question was already answered.');
+
+  const option = clarification.options.find((o) => o.id === optionId);
+  if (!option) throw badRequest('That is not one of the options.');
+
+  /* Answered whichever way the continuation goes. Leaving it open would let
+     the same choice be made twice. */
+  await deps.db.update(aiTurns)
+    .set({ status: 'answered', updatedAt: new Date() })
+    .where(eq(aiTurns.id, row.id));
+
+  return runTurn(deps, {
+    text: row.request,
+    conversationId: row.conversationId,
+    resolved: { ref: option.ref ?? null, label: option.label },
+  });
 }
 
 /** The turn as the client should render it, without re-planning. */

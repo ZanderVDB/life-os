@@ -63,7 +63,22 @@ export type Risk = 'safe' | 'confirm' | 'important' | 'external';
 export type CapabilityCtx = {
   db: Db;
   request: AiRequestContext;
+  /**
+   * Per-request memo for `available()`. Created by `forRequest()`; absent is
+   * fine and simply means every question is asked afresh.
+   */
+  availability?: Map<string, Promise<ModuleAvailability>>;
 };
+
+/**
+ * A context that answers each module's availability once.
+ *
+ * Not an optimisation bolted on: `available()` for Calendar is a database read,
+ * and one turn asks the registry what is available from five places. Without
+ * this the same question is asked — and paid for — five times.
+ */
+export const forRequest = (db: Db, request: AiRequestContext): CapabilityCtx =>
+  ({ db, request, availability: new Map() });
 
 export type Capability<I = any> = {
   /** `<module>.<verb>`, e.g. `task.create`. Stable; it appears in proposals. */
@@ -73,8 +88,24 @@ export type Capability<I = any> = {
   label: string;
   /** One line, written for a planner to read. Says what, and says the limits. */
   description: string;
-  /** The only accepted input shape. Validated before anything runs. */
+  /** The shape the PLANNER may propose. Validated at plan time. */
   input: z.ZodTypeAny;
+  /**
+   * The shape the EXECUTOR runs, when `preview` replaces the payload.
+   *
+   * Calendar is the reason this exists. Its plan-time input is a whole draft —
+   * a calendar, a title, a time — and its preview writes that draft into the
+   * mutation ledger and hands back a requestId. What is confirmed is the
+   * requestId alone, because the draft is already recorded and re-sending it
+   * would be a second, unproposed description of the same write.
+   *
+   * Without this the executor validated the confirmed payload against the
+   * PLAN's schema, a strict object needing a calendarId and a draft that the
+   * payload no longer carried, and every assistant calendar write failed after
+   * the user had already agreed to it. Absent means the two shapes are the
+   * same, which is true of every capability that does not preview.
+   */
+  confirmed?: z.ZodTypeAny;
   risk: Risk;
   /**
    * Reads. Returns typed sources with provenance, never raw rows.
@@ -94,13 +125,50 @@ export type Capability<I = any> = {
    * assistant cannot reach `executeMutation` without having proposed first.
    */
   preview?: (ctx: CapabilityCtx, input: I) => Promise<{
-    summary: string; warnings?: string[]; handle?: string;
+    summary: string;
+    warnings?: string[];
+    handle?: string;
+    /**
+     * Fields the confirmed payload must keep alongside the handle.
+     *
+     * Only what preview has already validated. A task id travels this way so
+     * that "put an hour in for this task" ends with the task and the event
+     * linked, which is a local Life OS write and is not part of what the
+     * ledger records about Google.
+     */
+    carry?: Record<string, unknown>;
   }>;
 };
 
 /* ══ What a module is ════════════════════════════════════════════════════ */
 
-export type ModuleAvailability = { enabled: boolean; reason?: string };
+/**
+ * Whether a module can be read from, and — separately — written to.
+ *
+ * ── Why two answers and not one ──────────────────────────────────────────
+ *
+ * Because Calendar has three states, not two. Not connected at all; connected
+ * with a read-only grant; connected and writable. Collapsing the middle one
+ * into "off" was the honest choice while everything a module offered was
+ * either all available or all not — but it meant a workspace whose Google
+ * grant could not write lost the ability to ASK about its own calendar, and
+ * the assistant answered "I cannot see that meeting" about a meeting sitting
+ * in front of it.
+ *
+ * So `enabled` governs the module and `canMutate` governs its writes. A module
+ * that omits `canMutate` writes exactly as before: it follows `enabled`.
+ */
+export type ModuleAvailability = {
+  enabled: boolean;
+  reason?: string;
+  /** Defaults to `enabled`. False means readable, not writable. */
+  canMutate?: boolean;
+  /** Why writing is off, in words that can be shown to a person. */
+  mutateReason?: string;
+};
+
+/** Reads stay; mutations go. Used everywhere availability is interpreted. */
+const canMutate = (a: ModuleAvailability) => a.enabled && (a.canMutate ?? true);
 
 export type AiModule = {
   id: string;
@@ -128,6 +196,8 @@ export type ModuleStatus = ModuleAvailability & {
   entities: EntityType[];
   rules: string[];
   capabilities: string[];
+  /** Resolved rather than inferred, so a caller never has to repeat the rule. */
+  writable: boolean;
 };
 
 export class CapabilityRegistry {
@@ -156,18 +226,49 @@ export class CapabilityRegistry {
   /** Every module in the build, whether or not this workspace can use it. */
   all(): AiModule[] { return [...this.modules]; }
 
-  /** Status of each module for this request, availability resolved. */
+  /**
+   * `available()` once per module per request, not once per question asked.
+   *
+   * The memo lives on the context, so it is created and discarded with the
+   * request. A module that goes away between one turn and the next is gone;
+   * one that goes away between two questions inside the same turn is not, and
+   * that is the correct reading — a turn should decide against one consistent
+   * picture of what exists.
+   */
+  private async availability(ctx: CapabilityCtx, m: AiModule): Promise<ModuleAvailability> {
+    if (!ctx.availability) return m.available(ctx);
+    const key = `${ctx.request.workspaceId}:${m.id}`;
+    let hit = ctx.availability.get(key);
+    if (!hit) {
+      hit = Promise.resolve(m.available(ctx));
+      ctx.availability.set(key, hit);
+    }
+    return hit;
+  }
+
+  /**
+   * Status of each module for this request, availability resolved.
+   *
+   * Asked once per turn and reused: `available()` can be a database round trip
+   * — Calendar's is — and a turn that calls `status()`, `capabilities()`,
+   * `describe()` and `resolve()` four times over would pay for it four times.
+   */
   async status(ctx: CapabilityCtx): Promise<ModuleStatus[]> {
     return Promise.all(this.modules.map(async (m) => {
-      const a = await m.available(ctx);
+      const a = await this.availability(ctx, m);
+      const writable = canMutate(a);
       return {
         id: m.id,
         name: m.name,
         entities: m.entities,
         rules: m.rules,
         enabled: a.enabled,
+        writable,
         ...(a.reason ? { reason: a.reason } : {}),
-        capabilities: a.enabled ? m.capabilities.map((c) => c.id) : [],
+        ...(a.mutateReason ? { mutateReason: a.mutateReason } : {}),
+        capabilities: a.enabled
+          ? m.capabilities.filter((c) => writable || c.kind !== 'mutate').map((c) => c.id)
+          : [],
       };
     }));
   }
@@ -178,12 +279,18 @@ export class CapabilityRegistry {
    * This is the answer to "what can the assistant currently do", and it is the
    * only answer. A capability absent from this list does not exist as far as
    * the planner and the executor are concerned.
+   *
+   * A read-only module still contributes its reads. That is the whole point of
+   * the split: losing the ability to write to a calendar is not the same as
+   * losing the ability to see it.
    */
   async capabilities(ctx: CapabilityCtx): Promise<Capability[]> {
     const out: Capability[] = [];
     for (const m of this.modules) {
-      const a = await m.available(ctx);
-      if (a.enabled) out.push(...m.capabilities);
+      const a = await this.availability(ctx, m);
+      if (!a.enabled) continue;
+      const writes = canMutate(a);
+      for (const c of m.capabilities) if (writes || c.kind !== 'mutate') out.push(c);
     }
     return out;
   }
@@ -191,17 +298,54 @@ export class CapabilityRegistry {
   /**
    * Resolve one capability, honouring availability.
    *
-   * Returns null for an unknown id AND for a known id belonging to a module
-   * that is switched off. The executor treats both the same way, which is what
-   * makes "remove the module, the capability disappears" true at execution
-   * time and not merely in the listing.
+   * Returns null for an unknown id, for a known id belonging to a module that
+   * is switched off, AND for a mutation belonging to a module that has gone
+   * read-only. The executor treats all three the same way, which is what makes
+   * "remove the module, the capability disappears" true at execution time and
+   * not merely in the listing.
    */
   async resolve(ctx: CapabilityCtx, id: string): Promise<Capability | null> {
     const m = this.modules.find((x) => x.capabilities.some((c) => c.id === id));
     if (!m) return null;
-    const a = await m.available(ctx);
+    const a = await this.availability(ctx, m);
     if (!a.enabled) return null;
-    return m.capabilities.find((c) => c.id === id) ?? null;
+    const cap = m.capabilities.find((c) => c.id === id) ?? null;
+    if (cap?.kind === 'mutate' && !canMutate(a)) return null;
+    return cap;
+  }
+
+  /**
+   * Why one capability is not available, for a sentence a person can read.
+   *
+   * "Capability unavailable" tells nobody anything. The registry is the only
+   * thing that knows whether the answer is "Life OS has never had that",
+   * "your calendar is not connected" or "your calendar connection cannot
+   * write", so it is the only thing that can say which.
+   */
+  async explain(ctx: CapabilityCtx, id: string): Promise<
+    { available: true } | { available: false; reason: string; readable: boolean }
+  > {
+    const m = this.modules.find((x) => x.capabilities.some((c) => c.id === id));
+    if (!m) return { available: false, reason: 'Life OS cannot do that.', readable: false };
+    const a = await this.availability(ctx, m);
+    if (!a.enabled) {
+      return {
+        available: false,
+        reason: a.reason ?? `${m.name} is not available right now.`,
+        readable: false,
+      };
+    }
+    const cap = m.capabilities.find((c) => c.id === id)!;
+    if (cap.kind === 'mutate' && !canMutate(a)) {
+      return {
+        available: false,
+        reason: a.mutateReason ?? `${m.name} changes are not available right now.`,
+        /* The distinction the wording pass in §12 turns on: this is the case
+           where "I can see it, I just cannot change it" is the true sentence. */
+        readable: true,
+      };
+    }
+    return { available: true };
   }
 
   /** Which module owns an entity type, for relationship traversal. */
@@ -230,6 +374,12 @@ export class CapabilityRegistry {
       modules: enabled.map((s) => ({ id: s.id, name: s.name, rules: s.rules })),
       unavailable: status.filter((s) => !s.enabled)
         .map((s) => ({ id: s.id, reason: s.reason ?? 'Not available.' })),
+      /* Readable but not writable. The planner needs this stated rather than
+         inferred from an absence: "I can see that meeting but cannot move it"
+         is a useful answer, and it is unreachable from a capability list that
+         merely does not mention Calendar. */
+      readOnly: status.filter((s) => s.enabled && !s.writable)
+        .map((s) => ({ id: s.id, reason: s.mutateReason ?? 'Changes are not available.' })),
       /* MUTATIONS ONLY.
        *
        * Reads are the context engine's job and have already run — retrieval
@@ -249,6 +399,9 @@ export class CapabilityRegistry {
     };
   }
 }
+
+/** What a payload is checked against at execution. See `Capability.confirmed`. */
+export const executionSchema = (c: Capability) => c.confirmed ?? c.input;
 
 /** A ref helper every module needs, kept in one place. */
 export const ref = (type: EntityType, id: string): EntityRef => ({ type, id });

@@ -460,6 +460,20 @@ async function finishListening() {
  * database, so a refresh does not lose it and a confirmation cannot run
  * anything the planner did not write.
  */
+/** One turn onto the session. Two entry points, one shape, no drift. */
+function applyTurn(r) {
+  session.turnId = r.turnId;
+  session.conversationId = r.conversationId;
+  session.version = r.version;
+  session.actions = r.actions ?? [];
+  session.answer = r.answer ?? null;
+  session.understood = r.understood ?? '';
+  session.sources = r.sources ?? [];
+  session.clarification = r.clarification ?? null;
+  session.note = r.note ?? null;
+  session.report = null;
+}
+
 async function propose(text) {
   if (!session) return;
   setState('processing');
@@ -470,16 +484,7 @@ async function propose(text) {
       surface: session.ctx.surface?.() ?? null,
     });
     if (!session) return;
-    session.turnId = r.turnId;
-    session.conversationId = r.conversationId;
-    session.version = r.version;
-    session.actions = r.actions ?? [];
-    session.answer = r.answer ?? null;
-    session.understood = r.understood ?? '';
-    session.sources = r.sources ?? [];
-    session.clarification = r.clarification ?? null;
-    session.note = r.note ?? null;
-    session.report = null;
+    applyTurn(r);
     await markUnavailable();
     renderReview();
     setState('proposal');
@@ -488,6 +493,31 @@ async function propose(text) {
     setState('idle');
     /* The server says what went wrong — no model configured, timed out,
        rate limited. Repeating its sentence beats "something went wrong". */
+    session.ctx.toast?.(e.message, true);
+  }
+}
+
+/**
+ * The user picked one of the options.
+ *
+ * A continuation of the SAME turn, resolved server-side to a stable id. If the
+ * option named no entity - "leave them open" is a real choice and not a thing -
+ * the server falls back to continuing with the chosen words, which is the old
+ * behaviour correctly reserved for the case where there is nothing to name.
+ */
+async function answerQuestion(optionId) {
+  if (!session?.turnId) return;
+  setState('processing');
+  try {
+    const r = await api.clarifyTurn(session.turnId, optionId);
+    if (!session) return;
+    applyTurn(r);
+    await markUnavailable();
+    renderReview();
+    setState('proposal');
+  } catch (e) {
+    if (!session) return;
+    setState('proposal');
     session.ctx.toast?.(e.message, true);
   }
 }
@@ -547,9 +577,12 @@ function wireReview(box) {
     el.onclick = () => editField(el.dataset.field, el.dataset.key);
   });
   box.querySelectorAll('[data-clarify]').forEach((el) => {
-    /* Answering the question is just saying the answer. It continues the same
-       conversation, so the server still has everything from the first turn. */
-    el.onclick = () => void propose(el.dataset.clarify);
+    /* The button carries an OPTION ID, not its label. The server holds what
+       each option stands for, so the original request continues with the exact
+       entity the assistant was already looking at. Sending the label back as a
+       fresh sentence - which is what this used to do - threw that away and
+       asked the planner to work it out again from less. */
+    el.onclick = () => void answerQuestion(el.dataset.clarify);
   });
   box.querySelectorAll('[data-src-id]').forEach((el) => {
     el.onclick = () => session.ctx.openEntity?.({

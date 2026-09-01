@@ -28,10 +28,12 @@
  * list they can edit and delete. `list()` is the query behind that screen. A
  * memory the user cannot see is a memory they cannot correct.
  */
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
-import { aiMemories, aiMemoryCandidates, MEMORY_CATEGORIES, MEMORY_SOURCES } from '../db/schema.js';
+import {
+  aiMemories, aiMemoryCandidates, aiTurns, MEMORY_CATEGORIES, MEMORY_SOURCES,
+} from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
 
 export type MemoryOwner = { workspaceId: string; userId: string };
@@ -193,17 +195,62 @@ export async function touchUsed(db: Db, owner: MemoryOwner, ids: string[]) {
  * the most common and most important outcome and silently dropping it would
  * make the extraction look broken.
  */
+/**
+ * Does this candidate contradict something already believed?
+ *
+ * Two facts in the same category that share most of their distinctive words
+ * and are not the same sentence are almost always a change of mind rather than
+ * two separate beliefs: "prefers morning meetings" and "prefers afternoon
+ * meetings" both belong to `preferences` and share every word but one.
+ *
+ * Detecting it matters because of where it routes the candidate. A contradiction
+ * becomes a SUPERSEDE, and supersede refuses to touch a pinned memory - so a
+ * model that mishears cannot quietly overturn something the user confirmed.
+ * Without this the contradiction would arrive as an unrelated new memory and
+ * both would sit in the list, and the assistant would have two opposite
+ * beliefs and no way to choose.
+ */
+function contradicts(
+  fact: string, category: string, live: { id: string; category: string; fact: string }[],
+): string | null {
+  const words = new Set(norm(fact).split(' ').filter((w) => w.length > 3));
+  if (words.size < 2) return null;
+  for (const m of live) {
+    if (m.category !== category) continue;
+    const theirs = new Set(norm(m.fact).split(' ').filter((w) => w.length > 3));
+    if (theirs.size < 2) continue;
+    let shared = 0;
+    for (const w of words) if (theirs.has(w)) shared += 1;
+    const overlap = shared / Math.max(words.size, theirs.size);
+    /* High overlap and not identical. Identical was already caught as a
+       duplicate; near-identical is the interesting case. */
+    if (overlap >= 0.6 && norm(m.fact) !== norm(fact)) return m.id;
+  }
+  return null;
+}
+
 export async function proposeMemories(
   db: Db, owner: MemoryOwner, candidates: MemoryCandidate[],
 ) {
   const live = await list(db, owner);
   const known = new Map(live.map((m) => [norm(m.fact), m]));
-  const out: { fact: string; outcome: 'duplicate' | 'pending'; id?: string }[] = [];
+  /* Already queued and still waiting. Extraction runs on every turn, so the
+     same observation arrives repeatedly; queuing it twice would make the
+     review screen a list of the same sentence. */
+  const waiting = await listCandidates(db, owner);
+  const queued = new Map(waiting.map((c) => [norm(c.fact), c]));
+  const out: {
+    fact: string;
+    outcome: 'duplicate' | 'queued' | 'pending' | 'conflict';
+    id?: string;
+  }[] = [];
 
   for (const c of candidates) {
     const parsed = MemoryCandidateInput.safeParse(c);
     if (!parsed.success) continue;
-    const existing = known.get(norm(parsed.data.fact));
+    const key = norm(parsed.data.fact);
+
+    const existing = known.get(key);
     if (existing) {
       /* Already believed. Not an error and not a new row — just a reason to
          trust it slightly more the next time it is ranked. */
@@ -212,6 +259,19 @@ export async function proposeMemories(
       out.push({ fact: parsed.data.fact, outcome: 'duplicate', id: existing.id });
       continue;
     }
+    const already = queued.get(key);
+    if (already) {
+      out.push({ fact: parsed.data.fact, outcome: 'queued', id: already.id });
+      continue;
+    }
+
+    /* A stated supersedesId is trusted only if it names something live; the
+       model can be wrong about ids here as anywhere else. */
+    const stated = parsed.data.supersedesId
+      && live.some((m) => m.id === parsed.data.supersedesId)
+      ? parsed.data.supersedesId : null;
+    const conflict = stated ?? contradicts(parsed.data.fact, parsed.data.category, live);
+
     const [row] = await db.insert(aiMemoryCandidates).values({
       workspaceId: owner.workspaceId,
       userId: owner.userId,
@@ -219,9 +279,14 @@ export async function proposeMemories(
       fact: parsed.data.fact,
       confidence: parsed.data.confidence,
       evidence: parsed.data.evidence ?? null,
-      supersedesId: parsed.data.supersedesId ?? null,
+      supersedesId: conflict,
     }).returning();
-    out.push({ fact: parsed.data.fact, outcome: 'pending', id: row!.id });
+    queued.set(key, row!);
+    out.push({
+      fact: parsed.data.fact,
+      outcome: conflict ? 'conflict' : 'pending',
+      id: row!.id,
+    });
   }
   return out;
 }
@@ -259,6 +324,75 @@ export async function acceptCandidate(db: Db, owner: MemoryOwner, id: string) {
     .set({ status: 'accepted', memoryId: memory.id, resolvedAt: new Date() })
     .where(eq(aiMemoryCandidates.id, c.id));
   return memory;
+}
+
+/* ══ Housekeeping ════════════════════════════════════════════════════════ */
+
+/**
+ * Retention, and what it deliberately never touches.
+ *
+ * Two things here grow without a ceiling if nothing removes them: memory
+ * candidates the user rejected or ignored, and the record of every turn ever
+ * taken. Neither is history worth keeping indefinitely - a rejected suggestion
+ * is a suggestion the user has already answered, and a proposal from four
+ * months ago cannot be confirmed.
+ *
+ * What is never removed:
+ *   - any memory, pinned or not, superseded or not. That is the user's own
+ *     record of what Life OS knows about them, and it is theirs to delete.
+ *   - an accepted candidate, which is the provenance of a live memory.
+ *   - a turn still awaiting confirmation, however old. Deleting one would
+ *     silently discard something the user was in the middle of.
+ *
+ * Deliberately conservative. Aggressively pruning a personal system is how a
+ * user discovers that something they cared about is gone, and there is no
+ * version of that story where the storage saved was worth it.
+ */
+export const RETENTION = {
+  /** A rejected suggestion is an answered question. */
+  rejectedCandidateDays: 30,
+  /** Never accepted, never rejected - just ignored for a season. */
+  staleCandidateDays: 120,
+  /** Finished turns. The proposal they carried is long since irrelevant. */
+  finishedTurnDays: 90,
+} as const;
+
+const daysAgo = (n: number) => new Date(Date.now() - n * 86400000);
+
+export async function housekeeping(db: Db, owner: MemoryOwner) {
+  const removedCandidates = await db.delete(aiMemoryCandidates).where(and(
+    eq(aiMemoryCandidates.workspaceId, owner.workspaceId),
+    eq(aiMemoryCandidates.userId, owner.userId),
+    eq(aiMemoryCandidates.status, 'rejected'),
+    lt(aiMemoryCandidates.resolvedAt, daysAgo(RETENTION.rejectedCandidateDays)),
+  )).returning({ id: aiMemoryCandidates.id });
+
+  const removedStale = await db.delete(aiMemoryCandidates).where(and(
+    eq(aiMemoryCandidates.workspaceId, owner.workspaceId),
+    eq(aiMemoryCandidates.userId, owner.userId),
+    eq(aiMemoryCandidates.status, 'pending'),
+    lt(aiMemoryCandidates.createdAt, daysAgo(RETENTION.staleCandidateDays)),
+  )).returning({ id: aiMemoryCandidates.id });
+
+  /* `proposed` is excluded by listing the finished states rather than by
+     negating one, so a status added later is kept by default rather than
+     deleted by accident. */
+  const removedTurns: { id: string }[] = [];
+  for (const status of ['executed', 'answered', 'failed', 'cancelled', 'clarifying']) {
+    const gone = await db.delete(aiTurns).where(and(
+      eq(aiTurns.workspaceId, owner.workspaceId),
+      eq(aiTurns.userId, owner.userId),
+      eq(aiTurns.status, status),
+      lt(aiTurns.createdAt, daysAgo(RETENTION.finishedTurnDays)),
+    )).returning({ id: aiTurns.id });
+    removedTurns.push(...gone);
+  }
+
+  return {
+    rejectedCandidates: removedCandidates.length,
+    staleCandidates: removedStale.length,
+    turns: removedTurns.length,
+  };
 }
 
 export async function rejectCandidate(db: Db, owner: MemoryOwner, id: string) {

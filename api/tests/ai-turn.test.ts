@@ -22,7 +22,7 @@ import { CapabilityRegistry } from '../src/ai/registry.js';
 import { MODULES } from '../src/ai/modules/index.js';
 import { ProviderRouter, deterministicProvider } from '../src/ai/provider.js';
 import type { AiProvider } from '../src/ai/provider.js';
-import { calendars, calendarEvents, aiTurns } from '../src/db/schema.js';
+import { calendars, calendarEvents, aiTurns, tasks } from '../src/db/schema.js';
 import { and, eq } from 'drizzle-orm';
 
 const TOKEN = 'test-bypass-token';
@@ -539,27 +539,55 @@ test('turn: a follow-up continues the conversation and knows what is pending', a
   assert.equal(second.body.conversationId, first.body.conversationId, 'a new thread was started');
 
   /* The planner was told what is still on the table, so "make it Saturday" has
-     something to be about. Bounded to ids and titles — not a transcript. */
-  assert.match(lastPlanInput.text, /Still pending/);
-  assert.match(lastPlanInput.text, /Send the contract/);
-  assert.ok(lastPlanInput.text.length < 600, 'the whole prior turn was resent');
+     something to be about.
+
+     This used to be appended to the request text as a sentence. It is a FIELD
+     now, carrying the pending PAYLOADS rather than a list of titles, because
+     an amendment has to name a field to change and a title list cannot say
+     what the fields are. Same rule, better place: still bounded, still not a
+     transcript. */
+  assert.ok(lastPlanInput.pending, 'the planner was not told what is pending');
+  assert.equal(lastPlanInput.pending.actions.length, 1);
+  assert.equal(lastPlanInput.pending.actions[0].title, 'Send the contract');
+  assert.ok(lastPlanInput.pending.actions[0].payload.dueDate,
+    'the pending payload was not carried, so there is nothing to amend');
+  assert.equal(lastPlanInput.text, 'actually make it Saturday',
+    'the request was rewritten instead of being accompanied');
+  assert.ok(JSON.stringify(lastPlanInput.pending).length < 1200,
+    'the whole prior turn was resent');
 });
 
 /* ══ 10. Partial failure ═════════════════════════════════════════════════ */
 
 test('turn: one action failing leaves the others done and says so exactly', async () => {
-  const { call } = await setup([{
+  /* The failing action names something that REALLY EXISTS when the plan is
+     made and is gone by the time it runs. It used to name an invented uuid,
+     which no longer survives planning at all - a payload id absent from the
+     retrieved context is refused before the user is shown a card, which is a
+     better outcome and a different test (see ai-beta). This one is about
+     EXECUTION: a batch of three is three independent agreements, and one of
+     them failing must not take the other two with it. */
+  const doomedAction = {
+    capability: 'task.complete', title: 'Complete That thing',
+    payload: { id: '' as string, done: true },
+  };
+  const { call, db } = await setup([{
     actions: [
       { capability: 'task.create', title: 'Milk', payload: { title: 'Milk' } },
-      {
-        capability: 'task.complete', title: 'Complete something that is gone',
-        payload: { id: '00000000-0000-0000-0000-000000000000', done: true },
-      },
+      doomedAction,
       { capability: 'task.create', title: 'Chicken', payload: { title: 'Chicken' } },
     ],
   }]);
+  /* The plan array is read when the stub is CALLED, so the id can be filled in
+     once the task it names actually exists. */
+  const doomed = (await call('POST', '/tasks', { title: 'That thing' })).body.task;
+  doomedAction.payload.id = doomed.id;
+
   const r = await call('POST', '/ai/turn', { text: 'milk, finish that thing, chicken' });
   assert.equal(r.body.actions.length, 3);
+
+  // Deleted between the agreement and the execution.
+  await db.delete(tasks).where(eq(tasks.id, doomed.id));
 
   const done = await call('POST', `/ai/turn/${r.body.turnId}/confirm`, {
     version: r.body.version, count: 3,

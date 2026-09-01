@@ -205,16 +205,35 @@ const PlanActionSchema = z.object({
   sources: z.array(z.string().max(80)).max(10).default([]),
 });
 
+/**
+ * An edit to the proposal already on the table.
+ *
+ * Separate from `actions` on purpose. An amendment is not a new change; it is
+ * a correction to one the user is still looking at, and routing it through the
+ * card's own validated edit path is what keeps "actually Saturday" from
+ * becoming a second haircut.
+ */
+const PlanAmendSchema = z.object({
+  actionId: z.string().min(1).max(80),
+  enabled: z.boolean().nullish(),
+  fields: z.record(z.union([z.string(), z.number(), z.null()])).nullish(),
+});
+
 const PlanSchema = z.object({
   understood: z.string().min(1).max(400),
   answer: z.string().max(3000).nullish(),
   actions: z.array(PlanActionSchema).max(12).default([]),
+  amend: z.array(PlanAmendSchema).max(25).default([]),
   clarification: z.object({
     question: z.string().min(1).max(300),
     options: z.array(z.object({
       id: z.string().max(80),
       label: z.string().max(200),
+      /* "type:id" from CONTEXT. The server verifies it against what was
+         actually retrieved and drops it if it names nothing real — an
+         invented ref is treated exactly like an invented payload id. */
       ref: z.string().max(80).nullish(),
+      detail: z.string().max(120).nullish(),
     })).min(2).max(6),
   }).nullish(),
 });
@@ -236,6 +255,25 @@ const MemorySchema = z.object({
 
 /* ══ Prompts ═════════════════════════════════════════════════════════════ */
 
+/**
+ * What the model is told, and what it is merely told AGAIN.
+ *
+ * Most of what follows is also enforced in code, and that is the point. A rule
+ * that exists only here is a rule the model can decide not to follow at three
+ * in the morning; a rule that exists only in code produces a refusal the model
+ * cannot explain. So the ones that would corrupt data if broken are enforced
+ * by the registry, the schemas and the consistency pass — and repeated here so
+ * that the plan is usually right the first time rather than merely rejected
+ * correctly.
+ *
+ * Enforced elsewhere, whatever this text says:
+ *   capability whitelist   registry.resolve — an unlisted id resolves to null
+ *   payload shape          the capability's own Zod schema, at plan time
+ *   ids exist              validate.ts: a uuid not in CONTEXT is refused
+ *   card matches payload   validate.ts: a stated date the payload lacks is refused
+ *   who needs confirming   the capability's risk, assigned by the server
+ *   external writes        calendar's propose/execute ledger
+ */
 const RULES = `You are the reasoning layer inside Life OS, a personal command centre.
 
 You do not perform actions. You propose them. A proposal the user edits and
@@ -245,6 +283,9 @@ buttons use. Never claim to have done something.
 Hard rules:
 - You may ONLY use capabilities listed for you. If something is not listed, it
   is not available - say so plainly rather than inventing an alternative.
+- Some modules can be READ but not changed. If the user asks for a change there,
+  say what you can see and that the change is not available - do not propose it
+  and do not pretend the thing does not exist.
 - Entity ids come from the CONTEXT you were given. Never invent a uuid. If you
   cannot find the thing being referred to, say so or ask.
 - CONTEXT IS EVERYTHING YOU HAVE. There is no way for you to fetch more: it has
@@ -257,6 +298,9 @@ Hard rules:
 - A reminder is a Life OS record and never a Google event. Prefer a reminder
   when the user asked to be reminded rather than to hold time.
 - A project's status and its focus are independent. Change only what was asked.
+- Every date or time you state in a title, summary or assumption MUST also be
+  in the payload. A card that says Saturday over a payload with no date is a
+  card that lies to the person confirming it.
 - Write British English, plainly. No exclamation marks, no filler.`;
 
 const fmt = (o: unknown) => JSON.stringify(o, null, 1);
@@ -322,7 +366,9 @@ Produce a plan. Return ONLY JSON:
  "actions": [{"capability": string, "title": string, "summary": string | null,
               "payload": object, "confidence": "high"|"medium"|"low",
               "assumptions": string[], "warnings": string[], "sources": string[]}],
- "clarification": {"question": string, "options": [{"id","label","ref"}]} | null}
+ "amend": [{"actionId": string, "enabled": boolean|null, "fields": object|null}],
+ "clarification": {"question": string,
+                   "options": [{"id","label","ref","detail"}]} | null}
 
 A request can be a question, changes, or both. Answer the informational part in
 "answer" and put every change in "actions" - do not describe a change in prose
@@ -373,6 +419,23 @@ CONFIDENCE AND ASSUMPTIONS
 Do not ask for clarification about small reversible things. An editable card
 absorbs ordinary uncertainty; a question costs the user a turn.
 
+CLARIFICATION OPTIONS MUST NAME THINGS, NOT DESCRIBE THEM. When the choice is
+between entities that exist, put the "type:id" from CONTEXT in "ref" and one
+distinguishing line - a date, a project, a status - in "detail". An option
+without a ref is right only when the choice is not an entity at all ("leave
+them open" / "cancel them").
+
+AMENDING WHAT IS PENDING
+If PENDING is present, the user is looking at changes that have NOT happened
+yet. A correction to them - "actually Saturday", "make it 4", "don't add the
+milk", "only the first two" - is an AMENDMENT, not a new request. Put it in
+"amend", naming the pending action id, and return NO action for that part:
+  "amend": [{"actionId": "a2", "fields": {"dueDate": "2026-09-05"}}]
+  "amend": [{"actionId": "a1", "enabled": false}]
+Never propose a new action to fix a pending one, and never say a pending thing
+cannot be found: it has not been created, so of course it is not in CONTEXT.
+Only genuinely new requests go in "actions" while something is pending.
+
 MEMORY may inform defaults. It never overrides an explicit instruction or a
 fact from CONTEXT.`,
       user: [
@@ -382,13 +445,30 @@ fact from CONTEXT.`,
         'CAPABILITIES YOU MAY USE:',
         fmt(input.capabilities),
         '',
+        input.readOnly?.length
+          ? `READABLE BUT NOT CHANGEABLE RIGHT NOW:\n${fmt(input.readOnly)}` : '',
+        '',
         'MODULE RULES:',
         fmt(input.rules),
         '',
         'CONTEXT (the only real ids that exist):',
         fmt(input.sources),
         '',
+        input.pending
+          ? 'PENDING - proposed, not yet confirmed, and absent from CONTEXT because '
+            + `it does not exist yet:\n${fmt(input.pending)}` : '',
+        '',
+        input.resolved
+          ? `The user has just chosen: ${JSON.stringify(input.resolved.label)}`
+            + `${input.resolved.ref ? ` = ${input.resolved.ref.type}:${input.resolved.ref.id}` : ''}.`
+            + ' Use that exact id; the ambiguity is settled.' : '',
+        '',
         input.memory.length ? `MEMORY about this user:\n${fmt(input.memory)}` : '',
+        '',
+        input.repair
+          ? `YOUR PREVIOUS PLAN CONTRADICTED ITSELF:\n${input.repair.problems}\n`
+            + 'Return a corrected plan. Either put the stated value in the payload or '
+            + 'stop stating it - do not repeat the same contradiction.' : '',
         '',
         `REQUEST: ${JSON.stringify(input.text)}`,
       ].filter(Boolean).join('\n'),
@@ -400,6 +480,7 @@ fact from CONTEXT.`,
       understood: r.value.understood,
       answer: r.value.answer ?? null,
       actions: r.value.actions as any,
+      amend: (r.value.amend ?? []) as any,
       clarification: (r.value.clarification ?? null) as any,
     };
   },

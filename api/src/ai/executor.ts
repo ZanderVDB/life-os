@@ -34,6 +34,7 @@ import type { Db } from '../db/client.js';
    the person nothing about the one thing they could act on: the list changed,
    look again. */
 import { badRequest } from '../lib/errors.js';
+import { executionSchema } from './registry.js';
 import type { CapabilityRegistry, CapabilityCtx } from './registry.js';
 import type {
   AiRequestContext, ProposalSet, ProposalAction, Confirmation,
@@ -126,8 +127,13 @@ export async function execute(
       /* Validated against the CAPABILITY's schema, not against whatever the
          planner produced. A payload that drifted — a hallucinated field, a
          date in the wrong shape — is rejected here rather than reaching a
-         service that would have to defend itself against it. */
-      const parsed = cap.input.safeParse(action.payload);
+         service that would have to defend itself against it.
+
+         The EXECUTION schema, which is the plan-time one for everything that
+         does not preview. Where preview replaced the payload with a ledger
+         handle, checking the handle against the schema for a full draft
+         refuses a payload that is exactly right. */
+      const parsed = executionSchema(cap).safeParse(action.payload);
       if (!parsed.success) {
         results.push({
           actionId: action.id,

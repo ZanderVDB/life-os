@@ -63,6 +63,25 @@ export async function isAvailable(capabilityId) {
   return (c.capabilities ?? []).some((x) => x.id === capabilityId);
 }
 
+/**
+ * Why a capability is not available, in a sentence rather than a status.
+ *
+ * Three different situations reach the user as the same silence otherwise:
+ * Life OS has never had that, the module is not connected, and the module is
+ * connected but cannot write. Only the last of those makes "I can see it, I
+ * just cannot change it" the true thing to say.
+ */
+export async function unavailableReason(capabilityId) {
+  const c = await capabilities();
+  const moduleId = String(capabilityId).split('.')[0];
+  const readOnly = (c.readOnly ?? []).find((m) => m.id === moduleId
+    || (c.modules ?? []).some((x) => x.id === m.id && x.capabilities?.includes(capabilityId)));
+  if (readOnly) return readOnly.reason;
+  const off = (c.unavailable ?? []).find((m) => m.id === moduleId);
+  if (off) return off.reason;
+  return null;
+}
+
 /** The server's own label for a capability, for anything this client cannot draw. */
 export async function labelFor(capabilityId) {
   const c = await capabilities();
@@ -113,6 +132,21 @@ export const confirmTurn = (turnId, version, count, importantAccepted = []) =>
   });
 
 export const discardTurn = (turnId) => need()(`/ai/turn/${turnId}/discard`, { method: 'POST' });
+
+/**
+ * Answer the assistant's own question.
+ *
+ * Sends an OPTION ID and nothing else. The server holds the option set, so the
+ * choice resolves to the exact entity the assistant was already looking at.
+ * Sending the button's label back as a new request - which is what this
+ * replaces - asks a language model to work out a second time something that
+ * was known exactly the first time, and it is the second guess that picks the
+ * wrong meeting.
+ */
+export const clarifyTurn = (turnId, optionId) => need()(`/ai/turn/${turnId}/clarify`, {
+  method: 'POST',
+  body: { optionId },
+});
 
 /* ── Memory ───────────────────────────────────────────────────────────── */
 

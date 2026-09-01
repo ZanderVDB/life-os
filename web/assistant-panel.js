@@ -94,6 +94,20 @@ export function wireComposer(root) {
 
 /* ── A turn ───────────────────────────────────────────────────────────── */
 
+/** One turn onto the panel state. Three entry points, one shape, no drift. */
+function applyTurn(r) {
+  state.conversationId = r.conversationId;
+  state.turnId = r.turnId;
+  state.version = r.version;
+  state.actions = r.actions ?? [];
+  state.answer = r.answer ?? null;
+  state.understood = r.understood ?? '';
+  state.sources = r.sources ?? [];
+  state.clarification = r.clarification ?? null;
+  state.note = r.note ?? null;
+  state.report = null;
+}
+
 async function send(text) {
   state.busy = true;
   state.history.push({ role: 'you', text });
@@ -105,21 +119,38 @@ async function send(text) {
       conversationId: state.conversationId,
       surface: ctx?.surface?.() ?? null,
     });
-    state.conversationId = r.conversationId;
-    state.turnId = r.turnId;
-    state.version = r.version;
-    state.actions = r.actions ?? [];
-    state.answer = r.answer ?? null;
-    state.understood = r.understood ?? '';
-    state.sources = r.sources ?? [];
-    state.clarification = r.clarification ?? null;
-    state.note = r.note ?? null;
-    state.report = null;
+    applyTurn(r);
     await markUnavailable();
     state.history.push({ role: 'los', text: r.answer ?? r.understood ?? '' });
   } catch (e) {
     /* The server knows what went wrong — no model, a timeout, a rate limit.
        Its sentence goes on screen; "something went wrong" would not. */
+    state.history.push({ role: 'error', text: e.message });
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+/**
+ * The user picked one of the options the assistant offered.
+ *
+ * Continues the ORIGINAL request with the entity that option stands for. The
+ * choice was exact when it was offered; sending its label back to be
+ * re-interpreted is how an exact choice becomes an approximate one.
+ */
+async function answerQuestion(optionId, label) {
+  if (!state.turnId || state.busy) return;
+  state.busy = true;
+  state.history.push({ role: 'you', text: label || 'That one' });
+  state.clarification = null;
+  render();
+  try {
+    const r = await api.clarifyTurn(state.turnId, optionId);
+    applyTurn(r);
+    await markUnavailable();
+    state.history.push({ role: 'los', text: r.answer ?? r.understood ?? '' });
+  } catch (e) {
     state.history.push({ role: 'error', text: e.message });
   } finally {
     state.busy = false;
@@ -208,7 +239,10 @@ function wire() {
     el.onclick = () => openFieldEditor(el);
   });
   panel.querySelectorAll('[data-clarify]').forEach((el) => {
-    el.onclick = () => void send(el.dataset.clarify);
+    /* An OPTION ID, not a label. See assistant-cards.js. */
+    el.onclick = () => void answerQuestion(
+      el.dataset.clarify, el.querySelector('.ap-ask-l')?.textContent.trim() ?? '',
+    );
   });
   panel.querySelectorAll('[data-src-id]').forEach((el) => {
     el.onclick = () => ctx?.openEntity?.({ type: el.dataset.srcType, id: el.dataset.srcId });

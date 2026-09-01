@@ -582,7 +582,13 @@
   flex-direction:column;gap:10px}
 .ap-ask-q{margin:0;font-size:15px;line-height:1.45}
 .ap-ask-opts{display:flex;flex-wrap:wrap;gap:8px}
-.ap-ask-o{min-height:40px}
+/* Two lines: the name, and the one fact that tells it from the other one.
+   Stacked rather than run together, because the whole job of this control is
+   letting somebody tell two things with the same name apart at a glance. */
+.ap-ask-o{min-height:44px;display:flex;flex-direction:column;align-items:flex-start;
+  gap:2px;text-align:left;padding-top:7px;padding-bottom:7px}
+.ap-ask-l{font-size:14px;line-height:1.3}
+.ap-ask-d{font-size:12px;line-height:1.3;color:var(--muted)}
 
 /* What actually happened. Three of four succeeding is three things that
    happened, and it is never reported as a failure. */

@@ -28,9 +28,9 @@
  */
 import { and, desc, eq, gte, ilike, lte } from 'drizzle-orm';
 import { z } from 'zod';
-import { calendarEvents, calendars } from '../../db/schema.js';
+import { calendarEvents, calendars, tasks } from '../../db/schema.js';
 import {
-  writeState, checkAvailability,
+  writeState, checkAvailability, linkTaskToEvent,
   proposeCreateEvent, proposeUpdateEvent, proposeDeleteEvent, executeMutation,
 } from '../../lib/calendar-mutations.js';
 import type { AiModule, Capability } from '../registry.js';
@@ -79,10 +79,17 @@ const Draft = z.object({
  * The handle a confirmed calendar action carries.
  *
  * `requestId` is produced by `preview` and recorded in the ledger. Execution
- * takes nothing else — no draft, no calendar, no event id — so a confirmed
- * action can only do what was actually proposed.
+ * takes nothing else about the GOOGLE write — no draft, no calendar, no event
+ * id — so a confirmed action can only do what was actually proposed.
+ *
+ * `taskId` is not part of that write. It is the Life OS statement that this
+ * event and that task are the same commitment, checked at preview time and
+ * recorded locally after the event exists.
  */
-const ConfirmedMutation = z.object({ requestId: z.string().min(8).max(80) }).strict();
+const ConfirmedMutation = z.object({
+  requestId: z.string().min(8).max(80),
+  taskId: uuid.optional(),
+}).strict();
 
 const createCap: Capability = {
   id: 'event.create',
@@ -95,9 +102,30 @@ const createCap: Capability = {
     calendarId: uuid,
     draft: Draft,
     requestId: z.string().min(8).max(80),
+    /**
+     * The task this event is holding time for, when there is one.
+     *
+     * "Put an hour in on Thursday for the client handover" is one intention
+     * and two objects, and the link between them is what makes the event
+     * visible from the task and the task visible from the event. Life OS has
+     * always made this link when the UI schedules a task; the assistant could
+     * create the event and not the link, which left a scheduled task that did
+     * not know it had been scheduled.
+     */
+    taskId: uuid.optional(),
   }).strict(),
+  confirmed: ConfirmedMutation,
   risk: 'external',
-  async preview(ctx, input: { calendarId: string; draft: any; requestId: string }) {
+  async preview(ctx, input: { calendarId: string; draft: any; requestId: string; taskId?: string }) {
+    /* Checked HERE, before the user is asked. A task id that names nothing
+       must not survive to become a failure after the event has been written
+       to Google, which is the one part of this that cannot be taken back. */
+    if (input.taskId) {
+      const [task] = await ctx.db.select().from(tasks).where(and(
+        eq(tasks.workspaceId, ctx.request.workspaceId), eq(tasks.id, input.taskId),
+      )).limit(1);
+      if (!task) throw new Error('That task is no longer here.');
+    }
     const p = await proposeCreateEvent(ctx.db, ctx.request.workspaceId, {
       requestId: input.requestId,
       calendarId: input.calendarId,
@@ -112,16 +140,28 @@ const createCap: Capability = {
         ...(p.conflicts?.length ? [`Clashes with ${p.conflicts.length} existing event(s).`] : []),
       ],
       handle: p.requestId,
+      ...(input.taskId ? { carry: { taskId: input.taskId } } : {}),
     };
   },
-  async execute(ctx, input: { requestId: string }) {
+  async execute(ctx, input: { requestId: string; taskId?: string }) {
     const r = await executeMutation(ctx.db, ctx.request.workspaceId, input.requestId, {
       userId: ctx.request.userId,
     });
+    /* After the event exists, and never before. The link is a local write
+       through the same service the UI uses, so it appears on both objects at
+       once; failing to make it does not undo an event Google already has. */
+    let linked = false;
+    if (input.taskId && r.event?.id) {
+      linked = Boolean(await linkTaskToEvent(
+        ctx.db, ctx.request.workspaceId, input.taskId, r.event.id, ctx.request.userId,
+      ).catch(() => null));
+    }
     return {
       status: 'done' as const,
       ref: r.event ? { type: 'event' as const, id: r.event.id } : null,
-      message: r.alreadyDone ? 'That event was already created.' : 'Added to the calendar.',
+      message: r.alreadyDone
+        ? 'That event was already created.'
+        : linked ? 'Added to the calendar and linked to the task.' : 'Added to the calendar.',
     };
   },
 };
@@ -141,6 +181,7 @@ const updateCap: Capability = {
     scope: z.enum(['single', 'instance', 'series']).optional(),
     requestId: z.string().min(8).max(80),
   }).strict(),
+  confirmed: ConfirmedMutation,
   risk: 'external',
   async preview(ctx, input: { eventId: string; draft: any; scope?: any; requestId: string }) {
     const p = await proposeUpdateEvent(ctx.db, ctx.request.workspaceId, {
@@ -181,6 +222,7 @@ const deleteCap: Capability = {
     scope: z.enum(['single', 'instance', 'series']).optional(),
     requestId: z.string().min(8).max(80),
   }).strict(),
+  confirmed: ConfirmedMutation,
   risk: 'external',
   async preview(ctx, input: { eventId: string; scope?: any; requestId: string }) {
     const p = await proposeDeleteEvent(ctx.db, ctx.request.workspaceId, {
@@ -219,6 +261,9 @@ export const calendarModule: AiModule = {
       + 'occurrence is not changing the series.',
     'A task due date is not a calendar event. Scheduling a task can create one, but that is '
       + 'a separate explicit action.',
+    'To hold time FOR a task, use event.create with that task\u2019s taskId. The event and the '
+      + 'task are then linked, and each is visible from the other. Creating the event without '
+      + 'the taskId leaves a task that does not know it was scheduled.',
     'Never write a Life OS relationship into a Google event field.',
   ],
   async available(ctx) {
@@ -227,9 +272,17 @@ export const calendarModule: AiModule = {
       return { enabled: false, reason: 'No Google Calendar account is connected.' };
     }
     if (!s.canWrite) {
-      /* Reading still works, but a module that can only read half its
-         capabilities would advertise creates that always fail. Off is honest. */
-      return { enabled: false, reason: s.reason ?? 'This calendar connection cannot write.' };
+      /* Readable, not writable — the middle state, and the one that used to be
+         collapsed into "off". Collapsing it meant a workspace whose grant
+         could not write was also told it could not SEE its calendar, and the
+         assistant said "I cannot find that meeting" about a meeting it had
+         already retrieved. Now the reads stay and only the writes go. */
+      return {
+        enabled: true,
+        canMutate: false,
+        mutateReason: s.reason
+          ?? 'Calendar changes are not available — this Google connection can only read.',
+      };
     }
     return { enabled: true };
   },

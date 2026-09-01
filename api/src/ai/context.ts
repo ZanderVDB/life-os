@@ -115,48 +115,61 @@ export async function gather(
   const surface = ctx.request.surface;
   if (surface?.entity) seeds.push(surface.entity);
 
-  for (const seed of seeds) {
-    const readCap = caps.find((c) => c.kind === 'read' && c.module === registry
-      .moduleForEntity(seed.type)?.id);
-    if (readCap) {
-      const rows = await call(readCap.id, { id: seed.id });
-      out.push(...rows.map((r) => ({ ...r, via: 'surface' as const, level: 1 as const })));
-    }
-  }
+  const seeded = await Promise.all(seeds.map(async (seed) => {
+    const owner = registry.moduleForEntity(seed.type)?.id;
+    /* `<module>.read` first: several modules register more than one read, and
+       the one that loads a single thing by id is the one a seed wants. */
+    const readCap = caps.find((c) => c.kind === 'read' && c.module === owner && c.id.endsWith('.read'))
+      ?? caps.find((c) => c.kind === 'read' && c.module === owner);
+    if (!readCap) return [];
+    const rows = await call(readCap.id, { id: seed.id });
+    /* Only the seed ITSELF is "on screen". A project read brings its tasks
+       with it, and marking those as level 1 too would give every one of them
+       the surface weight — twelve points for existing near something the user
+       is looking at, which buries whatever they actually asked about. */
+    return rows.map((r) => (r.ref.id === seed.id && r.ref.type === seed.type
+      ? { ...r, via: 'surface' as const, level: 1 as const }
+      : r));
+  }));
+  for (const rows of seeded) out.push(...rows);
 
   if (level >= 2 && opts.query && opts.query.trim().length >= 2) {
-    /* ── Level 2: targeted search ──────────────────────────────────── */
+    /* ── Level 2: targeted search ────────────────────────────────────
+     *
+     * Every registered search, CONCURRENTLY. They are independent reads
+     * against different tables and running them in series made a turn wait
+     * for the sum of eight round trips to learn what the slowest one alone
+     * would have told it. Nothing here depends on anything else here. */
     const q = opts.query.trim().slice(0, 200);
     const searches = caps.filter((c) => c.kind === 'search');
-    for (const c of searches) {
-      if (out.length >= limit) break;
-      out.push(...await call(c.id, { query: q }));
-    }
+    const rows = await Promise.all(searches.map((c) => call(c.id, { query: q })));
+    for (const r of rows) out.push(...r);
   }
 
   /* ── Traversal: the reason relationships exist ─────────────────────── */
-  if (level >= 2 && depth > 0) {
-    const traverseCap = byId.get('link.traverse');
-    if (traverseCap) {
-      /* Walk from the strongest starting points only — the surface, and the
-         first few search hits. Walking from everything turns a search that
-         returned twenty rows into twenty graph walks. */
-      const starts = merge(out).sort((a, b) => a.level - b.level).slice(0, 5);
-      for (const s of starts) {
-        if (out.length >= limit) break;
-        out.push(...await call('link.traverse', {
-          type: s.ref.type, id: s.ref.id, depth, limit: 12,
-        }));
-      }
-    }
+  if (level >= 2 && depth > 0 && byId.has('link.traverse')) {
+    /* Walk from the strongest starting points only — the surface, and the
+       first few search hits. Walking from everything turns a search that
+       returned twenty rows into twenty graph walks. Concurrent for the same
+       reason the searches are: five independent walks, no shared state. */
+    const starts = merge(out).sort((a, b) => a.level - b.level).slice(0, 5);
+    const walked = await Promise.all(starts.map((s) => call('link.traverse', {
+      type: s.ref.type, id: s.ref.id, depth, limit: 12,
+    })));
+    for (const r of walked) out.push(...r);
   }
 
   if (level >= 3) {
-    /* ── Level 3: broad ────────────────────────────────────────────── */
-    for (const c of caps.filter((x) => x.kind === 'read' && x.input.safeParse({}).success)) {
-      if (out.length >= limit) break;
-      out.push(...await call(c.id, {}));
-    }
+    /* ── Level 3: broad ──────────────────────────────────────────────
+     *
+     * Every read that will accept an empty input: the whole habit list, the
+     * areas, whatever else answers "just tell me what is there". Expensive by
+     * design, which is why nothing reaches it by accident — a caller asks for
+     * level 3, or the low-result fallback in `turn.ts` escalates to it after
+     * a targeted pass came back suspiciously empty. */
+    const broad = caps.filter((x) => x.kind === 'read' && x.input.safeParse({}).success);
+    const rows = await Promise.all(broad.map((c) => call(c.id, {})));
+    for (const r of rows) out.push(...r);
   }
 
   const merged = merge(out);

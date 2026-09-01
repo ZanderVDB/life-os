@@ -68,10 +68,58 @@ export type PlanInput = {
   capabilities: { id: string; module: string; kind: string; description: string; risk: string }[];
   /** The module rules the plan has to respect. */
   rules: { module: string; rules: string[] }[];
+  /**
+   * Modules that can be READ but not written to right now.
+   *
+   * Stated rather than left to be inferred from an absence. "I can see that
+   * meeting, but calendar changes aren't available" is a useful answer and it
+   * is unreachable from a capability list that merely does not mention
+   * Calendar — from that, the only available conclusion is silence.
+   */
+  readOnly?: { id: string; reason: string }[];
   /** What was retrieved, already trimmed by the context engine. */
   sources: ReturnType<typeof import('./context.js').forPrompt>;
   /** Durable facts about this user. Small, and never secrets. */
   memory: { category: string; fact: string }[];
+  /**
+   * The proposal still awaiting confirmation, when there is one.
+   *
+   * Present so that "actually Saturday" has something to be about. A pending
+   * proposal is conversation state: it does not exist in the workspace yet, so
+   * searching for it finds nothing, and an assistant without this said the
+   * thing the user was looking at did not exist.
+   */
+  pending?: {
+    understood: string;
+    request: string;
+    actions: {
+      id: string; capability: string; title: string;
+      payload: Record<string, unknown>; enabled: boolean;
+    }[];
+  };
+  /** The entity the user picked from a clarification, by id rather than label. */
+  resolved?: { ref: { type: string; id: string } | null; label: string } | null;
+  /**
+   * One chance to fix a plan that contradicted itself.
+   *
+   * Set by the consistency pass, which is deterministic and runs before the
+   * user sees anything. The complaint names the field and the sentence that
+   * disagree; a model told exactly that usually fixes it.
+   */
+  repair?: { problems: string; previous: unknown };
+};
+
+/**
+ * An edit to a proposal that is already on the table.
+ *
+ * Deliberately shaped like the card's own edit control, because it goes down
+ * the same validated path: field values checked against the capability's
+ * schema, the version bumped, the confirmation gate untouched.
+ */
+export type PlanAmendment = {
+  actionId: string;
+  enabled?: boolean | null;
+  fields?: Record<string, string | number | null> | null;
 };
 
 export type AnswerInput = {
@@ -106,7 +154,7 @@ export type AiProvider = {
   /** For the trace, so a wrong answer can be attributed. */
   model?: string | null;
   interpret?: (input: InterpretInput) => Promise<InterpretOutput>;
-  plan?: (input: PlanInput) => Promise<Omit<ProposalSet, 'sources'>>;
+  plan?: (input: PlanInput) => Promise<Omit<ProposalSet, 'sources'> & { amend?: PlanAmendment[] }>;
   answer?: (input: AnswerInput) => Promise<AnswerOutput>;
   summarise?: (input: { text: string; maxWords?: number }) => Promise<string>;
   extractMemory?: (input: ExtractMemoryInput) => Promise<MemoryCandidate[]>;
