@@ -30,6 +30,8 @@ import {
   recentReferences, referenceCue, forPrompt as referencesForPrompt,
 } from '../src/ai/references.js';
 import { z } from 'zod';
+import { ProviderRouter, deterministicProvider } from '../src/ai/provider.js';
+import type { AiProvider } from '../src/ai/provider.js';
 import { and, eq } from 'drizzle-orm';
 
 const TOKEN = 'test-bypass-token';
@@ -593,4 +595,209 @@ test('phase4: areas are retrieved on every turn, not only on a broad pass', asyn
   const areas = MODULES.find((m) => m.id === 'areas')!;
   const list = areas.capabilities.find((c) => c.id === 'area.list')!;
   assert.equal(list.always, true);
+});
+
+/* ══ Through the real HTTP path ══════════════════════════════════════════
+ *
+ * The tests above exercise the executor directly. These go through the route
+ * the browser uses — plan, persist, confirm, execute — because that is where
+ * the version gate, the proposal store and the confirmation count live, and a
+ * dependency that works in the executor and not through the route works
+ * nowhere that matters.
+ *
+ * The PLANNER is stubbed. What is being checked is the pipeline, not the
+ * model's judgement: that a placeholder survives validation and storage, that
+ * the count the button sends still matches, and that the ids that reach the
+ * services are the ones the earlier actions actually produced.
+ */
+function stubPlanner(plans: any[]): AiProvider {
+  let i = 0;
+  return {
+    id: 'stub',
+    label: 'Stub',
+    model: 'stub-1',
+    async plan(input: any) {
+      const p = plans[Math.min(i, plans.length - 1)] ?? {};
+      i += 1;
+      return {
+        id: '', request: input.text,
+        understood: p.understood ?? 'Understood',
+        answer: p.answer ?? null,
+        actions: (p.actions ?? []) as any,
+        amend: (p.amend ?? []) as any,
+        clarification: (p.clarification ?? null) as any,
+      };
+    },
+    async answer() { return { answer: '', cited: [] }; },
+  };
+}
+
+async function withPlanner(plans: any[]) {
+  const { db } = await freshDb();
+  const app = buildApp(db, env, {
+    registry: new CapabilityRegistry(MODULES),
+    providers: new ProviderRouter(
+      [deterministicProvider, stubPlanner(plans)],
+      { plan: 'stub', default: 'deterministic' },
+    ),
+  });
+  await app.ready();
+  const me = (await app.inject({ method: 'GET', url: '/api/v1/me', headers: auth })).json();
+  const ws = me.workspace.id;
+  const call = async (method: string, url: string, payload?: unknown) => {
+    const r = await app.inject({
+      method: method as any, url: `/api/v1/workspaces/${ws}${url}`, headers: auth,
+      payload: payload as any,
+    });
+    return { status: r.statusCode, body: r.body ? r.json() : null };
+  };
+  return { app, db, ws, call, userId: me.user.id, areaId: me.areas[0].id };
+}
+
+test('phase4 http: a composite request survives plan, storage and confirmation', async () => {
+  /* Filled in after setup: the plan names a real area id, and there is no
+     workspace to get one from until the app exists. The stub reads the array
+     when the turn runs, not when it is constructed. */
+  const plans: any[] = [];
+  const { call, areaId } = await withPlanner(plans);
+  plans.push({
+    understood: 'Set up the office move',
+    actions: [
+      {
+        capability: 'project.create', title: 'Office move',
+        payload: {
+          title: 'Office move', outcome: 'Everything moved and working',
+          areaId, focus: 'now',
+        },
+        confidence: 'high', assumptions: [], warnings: [], sources: [],
+      },
+      {
+        capability: 'task.create', title: 'Get moving quotes',
+        payload: { title: 'Get moving quotes', projectId: '{{a1.id}}' },
+        confidence: 'high', assumptions: [], warnings: [], sources: [],
+      },
+      {
+        capability: 'link.create', title: 'Link the task to the project',
+        payload: {
+          kind: 'related',
+          sourceType: 'task', sourceId: '{{a2.id}}',
+          targetType: 'project', targetId: '{{a1.id}}',
+        },
+        confidence: 'high', assumptions: [], warnings: [], sources: [],
+      },
+    ],
+  });
+
+  const turn = (await call('POST', '/ai/turn', {
+    text: 'Create a project called Office move in Work, add a task to get moving quotes, '
+      + 'and link them.',
+    today: '2026-09-01',
+  })).body;
+
+  assert.equal(turn.status, 'proposed', JSON.stringify(turn));
+  assert.equal(turn.actions.length, 3, 'all three survived validation');
+  /* The placeholder is STORED, not resolved early and not replaced by a
+     probe. Confirming a proposal carrying a real-looking id nobody created
+     is the failure this guards. */
+  assert.equal(turn.actions[1].payload.projectId, '{{a1.id}}');
+
+  const done = (await call('POST', `/ai/turn/${turn.turnId}/confirm`, {
+    version: turn.version, count: 3, importantAccepted: [],
+  })).body;
+
+  assert.equal(done.done, 3, JSON.stringify(done.results));
+  const projectId = done.results[0].ref.id;
+  const shown = (await call('GET', `/projects/${projectId}`)).body;
+  assert.equal(shown.tasks.length, 1);
+  assert.equal(shown.tasks[0].title, 'Get moving quotes');
+
+  /* And the edge points at the two rows that were really created. */
+  const related = (await call('GET', `/links?type=task&id=${shown.tasks[0].id}`)).body;
+  assert.ok(
+    JSON.stringify(related).includes(projectId),
+    'the link reaches the project that was created in the same turn',
+  );
+});
+
+test('phase4 http: a dependent is not run when its dependency fails', async () => {
+  const plans: any[] = [];
+  const { call, areaId } = await withPlanner(plans);
+  /* A REAL project, so every id in the plan is one retrieval produced and
+     validation has nothing to object to. */
+  const project = (await call('POST', '/projects', {
+    title: 'Office move', outcome: 'Moved', areaId, focus: 'now',
+  })).body.project;
+
+  plans.push({
+    understood: 'Link and then edit',
+    actions: [
+      {
+        /* Passes every plan-time check and fails at EXECUTION: the id is
+           real and known, and it is a PROJECT being described as a task.
+           The link service checks both ends exist as the types claimed. */
+        capability: 'link.create', title: 'Link them',
+        payload: {
+          kind: 'related',
+          sourceType: 'task', sourceId: project.id,
+          targetType: 'project', targetId: project.id,
+        },
+        confidence: 'high', assumptions: [], warnings: [], sources: [],
+      },
+      {
+        capability: 'task.update', title: 'Make it urgent',
+        payload: { id: '{{a1.id}}', changes: { priority: 'high' } },
+        confidence: 'high', assumptions: [], warnings: [], sources: [],
+      },
+    ],
+  });
+
+  const turn = (await call('POST', '/ai/turn', {
+    text: 'Link the office move to itself and make it urgent.', today: '2026-09-01',
+  })).body;
+  assert.equal(turn.status, 'proposed', JSON.stringify(turn));
+  assert.equal(turn.actions.length, 2, 'both were shown — nothing was caught early');
+
+  const done = (await call('POST', `/ai/turn/${turn.turnId}/confirm`, {
+    version: turn.version, count: 2, importantAccepted: [],
+  })).body;
+
+  assert.equal(done.results[0].status, 'failed', JSON.stringify(done));
+  assert.equal(done.results[1].status, 'skipped');
+  assert.equal(done.results[1].error, 'dependency_failed');
+  assert.equal(done.done, 0, 'nothing claims to be done');
+});
+
+test('phase4 http: an action referring to one that was rejected is dropped, not shown', async () => {
+  const { call } = await withPlanner([{
+    understood: 'Two changes',
+    actions: [
+      /* Invalid — no title. Rejected before anything is shown. */
+      {
+        capability: 'task.create', title: 'Broken',
+        payload: { nonsense: true },
+        confidence: 'high', assumptions: [], warnings: [], sources: [],
+      },
+      /* Depends on it, so it cannot be carried out either. */
+      {
+        capability: 'task.update', title: 'Make it urgent',
+        payload: { id: '{{a1.id}}', changes: { priority: 'high' } },
+        confidence: 'high', assumptions: [], warnings: [], sources: [],
+      },
+      /* Independent, and must survive. */
+      {
+        capability: 'task.create', title: 'Unrelated',
+        payload: { title: 'Unrelated' },
+        confidence: 'high', assumptions: [], warnings: [], sources: [],
+      },
+    ],
+  }]);
+
+  const turn = (await call('POST', '/ai/turn', {
+    text: 'Do three things.', today: '2026-09-01',
+  })).body;
+
+  /* Only the independent one is offered. The user is never shown a change
+     that could not have worked. */
+  assert.equal(turn.actions.length, 1, JSON.stringify(turn.actions));
+  assert.equal(turn.actions[0].title, 'Unrelated');
 });

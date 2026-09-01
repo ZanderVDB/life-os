@@ -182,6 +182,19 @@ export function substitute(
 const probeId = (actionId: string) =>
   `00000000-0000-4000-8000-${actionId.replace(/\D/g, '').padStart(12, '0')}`;
 
+/**
+ * Whether a value is a stand-in this file produced.
+ *
+ * Needed by the validator: the id checks run over the PARSED payload, which
+ * carries schema defaults the raw one does not, and probe ids therefore reach
+ * them. A probe id is not a claim that something exists — it is a claim that
+ * something is being CREATED in this plan, which `planOrder` has already
+ * verified. Reported as an unknown id it produced the opposite of the truth:
+ * a correct composite plan refused for inventing ids.
+ */
+export const isProbeId = (v: unknown) =>
+  typeof v === 'string' && /^00000000-0000-4000-8000-\d{12}$/.test(v);
+
 export function probe(payload: Record<string, unknown>): Record<string, unknown> {
   const stand = new Map<string, EntityRef>();
   for (const id of placeholdersIn(payload)) {

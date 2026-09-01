@@ -392,6 +392,8 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     schemas,
     knownIds,
     today: request.today,
+    /* The user's own words. Read by exactly one check — see ValidateInput. */
+    request: text,
     timing,
     /* A clarification means the turn is ASKING rather than deciding, which is
        exactly what ambiguous wording should produce — so the ambiguity check

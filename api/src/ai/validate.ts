@@ -39,6 +39,7 @@ import {
   longDate, isCivilDate,
 } from '../lib/civil-date.js';
 import type { TimingIntent } from '../lib/timing-intent.js';
+import { probe, isProbeId } from './depends.js';
 
 export type Finding = {
   /** Which action, by its index in the plan. */
@@ -247,6 +248,16 @@ export type ValidateInput = {
   timing?: TimingIntent;
   /** True when the plan asked a question rather than deciding. */
   asking?: boolean;
+  /**
+   * What the user actually said.
+   *
+   * Only the create-versus-change check reads it, and it has to: the verb
+   * that decides which of those a request is lives in the request, while the
+   * action's title is the NAME of the thing. "Create a project called Office
+   * move" is unambiguous, and looking only at "Office move" made it look like
+   * a request to move something.
+   */
+  request?: string;
 };
 
 /** Fields where a task's two meanings of "when" actually compete. */
@@ -277,7 +288,12 @@ export function validatePlan(input: ValidateInput): Finding[] {
      * having a repair pass: "you left out the id" is exactly the kind of
      * mistake a second attempt fixes, and exactly the kind a user should
      * never have to see. */
-    const shape = schema.safeParse(a.payload ?? {});
+    /* Through a PROBE, for the same reason `buildActions` does it: a field
+       holding `{{a1.id}}` carries an id the action it depends on has not
+       produced yet, and checking it as the text it currently is rejects a
+       payload that is in fact correct. Only the placeholders are stood in
+       for; every other rule still applies to the real value. */
+    const shape = schema.safeParse(probe((a.payload ?? {}) as Record<string, unknown>));
     if (!shape.success) {
       const issue = shape.error.issues[0];
       const field = issue?.path?.filter((x) => typeof x === 'string').join('.') ?? '';
@@ -397,7 +413,14 @@ export function validatePlan(input: ValidateInput): Finding[] {
 
     /* ── 4. Create versus change ────────────────────────────────────── */
     const isCreate = /\.(create|append|add)/i.test(a.capability);
-    if (isCreate && CHANGE_WORDS.test(a.title) && !CREATE_WORDS.test(words)) {
+    /* The verb lives in what the USER said, not in what the thing is called.
+       A title is a NAME: "Office move", "Rename the shop", "Set design" are
+       all perfectly good names for something new, and reading them as verbs
+       refused to create them. The card's own words are still consulted —
+       they are what this check was written for — but an explicit create in
+       the request settles it. */
+    const asked = `${input.request ?? ''}. ${words}`;
+    if (isCreate && CHANGE_WORDS.test(a.title) && !CREATE_WORDS.test(asked)) {
       add(index, 'kind_mismatch',
         `“${a.title}” describes changing something that exists, but ${a.capability} `
         + 'creates a new one. Use the update capability with the existing id, or say plainly '
@@ -408,6 +431,11 @@ export function validatePlan(input: ValidateInput): Finding[] {
     for (const [key, v] of Object.entries(values)) {
       if (typeof v !== 'string' || !/^[0-9a-f-]{36}$/i.test(v)) continue;
       if (key === 'requestId') continue;
+      /* A placeholder standing in for something this plan creates. Not a
+         claim that a row exists, so there is nothing here to have found in
+         context; whether the action it points at is real is `planOrder`'s
+         question and it has already been asked. */
+      if (isProbeId(v)) continue;
       /* Any uuid in a payload is a claim that the thing exists. The claim is
          checkable, and an unchecked one becomes a foreign-key error the user
          sees after they have already agreed to the change. */
