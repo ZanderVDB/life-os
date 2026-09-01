@@ -39,6 +39,8 @@ import {
   calendarConnections,
 } from '../src/db/schema.js';
 import { and, eq, sql } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { encryptToken } from '../src/lib/token-crypto.js';
 
@@ -1054,6 +1056,26 @@ test('calendar: an event created for a task ends up linked to it, both ways', as
   assert.equal(google.calls.filter((c) => c.method === 'POST'
     && /\/events(\?|$)/.test(c.url)).length, 1);
   } finally { google.restore(); }
+});
+
+test('the model is told the surface renders text literally', async () => {
+  /* The panel and the phone render an answer as plain text, so `**Urgent**`
+     arrives on screen as asterisks. Telling the model not to emit markdown is
+     the whole fix; adding a renderer would be a different product decision
+     made by accident. */
+  const src = readFileSync(join('src', 'ai', 'providers', 'anthropic.ts'), 'utf8');
+  assert.match(src, /PLAIN TEXT ONLY/);
+  assert.match(src, /renders what you write literally/);
+
+  /* And nothing on either surface parses it, which is what makes the rule
+     necessary rather than merely tidy. Comments are stripped first: the word
+     "marked" appears in one, describing a card that cannot run. */
+  const CODE = /\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm;
+  for (const file of ['assistant-panel.js', 'assistant.js', 'assistant-cards.js']) {
+    const web = readFileSync(join('..', 'web', file), 'utf8').replace(CODE, ' ');
+    assert.ok(!/marked\(|markdown|remark|DOMPurify/i.test(web),
+      `${file} parses markdown, so the rule is wrong rather than the renderer`);
+  }
 });
 
 test('operations: /health/version says whether a model is configured here', async () => {

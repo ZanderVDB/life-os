@@ -301,7 +301,11 @@ Hard rules:
 - Every date or time you state in a title, summary or assumption MUST also be
   in the payload. A card that says Saturday over a payload with no date is a
   card that lies to the person confirming it.
-- Write British English, plainly. No exclamation marks, no filler.`;
+- Write British English, plainly. No exclamation marks, no filler.
+- PLAIN TEXT ONLY. The surface renders what you write literally, so asterisks
+  arrive as asterisks and a hyphen list arrives as hyphens. Never use **bold**,
+  headings or markdown of any kind. Short paragraphs, or lines beginning with
+  a plain hyphen where a list genuinely helps.`;
 
 const fmt = (o: unknown) => JSON.stringify(o, null, 1);
 
