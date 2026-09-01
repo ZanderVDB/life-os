@@ -19,7 +19,9 @@ import {
 import { badRequest, notFound } from '../lib/errors.js';
 import { cleanupLinksFor } from '../lib/relationships.js';
 // One implementation of "due and done on a day", shared with Calendar.
-import { checkHabit, HabitCheckInput } from '../lib/actions/habits.js';
+import {
+  checkHabit, HabitCheckInput, createHabit, updateHabit, archiveHabit,
+} from '../lib/actions/habits.js';
 import { habitHistory } from '../lib/habit-history.js';
 /* The computed `Write in Diary` habit. Habits, Calendar and Today all go
  * through this one provider — §6 of D2.2 exists because they did not. */
@@ -287,14 +289,7 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
     const body = HabitCreate.parse(req.body);
     await assertArea(wsId, body.areaId);
 
-    const [maxRow] = await db.select({ max: sql<number>`coalesce(max(${habits.position}), 0)` })
-      .from(habits).where(eq(habits.workspaceId, wsId));
-    const created = (await db.insert(habits).values({
-      workspaceId: wsId, name: body.name, description: body.description ?? null,
-      areaId: body.areaId ?? null, frequencyType: body.frequencyType,
-      frequencyConfig: body.frequencyConfig ?? null, targetCount: body.targetCount,
-      color: body.color, position: Number(maxRow?.max ?? 0) + GAP,
-    }).returning())[0]!;
+    const created = await createHabit(db, wsId, body as any);
     reply.code(201);
     return { habit: created };
   });
@@ -306,15 +301,20 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
     if (!Object.keys(body).length) throw badRequest('No fields to update.');
     await assertArea(wsId, body.areaId);
 
-    const patch: Record<string, unknown> = { updatedAt: new Date() };
-    for (const k of ['name', 'description', 'areaId', 'frequencyType', 'frequencyConfig',
-      'targetCount', 'color', 'isActive', 'position'] as const) {
-      if (body[k] !== undefined) patch[k] = body[k] ?? null;
+    /* `position` is a drag against a rendered list; nothing outside this route
+       sets it, so it stays here rather than in the shared service. */
+    if (body.position !== undefined) {
+      await db.update(habits).set({ position: body.position, updatedAt: new Date() })
+        .where(and(eq(habits.id, habitId), eq(habits.workspaceId, wsId)));
     }
-    const updated = (await db.update(habits).set(patch)
-      .where(and(eq(habits.id, habitId), eq(habits.workspaceId, wsId))).returning())[0];
-    if (!updated) throw notFound('Habit not found.');
-    return { habit: updated };
+    const { position, ...rest } = body;
+    if (!Object.keys(rest).length) {
+      const [only] = await db.select().from(habits)
+        .where(and(eq(habits.id, habitId), eq(habits.workspaceId, wsId))).limit(1);
+      if (!only) throw notFound('Habit not found.');
+      return { habit: only };
+    }
+    return { habit: await updateHabit(db, wsId, habitId, rest as any) };
   });
 
   /**
@@ -337,10 +337,7 @@ export function registerHabitRoutes(app: AppInstance, db: Db, guards: Guards) {
       if (!gone.length) throw notFound('Habit not found.');
       return { deleted: true, archived: false };
     }
-    const archived = (await db.update(habits)
-      .set({ archivedAt: new Date(), isActive: false, updatedAt: new Date() })
-      .where(and(eq(habits.id, habitId), eq(habits.workspaceId, wsId))).returning())[0];
-    if (!archived) throw notFound('Habit not found.');
+    const archived = await archiveHabit(db, wsId, habitId);
     return { deleted: false, archived: true, habit: archived };
   });
 

@@ -30,7 +30,9 @@ import {
 } from '../db/schema.js';
 import { ensureProjectBook, PAGE_TARGET } from '../lib/book-links.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
-import { updateProject } from '../lib/actions/projects.js';
+import {
+  updateProject, createProject, completeProject, archiveProject, OpenTasksRemain,
+} from '../lib/actions/projects.js';
 import { cleanupLinksFor } from '../lib/relationships.js';
 // TEMPORARY — sample data for E2 review. Delete with src/lib/sample-projects.ts.
 import {
@@ -575,55 +577,7 @@ export function registerProjectRoutes(
     const body = parsed.data;
     await assertArea(ws, body.areaId);
 
-    const status: ProjectStatus = body.firstTask ? 'active' : 'planning';
-
-    const maxRow = await db.select({
-      max: sql<number>`coalesce(max(${projects.position}), 0)`,
-    }).from(projects).where(eq(projects.workspaceId, ws));
-    const max = maxRow[0]?.max ?? 0;
-
-    const created = await db.transaction(async (tx) => {
-      const [project] = await tx.insert(projects).values({
-        workspaceId: ws,
-        areaId: body.areaId,
-        title: body.title,
-        outcome: body.outcome,
-        description: body.description ?? null,
-        targetDate: body.targetDate ?? null,
-        status,
-        focus: body.focus,
-        position: Number(max) + GAP,
-      }).returning();
-
-      if (body.firstTask) {
-        // The first task inherits the project's area. It is being created
-        // inside the project, so there is no prior classification to respect.
-        const posRow = await tx.select({
-          maxPos: sql<number>`coalesce(max(${tasks.position}), 0)`,
-        }).from(tasks).where(eq(tasks.workspaceId, ws));
-        const maxPos = posRow[0]?.maxPos ?? 0;
-        await tx.insert(tasks).values({
-          workspaceId: ws,
-          projectId: project!.id,
-          areaId: body.areaId,
-          title: body.firstTask.title,
-          projectPosition: GAP,
-          // Focus decides whether project context surfaces work; a task the
-          // user just typed into a Now project belongs in view. Anything else
-          // starts in the backlog rather than jumping onto Today.
-          bucket: body.focus === 'now' ? 'today' : 'future',
-          position: Number(maxPos) + GAP,
-        });
-      }
-
-      /* Every Project gets a Book, at the moment it is created and in the same
-       * transaction (§6). Not lazily on first open: a Project whose Book only
-       * exists once somebody looks for it is a Project that AI cannot be told
-       * about, and half the point of this model is that the relationship is
-       * always there to be asked about. */
-      await ensureProjectBook(tx, ws, project!);
-      return project!;
-    });
+    const created = await createProject(db, ws, body);
 
     const list = await tasksWithSteps(ws, created.id);
     reply.code(201);
@@ -920,42 +874,30 @@ export function registerProjectRoutes(
     assertFresh(project, body.data.expectedUpdatedAt);
     if (project.archivedAt) throw conflict('This project is archived. Restore it first.');
 
-    const list = await tasksOf(ws, id);
-    const open = list.filter((t) => t.status === 'open');
-
-    if (open.length > 0 && !body.data.openTasks) {
-      throw conflict(JSON.stringify({
-        reason: 'open_tasks',
-        message: `${open.length} task${open.length === 1 ? '' : 's'} still open.`,
-        openTasks: open.length,
-        choices: ['leave', 'cancel'],
-      }));
-    }
-
-    let cancelled = 0;
-    await db.transaction(async (tx) => {
-      if (open.length > 0 && body.data.openTasks === 'cancel') {
-        const rows = await tx.update(tasks)
-          .set({ status: 'cancelled', updatedAt: new Date() })
-          .where(and(eq(tasks.workspaceId, ws), eq(tasks.projectId, id), eq(tasks.status, 'open')))
-          .returning({ id: tasks.id });
-        cancelled = rows.length;
+    try {
+      const r = await completeProject(db, ws, {
+        id,
+        ...(body.data.openTasks ? { openTasks: body.data.openTasks } : {}),
+      });
+      return {
+        project: shape(r.project, await tasksOf(ws, id)),
+        tasksCancelled: r.tasksCancelled,
+        tasksLeftOpen: r.tasksLeftOpen,
+      };
+    } catch (e) {
+      /* The service refuses to guess what happens to unfinished work. The
+         wire shape of that refusal has always been this 409 body, and the
+         Projects page reads it to put the choice in front of the user. */
+      if (e instanceof OpenTasksRemain) {
+        throw conflict(JSON.stringify({
+          reason: 'open_tasks',
+          message: e.message,
+          openTasks: e.openTasks,
+          choices: ['leave', 'cancel'],
+        }));
       }
-      await tx.update(projects).set({
-        status: 'completed',
-        completedAt: new Date(),
-        // A completed project has no next action to point at.
-        nextTaskId: null,
-        updatedAt: new Date(),
-      }).where(and(eq(projects.workspaceId, ws), eq(projects.id, id)));
-    });
-
-    const after = await tasksOf(ws, id);
-    return {
-      project: shape(await load(ws, id), after),
-      tasksCancelled: cancelled,
-      tasksLeftOpen: body.data.openTasks === 'leave' ? open.length : 0,
-    };
+      throw e;
+    }
   });
 
   /* ── Archive / restore ─────────────────────────────────────────────── */
@@ -968,14 +910,8 @@ export function registerProjectRoutes(
   app.post(`${base}/projects/:id/archive`, pre, async (req) => {
     const { id } = z.object({ id: uuid }).parse(req.params);
     const ws = wsId(req);
-    const project = await load(ws, id);
-    // Idempotent: archiving twice is the same as archiving once, which matters
-    // when a double click produces two requests.
-    if (project.archivedAt) return { project: shape(project, await tasksOf(ws, id)) };
-    const [row] = await touch(ws, id, {
-      archivedAt: new Date(), preArchiveStatus: project.status,
-    });
-    return { project: shape(row!, await tasksOf(ws, id)) };
+    const row = await archiveProject(db, ws, id);
+    return { project: shape(row, await tasksOf(ws, id)) };
   });
 
   app.post(`${base}/projects/:id/restore`, pre, async (req) => {

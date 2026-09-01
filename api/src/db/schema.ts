@@ -1320,6 +1320,93 @@ export const aiMemoryCandidates = pgTable('ai_memory_candidates', {
 export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
 export type MemorySource = (typeof MEMORY_SOURCES)[number];
 
+
+/* ══ Assistant turns ═════════════════════════════════════════════════════
+ *
+ * The assistant's own state, and deliberately small.
+ *
+ * ── Why proposals live here and not in the browser ───────────────────────
+ *
+ * Phase 1 let the client hand the executor a proposal set. That was safe only
+ * because every action still had to name a registered capability and pass its
+ * schema — but it meant the client could confirm a set the planner never
+ * produced. The executor now runs a SERVER-AUTHORED set: the planner writes
+ * one here, the client is given its id and version, edits go through
+ * validation back into this row, and confirmation names the id and the
+ * version it saw.
+ *
+ * ── What is deliberately NOT stored ──────────────────────────────────────
+ *
+ * Retrieved content. A turn records which entities were read — ids, so an
+ * answer can be traced and a follow-up can say "the first one" — and never
+ * their text. Storing the latter would make this table a second copy of the
+ * user's diary, and it is not one.
+ */
+export const TURN_STATUSES = ['planning', 'proposed', 'answered', 'executed', 'failed', 'cancelled'] as const;
+
+export const aiConversations = pgTable('ai_conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /**
+   * A bounded, structured summary of what has been said.
+   *
+   * NOT a transcript. A conversation that resends everything forever gets
+   * more expensive and less accurate with every turn; what a follow-up
+   * actually needs is "the last proposal set, and what the last answer was
+   * about", which is a few hundred bytes.
+   */
+  summary: text('summary'),
+  lastTurnAt: timestamp('last_turn_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byOwner: index('ai_conversations_owner_idx').on(t.workspaceId, t.userId, t.lastTurnAt),
+}));
+
+export const aiTurns = pgTable('ai_turns', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  conversationId: uuid('conversation_id').notNull()
+    .references(() => aiConversations.id, { onDelete: 'cascade' }),
+  /** What the user said. Kept because a follow-up needs it and the user wrote it. */
+  request: text('request').notNull(),
+  /** What the assistant believed was asked, in the user's own terms. */
+  understood: text('understood'),
+  /** A direct answer, when the request was a question. */
+  answer: text('answer'),
+  status: text('status').notNull().default('planning'),
+  /**
+   * The authoritative proposal set. The client renders a copy; only this one
+   * is ever executed.
+   */
+  actions: jsonb('actions').$type<unknown[]>().notNull().default([]),
+  /**
+   * Bumped on every accepted edit. A confirmation naming an old version is
+   * refused — the person agreed to a set that no longer exists.
+   */
+  version: integer('version').notNull().default(1),
+  /** Entity refs only: `[{type,id}]`. Never their content. */
+  sources: jsonb('sources').$type<unknown[]>().notNull().default([]),
+  /** What the executor did, once. Its presence is what makes replay a no-op. */
+  results: jsonb('results').$type<unknown[]>(),
+  executedAt: timestamp('executed_at', { withTimezone: true }),
+  /** Operating information: which model, how long, how much was retrieved. */
+  metrics: jsonb('metrics').$type<Record<string, unknown>>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byConversation: index('ai_turns_conversation_idx').on(t.conversationId, t.createdAt),
+  byOwner: index('ai_turns_owner_idx').on(t.workspaceId, t.userId, t.createdAt),
+  statusCheck: check('ai_turns_status',
+    sql`${t.status} IN ('planning','proposed','answered','executed','failed','cancelled')`),
+}));
+
+export type TurnStatus = (typeof TURN_STATUSES)[number];
+
 /* ── relations ───────────────────────────────────────────────────────── */
 export const calendarConnectionsRelations = relations(calendarConnections, ({ many }) => ({
   calendars: many(calendars),

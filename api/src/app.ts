@@ -26,7 +26,16 @@ import { createAssistant } from './ai/index.js';
 
 export const API_VERSION = '0.1.0';
 
-export function buildApp(db: Db, env: AppEnv = loadEnv()) {
+/**
+ * @param assistant  Overridden by tests to inject a stub planner.
+ *
+ * A model behind a network call cannot be exercised by a test suite, and a
+ * test that skipped the turn would leave the most important path in the system
+ * uncovered. The seam is here rather than inside the turn so that everything
+ * BELOW it — retrieval, ranking, the registry, validation, the proposal row,
+ * the confirmation gate, the executor — is the real thing.
+ */
+export function buildApp(db: Db, env: AppEnv = loadEnv(), assistant = createAssistant()) {
   const app = Fastify({
     loggerInstance: makeLogger(env.LOG_LEVEL),
     genReqId: () => randomUUID(),
@@ -82,7 +91,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv()) {
   /* Built once. The module list is fixed at build time; which of them are
      AVAILABLE is asked per request, so two workspaces get different answers
      from the same registry. */
-  registerAiRoutes(app, db, guards, createAssistant());
+  registerAiRoutes(app, db, guards, assistant);
   /* Google is not a signed-in user, so its webhook is registered outside the
    * workspace-scoped routes and proves who it is from a channel row instead. */
   registerCalendarWebhook(app, db);

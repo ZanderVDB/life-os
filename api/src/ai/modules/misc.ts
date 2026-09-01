@@ -18,7 +18,20 @@ import {
   habits, habitEntries, areas, diaryEntries,
   libraryItems, libraryBooks, bookSections, bookPages,
 } from '../../db/schema.js';
-import { checkHabit, HabitCheckInput } from '../../lib/actions/habits.js';
+import {
+  checkHabit, createHabit, updateHabit, archiveHabit,
+  HabitCheckInput, HabitCreateInput, HabitUpdateInput,
+} from '../../lib/actions/habits.js';
+import {
+  createArea, updateArea, deleteArea, AreaCreateInput, AreaUpdateInput,
+} from '../../lib/actions/areas.js';
+import {
+  appendToDiary, setDiaryCheckIn, DiaryAppendInput, DiaryCheckInInput,
+} from '../../lib/actions/diary.js';
+import {
+  appendToPage, createPage, sectionsOfBook, bookForProject,
+  PageAppendInput, PageCreateInput,
+} from '../../lib/actions/library.js';
 import type { AiModule } from '../registry.js';
 import type { ContextSource } from '../types.js';
 
@@ -94,6 +107,60 @@ export const habitsModule: AiModule = {
         };
       },
     },
+    {
+      id: 'habit.create',
+      module: 'habits',
+      kind: 'mutate',
+      label: 'Add a habit',
+      description: 'Start tracking a recurring intention. targetCount above 1 makes it a '
+        + 'counter rather than a checkbox.',
+      input: HabitCreateInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const row = await createHabit(ctx.db, ctx.request.workspaceId, input as any);
+        return {
+          status: 'done' as const,
+          ref: { type: 'habit' as const, id: row.id },
+          message: `Now tracking "${row.name}".`,
+        };
+      },
+    },
+    {
+      id: 'habit.update',
+      module: 'habits',
+      kind: 'mutate',
+      label: 'Change a habit',
+      description: 'Rename a habit or change how often it is expected. Changing frequency does '
+        + 'not alter what has already been recorded.',
+      input: z.object({ id: uuid, changes: HabitUpdateInput }).strict(),
+      risk: 'confirm',
+      async execute(ctx, input: { id: string; changes: any }) {
+        const row = await updateHabit(ctx.db, ctx.request.workspaceId, input.id, input.changes);
+        return {
+          status: 'done' as const,
+          ref: { type: 'habit' as const, id: row.id },
+          message: `Updated "${row.name}".`,
+        };
+      },
+    },
+    {
+      id: 'habit.archive',
+      module: 'habits',
+      kind: 'mutate',
+      label: 'Archive a habit',
+      description: 'Take a habit off Today, keeping its whole history. There is no delete - a '
+        + 'streak that took months is not something to throw away on an ambiguous sentence.',
+      input: z.object({ id: uuid }).strict(),
+      risk: 'important',
+      async execute(ctx, input: { id: string }) {
+        const row = await archiveHabit(ctx.db, ctx.request.workspaceId, input.id);
+        return {
+          status: 'done' as const,
+          ref: { type: 'habit' as const, id: row.id },
+          message: `Archived "${row.name}". Its history is kept.`,
+        };
+      },
+    },
   ],
 };
 
@@ -106,8 +173,10 @@ export const areasModule: AiModule = {
   rules: [
     'An area is a label on a part of a life, not a container. Tasks, projects, habits and '
       + 'reminders each carry at most one, and deleting an area never deletes work.',
-    'Areas are configuration. Creating or removing one is a settings decision, not something '
-      + 'to infer from a sentence, so neither is offered.',
+    'Built-in areas cannot be renamed away or removed - they are part of how Life OS files '
+      + 'things.',
+    'Removing an area never deletes the work inside it. The work loses the label, and can be '
+      + 'reassigned to another area instead.',
   ],
   available: () => ({ enabled: true }),
   capabilities: [
@@ -134,6 +203,62 @@ export const areasModule: AiModule = {
         }));
       },
     },
+    {
+      id: 'area.create',
+      module: 'areas',
+      kind: 'mutate',
+      label: 'Add an area',
+      description: 'Create a new area. Check area.list first - a duplicate name is refused.',
+      input: AreaCreateInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const row = await createArea(ctx.db, ctx.request.workspaceId, input as any);
+        return {
+          status: 'done' as const,
+          ref: { type: 'area' as const, id: row.id },
+          message: `Added the "${row.name}" area.`,
+        };
+      },
+    },
+    {
+      id: 'area.update',
+      module: 'areas',
+      kind: 'mutate',
+      label: 'Rename an area',
+      description: 'Rename a custom area or change its colour.',
+      input: z.object({ id: uuid, changes: AreaUpdateInput }).strict(),
+      risk: 'confirm',
+      async execute(ctx, input: { id: string; changes: any }) {
+        const row = await updateArea(ctx.db, ctx.request.workspaceId, input.id, input.changes);
+        return {
+          status: 'done' as const,
+          ref: { type: 'area' as const, id: row.id },
+          message: `Renamed to "${row.name}".`,
+        };
+      },
+    },
+    {
+      id: 'area.delete',
+      module: 'areas',
+      kind: 'mutate',
+      label: 'Remove an area',
+      description: 'Remove a custom area. Its tasks are kept and simply lose the label, or are '
+        + 'reassigned if reassignToAreaId is given. Built-in areas cannot be removed.',
+      input: z.object({ id: uuid, reassignToAreaId: uuid.nullish() }).strict(),
+      risk: 'important',
+      async execute(ctx, input: { id: string; reassignToAreaId?: string | null }) {
+        const r = await deleteArea(
+          ctx.db, ctx.request.workspaceId, input.id, input.reassignToAreaId ?? null,
+        );
+        return {
+          status: 'done' as const,
+          ref: null,
+          message: r.reassignedTasks
+            ? `Area removed. ${r.reassignedTasks} task${r.reassignedTasks === 1 ? '' : 's'} kept.`
+            : 'Area removed.',
+        };
+      },
+    },
   ],
 };
 
@@ -145,8 +270,12 @@ export const diaryModule: AiModule = {
   entities: ['diary'],
   rules: [
     'One entry per date; the date is the key, so there is never a question of which entry.',
-    'The diary is what the user wrote. Reading it to answer a question is fine; writing to '
-      + 'it on their behalf is not offered, because a diary somebody else wrote in is not a diary.',
+    'The diary is what the user wrote. Text is only ever APPENDED - never replace or rewrite '
+      + 'what is there, because there is no version history and no way back.',
+    'Write in the user\u2019s own words where they gave them. Do not embellish an entry on their '
+      + 'behalf; a diary somebody else wrote is not a diary.',
+    'mood, energy and the day summary are FIELDS, not prose. Setting them touches nothing that '
+      + 'was written.',
   ],
   available: () => ({ enabled: true }),
   capabilities: [
@@ -210,6 +339,44 @@ export const diaryModule: AiModule = {
         }));
       },
     },
+    {
+      id: 'diary.append',
+      module: 'diary',
+      kind: 'mutate',
+      label: 'Add to the diary',
+      description: 'Add paragraphs to the end of a day\u2019s entry, creating the day if there is '
+        + 'nothing there yet. Never replaces anything already written.',
+      input: DiaryAppendInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const r = await appendToDiary(ctx.db, ctx.request.workspaceId, input as any);
+        return {
+          status: 'done' as const,
+          ref: { type: 'diary' as const, id: r.entry.id },
+          message: r.created
+            ? `Started the diary for ${r.entry.entryDate}.`
+            : `Added to ${r.entry.entryDate}.`,
+        };
+      },
+    },
+    {
+      id: 'diary.checkIn',
+      module: 'diary',
+      kind: 'mutate',
+      label: 'Record how the day was',
+      description: 'Set mood, energy or the day summary for a date. Only what is named is set; '
+        + 'nothing written is touched.',
+      input: DiaryCheckInInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const r = await setDiaryCheckIn(ctx.db, ctx.request.workspaceId, input as any);
+        return {
+          status: 'done' as const,
+          ref: { type: 'diary' as const, id: r.entry.id },
+          message: `Recorded for ${r.entry.entryDate}.`,
+        };
+      },
+    },
   ],
 };
 
@@ -224,8 +391,11 @@ export const libraryModule: AiModule = {
       + 'is ownership and is structural; it is never an item_link.',
     'A Book is addressed by its library_books id; a library item has its own id. They are '
       + 'different and are not interchangeable.',
-    'Writing into a page is not offered yet: page documents are saved through an editor with '
-      + 'its own conflict model, and there is no application service for a blind append.',
+    'Text is APPENDED to a page, never substituted for what is there.',
+    'Only flowed layouts (notes, blank, two_columns, quad, comparison) can hold paragraphs. A '
+      + 'pinboard holds positioned items and will refuse text - propose a Notes page instead.',
+    'A page belongs to a SECTION. Use library.sections to find the right one before creating a '
+      + 'page, and library.projectBook to find a project\u2019s own book.',
   ],
   available: () => ({ enabled: true }),
   capabilities: [
@@ -312,6 +482,110 @@ export const libraryModule: AiModule = {
           via: 'direct',
           level: 1,
         }];
+      },
+    },
+    {
+      id: 'library.sections',
+      module: 'library',
+      kind: 'read',
+      label: 'Sections of a book',
+      description: 'The sections in one book, so a request naming one ("under Research") can '
+        + 'be resolved to an id before a page is proposed.',
+      input: z.object({ bookId: uuid }).strict(),
+      risk: 'safe',
+      async run(ctx, input: { bookId: string }) {
+        const rows = await sectionsOfBook(ctx.db, ctx.request.workspaceId, input.bookId);
+        return rows.map<ContextSource>((r) => ({
+          ref: { type: 'library', id: r.id },
+          module: 'library',
+          title: r.title,
+          summary: 'section',
+          data: { sectionId: r.id, bookId: r.bookId },
+          via: 'direct',
+          level: 2,
+        }));
+      },
+    },
+    {
+      id: 'library.projectBook',
+      module: 'library',
+      kind: 'read',
+      label: 'A project\u2019s book',
+      description: 'The Book belonging to a project, with its sections. This is what "the '
+        + 'project book" means.',
+      input: z.object({ projectId: uuid }).strict(),
+      risk: 'safe',
+      async run(ctx, input: { projectId: string }) {
+        const ws = ctx.request.workspaceId;
+        const book = await bookForProject(ctx.db, ws, input.projectId);
+        if (!book) return [];
+        const sections = await sectionsOfBook(ctx.db, ws, book.bookId);
+        const out: ContextSource[] = [{
+          ref: { type: 'library', id: book.itemId },
+          module: 'library',
+          title: book.title,
+          summary: 'the project book',
+          data: { bookId: book.bookId, libraryItemId: book.itemId },
+          via: 'relationship',
+          path: [{
+            from: { type: 'project', id: input.projectId },
+            kind: 'structural',
+            label: 'Book of',
+          }],
+          level: 2,
+        }];
+        for (const sct of sections) {
+          out.push({
+            ref: { type: 'library', id: sct.id },
+            module: 'library',
+            title: sct.title,
+            summary: `section of ${book.title}`,
+            data: { sectionId: sct.id, bookId: book.bookId },
+            via: 'direct',
+            level: 2,
+          });
+        }
+        return out;
+      },
+    },
+    {
+      id: 'library.appendPage',
+      module: 'library',
+      kind: 'mutate',
+      label: 'Write to a page',
+      description: 'Add paragraphs to the end of an existing page. Refuses a layout that '
+        + 'cannot hold paragraphs rather than dropping the text.',
+      input: PageAppendInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const row = await appendToPage(
+          ctx.db, ctx.request.workspaceId, { userId: ctx.request.userId }, input as any,
+        );
+        return {
+          status: 'done' as const,
+          ref: { type: 'book_page' as const, id: row.id },
+          message: `Added to "${row.title || 'the page'}".`,
+        };
+      },
+    },
+    {
+      id: 'library.createPage',
+      module: 'library',
+      kind: 'mutate',
+      label: 'Add a page',
+      description: 'Add a page to a section, optionally with its first paragraphs. Needs a '
+        + 'sectionId - find one with library.sections or library.projectBook.',
+      input: PageCreateInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const row = await createPage(
+          ctx.db, ctx.request.workspaceId, { userId: ctx.request.userId }, input as any,
+        );
+        return {
+          status: 'done' as const,
+          ref: { type: 'book_page' as const, id: row.id },
+          message: `Added the page "${row.title || 'Untitled'}".`,
+        };
       },
     },
   ],

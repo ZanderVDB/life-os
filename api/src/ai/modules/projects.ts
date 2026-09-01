@@ -10,7 +10,10 @@
 import { and, desc, eq, ilike } from 'drizzle-orm';
 import { z } from 'zod';
 import { projects, tasks } from '../../db/schema.js';
-import { updateProject, ProjectUpdateInput } from '../../lib/actions/projects.js';
+import {
+  updateProject, createProject, completeProject, archiveProject, OpenTasksRemain,
+  ProjectUpdateInput, ProjectCreateInput, ProjectCompleteInput,
+} from '../../lib/actions/projects.js';
 import type { AiModule } from '../registry.js';
 import type { ContextSource } from '../types.js';
 
@@ -47,7 +50,10 @@ export const projectsModule: AiModule = {
       + 'not have to guess.',
     'Completing a project is not a field change - it has to ask about open tasks - so it is '
       + 'not offered here.',
-    'Creating a project is not offered: there is no application service for it yet.',
+    'A project needs an outcome - what is true when it is done. Creating one without asking '
+      + 'for that produces a project nobody can tell they have finished.',
+    'Completing a project with unfinished work is a DECISION, not a guess. Ask whether the '
+      + 'open tasks should be left or cancelled; never assume either.',
   ],
   available: () => ({ enabled: true }),
   capabilities: [
@@ -119,6 +125,78 @@ export const projectsModule: AiModule = {
           status: 'done' as const,
           ref: { type: 'project' as const, id: row.id },
           message: `Updated "${row.title}".`,
+        };
+      },
+    },
+    {
+      id: 'project.create',
+      module: 'projects',
+      kind: 'mutate',
+      label: 'Create project',
+      description: 'Start a project. Needs a title, an outcome (what is true when it is done), '
+        + 'an area and a focus. An optional firstTask makes it active rather than planning.',
+      input: ProjectCreateInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const row = await createProject(ctx.db, ctx.request.workspaceId, input as any);
+        return {
+          status: 'done' as const,
+          ref: { type: 'project' as const, id: row.id },
+          message: `Created "${row.title}".`,
+        };
+      },
+    },
+    {
+      id: 'project.complete',
+      module: 'projects',
+      kind: 'mutate',
+      label: 'Complete project',
+      description: 'Finish a project. If tasks are still open you MUST say what happens to '
+        + 'them - "leave" keeps them, "cancel" cancels them. Do not guess: ask.',
+      input: ProjectCompleteInput,
+      risk: 'important',
+      async execute(ctx, input) {
+        try {
+          const r = await completeProject(ctx.db, ctx.request.workspaceId, input as any);
+          const extra = r.tasksCancelled
+            ? ` ${r.tasksCancelled} open task${r.tasksCancelled === 1 ? '' : 's'} cancelled.`
+            : r.tasksLeftOpen
+              ? ` ${r.tasksLeftOpen} task${r.tasksLeftOpen === 1 ? '' : 's'} left open.` : '';
+          return {
+            status: 'done' as const,
+            ref: { type: 'project' as const, id: r.project.id },
+            message: `Completed "${r.project.title}".${extra}`,
+          };
+        } catch (e) {
+          /* The service refuses to decide what happens to unfinished work.
+             That refusal reaches the user as a sentence, not a stack. */
+          if (e instanceof OpenTasksRemain) {
+            return {
+              status: 'failed' as const,
+              ref: null,
+              message: `${e.message} Say whether to leave them or cancel them.`,
+              error: 'open_tasks',
+            };
+          }
+          throw e;
+        }
+      },
+    },
+    {
+      id: 'project.archive',
+      module: 'projects',
+      kind: 'mutate',
+      label: 'Archive project',
+      description: 'Put a project away without completing it. It keeps the state it had, so '
+        + 'restoring does not have to guess.',
+      input: z.object({ id: uuid }).strict(),
+      risk: 'important',
+      async execute(ctx, input: { id: string }) {
+        const row = await archiveProject(ctx.db, ctx.request.workspaceId, input.id);
+        return {
+          status: 'done' as const,
+          ref: { type: 'project' as const, id: row.id },
+          message: `Archived "${row.title}".`,
         };
       },
     },

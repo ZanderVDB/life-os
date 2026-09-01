@@ -29,6 +29,7 @@ export const SETTINGS_TABS = [
   { id: 'appearance', label: 'Appearance', blurb: 'How Life OS looks and how much it moves.' },
   { id: 'areas', label: 'Areas', blurb: 'The parts of your life. Every task belongs to one.' },
   { id: 'habits', label: 'Habits', blurb: 'Manage the habits themselves. Ticking them off happens on Today.' },
+  { id: 'ai', label: 'AI & personalisation', blurb: 'What Life OS knows about you, and how it uses it.' },
   { id: 'integrations', label: 'Integrations', blurb: 'The services Life OS is connected to.' },
   { id: 'app', label: 'App', blurb: 'This installation, on this device.' },
   { id: 'data', label: 'Privacy & data', blurb: 'Where your data lives and what leaves it.' },
@@ -403,6 +404,88 @@ function dataPanel() {
   + 'please say so.')}`;
 }
 
+/* ══ AI & personalisation ════════════════════════════════════════════════
+ *
+ * "What Life OS knows about me", in the user's own words, editable and
+ * deletable. The point of showing it is that a memory nobody can see is a
+ * memory nobody can correct — which is the difference between a memory system
+ * and a hidden profile.
+ *
+ * Confidence and provenance are deliberately NOT on the row. They are honest
+ * and they are internal; a list of sentences each carrying "0.6 · assistant"
+ * reads like a database, and the person is here to check what is believed
+ * about them rather than to audit how sure it is.
+ */
+
+const MEMORY_GROUPS = [
+  ['profile', 'About you'],
+  ['preferences', 'Preferences'],
+  ['people', 'People'],
+  ['places', 'Places'],
+  ['routines', 'Routines'],
+  ['work_style', 'How you work'],
+  ['communication', 'Communication'],
+  ['defaults', 'Defaults'],
+  ['interests', 'Interests'],
+  ['other', 'Other'],
+];
+
+function aiPanel(state) {
+  const memories = state.aiMemories ?? null;
+  const candidates = state.aiCandidates ?? [];
+
+  if (memories === null) {
+    return sec('What Life OS knows about you',
+      rowFull('<p class="set-empty">Loading…</p>'));
+  }
+
+  const byCategory = new Map();
+  for (const m of memories) {
+    if (!byCategory.has(m.category)) byCategory.set(m.category, []);
+    byCategory.get(m.category).push(m);
+  }
+
+  const groups = MEMORY_GROUPS
+    .filter(([id]) => byCategory.has(id))
+    .map(([id, label]) => `
+      <div class="set-row set-mem-h"><span class="set-mem-cat">${esc(label)}</span></div>
+      ${byCategory.get(id).map((m) => `<div class="set-row set-item set-mem" data-mem="${m.id}">
+        <span class="set-item-dot ${m.isPinned ? 'set-item-dot-ok' : ''}"></span>
+        <input class="set-item-name" value="${esc(m.fact)}" data-mem-fact="${m.id}"
+          aria-label="What Life OS knows: ${esc(m.fact)}">
+        <button class="set-item-go" data-mem-pin="${m.id}"
+          aria-pressed="${m.isPinned ? 'true' : 'false'}"
+          aria-label="${m.isPinned ? 'Unpin' : 'Pin'} this">${m.isPinned ? 'Pinned' : 'Pin'}</button>
+        <button class="set-item-x" data-mem-del="${m.id}"
+          aria-label="Forget: ${esc(m.fact)}">Forget</button>
+      </div>`).join('')}`).join('');
+
+  return `
+    ${candidates.length ? sec('Noticed recently', `
+      ${candidates.map((c) => `<div class="set-row set-item" data-cand="${c.id}">
+        <span class="set-item-dot"></span>
+        <span class="set-item-name set-cand-t">${esc(c.fact)}</span>
+        <button class="set-item-go" data-cand-yes="${c.id}">Remember</button>
+        <button class="set-item-x" data-cand-no="${c.id}">No</button>
+      </div>`).join('')}`,
+    'Life OS noticed these while you were talking to it. Nothing is remembered '
+      + 'until you say so.') : ''}
+
+    ${sec('What Life OS knows about you', groups || rowFull(
+    '<p class="set-empty">Nothing yet. As you use the assistant it will notice durable '
+      + 'things — that you prefer afternoon meetings, who you work with — and ask before '
+      + 'remembering any of them.</p>',
+  ), 'These are used to make suggestions fit you: a preferred time of day, who is '
+    + 'involved in what, where things normally go. They never override something you '
+    + 'ask for directly, and they never leave your workspace. Edit any of them by '
+    + 'typing, or forget one entirely.')}
+
+    ${sec('Pinned', rowFull(
+    '<p class="set-empty">A pinned memory is one you have confirmed. Life OS will not '
+      + 'quietly replace it when it hears something that seems to contradict it.</p>',
+  ))}`;
+}
+
 /* ══ The shell ═══════════════════════════════════════════════════════════ */
 
 export function settingsHtml(state, phone = false) {
@@ -414,6 +497,7 @@ export function settingsHtml(state, phone = false) {
     appearance: appearancePanel,
     areas: areasPanel,
     habits: habitsPanel,
+    ai: aiPanel,
     integrations: integrationsPanel,
     app: appPanel,
     data: dataPanel,

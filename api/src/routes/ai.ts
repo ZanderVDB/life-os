@@ -6,23 +6,23 @@
  * do — the registry does — and nothing here changes anything except through
  * the executor.
  *
- * ── What is deliberately absent ──────────────────────────────────────────
+ * ── The proposal is the server's, not the client's ───────────────────────
  *
- * There is no `POST /ai/ask`. A turn needs a planner, and a planner needs a
- * model, and no model is configured yet. Shipping the endpoint anyway would
- * mean shipping something that either fails or quietly guesses, and a
- * guessing assistant is exactly what the proposal architecture exists to keep
- * away from the database. The pieces a turn is made of are all here and all
- * tested; the turn itself is Phase 2.
+ * `POST /ai/turn` plans and WRITES the proposal set down. The client is given
+ * its id and version and renders a copy; edits go back through validation into
+ * the stored row; confirmation names the id and the version the person saw.
+ * There is no endpoint that takes an action from the browser and runs it.
  */
 import type { AppInstance, Guards } from '../types.js';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import type { Assistant } from '../ai/index.js';
 import { gather } from '../ai/context.js';
-import { execute, assertConfirmable, changeCount } from '../ai/executor.js';
+import { changeCount } from '../ai/executor.js';
+import { runTurn, editTurn, readTurn } from '../ai/turn.js';
+import { confirmTurn, cancelTurn } from '../ai/confirm.js';
 import * as memory from '../ai/memory.js';
-import type { AiRequestContext, ProposalSet } from '../ai/types.js';
+import type { AiRequestContext } from '../ai/types.js';
 import { badRequest } from '../lib/errors.js';
 
 const uuid = z.string().uuid();
@@ -122,57 +122,115 @@ export function registerAiRoutes(
     };
   });
 
-  /* ══ Execution ═══════════════════════════════════════════════════════ */
+  /* ══ A turn ══════════════════════════════════════════════════════════ */
 
   /**
-   * Run a confirmed proposal set.
+   * Say something to the assistant.
    *
-   * The proposal set arrives from the caller because Phase 1 has no planner to
-   * produce one. That is safe for a reason worth stating: an action names a
-   * CAPABILITY, its payload is validated against that capability's own schema,
-   * and the capability calls an application service. A caller cannot express
-   * anything a person using the UI could not do, and the confirmation gate is
-   * checked before any of it runs.
+   * Plans, writes the proposal down, and returns it. Nothing is changed by
+   * this call however confident the plan is — `POST /ai/turn/:id/confirm` is
+   * the only thing that writes, and it can only run what this wrote.
    */
-  app.post(`${base}/ai/execute`, pre, async (req) => {
+  app.post(`${base}/ai/turn`, pre, async (req) => {
     const b = z.object({
-      proposalSet: z.object({
-        id: z.string().min(1).max(80),
-        request: z.string().max(4000).default(''),
-        understood: z.string().max(2000).default(''),
-        answer: z.string().max(4000).nullish(),
-        actions: z.array(z.object({
-          id: z.string().min(1).max(80),
-          capability: z.string().min(1).max(80),
-          module: z.string().min(1).max(40),
-          title: z.string().max(300).default(''),
-          summary: z.string().max(600).nullish(),
-          payload: z.record(z.unknown()).default({}),
-          target: z.object({ type: z.string().max(40), id: uuid }).nullish(),
-          confidence: z.enum(['high', 'medium', 'low']).default('medium'),
-          assumptions: z.array(z.string().max(300)).default([]),
-          warnings: z.array(z.string().max(300)).default([]),
-          requiresConfirmation: z.boolean().default(true),
-          important: z.boolean().default(false),
-          editable: z.array(z.any()).default([]),
-          enabled: z.boolean().default(true),
-          sources: z.array(z.object({ type: z.string().max(40), id: uuid })).default([]),
-        })).max(25),
-      }),
-      confirmation: z.object({
-        confirmed: z.literal(true),
-        count: z.number().int().min(0).max(100),
-        importantAccepted: z.array(z.string().max(80)).default([]),
-      }),
+      text: z.string().trim().min(1).max(4000),
+      conversationId: uuid.nullish(),
+      surface: SurfaceSchema.nullish(),
+      timeZone: z.string().max(64).nullish(),
+      today: z.string().regex(ISO_DATE).optional(),
+    }).strict().parse(req.body ?? {});
+
+    const request = requestCtx(req, {
+      surface: (b.surface ?? null) as any,
+      timeZone: b.timeZone ?? null,
+      ...(b.today ? { today: b.today } : {}),
+    });
+    if (!request.userId) throw badRequest('The assistant needs a signed-in user.');
+
+    return runTurn(
+      { db, registry: assistant.registry, providers: assistant.providers, request },
+      { text: b.text, conversationId: b.conversationId ?? null },
+    );
+  });
+
+  /** Read a turn back without re-planning — a refresh must cost nothing. */
+  app.get(`${base}/ai/turn/:id`, pre, async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const deps = {
+      db, registry: assistant.registry, providers: assistant.providers,
+      request: requestCtx(req),
+    };
+    const row = await readTurn(deps, id);
+    return {
+      turnId: row.id,
+      conversationId: row.conversationId,
+      version: row.version,
+      status: row.status,
+      understood: row.understood,
+      answer: row.answer,
+      actions: row.actions,
+      sources: row.sources,
+      results: row.results ?? null,
+    };
+  });
+
+  /**
+   * Edit the authoritative proposal.
+   *
+   * Field edits are validated against the capability's own schema before they
+   * are kept, so a card cannot be edited into something that will fail after
+   * the user has already agreed to it.
+   */
+  app.patch(`${base}/ai/turn/:id`, pre, async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({
+      version: z.number().int().min(1),
+      edits: z.array(z.object({
+        actionId: z.string().min(1).max(80),
+        enabled: z.boolean().optional(),
+        fields: z.record(z.union([z.string(), z.number(), z.null()])).optional(),
+      })).min(1).max(25),
+    }).strict().parse(req.body ?? {});
+
+    return editTurn(
+      {
+        db, registry: assistant.registry, providers: assistant.providers,
+        request: requestCtx(req),
+      },
+      id, b.version, b.edits,
+    );
+  });
+
+  /**
+   * Carry out what was proposed.
+   *
+   * The body names a turn, a version and the individually accepted important
+   * actions. It cannot name an action or supply a payload — everything
+   * executable was written by the planner.
+   */
+  app.post(`${base}/ai/turn/:id/confirm`, pre, async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({
+      version: z.number().int().min(1),
+      count: z.number().int().min(0).max(100),
+      importantAccepted: z.array(z.string().max(80)).max(25).default([]),
     }).strict().parse(req.body ?? {});
 
     const request = requestCtx(req);
     if (!request.userId) throw badRequest('An assistant change needs a signed-in user.');
+    return confirmTurn({ db, registry: assistant.registry, request }, {
+      turnId: id,
+      version: b.version,
+      count: b.count,
+      importantAccepted: b.importantAccepted,
+    });
+  });
 
-    return execute(
-      { db, registry: assistant.registry, request },
-      b.proposalSet as unknown as ProposalSet,
-      b.confirmation,
+  /** Throw a proposal away without running any of it. */
+  app.post(`${base}/ai/turn/:id/discard`, pre, async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return cancelTurn(
+      { db, registry: assistant.registry, request: requestCtx(req) }, id,
     );
   });
 
@@ -253,5 +311,4 @@ export function registerAiRoutes(
     return { candidate: await memory.rejectCandidate(db, owner(req), id) };
   });
 
-  void assertConfirmable;
 }

@@ -20,7 +20,10 @@ import {
 } from '../db/schema.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { cleanupLinksFor } from '../lib/relationships.js';
-import { createReminder } from '../lib/actions/reminders.js';
+import {
+  createReminder, updateReminder, completeReminder, setReminderPaused, resumeReminder,
+  deleteReminder,
+} from '../lib/actions/reminders.js';
 import { habitHistory } from '../lib/habit-history.js';
 import {
   writtenDays, diaryHabitSince, addDiaryToHabitDays, diaryHabitEnabled,
@@ -528,77 +531,19 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
    */
   app.post('/api/v1/workspaces/:workspaceId/reminders/:id/complete', pre, async (req) => {
     const { workspaceId, id } = req.params as { workspaceId: string; id: string };
-    const [existing] = await db.select().from(reminders).where(and(
-      eq(reminders.id, id), eq(reminders.workspaceId, workspaceId),
-    ));
-    if (!existing) throw notFound('Reminder not found.');
-
-    const [rule] = await db.select().from(reminderRecurrenceRules)
-      .where(eq(reminderRecurrenceRules.reminderId, id));
-
-    if (rule && existing.dueDate) {
-      const next = nextAfter(existing.dueDate, rule);
-      // Past the end of the series? Then it really is finished.
-      const ended = (rule.until && next > rule.until) || !next;
-      const [row] = await db.update(reminders).set(
-        ended
-          ? { status: 'done', completedAt: new Date(), updatedAt: new Date() }
-          : { dueDate: next, status: 'open', completedAt: null, updatedAt: new Date() },
-      ).where(eq(reminders.id, id)).returning();
-      return { reminder: { ...row, recurrence: rule }, advancedTo: ended ? null : next };
-    }
-
-    const [row] = await db.update(reminders)
-      .set({ status: 'done', completedAt: new Date(), updatedAt: new Date() })
-      .where(eq(reminders.id, id)).returning();
-    return { reminder: row, advancedTo: null };
+    return completeReminder(db, workspaceId, id);
   });
 
   app.patch('/api/v1/workspaces/:workspaceId/reminders/:id', pre, async (req) => {
     const { workspaceId, id } = req.params as { workspaceId: string; id: string };
     const b = ReminderBody.partial().safeParse(req.body);
     if (!b.success) throw badRequest(b.error.issues[0]!.message);
-    const { recurrence, ...fields } = b.data;
-
-    const [row] = await db.update(reminders)
-      .set({ ...fields, updatedAt: new Date() })
-      .where(and(eq(reminders.id, id), eq(reminders.workspaceId, workspaceId)))
-      .returning();
-    if (!row) throw notFound('Reminder not found.');
-
-    // `recurrence: undefined` means "not mentioned" and must leave the rule
-    // alone; `null` means "stop repeating". Conflating the two would silently
-    // drop a recurrence every time an unrelated field was edited.
-    if (recurrence !== undefined) {
-      await db.delete(reminderRecurrenceRules)
-        .where(eq(reminderRecurrenceRules.reminderId, id));
-      if (recurrence) {
-        await db.insert(reminderRecurrenceRules).values({
-          workspaceId, reminderId: id,
-          frequency: recurrence.frequency,
-          interval: recurrence.interval,
-          byWeekday: recurrence.byWeekday ?? null,
-          byMonthDay: recurrence.byMonthDay ?? null,
-          until: recurrence.until ?? null,
-          count: recurrence.count ?? null,
-        });
-      }
-    }
-    const [rule] = await db.select().from(reminderRecurrenceRules)
-      .where(eq(reminderRecurrenceRules.reminderId, id));
-    return { reminder: { ...row, recurrence: rule ?? null } };
+    return { reminder: await updateReminder(db, workspaceId, id, b.data) };
   });
 
   app.delete('/api/v1/workspaces/:workspaceId/reminders/:id', pre, async (req, reply) => {
     const { workspaceId, id } = req.params as { workspaceId: string; id: string };
-    // The rule cascades from the reminder.
-    const gone = await db.delete(reminders).where(and(
-      eq(reminders.id, id), eq(reminders.workspaceId, workspaceId),
-    )).returning({ id: reminders.id });
-    if (!gone.length) throw notFound('Reminder not found.');
-    // The recurrence rule cascades; the semantic edges do not — nothing in the
-    // database points from a polymorphic edge back to a reminder.
-    await cleanupLinksFor(db, workspaceId, 'reminder', id);
+    await deleteReminder(db, workspaceId, id);
     reply.code(204);
     return null;
   });
@@ -654,10 +599,7 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
   /** Pause and resume: a rule that keeps its history but stops firing. */
   app.post('/api/v1/workspaces/:workspaceId/reminders/:id/pause', pre, async (req) => {
     const { workspaceId, id } = req.params as { workspaceId: string; id: string };
-    const [row] = await db.update(reminders)
-      .set({ status: 'paused', updatedAt: new Date() })
-      .where(and(eq(reminders.id, id), eq(reminders.workspaceId, workspaceId)))
-      .returning();
+    const row = await setReminderPaused(db, workspaceId, id, true);
     if (!row) throw notFound('Reminder not found.');
     return { reminder: row };
   });
@@ -676,24 +618,7 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
    */
   app.post('/api/v1/workspaces/:workspaceId/reminders/:id/resume', pre, async (req) => {
     const { workspaceId, id } = req.params as { workspaceId: string; id: string };
-    const [existing] = await db.select().from(reminders).where(and(
-      eq(reminders.id, id), eq(reminders.workspaceId, workspaceId),
-    ));
-    if (!existing) throw notFound('Reminder not found.');
-    const [rule] = await db.select().from(reminderRecurrenceRules)
-      .where(eq(reminderRecurrenceRules.reminderId, id));
-
-    const today = new Date().toISOString().slice(0, 10);
-    let due = existing.dueDate;
-    if (rule && due && due < today) {
-      // Bounded: a daily rule paused for years must not spin.
-      for (let i = 0; i < 500 && due < today; i++) due = nextAfter(due, rule);
-    }
-
-    const [row] = await db.update(reminders)
-      .set({ status: 'open', dueDate: due, updatedAt: new Date() })
-      .where(eq(reminders.id, id)).returning();
-    return { reminder: { ...row, recurrence: rule ?? null }, nextOccurrence: due };
+    return resumeReminder(db, workspaceId, id);
   });
 
   /**

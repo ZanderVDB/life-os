@@ -6,12 +6,13 @@
  * the domain and now applies to the assistant and not to the person using the
  * app.
  */
-import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { tasks, projects, BUCKETS, PRIORITIES } from '../../db/schema.js';
+import { tasks, taskSteps, projects, BUCKETS, PRIORITIES } from '../../db/schema.js';
 import {
-  createTask, updateTask, setTaskDone, scheduleTask,
-  TaskCreateInput, TaskUpdateInput,
+  createTask, updateTask, setTaskDone, scheduleTask, archiveTask, moveTask,
+  addStep, updateStep, removeStep,
+  TaskCreateInput, TaskUpdateInput, StepAddInput, StepUpdateInput, TaskMoveInput,
 } from '../../lib/actions/tasks.js';
 import type { AiModule, Capability, CapabilityCtx } from '../registry.js';
 import type { ContextSource } from '../types.js';
@@ -88,7 +89,19 @@ const readCap: Capability = {
     const [row] = await ctx.db.select().from(tasks).where(and(
       eq(tasks.workspaceId, ctx.request.workspaceId), eq(tasks.id, input.id),
     )).limit(1);
-    return row ? [source(row, null, 1)] : [];
+    if (!row) return [];
+    /* Steps come with the task, with their ids. Without them a request to
+       tick "the second step" has no id to name and the plan cannot be made. */
+    const steps = await ctx.db.select().from(taskSteps)
+      .where(eq(taskSteps.taskId, row.id)).orderBy(asc(taskSteps.position));
+    const s = source(row, null, 1);
+    return [{
+      ...s,
+      data: {
+        ...s.data,
+        steps: steps.map((x) => ({ id: x.id, title: x.title, completed: x.completed })),
+      },
+    }];
   },
 };
 
@@ -167,6 +180,104 @@ const scheduleCap: Capability = {
   },
 };
 
+const archiveCap: Capability = {
+  id: 'task.archive',
+  module: 'tasks',
+  kind: 'mutate',
+  label: 'Archive task',
+  description: 'Take a task off the board, keeping its history. This is what "get rid of it" '
+    + 'usually means and it can be undone; there is no delete.',
+  input: z.object({ id: uuid }).strict(),
+  risk: 'important',
+  async execute(ctx, input: { id: string }) {
+    const row = await archiveTask(
+      ctx.db, ctx.request.workspaceId, { userId: ctx.request.userId }, input.id,
+    );
+    return {
+      status: 'done' as const,
+      ref: { type: 'task' as const, id: row.id },
+      message: `Archived "${row.title}".`,
+    };
+  },
+};
+
+const moveCap: Capability = {
+  id: 'task.move',
+  module: 'tasks',
+  kind: 'mutate',
+  label: 'Move task',
+  description: 'Move a task between Today, This week, This month and Future. A bucket is where '
+    + 'a task sits on the board - it is NOT a due date and NOT a scheduled time.',
+  input: TaskMoveInput,
+  risk: 'confirm',
+  async execute(ctx, input) {
+    const row = await moveTask(
+      ctx.db, ctx.request.workspaceId, { userId: ctx.request.userId }, input as any,
+    );
+    return {
+      status: 'done' as const,
+      ref: { type: 'task' as const, id: row.id },
+      message: `Moved "${row.title}".`,
+    };
+  },
+};
+
+const addStepCap: Capability = {
+  id: 'task.addStep',
+  module: 'tasks',
+  kind: 'mutate',
+  label: 'Add a step',
+  description: 'Add a sub-item to a task. Steps are strictly sequential, so a new one goes at '
+    + 'the end.',
+  input: StepAddInput,
+  risk: 'confirm',
+  async execute(ctx, input) {
+    const row = await addStep(ctx.db, ctx.request.workspaceId, input as any);
+    return {
+      status: 'done' as const,
+      ref: { type: 'task' as const, id: row.taskId },
+      message: `Added step "${row.title}".`,
+    };
+  },
+};
+
+const updateStepCap: Capability = {
+  id: 'task.updateStep',
+  module: 'tasks',
+  kind: 'mutate',
+  label: 'Change a step',
+  description: 'Rename a step or mark it done. Needs the step id, which comes from reading the '
+    + 'task.',
+  input: StepUpdateInput,
+  risk: 'confirm',
+  async execute(ctx, input) {
+    const row = await updateStep(ctx.db, ctx.request.workspaceId, input as any);
+    return {
+      status: 'done' as const,
+      ref: { type: 'task' as const, id: row.taskId },
+      message: row.completed ? `Step done: "${row.title}".` : `Updated step "${row.title}".`,
+    };
+  },
+};
+
+const removeStepCap: Capability = {
+  id: 'task.removeStep',
+  module: 'tasks',
+  kind: 'mutate',
+  label: 'Remove a step',
+  description: 'Delete a step from a task. A step has no history, so this really removes it.',
+  input: z.object({ stepId: uuid }).strict(),
+  risk: 'important',
+  async execute(ctx, input: { stepId: string }) {
+    const row = await removeStep(ctx.db, ctx.request.workspaceId, input.stepId);
+    return {
+      status: 'done' as const,
+      ref: { type: 'task' as const, id: row.taskId },
+      message: `Removed step "${row.title}".`,
+    };
+  },
+};
+
 export const tasksModule: AiModule = {
   id: 'tasks',
   name: 'Tasks',
@@ -177,9 +288,15 @@ export const tasksModule: AiModule = {
     'A task is one action. Anything needing several is a project.',
     'Setting a due date does NOT create a calendar event.',
     'bucket (today/week/month/future) is where a task sits on the board, not when it is due.',
+    'Archiving takes a task off the board and keeps it. There is no delete, because "get rid '
+      + 'of it" almost always means the reversible one.',
+    'Steps are strictly sequential. To change one you need its id, which comes from task.read.',
   ],
   available: () => ({ enabled: true }),
-  capabilities: [searchCap, readCap, createCap, updateCap, completeCap, scheduleCap],
+  capabilities: [
+    searchCap, readCap, createCap, updateCap, completeCap, scheduleCap,
+    archiveCap, moveCap, addStepCap, updateStepCap, removeStepCap,
+  ],
 };
 
 export { BUCKETS, PRIORITIES };

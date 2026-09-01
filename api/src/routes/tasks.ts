@@ -23,8 +23,8 @@ import { nextActionFor } from './projects.js';
 /* The rules for creating, editing and completing a task live in one place, so
  * the assistant and this route cannot drift apart. See lib/actions/tasks.ts. */
 import {
-  createTask, updateTask, setTaskDone,
-  TaskCreateInput, TaskUpdateInput,
+  createTask, updateTask, setTaskDone, archiveTask,
+  addStep, updateStep, removeStep,
 } from '../lib/actions/tasks.js';
 
 /** Sparse spacing so a single move rewrites one row, not the whole bucket. */
@@ -362,13 +362,7 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
   app.post(`${base}/tasks/:taskId/archive`, pre, async (req) => {
     const wsId = req.workspaceId!;
     const { taskId } = req.params as { taskId: string };
-    const row = await db.transaction(async (tx) => {
-      const r = (await tx.update(tasks).set({ archivedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, wsId))).returning())[0];
-      if (!r) throw notFound('Task not found.');
-      await logActivity(tx, wsId, taskId, req.principal!.userId, 'archived');
-      return r;
-    });
+    const row = await archiveTask(db, wsId, { userId: req.principal!.userId }, taskId);
     return { task: row };
   });
 
@@ -446,14 +440,7 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
     const wsId = req.workspaceId!;
     const { taskId } = req.params as { taskId: string };
     const body = StepCreate.parse(req.body);
-    const t = (await db.select().from(tasks)
-      .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, wsId))).limit(1))[0];
-    if (!t) throw notFound('Task not found.');
-    const max = await db.select({ m: sql<number>`coalesce(max(${taskSteps.position}), -1)` })
-      .from(taskSteps).where(eq(taskSteps.taskId, taskId));
-    const row = (await db.insert(taskSteps).values({
-      taskId, workspaceId: wsId, title: body.title, position: Number(max[0]?.m ?? -1) + 1,
-    }).returning())[0]!;
+    const row = await addStep(db, wsId, { taskId, title: body.title });
     reply.code(201);
     return { step: row };
   });
@@ -462,19 +449,13 @@ export function registerTaskRoutes(app: AppInstance, db: Db, guards: Guards) {
     const wsId = req.workspaceId!;
     const { stepId } = req.params as { stepId: string };
     const body = StepUpdate.parse(req.body);
-    if (Object.keys(body).length === 0) throw badRequest('No fields to update.');
-    const row = (await db.update(taskSteps).set({ ...body, updatedAt: new Date() })
-      .where(and(eq(taskSteps.id, stepId), eq(taskSteps.workspaceId, wsId))).returning())[0];
-    if (!row) throw notFound('Step not found.');
-    return { step: row };
+    return { step: await updateStep(db, wsId, { stepId, ...body }) };
   });
 
   app.delete(`${base}/tasks/:taskId/steps/:stepId`, pre, async (req, reply) => {
     const wsId = req.workspaceId!;
     const { stepId } = req.params as { stepId: string };
-    const row = (await db.delete(taskSteps)
-      .where(and(eq(taskSteps.id, stepId), eq(taskSteps.workspaceId, wsId))).returning())[0];
-    if (!row) throw notFound('Step not found.');
+    await removeStep(db, wsId, stepId);
     reply.code(204);
     return null;
   });

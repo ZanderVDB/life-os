@@ -4,20 +4,33 @@
     {
       "name": "life-os",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["server.js"],
+      "runtimeArgs": [
+        "server.js"
+      ],
       "port": 3000,
       "autoPort": true
     },
     {
       "name": "v2-web",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "serve", "web", "-l", "5173", "--no-clipboard"],
+      "runtimeArgs": [
+        "--yes",
+        "serve",
+        "web",
+        "-l",
+        "5173",
+        "--no-clipboard"
+      ],
       "port": 5173
     },
     {
       "name": "v2-api-live",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["api/node_modules/tsx/dist/cli.mjs", "api/tests/live-server.ts"],
+      "runtimeArgs": [
+        "--env-file-if-exists=api/.env",
+        "api/node_modules/tsx/dist/cli.mjs",
+        "api/tests/live-server.ts"
+      ],
       "port": 8080
     }
   ]

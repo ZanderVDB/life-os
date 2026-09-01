@@ -47,6 +47,11 @@ import {
 } from './arrange.js';
 import { openHabitModal } from './habit-modal.js';
 import { openAreaModal } from './area-modal.js';
+import * as assistantApi from './assistant-api.js';
+import { initAssistantApi } from './assistant-api.js';
+import {
+  initAssistantPanel, composerHtml, wireComposer, close as closeAssistantPanel,
+} from './assistant-panel.js';
 import { initRelated, setRelatedOpener, mountRelated } from './related.js';
 import { initStars } from './stars.js';
 import { initDrag, isDragging } from './drag.js';
@@ -501,6 +506,22 @@ async function boot() {
   renderShell();
   /* One authenticated caller, one opener. Done here rather than at module
      load because both need the workspace, which does not exist until now. */
+  /**
+   * The assistant's four hooks into the shell.
+   *
+   * `surface` is the whole reason the desktop assistant is a panel rather than
+   * a page: it is what the user is looking at, and level 1 of the context
+   * engine. `afterChanges` is what makes a confirmation real on screen rather
+   * than merely reported.
+   */
+  initAssistantApi((path, opts) => api(`/api/v1/workspaces/${ws()}${path}`, opts));
+  initAssistantPanel({
+    toast: (m, bad) => toast(m, bad),
+    openEntity: (ref) => openLinkedEntity({ type: ref.type, id: ref.id, href: null }),
+    afterChanges: () => { void loadRoute(); },
+    surface: currentSurface,
+  });
+
   initRelated(relApi);
   setRelatedOpener(openLinkedEntity);
   window.__mountRelated = mountRelatedHosts;
@@ -754,18 +775,11 @@ function renderShell() {
 
     ${bottomNavHtml()}
 
-    <div class="composer" id="composer">
-      <div class="composer-inner" role="group" aria-disabled="true"
-           aria-label="Life OS assistant — not yet connected"
-           title="The assistant arrives in a later phase of v2">
-        <span class="ico">${icon('sparkle', 18)}</span>
-        <span class="composer-text">Ask Life OS or capture a thought</span>
-        <span class="composer-badge">Soon</span>
-      </div>
-    </div>`;
+    ${composerHtml()}`;
 
   if (!introSeen) sessionStorage.setItem('los2_intro', '1');
   wireShell();
+  wireComposer(root);
   renderRail();
   positionPill(true);
 }
@@ -982,6 +996,32 @@ function goToHash(href) {
   return loadRoute();
 }
 
+/**
+ * What the user is looking at, for the assistant.
+ *
+ * The ENTITY where there is one — an open project, a book page, a diary day —
+ * and the visible range where the surface is a period rather than an object.
+ * "Move this to Friday" is unanswerable without it and unambiguous with it.
+ */
+function currentSurface() {
+  const route = state.route;
+  const surface = { route };
+  if (route === 'projects' && pj.openId) {
+    surface.entity = { type: 'project', id: pj.openId };
+  } else if (route === 'calendar') {
+    const ev = eventFromHash();
+    if (ev) surface.entity = { type: 'event', id: ev };
+    else {
+      const r = currentRange();
+      surface.range = { from: r.from, to: r.to };
+    }
+  } else if (route === 'diary') {
+    const day = (location.hash.split('/')[1] ?? '').slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) surface.range = { from: day, to: day };
+  }
+  return surface;
+}
+
 /** A link may be followed from inside a modal, which has to get out of the way. */
 function closeAnyModal() {
   document.querySelector('.modal-scrim')?.remove();
@@ -1159,6 +1199,8 @@ async function loadRoute(nav = navToken()) {
   head.classList.toggle('m-dupe', isPhone() && REPEATS_TITLE.includes(state.route));
 
   if (state.route === 'ai') {
+    /* The panel belongs to the desktop shell and would sit over this screen. */
+    closeAssistantPanel();
     renderAssistant(head, scroll, assistantContext());
     return;
   }
@@ -2998,6 +3040,64 @@ async function openReminderById(id) {
   editReminder(id, cal.reminders);
 }
 
+  /* ── What Life OS knows about you ────────────────────────────────────
+   *
+   * Editing is the same gesture as renaming an area: type, blur, saved. A
+   * memory the person cannot correct in one move is a memory they will
+   * eventually stop trusting. */
+  document.querySelectorAll('[data-mem-fact]').forEach((el) => {
+    const id = el.dataset.memFact;
+    const original = el.value;
+    const save = () => run(async () => {
+      const fact = el.value.trim();
+      if (!fact || fact === original) { el.value = original; return; }
+      await assistantApi.memoryUpdate(id, { fact });
+      await loadMemories();
+      renderSettings();
+      toast('Saved');
+    });
+    el.onblur = save;
+    el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); if (e.key === 'Escape') el.value = original; };
+  });
+
+  document.querySelectorAll('[data-mem-pin]').forEach((el) => {
+    el.onclick = () => run(async () => {
+      const pinned = el.getAttribute('aria-pressed') === 'true';
+      await assistantApi.memoryUpdate(el.dataset.memPin, { isPinned: !pinned });
+      await loadMemories();
+      renderSettings();
+      toast(pinned ? 'Unpinned' : 'Pinned — this will not be replaced automatically');
+    });
+  });
+
+  document.querySelectorAll('[data-mem-del]').forEach((el) => {
+    el.onclick = () => run(async () => {
+      const row = el.closest('[data-mem]');
+      const fact = row?.querySelector('[data-mem-fact]')?.value ?? 'this';
+      if (!confirm(`Forget "${fact}"? Life OS will stop using it.`)) return;
+      await assistantApi.memoryDelete(el.dataset.memDel);
+      await loadMemories();
+      renderSettings();
+      toast('Forgotten');
+    });
+  });
+
+  document.querySelectorAll('[data-cand-yes]').forEach((el) => {
+    el.onclick = () => run(async () => {
+      await assistantApi.memoryAccept(el.dataset.candYes);
+      await loadMemories();
+      renderSettings();
+      toast('Remembered');
+    });
+  });
+  document.querySelectorAll('[data-cand-no]').forEach((el) => {
+    el.onclick = () => run(async () => {
+      await assistantApi.memoryReject(el.dataset.candNo);
+      await loadMemories();
+      renderSettings();
+    });
+  });
+
   document.querySelectorAll('[data-area-open]').forEach((el) => {
     el.onclick = () => { openAreaById(el.dataset.areaOpen); mountRelatedHosts(); };
   });
@@ -3194,6 +3294,27 @@ function renderSettings() {
     loadTasks().then(() => {
       if (state.route === 'settings' && state.settingsTab === 'areas') renderSettings();
     }).catch(() => {});
+  }
+  /* What Life OS knows lives on the server. Same pattern: render the panel,
+     ask once, repaint. `null` means "not asked yet" and shows Loading; an
+     empty array means "asked, and there is nothing", which is a real answer
+     and gets the empty state rather than a spinner for ever. */
+  if (state.settingsTab === 'ai' && state.aiMemories === undefined) {
+    state.aiMemories = null;
+    loadMemories().then(() => {
+      if (state.route === 'settings' && state.settingsTab === 'ai') renderSettings();
+    }).catch(() => {});
+  }
+}
+
+async function loadMemories() {
+  try {
+    const r = await assistantApi.memoryList();
+    state.aiMemories = r.memories ?? [];
+    state.aiCandidates = r.candidates ?? [];
+  } catch {
+    state.aiMemories = [];
+    state.aiCandidates = [];
   }
 }
 
@@ -6431,6 +6552,11 @@ function assistantContext() {
     toast,
     quickAdd: () => openQuickAdd(),
     go: (id) => go(id),
+    /* The same four hooks the desktop panel gets. One assistant, two frames —
+       and `surface` is what makes "move this to Friday" answerable on either. */
+    surface: currentSurface,
+    openEntity: (ref) => openLinkedEntity({ type: ref.type, id: ref.id, href: null }),
+    afterChanges: () => { void loadRoute(); },
   };
 }
 

@@ -547,6 +547,57 @@
 .ap-fvalue{font-weight:600}
 .ap-field svg{color:var(--muted)}
 
+/* An interpretation made on the user's behalf, said out loud on the card.
+   This is what lets a medium-confidence reading be a proposal instead of a
+   question — quiet enough not to alarm, present enough to be corrected. */
+.ap-assume{margin:1px 0 0;padding:0 0 0 14px;list-style:none;
+  display:flex;flex-direction:column;gap:3px}
+.ap-assume li{position:relative;font-size:12.5px;color:var(--muted);line-height:1.45}
+.ap-assume li::before{content:'';position:absolute;left:-14px;top:.62em;
+  width:5px;height:5px;border-radius:50%;background:var(--muted);opacity:.55}
+
+/* Things that are true and unwelcome: a clash, a read-only calendar. Warm,
+   never red — a warning is not an error, and the action can still be taken. */
+.ap-warn{margin:1px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.ap-warn li{display:flex;align-items:flex-start;gap:7px;font-size:12.5px;
+  color:var(--warn);line-height:1.45}
+.ap-warn svg{flex-shrink:0;margin-top:1px}
+.ap-gone{color:var(--muted)}
+
+/* Where an answer came from. One quiet line of chips, not a citation report. */
+.ap-src{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:2px}
+.ap-src-l{font-size:10.5px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted)}
+.ap-src-i{font-size:12px;color:var(--text-2);background:rgba(255,255,255,.05);
+  border:1px solid var(--border);border-radius:8px;padding:4px 9px;
+  max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  transition:background var(--t-hover),color var(--t-hover)}
+.ap-src-i:hover{background:rgba(255,255,255,.09);color:var(--text)}
+.ap-src-more{font-size:12px;color:var(--muted)}
+
+/* The one genuinely necessary question. Shown instead of a guess, never as
+   the default response to ordinary uncertainty. */
+.ap-ask{background:var(--surface);border:1px solid rgba(255,196,77,.34);
+  border-radius:var(--m-radius);padding:13px 14px;display:flex;
+  flex-direction:column;gap:10px}
+.ap-ask-q{margin:0;font-size:15px;line-height:1.45}
+.ap-ask-opts{display:flex;flex-wrap:wrap;gap:8px}
+.ap-ask-o{min-height:40px}
+
+/* What actually happened. Three of four succeeding is three things that
+   happened, and it is never reported as a failure. */
+.ap-done{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--m-radius);padding:13px 14px;display:flex;
+  flex-direction:column;gap:9px}
+.ap-done.has-fail{border-color:rgba(255,196,77,.34)}
+.ap-done-h{margin:0;font-size:15.5px;font-weight:600}
+.ap-done-l{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.ap-done-l li{display:flex;align-items:flex-start;gap:8px;font-size:13.5px;line-height:1.45}
+.ap-done-l li.ok{color:var(--text-2)}
+.ap-done-l li.ok svg{color:var(--ok)}
+.ap-done-l li.bad{color:var(--warn)}
+.ap-done-l svg{flex-shrink:0;margin-top:2px}
+
 /* Confirm. It counts, and the number is derived from the list above it —
    see changeCount() for why those two can never disagree. */
 .asst-confirm{position:sticky;bottom:calc(var(--m-nav-h) + var(--m-safe-b) + 8px);
@@ -2262,3 +2313,14 @@
   .rel-pick-list{max-height:40dvh}
   .rel-add{min-height:32px;display:inline-flex;align-items:center}
 }
+
+
+/* ── What Life OS knows about you ────────────────────────────────────────
+   A list of sentences, grouped, each one editable in place. Deliberately not
+   a table of confidence scores: the person is here to check what is believed
+   about them, not to audit how sure the machine is. */
+.set-mem-h{padding-top:14px;padding-bottom:2px}
+.set-mem-cat{font-size:10.5px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted)}
+.set-mem .set-item-name{font-size:14px}
+.set-cand-t{flex:1;font-size:14px;color:var(--text-2);min-width:0}

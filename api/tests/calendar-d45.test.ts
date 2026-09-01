@@ -106,7 +106,12 @@ test('recurrence: the range query expands rather than filtering by due date', ()
 
 test('recurrence: one engine, shared by every view', () => {
   assert.match(calRoute, /from '\.\.\/lib\/recurrence\.js'/, 'the shared engine is not used');
-  assert.match(calRoute, /nextAfter\(existing\.dueDate, rule\)/,
+  /* Completion's date maths moved into the application service so the UI and
+     the assistant advance a series identically. Still ONE engine — the point
+     of this test — and the service imports the same one. */
+  const service = readFileSync(join('src', 'lib', 'actions', 'reminders.ts'), 'utf8');
+  assert.match(service, /from '\.\.\/recurrence\.js'/, 'the service uses different date maths');
+  assert.match(service, /nextAfter\(existing\.dueDate, rule as any\)/,
     'completion uses its own date maths');
 });
 

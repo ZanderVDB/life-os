@@ -24,18 +24,20 @@
 
 import { icon, logoMark } from './icons.js';
 import { Orb, MicLevel, VARIANTS, DEFAULT_VARIANT, synthLevel } from './assistant-orb.js';
-import { mockProvider, MOCK_TRANSCRIPTS } from './assistant-mock.js';
-import {
-  normalise, changeCount, setEnabled, setItemEnabled, setField,
-  isImportant, isMutation, KINDS, summarise, assertConfirmable,
-} from './assistant-contract.js';
 import { openSheet, closeSheet } from './mobile.js';
+/* Fixed transcripts stand in for a MICROPHONE, not for the assistant: speech
+   recognition does not exist in Firefox and differs between Chrome and Safari.
+   What they produce goes to the same server turn a spoken sentence would. */
+import { MOCK_TRANSCRIPTS } from './assistant-mock.js';
+/* What Life OS can do comes from the SERVER. This client keeps no
+   authoritative capability list of its own — see assistant-api.js. */
+import * as api from './assistant-api.js';
+import {
+  actionCardHtml, sourcesHtml, clarificationHtml, resultsHtml,
+} from './assistant-cards.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-/* The provider. One line to change when the real one exists. */
-const provider = mockProvider;
 
 /** Development controls — the A/B/C selector and the mock transcripts. */
 export const devTools = () => Boolean(window.LIFE_OS_CONFIG?.devTools)
@@ -152,13 +154,12 @@ export function renderAssistant(head, scroll, ctx) {
     <p class="sub">Say what is going on. Life OS proposes the changes; you confirm them.</p>`;
 
   scroll.innerHTML = `<div class="asst" id="asst" data-state="idle">
-    <!-- One line. It was a full amber panel, which is the right weight for a
-         warning about losing data and the wrong weight for a standing fact —
-         it drew the eye before the orb did, every single time the screen
-         opened. The full explanation is still given at the moment it matters,
-         on the confirmation. -->
-    <p class="asst-note"><span class="asst-dot" aria-hidden="true"></span>
-      Prototype · nothing will be saved</p>
+    <!-- One line, and only when there is something to say. The prototype
+         warning was true for two phases and is not any more; what remains is
+         the case where no model is configured, which the person genuinely
+         needs to know before they speak into a void. -->
+    <p class="asst-note" id="asst-note" hidden><span class="asst-dot" aria-hidden="true"></span>
+      <span id="asst-note-t"></span></p>
 
     <p class="asst-src" id="asst-src" hidden></p>
     <div class="asst-script" id="asst-script" role="log" aria-live="polite"></div>
@@ -179,9 +180,17 @@ export function renderAssistant(head, scroll, ctx) {
   orb.start();
 
   session = {
-    el, orb, ctx, state: 'idle', transcript: '', proposals: [], response: null,
+    el, orb, ctx, state: 'idle', transcript: '',
+    /* The server holds the proposal. These are the handle to it — an id and
+       the version the person is looking at — and a local copy for rendering. */
+    turnId: null, version: 0, actions: [], answer: null, understood: '',
+    sources: [], clarification: null, conversationId: null, report: null,
+    unavailable: new Set(),
     mic: null, rec: null, tick: null, mockTimer: null, source: null,
   };
+
+  /* Said once, on arrival, and only when true. */
+  void showConnectionNote(el);
 
   renderActions();
   wireDevPanel(el);
@@ -250,11 +259,34 @@ function renderActions() {
   box.querySelector('#asst-quick').onclick = () => session.ctx.quickAdd?.();
 }
 
+async function showConnectionNote(el) {
+  const note = el.querySelector('#asst-note');
+  if (!note) return;
+  try {
+    if (await api.plannerReady()) { note.hidden = true; return; }
+    const c = await api.capabilities();
+    el.querySelector('#asst-note-t').textContent = c.planner?.reason
+      ?? 'The assistant is not connected to a model yet.';
+    note.hidden = false;
+  } catch {
+    /* Offline, or not signed in. Silence is right: the note is for a
+       configuration problem, not for a network blip the app already reports. */
+    note.hidden = true;
+  }
+}
+
 function reset() {
   if (!session) return;
   session.transcript = '';
-  session.proposals = [];
-  session.response = null;
+  session.turnId = null;
+  session.version = 0;
+  session.actions = [];
+  session.answer = null;
+  session.understood = '';
+  session.sources = [];
+  session.clarification = null;
+  session.report = null;
+  session.unavailable = new Set();
   session.el.querySelector('#asst-script').innerHTML = '';
   const src = session.el.querySelector('#asst-src');
   if (src) { src.textContent = ''; src.hidden = true; }
@@ -417,59 +449,85 @@ async function finishListening() {
   await propose(text);
 }
 
-/* ── Understanding ─────────────────────────────────────────────────────── */
+/* ── A turn ────────────────────────────────────────────────────────────── */
 
+/**
+ * Say it, and render what came back.
+ *
+ * The whole turn happens on the server: retrieval, ranking, memory, planning,
+ * calendar preview. What arrives is a proposal set that already exists in the
+ * database, so a refresh does not lose it and a confirmation cannot run
+ * anything the planner did not write.
+ */
 async function propose(text) {
   if (!session) return;
   setState('processing');
-  const ctx = session.ctx;
-  let raw;
   try {
-    raw = await provider.propose({
+    const r = await api.turn({
       text,
-      /* Read-only, and no credentials. The provider is told what exists so
-       * its proposals can name real projects and real areas; it is given no
-       * way to reach any of them. */
-      context: {
-        now: Date.now(),
-        areas: ctx.areas ?? [],
-        projects: ctx.projects ?? [],
-        counts: ctx.counts ?? {},
-        next: ctx.next ?? null,
-      },
+      conversationId: session.conversationId,
+      surface: session.ctx.surface?.() ?? null,
     });
+    if (!session) return;
+    session.turnId = r.turnId;
+    session.conversationId = r.conversationId;
+    session.version = r.version;
+    session.actions = r.actions ?? [];
+    session.answer = r.answer ?? null;
+    session.understood = r.understood ?? '';
+    session.sources = r.sources ?? [];
+    session.clarification = r.clarification ?? null;
+    session.report = null;
+    await markUnavailable();
+    renderReview();
+    setState('proposal');
   } catch (e) {
     if (!session) return;
     setState('idle');
-    ctx.toast?.(e.message, true);
-    return;
+    /* The server says what went wrong — no model configured, timed out,
+       rate limited. Repeating its sentence beats "something went wrong". */
+    session.ctx.toast?.(e.message, true);
   }
-  if (!session) return;
+}
 
-  const res = normalise({ transcript: text, ...raw });
-  session.response = res;
-  session.proposals = res.proposals;
-  renderReview();
-  setState('proposal');
+/**
+ * A proposal can outlive the thing it needs.
+ *
+ * Google disconnects, a module is removed. The card still shows what was
+ * meant; it is marked unrunnable rather than offering a button that fails.
+ */
+async function markUnavailable() {
+  session.unavailable = new Set();
+  try {
+    const c = await api.capabilities({ force: true });
+    const have = new Set((c.capabilities ?? []).map((x) => x.id));
+    for (const a of session.actions) {
+      if (!have.has(a.capability)) session.unavailable.add(a.id);
+    }
+  } catch { /* leave everything enabled rather than disabling on a blip */ }
 }
 
 /* ── The proposal ──────────────────────────────────────────────────────── */
 
 function renderReview() {
   const box = session.el.querySelector('#asst-review');
-  const res = session.response;
-  const list = session.proposals;
-  const n = changeCount(list);
+  const list = session.actions;
+  const runnable = list.filter((a) => a.enabled && !session.unavailable.has(a.id));
+  const n = runnable.length;
 
   box.hidden = false;
   box.innerHTML = `
-    <h2 class="asst-h">${esc(res.understood)}</h2>
-    ${res.reply ? `<p class="asst-reply">${esc(res.reply)}</p>` : ''}
-    ${list.length ? list.map(cardHtml).join('') : '<p class="asst-empty">Nothing to change.</p>'}
-    ${res.dropped.length ? `<p class="asst-empty">${res.dropped.length} suggestion${
-  res.dropped.length === 1 ? '' : 's'} could not be shown and ${
-  res.dropped.length === 1 ? 'was' : 'were'} dropped.</p>` : ''}
-    ${n ? `<div class="asst-confirm">
+    ${session.understood ? `<h2 class="asst-h">${esc(session.understood)}</h2>` : ''}
+    ${session.answer ? `<p class="asst-reply">${esc(session.answer)}</p>` : ''}
+    ${session.answer ? sourcesHtml(session.sources) : ''}
+    ${clarificationHtml(session.clarification)}
+    ${session.report ? resultsHtml(session.report) : ''}
+    ${!session.report ? list.map((a) => actionCardHtml(a, {
+    unavailable: session.unavailable.has(a.id),
+  })).join('') : ''}
+    ${!session.report && !list.length && !session.answer && !session.clarification
+    ? '<p class="asst-empty">Nothing to change.</p>' : ''}
+    ${!session.report && n ? `<div class="asst-confirm">
       <button type="button" class="btn btn-ghost" id="asst-discard">Discard</button>
       <button type="button" class="btn btn-primary" id="asst-commit">
         Confirm ${n} change${n === 1 ? '' : 's'}</button>
@@ -478,87 +536,56 @@ function renderReview() {
   wireReview(box);
 }
 
-function cardHtml(p) {
-  const meta = KINDS[p.kind] ?? {};
-  const off = !p.enabled;
-  return `<article class="ap ${off ? 'is-off' : ''} ${isImportant(p.kind) ? 'is-important' : ''}"
-      data-p="${esc(p.id)}">
-    <header class="ap-head">
-      <span class="ap-kind">${esc(meta.label ?? p.kind)}</span>
-      ${isImportant(p.kind) ? '<span class="ap-flag">Needs your confirmation</span>' : ''}
-      ${isMutation(p.kind) ? `<label class="ap-on">
-        <input type="checkbox" ${p.enabled ? 'checked' : ''} data-toggle="${esc(p.id)}">
-        <span class="sr-only">Include this change</span></label>` : ''}
-    </header>
-    <p class="ap-title">${esc(p.title)}</p>
-    ${p.summary || summarise(p) ? `<p class="ap-sum">${esc(p.summary || summarise(p))}</p>` : ''}
-    ${p.context ? `<p class="ap-ctx">${esc(p.context)}</p>` : ''}
-    ${p.items.length ? `<ul class="ap-items">${p.items.map((i) => `<li>
-      <label class="ap-item">
-        <input type="checkbox" ${i.enabled ? 'checked' : ''}
-          data-item="${esc(p.id)}" data-item-id="${esc(i.id)}">
-        <span>${esc(i.label)}</span></label></li>`).join('')}</ul>` : ''}
-    ${p.fields.length ? `<div class="ap-fields">${p.fields.map((f) => `
-      <button type="button" class="ap-field" data-field="${esc(p.id)}" data-key="${esc(f.key)}">
-        <span class="ap-flabel">${esc(f.label)}</span>
-        <span class="ap-fvalue">${esc(f.value ?? '—')}</span>
-        ${icon('pencil', 14)}
-      </button>`).join('')}</div>` : ''}
-  </article>`;
-}
-
 function wireReview(box) {
   box.querySelectorAll('[data-toggle]').forEach((el) => {
-    el.onchange = () => {
-      session.proposals = setEnabled(session.proposals, el.dataset.toggle, el.checked);
-      renderReview();
-    };
-  });
-  box.querySelectorAll('[data-item]').forEach((el) => {
-    el.onchange = () => {
-      session.proposals = setItemEnabled(session.proposals,
-        el.dataset.item, el.dataset.itemId, el.checked);
-      renderReview();
-    };
+    el.onchange = () => void edit(el.dataset.toggle, { enabled: el.checked });
   });
   box.querySelectorAll('[data-field]').forEach((el) => {
     el.onclick = () => editField(el.dataset.field, el.dataset.key);
   });
-  box.querySelector('#asst-discard')?.addEventListener('click', () => reset());
-  box.querySelector('#asst-commit')?.addEventListener('click', commit);
+  box.querySelectorAll('[data-clarify]').forEach((el) => {
+    /* Answering the question is just saying the answer. It continues the same
+       conversation, so the server still has everything from the first turn. */
+    el.onclick = () => void propose(el.dataset.clarify);
+  });
+  box.querySelectorAll('[data-src-id]').forEach((el) => {
+    el.onclick = () => session.ctx.openEntity?.({
+      type: el.dataset.srcType, id: el.dataset.srcId,
+    });
+  });
+  box.querySelector('#asst-discard')?.addEventListener('click', () => void discard());
+  box.querySelector('#asst-commit')?.addEventListener('click', () => void commit());
 }
 
-/**
- * Editing one field of one proposal.
- *
- * §13: a misheard item is corrected here. Nothing about this asks the person
- * to say it all again, which is the failure mode that makes voice assistants
- * unusable the moment they get one word wrong.
- */
-function editField(pid, key) {
-  const p = session.proposals.find((x) => x.id === pid);
-  const f = p?.fields.find((x) => x.key === key);
-  if (!f) return;
-
-  if (f.type === 'choice') {
-    openSheet({
-      title: f.label,
-      body: (f.options ?? []).map((o) => `<button type="button" class="msheet-row"
-        data-opt="${esc(o)}" ${o === f.value ? 'aria-current="page"' : ''}>
-        <span>${esc(o)}</span>
-        ${o === f.value ? `<span class="msheet-r">${icon('check', 16)}</span>` : ''}</button>`).join(''),
-      onMount: (rootEl, close) => {
-        rootEl.querySelectorAll('[data-opt]').forEach((el) => {
-          el.onclick = () => {
-            session.proposals = setField(session.proposals, pid, key, el.dataset.opt);
-            close();
-            renderReview();
-          };
-        });
-      },
-    });
-    return;
+/** Push one edit to the authoritative proposal and re-render what came back. */
+async function edit(actionId, change) {
+  if (!session?.turnId) return;
+  try {
+    const r = await api.editTurn(session.turnId, session.version, [{ actionId, ...change }]);
+    session.version = r.version;
+    session.actions = r.actions;
+    renderReview();
+  } catch (e) {
+    session.ctx.toast?.(e.message, true);
+    /* The server refused. Re-read rather than leaving the screen showing a
+       change that did not happen. */
+    void refresh();
   }
+}
+
+async function refresh() {
+  if (!session?.turnId) return;
+  const r = await api.readTurn(session.turnId).catch(() => null);
+  if (!r || !session) return;
+  session.version = r.version;
+  session.actions = r.actions ?? [];
+  renderReview();
+}
+
+function editField(actionId, key) {
+  const action = session.actions.find((x) => x.id === actionId);
+  const f = action?.editable?.find((x) => x.key === key);
+  if (!f) return;
 
   openSheet({
     title: f.label,
@@ -568,13 +595,12 @@ function editField(pid, key) {
     foot: '<button type="button" class="btn btn-primary" id="ap-save">Save</button>',
     onMount: (rootEl, close) => {
       const input = rootEl.querySelector('#ap-edit');
-      const save = () => {
-        session.proposals = setField(session.proposals, pid, key, input.value);
+      const save = async () => {
         close();
-        renderReview();
+        await edit(actionId, { fields: { [key]: input.value } });
       };
-      rootEl.querySelector('#ap-save').onclick = save;
-      input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+      rootEl.querySelector('#ap-save').onclick = () => void save();
+      input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); void save(); } };
     },
   });
 }
@@ -582,41 +608,66 @@ function editField(pid, key) {
 /**
  * Confirmation.
  *
- * The gate runs for real — `assertConfirmable` is the same function the
- * executor will call, and it is exercised here so the contract is tested by
- * the prototype rather than merely described by it.
- *
- * Then it stops, and says so. This is where a fake would write rows and look
- * like a working assistant; §11 and §54 are explicit that it must not, and a
- * prototype that lies about having done the work cannot tell you whether the
- * interaction was right.
+ * The count goes with it and the server checks it. Important actions are
+ * accepted individually, in a sheet that names them — the batch confirmation
+ * does not cover a meeting other people were invited to.
  */
-function commit() {
-  const list = session.proposals;
-  const n = changeCount(list);
+async function commit() {
+  const runnable = session.actions.filter((a) => a.enabled && !session.unavailable.has(a.id));
+  const n = runnable.length;
+  const important = runnable.filter((a) => a.important);
+
+  if (important.length) {
+    const ok = await confirmImportant(important);
+    if (!ok) return;
+  }
+  await run(n, important.map((a) => a.id));
+}
+
+function confirmImportant(list) {
+  return new Promise((resolve) => {
+    let settled = false;
+    openSheet({
+      title: list.length === 1 ? 'Confirm this change' : `Confirm ${list.length} changes`,
+      body: `<div class="msheet-pad">
+        <p class="msheet-p">${list.length === 1 ? 'This one is' : 'These are'} harder to undo,
+        so ${list.length === 1 ? 'it needs' : 'they need'} a separate yes.</p>
+        <ul class="msheet-list">${list.map((a) => `<li>${esc(a.title)}</li>`).join('')}</ul>
+      </div>`,
+      foot: `<button type="button" class="btn btn-ghost" data-no>Back</button>
+        <button type="button" class="btn btn-primary" data-yes>Yes, do ${
+  list.length === 1 ? 'it' : 'them'}</button>`,
+      onMount: (rootEl, close) => {
+        rootEl.querySelector('[data-yes]').onclick = () => {
+          settled = true; close(); resolve(true);
+        };
+        rootEl.querySelector('[data-no]').onclick = () => { settled = true; close(); resolve(false); };
+      },
+      onClose: () => { if (!settled) resolve(false); },
+    });
+  });
+}
+
+async function run(count, importantAccepted) {
   try {
-    assertConfirmable(list, { confirmed: true, count: n });
+    const report = await api.confirmTurn(
+      session.turnId, session.version, count, importantAccepted,
+    );
+    if (!session) return;
+    session.report = report;
+    renderReview();
+    /* The board behind this is now wrong. Refreshing it is the difference
+       between "it says it did it" and "it did it". */
+    session.ctx.afterChanges?.();
   } catch (e) {
     session.ctx.toast?.(e.message, true);
-    return;
+    void refresh();
   }
-  openSheet({
-    title: 'Not connected yet',
-    body: `<div class="msheet-pad">
-      <p class="msheet-p">You confirmed <b>${n} change${n === 1 ? '' : 's'}</b>, and this is
-      exactly where the assistant will hand them to Life OS to carry out.</p>
-      <p class="msheet-p">That layer is not built yet, so <b>nothing has been saved</b>.
-      Everything you did here — what it understood, what you switched off, what you
-      corrected — is the interaction being tested.</p>
-      <ul class="msheet-list">${list.filter((p) => p.enabled && isMutation(p.kind))
-    .map((p) => `<li>${esc(KINDS[p.kind]?.label ?? p.kind)} · ${esc(p.title)}${
-      p.items.length ? ` (${p.items.filter((i) => i.enabled).length})` : ''}</li>`).join('')}</ul>
-    </div>`,
-    foot: '<button type="button" class="btn btn-primary" data-sheet-close>Close</button>',
-    onMount: (rootEl, close) => {
-      rootEl.querySelectorAll('[data-sheet-close]').forEach((b) => { b.onclick = () => close(); });
-    },
-  });
+}
+
+async function discard() {
+  if (session?.turnId) await api.discardTurn(session.turnId).catch(() => {});
+  reset();
 }
 
 /* ── Typing ───────────────────────────────────────────────────────────── */

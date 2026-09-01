@@ -218,7 +218,11 @@ test('settings: a category column and one panel, with every required group', () 
   assert.match(settings, /data-area-name=/, 'Areas cannot be renamed');
   assert.match(settings, /data-area-del=/, 'Areas cannot be removed');
   assert.match(settings, /lose this label|never deletes/i, 'removal does not explain reassignment');
-  assert.ok(!/profile/i.test(settings), 'settings mention profiles');
+  /* No "user profiles" feature — that was a Legacy idea and does not exist.
+     Matched on the word that would name it, not on every occurrence of the
+     substring: AI & personalisation has a memory CATEGORY called `profile`
+     ("About you"), which is a category of fact rather than a feature. */
+  assert.ok(!/profiles|user profile/i.test(settings), 'settings offer profile management');
 });
 
 test('settings: no control is drawn for something that cannot happen', () => {
@@ -277,14 +281,47 @@ test('icons: every required file exists at the right dimensions', () => {
   assert.ok(!/Playfair|<text/.test(std), 'the app icon contains a wordmark');
 });
 
-test('the AI composer is inert — no handler, no network call', () => {
-  const start = app.indexOf('class="composer-inner"');
-  const composer = app.slice(start, app.indexOf('</div>', app.indexOf('composer-badge')));
-  assert.match(composer, /aria-disabled="true"/, 'composer is not marked disabled');
-  assert.ok(!/fetch\(|anthropic|onclick|addEventListener/i.test(composer),
-    'the composer has behaviour attached');
-  assert.match(composer, /Ask Life OS or capture a thought/, 'composer copy is not the honest one');
-  assert.ok(!/anthropic/i.test(app + html + sw + pwa), 'something references Anthropic');
+test('the AI composer is real, and the browser still talks to no model', () => {
+  /* This test used to assert the composer was INERT, which was true while
+     there was nothing behind it. There is now, so the assertion moved to the
+     rule that outlived the placeholder:
+     
+     THE BROWSER NEVER TALKS TO A MODEL PROVIDER.
+     
+     Every turn goes to the Life OS API, which holds the key, plans, stores the
+     proposal and runs it. A client that could call a provider directly would
+     be a client that could be given a key — and a key in a browser is a key
+     that is public. */
+  const panel = readFileSync(join(WEB, 'assistant-panel.js'), 'utf8');
+  const assistant = readFileSync(join(WEB, 'assistant.js'), 'utf8');
+  const clientApi = readFileSync(join(WEB, 'assistant-api.js'), 'utf8');
+  const bundle = app + html + panel + assistant + clientApi + sw + pwa;
+
+  assert.ok(!/anthropic|openai|api\.anthropic|x-api-key|sk-ant/i.test(bundle),
+    'the browser references a model provider');
+
+  // It is a real input, and it submits.
+  assert.match(app, /composerHtml\(\)/, 'the composer is not rendered from the assistant panel');
+  assert.match(panel, /id="composer-input"/, 'the composer is not an input');
+  assert.match(panel, /addEventListener\('submit'/, 'the composer does not submit');
+  assert.match(panel, /Ask Life OS or capture a thought/, 'composer copy changed');
+  // …and every call it makes is to Life OS's own API.
+  assert.ok(!/fetch\(/.test(panel), 'the panel fetches directly instead of going through the API client');
+});
+
+test('the client keeps no authoritative list of what Life OS can do', () => {
+  /* The registry is the authority. A second list in the browser is exactly
+     what it exists to prevent: it goes stale the first time a module is
+     removed, and the assistant keeps offering something that is gone. */
+  const clientApi = readFileSync(join(WEB, 'assistant-api.js'), 'utf8');
+  assert.match(clientApi, /\/ai\/capabilities/, 'the client never asks what is available');
+  const cards = readFileSync(join(WEB, 'assistant-cards.js'), 'utf8');
+  assert.match(cards, /PRESENTATION/, 'the presentation table is gone');
+  assert.match(cards, /NOT authoritative/,
+    'nothing records that the presentation table is not a capability list');
+  // The old contract's KINDS map must not be the source of truth any more.
+  const assistant = readFileSync(join(WEB, 'assistant.js'), 'utf8');
+  assert.ok(!/KINDS\[/.test(assistant), 'the client still resolves capabilities from its own map');
 });
 
 /* ── Phase C3 ────────────────────────────────────────────────────────── */

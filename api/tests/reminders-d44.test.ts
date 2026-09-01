@@ -22,6 +22,9 @@ const calendar = read('calendar.js');
 const reminderModal = read('reminder-modal.js');
 const detail = read('detail-sheet.js');
 const calRoute = readFileSync(join('src', 'routes', 'calendar.ts'), 'utf8');
+/* The reminder rules live in the application service now, so both the UI and
+   the assistant obey the same ones. These assertions read where the rule IS. */
+const service = readFileSync(join('src', 'lib', 'actions', 'reminders.ts'), 'utf8');
 
 const code = (src: string) => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -46,7 +49,8 @@ test('recurrence: the API accepts it — this is the bug that shipped', () => {
   assert.match(calRoute, /const RecurrenceBody = z\.object/, 'no recurrence schema');
   assert.match(calRoute, /recurrence: RecurrenceBody\.nullish\(\)/,
     'ReminderBody does not accept recurrence — it will be silently discarded');
-  assert.match(calRoute, /db\.insert\(reminderRecurrenceRules\)/, 'the rule is never stored');
+  // Stored by the service both callers use, not by the route.
+  assert.match(service, /db\.insert\(reminderRecurrenceRules\)/, 'the rule is never stored');
   // And it must come back out again.
   // D4.5 changed the range query from "attach the rule" to "expand the rule",
   // so the rule now travels on every generated occurrence.
@@ -114,22 +118,32 @@ test('recurrence: dates are calendar-local, never UTC instants', () => {
 });
 
 test('recurrence: completing a recurring reminder advances it, not closes it', () => {
-  const fn = calRoute.slice(calRoute.indexOf("reminders/:id/complete"));
+  /* The rule moved to lib/actions/reminders.ts when the write side became
+     callable by the assistant as well as the UI. The assertion follows it —
+     reading the route would now prove nothing about what runs. */
+  const fn = service.slice(service.indexOf('export async function completeReminder'));
   // Renamed to nextAfter in D4.5 when the shared recurrence engine replaced
   // the route-local implementation.
-  assert.match(fn.slice(0, 1600), /nextAfter\(existing\.dueDate, rule\)/,
+  assert.match(fn, /nextAfter\(existing\.dueDate, rule as any\)/,
     'completion does not advance a recurring reminder');
-  assert.match(fn.slice(0, 1600), /status: 'open', completedAt: null/,
+  assert.match(fn, /status: 'open', completedAt: null/,
     'a recurring reminder is closed permanently on completion');
   // Unless the series has genuinely ended.
-  assert.match(fn.slice(0, 1600), /rule\.until && next > rule\.until/,
+  assert.match(fn, /rule\.until && next && next > rule\.until/,
     'a series with an end date never finishes');
+  // …and the route really does hand over rather than keeping a second copy.
+  const route = calRoute.slice(calRoute.indexOf('reminders/:id/complete'));
+  assert.match(route.slice(0, 400), /completeReminder\(/,
+    'the complete route stopped using the shared service');
 });
 
 test('recurrence: editing an unrelated field does not drop the rule', () => {
-  const fn = calRoute.slice(calRoute.indexOf("app.patch('/api/v1/workspaces/:workspaceId/reminders/:id'"));
-  assert.match(fn.slice(0, 1600), /if \(recurrence !== undefined\)/,
+  const fn = service.slice(service.indexOf('export async function updateReminder'));
+  assert.match(fn, /if \(recurrence !== undefined\)/,
     'an absent recurrence is treated as "remove it", so editing a title unsets repeat');
+  const route = calRoute.slice(calRoute.indexOf("app.patch('/api/v1/workspaces/:workspaceId/reminders/:id'"));
+  assert.match(route.slice(0, 500), /updateReminder\(/,
+    'the update route stopped using the shared service');
 });
 
 /* ── §3 Month reminder rows ──────────────────────────────────────────── */

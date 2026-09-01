@@ -159,10 +159,16 @@ test('pause: stops future occurrences without losing the rule', () => {
 test('resume: rolls a stale rule forward instead of firing in the past', () => {
   // A reminder paused in March and resumed in August must not come back due
   // in March.
-  const fn = calRoute.slice(calRoute.indexOf("reminders/:id/resume"));
-  assert.match(fn.slice(0, 1600), /due < today/, 'a stale date is resumed unchanged');
-  assert.match(fn.slice(0, 1600), /nextAfter\(due, rule\)/, 'the rule is not rolled forward');
-  assert.match(fn.slice(0, 1600), /i < 500/, 'the roll-forward loop is unbounded');
+  /* The rule lives in lib/actions/reminders.ts now, so the UI and the
+     assistant resume a reminder the same way. The assertion follows it. */
+  const service = readFileSync(join('src', 'lib', 'actions', 'reminders.ts'), 'utf8');
+  const fn = service.slice(service.indexOf('export async function resumeReminder'));
+  assert.match(fn, /due < today/, 'a stale date is resumed unchanged');
+  assert.match(fn, /nextAfter\(due, rule as any\)/, 'the rule is not rolled forward');
+  assert.match(fn, /i < 500/, 'the roll-forward loop is unbounded');
+  const route = calRoute.slice(calRoute.indexOf('reminders/:id/resume'));
+  assert.match(route.slice(0, 400), /resumeReminder\(/,
+    'the resume route stopped using the shared service');
 
   // The maths itself, on a rule four months stale.
   let due = '2026-03-15';

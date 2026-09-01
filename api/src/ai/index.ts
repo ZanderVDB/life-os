@@ -9,7 +9,8 @@
 import type { Db } from '../db/client.js';
 import { CapabilityRegistry } from './registry.js';
 import { MODULES } from './modules/index.js';
-import { defaultRouter, ProviderRouter } from './provider.js';
+import { buildRouter, ProviderRouter } from './provider.js';
+import { anthropicProvider, isConfigured } from './providers/anthropic.js';
 import type { AiRequestContext, Trace, ProposalAction, ProposalSet } from './types.js';
 import { gather, forPrompt, type GatherOptions } from './context.js';
 import { execute } from './executor.js';
@@ -28,9 +29,12 @@ export type Assistant = {
  * different answers from the same registry.
  */
 export function createAssistant(): Assistant {
+  /* The model provider joins only when a key is present. With none, the router
+     still answers every read and the turn says the assistant is not connected
+     — rather than the app failing to boot over a missing variable. */
   return {
     registry: new CapabilityRegistry(MODULES),
-    providers: defaultRouter(),
+    providers: buildRouter(isConfigured() ? [anthropicProvider] : []),
   };
 }
 

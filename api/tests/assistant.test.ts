@@ -1,13 +1,22 @@
 /**
- * The assistant's contract, run rather than read.
+ * The assistant client, after the model arrived.
  *
- * The interface is being built before the intelligence is, on purpose: the
- * hard questions about an assistant that can move your meetings are questions
- * about consent and correction, and those are answered in the interface. A
- * model behind a bad interface is a faster way to get the wrong thing done.
+ * ── What changed, and why these tests changed with it ────────────────────
  *
- * So these exercise the real functions. `assertConfirmable` is the same gate
- * the executor will call, and it is tested here rather than merely described.
+ * The interface was built before the intelligence, on purpose: the hard
+ * questions about an assistant that can move your meetings are questions about
+ * consent and correction, and those are answered in the interface. That
+ * interface was driven by a MOCK PROVIDER in the browser, and these tests
+ * exercised it.
+ *
+ * Both are gone. The provider is real, it runs on the server, and the proposal
+ * it produces is stored there — so the rules those tests protected are now
+ * enforced by `ai-turn.test.ts` against the real thing, and what is left here
+ * is what is still the client's job:
+ *
+ *   · it keeps NO authoritative idea of what Life OS can do;
+ *   · it never talks to a model;
+ *   · speech is an enhancement and never the only way in.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,172 +26,83 @@ import { join } from 'node:path';
 const WEB = join('..', 'web');
 const read = (f: string) => readFileSync(join(WEB, f), 'utf8');
 
-const contract = await import('../../web/assistant-contract.js' as string);
-const mock = await import('../../web/assistant-mock.js' as string);
+const assistant = read('assistant.js');
+const clientApi = read('assistant-api.js');
+const cards = read('assistant-cards.js');
+const panel = read('assistant-panel.js');
 
-const {
-  normalise, changeCount, setEnabled, setItemEnabled, setField,
-  assertConfirmable, isImportant, isMutation, isProvider, summarise,
-} = contract as any;
+/* ── The client is not the authority ─────────────────────────────────── */
 
-/* The response §11 describes, which is also what the mock returns. */
-const demo = () => normalise({
-  transcript: 'demo',
-  proposals: [
-    { id: 'p1', kind: 'task.complete', title: 'Finish website changes' },
-    {
-      id: 'p2',
-      kind: 'task.create',
-      title: 'Haircut',
-      fields: [
-        { key: 'when', label: 'When', type: 'choice', value: 'Tomorrow', options: ['Tomorrow', 'Saturday'] },
-        { key: 'area', label: 'Area', type: 'choice', value: 'Personal', options: ['Personal'] },
-      ],
-    },
-    {
-      id: 'p3',
-      kind: 'list.add',
-      title: 'Add to Groceries',
-      items: [{ id: 'a', label: 'Milk' }, { id: 'b', label: 'Chicken' }, { id: 'c', label: 'Toothpaste' }],
-    },
-    { id: 'p4', kind: 'event.update', title: 'Meeting with John' },
-  ],
+test('what Life OS can do comes from the server, not from a map in the browser', () => {
+  assert.match(clientApi, /\/ai\/capabilities/, 'the client never asks what is available');
+  /* A presentation table is fine and a capability list is not. The difference
+     is written down in the file, because the next person to add a row needs to
+     know which one they are adding to. */
+  assert.match(cards, /PRESENTATION/);
+  assert.match(cards, /NOT authoritative/);
+  // A capability the client has never seen still renders.
+  assert.match(cards, /\?\?\s*`\$\{action\.module/, 'an unknown capability has no fallback label');
 });
 
-test('the count on the button is the count on the screen', () => {
-  /* Six: one completion, one task, three list lines and one calendar move.
-   * Sub-items count individually because that is what somebody is agreeing
-   * to — a button saying "4 changes" over a card listing six lines is a
-   * button nobody can check. */
-  const r = demo();
-  assert.equal(changeCount(r.proposals), 6);
-
-  // Switching one grocery off is one change fewer, not one card fewer.
-  const less = setItemEnabled(r.proposals, 'p3', 'c', false);
-  assert.equal(changeCount(less), 5);
-
-  // Switching a whole card off removes everything it was going to do — the
-  // two groceries still ticked as well as the one already switched off.
-  const fewer = setEnabled(less, 'p3', false);
-  assert.equal(changeCount(fewer), 3);
-});
-
-test('an answer is not a change', () => {
-  const r = normalise({ proposals: [{ id: 'a', kind: 'answer', title: '5 tasks' }] });
-  assert.equal(changeCount(r.proposals), 0, 'agreeing with an answer is not an action');
-  assert.equal(isMutation('answer'), false);
-});
-
-test('editing a field rewrites the line that describes it', () => {
-  /* §13. A summary that keeps its original value after an edit is worse than
-   * no summary: it is a confident wrong answer directly beneath the right
-   * one. And nothing here asks the person to speak again. */
-  const r = demo();
-  assert.equal(summarise(r.proposals[1]), 'Tomorrow · Personal');
-  const edited = setField(r.proposals, 'p2', 'when', 'Saturday');
-  assert.equal(edited[1].summary, 'Saturday · Personal');
-  assert.equal(changeCount(edited), 6, 'an edit changed how many changes there are');
-});
-
-test('nothing executes without a confirmation that names the same number', () => {
-  const r = demo();
-  assert.throws(() => assertConfirmable(r.proposals, null),
-    /require an explicit confirmation/,
-    'a batch ran with no confirmation at all');
-  assert.throws(() => assertConfirmable(r.proposals, { confirmed: false, count: 6 }),
-    /require an explicit confirmation/);
-
-  /* The count is part of the confirmation, not decoration. If the list moved
-   * between the button being drawn and being pressed, the person agreed to a
-   * different set of changes than the one about to run. */
-  assert.throws(() => assertConfirmable(r.proposals, { confirmed: true, count: 5 }),
-    /Confirmed 5 changes but 6 are pending/);
-
-  assert.equal(assertConfirmable(r.proposals, { confirmed: true, count: 6 }), true);
-});
-
-test('the changes that cannot be undone are marked', () => {
-  for (const kind of ['event.delete', 'event.update', 'task.complete', 'project.update']) {
-    assert.ok(isImportant(kind), `${kind} is not marked as needing confirmation`);
+test('a proposal naming something now unavailable degrades instead of failing', () => {
+  /* Google disconnects between the plan and the confirmation. The card still
+     says what was meant; it stops offering a button that would fail. */
+  for (const [name, src] of [['assistant.js', assistant], ['assistant-panel.js', panel]] as const) {
+    assert.match(src, /markUnavailable/, `${name} does not check availability`);
   }
-  assert.equal(isImportant('task.create'), false, 'everything is marked, so nothing is');
+  assert.match(cards, /unavailable/, 'the card has no unavailable state');
+  assert.match(cards, /Not available now/);
 });
 
-test('a proposal the app cannot render is dropped, not half-shown', () => {
-  const r = normalise({
-    proposals: [
-      { id: 'ok', kind: 'task.create', title: 'Real' },
-      { id: 'no', kind: 'bank.transfer', title: 'Send £400' },
-    ],
-  });
-  assert.equal(r.proposals.length, 1, 'an unknown kind was rendered');
-  assert.deepEqual(r.dropped, ['bank.transfer']);
-  assert.equal(changeCount(r.proposals), 1);
+/* ── The browser talks to Life OS, never to a model ──────────────────── */
+
+test('no model provider is reachable from the browser', () => {
+  const bundle = assistant + clientApi + cards + panel + read('app.js');
+  assert.ok(!/anthropic|openai|x-api-key|sk-ant/i.test(bundle),
+    'the browser references a model provider');
+  /* A key in a browser is a public key. Everything goes through the Life OS
+     API, which holds it. */
+  assert.ok(!/fetch\(\s*['"`]https?:/.test(bundle),
+    'the client calls an external URL directly');
 });
 
-test('a provider has exactly one method, and it cannot write', () => {
-  assert.ok(isProvider(mock.mockProvider), 'the mock does not satisfy the interface');
-  const keys = Object.keys(mock.mockProvider);
-  assert.deepEqual(keys.sort(), ['id', 'label', 'propose'],
-    `a provider gained a capability: ${keys.join(', ')}`);
+test('the mock provider is gone, and what remains is a microphone substitute', () => {
+  const mockFile = read('assistant-mock.js');
+  assert.ok(!/mockProvider/.test(mockFile), 'the fake assistant is still there');
+  assert.ok(!/propose\s*\(/.test(mockFile), 'the fake assistant still has a propose method');
+  // The transcripts stay: speech recognition does not exist in Firefox.
+  assert.match(mockFile, /MOCK_TRANSCRIPTS/);
+  assert.match(mockFile, /substitute for a MICROPHONE/i,
+    'nothing records what this file is for now');
+});
 
-  const src = read('assistant-mock.js');
-  for (const forbidden of ['fetch(', 'api(', 'localStorage', 'method: \'POST\'', 'workspaces/']) {
-    assert.ok(!src.includes(forbidden),
-      `the mock provider can reach ${forbidden} — a provider must not be able to write`);
+/* ── Consent is still the shape of the interface ─────────────────────── */
+
+test('the button counts, and the count is what is sent', () => {
+  /* The count is part of the agreement and the SERVER checks it. The client's
+     job is to send the same number it drew. */
+  assert.match(clientApi, /export const changeCount/);
+  assert.match(clientApi, /filter\(\(a\) => a\.enabled\)/);
+  for (const [name, src] of [['assistant.js', assistant], ['assistant-panel.js', panel]] as const) {
+    assert.match(src, /Confirm \$\{n\} change/, `${name} does not count on the button`);
+    assert.match(src, /runnable\.length/, `${name} sends a count it did not draw`);
   }
 });
 
-test('the mock says what it is, everywhere it appears', () => {
-  /* A fake that writes real rows is indistinguishable from a working
-   * assistant right up until somebody trusts it with a real calendar. */
-  const surface = read('assistant.js');
-  /* One line, in the flow, and it never goes away. It used to be a full amber
-   * panel: the right weight for "you are about to lose data" and the wrong
-   * weight for a standing fact, and it drew the eye before the orb did every
-   * time the screen opened. It still has to SAY the two things that matter. */
-  assert.match(surface, /class="asst-note"/, 'the surface does not label itself');
-  assert.match(surface, /Prototype/, 'the label does not say it is a prototype');
-  assert.match(surface, /nothing will be saved/, 'the label does not say nothing is saved');
-  assert.ok(!/class="asst-note"[\s\S]{0,200}<b>/.test(surface),
-    'the standing label has grown a panel again');
-  assert.match(surface, /nothing has been saved/, 'confirming does not say nothing was saved');
-  assert.match(mock.mockProvider.label, /Prototype/);
-});
-
-test('replacing the mock is one line', () => {
-  const surface = read('assistant.js');
-  assert.match(surface, /const provider = mockProvider;/,
-    'the provider is not a single named binding');
-  // The surface talks to the contract, never to the mock's internals.
-  const body = surface.slice(surface.indexOf('function propose('));
-  assert.ok(!/mockProvider/.test(body), 'the mock leaks into the surface logic');
-  assert.match(surface, /provider\.propose\(\{/, 'the surface does not go through the interface');
-});
-
-test('the provider is told what exists and given no way to reach it', () => {
-  const surface = read('assistant.js');
-  const ctx = surface.slice(surface.indexOf('context: {'), surface.indexOf('});', surface.indexOf('context: {')));
-  for (const leak of ['token', 'workspace', 'api', 'headers']) {
-    assert.ok(!new RegExp(leak, 'i').test(ctx), `the assistant context carries ${leak}`);
+test('an important change is confirmed on its own, not by the batch', () => {
+  for (const [name, src] of [['assistant.js', assistant], ['assistant-panel.js', panel]] as const) {
+    assert.match(src, /important/, `${name} does not separate important changes`);
+    assert.match(src, /importantAccepted|important\.map/,
+      `${name} does not send individual acceptances`);
   }
-  assert.match(ctx, /areas:/);
-  assert.match(ctx, /projects:/);
 });
 
-test('the mock is deterministic, and the demo returns six changes', async () => {
-  const one = await mock.mockProvider.propose({
-    text: 'I finished the website changes. I need a haircut tomorrow. '
-      + 'Add milk, chicken and toothpaste to groceries. Move my meeting with John from 2 to 3.',
-    context: { now: Date.UTC(2026, 7, 25), areas: [{ name: 'Personal' }], projects: [] },
-  });
-  const two = await mock.mockProvider.propose({
-    text: 'I finished the website changes. I need a haircut tomorrow. '
-      + 'Add milk, chicken and toothpaste to groceries. Move my meeting with John from 2 to 3.',
-    context: { now: Date.UTC(2026, 7, 25), areas: [{ name: 'Personal' }], projects: [] },
-  });
-  assert.deepEqual(one, two, 'the same sentence produced two different answers');
-  assert.equal(changeCount(normalise(one).proposals), 6);
+test('an edit goes to the server, which validates it before it counts', () => {
+  /* The client cannot decide a value is acceptable. It sends the edit and
+     renders whatever comes back — including a refusal. */
+  assert.match(clientApi, /export const editTurn/);
+  assert.match(assistant, /api\.editTurn\(/);
+  assert.match(panel, /api\.editTurn\(/);
 });
 
 test('speech recognition is an enhancement, never the thing it depends on', () => {

@@ -26,6 +26,7 @@ import type {
   AiRequestContext, ProposalSet, ContextSource, Confidence,
 } from './types.js';
 import type { MemoryCandidate } from './memory.js';
+import { tokens } from './ranking.js';
 
 /* ══ The jobs ════════════════════════════════════════════════════════════ */
 
@@ -197,11 +198,19 @@ export const deterministicProvider: AiProvider = {
       library: /\bnote|page|book|document\b/i,
     };
     const hinted = modules.filter((m) => HINTS[m]?.test(t));
+    /* WORDS, not the sentence.
+     *
+     * Search is `ILIKE '%…%'`, so handing it a whole question matches nothing
+     * — "what do I need before the Trifusion handover?" has no row containing
+     * that string, and a search that finds nothing means no seed and therefore
+     * no relationship traversal. The distinctive words are what a person would
+     * have typed into a search box. */
+    const words = tokens(t);
     return {
       understood: t,
       intent: asksSomething ? 'question' : 'unclear',
       modules: hinted.length ? hinted : modules,
-      queries: [t.slice(0, 200)],
+      queries: words.length ? words.slice(0, 4) : [t.slice(0, 200)],
       confidence: hinted.length ? 'medium' : 'low',
     };
   },
@@ -211,9 +220,37 @@ export const deterministicProvider: AiProvider = {
   },
 };
 
-/** What a deployment gets before a model is configured. */
-export const defaultRouter = () => new ProviderRouter([deterministicProvider], {
-  default: 'deterministic',
-});
+/**
+ * What this deployment actually has.
+ *
+ * The deterministic provider is always present; the model provider joins it
+ * only when a key is configured. Routing then sends the cheap jobs to the
+ * model as well — `interpret` benefits from a real reading of the sentence —
+ * while `summarise` stays deterministic, because trimming a string to forty
+ * words does not need a model and paying for one would be waste.
+ *
+ * With no key the router still answers: `for('plan')` returns null, and the
+ * turn says the assistant is not configured rather than failing obscurely.
+ */
+export function buildRouter(providers: AiProvider[] = []): ProviderRouter {
+  const router = new ProviderRouter([deterministicProvider, ...providers]);
+  const model = providers[0];
+  if (model) {
+    router.route({
+      interpret: model.id,
+      plan: model.id,
+      answer: model.id,
+      extractMemory: model.id,
+      summarise: 'deterministic',
+      default: model.id,
+    });
+  } else {
+    router.route({ default: 'deterministic' });
+  }
+  return router;
+}
+
+/** Kept for callers that only ever wanted the no-model behaviour. */
+export const defaultRouter = () => buildRouter();
 
 export type { ContextSource };

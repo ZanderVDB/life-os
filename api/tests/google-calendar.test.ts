@@ -358,7 +358,10 @@ test('ui: no browser prompt, confirm or alert for normal creation', () => {
   // message is sometimes built into a variable on an earlier line, so each
   // call site is judged with a few lines of context rather than one line.
   const lines = app.split('\n');
-  const DESTRUCTIVE = /Delete|Remove|Disconnect|Archive|Sign out|unsaved|cannot be undone/i;
+  /* `Forget` is destructive: it is the word the AI & personalisation screen
+     uses for deleting a memory, and a memory really is deleted rather than
+     superseded — "forget that" has to mean gone or the control is a lie. */
+  const DESTRUCTIVE = /Delete|Remove|Disconnect|Archive|Sign out|Forget|unsaved|cannot be undone|hard to undo/i;
   lines.forEach((line, i) => {
     if (!line.includes('confirm(')) return;
     const context = lines.slice(Math.max(0, i - 6), i + 1).join(' ');
