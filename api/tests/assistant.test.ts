@@ -108,10 +108,17 @@ test('an edit goes to the server, which validates it before it counts', () => {
 test('speech recognition is an enhancement, never the thing it depends on', () => {
   /* §10. Chrome and Safari implement it under a prefix and behave
    * differently; Firefox does not implement it at all. Blocking the work on
-   * it would mean the interaction could only be tested in one browser. */
+   * it would mean the interaction could only be tested in one browser.
+   *
+   * The rule has not changed. The compatibility wrapper moved: it belongs to
+   * the shared controller now, because desktop needs the same answer and two
+   * copies of a browser check is how two surfaces come to disagree about
+   * which browsers work. */
+  const voice = read('voice-input.js');
+  assert.match(voice, /window\.SpeechRecognition \|\| window\.webkitSpeechRecognition/);
+
   const surface = read('assistant.js');
-  assert.match(surface, /window\.SpeechRecognition \|\| window\.webkitSpeechRecognition/);
-  assert.match(surface, /if \(!SR\) \{ showSourceNote/, 'a browser without it gets nothing');
+  assert.match(surface, /voiceSupported/, 'the surface never assumes recognition exists');
   assert.match(surface, /runMockCapture/, 'there is no development transcript');
   assert.match(surface, /openTypeSheet/, 'there is no way to type instead');
   // And the surface says which source it used rather than passing a

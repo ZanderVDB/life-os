@@ -332,6 +332,31 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
   border-radius:9px;color:var(--muted);transition:background var(--t-hover),color var(--t-hover)}
 .composer-go:hover{background:var(--surface-2);color:var(--text)}
 
+/* ── Voice input ──────────────────────────────────────────────────────
+ * The same 32px control as Send, sitting beside it, because speech is
+ * another way to fill this field rather than a feature of its own. Hidden
+ * outright where the browser has no recogniser — an inert button that
+ * apologises when pressed is worse than no button. */
+.composer-mic{flex-shrink:0;display:grid;place-items:center;width:32px;height:32px;
+  border-radius:9px;color:var(--muted);
+  transition:background var(--t-hover),color var(--t-hover)}
+.composer-mic:hover{background:var(--surface-2);color:var(--text)}
+.composer-mic.is-listening{color:#fff;background:rgba(138,93,255,.22)}
+/* One slow pulse on the ring, not on the glyph — a jumping icon in a text
+   field pulls the eye off the words appearing next to it. */
+.composer-mic.is-listening::after{content:'';position:absolute;width:32px;height:32px;
+  border-radius:9px;box-shadow:0 0 0 0 rgba(138,93,255,.5);
+  animation:mic-pulse 2s ease-out infinite;pointer-events:none}
+.composer-mic{position:relative}
+.composer.is-listening .composer-inner{border-color:var(--accent)}
+@keyframes mic-pulse{
+  0%{box-shadow:0 0 0 0 rgba(138,93,255,.45)}
+  70%{box-shadow:0 0 0 7px rgba(138,93,255,0)}
+  100%{box-shadow:0 0 0 0 rgba(138,93,255,0)}}
+@media (prefers-reduced-motion:reduce){
+  .composer-mic.is-listening::after{animation:none;
+    box-shadow:0 0 0 2px rgba(138,93,255,.45)}}
+
 /* ── The desktop assistant panel ──────────────────────────────────────────
  *
  * It grows UPWARDS from the composer over the page you are on, rather than

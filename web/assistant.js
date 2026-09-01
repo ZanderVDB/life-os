@@ -24,6 +24,7 @@
 
 import { icon, logoMark } from './icons.js';
 import { Orb, MicLevel, VARIANTS, DEFAULT_VARIANT, synthLevel } from './assistant-orb.js';
+import { VoiceInput, voiceSupported } from './voice-input.js';
 import { openSheet, closeSheet } from './mobile.js';
 /* Fixed transcripts stand in for a MICROPHONE, not for the assistant: speech
    recognition does not exist in Firefox and differs between Chrome and Safari.
@@ -80,7 +81,10 @@ function endSession() {
   if (!session) return;
   session.orb?.destroy();
   session.mic?.stop();
-  try { session.rec?.stop(); } catch { /* not started */ }
+  /* `destroy`, not `stop`: leaving the route is not "finish the sentence",
+     and a recogniser left running holds the microphone behind a page nobody
+     is looking at — the browser goes on showing the recording dot. */
+  session.voice?.destroy();
   clearInterval(session.tick);
   clearTimeout(session.mockTimer);
   session = null;
@@ -301,67 +305,86 @@ function reset() {
 
 /* ── Listening ─────────────────────────────────────────────────────────── */
 
-async function startListening() {
+/**
+ * Start listening.
+ *
+ * NOT async, and that is the fix rather than a style choice. iOS Safari only
+ * allows `SpeechRecognition.start()` while the user's tap is still being
+ * handled, and the previous version awaited `getUserMedia` first — so on an
+ * iPhone the level meter came up (that await is what starts it) and
+ * recognition never began at all. Speech first, synchronously; the meter
+ * follows on its own time.
+ *
+ * The two are independent on purpose. Either can fail without the other, and
+ * conflating them is what made a moving waveform look like proof that words
+ * were being heard.
+ */
+function startListening() {
   if (!session) return;
   reset();
   setState('starting');
 
+  const heard = startSpeech();
+  void startLevel();
+  /* Neither one worked: no recogniser and no microphone. The interaction is
+     still walkable — §10 — with a labelled demo transcript. */
+  if (!heard && !voiceSupported()) session.wantMock = true;
+}
+
+/** Speech recognition, through the shared controller. Synchronous. */
+function startSpeech() {
+  session.voice = new VoiceInput({
+    onState: (st) => {
+      if (!session) return;
+      if (st === 'listening') setState('listening');
+    },
+    onTranscript: ({ full }) => {
+      if (!session) return;
+      session.source = 'mic';
+      paintTranscript(full);
+    },
+    onError: ({ kind, message }) => {
+      if (!session) return;
+      /* The UI must never be left in LISTENING after a failure. */
+      if (kind === 'denied') { session.source = 'denied'; setState('denied'); }
+      else if (session.state === 'listening' || session.state === 'starting') {
+        setState('idle');
+      }
+      showSourceNote(message);
+    },
+  });
+  return session.voice.start('');
+}
+
+/** The waveform. A different subsystem, and it is allowed to fail alone. */
+async function startLevel() {
   const mic = new MicLevel();
   const got = await mic.start();
   if (!session) { mic.stop(); return; }
 
   if (got === 'ok') {
     session.mic = mic;
-    session.source = 'mic';
     session.tick = setInterval(() => {
+      if (!session) return;
       session.orb.setLevel(mic.read());
       if (currentVariant() === 'c') session.orb.setBins(mic.bins());
     }, 50);
-    startRecognition();
-    setState('listening');
+    if (session.state === 'starting') setState('listening');
     return;
   }
 
-  /* No microphone, or it was refused. The interaction is still testable —
-   * §10 — and the surface says which source it is using rather than
-   * pretending a synthetic level is a voice. */
-  session.source = got === 'denied' ? 'denied' : 'unsupported';
-  if (got === 'denied') { setState('denied'); showSourceNote(); return; }
-  runMockCapture(MOCK_TRANSCRIPTS[0]);
-}
-
-/**
- * Browser speech recognition, where it exists.
- *
- * Chrome and Safari implement it under a prefix and behave differently;
- * Firefox does not implement it at all. So it is treated as an enhancement
- * on top of a transcript that has a development source — never as the thing
- * the interaction depends on.
- */
-function startRecognition() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showSourceNote('No speech recognition in this browser — type, or use a demo transcript.'); return; }
-  try {
-    const rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = navigator.language || 'en-US';
-    let settled = '';
-    rec.onresult = (e) => {
-      if (!session) return;
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i += 1) {
-        const r = e.results[i];
-        if (r.isFinal) settled += `${r[0].transcript} `;
-        else interim += r[0].transcript;
-      }
-      paintTranscript(`${settled}${interim}`.trim());
-    };
-    rec.onerror = () => showSourceNote('Speech recognition stopped — you can type it instead.');
-    rec.start();
-    session.rec = rec;
-  } catch {
-    showSourceNote('Speech recognition is unavailable here — you can type it instead.');
+  if (got === 'denied') {
+    session.source = 'denied';
+    setState('denied');
+    showSourceNote();
+    session.voice?.cancel();
+    return;
+  }
+  /* No microphone at all. If speech recognition is also absent there is
+     nothing to listen with, so the demo transcript stands in — labelled. */
+  if (session.wantMock || !voiceSupported()) {
+    session.source = 'unsupported';
+    runMockCapture(MOCK_TRANSCRIPTS[0]);
   }
 }
 
@@ -436,8 +459,9 @@ function stopCapture() {
   if (!session) return;
   clearInterval(session.tick); session.tick = null;
   clearTimeout(session.mockTimer); session.mockTimer = null;
-  try { session.rec?.stop(); } catch { /* never started */ }
-  session.rec = null;
+  /* `stop`, not `cancel`: the last thing somebody said is usually the thing
+     they most want kept, and stop lets the engine deliver it. */
+  session.voice?.stop();
   session.mic?.stop();
   session.mic = null;
   session.orb.setLevel(0);

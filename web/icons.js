@@ -16,6 +16,9 @@ export const ICON = {
   menu: '<path d="M3.5 6h13M3.5 10h13M3.5 14h13"/>',
   sparkle: '<path d="M10 3.5 11.4 8 16 9.4 11.4 10.8 10 15.4 8.6 10.8 4 9.4 8.6 8 10 3.5Z"/>',
   check: '<path d="m4.5 10.5 3.5 3.5 7.5-8"/>',
+  // A capsule on a stand. Drawn at the same 20-unit box and stroke weight
+  // as the rest, so it sits beside Send without announcing itself.
+  mic: '<rect x="7.5" y="2.8" width="5" height="9" rx="2.5"/><path d="M4.8 9.4a5.2 5.2 0 0 0 10.4 0M10 14.6V17"/>',
   // Three lines, shortest last — the conventional "sort" mark, at the same
   // stroke weight as every other icon in the set.
   sort: '<path d="M4 6h12M4 10h8M4 14h4"/>',

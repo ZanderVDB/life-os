@@ -971,6 +971,91 @@ handles it (§6a3).
 
 ---
 
+## 6j. Voice input — speech becomes text, and nothing else
+
+**An input adapter, not an AI mode.** Speech goes in, ordinary text comes out,
+and it is handed to the same composer typing would have filled. There is no
+voice message, no audio conversation, no parallel endpoint. By the time
+anything reaches the server it is indistinguishable from something typed —
+which is the point: one canonical path, one set of rules, one place where
+timing, resolution and confirmation are decided.
+
+```
+speech → SpeechRecognition → transcript → the composer → the ordinary turn
+```
+
+Speaking the assistant's answer BACK is a different capability and is **not
+implemented** — see §18.
+
+### One controller, both surfaces
+
+`web/voice-input.js` owns every piece of recognition logic. The mobile orb
+(`assistant.js`) and the desktop composer (`assistant-panel.js`) both use it;
+neither constructs a recogniser. Two copies of a browser compatibility check is
+how two surfaces come to disagree about which browsers work.
+
+States: `idle → starting → listening → stopping → idle`, plus `cancelled`,
+`error` and `unavailable`.
+
+### Audio level is not transcription
+
+Two subsystems, deliberately separate:
+
+| | what it is | where it lives |
+|---|---|---|
+| **audio level** | `getUserMedia` + an AnalyserNode, driving the orb | `assistant-orb.js` |
+| **transcription** | the Web Speech API, producing words | `voice-input.js` |
+
+Either can fail alone, and **a moving waveform is never evidence that anything
+is being transcribed**. That confusion was the bug: the orb danced to a voice
+that nothing was listening to.
+
+### The two causes of the mobile bug
+
+1. **Nothing handled `end`.** `continuous = true` is advisory — mobile Chrome
+   and Safari end a recognition after a pause regardless. There was no `end`
+   handler at all, so the first phrase was the only phrase, and the microphone
+   stream went on reacting to the voice as though all were well. The controller
+   now restarts while the user still intends to be listened to, keeping what
+   was already heard in `committed` so a restart can neither lose it nor repeat
+   it. A recogniser that ends instantly and repeatedly is given up on rather
+   than spun forever.
+
+2. **`start()` was called after `await getUserMedia`.** iOS Safari only permits
+   `SpeechRecognition.start()` while the user's tap is still being handled, and
+   that await spends it. So on an iPhone the level meter came up — that await
+   is what starts it — and recognition never began. `startListening()` is no
+   longer `async`: speech starts synchronously, the meter follows.
+
+### Behaviour
+
+- **The existing draft is preserved.** Composer holds *"Remind me"*, you say
+  *"Friday to phone Oscar"*, you get *"Remind me Friday to phone Oscar"*.
+- **Interim words show and are replaced exactly once.** Chrome re-reports a
+  final whose text it has refined; the transcript is rebuilt from the result
+  list rather than appended to, so it cannot stutter.
+- **A second session does not repeat the first.**
+- **Nothing auto-submits.** Desktop leaves the words in the composer to be
+  reviewed and sent. Mobile keeps its existing designed behaviour: Done ends
+  listening and asks.
+- **Stopping releases everything** — stop, cancel, navigation, unmount, page
+  hide, error, and a re-render of the shell.
+
+### Errors, in words
+
+`not-allowed` → *"Microphone access is blocked. Allow microphone access in your
+browser settings to use voice input."* · `no-speech` → *"I didn't catch
+anything. Try again."* · no recogniser → *"Voice input isn't supported by this
+browser."* · anything else → *"Voice input stopped unexpectedly. Try again."*
+
+Raw codes go to `console.debug` and are never shown. `no-speech` is not fatal —
+it arrives every time somebody draws breath.
+
+Where the browser has no recogniser at all (Firefox), the desktop button is not
+rendered rather than shown and then apologising.
+
+---
+
 ## 7. Proposal system
 
 `ProposalSet` → many `ProposalAction`. A single utterance is often several
@@ -1799,6 +1884,10 @@ the registry is that they do not have to be.
 absorbed into Library; what remains of the idea *is* this system.
 
 ### Spoken responses (text-to-speech) — planned, not built
+
+**Voice INPUT exists and is not this** — see §6j. Speech reaching the composer
+is an input adapter; speaking an answer aloud is an output one, and they share
+nothing but the word "voice".
 
 **Nothing below exists yet.** No provider is chosen, no code is written, and
 the assistant is silent today. This records the intended shape so that when it

@@ -23,6 +23,7 @@ import {
   actionCardHtml, sourcesHtml, clarificationHtml, resultsHtml,
 } from './assistant-cards.js';
 import { proseHtml } from './assistant-prose.js';
+import { VoiceInput, voiceSupported } from './voice-input.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -68,6 +69,9 @@ export function composerHtml() {
       <input class="composer-input" id="composer-input" type="text"
         placeholder="Ask Life OS or capture a thought"
         aria-label="Ask Life OS or capture a thought">
+      <button type="button" class="composer-mic" id="composer-mic"
+        aria-label="Voice input" aria-pressed="false" hidden>
+        ${icon('mic', 17)}</button>
       <button type="submit" class="composer-go" id="composer-go" aria-label="Send">
         ${icon('chevR', 16)}</button>
     </form>
@@ -92,7 +96,69 @@ export function wireComposer(root) {
      because closing a window is not the same as saying no. */
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.open) { e.preventDefault(); close(); }
+    /* Typing while listening means the person has taken over. Keep the words
+       already heard and stop competing for the field. */
+    if (voice?.listening && e.key.length === 1) voice.stop();
   });
+
+  wireMic(root, input);
+}
+
+/* ── Voice ────────────────────────────────────────────────────────────────
+ *
+ * Speech is an INPUT METHOD, not a mode. It fills the same field typing fills
+ * and submits nothing on its own — the words land in the composer and the
+ * person presses Send, exactly as if they had typed them. Auto-sending what a
+ * recogniser thought it heard is how a wrong sentence becomes a wrong change.
+ *
+ * The controller is shared with the mobile orb. Nothing about recognition is
+ * implemented here.
+ */
+let voice = null;
+
+function wireMic(root, input) {
+  /* The shell can be rendered again — a layout switch redraws the composer —
+     and the previous controller would go on holding a recogniser behind a
+     button that no longer exists. */
+  voice?.destroy();
+  voice = null;
+
+  const btn = root.querySelector('#composer-mic');
+  if (!btn) return;
+  /* Hidden where the browser has no recogniser, rather than shown and then
+     apologising. Firefox has none, and an inert button is worse than none. */
+  if (!voiceSupported()) return;
+  btn.hidden = false;
+
+  const paint = (listening) => {
+    btn.classList.toggle('is-listening', listening);
+    btn.setAttribute('aria-pressed', listening ? 'true' : 'false');
+    btn.setAttribute('aria-label', listening ? 'Stop voice input' : 'Voice input');
+    root.querySelector('#composer')?.classList.toggle('is-listening', listening);
+  };
+
+  voice = new VoiceInput({
+    onState: (st) => paint(st === 'listening' || st === 'starting'),
+    onTranscript: ({ full, isFinal }) => {
+      input.value = full;
+      /* The caret follows the words, so carrying on by typing works without
+         clicking into the field first. */
+      if (isFinal) input.setSelectionRange(full.length, full.length);
+    },
+    onError: ({ message }) => { paint(false); ctx?.toast?.(message, true); },
+  });
+
+  btn.addEventListener('click', () => {
+    if (voice.listening) { voice.stop(); input.focus(); return; }
+    /* The draft already in the field is the base, so speaking ADDS to what
+       was typed rather than replacing it. */
+    voice.start(input.value);
+  });
+
+  /* Leaving the page, or putting it in the background on a phone, must not
+     leave a recogniser running — the browser goes on showing the recording
+     indicator over whatever the person opened next. */
+  window.addEventListener('pagehide', () => voice?.destroy());
 }
 
 /* ── A turn ───────────────────────────────────────────────────────────── */
