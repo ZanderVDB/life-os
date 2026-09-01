@@ -1180,15 +1180,15 @@ codebase.
 
 ## 17. Currently registered modules
 
-Nine modules, **54 capabilities**, 34 of them mutations. Every mutation is a
+Nine modules, **57 capabilities**, 34 of them mutations. Every mutation is a
 thin adapter over an application service that the UI routes call too.
 
 | Module | Available when | Capabilities |
 |---|---|---|
-| **tasks** | always | `search` `read` `create` `update` `complete`\* `schedule` `move` `archive`\* `addStep` `updateStep` `removeStep`\* |
-| **projects** | always | `search` `read` `create` `update`\* `complete`\* `archive`\* |
+| **tasks** | always | `search` `list` `read` `create` `update` `complete`\* `schedule` `move` `archive`\* `addStep` `updateStep` `removeStep`\* |
+| **projects** | always | `search` `list` `read` `create` `update`\* `complete`\* `archive`\* |
 | **calendar** | reads: Google connected · writes: **and** the grant covers writing | `event.search` `event.read` `calendar.availability` `calendar.list` `event.create` `event.update` `event.delete` — creates/edits/deletes are *external* |
-| **reminders** | always | `search` `create` `update` `complete` `setPaused` `delete`\* |
+| **reminders** | always | `search` `list` `create` `update` `complete` `setPaused` `delete`\* |
 | **habits** | always | `list` `search` `check` `create` `update` `archive`\* |
 | **areas** | always | `list` `create` `update` `delete`\* |
 | **diary** | always | `read` `search` `append` `checkIn` |
@@ -1201,9 +1201,9 @@ Three answers from one registry, which is the whole architecture in one line:
 
 | workspace | capabilities | what is missing |
 |---|---|---|
-| Google connected, writable | **54** | nothing |
-| Google connected, read-only grant | **51** | the three `event.*` writes; the four calendar reads remain |
-| no Google account | **47** | all seven calendar capabilities, with the reason stated |
+| Google connected, writable | **57** | nothing |
+| Google connected, read-only grant | **54** | the three `event.*` writes; the four calendar reads remain |
+| no Google account | **50** | all seven calendar capabilities, with the reason stated |
 
 Nothing was edited to produce those differences. `available()` is asked per
 request and the numbers follow.
