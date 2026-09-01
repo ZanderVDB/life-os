@@ -1484,6 +1484,12 @@ real workspace, and none of them would have been found any other way:
 **Database:** `ai_turns.clarification`, and `clarifying` added to the status
 CHECK (migration `0017_ai_beta.sql`). Additive; nothing existing rewritten.
 
+**Operations:** `/health/version` now reports whether a model is configured in
+THIS environment, and for which jobs. A boolean and job names — no key, no
+vendor host, no model id, because that endpoint is public and unauthenticated.
+Before it, the only way to find out whether staging had a key was to sign in
+and ask the assistant, and the answer to "why is it not working" was a shrug.
+
 **Two tests changed rather than deleted.** One asserted that the pending set
 reached the planner appended to the request text; it is a field now, carrying
 payloads rather than titles, and the assertion followed it. One relied on an

@@ -74,7 +74,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv(), assistant = createAssi
 
   const guards = makeAuth(db, env);
 
-  registerHealthRoutes(app, db, API_VERSION);
+  registerHealthRoutes(app, db, API_VERSION, assistant);
   registerMeRoutes(app, db, guards);
   registerAreaRoutes(app, db, guards);
   registerTaskRoutes(app, db, guards);

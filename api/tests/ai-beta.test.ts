@@ -1056,6 +1056,23 @@ test('calendar: an event created for a task ends up linked to it, both ways', as
   } finally { google.restore(); }
 });
 
+test('operations: /health/version says whether a model is configured here', async () => {
+  /* The only way to find out whether an environment had an API key was to
+     sign in and ask the assistant, and the answer to "why is it not working"
+     was a shrug. A boolean and the job names - no key, no vendor, no model id,
+     because this endpoint is public and unauthenticated. */
+  const { app } = await setup([{}]);
+  const r = (await app.inject({ method: 'GET', url: '/health/version' })).json();
+  assert.equal(typeof r.assistant.configured, 'boolean');
+  assert.equal(r.assistant.configured, true, 'a stub planner is configured and unreported');
+  assert.equal(r.assistant.jobs.plan, true);
+
+  const body = JSON.stringify(r);
+  for (const secret of ['api-key', 'x-api-key', 'sk-ant', 'anthropic.com', 'ANTHROPIC']) {
+    assert.ok(!body.includes(secret), `${secret} reached a public endpoint`);
+  }
+});
+
 /* ══ 9. Performance shape ════════════════════════════════════════════════ */
 
 test('performance: the obvious command costs one round of work, not a chain', async () => {

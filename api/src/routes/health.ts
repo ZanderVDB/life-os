@@ -5,8 +5,11 @@ import { schedulerStatus } from '../lib/calendar-scheduler.js';
 import { googleConfig } from '../lib/calendar-sync.js';
 import { webhookConfigured, webhookUrl } from '../lib/calendar-watch.js';
 import { calendarWatchChannels } from '../db/schema.js';
+import type { Assistant } from '../ai/index.js';
 
-export function registerHealthRoutes(app: AppInstance, db: Db, version: string) {
+export function registerHealthRoutes(
+  app: AppInstance, db: Db, version: string, assistant?: Assistant,
+) {
   /** Liveness — no dependencies, no auth. Railway uses this. */
   app.get('/health', async () => ({ status: 'ok', service: 'life-os-v2-api' }));
 
@@ -39,6 +42,18 @@ export function registerHealthRoutes(app: AppInstance, db: Db, version: string) 
      * working one from the outside. Counts and the last error only; no
      * workspace, no calendar name, no token. */
     calendarPush: await pushStatus(),
+    /* Whether a model is configured HERE. Without this the only way to find
+       out whether staging has a key is to sign in and ask the assistant, and
+       the answer to "why is it not working" was a shrug. A boolean and the
+       job names; no key, no vendor host, no model id — this endpoint is
+       public. */
+    assistant: {
+      configured: Boolean(assistant?.providers.for('plan')),
+      jobs: assistant
+        ? Object.fromEntries((['interpret', 'plan', 'answer', 'extractMemory'] as const)
+          .map((j) => [j, Boolean(assistant.providers.for(j))]))
+        : {},
+    },
   }));
 
   async function pushStatus() {
