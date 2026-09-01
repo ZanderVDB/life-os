@@ -677,12 +677,39 @@ test('dates: a card naming a day the date is not never reaches the user', async 
   const r = await call('POST', '/ai/turn', {
     text: 'haircut done by saturday', today: '2026-09-01',
   });
-  assert.ok(r.body.metrics.inconsistencies.includes('weekday_mismatch'),
-    'a Sunday called Saturday was accepted');
-  assert.equal(r.body.metrics.repaired, 1);
+  /* CORRECTED, not refused. Asking the model again was tried: told in plain
+     words that Saturday is the 5th, it produced the 6th a second time and the
+     user got a note instead of a task. There is one right answer here and the
+     resolver already knows it, so it is applied — visibly, on a card, before
+     anything is confirmed. */
+  assert.deepEqual(r.body.metrics.dayFixes, ['dueDate: 2026-09-06 -> 2026-09-05']);
+  assert.equal(r.body.metrics.inconsistencies.length, 0,
+    'the corrected date was still reported as a disagreement');
+  assert.equal(r.body.actions.length, 1);
   assert.equal(r.body.actions[0].payload.dueDate, '2026-09-05');
   assert.equal(r.body.note, null);
-  assert.match(lastPlanInput.repair.problems, /is a Sunday/);
+  assert.equal(planCalls, 1, 'a repair was asked for something already resolved');
+});
+
+test('dates: a wrong day is only corrected when there is one right answer', async () => {
+  /* "Move it from Saturday to the 9th" names a day it is deliberately NOT
+     using, and a payload with two dates has no single field to correct. Both
+     are left alone, and the finding stands. */
+  const { call } = await setup([
+    {
+      actions: [{
+        capability: 'event.create', title: 'Saturday and Sunday',
+        payload: {
+          calendarId: '11111111-1111-4111-8111-111111111111',
+          draft: { title: 'Trip', isAllDay: true, startDate: '2026-09-06', endDate: '2026-09-08' },
+          requestId: 'assistant-req-9',
+        },
+      }],
+    },
+    { actions: [] },
+  ]);
+  const r = await call('POST', '/ai/turn', { text: 'trip saturday', today: '2026-09-01' });
+  assert.deepEqual(r.body.metrics.dayFixes, [], 'a two-date payload was guessed at');
 });
 
 test('dates: the fast path resolves reminders from the same calendar', async () => {

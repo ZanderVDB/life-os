@@ -35,7 +35,8 @@
  */
 import type { z } from 'zod';
 import {
-  resolveRelativeDate, weekdayNamesIn, isWeekday, weekdayOf, longDate, isCivilDate,
+  resolveRelativeDate, weekdayNamesIn, isWeekday, weekdayOf, nextWeekday,
+  longDate, isCivilDate,
 } from '../lib/civil-date.js';
 import type { TimingIntent } from '../lib/timing-intent.js';
 
@@ -336,10 +337,15 @@ export function validatePlan(input: ValidateInput): Finding[] {
       for (const [key, iso] of dated) {
         if (!isCivilDate(iso)) continue;
         if (named.some((n) => isWeekday(iso, n))) continue;
+        /* The RIGHT date, not just the wrong one. "Use the calendar" left the
+           model to look it up again and it drifted again; naming the row turns
+           the repair from a complaint into an answer — the same thing that
+           made handing over payload shapes work. */
+        const right = named.map((n) => `${n} is ${nextWeekday(input.today, n)}`).join(', ');
         add(index, 'weekday_mismatch',
           `“${a.title}” says ${named.join(' and ')} but ${key}=${iso} is a `
-          + `${longDate(iso).split(' ')[0]}. Use the date from TODAY'S CALENDAR for the `
-          + 'day you named; do not work it out yourself.');
+          + `${longDate(iso).split(',')[0]}. From TODAY'S CALENDAR, ${right}. `
+          + `Use that date and keep any time of day you had.`);
       }
     }
 
@@ -466,6 +472,54 @@ export function stillDescribes(words: string, payload: Record<string, unknown>, 
     }
   }
   return true;
+}
+
+/**
+ * The named day, applied to the payload the model wrote.
+ *
+ * ── Why correct rather than ask again ────────────────────────────────────
+ *
+ * The user said "Friday". `civil-date.ts` says Friday is the 4th. The model
+ * wrote the 5th while its own card said Friday. There is nothing to decide
+ * here — the right answer is already known, deterministically, and asking a
+ * model to look it up a second time was tried: told in plain words that Friday
+ * is the 4th, it produced the 5th again, and the action was withheld. The user
+ * asked for something unambiguous and got nothing.
+ *
+ * So the resolved date is applied, and the card shows it before anything is
+ * confirmed. This is the same resolver the whole date path uses, reaching the
+ * one field the model mislabelled.
+ *
+ * ── When it refuses ──────────────────────────────────────────────────────
+ *
+ * Exactly one weekday named, exactly one date in the payload. Two of either
+ * and there is no single right answer — "move it from Friday to the 9th" names
+ * a day it is deliberately NOT using — so nothing is touched and the finding
+ * stands. A time of day is kept exactly as written: only the day was wrong.
+ */
+export function applyNamedWeekday(
+  words: string, payload: Record<string, unknown>, today: string,
+): { payload: Record<string, unknown>; changed: string | null } {
+  const named = weekdayNamesIn(words);
+  if (named.length !== 1) return { payload, changed: null };
+  const want = nextWeekday(today, named[0]!);
+
+  const flat = flatten(payload ?? {});
+  const dated = Object.entries(flat)
+    .filter(([, v]) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v as string));
+  if (dated.length !== 1) return { payload, changed: null };
+
+  const [key, value] = dated[0] as [string, string];
+  const iso = value.slice(0, 10);
+  if (!isCivilDate(iso) || iso === want) return { payload, changed: null };
+
+  const next = structuredClone(payload) as Record<string, unknown>;
+  const target = (next['changes'] ?? next['draft'] ?? next) as Record<string, unknown>;
+  if (!(key in target)) return { payload, changed: null };
+  /* The rest of the string is the time of day and its offset. Only the ten
+     characters that were wrong are replaced. */
+  target[key] = `${want}${value.slice(10)}`;
+  return { payload: next, changed: `${key}: ${iso} -> ${want}` };
 }
 
 /**

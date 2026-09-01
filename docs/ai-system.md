@@ -554,6 +554,15 @@ somebody's behalf.
 **Explicit words beat learned preferences.** Memory can inform a default; it can
 never turn an ambiguous date into a deadline, and it never decides this field.
 
+**A named day that the date is not gets corrected, not refused.** If the words
+name exactly one weekday and the payload holds exactly one date, the resolved
+date is applied — keeping any time of day — and the card shows it before
+anything is confirmed. Asking the model again was tried first: told in plain
+words that Friday is the 4th, it produced the 5th a second time, and the user
+got a note instead of a task. There is one right answer and the resolver knows
+it. Two weekdays or two dates have no single right answer, so nothing is
+touched and the finding stands.
+
 **One reading per sentence.** The fast path asks the same classifier rather than
 holding an opinion of its own: anything other than "no date at all" goes to the
 planner. `timing_ambiguous`, `due_vs_scheduled` and `scheduled_vs_due` are

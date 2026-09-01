@@ -45,7 +45,8 @@ import { gather, forPrompt } from './context.js';
 import { rank, rankMemories, tokens } from './ranking.js';
 import { tryFastPath, isMiss, type RawAction } from './fastpath.js';
 import {
-  validatePlan, repairBrief, stillDescribes, retitleForDate, type Finding,
+  validatePlan, repairBrief, stillDescribes, retitleForDate, applyNamedWeekday,
+  type Finding,
 } from './validate.js';
 import { structure, type Clarification } from './clarify.js';
 import { classifyTiming, readingFromChoice } from '../lib/timing-intent.js';
@@ -323,6 +324,22 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     if (a.target) knownIds.add(refKey(a.target));
   }
 
+  /* ── The named day, applied before anything is judged ──────────────
+     A card saying "Friday" over a date that is not a Friday has one right
+     answer and the resolver already knows it. Correcting it here means the
+     user gets what they asked for rather than a note explaining why they did
+     not — asking the model again was tried, and it produced the same wrong
+     day. Visible on the card, and editable, before anything is confirmed. */
+  const dayFixes: string[] = [];
+  for (const a of (plan.actions ?? []) as any[]) {
+    const words = [a.title, a.summary ?? '', ...(a.assumptions ?? [])].join('. ');
+    const fixed = applyNamedWeekday(words, a.payload ?? {}, request.today);
+    if (fixed.changed) {
+      a.payload = fixed.payload;
+      dayFixes.push(fixed.changed);
+    }
+  }
+
   const schemas = await schemaMap(deps, ctx, (plan.actions ?? []) as any);
   const validateInput = {
     schemas,
@@ -421,6 +438,15 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
       inconsistencies: found,
       /* What still disagreed after the one repair attempt, and was withheld. */
       unresolved: findings.map((f) => f.code),
+      /* WHY, in the words the planner was given. A code says which check
+         fired; only the detail says which value it fired on, and "the note
+         said the date was wrong" is not something anybody can act on without
+         knowing what date it used. Operating information: it names fields and
+         values from a payload the user never saw, and it stays out of the
+         interface. */
+      inconsistencyDetail: findings.map((f) => f.detail),
+      /* Dates the resolver corrected before anything was judged. */
+      dayFixes,
       repaired,
       memoriesUsed: relevant.length,
       capabilitiesUsed: [...retrieval.used],
