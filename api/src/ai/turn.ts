@@ -1012,6 +1012,12 @@ function editableFor(capabilityId: string, payload: Record<string, unknown>) {
   const out: ProposalAction['editable'] = [];
   const put = (key: string, label: string, type: any, value: unknown) => {
     if (value === undefined) return;
+    /* A field still holding a reference to another action's result is not
+       editable yet — there is no id in it to show, and an edit would write
+       back whatever the box displayed, quietly breaking the dependency. Id
+       fields are never offered here, so this only catches a title the
+       planner wrote a reference into. The action still runs. */
+    if (placeholdersIn(value).size) return;
     out.push({ key, label, type, value: (value ?? null) as any });
   };
   const p = payload as any;
