@@ -1441,6 +1441,35 @@ test('operations: /health/version says whether a model is configured here', asyn
   }
 });
 
+test('a provider having a bad minute says so, and is not a 500', async () => {
+  /* Observed live: the model returned a non-OK status, the ProviderError fell
+     through to the generic handler, and the user was told "Something went
+     wrong" — the one sentence §12 says never to use when the server knows
+     exactly what went wrong. */
+  const { AiProviderError } = await import('../src/ai/provider.js');
+  const failing: AiProvider = {
+    id: 'failing', label: 'Failing', model: 'x',
+    async plan() { throw new AiProviderError('The assistant is rate limited. Try again shortly.', 'rate'); },
+  };
+  const { db } = await freshDb();
+  const app = buildApp(db, env, {
+    registry: new CapabilityRegistry(MODULES),
+    providers: new ProviderRouter([deterministicProvider, failing],
+      { plan: 'failing', default: 'deterministic' }),
+  });
+  await app.ready();
+  const me = (await app.inject({ method: 'GET', url: '/api/v1/me', headers: auth })).json();
+  const r = await app.inject({
+    method: 'POST', url: `/api/v1/workspaces/${me.workspace.id}/ai/turn`,
+    headers: auth, payload: { text: 'what is left on the handover' },
+  });
+  assert.equal(r.statusCode, 503, 'somebody else’s bad minute was reported as ours');
+  const body = r.json();
+  assert.equal(body.error.code, 'UPSTREAM_UNAVAILABLE');
+  assert.match(body.error.message, /rate limited/i);
+  assert.ok(!/something went wrong/i.test(body.error.message));
+});
+
 /* ══ 9. Performance shape ════════════════════════════════════════════════ */
 
 test('performance: the obvious command costs one round of work, not a chain', async () => {

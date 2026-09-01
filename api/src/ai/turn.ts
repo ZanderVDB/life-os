@@ -38,7 +38,8 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { aiConversations, aiTurns } from '../db/schema.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, notFound, upstreamUnavailable } from '../lib/errors.js';
+import { AiProviderError } from './provider.js';
 import { forRequest, type CapabilityRegistry, type CapabilityCtx } from './registry.js';
 import type { ProviderRouter } from './provider.js';
 import { gather, forPrompt } from './context.js';
@@ -304,7 +305,14 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     } : {}),
     ...(input.resolved ? { resolved: input.resolved } : {}),
   };
-  let plan = await planner.plan(planInput as any);
+  /* A provider failure is not an internal error, and the provider already
+     wrote the sentence for it — "rate limited, try again shortly", "took too
+     long to answer". Left to fall through it became a 500 and the user was
+     told "Something went wrong", which is the one thing §12 says never to
+     say when the server knows exactly what went wrong. */
+  let plan = await planner.plan(planInput as any).catch((e: unknown) => {
+    throw asClientError(e);
+  });
 
   /* ── Route 2, continued: an amendment is an EDIT ───────────────────── */
   const amendments = ((plan as any).amend ?? []) as {
@@ -367,7 +375,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     const retry = await planner.plan({
       ...planInput,
       repair: { problems: brief, previous: plan.actions },
-    } as any).catch(() => null);
+    } as any).catch(() => null);   // a failed repair keeps the original plan
     if (retry) {
       const retrySchemas = await schemaMap(deps, ctx, (retry.actions ?? []) as any);
       const after = validatePlan({
@@ -458,6 +466,19 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     },
     rejectedDetail: built.rejected,
   });
+}
+
+/**
+ * A provider failure, in a shape the client can render.
+ *
+ * `shape` is the one that is genuinely ours: the model answered and could not
+ * be made to answer correctly, which is a bad request to a model rather than a
+ * broken dependency. Everything else is somebody else's bad minute, and 503
+ * says "this is expected to pass" where 500 says "this is broken".
+ */
+function asClientError(e: unknown): unknown {
+  if (!(e instanceof AiProviderError)) return e;
+  return e.kind === 'shape' ? badRequest(e.message) : upstreamUnavailable(e.message);
 }
 
 /* ══ Retrieval ═══════════════════════════════════════════════════════════ */

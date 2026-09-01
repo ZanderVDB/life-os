@@ -191,6 +191,28 @@ export type AiProvider = {
 
 export const supports = (p: AiProvider, job: AiJob) => typeof (p as any)[job] === 'function';
 
+/**
+ * A provider could not answer, and why.
+ *
+ * Here rather than in the vendor adapter because the ORCHESTRATOR has to
+ * recognise it: a model being rate limited is not an internal error, and it
+ * reached the user as "Something went wrong" because nothing above the adapter
+ * knew the difference. The message is already written for a person; the `kind`
+ * is what decides the status code.
+ *
+ * Every provider throws this. Nothing outside a provider imports a vendor file
+ * to catch it.
+ */
+export class AiProviderError extends Error {
+  constructor(
+    message: string,
+    readonly kind: 'auth' | 'timeout' | 'rate' | 'upstream' | 'shape',
+  ) {
+    super(message);
+    this.name = 'AiProviderError';
+  }
+}
+
 /* ══ The router ══════════════════════════════════════════════════════════ */
 
 /**

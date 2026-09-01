@@ -1097,6 +1097,23 @@ whether the refusal is a sentence or a status.
 | "No results" | "I couldn't find that after searching your workspace." |
 | silence, then a guess | "I found two tasks called Invoice. Which one did you mean?" |
 | "Error: invalid payload" | "*Complete Price three options* — no id was given." |
+| "Something went wrong" (a provider failure) | "The assistant is rate limited. Try again shortly." |
+| "The assistant could not be reached" (out of credit) | "The assistant could not run: your credit balance is too low…" |
+
+**A provider having a bad minute is not an internal error.** `AiProviderError`
+lives in the provider CONTRACT rather than in a vendor file, so the turn can
+recognise one without importing an adapter: `shape` (the model answered and
+could not be made to answer correctly) becomes a 400, everything else a 503 —
+which says "expected to pass" where 500 says "broken". Left to fall through, a
+rate limit reached the user as "Something went wrong", which is the one
+sentence this section exists to forbid.
+
+**A 400 from the provider is about the ACCOUNT, and says so.** Out of credit, a
+model not enabled, a plan that does not allow the request — none of them is a
+network problem, and calling one "could not be reached" sends whoever is fixing
+it to look at the wrong thing. This is the single case where the provider's own
+sentence is passed through: it is written for the account owner and carries
+none of the request.
 
 **The sentence comes from the server**, because the server is the only thing
 that knows which situation this is. `registry.explain()` distinguishes three

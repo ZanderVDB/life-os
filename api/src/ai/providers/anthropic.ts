@@ -26,6 +26,7 @@
  */
 import { z } from 'zod';
 import { calendarWindow, longDate } from '../../lib/civil-date.js';
+import { AiProviderError } from '../provider.js';
 import type {
   AiProvider, InterpretInput, InterpretOutput, PlanInput, AnswerInput,
   AnswerOutput, ExtractMemoryInput,
@@ -60,11 +61,11 @@ type CallOpts = {
   timeoutMs?: number;
 };
 
-class ProviderError extends Error {
-  constructor(message: string, readonly kind: 'auth' | 'timeout' | 'rate' | 'upstream' | 'shape') {
-    super(message);
-  }
-}
+/* The shape lives in the provider CONTRACT, so the turn can recognise it
+   without importing this file. Kept under the old name here because that is
+   what this file has always called it. */
+const ProviderError = AiProviderError;
+type ProviderError = AiProviderError;
 
 async function call(opts: CallOpts): Promise<string> {
   const key = process.env['ANTHROPIC_API_KEY'];
@@ -91,6 +92,24 @@ async function call(opts: CallOpts): Promise<string> {
 
     if (r.status === 401 || r.status === 403) {
       throw new ProviderError('The assistant’s credentials were refused.', 'auth');
+    }
+    if (r.status === 400) {
+      /* The account cannot be used — out of credit, a model that is not
+         enabled, a request the plan does not allow. NOT a network problem, and
+         reporting it as one ("could not be reached") sends whoever is fixing
+         it to look at the wrong thing entirely. This is the one case where the
+         provider's own sentence is passed through: a 400 here is about the
+         ACCOUNT, it is written for the person who owns it, and it carries none
+         of the request. Anything unrecognisable falls back to our own words. */
+      const detail = await r.json().catch(() => null) as
+        { error?: { message?: string; type?: string } } | null;
+      const said = detail?.error?.message;
+      throw new ProviderError(
+        said && said.length < 300
+          ? `The assistant could not run: ${said}`
+          : 'The assistant’s account cannot be used right now. Check its plan and credit.',
+        'auth',
+      );
     }
     if (r.status === 429) {
       throw new ProviderError('The assistant is rate limited. Try again shortly.', 'rate');
