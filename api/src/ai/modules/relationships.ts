@@ -89,7 +89,16 @@ async function traverse(
           module: OWNER[l.entity.type] ?? 'relationships',
           title: l.entity.title,
           summary: l.entity.subtitle ?? null,
-          data: { relationship: l.label, hops: hop + 1 },
+          /* `at` matters as much as the label. A traversed row's subtitle is a
+             HUMAN date - "3 Sep · 10:00", no year, no weekday - and the model
+             reading that had to work the weekday out, which is the whole
+             mistake this pass exists to remove. The instant is already on the
+             summary; carrying it lets `forPrompt` attach the real day. */
+          data: {
+            relationship: l.label, hops: hop + 1,
+            ...(l.entity.at ? { at: l.entity.at } : {}),
+            ...(l.entity.on ? { on: l.entity.on } : {}),
+          },
           via: 'relationship',
           path,
           level: 2,
@@ -120,7 +129,11 @@ const inspectCap: Capability = {
       module: OWNER[l.entity.type] ?? 'relationships',
       title: l.entity.title,
       summary: l.entity.subtitle ?? null,
-      data: { relationship: l.label, direction: l.direction, kind: l.kind },
+      data: {
+        relationship: l.label, direction: l.direction, kind: l.kind,
+        ...(l.entity.at ? { at: l.entity.at } : {}),
+        ...(l.entity.on ? { on: l.entity.on } : {}),
+      },
       via: 'relationship',
       path: [{ from: { type: input.type as EntityType, id: input.id }, kind: l.kind, label: l.label }],
       level: 2,

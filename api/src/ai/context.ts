@@ -32,6 +32,7 @@
  * name what it read is an answer nobody can check.
  */
 import type { CapabilityRegistry, CapabilityCtx } from './registry.js';
+import { isCivilDate, weekdayOf } from '../lib/civil-date.js';
 import type { ContextSource, EntityRef } from './types.js';
 
 export type GatherOptions = {
@@ -194,12 +195,44 @@ export async function gather(
  * needs more asks for it with `read`, which is cheaper than sending everything
  * to every call on the chance it matters.
  */
+/**
+ * The weekday for every date a source carries.
+ *
+ * The same root cause as the planner's date bug, one layer along: retrieval
+ * hands over `2026-09-08` and the model renders it in prose as "Sunday 8
+ * September" — arithmetic in its head again, wrong again, and this time in an
+ * ANSWER, where there is no payload to validate against.
+ *
+ * A separate map rather than a decorated value, so the ISO string an action
+ * must copy stays exactly what it was and cannot pick up a suffix.
+ */
+function daysOf(s: ContextSource): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  const note = (iso: string | null) => {
+    if (iso && isCivilDate(iso)) out[iso] = weekdayOf(iso);
+  };
+  for (const v of Object.values(s.data ?? {})) {
+    if (typeof v === 'string') note(v.slice(0, 10));
+    else if (v instanceof Date) note(v.toISOString().slice(0, 10));
+  }
+  /* And any date written into the TITLE or SUMMARY. A row reached by
+     traversal carries no date field at all — its data is the relationship —
+     but its subtitle says "2026-09-08", and that is the string the model then
+     renders a weekday for. Keyed by the DATE rather than the field, because
+     what matters is the date it saw, wherever it saw it. */
+  for (const m of `${s.title} ${s.summary ?? ''}`.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)) {
+    note(m[0]);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 export function forPrompt(sources: ContextSource[]) {
   return sources.map((s) => ({
     ref: `${s.ref.type}:${s.ref.id}`,
     title: s.title,
     ...(s.summary ? { summary: s.summary.slice(0, 200) } : {}),
     ...(s.data ? { data: s.data } : {}),
+    ...(daysOf(s) ? { days: daysOf(s) } : {}),
     ...(s.path?.length
       ? { reachedBy: s.path.map((p) => `${p.from.type} --${p.label}-->`).join(' ') }
       : {}),

@@ -185,6 +185,17 @@ export type Summary = {
    * event, which is the same class of bug as a stale cached title.
    */
   at?: string | null;
+  /**
+   * The DAY this is on, as a civil date, when it has one.
+   *
+   * Not the same as `at`, and needed because most things that have a day do
+   * not have an instant: a reminder is due on a date, a diary entry belongs to
+   * one, a task is due by one. `subtitle` renders that as "8 Sep 2026", which
+   * is right for a person and useless to anything that has to know which
+   * weekday it is — the assistant read those labels and invented weekdays for
+   * them. This is the machine-readable half of the same fact.
+   */
+  on?: string | null;
   /** Where the app should navigate. Null when the type has no deep link yet. */
   href?: string | null;
   /** Anything the client needs to open it that is not in the href. */
@@ -235,7 +246,7 @@ export async function summarise(db: Db, ws: string, refs: Ref[]): Promise<Map<st
 
   if (ids('task').length) {
     const rows = await db.select({
-      id: tasks.id, title: tasks.title, status: tasks.status, bucket: tasks.bucket,
+      id: tasks.id, title: tasks.title, status: tasks.status, dueDate: tasks.dueDate, bucket: tasks.bucket,
       projectId: tasks.projectId,
     }).from(tasks).where(and(eq(tasks.workspaceId, ws), inArray(tasks.id, ids('task'))));
     const pj = byId(await db.select({ id: projects.id, title: projects.title }).from(projects)
@@ -245,6 +256,7 @@ export async function summarise(db: Db, ws: string, refs: Ref[]): Promise<Map<st
       put({
         type: 'task', id: r.id, title: r.title,
         subtitle: r.projectId ? (pj.get(r.projectId)?.title ?? null) : null,
+        on: r.dueDate ?? null,
         href: null, open: { kind: 'task', id: r.id, done: r.status === 'done' },
       });
     }
@@ -279,6 +291,7 @@ export async function summarise(db: Db, ws: string, refs: Ref[]): Promise<Map<st
       .from(reminders).where(and(eq(reminders.workspaceId, ws), inArray(reminders.id, ids('reminder'))))) {
       put({
         type: 'reminder', id: r.id, title: r.title, subtitle: whenLabel(null, r.dueDate),
+        on: r.dueDate ?? null,
         href: '#calendar/reminders', open: { kind: 'reminder', id: r.id },
       });
     }
@@ -294,6 +307,7 @@ export async function summarise(db: Db, ws: string, refs: Ref[]): Promise<Map<st
         type: 'event', id: r.id, title: r.title ?? 'Untitled event',
         subtitle: whenLabel(r.startsAt, r.startDate),
         at: r.startsAt ? r.startsAt.toISOString() : null,
+        on: r.startDate ?? (r.startsAt ? r.startsAt.toISOString().slice(0, 10) : null),
         href: '#calendar', open: { kind: 'event', id: r.id },
       });
     }
@@ -350,7 +364,8 @@ export async function summarise(db: Db, ws: string, refs: Ref[]): Promise<Map<st
       /* A diary day is usually untitled, so the date IS the name and has to
          read like one. `2026-08-31` is a key, not a day. */
       put({ type: 'diary', id: r.id, title: r.title || whenLabel(null, r.entryDate) || r.entryDate,
-        subtitle: r.title ? whenLabel(null, r.entryDate) : null, href: `#diary/${r.entryDate}` });
+        subtitle: r.title ? whenLabel(null, r.entryDate) : null,
+        on: r.entryDate, href: `#diary/${r.entryDate}` });
     }
   }
 
