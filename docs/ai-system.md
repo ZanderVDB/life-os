@@ -543,6 +543,19 @@ point.
 | retrieval-heavy — *"What still needs to happen for X?"* | ~8.5 s | plus traversal and structural expansion |
 | four changes in one sentence | ~13 s | the plan itself is longer |
 
+**The same command, both ways.** `"Add milk"` takes the fast path;
+`"Please add milk"` does not, because the shape requires the sentence to start
+with the verb — so it does exactly the work the fast path replaced, against the
+same data on the same machine. Same result, same card:
+
+| | median |
+|---|---|
+| `Add milk` | **4 ms** |
+| `Please add milk` | **6,244 ms** |
+
+That is the honest before-and-after: the fast path did not exist before this
+pass, so its "before" is the planner doing the same job.
+
 **Where the time goes.** Almost all of it is the model. Retrieval against a
 workspace of this size is tens of milliseconds; the two model calls are
 seconds. That is why the fast path is worth having and why micro-optimising
@@ -1038,6 +1051,13 @@ The UI shows sources as a quiet row of clickable chips under an answer — not a
 citation report. Asking *"where did you get that?"* is answerable because the
 refs are on the turn.
 
+**"Used" means retrieved, not cited.** The chips are what the assistant was
+given, ranked, and they are honest about that — but on a broad question they
+will include rows the answer did not draw on. The `answer` job returns a
+`cited` list; the `plan` job does not, so a turn that produced actions has no
+narrower set to show. Making the chips exactly what informed the sentence is a
+real improvement and is not built (§19).
+
 ---
 
 ## 15. Adding and removing modules
@@ -1368,7 +1388,9 @@ more predictable, and probably right.
 11. **Turn history is deleted at 90 days, not archived.** Nobody has asked to
     read a four-month-old proposal, and keeping them would need a retention
     story of its own. If that changes, the sweep is one function.
-12. **Nothing measures the assistant over time.** `metrics` on each turn says
+12. **Source chips are what was retrieved, not what was cited.** On a broad
+    question the row includes rows the answer never used. §14.
+13. **Nothing measures the assistant over time.** `metrics` on each turn says
     what happened in that turn; there is no aggregation, so "is retrieval
     getting worse" is not a question anything can currently answer.
 

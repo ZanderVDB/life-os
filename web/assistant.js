@@ -551,6 +551,14 @@ async function markUnavailable() {
 
 /* ── The proposal ──────────────────────────────────────────────────────── */
 
+/** Is this just the request again? Compared on words, not punctuation. */
+function echoes(request, understood) {
+  if (!understood) return true;
+  const norm = (x) => String(x ?? '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  return norm(request) === norm(understood);
+}
+
 function renderReview() {
   const box = session.el.querySelector('#asst-review');
   const list = session.actions;
@@ -559,7 +567,11 @@ function renderReview() {
 
   box.hidden = false;
   box.innerHTML = `
-    ${session.understood ? `<h2 class="asst-h">${esc(session.understood)}</h2>` : ''}
+    ${/* An "understood" that only restates the request reads as a stutter: the
+          transcript is directly above it. It earns its place when it says
+          something the user did not. */ ''}
+    ${session.understood && !echoes(session.transcript, session.understood)
+    ? `<h2 class="asst-h">${esc(session.understood)}</h2>` : ''}
     ${session.answer ? `<p class="asst-reply">${esc(session.answer)}</p>` : ''}
     ${session.answer ? sourcesHtml(session.sources) : ''}
     ${session.note ? `<p class="asst-note-line">${esc(session.note)}</p>` : ''}

@@ -343,7 +343,9 @@ async function commit() {
     state.report = await api.confirmTurn(
       state.turnId, state.version, runnable.length, important.map((a) => a.id),
     );
-    state.history.push({ role: 'los', text: state.report.headline });
+    /* The results block already carries the headline, in larger type with the
+       list under it. Pushing it into the transcript as well says the same
+       sentence twice a line apart. */
     /* The screen behind the panel is now out of date. Refreshing it is the
        difference between saying it happened and it having happened. */
     ctx?.afterChanges?.();
