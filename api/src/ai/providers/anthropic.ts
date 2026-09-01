@@ -247,6 +247,10 @@ Hard rules:
   is not available - say so plainly rather than inventing an alternative.
 - Entity ids come from the CONTEXT you were given. Never invent a uuid. If you
   cannot find the thing being referred to, say so or ask.
+- CONTEXT IS EVERYTHING YOU HAVE. There is no way for you to fetch more: it has
+  already been retrieved for you. Never say you need to read, check or look at
+  something - answer from what is there, and if a fact is genuinely absent say
+  which fact is missing.
 - dueDate is a DEADLINE. scheduledAt is WHEN THE USER INTENDS TO DO IT. They
   are different facts. Never write one from the other.
 - A task due date is NOT a calendar event. Reserving time is a separate action.
@@ -285,8 +289,12 @@ Classify one request. Return ONLY JSON:
  "modules": string[], "queries": string[], "confidence": "high"|"medium"|"low"}
 
 "modules" are which of the available module ids the request concerns - be
-narrow, this decides what is retrieved. "queries" are the words worth searching
-for, which are usually NOT the whole sentence: names of things, not verbs.`,
+narrow, this decides what is retrieved.
+
+"queries" are fed to a SUBSTRING search over titles. Give the distinctive words
+a title would actually contain - names, nouns, one or two words each - not the
+sentence and not a verb phrase. "I finished reconciling against the bank" gives
+["reconcile", "bank"], never ["reconciling against the bank"].`,
       user: `Today is ${input.request.today}.
 Available modules: ${input.modules.join(', ')}
 
@@ -322,9 +330,35 @@ instead of proposing it, and do not propose an action for something that was
 only a question.
 
 One action per distinct change. "I finished X and remind me about Y" is two.
+"Add milk and chicken" is two tasks, not one. Never drop a change because
+another one in the same sentence was hard — propose every part you can.
 
 "payload" must match the capability's input schema exactly. Ids must come from
 CONTEXT. "sources" are "type:id" strings from CONTEXT that justify the action.
+
+CAPABILITIES lists only things that CHANGE something. Reading has already
+happened — everything available is in CONTEXT. There is no search action.
+
+CREATE VERSUS CHANGE. A capability that acts on something that already exists
+takes its id, and that id must appear in CONTEXT. If the thing is not in
+CONTEXT it does not exist as far as you are concerned:
+- use the CREATE capability, or
+- say in the answer that you could not find it, or ask which one is meant.
+Never call a change capability without the id it requires, and never invent
+one. "I need a haircut tomorrow" is a NEW task — task.create — not a schedule
+or an update of something you cannot see.
+
+DATE AND TIME FORMATS, exactly:
+- dueDate, date, targetDate, entryDate: "YYYY-MM-DD"
+- scheduledAt, startsAt, endsAt: full ISO-8601 with an offset,
+  e.g. "2026-09-02T14:00:00+02:00"
+- dueTime: "HH:MM"
+Never put a bare date where a datetime is required. If you only know the day,
+use the dueDate field rather than inventing a time.
+
+If an assumption states a resolved value - "Friday means 2026-09-05" - that
+value MUST also appear in the payload. An assumption describing a date the
+payload does not contain produces a card that says one thing and does another.
 
 CONFIDENCE AND ASSUMPTIONS
 - high: the request said it. Propose it, no assumption needed.

@@ -6,7 +6,7 @@
  * the domain and now applies to the assistant and not to the person using the
  * app.
  */
-import { and, asc, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { tasks, taskSteps, projects, BUCKETS, PRIORITIES } from '../../db/schema.js';
 import {
@@ -68,8 +68,12 @@ const searchCap: Capability = {
     const titles = new Map<string, string>();
     const ids = rows.map((r) => r.projectId).filter(Boolean) as string[];
     if (ids.length) {
+      /* `inArray`, not a raw `= any(...)`: the raw form binds a JS array in a
+         way PGlite rejects, and the throw was being swallowed by the context
+         engine's per-capability catch — so task search silently returned
+         nothing for every task that belonged to a project. */
       for (const p of await ctx.db.select({ id: projects.id, title: projects.title })
-        .from(projects).where(and(eq(projects.workspaceId, ws), sql`${projects.id} = any(${ids})`))) {
+        .from(projects).where(and(eq(projects.workspaceId, ws), inArray(projects.id, ids)))) {
         titles.set(p.id, p.title);
       }
     }

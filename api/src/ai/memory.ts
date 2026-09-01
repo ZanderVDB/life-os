@@ -28,7 +28,7 @@
  * list they can edit and delete. `list()` is the query behind that screen. A
  * memory the user cannot see is a memory they cannot correct.
  */
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import { aiMemories, aiMemoryCandidates, MEMORY_CATEGORIES, MEMORY_SOURCES } from '../db/schema.js';
@@ -178,7 +178,9 @@ export async function touchUsed(db: Db, owner: MemoryOwner, ids: string[]) {
   await db.update(aiMemories).set({ lastUsedAt: new Date() }).where(and(
     eq(aiMemories.workspaceId, owner.workspaceId),
     eq(aiMemories.userId, owner.userId),
-    sql`${aiMemories.id} = any(${ids})`,
+    /* `inArray`, not a raw `= any(...)` — see the note in modules/tasks.ts:
+       the raw form binds a JS array in a way PGlite rejects. */
+    inArray(aiMemories.id, ids),
   ));
 }
 

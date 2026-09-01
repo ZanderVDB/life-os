@@ -29,7 +29,7 @@ import { badRequest, notFound } from '../lib/errors.js';
 import type { CapabilityRegistry, CapabilityCtx } from './registry.js';
 import type { ProviderRouter } from './provider.js';
 import { gather, forPrompt } from './context.js';
-import { rank, rankMemories } from './ranking.js';
+import { rank, rankMemories, tokens } from './ranking.js';
 import * as memory from './memory.js';
 import type {
   AiRequestContext, ProposalAction, ContextSource, Confidence, EntityRef,
@@ -125,6 +125,8 @@ export type TurnResult = {
   answer: string | null;
   actions: ProposalAction[];
   clarification: { question: string; options: { id: string; label: string; ref?: EntityRef }[] } | null;
+  /** What was asked for but could not be turned into a real action. */
+  note: string | null;
   /** What informed this, for the "where did you get that" question. */
   sources: { ref: EntityRef; title: string; module: string; via: string; path?: unknown }[];
   metrics: Record<string, unknown>;
@@ -155,11 +157,37 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     : null;
 
   /* ── 2. Retrieve ──────────────────────────────────────────────────── */
-  /* The searches worth running are usually not the whole sentence — "move my
-     meeting with John to 3" should search for "John", not for "move". */
-  const queries = (read?.queries?.length ? read.queries : [text]).slice(0, 3);
+  /* ── What to search for ─────────────────────────────────────────────
+   *
+   * Search is `ILIKE '%…%'`, which matches a SUBSTRING. A phrase almost never
+   * is one: "reconciling against the bank" appears in no title, while
+   * "reconcile" and "bank" both do. So whatever the interpreter returns —
+   * phrases, or nothing at all — it is expanded into distinctive words, and
+   * the phrases are kept as well because an exact title match outranks
+   * everything and is worth the one extra query.
+   *
+   * Getting this wrong is silent: retrieval returns nothing, the planner is
+   * handed an empty context, and it proposes actions with no ids in them. */
+  const phrases = (read?.queries?.length ? read.queries : [text]).slice(0, 5);
+  const words = tokens(phrases.join(' '));
+  /* ── Stems, crudely ─────────────────────────────────────────────────
+   * "I finished pricing three options" has to find the task called "Price
+   * three options", and `%pricing%` does not match it. A real stemmer is a
+   * dependency and a vocabulary; a prefix of a long word is neither, and it
+   * catches the English inflections that actually come up — price/pricing,
+   * book/booking, reconcile/reconciling. A wrong extra hit costs one row in a
+   * ranked list; a miss costs the whole action. */
+  const stems = words
+    .filter((w) => w.length >= 6)
+    .map((w) => w.slice(0, Math.max(4, w.length - 3)));
+  const queries = [...new Set([
+    ...phrases.filter((q) => q.trim().length >= 2 && q.trim().split(/\s+/).length <= 4),
+    ...words,
+    ...stems,
+  ])].slice(0, 10);
   const collected: ContextSource[] = [];
   const usedCaps = new Set<string>();
+  const failedCaps: { capability: string; reason: string }[] = [];
 
   for (const q of queries) {
     const g = await gather(ctx, registry, {
@@ -171,15 +199,57 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     });
     collected.push(...g.sources);
     g.used.forEach((u) => usedCaps.add(u));
+    failedCaps.push(...g.failed);
   }
   // Level 1 always: what is on screen matters even when nothing was searched.
   if (request.surface?.entity) {
     const g = await gather(ctx, registry, { level: 1, traverseDepth: 1, limit: 20 });
     collected.push(...g.sources);
     g.used.forEach((u) => usedCaps.add(u));
+    failedCaps.push(...g.failed);
   }
 
-  const ranked = rank(collected, {
+  /* ── Deduplicate across queries ─────────────────────────────────────
+     Each `gather` deduplicates its own result; the UNION of three does not.
+     Sending the same project twice wastes context and lets one row vote twice
+     in the ranking. Lowest level wins, as it does inside `gather`. */
+  const seen = new Map<string, (typeof collected)[number]>();
+  for (const src of collected) {
+    const k = refKey(src.ref);
+    const prev = seen.get(k);
+    if (!prev || src.level < prev.level) seen.set(k, src);
+  }
+  let pool = [...seen.values()];
+
+  /* ── Expand the strongest hits STRUCTURALLY ─────────────────────────
+     A project's own tasks are not `item_links` — they are a foreign key — so
+     traversal never reaches them. Without this the assistant finds the project
+     the question is about and then says it would need to read it, which is
+     both true and useless. So the top few hits are read in full, which is what
+     a person would have clicked. */
+  const preliminary = rank(pool, {
+    query: queries.join(' '),
+    today: request.today,
+    surface: request.surface?.entity ?? null,
+  }, 6);
+
+  for (const top of preliminary) {
+    const owner = registry.moduleForEntity(top.ref.type);
+    const readCap = owner && (await registry.capabilities(ctx))
+      .find((c) => c.kind === 'read' && c.module === owner.id && c.id.endsWith('.read'));
+    if (!readCap?.run) continue;
+    const parsed = readCap.input.safeParse({ id: top.ref.id });
+    if (!parsed.success) continue;
+    usedCaps.add(readCap.id);
+    const rows = await readCap.run(ctx, parsed.data).catch(() => []);
+    for (const r of rows) {
+      const k = refKey(r.ref);
+      if (!seen.has(k)) { seen.set(k, r); pool.push(r); }
+    }
+  }
+  pool = [...seen.values()];
+
+  const ranked = rank(pool, {
     query: queries.join(' '),
     today: request.today,
     surface: request.surface?.entity ?? null,
@@ -229,10 +299,20 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     if (!parsed.success) {
       /* Rejected HERE rather than at execution. A card the user confirms and
          which then fails on a shape error is the worst of both: they agreed to
-         it and it did not happen. */
+         it and it did not happen.
+         
+         The reason is written for a person. Zod's own message is a field-level
+         fragment — "Required" — which says nothing on its own; naming the
+         action and the field is the difference between a note somebody can act
+         on and one they can only be puzzled by. */
+      const issue = parsed.error.issues[0];
+      const field = issue?.path?.filter((p) => typeof p === 'string').join('.') ?? '';
+      const detail = issue?.message === 'Required' && field
+        ? `no ${field} was given`
+        : (issue?.message ?? 'the details were not valid').toLowerCase();
       rejected.push({
         capability: raw.capability,
-        reason: parsed.error.issues[0]?.message ?? 'the details were not valid',
+        reason: `${raw.title || cap.label} — ${detail}`,
       });
       continue;
     }
@@ -283,8 +363,15 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     });
   }
 
-  /* Something the planner meant to do but could not be expressed as a real
-     action is said out loud, not silently dropped. */
+  /* ── Say what could not be prepared ─────────────────────────────────
+     An action that failed validation at plan time is a change the user asked
+     for and is not going to get. Dropping it silently is the worst option:
+     they said four things, three cards appear, and nothing accounts for the
+     fourth. */
+  const note = rejected.length
+    ? `${rejected.length === 1 ? 'One thing' : `${rejected.length} things`} could not be prepared: `
+      + `${[...new Set(rejected.map((r) => r.reason))].join('; ')}.`
+    : null;
   const answer = plan.answer ?? null;
   const clarification = (plan as any).clarification ?? null;
 
@@ -301,6 +388,10 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     rejected: rejected.length,
     memoriesUsed: relevant.length,
     capabilitiesUsed: [...usedCaps],
+    /* Empty in normal operation. Anything here means retrieval was quietly
+       worse than it should have been, which is the hardest kind of fault to
+       notice from the outside. */
+    retrievalFailures: failedCaps,
     model: planner.model ?? null,
   };
 
@@ -332,6 +423,8 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     status: row!.status,
     understood: plan.understood,
     answer,
+    /** What was asked for and could not be prepared. Shown, never swallowed. */
+    note,
     actions,
     clarification,
     sources: sourceRefs,

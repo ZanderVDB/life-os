@@ -51,6 +51,16 @@ export type GatherResult = {
   sources: ContextSource[];
   /** Which capabilities were actually used, for the trace. */
   used: string[];
+  /**
+   * Retrievals that threw, with the reason.
+   *
+   * A failing capability used to vanish: the catch below returned an empty
+   * list and the turn carried on with less context and no sign of it. That
+   * hid a real bug — a bad array binding made task search throw for every task
+   * belonging to a project, and the only symptom was an assistant that could
+   * not find things. Recorded now, and surfaced in the turn's metrics.
+   */
+  failed: { capability: string; reason: string }[];
   /** True when the ceiling stopped retrieval before it ran out of results. */
   truncated: boolean;
 };
@@ -82,6 +92,7 @@ export async function gather(
   const caps = await registry.capabilities(ctx);
   const byId = new Map(caps.map((c) => [c.id, c]));
   const used: string[] = [];
+  const failed: GatherResult['failed'] = [];
   const out: ContextSource[] = [];
 
   const call = async (id: string, input: unknown) => {
@@ -90,9 +101,13 @@ export async function gather(
     const parsed = cap.input.safeParse(input);
     if (!parsed.success) return [];
     used.push(id);
-    /* A single failing retrieval must not fail the turn. A module can be
-       misconfigured, and answering from less is better than not answering. */
-    return cap.run(ctx, parsed.data).catch(() => [] as ContextSource[]);
+    /* A single failing retrieval must not fail the turn — a module can be
+       misconfigured, and answering from less is better than not answering at
+       all. But it must not be SILENT either. */
+    return cap.run(ctx, parsed.data).catch((e: Error) => {
+      failed.push({ capability: id, reason: e.message });
+      return [] as ContextSource[];
+    });
   };
 
   /* ── Level 1: where the user is ───────────────────────────────────── */
@@ -148,6 +163,7 @@ export async function gather(
   return {
     sources: merged.slice(0, limit),
     used: [...new Set(used)],
+    failed,
     truncated: merged.length > limit,
   };
 }

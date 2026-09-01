@@ -275,20 +275,26 @@ Editable field types the proposal UI can render: `text`, `date`, `time`,
 
 ## 5. Gaps worth naming before designing
 
-**As of the AI foundation pass, the authoritative answer to "what can the
-assistant do" is `GET /ai/capabilities`, built from module registration.** The
-list below is the remaining gap between what the app can do and what any module
-has registered — see `ai-system.md` §19.
+**The authoritative answer to "what can the assistant do" is
+`GET /ai/capabilities`, built from module registration.** As of Phase 2 there
+are 53 capabilities across nine modules, 34 of them mutations, and the client
+asks rather than assuming. The list below is the remaining gap between what the
+app can do and what any module has registered — see `ai-system.md` §19.
 
 Things the app can do that the assistant currently has **no capability for** —
 each is a deliberate decision, not an oversight to fix silently:
 
-- Creating or editing **Projects** (only `project.update` exists), **Areas**,
-  **Habits** (only `check`), or **Books/Sections/Pages** beyond appending
-- Writing a **Diary** entry or a check-in field
-- **Reordering** anything, or moving a task between buckets
-  (`task.update` may cover this; the contract does not say)
-- **Reminder recurrence** — `reminder.create` exists; series control does not
+- **Reordering** anything: tasks, steps, projects or habits. A pointer dragging
+  a row against a rendered list; no sentence maps onto it.
+- **Restoring** an archived project, task or library item.
+- **Replacing** a diary entry or a page's contents. Appending only, deliberately
+  — see `ai-system.md` §17.
+- **Deleting** a task or a habit. Both archive instead; a habit has no delete
+  at all.
+
+Phase 2 closed the rest: projects create/complete/archive, areas and habits and
+reminders in full, diary append and check-in, library page writes, task steps
+and buckets and archiving.
 
 **Relationships are no longer on that list.** `link.inspect`, `link.traverse`,
 `link.create` and `link.remove` are registered capabilities and go through the

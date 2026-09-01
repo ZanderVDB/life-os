@@ -11,8 +11,9 @@ what is actually true of the code today. Kept current in every AI phase.
 > `relationships.md` is authoritative for the relationship graph.
 > `ai-surface-map.md` is the map of what exists to reason about.
 
-**Status: Phase 1 (foundation) complete.** There is no planner and no model
-configured. §20 says exactly what was built and what was not.
+**Status: Phase 2 complete.** The assistant is real: a model plans, the server
+holds the proposal, and confirmed actions run through application services.
+§20 says exactly what was built and what was not.
 
 ---
 
@@ -52,8 +53,26 @@ will make, and that number is part of the agreement — see §8.
 **An answer names what it read.** "Because the meeting is linked to that
 task" beats an assertion the user has to take on trust.
 
-**What Life OS knows about you is a screen you can edit.** Not a hidden
-profile. §11.
+**What Life OS knows about you is a screen you can edit.** Settings → AI &
+personalisation. Not a hidden profile. §11.
+
+### Where the assistant lives
+
+**Desktop: a panel above the composer, not a page.** The composer bar at the
+bottom of every screen is now a real input, and the conversation grows upwards
+from it *over the page you are on*. That is not decoration — the assistant's job
+is to act on what you are looking at, and navigating away to a chat transcript
+throws away the one piece of context that makes "move this to Friday"
+answerable. The surface is sent with every turn.
+
+**Phone: the lotus screen**, unchanged in look. Speak or type, watch the orb,
+get the same cards. Speech recognition remains an enhancement — it does not
+exist in Firefox — so typing is always there, and fixed transcripts stand in for
+a microphone during development. They produce text that goes to the same server
+turn a spoken sentence would.
+
+**One card renderer for both.** `assistant-cards.js`. Two implementations would
+drift, and the one that drifted would be the one somebody trusted.
 
 ### The path a request takes
 
@@ -194,24 +213,91 @@ flooding the context, and `truncated` says when it did.
 `POST /ai/context` exposes the whole thing without a model, which is how the
 levels are exercised and how a wrong answer is traced back to what was read.
 
+### 5b. Ranking
+
+`api/src/ai/ranking.ts`. Phase 1 retrieved with a bare `ILIKE` and no ordering,
+which is adequate for a demo and useless for a real question.
+
+**Not vectors, and deliberately.** The question this system gets is not "find
+something semantically near this sentence" — it is *"what do I need before the
+Trifusion meeting"*, and the answer is reached by walking one edge from a title
+that matched exactly. An embedding index answers the easy half of that and none
+of the hard half, alongside a relationship graph that already answers the hard
+half precisely. `score()` is the single place vectors would be added when
+recall-by-meaning is genuinely needed.
+
+Signals, each bounded so none can dominate:
+
+| Signal | Weight | Why it exists |
+|---|---|---|
+| exact title | 10 | a thing named in the request is what the request is about |
+| title prefix / contains | 6 / 4 | partial names |
+| token overlap | ≤5 | scaled by coverage **and** by how distinctive the word is |
+| current surface | 12 | what the user is looking at beats what they are not |
+| one relationship hop | 5 | the task nobody named, linked to the meeting they did |
+| two hops | 2.5 | |
+| open lifecycle | 1.5 | "what do I still need" means what is open |
+| due soon | ≤2 | decays over a fortnight either side of today |
+| recency | ≤3 | half-life of a fortnight |
+| same project / area | 2 / 1 | applied in a **second pass**, from what the first ranked |
+
+Token weight is inverse-frequency over the candidate set: a rare word is
+evidence, a common one is noise. Without it, "meeting" pulls every event in the
+workspace into a question about one meeting.
+
+**Traversal is the heaviest structural signal**, which is the whole reason the
+relationship layer was built. A test asserts that a linked task with no matching
+words outranks six rows that merely contain the search term.
+
+**Memory is ranked separately**: pinned, then confidence, then keyword overlap.
+Relevance is last on purpose — "prefers afternoon meetings" often shares no word
+with the request it should influence.
+
 ---
 
-## 6. Planner
+## 6. The turn
 
-**Not built in Phase 1**, deliberately. A planner needs a model; wiring one in
-before the contracts around it were settled is how the model ends up holding
-the business logic.
+`api/src/ai/turn.ts`. One request, in order:
 
-What exists for it:
+```
+interpret   what is this about, which modules, what words to search for
+gather      surface → targeted search → relationship traversal
+rank        24 of ~200 rows, by signals Life OS already has (§5b)
+memory      a bounded, ranked set of durable facts
+plan        capabilities and rules FROM THE REGISTRY, sources, memory
+preview     calendar actions go through the mutation ledger, here
+persist     the proposal set is written down; the client gets its id
+```
 
-- `PlanInput` in `provider.ts` — the exact shape a planner receives:
-  the request, the **capabilities from the registry** (never a static list),
-  the **module rules**, the retrieved sources, and the user's memory.
-- `registry.describe(ctx)` builds that capability and rule list per request.
-- `ProposalSet` is the required output shape.
+The model appears once, in the middle, and is handed data. Everything before it
+decides what it may see; everything after it decides what may happen.
 
-The planner will never be given a database handle. It returns a description;
-the executor is what acts.
+**Three turn types, and a request is not forced into one.** A question is
+answered in `answer`; changes become `actions`; a request that is both gets
+both, kept separate. *"What do I still need before Friday, and move John to 3"*
+is one turn with an answer and one proposal.
+
+**Every action the model returns is re-resolved through the registry** and
+re-validated against the capability's own schema before it becomes a card. A
+capability the model invented, or one belonging to a module that is off, is
+rejected at plan time and recorded in `metrics.rejectedDetail` — not at
+execution time, where it would have failed *after* the user agreed to it.
+
+**The server decides risk.** `important` comes from the capability's `risk`,
+never from the model. A model that classified its own permission level could
+lower it.
+
+### 6b. Conversation and follow-up
+
+`ai_conversations` holds a thread; `ai_turns` holds each turn. A follow-up is
+given the **pending actions by id and title** — a few hundred bytes — so
+*"actually make it Saturday"* has something to be about. It is not given a
+transcript: resending everything forever gets more expensive and less accurate
+with every turn, and a test asserts the follow-up prompt stays under 600
+characters.
+
+Only a turn still `proposed` is pending. One already executed is history, and
+"make it Saturday" about it is a new request.
 
 ---
 
@@ -241,9 +327,34 @@ Each action carries:
 A set can also carry an `answer` (a question answered rather than a change) and
 a `clarification` (§12).
 
-The full proposal *UI* is not rebuilt in this phase; the existing composer is
-untouched. `web/assistant-contract.js` remains the client-side contract and its
-shapes line up with these.
+### The proposal is the server's
+
+Phase 1 let the client hand the executor a set. Safe — every action still had to
+name a registered capability and pass its schema — but it meant the client could
+confirm a set the planner never produced. Now:
+
+```
+POST   /ai/turn              plans, WRITES the set, returns id + version
+GET    /ai/turn/:id          read it back; a refresh costs no planning
+PATCH  /ai/turn/:id          edit, validated against the capability's schema
+POST   /ai/turn/:id/confirm  names id + version + accepted important ids
+POST   /ai/turn/:id/discard  throw it away
+```
+
+The confirm body has no field through which an action or a payload could arrive,
+and the schema is `.strict()` so an attempt is a 400 rather than a silent extra.
+
+| Protection | How |
+|---|---|
+| stale | the version confirmed must equal the version stored |
+| fabricated | actions come from the row, never the request |
+| replay | an executed turn returns its original result unchanged |
+| concurrent | the status moves to `executed` in the statement that claims it |
+| post-confirmation edit | editing a non-`proposed` turn is refused |
+| partial | one action failing leaves the others done, and says so |
+
+An **edited** action drops its assumptions: the value is now the user's
+statement, not the model's guess.
 
 ---
 
@@ -265,6 +376,21 @@ ships around.
 Risk levels map to this: `safe` and `confirm` are covered by the batch;
 `important` needs its own acceptance; `external` needs its own acceptance *and*
 passes through the target system's own gate (§16).
+
+### What the user sees afterwards
+
+In the same language the cards used, and honest in both directions:
+
+```
+Done — 3 changes.            2 completed, 1 needs attention.
+✓ Added "Haircut".           ✓ Added "Milk".
+✓ Reminder set: "…".         ✓ Added "Chicken".
+✓ Added to 31 Aug 2026.      ⚠ Task not found.
+```
+
+Three of four succeeding is three things that happened; it is never reported as
+a failure, and a failure is never reported as a success. Confirming twice
+returns the first result rather than doing the work again.
 
 ---
 
@@ -408,39 +534,61 @@ consequence worth a turn. Low confidence on something cheap and reversible is
 still a proposal — that is what the edit controls are for.
 
 `ProposalSet.clarification` carries the question and the options, each able to
-name an entity so the answer is a choice rather than more prose.
+name an entity so the answer is a choice rather than more prose. The options
+render as buttons; pressing one sends its label as the next turn **in the same
+conversation**, so the server still has everything from the first.
+
+Both conditions must hold before asking: low confidence **and** a consequence
+worth a turn. The planner is told this explicitly — *"an editable card absorbs
+ordinary uncertainty; a question costs the user a turn"* — and told that
+everything unambiguous in the same request should still be proposed alongside
+the question.
 
 ---
 
 ## 13. Provider and model abstraction
 
-`api/src/ai/provider.ts`. The jobs are not alike, so a provider answers **jobs**
-and a router picks a provider per job:
+`api/src/ai/provider.ts` is the contract; `api/src/ai/providers/anthropic.ts` is
+the **only file in Life OS that knows a model vendor exists**.
 
-| Job | Character |
-|---|---|
-| `interpret` | what is being asked, which modules. Cheap, frequent. |
-| `plan` | request + context → proposed actions. The expensive one. |
-| `answer` | answer from sources, with citations. |
-| `summarise` | condense. |
-| `extractMemory` | notice durable facts. Cheap, writes nothing. |
+Five jobs, and a router picks a provider per job:
 
-Swapping a model is a line in the router. Adding a strong provider for `plan`
-and a cheap one for `interpret` and `extractMemory` is a line in the router.
-Neither touches a capability, a service or a route.
+| Job | Model | Character |
+|---|---|---|
+| `interpret` | `AI_MODEL_FAST` | which modules, what words to search for. Every turn. |
+| `plan` | `AI_MODEL_PLAN` | request + context → actions. The expensive one. |
+| `answer` | `AI_MODEL_ANSWER` | answer from sources, with citations. |
+| `summarise` | *deterministic* | trimming a string does not need a model. |
+| `extractMemory` | `AI_MODEL_FAST` | notice durable facts. Runs after the answer. |
 
-**A provider is structurally denied a database handle.** Every job takes plain
-data and returns plain data; there is no argument through which one could reach
-a table. It cannot write even if it decided to.
+Defaults: **Sonnet 4.5** for `plan` and `answer`, **Haiku 4.5** for the cheap
+jobs. Overridden by environment, never by editing code.
 
-`deterministicProvider` ships now and needs no model: it handles `interpret`
-(crudely, to narrow retrieval — being wrong costs a wider search, never a wrong
-write) and `summarise`. It deliberately does **not** implement `plan`. Guessing
-at multi-step intent without a model is exactly the confident wrong answer this
-architecture exists to keep away from the database. With no planner,
-`GET /ai/capabilities` says so plainly rather than leaving it to be inferred.
+**Configuration.** `ANTHROPIC_API_KEY` is the only required variable. With none
+the app still boots, every read still works, and the assistant says *"not
+connected to a model yet"* — `GET /ai/capabilities` reports
+`planner.available: false` with the reason, rather than leaving it to be
+inferred from an absence.
 
----
+**The browser never sees a key and never calls a provider.** A test asserts that
+no web file references a vendor, an API host or a key prefix. A key in a browser
+is a public key.
+
+### Structured output is not optional
+
+A model asked for JSON returns JSON *usually*. The failure that matters is not a
+parse error — it is a plausible object with a subtly wrong field: a capability
+id that does not exist, a date as "next Friday", a payload missing the one
+property the service requires.
+
+So every response is parsed against a Zod schema, and a schema failure is
+**retried with the error handed back to the model**, bounded at three attempts.
+A model told twice exactly which field was wrong will not be fixed by a fourth
+try. JSON is brace-matched out of the reply, so a fence or a sentence of preamble
+does not cost a round trip.
+
+Accepting a malformed plan would push the problem to the executor, where it
+becomes an action that fails *after* the user confirmed it.
 
 ## 14. Source, citation and traceability
 
@@ -454,10 +602,21 @@ can check, and a wrong answer nobody can check is worse than no answer.
 offered, which sources were retrieved (as refs), what was planned, what was
 executed, and which provider answered which job.
 
-**Traces hold ids and names and nothing else** — no transcript, no field
-values, no retrieved text — and are **not persisted**. Persisting them is a
-privacy decision this phase has not made; a trace that quotes the user's diary
-is a second copy of it.
+**A turn is persisted; its content is not.** `ai_turns` stores the request (the
+user wrote it), what was understood, the answer, the proposal actions, and
+`sources` as **entity refs only** — `{type, id}` with a title, never the
+retrieved text. A test asserts no `data` field survives into the row. Storing
+retrieved content would make this table a second copy of the user's diary.
+
+`metrics` carries operating information and no content: elapsed ms, how many
+rows were retrieved and ranked, how many actions were produced and rejected,
+how many memories were used, which capabilities ran, and which model answered.
+That is enough to answer "why was this slow" and "why did it propose that"
+without keeping anything sensitive.
+
+The UI shows sources as a quiet row of clickable chips under an answer — not a
+citation report. Asking *"where did you get that?"* is answerable because the
+refs are on the turn.
 
 ---
 
@@ -508,31 +667,60 @@ stop a plausible plan from being wrong.
    enforced by the services, and tested.
 8. **Relationships go through `item_links`.** No second graph.
 9. **Memory is user- and workspace-scoped**, visible, editable and deletable.
-10. **Traces carry no content.**
+10. **Turns carry refs, not content.** §14.
+11. **The browser never talks to a model.** No key, no vendor host, no direct
+    call — asserted by a test over the whole web bundle.
+12. **The client is not the authority on what exists.** It asks
+    `GET /ai/capabilities`; its presentation table is labels and icons only.
+13. **The model does not set its own permission level.** `important` comes from
+    the capability's `risk`.
+14. **A confirmed turn is immutable.** Editing one is refused; replaying a
+    confirmation returns the original result.
 
 ---
 
 ## 17. Currently registered modules
 
+Nine modules, **53 capabilities**, 34 of them mutations. Every mutation is a
+thin adapter over an application service that the UI routes call too.
+
 | Module | Available when | Capabilities |
 |---|---|---|
-| **tasks** | always | `task.search` `task.read` `task.create` `task.update` `task.complete` *(important)* `task.schedule` |
-| **projects** | always | `project.search` `project.read` `project.update` *(important)* |
-| **calendar** | Google connected **with write scope** | `event.search` `event.read` `calendar.availability` `calendar.list` `event.create` `event.update` `event.delete` *(all external)* |
-| **reminders** | always | `reminder.search` `reminder.create` |
-| **habits** | always | `habit.list` `habit.check` |
-| **areas** | always | `area.list` |
-| **diary** | always | `diary.read` `diary.search` |
-| **library** | always | `library.search` `library.readPage` |
-| **relationships** | always | `link.inspect` `link.traverse` `link.create` `link.remove` *(important)* |
+| **tasks** | always | `search` `read` `create` `update` `complete`\* `schedule` `move` `archive`\* `addStep` `updateStep` `removeStep`\* |
+| **projects** | always | `search` `read` `create` `update`\* `complete`\* `archive`\* |
+| **calendar** | Google connected **with write scope** | `event.search` `event.read` `calendar.availability` `calendar.list` `event.create` `event.update` `event.delete` — creates/edits/deletes are *external* |
+| **reminders** | always | `search` `create` `update` `complete` `setPaused` `delete`\* |
+| **habits** | always | `list` `check` `create` `update` `archive`\* |
+| **areas** | always | `list` `create` `update` `delete`\* |
+| **diary** | always | `read` `search` `append` `checkIn` |
+| **library** | always | `search` `readPage` `sections` `projectBook` `appendPage` `createPage` |
+| **relationships** | always | `link.inspect` `link.traverse` `link.create` `link.remove`\* |
 
-Nine modules, **29 capabilities**, 12 of them mutations.
+\* *important* — needs its own confirmation, not just the batch's.
 
-In a workspace with no Google account connected, `GET /ai/capabilities` returns
-**22** — Calendar's seven are absent, with the reason stated. That difference
-is the registry working, not a bug to reconcile.
+In a workspace with no Google account, `GET /ai/capabilities` returns **46**;
+Calendar's seven are absent with the reason stated. That difference is the
+registry working.
 
----
+### Rules the new writes obey
+
+- **Diary text is only ever APPENDED.** There is no service that replaces a
+  document, and there will not be one: a diary has no version history, and a
+  wrong write destroys something that cannot be reconstructed. `mood`, `energy`
+  and the day summary are separate fields that touch no prose.
+- **Library pages refuse what they cannot hold.** A pinboard is positioned
+  items, not paragraphs; `appendToPage` says so and suggests a Notes page rather
+  than dropping the text. Page edges are re-synced in the same transaction as
+  the write, exactly as the editor's save does.
+- **Completing a project with open tasks is a decision, not a guess.** The
+  service throws `OpenTasksRemain`; the capability turns that into a sentence
+  asking whether to leave or cancel them.
+- **Archiving, not deleting**, wherever the reversible verb is what people mean:
+  tasks and habits archive, and a habit has no delete at all because a streak
+  that took months is not something to lose on an ambiguous sentence.
+- **Built-in areas cannot be removed.** Settings has always promised this and
+  enforced it by hiding a button; the rule now lives in the service, so it holds
+  for the assistant too.
 
 ## 18. Future modules
 
@@ -549,52 +737,76 @@ absorbed into Library; what remains of the idea *is* this system.
 
 ## 19. Known gaps
 
-1. **No planner, and therefore no end-to-end turn.** §6. The pieces are built
-   and tested; the turn is Phase 2.
-2. **No model provider.** Only `deterministicProvider`. The router and the job
-   split exist; nothing is wired to an API.
-3. **No library page writes.** Page documents are saved through an editor with
-   its own conflict model; there is no application service for a blind append,
-   and inventing one inside a capability would put the rule in the wrong place.
-   `library.append` is in the *client* contract and has no server capability.
-4. **No project creation or completion.** No application service for create;
-   completion has to ask about open tasks.
-5. **No task steps or reordering.** Pointer-driven, no sentence maps to them.
-6. **No diary writing.** A diary somebody else wrote in is not a diary.
-7. **Memory UI is designed but not built.** §11.
-8. **Traces are not persisted.** §14.
-9. **`interpret` is keyword-based** in the deterministic provider. It narrows
-   retrieval and nothing else, so being wrong costs a wider search.
-10. **Search is `ILIKE`.** No embeddings, no ranking. Adequate for targeted
-    retrieval alongside traversal; it will not answer a vague question well.
-
----
+1. **No streaming.** A turn is one request and the user waits for the whole
+   plan. Planning a four-action sentence takes seconds; a token stream would
+   make that feel faster without being faster.
+2. **No voice output.** Speech in, text out.
+3. **Retrieval is keyword plus graph, with no embeddings.** §5b explains why
+   that is a decision rather than an omission — but it will not recall by
+   meaning where no word is shared, and a vague question ("what have I been
+   avoiding") will answer poorly.
+4. **Level 3 (broad) retrieval is unranked across modules.** It reads the
+   parameterless reads of every module and ranks the union, which is adequate
+   for "what is taking my attention" and crude for anything subtler.
+5. **A calendar action cannot be edited on its card.** After preview the payload
+   is a ledger handle, and editing it would mean editing a proposal Google was
+   already told about. The way to change one is to say so, which re-plans and
+   re-previews. Correct, and worth making obvious in the UI.
+6. **Reordering is still not offered** — tasks, steps, projects or habits.
+   Pointer-driven against a rendered list; no sentence maps onto "put this
+   between those two".
+7. **No project restore, no task un-archive, no library archive/restore** from
+   the assistant. All exist in the app; none is a sentence anyone says.
+8. **Memory has no decay or size limit.** Bounded at 12 per prompt and ranked,
+   but nothing prunes. A year of accepted candidates will need a policy.
+9. **The clarification flow answers by sending the option's label as text.**
+   It works and reads naturally; a structured answer carrying the chosen ref
+   would be more precise.
+10. **Conversation state is the pending actions plus the request.** No running
+    summary is generated yet, so a long thread loses its early context. The
+    column exists (`ai_conversations.summary`) and nothing writes it.
 
 ## 20. Implementation status and changelog
 
-### Phase 1 — foundation (this pass)
+### Phase 2 — the real assistant (this pass)
+
+**Built and tested:**
+
+- **Anthropic provider** implementing all five jobs, schema-validated with
+  bounded retries, two model tiers, environment-configured.
+- **The turn**: interpret → gather → rank → memory → plan → preview → persist.
+- **Ranking** (`ranking.ts`) over eight signals with a second affinity pass.
+- **Server-held proposals**: plan, read, edit, confirm, discard, with stale,
+  replay, concurrency and post-confirmation protection.
+- **Calendar preview at plan time**, through the existing mutation ledger.
+- **24 new capabilities** (29 → 53) and **six new application services**
+  (library, diary, areas, plus extensions to tasks, projects, reminders,
+  habits). Nine route handlers now delegate to them.
+- **Memory in the loop**: ranked into the plan, extracted into candidates after.
+- **Settings → AI & personalisation**: view, edit, pin, forget, and accept or
+  reject what was noticed.
+- **Desktop panel** above the composer; **mobile** wired to the same server.
+- 17 turn tests, 11 client tests, plus the Phase-1 suite.
+
+**Database:** `ai_conversations`, `ai_turns` (migration `0016_ai_turns.sql`).
+Additive and idempotent; nothing existing altered.
+
+**Three tests changed rather than deleted.** Two asserted Phase-1 truths this
+phase reverses — the composer being inert, the mock provider being
+deterministic — and now assert what outlived them. One allowed `Forget` as a
+destructive verb.
+
+### Phase 1 — foundation
 
 **Built and tested:**
 
 - Capability Registry, with per-request availability and resolution.
-- Nine modules, 29 capabilities, declared by the domains that own them.
-- Four new application services; four route handlers refactored to call them.
-  Behaviour-neutral — the whole suite passed unchanged.
+- Nine modules, declared by the domains that own them.
+- Four application services; four route handlers refactored to call them.
 - Executor with the confirmation gate, per-action transactions, payload
   validation, and no path to a table.
-- Context Engine with three retrieval levels, relationship traversal and
-  provenance on every source.
-- Personal Memory: two tables, migration `0015_ai_memory.sql`, full service
-  with superseding, pinning, candidates and deduplication.
+- Context Engine with three retrieval levels and provenance on every source.
+- Personal Memory: two tables, migration `0015_ai_memory.sql`, full service.
 - Provider abstraction with a job router and a deterministic provider.
-- Typed contracts for context, sources, proposals, execution, memory,
-  providers and traces.
-- Routes: `GET /ai/capabilities`, `POST /ai/context`, `POST /ai/execute`,
-  `POST /ai/preflight`, and `/ai/memory` CRUD plus candidates.
+- Routes: capabilities, context, memory CRUD and candidates.
 - 24 focused tests in `api/tests/ai-foundation.test.ts`.
-
-**Deliberately not built:** planner, model provider, assistant UI changes,
-memory UI, trace persistence, any new product module.
-
-**Database:** `ai_memories`, `ai_memory_candidates`. Additive and idempotent;
-no existing column altered, no user data read or rewritten.

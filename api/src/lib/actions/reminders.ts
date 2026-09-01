@@ -41,6 +41,11 @@ export type ReminderCreate = z.infer<typeof ReminderCreateInput>;
 
 export async function createReminder(db: Db, wsId: string, input: ReminderCreate) {
   const { recurrence, ...fields } = input;
+  /* A reminder with no date never asks for anything, which makes it a note
+     nobody reads. The modal has always defaulted this to today; the default
+     belongs here so the assistant behaves the same way rather than producing
+     silent reminders. */
+  if (!fields.dueDate) fields.dueDate = new Date().toISOString().slice(0, 10);
   /* `isSynthetic: false` matters. It was left true from the seed work once,
      which made real reminders eligible for the staging cleanup. */
   const [row] = await db.insert(reminders).values({

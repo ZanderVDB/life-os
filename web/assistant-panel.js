@@ -46,6 +46,7 @@ const state = {
   understood: '',
   sources: [],
   clarification: null,
+  note: null,
   report: null,
   unavailable: new Set(),
 };
@@ -112,6 +113,7 @@ async function send(text) {
     state.understood = r.understood ?? '';
     state.sources = r.sources ?? [];
     state.clarification = r.clarification ?? null;
+    state.note = r.note ?? null;
     state.report = null;
     await markUnavailable();
     state.history.push({ role: 'los', text: r.answer ?? r.understood ?? '' });
@@ -148,7 +150,7 @@ async function clear() {
   if (state.turnId && !state.report) await api.discardTurn(state.turnId).catch(() => {});
   Object.assign(state, {
     conversationId: null, turnId: null, version: 0, history: [], actions: [],
-    answer: null, understood: '', sources: [], clarification: null, report: null,
+    answer: null, understood: '', sources: [], clarification: null, note: null, report: null,
     unavailable: new Set(),
   });
   close();
@@ -173,6 +175,7 @@ function render() {
       ${state.busy ? '<p class="asstp-line is-busy">Thinking…</p>' : ''}
 
       ${!state.busy && state.answer ? sourcesHtml(state.sources) : ''}
+      ${state.note && !state.busy ? `<p class="asst-note-line">${esc(state.note)}</p>` : ''}
       ${!state.busy ? clarificationHtml(state.clarification) : ''}
       ${state.report ? resultsHtml(state.report) : ''}
       ${!state.report && !state.busy

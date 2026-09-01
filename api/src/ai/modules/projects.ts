@@ -91,15 +91,30 @@ export const projectsModule: AiModule = {
         if (!row) return [];
         const list = await ctx.db.select().from(tasks)
           .where(and(eq(tasks.workspaceId, ws), eq(tasks.projectId, input.id)));
-        const out: ContextSource[] = [source(row, 1)];
+        const open = list.filter((x) => x.status === 'open');
+        const done = list.filter((x) => x.status === 'done');
+        const first = source(row, 1);
+        /* The COUNTS go on the project itself. "Nothing is outstanding" and
+           "this project has no tasks" are different answers to "what still
+           needs to happen", and a list of only the open ones cannot tell them
+           apart — it is empty in both cases. */
+        const out: ContextSource[] = [{
+          ...first,
+          data: {
+            ...first.data,
+            taskCount: list.length,
+            openTaskCount: open.length,
+            doneTaskCount: done.length,
+          },
+        }];
         /* Its tasks arrive as STRUCTURAL neighbours, not as search hits. The
            path is recorded so an answer can say how it got here. */
-        for (const t of list.filter((x) => x.status === 'open').slice(0, 20)) {
+        for (const t of [...open, ...done.slice(0, 6)].slice(0, 20)) {
           out.push({
             ref: { type: 'task', id: t.id },
             module: 'tasks',
             title: t.title,
-            summary: `in ${row.title}`,
+            summary: `${t.status === 'done' ? 'done · ' : ''}in ${row.title}`,
             data: { status: t.status, dueDate: t.dueDate, scheduledAt: t.scheduledAt },
             via: 'relationship',
             path: [{ from: { type: 'project', id: row.id }, kind: 'structural', label: 'Task of' }],

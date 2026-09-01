@@ -67,13 +67,21 @@ export function registerAiRoutes(
    */
   app.get(`${base}/ai/capabilities`, pre, async (req) => {
     const ctx = { db, request: requestCtx(req) };
-    const [status, described] = await Promise.all([
+    const [status, described, all] = await Promise.all([
       assistant.registry.status(ctx),
       assistant.registry.describe(ctx),
+      assistant.registry.capabilities(ctx),
     ]);
     return {
       modules: status,
-      capabilities: described.capabilities,
+      /* EVERYTHING available, reads included. This is the answer to "what can
+         the assistant do", and the client renders proposals against it.
+         `describe()` is narrower on purpose — it is what the PLANNER is
+         offered, and a planner cannot call a read. */
+      capabilities: all.map((c) => ({
+        id: c.id, module: c.module, kind: c.kind, description: c.description, risk: c.risk,
+      })),
+      plannable: described.capabilities.map((c) => c.id),
       unavailable: described.unavailable,
       providers: assistant.providers.list(),
       /* Said plainly rather than implied by an empty list: there is no planner
@@ -117,6 +125,7 @@ export function registerAiRoutes(
     return {
       sources: r.sources,
       used: r.used,
+      failed: r.failed,
       truncated: r.truncated,
       count: r.sources.length,
     };

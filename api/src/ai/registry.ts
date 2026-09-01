@@ -210,7 +210,10 @@ export class CapabilityRegistry {
   }
 
   /**
-   * The planner's view: what may be done, and the rules that constrain it.
+   * The planner's view: what may be DONE, and the rules that constrain it.
+   *
+   * Deliberately narrower than `capabilities()`, which is the full answer to
+   * "what can the assistant do" and is what `GET /ai/capabilities` reports.
    *
    * Built per request from live availability rather than written into a
    * prompt, which is the difference between an assistant that stops offering
@@ -227,13 +230,22 @@ export class CapabilityRegistry {
       modules: enabled.map((s) => ({ id: s.id, name: s.name, rules: s.rules })),
       unavailable: status.filter((s) => !s.enabled)
         .map((s) => ({ id: s.id, reason: s.reason ?? 'Not available.' })),
-      capabilities: (await this.capabilities(ctx)).map((c) => ({
-        id: c.id,
-        module: c.module,
-        kind: c.kind,
-        description: c.description,
-        risk: c.risk,
-      })),
+      /* MUTATIONS ONLY.
+       *
+       * Reads are the context engine's job and have already run — retrieval
+       * happened before the planner was called and it has no way to call one.
+       * Offering them anyway is a contradiction the model resolves by
+       * proposing a search as if it were an action, which is then rejected
+       * and the real change alongside it is lost. */
+      capabilities: (await this.capabilities(ctx))
+        .filter((c) => c.kind === 'mutate')
+        .map((c) => ({
+          id: c.id,
+          module: c.module,
+          kind: c.kind,
+          description: c.description,
+          risk: c.risk,
+        })),
     };
   }
 }

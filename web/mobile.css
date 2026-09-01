@@ -2324,3 +2324,8 @@
   text-transform:uppercase;color:var(--muted)}
 .set-mem .set-item-name{font-size:14px}
 .set-cand-t{flex:1;font-size:14px;color:var(--text-2);min-width:0}
+
+/* What was asked for and could not be prepared. A note, not an error: the
+   user said four things and got three cards, and something has to account
+   for the fourth. */
+.asst-note-line{margin:0;font-size:12.5px;color:var(--warn);line-height:1.45}

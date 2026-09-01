@@ -183,7 +183,7 @@ export function renderAssistant(head, scroll, ctx) {
     el, orb, ctx, state: 'idle', transcript: '',
     /* The server holds the proposal. These are the handle to it — an id and
        the version the person is looking at — and a local copy for rendering. */
-    turnId: null, version: 0, actions: [], answer: null, understood: '',
+    turnId: null, version: 0, actions: [], answer: null, understood: '', note: null,
     sources: [], clarification: null, conversationId: null, report: null,
     unavailable: new Set(),
     mic: null, rec: null, tick: null, mockTimer: null, source: null,
@@ -285,6 +285,7 @@ function reset() {
   session.understood = '';
   session.sources = [];
   session.clarification = null;
+  session.note = null;
   session.report = null;
   session.unavailable = new Set();
   session.el.querySelector('#asst-script').innerHTML = '';
@@ -477,6 +478,7 @@ async function propose(text) {
     session.understood = r.understood ?? '';
     session.sources = r.sources ?? [];
     session.clarification = r.clarification ?? null;
+    session.note = r.note ?? null;
     session.report = null;
     await markUnavailable();
     renderReview();
@@ -520,6 +522,7 @@ function renderReview() {
     ${session.understood ? `<h2 class="asst-h">${esc(session.understood)}</h2>` : ''}
     ${session.answer ? `<p class="asst-reply">${esc(session.answer)}</p>` : ''}
     ${session.answer ? sourcesHtml(session.sources) : ''}
+    ${session.note ? `<p class="asst-note-line">${esc(session.note)}</p>` : ''}
     ${clarificationHtml(session.clarification)}
     ${session.report ? resultsHtml(session.report) : ''}
     ${!session.report ? list.map((a) => actionCardHtml(a, {

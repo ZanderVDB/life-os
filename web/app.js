@@ -6556,7 +6556,12 @@ function assistantContext() {
        and `surface` is what makes "move this to Friday" answerable on either. */
     surface: currentSurface,
     openEntity: (ref) => openLinkedEntity({ type: ref.type, id: ref.id, href: null }),
-    afterChanges: () => { void loadRoute(); },
+    /* NOT on the assistant's own screen. There, `loadRoute` re-renders the
+       assistant itself — which tears down the session and takes the result the
+       person just confirmed off the screen with it. There is nothing behind
+       this surface to refresh; the boards are re-read when they are next
+       opened. */
+    afterChanges: () => { if (state.route !== 'ai') void loadRoute(); },
   };
 }
 
