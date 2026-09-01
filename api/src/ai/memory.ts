@@ -210,9 +210,24 @@ export async function touchUsed(db: Db, owner: MemoryOwner, ids: string[]) {
  * both would sit in the list, and the assistant would have two opposite
  * beliefs and no way to choose.
  */
+/**
+ * Categories where a fact is a single standing VALUE rather than one of many.
+ *
+ * This is what makes the overlap test safe to loosen. Two facts in
+ * `preferences` that share a subject are a change of mind: somebody has one
+ * preference about meetings, not two. Two facts in `people` that share a
+ * subject are usually both true — "John is the contact on WebAnchor" and
+ * "Sarah is the contact on WebAnchor" are a team, not a contradiction — and
+ * treating them as one would quietly delete half of what is known.
+ */
+const SINGLE_VALUED = new Set([
+  'preferences', 'defaults', 'routines', 'work_style', 'communication',
+]);
+
 function contradicts(
   fact: string, category: string, live: { id: string; category: string; fact: string }[],
 ): string | null {
+  if (!SINGLE_VALUED.has(category)) return null;
   const words = new Set(norm(fact).split(' ').filter((w) => w.length > 3));
   if (words.size < 2) return null;
   for (const m of live) {
@@ -222,9 +237,16 @@ function contradicts(
     let shared = 0;
     for (const w of words) if (theirs.has(w)) shared += 1;
     const overlap = shared / Math.max(words.size, theirs.size);
-    /* High overlap and not identical. Identical was already caught as a
-       duplicate; near-identical is the interesting case. */
-    if (overlap >= 0.6 && norm(m.fact) !== norm(fact)) return m.id;
+    /* Half the distinctive words, and not identical — identical was already
+       caught as a duplicate.
+
+       Half rather than most, because the real pair looks like this:
+       "prefers afternoon meetings, and no meetings before 10" against
+       "prefers morning meetings, and no meetings after 3" shares exactly
+       `prefers` and `meetings`, which is 0.5 — and is unmistakably the same
+       belief, reversed. A stricter threshold let it through as unrelated news,
+       and the list then held both. */
+    if (overlap >= 0.5 && norm(m.fact) !== norm(fact)) return m.id;
   }
   return null;
 }

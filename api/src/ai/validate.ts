@@ -204,9 +204,20 @@ function timeIn(text: string): string | null {
   return `${String(h).padStart(2, '0')}:${m[2] ?? '00'}`;
 }
 
-/** Does any value in the payload carry this date? */
-const carriesDate = (values: Record<string, unknown>, iso: string) =>
-  Object.values(values).some((v) => typeof v === 'string' && v.startsWith(iso));
+/**
+ * Does any value in the payload carry this date?
+ *
+ * `bucket` counts, and it has to. "Today" is a board COLUMN in Life OS as well
+ * as a day, so a card reading "Add chicken to the Today list" over a payload
+ * with `bucket: 'today'` and no due date is not lying about anything — it is
+ * describing the bucket. Without this the check refused a correct action and
+ * told the user their shopping could not be prepared, which is the exact
+ * failure mode a validator that cries wolf produces.
+ */
+const carriesDate = (values: Record<string, unknown>, iso: string, today: string) => {
+  if (Object.values(values).some((v) => typeof v === 'string' && v.startsWith(iso))) return true;
+  return iso === today && values['bucket'] === 'today';
+};
 
 const carriesTime = (values: Record<string, unknown>, hhmm: string) =>
   Object.values(values).some((v) => typeof v === 'string' && v.includes(`T${hhmm}`))
@@ -263,7 +274,10 @@ export function validatePlan(input: ValidateInput): Finding[] {
     }
 
     const fields = fieldsOf(schema);
-    const values = flatten(a.payload ?? {});
+    /* The PARSED payload, so schema defaults are part of what is checked. A
+       task created with no bucket really does land on Today, and the card is
+       entitled to say so. */
+    const values = flatten((shape.data ?? a.payload ?? {}) as Record<string, unknown>);
     /* The card's OWN words — never the turn's overall answer, which may be
        describing a different action in the same request. */
     const words = [a.title, a.summary ?? '', ...(a.assumptions ?? [])].join('. ');
@@ -272,7 +286,7 @@ export function validatePlan(input: ValidateInput): Finding[] {
     const promised = datesIn(words, input.today);
     if (promised.length) {
       const hasDateField = [...DATE_FIELDS, ...TIME_FIELDS].some((f) => fields.has(f));
-      const kept = promised.filter((d) => carriesDate(values, d));
+      const kept = promised.filter((d) => carriesDate(values, d, input.today));
       if (!hasDateField && Object.keys(values).length) {
         add(index, 'date_not_supported',
           `“${a.title}” names a date but ${a.capability} has no date field. `
@@ -356,6 +370,24 @@ export function validatePlan(input: ValidateInput): Finding[] {
   }
 
   return findings;
+}
+
+/**
+ * Do these words still describe this payload?
+ *
+ * Used after an EDIT, which is the one place the consistency pass cannot
+ * reach: it runs between planning and the user, and an amendment happens
+ * after. "Actually make it Monday" changed the date field and left the card's
+ * own sentence saying "Saturday 5 September" — a card that says one thing and
+ * does another, which is precisely what this file exists to prevent, arriving
+ * by the one door it was not watching.
+ */
+export function stillDescribes(words: string, payload: Record<string, unknown>, today: string) {
+  const values = flatten(payload ?? {});
+  for (const d of datesIn(words, today)) if (!carriesDate(values, d, today)) return false;
+  const clock = timeIn(words);
+  if (clock && !carriesTime(values, clock)) return false;
+  return true;
 }
 
 /** The complaint handed back to the planner for one repair attempt. */

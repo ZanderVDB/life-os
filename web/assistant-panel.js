@@ -110,6 +110,14 @@ function applyTurn(r) {
   state.report = null;
 }
 
+/** Is this just the request again? Compared on words, not punctuation. */
+function echoes(request, understood) {
+  if (!understood) return true;
+  const norm = (x) => String(x).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  return norm(request) === norm(understood);
+}
+
 async function send(text) {
   state.busy = true;
   state.history.push({ role: 'you', text });
@@ -123,7 +131,12 @@ async function send(text) {
     });
     applyTurn(r);
     await markUnavailable();
-    state.history.push({ role: 'los', text: r.answer ?? r.understood ?? '' });
+    /* An `understood` that is only a restatement of the request reads as a
+       stutter: the same sentence twice, once from each of you. It earns its
+       place when it says something the user did not — "Mark the pricing task
+       done, create a haircut task" — and not otherwise. */
+    const said = r.answer ?? (echoes(text, r.understood) ? '' : r.understood ?? '');
+    if (said) state.history.push({ role: 'los', text: said });
   } catch (e) {
     /* The server knows what went wrong — no model, a timeout, a rate limit.
        Its sentence goes on screen; "something went wrong" would not. */
@@ -151,7 +164,8 @@ async function answerQuestion(optionId, label) {
     const r = await api.clarifyTurn(state.turnId, optionId);
     applyTurn(r);
     await markUnavailable();
-    state.history.push({ role: 'los', text: r.answer ?? r.understood ?? '' });
+    const said = r.answer ?? (echoes(label, r.understood) ? '' : r.understood ?? '');
+    if (said) state.history.push({ role: 'los', text: said });
   } catch (e) {
     state.history.push({ role: 'error', text: e.message });
   } finally {

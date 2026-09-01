@@ -44,7 +44,7 @@ import type { ProviderRouter } from './provider.js';
 import { gather, forPrompt } from './context.js';
 import { rank, rankMemories, tokens } from './ranking.js';
 import { tryFastPath, isMiss, type RawAction } from './fastpath.js';
-import { validatePlan, repairBrief, type Finding } from './validate.js';
+import { validatePlan, repairBrief, stillDescribes, type Finding } from './validate.js';
 import { structure, type Clarification } from './clarify.js';
 import * as memory from './memory.js';
 import type {
@@ -273,6 +273,9 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     /* Readable but not writable — stated rather than left to be inferred from
        an absence, so "I can see that meeting but cannot move it" is reachable. */
     readOnly: described.readOnly,
+    /* And why the missing ones are missing. A disconnected calendar should
+       produce "your calendar is not connected", never "I cannot find it". */
+    unavailable: described.unavailable,
     sources: forPrompt(ranked),
     memory: relevant.map((m) => ({ category: m.category, fact: m.fact })),
     ...(conversation.pending ? {
@@ -978,7 +981,18 @@ export async function editTurn(
     ));
     /* An edited action is the user's statement, not the model's guess, so the
        assumption that produced it no longer applies. */
-    if (Object.keys(edit.fields).length) action.assumptions = [];
+    if (Object.keys(edit.fields).length) {
+      action.assumptions = [];
+      /* And neither does prose about the old value. "Actually make it Monday"
+         moved the date and left the card still reading "Saturday 5 September"
+         above a field saying the 7th — a card that says one thing and does
+         another, arriving by the one door the consistency pass cannot watch
+         because it runs before the edit exists. Dropped only when it has
+         genuinely stopped being true. */
+      if (action.summary && !stillDescribes(action.summary, action.payload, request.today)) {
+        action.summary = null;
+      }
+    }
   }
 
   const [updated] = await db.update(aiTurns)

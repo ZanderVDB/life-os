@@ -530,6 +530,48 @@ Only a turn still `proposed` is pending. One already executed is history, and
 
 ---
 
+### 6d. What a turn costs
+
+Measured against the real model over a real workspace, median of three runs.
+Absolute numbers move with the machine and the network; the SHAPE is the
+point.
+
+| | median | why |
+|---|---|---|
+| obvious command — *"Add milk"* | **~5 ms** | no model, no retrieval, no planning |
+| simple read — *"What is on my Today board?"* | ~6 s | one cheap interpretation, one plan |
+| retrieval-heavy — *"What still needs to happen for X?"* | ~8.5 s | plus traversal and structural expansion |
+| four changes in one sentence | ~13 s | the plan itself is longer |
+
+**Where the time goes.** Almost all of it is the model. Retrieval against a
+workspace of this size is tens of milliseconds; the two model calls are
+seconds. That is why the fast path is worth having and why micro-optimising
+the database would not be.
+
+**What was done about it.**
+
+- The **fast path** removes both model calls for the commands people repeat
+  most: capture, complete, move, remind. It is the difference between five
+  milliseconds and several seconds for the same result.
+- **Retrieval runs concurrently** — a dozen searches, five traversals, the
+  surface read. Wall clock is the slowest, not the sum.
+- **A short amendment skips retrieval entirely.** What it refers to is in the
+  proposal, not the workspace.
+- **Availability is asked once per request** rather than once per question.
+- **Query building spends its budget on distinct meanings**, not on spellings
+  of the same one — which made retrieval both broader and cheaper.
+
+**What was deliberately not done.** Streaming, caching plans, or a smaller
+model for planning. The first is a real improvement and a real piece of work
+(§19); the second trades correctness for speed on a system whose whole value
+is being right about your own data; the third was tried in Phase 2 and the
+cheap model plans badly.
+
+The target is not "fast". It is: **the things people do constantly feel
+instant, and the things that are genuinely hard are allowed to take a moment.**
+
+---
+
 ## 7. Proposal system
 
 `ProposalSet` → many `ProposalAction`. A single utterance is often several
@@ -884,6 +926,40 @@ the question.
 
 ---
 
+### 12b. Saying why, not just no
+
+An assistant is going to be unable to do things. What separates one that feels
+intelligent from one that feels broken is almost never capability — it is
+whether the refusal is a sentence or a status.
+
+| never | instead |
+|---|---|
+| "Capability unavailable" | "I can see that meeting, but calendar changes aren't available right now." |
+| "Something went wrong" | "That changed after you saw it. Reload and check the list again." |
+| "No results" | "I couldn't find that after searching your workspace." |
+| silence, then a guess | "I found two tasks called Invoice. Which one did you mean?" |
+| "Error: invalid payload" | "*Complete Price three options* — no id was given." |
+
+**The sentence comes from the server**, because the server is the only thing
+that knows which situation this is. `registry.explain()` distinguishes three
+that reach the user identically otherwise: Life OS has never had that; the
+module is not connected; the module is connected and cannot write. Only the
+third makes "I can see it, I just cannot change it" true.
+
+A card whose capability has gone away since the plan was made still shows what
+was meant — marked unavailable, carrying the reason, and without a button that
+would fail.
+
+**Three of four succeeding is three things that happened.** It is never
+reported as a failure, a failure is never reported as a success, and the
+headline counts both: *"3 completed, 1 needs attention."*
+
+**What could not be prepared is always accounted for.** Four things asked,
+three cards shown, and a note naming the fourth — never three cards and
+silence.
+
+---
+
 ## 13. Provider and model abstraction
 
 `api/src/ai/provider.ts` is the contract; `api/src/ai/providers/anthropic.ts` is
@@ -1139,6 +1215,51 @@ scheduled.
   enforced it by hiding a button; the rule now lives in the service, so it holds
   for the assistant too.
 
+### The gap audit
+
+What the app can do, against what the assistant can do, sorted by whether beta
+depends on it.
+
+**Beta blockers — closed in this pass.** A user will expect these because the
+app so obviously supports them.
+
+| gap | closed by |
+|---|---|
+| "What is on my Today board?" retrieved nothing at all | `task.list`, `reminder.list`, `project.list` — reads that answer with no search term |
+| naming a habit found nothing | `habit.search` |
+| an event created for a task left the two unlinked | `taskId` on `event.create` |
+| every calendar write would have failed at confirmation | `Capability.confirmed` (§4) |
+| ticking a habit was impossible | the `habit.check` schema (§20) |
+
+**Useful later — deliberately not built.** Each is real, none is a sentence
+somebody is going to say in their first week.
+
+- Restore and un-archive, for projects, tasks and library items. All exist in
+  the app; none is phrased as a request.
+- Reordering anything. Pointer-driven against a rendered list; no sentence maps
+  onto "put this between those two".
+- Creating library items, books and sections. Pages can be written and created;
+  the container is a structural decision made once and rarely.
+- Calendar settings, the default target calendar, and watch management.
+  Configuration, not work.
+- `project.nextAction`, `project.area`, and the Today arrangement lock. Board
+  mechanics rather than intentions.
+
+**Deliberately excluded, and staying that way.**
+
+- **Deleting a task, a project or a habit.** Archive is the reversible verb and
+  it is what "get rid of it" almost always means. A streak that took months is
+  not something to lose on an ambiguous sentence.
+- **Rewriting a diary entry.** Append only. There is no version history and a
+  wrong write destroys something that cannot be reconstructed.
+- **Importing legacy data, staging cleanup, sample seeding.** Operator tools.
+  They are destructive at a scale no confirmation dialog can meaningfully
+  describe.
+- **Editing attendee emails on an event.** The draft the assistant may propose
+  is narrower than the UI's on purpose: adding somebody to a meeting is a
+  message to a person, not a change to a record.
+- **Changing what the assistant may do.** No capability grants capabilities.
+
 ## 18. Future modules
 
 Registerable without touching the planner, the executor or the proposal model:
@@ -1255,7 +1376,9 @@ more predictable, and probably right.
 
 ### Phase 3 — beta readiness (this pass)
 
-**Four faults that no test had, found by building against the real thing:**
+**Nine faults that no test had, found by building against the real thing.**
+Every one was found by running real sentences through the real model over a
+real workspace, and none of them would have been found any other way:
 
 - **`event.create` could never execute.** Preview replaces the payload with a
   ledger handle, and the executor validated that handle against the PLAN-time
@@ -1274,6 +1397,39 @@ more predictable, and probably right.
 - **A read-only Google grant switched Calendar off entirely**, and the
   assistant then reported that it could not SEE a calendar sitting in front of
   it. Availability now answers two questions rather than one.
+- ***"What is on my Today board?"* retrieved nothing at all.** It contains no
+  word that appears in any title, every search came back empty, and the answer
+  was "I cannot see your Today board" — about the most ordinary question a
+  command centre gets. Search answers "which of these is X"; nothing answered
+  "what is there". Now `task.list`, `reminder.list` and `project.list` do, and
+  the low-result fallback widens on any thin result rather than only on
+  requests containing a change verb.
+- ***"I finished pricing three options"* could not find *Price three
+  options*.** Query building spent a fixed budget on several spellings of the
+  same word, and the stems fell off the end of the list. Since `ILIKE` is
+  substring matching, the shortest form is the broadest one — so each word now
+  contributes one query in its broadest safe form and any query containing
+  another is dropped as redundant.
+- **`task.complete` kept arriving with no id.** The planner was given a
+  capability's description and never its schema, so it inferred field names
+  from an English sentence. That works for `title` and fails for `id`, which no
+  description mentions. Capabilities now carry a payload signature generated
+  from their own Zod schema.
+- **An amended card kept prose about the old value** — "Saturday 5 September"
+  above a date field the amendment had moved to the 7th. The consistency pass
+  runs before the user sees anything and an amendment happens after, so it was
+  the one door left unwatched.
+- ***"Add chicken to the Today list"* was refused** as a card promising a date
+  its payload would not set. "Today" is a board COLUMN as well as a day; the
+  check now counts `bucket` and reads the parsed payload, so schema defaults
+  are part of what it validates.
+- **A contradicting memory was not recognised as one.** "Prefers afternoon
+  meetings, and no meetings before 10" against "prefers morning meetings, and
+  no meetings after 3" shares exactly two distinctive words, which fell under
+  the threshold — so the reversal arrived as unrelated news and the list held
+  both. The threshold moved, and contradiction detection is now restricted to
+  the categories where a fact is a single standing value, because two people
+  can both be the contact on a project.
 
 **Built and tested:**
 
@@ -1298,7 +1454,10 @@ more predictable, and probably right.
 - **Memory** (§11) — relevance-gated injection, contradiction detection routed
   into supersede (which protects a pin), candidate dedupe, and retention that
   never touches a memory or an unconfirmed proposal.
-- **26 new tests** in `ai-beta.test.ts`.
+- **`registry.explain`** and the planner being told WHY a module is absent, so
+  a disconnected calendar produces "No Google Calendar account is connected"
+  rather than "I could not find that meeting".
+- **29 new tests** in `ai-beta.test.ts`.
 
 **Database:** `ai_turns.clarification`, and `clarifying` added to the status
 CHECK (migration `0017_ai_beta.sql`). Additive; nothing existing rewritten.

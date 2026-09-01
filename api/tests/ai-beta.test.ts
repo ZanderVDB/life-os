@@ -519,6 +519,51 @@ test('pending: a follow-up amends the proposal instead of inventing a second one
     assert.match(lie.body.error.message, /Confirmed 1 changes but 0/);
   });
 
+test('pending: an amendment drops prose that has stopped being true', async () => {
+  /* The card carried its own sentence - "Saturday 5 September" - above a date
+     field the amendment had just moved to the 7th. A card that says one thing
+     and does another, arriving through the one door the consistency pass
+     cannot watch: it runs between planning and the user, and an amendment
+     happens after. */
+  const { call } = await setup([
+    {
+      actions: [{
+        capability: 'task.create', title: 'Add haircut task',
+        summary: 'Saturday 5 September',
+        payload: { title: 'Haircut', dueDate: '2026-09-05' },
+      }],
+    },
+    { understood: 'Monday instead', amend: [{ actionId: 'a1', fields: { dueDate: '2026-09-07' } }] },
+  ]);
+  const first = await call('POST', '/ai/turn', { text: 'haircut saturday', today: '2026-09-01' });
+  assert.equal(first.body.actions[0].summary, 'Saturday 5 September');
+
+  const after = await call('POST', '/ai/turn', {
+    text: 'actually Monday', conversationId: first.body.conversationId, today: '2026-09-01',
+  });
+  assert.equal(after.body.actions[0].payload.dueDate, '2026-09-07');
+  assert.equal(after.body.actions[0].summary, null,
+    'the card still claims a date the change no longer makes');
+
+  /* A summary that is STILL true survives. Dropping every summary on every
+     edit would lose a useful line to be safe about a rare one. */
+  const { call: c2 } = await setup([
+    {
+      actions: [{
+        capability: 'task.create', title: 'Add haircut task',
+        summary: 'A short errand, nothing booked yet',
+        payload: { title: 'Haircut', dueDate: '2026-09-05' },
+      }],
+    },
+    { understood: 'Rename it', amend: [{ actionId: 'a1', fields: { title: 'Barber' } }] },
+  ]);
+  const one = await c2('POST', '/ai/turn', { text: 'haircut saturday', today: '2026-09-01' });
+  const two = await c2('POST', '/ai/turn', {
+    text: 'actually call it Barber', conversationId: one.body.conversationId, today: '2026-09-01',
+  });
+  assert.equal(two.body.actions[0].summary, 'A short errand, nothing booked yet');
+});
+
 test('pending: an amendment naming nothing pending is refused, not applied elsewhere',
   async () => {
     const { call } = await setup([
@@ -620,6 +665,21 @@ test('consistency: the checks are deterministic and read the real schemas', () =
     }],
     schemas, knownIds: known, today: '2026-09-01',
   }).length, 0);
+
+  /* "Today" is a board COLUMN as well as a day. A card saying "Add chicken to
+     the Today list" over a payload whose bucket IS today promises nothing it
+     does not deliver, and refusing it told the user their shopping could not
+     be prepared. */
+  assert.equal(validatePlan({
+    actions: [{
+      capability: 'task.create', title: 'Add chicken to the Today list',
+      payload: { title: 'Chicken', bucket: 'today' },
+    }],
+    schemas: new Map([['task.create', z.object({
+      title: z.string(), bucket: z.string().default('today'), dueDate: z.string().nullish(),
+    })]]),
+    knownIds: known, today: '2026-09-01',
+  }).length, 0, 'a board column was read as a promise about a due date');
 
   // A capability with nowhere to put the date it promises.
   assert.equal(validatePlan({
@@ -821,6 +881,18 @@ test('memory: a pinned belief is never quietly overturned', async () => {
   const live = await memory.list(db, owner);
   assert.equal(live.length, 1);
   assert.equal(live[0]!.fact, 'Prefers morning meetings');
+
+  /* Two facts about DIFFERENT people are not a contradiction, however alike
+     they read. Treating them as one would quietly delete half of what is
+     known, which is the opposite failure and a worse one. */
+  await memory.create(db, owner, {
+    category: 'people', fact: 'John Mercer is the client contact on WebAnchor',
+    confidence: 1, source: 'user', isPinned: false,
+  });
+  const alongside = await memory.proposeMemories(db, owner, [{
+    category: 'people', fact: 'Sarah Lowe is the client contact on WebAnchor', confidence: 0.8,
+  }] as any);
+  assert.equal(alongside[0]!.outcome, 'pending', 'a second colleague replaced the first');
 
   /* The user can still change their own mind - the block is on inference, not
      on the person. */

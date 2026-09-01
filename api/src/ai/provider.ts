@@ -81,6 +81,15 @@ export type PlanInput = {
    * Calendar — from that, the only available conclusion is silence.
    */
   readOnly?: { id: string; reason: string }[];
+  /**
+   * Modules that are not available at all, with the reason.
+   *
+   * "No Google Calendar account is connected" is a useful answer and it is
+   * unreachable from an absence: a planner told only that no calendar
+   * capability exists can conclude the calendar is empty, and says the
+   * meeting does not exist.
+   */
+  unavailable?: { id: string; reason: string }[];
   /** What was retrieved, already trimmed by the context engine. */
   sources: ReturnType<typeof import('./context.js').forPrompt>;
   /** Durable facts about this user. Small, and never secrets. */

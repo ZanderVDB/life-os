@@ -448,6 +448,12 @@ fact from CONTEXT.`,
         '',
         input.readOnly?.length
           ? `READABLE BUT NOT CHANGEABLE RIGHT NOW:\n${fmt(input.readOnly)}` : '',
+        /* WHY something is missing, not merely that it is. Without this the
+           only available answer about a disconnected calendar is silence, and
+           silence reads to the user as "I could not find your meeting". */
+        input.unavailable?.length
+          ? 'NOT AVAILABLE AT ALL. If the request needs one of these, say so using '
+            + `this reason - do not say the thing does not exist:\n${fmt(input.unavailable)}` : '',
         '',
         'MODULE RULES:',
         fmt(input.rules),
