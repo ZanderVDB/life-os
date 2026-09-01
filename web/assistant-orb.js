@@ -96,6 +96,21 @@ export class Orb {
     this.canvas.height = Math.round(r.height * this.dpr);
     this.w = r.width;
     this.h = r.height;
+    /* ── The orb's size is the CONTAINER's, not the canvas's ──────────
+     *
+     * The canvas is allowed to be bigger than the orb so that waves have
+     * somewhere to go. Without this the two were the same box and a loud
+     * ring hit the canvas edge and stopped dead — a square edge appearing
+     * out of nowhere around a round thing, which is exactly what it looked
+     * like.
+     *
+     * So the DRAWN radius follows the element the layout sized, and the
+     * canvas's extra room is bleed for the rings to fade into. How much
+     * bleed is a CSS decision and this reads it rather than assuming. */
+    const box = this.canvas.parentElement?.getBoundingClientRect();
+    this.unit = box?.width && box?.height
+      ? Math.min(box.width, box.height)
+      : Math.min(r.width, r.height);
   }
 
   setVariant(v) {
@@ -149,8 +164,10 @@ export class Orb {
 
   /* ── Geometry ──────────────────────────────────────────────────────── */
   get core() {
-    // The resting radius. Everything else is expressed as a multiple of it.
-    return Math.min(this.w, this.h) * 0.215;
+    /* The resting radius. Everything else is expressed as a multiple of it.
+       From `unit` — the visible orb box — so bleeding the canvas gives the
+       waves more room without making the orb itself grow. */
+    return (this.unit || Math.min(this.w, this.h)) * 0.215;
   }
 
   draw() {
@@ -325,7 +342,10 @@ export class Orb {
       }
     }
 
-    const reach = Math.min(this.w, this.h) / 2;
+    /* The canvas half-width, less the most a ring's wobble can add. A ring
+       whose crest crosses the edge is clipped, and one clipped edge is all
+       it takes to see the box. */
+    const reach = (Math.min(this.w, this.h) / 2) * 0.94;
     this.rings = this.rings.filter((ring) => {
       const age = (this.t - ring.born) / 1;
       /* Travel scales hard with the loudness the ring was born with: a shout

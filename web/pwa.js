@@ -121,8 +121,16 @@ export async function initServiceWorker() {
    * something.
    */
   if (reg.waiting && navigator.serviceWorker.controller) {
-    sessionStorage.removeItem('los2_update_dismissed');
-    reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    /* At boot there is normally no sentence to interrupt. "Normally" is not
+       "always": an installed app resumed from the background is booting and
+       being used at the same moment, which is exactly when this fired while
+       somebody was talking to the assistant. */
+    const take = () => {
+      if (isBusy()) { setTimeout(take, 2000); return; }
+      sessionStorage.removeItem('los2_update_dismissed');
+      reg.waiting?.postMessage({ type: 'SKIP_WAITING' });
+    };
+    take();
   }
 
   /** Applies a waiting update on demand. Returns false if there is none. */
@@ -154,14 +162,30 @@ export async function initServiceWorker() {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (reloading) return;
     reloading = true;
-    window.location.reload();
+    /* Not while the person is mid-sentence. A new build is never so urgent
+       that it is worth taking the microphone away in the middle of a
+       sentence, and "it reloaded itself as I started speaking" is
+       indistinguishable from a crash. */
+    const go = () => {
+      if (isBusy()) { setTimeout(go, 2000); return; }
+      window.location.reload();
+    };
+    go();
   });
 
   // Check on load and whenever the tab is brought back into view, so a long-
   // lived tab still learns about a deploy.
   reg.update().catch(() => {});
+  /* Throttled. A phone foregrounds an app constantly — every notification,
+     every glance — and an update check per glance is a request per glance,
+     each of which can install a worker that then wants to reload. Once every
+     ten minutes learns about a deploy soon enough. */
+  let lastCheck = Date.now();
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') reg.update().catch(() => {});
+    if (document.visibilityState !== 'visible') return;
+    if (Date.now() - lastCheck < 600000) return;
+    lastCheck = Date.now();
+    reg.update().catch(() => {});
   });
 }
 
@@ -173,10 +197,25 @@ function isEditing() {
     || Boolean(document.querySelector('.panel'));
 }
 
+/**
+ * Is the app in the middle of something a reload would destroy?
+ *
+ * Broader than `isEditing`, and it exists because a reload arriving while
+ * somebody is TALKING to the assistant is the worst version of this: the
+ * microphone dies, the words go, and from the outside the app simply threw
+ * the sentence away for no reason. Surfaces raise the flag; nothing here
+ * needs to know what they are doing.
+ */
+function isBusy() {
+  return isEditing()
+    || Boolean(window.__losBusy?.())
+    || Boolean(document.querySelector('[data-state="listening"], .composer.is-listening'));
+}
+
 function showUpdatePrompt() {
   if (document.querySelector('.updater')) return;
   // Never interrupt someone mid-sentence. Wait until the field is released.
-  if (isEditing()) { setTimeout(showUpdatePrompt, 4000); return; }
+  if (isBusy()) { setTimeout(showUpdatePrompt, 4000); return; }
   if (sessionStorage.getItem('los2_update_dismissed') === 'session') return;
 
   const el = document.createElement('div');

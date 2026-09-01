@@ -24,7 +24,7 @@
 
 import { icon, logoMark } from './icons.js';
 import { Orb, MicLevel, VARIANTS, DEFAULT_VARIANT, synthLevel } from './assistant-orb.js';
-import { VoiceInput, voiceSupported } from './voice-input.js';
+import { VoiceInput } from './voice-input.js';
 import { openSheet, closeSheet } from './mobile.js';
 /* Fixed transcripts stand in for a MICROPHONE, not for the assistant: speech
    recognition does not exist in Firefox and differs between Chrome and Safari.
@@ -63,6 +63,10 @@ const COPY = {
   starting: { say: 'Getting the microphone…', sub: '' },
   listening: { say: 'Listening…', sub: 'Tap when you’re done' },
   paused: { say: 'Still listening', sub: 'Tap when you’re done' },
+  /* Reached by stopping on a pause rather than by a tap. It stops LISTENING
+     and nothing else: sending a half-finished sentence because somebody drew
+     breath is worse than one more tap. */
+  heard: { say: 'Is that right?', sub: 'Send it, or say more' },
   processing: { say: 'Making sense of that…', sub: '' },
   proposal: { say: '', sub: '' },
   denied: { say: 'The microphone is blocked', sub: 'Type it instead, or allow the microphone in your browser' },
@@ -79,6 +83,7 @@ let session = null;
 
 function endSession() {
   if (!session) return;
+  window.__losBusy = null;
   session.orb?.destroy();
   session.mic?.stop();
   /* `destroy`, not `stop`: leaving the route is not "finish the sentence",
@@ -210,10 +215,17 @@ export function renderAssistant(head, scroll, ctx) {
   session.teardown = () => document.removeEventListener('visibilitychange', vis);
 }
 
+/** States a reload would destroy something in. Read by `pwa.js`. */
+const BUSY_STATES = new Set(['starting', 'listening', 'paused', 'heard', 'processing']);
+
 function setState(s) {
   if (!session) return;
   session.state = s;
   session.el.dataset.state = s;
+  /* A service worker update must not reload the page out from under a
+     sentence. `processing` matters as much as `listening`: the request is in
+     flight and a reload loses the answer somebody is waiting for. */
+  window.__losBusy = () => BUSY_STATES.has(session?.state ?? 'idle');
   session.orb.setState(s === 'denied' ? 'idle' : s);
   const c = COPY[s] ?? COPY.idle;
   session.el.querySelector('#asst-say').textContent = c.say;
@@ -245,6 +257,17 @@ function renderActions() {
     box.querySelector('#asst-done').onclick = finishListening;
     box.querySelector('#asst-cancel').onclick = cancelListening;
     box.querySelector('#asst-type').onclick = () => { stopCapture(); setState('idle'); openTypeSheet(); };
+    return;
+  }
+  if (s === 'heard') {
+    box.innerHTML = `<button type="button" class="btn btn-primary asst-big" id="asst-send">
+        ${icon('check', 18)}<span>Send</span></button>
+      <button type="button" class="btn btn-ghost" id="asst-more">Say more</button>
+      <button type="button" class="btn btn-ghost" id="asst-cancel">Cancel</button>`;
+    box.querySelector('#asst-send').onclick = finishListening;
+    box.querySelector('#asst-cancel').onclick = cancelListening;
+    /* Carries on from what is already there rather than starting over. */
+    box.querySelector('#asst-more').onclick = () => resumeListening();
     return;
   }
   if (s === 'processing') { box.innerHTML = ''; return; }
@@ -308,35 +331,91 @@ function reset() {
 /**
  * Start listening.
  *
- * NOT async, and that is the fix rather than a style choice. iOS Safari only
- * allows `SpeechRecognition.start()` while the user's tap is still being
- * handled, and the previous version awaited `getUserMedia` first — so on an
- * iPhone the level meter came up (that await is what starts it) and
- * recognition never began at all. Speech first, synchronously; the meter
- * follows on its own time.
+ * ── Recognition owns the microphone ──────────────────────────────────────
  *
- * The two are independent on purpose. Either can fail without the other, and
- * conflating them is what made a moving waveform look like proof that words
- * were being heard.
+ * There used to be TWO microphone consumers here: `getUserMedia`, feeding the
+ * orb's waveform, and the speech recogniser. On a phone they fight, and
+ * `getUserMedia` wins — it takes the microphone first and holds it, and the
+ * recogniser starts, hears nothing, and ends. Chrome plays its start tone on
+ * every attempt, which is why an empty room produced bing after bing while
+ * the waves danced and not one word ever arrived.
+ *
+ * Desktop never had the problem because desktop never opened a second stream.
+ * That was the difference between the surface that worked and the one that
+ * did not.
+ *
+ * So there is one consumer now. The orb is driven by RESULTS instead of by
+ * loudness, which is also the honest picture: the waves move when words are
+ * being heard, and go still when they are not. A waveform that dances to a
+ * passing lorry while transcription is dead is exactly the lie this whole
+ * pass exists to remove.
+ *
+ * The level meter survives for the one case that still needs it — no
+ * recogniser in this browser — where there are no words to draw from.
+ *
+ * NOT async, so the user's tap is still live when `start()` is called: iOS
+ * Safari refuses to begin recognition once the activation has been spent.
  */
 function startListening() {
   if (!session) return;
   reset();
   setState('starting');
 
-  const heard = startSpeech();
-  void startLevel();
-  /* Neither one worked: no recogniser and no microphone. The interaction is
-     still walkable — §10 — with a labelled demo transcript. */
-  if (!heard && !voiceSupported()) session.wantMock = true;
+  if (startSpeech()) {
+    /* The orb, from the words. Same 50ms tick the meter used. */
+    session.tick = setInterval(() => {
+      if (!session?.voice) return;
+      const level = session.voice.activity;
+      session.orb.setLevel(level);
+      if (currentVariant() === 'c') session.orb.setBins(spread(level));
+    }, 50);
+    return;
+  }
+
+  /* No recogniser at all. Nothing can be transcribed here, so the meter is
+     the only honest thing left to show — and it is labelled. */
+  void startLevelOnly();
+}
+
+/**
+ * Carry on after a pause, keeping what was already said.
+ *
+ * A fresh `start()` would clear the transcript, which is precisely what
+ * somebody adding a second sentence does not want.
+ */
+function resumeListening() {
+  if (!session) return;
+  const sofar = session.transcript.trim();
+  clearInterval(session.tick);
+  if (startSpeech(sofar)) {
+    session.tick = setInterval(() => {
+      if (!session?.voice) return;
+      const level = session.voice.activity;
+      session.orb.setLevel(level);
+      if (currentVariant() === 'c') session.orb.setBins(spread(level));
+    }, 50);
+  }
 }
 
 /** Speech recognition, through the shared controller. Synchronous. */
-function startSpeech() {
+function startSpeech(base = '') {
+  /* A previous controller would go on holding the microphone. */
+  session.voice?.destroy();
   session.voice = new VoiceInput({
     onState: (st) => {
       if (!session) return;
       if (st === 'listening') setState('listening');
+      /* The engine stopped on its own, on a pause long enough to be the end
+         of a sentence. It stops LISTENING and waits: a pause mid-thought is
+         common, and sending on one would act on half a sentence. */
+      if (st === 'idle' && (session.state === 'listening' || session.state === 'starting')) {
+        /* The controller settled itself, so nothing else will clear the
+           animation tick — it would go on polling a signal that is now
+           permanently zero. */
+        clearInterval(session.tick); session.tick = null;
+        session.orb.setLevel(0);
+        setState(session.transcript.trim() ? 'heard' : 'idle');
+      }
     },
     onTranscript: ({ full }) => {
       if (!session) return;
@@ -345,7 +424,6 @@ function startSpeech() {
     },
     onError: ({ kind, message }) => {
       if (!session) return;
-      /* The UI must never be left in LISTENING after a failure. */
       if (kind === 'denied') { session.source = 'denied'; setState('denied'); }
       else if (session.state === 'listening' || session.state === 'starting') {
         setState('idle');
@@ -353,23 +431,42 @@ function startSpeech() {
       showSourceNote(message);
     },
   });
-  return session.voice.start('');
+  return session.voice.start(base);
 }
 
-/** The waveform. A different subsystem, and it is allowed to fail alone. */
-async function startLevel() {
+/** A rough spectrum from one number, for the variant that draws bins. */
+function spread(level) {
+  const bins = new Array(24);
+  for (let i = 0; i < bins.length; i += 1) {
+    const shape = Math.sin(((i + 1) / bins.length) * Math.PI);
+    bins[i] = clamp01(level * shape * (0.75 + Math.random() * 0.5));
+  }
+  return bins;
+}
+const clamp01 = (n) => Math.max(0, Math.min(1, n));
+
+/**
+ * The waveform, for a browser with no speech recognition.
+ *
+ * The only path that still opens a microphone stream, and it can afford to:
+ * there is no recogniser for it to compete with.
+ */
+async function startLevelOnly() {
   const mic = new MicLevel();
   const got = await mic.start();
   if (!session) { mic.stop(); return; }
 
   if (got === 'ok') {
     session.mic = mic;
+    session.source = 'mic';
     session.tick = setInterval(() => {
       if (!session) return;
       session.orb.setLevel(mic.read());
       if (currentVariant() === 'c') session.orb.setBins(mic.bins());
     }, 50);
-    if (session.state === 'starting') setState('listening');
+    setState('listening');
+    showSourceNote('This browser cannot turn speech into text — the orb is '
+      + 'following your voice, but nothing is being transcribed. Type it instead.');
     return;
   }
 
@@ -377,15 +474,10 @@ async function startLevel() {
     session.source = 'denied';
     setState('denied');
     showSourceNote();
-    session.voice?.cancel();
     return;
   }
-  /* No microphone at all. If speech recognition is also absent there is
-     nothing to listen with, so the demo transcript stands in — labelled. */
-  if (session.wantMock || !voiceSupported()) {
-    session.source = 'unsupported';
-    runMockCapture(MOCK_TRANSCRIPTS[0]);
-  }
+  session.source = 'unsupported';
+  runMockCapture(MOCK_TRANSCRIPTS[0]);
 }
 
 /**

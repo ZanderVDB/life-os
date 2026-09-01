@@ -118,7 +118,7 @@ test('speech recognition is an enhancement, never the thing it depends on', () =
   assert.match(voice, /window\.SpeechRecognition \|\| window\.webkitSpeechRecognition/);
 
   const surface = read('assistant.js');
-  assert.match(surface, /voiceSupported/, 'the surface never assumes recognition exists');
+  assert.match(surface, /new VoiceInput\(/, 'the surface goes through the shared controller');
   assert.match(surface, /runMockCapture/, 'there is no development transcript');
   assert.match(surface, /openTypeSheet/, 'there is no way to type instead');
   // And the surface says which source it used rather than passing a

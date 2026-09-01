@@ -341,6 +341,110 @@ test('voice: a second session does not repeat the first one', async () => {
   assert.equal(last().full, 'Call Oscar', 'the previous transcript is not appended again');
 });
 
+/* ══ Stopping on a pause ═════════════════════════════════════════════════
+ *
+ * Two complaints, one cause. Desktop listened for ever until it was clicked
+ * again; mobile chimed over and over at an empty room, because Chrome plays a
+ * tone on every `start()` and every restart into silence bought nothing.
+ */
+
+test('voice: a pause after speech ends the session on its own', async () => {
+  const M = browser();
+  const { v, last } = await make({ silenceMs: 200 });
+  v.start('');
+  M.made[0]!.say([{ transcript: 'Buy milk', isFinal: true }]);
+  assert.equal(v.state, 'listening');
+
+  await new Promise((r) => { setTimeout(r, 500); });
+  assert.notEqual(v.state, 'listening', 'it stopped without being told to');
+  M.made[0]!.end();
+  assert.equal(v.state, 'idle');
+  assert.equal(last().full, 'Buy milk', 'and kept what was said');
+});
+
+test('voice: a silence BEFORE anything is said waits much longer', async () => {
+  const M = browser();
+  const { v } = await make({ silenceMs: 150 });
+  v.start('');
+  /* Nobody has spoken yet — they are still deciding what to say, and cutting
+     them off after a moment would be rude. The long window applies until the
+     first word arrives. */
+  await new Promise((r) => { setTimeout(r, 500); });
+  assert.equal(v.state, 'listening');
+  assert.equal(M.made.length, 1);
+});
+
+test('voice: ending in silence does not restart, so it cannot chime forever', async () => {
+  const M = browser();
+  const { v } = await make({ silenceMs: 60 });
+  v.start('');
+  M.made[0]!.say([{ transcript: 'Buy milk', isFinal: true }]);
+  await new Promise((r) => { setTimeout(r, 200); });
+  const count = M.made.length;
+  M.made[M.made.length - 1]!.end();
+  await new Promise((r) => { setTimeout(r, 150); });
+  assert.equal(M.made.length, count, 'no new recogniser, so no new tone');
+  assert.notEqual(v.state, 'listening');
+});
+
+test('voice: a pause MID-sentence still restarts, because it is not the end', async () => {
+  const M = browser();
+  const { v, last } = await make({ silenceMs: 5000 });
+  v.start('');
+  M.made[0]!.say([{ transcript: 'Remind me Friday', isFinal: true }]);
+  M.made[0]!.startedAt = 0;
+  M.made[0]!.end();                       // the browser gives up; we do not
+  assert.equal(M.made.length, 2);
+  assert.equal(v.state, 'listening');
+  M.made[1]!.say([{ transcript: 'to phone Oscar', isFinal: true }]);
+  assert.equal(last().full, 'Remind me Friday to phone Oscar');
+});
+
+test('voice: auto-stop can be switched off for a surface that wants a button', async () => {
+  const M = browser();
+  const { v } = await make({ silenceMs: 60, autoStop: false });
+  v.start('');
+  M.made[0]!.say([{ transcript: 'Buy milk', isFinal: true }]);
+  await new Promise((r) => { setTimeout(r, 250); });
+  assert.equal(v.state, 'listening', 'it waits to be told');
+});
+
+/* ══ The orb's signal ════════════════════════════════════════════════════ */
+
+test('voice: activity follows WORDS, not loudness', async () => {
+  const M = browser();
+  const { v } = await make({ silenceMs: 5000 });
+  assert.equal(v.activity, 0, 'nothing heard yet, nothing to draw');
+
+  v.start('');
+  assert.equal(v.activity, 0, 'starting is not hearing');
+
+  M.made[0]!.say([{ transcript: 'hello', isFinal: false }]);
+  assert.ok(v.activity > 0.9, 'a result drives it');
+
+  await new Promise((r) => { setTimeout(r, 500); });
+  const decayed = v.activity;
+  assert.ok(decayed < 0.6 && decayed > 0, `it decays between words (${decayed})`);
+
+  M.made[0]!.say([{ transcript: 'hello there', isFinal: false }]);
+  assert.ok(v.activity > 0.9, 'and comes back on the next one');
+});
+
+test('voice: the timer is released on every exit', async () => {
+  const M = browser();
+  for (const finish of ['stop', 'cancel', 'destroy'] as const) {
+    const { v } = await make({ silenceMs: 5000 });
+    v.start('');
+    assert.ok(v.silenceTimer, `${finish}: a watchdog is running`);
+    v[finish]();
+    /* Node keeps the process alive for a stray interval; a leaked one here
+       is a leaked microphone in a browser. */
+    assert.equal(v.wanted, false, `${finish}: no longer wanted`);
+    if (finish !== 'stop') assert.equal(v.rec, null, `${finish}: recogniser released`);
+  }
+  assert.ok(M.made.length >= 3);
+});
+
 /* ══ Both surfaces use it ════════════════════════════════════════════════ */
 
 test('voice: desktop and mobile both go through this one controller', () => {

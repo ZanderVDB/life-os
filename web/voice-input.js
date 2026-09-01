@@ -76,6 +76,25 @@ const CODE_KIND = {
 /** Restarts allowed before concluding the browser will not keep listening. */
 const MAX_RESTARTS = 40;
 
+/**
+ * How long a silence ends the session.
+ *
+ * Two windows, because the two silences mean different things. Before anybody
+ * has said anything the person is still gathering their thought and cutting
+ * them off would be rude; once words have arrived, a pause of a couple of
+ * seconds is the end of a sentence.
+ *
+ * This is also what stops Android chiming over and over. Chrome plays a tone
+ * every time recognition starts, so restarting a recogniser that keeps ending
+ * on background noise produces bing, bing, bing — and each of those restarts
+ * was buying nothing, because nothing was being heard.
+ */
+const SILENCE_AFTER_SPEECH_MS = 2600;
+const SILENCE_BEFORE_SPEECH_MS = 9000;
+
+/** How quickly the "words are arriving" signal falls back to nothing. */
+const ACTIVITY_HALF_LIFE_MS = 420;
+
 /** A restart sooner than this after a start means it is not really working. */
 const TOO_QUICK_MS = 350;
 
@@ -103,6 +122,14 @@ export class VoiceInput {
     this.wanted = false;
     this.restarts = 0;
     this.startedAt = 0;
+    /** When a result last arrived. The clock the silence windows run on. */
+    this.lastResultAt = 0;
+    /** Whether anything at all has been heard this session. */
+    this.heardAnything = false;
+    /** 0..1, bumped by every result and decaying. See `activity`. */
+    this.activityAt = 0;
+    this.silenceTimer = null;
+    this.autoStop = opts.autoStop !== false;
     this.lang = opts.lang || (typeof navigator !== 'undefined' ? navigator.language : '') || 'en-US';
   }
 
@@ -115,6 +142,21 @@ export class VoiceInput {
   }
 
   get listening() { return this.state === 'listening' || this.state === 'starting'; }
+
+  /**
+   * How strongly words are arriving right now, 0..1.
+   *
+   * THIS is what the orb should be drawn from, not the microphone's volume.
+   * A picture driven by loudness moves for a passing lorry and moves exactly
+   * the same when transcription has silently died — which is the whole bug
+   * this file was written for. Driven from results, the orb moving means
+   * words are being heard, and its stillness means they are not.
+   */
+  get activity() {
+    if (!this.activityAt) return 0;
+    const age = Date.now() - this.activityAt;
+    return Math.max(0, 2 ** (-age / ACTIVITY_HALF_LIFE_MS));
+  }
 
   /** base + everything heard, trimmed of the join seam. */
   compose(interim = '') {
@@ -135,6 +177,7 @@ export class VoiceInput {
 
   fail(kind, code) {
     this.wanted = false;
+    clearInterval(this.silenceTimer);
     this.teardown();
     this.setState(kind === 'unsupported' ? 'unavailable' : 'error', { kind, code });
     this.opts.onError?.({
@@ -166,9 +209,47 @@ export class VoiceInput {
     this.committed = '';
     this.sessionFinal = '';
     this.restarts = 0;
+    this.heardAnything = false;
+    this.lastResultAt = 0;
+    this.activityAt = 0;
+    this.startedAt = Date.now();
     this.wanted = true;
     this.setState('starting');
-    return this.open(SR);
+    const ok = this.open(SR);
+    if (ok) this.watchSilence();
+    return ok;
+  }
+
+  /** How long the current silence is allowed to run before it ends things. */
+  silenceWindow() {
+    const after = this.opts.silenceMs ?? SILENCE_AFTER_SPEECH_MS;
+    return this.heardAnything ? after : Math.max(after, SILENCE_BEFORE_SPEECH_MS);
+  }
+
+  /** True when nothing has arrived for long enough to call it finished. */
+  silent() {
+    const since = Date.now() - (this.lastResultAt || this.startedAt || Date.now());
+    return since > this.silenceWindow();
+  }
+
+  /**
+   * Stop on a pause, so the person does not have to.
+   *
+   * Answers both halves of the same complaint: desktop listened for ever
+   * until it was clicked again, and mobile chimed endlessly at an empty room.
+   * Pressing the button still stops it immediately — this only removes the
+   * NEED to.
+   */
+  watchSilence() {
+    clearInterval(this.silenceTimer);
+    if (!this.autoStop) return;
+    this.silenceTimer = setInterval(() => {
+      if (!this.wanted) { clearInterval(this.silenceTimer); return; }
+      if (this.silent()) {
+        this.log('silence — stopping');
+        this.stop();
+      }
+    }, Math.min(400, Math.max(40, this.silenceWindow() / 6)));
   }
 
   /** One recogniser, wired. Used by `start` and by every restart. */
@@ -213,6 +294,11 @@ export class VoiceInput {
         else interim += `${said} `;
       }
       this.sessionFinal = finals;
+      if (finals || interim) {
+        this.lastResultAt = Date.now();
+        this.activityAt = this.lastResultAt;
+        this.heardAnything = true;
+      }
       /* `committed` holds earlier sessions only, so the live text is always
          everything before, plus this session's finals, plus what is still
          being heard. No path adds the same words twice. */
@@ -249,6 +335,11 @@ export class VoiceInput {
       /* A recogniser that ends immediately and repeatedly is not listening,
          whatever it reports. Restarting for ever would spin and hold the
          microphone open; better to stop and say so plainly. */
+      /* A recogniser that ended during a silence is not worth restarting:
+         nothing was being said, and on Android every restart is another
+         chime. Finish instead — the silence watchdog would have anyway. */
+      if (this.silent()) { this.log('ended in silence'); this.stop(); return; }
+
       const quick = Date.now() - this.startedAt < TOO_QUICK_MS;
       this.restarts += quick ? 1 : 0;
       if (this.restarts > MAX_RESTARTS) {
@@ -305,6 +396,7 @@ export class VoiceInput {
   /** The final answer, once. */
   settle() {
     clearTimeout(this.settleTimer);
+    clearInterval(this.silenceTimer);
     if (this.state === 'idle') return;
     /* Keeps whatever the current recogniser had heard, for the browser that
        never fires `end` after `stop()`. */
@@ -317,6 +409,7 @@ export class VoiceInput {
   /** Throw the session away — nothing heard is kept. */
   cancel() {
     this.wanted = false;
+    clearInterval(this.silenceTimer);
     this.committed = '';
     this.sessionFinal = '';
     clearTimeout(this.settleTimer);
@@ -346,6 +439,7 @@ export class VoiceInput {
   destroy() {
     this.wanted = false;
     clearTimeout(this.settleTimer);
+    clearInterval(this.silenceTimer);
     this.teardown();
     this.state = 'idle';
   }

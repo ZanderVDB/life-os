@@ -588,8 +588,15 @@ test('an update that was already waiting is taken at boot, not asked about', () 
    * rendered correctly in a narrow desktop window that had no worker in the
    * way. */
   const pwa = read('pwa.js');
-  assert.match(pwa, /if \(reg\.waiting && navigator\.serviceWorker\.controller\) \{\s*sessionStorage\.removeItem\('los2_update_dismissed'\);\s*reg\.waiting\.postMessage\(\{ type: 'SKIP_WAITING' \}\)/,
+  assert.match(pwa, /if \(reg\.waiting && navigator\.serviceWorker\.controller\) \{/,
     'a worker waiting at boot is still only offered, never taken');
+  assert.match(pwa, /postMessage\(\{ type: 'SKIP_WAITING' \}\)/, 'nothing takes it');
+  /* It waits for a moment when nothing is being interrupted. An installed
+     app resumed from the background is booting and being USED at the same
+     instant — which is how a reload arrived while somebody was mid-sentence
+     to the assistant, taking the microphone with it. */
+  assert.match(pwa, /const take = \(\) => \{\s*if \(isBusy\(\)\)/,
+    'the boot hand-over can interrupt a sentence');
 
   // The prompt survives for updates that arrive DURING a session, which is
   // the only case where the question means anything.

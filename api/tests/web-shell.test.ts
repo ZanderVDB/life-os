@@ -542,7 +542,12 @@ test('service worker: waits for the user and cannot loop', () => {
 
 test('pwa: the update prompt can be postponed and never interrupts editing', () => {
   assert.match(pwa, /function isEditing\(/, 'no editing check');
-  assert.match(pwa, /if \(isEditing\(\)\) \{ setTimeout\(showUpdatePrompt/, 'prompts while editing');
+  /* Broadened: talking to the assistant is not typing, and a reload arriving
+     mid-sentence takes the microphone with it. `isBusy` covers both. */
+  assert.match(pwa, /function isBusy\(/, 'no busy check');
+  assert.match(pwa, /isEditing\(\)\s*\|\|/, 'isBusy does not include editing');
+  assert.match(pwa, /if \(isBusy\(\)\) \{ setTimeout\(showUpdatePrompt/, 'prompts while busy');
+  assert.match(pwa, /if \(isBusy\(\)\) \{ setTimeout\(go, 2000\)/, 'reloads while busy');
   assert.match(pwa, /sessionStorage\.setItem\('los2_update_dismissed'/, 'postpone is not remembered');
   // Postponing is device-scoped and must not reach the account.
   assert.ok(!/api\(|fetch\(/.test(pwa.slice(pwa.indexOf('u-later'), pwa.indexOf('u-now'))),

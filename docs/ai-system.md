@@ -1041,6 +1041,47 @@ that nothing was listening to.
 - **Stopping releases everything** — stop, cancel, navigation, unmount, page
   hide, error, and a re-render of the shell.
 
+### Recognition owns the microphone
+
+There were two microphone consumers: `getUserMedia`, feeding the orb's
+waveform, and the recogniser. **On a phone they fight, and `getUserMedia`
+wins** — it takes the microphone first and holds it, and the recogniser starts,
+hears nothing and ends. Chrome plays its start tone on every attempt, so an
+empty room produced bing after bing while the waves danced and not one word
+arrived.
+
+Desktop never had the problem because desktop never opened a second stream.
+That was the entire difference between the surface that worked and the one that
+did not.
+
+So there is one consumer. The orb is now drawn from **results** rather than
+loudness, which is also the honest picture: the waves move when words are being
+heard and go still when they are not. `VoiceInput.activity` is a 0..1 envelope
+bumped by every result and decaying over ~420ms. The level meter survives only
+for a browser with no recogniser, where there are no words to draw from and
+nothing to compete with.
+
+### Stopping on a pause
+
+Two complaints, one cause: desktop listened for ever until clicked again, and
+mobile chimed endlessly at an empty room. Both were the restart loop being too
+eager.
+
+A silence ends the session — **2.6s** once something has been said, **9s**
+before the first word, because somebody still gathering their thought should
+not be cut off. A recogniser that ends *during* a silence is not restarted,
+which is what stops the chiming. A pause mid-sentence still restarts, because
+that is not the end.
+
+What happens then differs by surface, deliberately:
+
+- **Desktop** stops listening. The words stay in the composer, editable, and
+  nothing is sent.
+- **Mobile** moves to `heard` — *"Is that right?"* — with **Send**, **Say
+  more** and **Cancel**. It does not send on its own: a pause mid-thought is
+  common and acting on half a sentence is worse than one more tap. *Say more*
+  carries on from what is already there rather than starting over.
+
 ### Errors, in words
 
 `not-allowed` → *"Microphone access is blocked. Allow microphone access in your
