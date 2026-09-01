@@ -49,6 +49,8 @@ const state = {
   note: null,
   report: null,
   unavailable: new Set(),
+  /** Action id → the server's sentence for why it cannot run. */
+  unavailableWhy: new Map(),
 };
 
 /* ── The composer ─────────────────────────────────────────────────────── */
@@ -160,10 +162,22 @@ async function answerQuestion(optionId, label) {
 
 async function markUnavailable() {
   state.unavailable = new Set();
+  state.unavailableWhy = new Map();
   try {
     const c = await api.capabilities({ force: true });
     const have = new Set((c.capabilities ?? []).map((x) => x.id));
-    for (const a of state.actions) if (!have.has(a.capability)) state.unavailable.add(a.id);
+    /* Why each missing one is missing, said in the server's own words. A
+       module that is off and a module that can be read but not written are
+       different situations and deserve different sentences. */
+    const why = new Map();
+    for (const m of c.readOnly ?? []) why.set(m.id, m.reason);
+    for (const m of c.unavailable ?? []) why.set(m.id, m.reason);
+    for (const a of state.actions) {
+      if (have.has(a.capability)) continue;
+      state.unavailable.add(a.id);
+      const reason = why.get(a.module);
+      if (reason) state.unavailableWhy.set(a.id, reason);
+    }
   } catch { /* a blip must not disable a proposal */ }
 }
 
@@ -182,7 +196,7 @@ async function clear() {
   Object.assign(state, {
     conversationId: null, turnId: null, version: 0, history: [], actions: [],
     answer: null, understood: '', sources: [], clarification: null, note: null, report: null,
-    unavailable: new Set(),
+    unavailable: new Set(), unavailableWhy: new Map(),
   });
   close();
 }
@@ -212,6 +226,7 @@ function render() {
       ${!state.report && !state.busy
     ? state.actions.map((a) => actionCardHtml(a, {
       unavailable: state.unavailable.has(a.id),
+      reason: state.unavailableWhy?.get(a.id) ?? null,
     })).join('') : ''}
     </div>
 

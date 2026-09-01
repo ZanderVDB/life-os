@@ -99,6 +99,69 @@ export function fieldsOf(schema: z.ZodTypeAny, depth = 0): Set<string> {
   return out;
 }
 
+/**
+ * The payload shape, in a line a planner can copy.
+ *
+ * ── The failure this removes ─────────────────────────────────────────────
+ *
+ * The planner was given a capability's id, module, description and risk, and
+ * NOT its schema. So it had to infer the field names from an English sentence,
+ * which works for `title` and `dueDate` because those are the obvious words —
+ * and fails for `task.complete`, whose description reads "mark a task done"
+ * and mentions no field at all. The model proposed the right capability
+ * against the right task and left out `id`, repeatedly, because nothing had
+ * ever told it there was one.
+ *
+ * Generated FROM the Zod schema rather than written beside it, so it cannot
+ * drift: change the capability's input and the sentence the planner reads
+ * changes with it. This is the same principle as taking the capability list
+ * from the registry — the machine-checked thing is also the described thing.
+ */
+export function signatureOf(schema: z.ZodTypeAny, depth = 0): unknown {
+  const def = (schema as any)?._def;
+  if (!def || depth > 3) return 'value';
+  const kind = def.typeName;
+
+  switch (kind) {
+    case 'ZodObject': {
+      const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
+      const out: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(shape ?? {})) {
+        const inner = signatureOf(value as z.ZodTypeAny, depth + 1);
+        const optional = (value as any)?.isOptional?.() ?? false;
+        out[key] = optional && typeof inner === 'string' ? `${inner}, optional` : inner;
+      }
+      return out;
+    }
+    case 'ZodString': {
+      const checks = def.checks ?? [];
+      if (checks.some((c: any) => c.kind === 'uuid')) return 'uuid from CONTEXT';
+      if (checks.some((c: any) => c.kind === 'datetime')) return 'ISO datetime with offset';
+      const re = checks.find((c: any) => c.kind === 'regex')?.regex?.source ?? '';
+      if (re.includes('\\d{4}')) return 'YYYY-MM-DD';
+      if (re.includes('\\d{2}:')) return 'HH:MM';
+      return 'string';
+    }
+    case 'ZodNumber': return 'number';
+    case 'ZodBoolean': return 'boolean';
+    case 'ZodEnum': return (def.values ?? []).join('|');
+    case 'ZodNativeEnum': return 'enum';
+    case 'ZodArray': return [signatureOf(def.type, depth + 1)];
+    case 'ZodRecord': return 'object';
+    case 'ZodOptional': case 'ZodNullable': case 'ZodDefault':
+      return signatureOf(def.innerType, depth + 1);
+    case 'ZodEffects': return signatureOf(def.schema, depth + 1);
+    case 'ZodIntersection': {
+      const left = signatureOf(def.left, depth + 1);
+      const right = signatureOf(def.right, depth + 1);
+      return (typeof left === 'object' && typeof right === 'object')
+        ? { ...(left as object), ...(right as object) } : left;
+    }
+    case 'ZodUnion': return signatureOf((def.options ?? [])[0], depth + 1);
+    default: return 'value';
+  }
+}
+
 /** Payload values, flattened through `changes` / `draft`, for value checks. */
 function flatten(payload: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -171,6 +234,34 @@ export function validatePlan(input: ValidateInput): Finding[] {
   for (const [index, a] of input.actions.entries()) {
     const schema = input.schemas.get(a.capability);
     if (!schema) continue;                        // resolved elsewhere; not this pass's job
+
+    /* ── 0. Does the payload even fit the schema ────────────────────────
+     *
+     * This used to be checked further downstream, where a failure could only
+     * become a note: "Complete 'Price three options' — no id was given."
+     * True, unhelpful, and avoidable — the model had the task in front of it
+     * and left the field out.
+     *
+     * Checked HERE it becomes repairable, and the repair pass already knows
+     * how to hand a model one precise complaint. Which is the whole point of
+     * having a repair pass: "you left out the id" is exactly the kind of
+     * mistake a second attempt fixes, and exactly the kind a user should
+     * never have to see. */
+    const shape = schema.safeParse(a.payload ?? {});
+    if (!shape.success) {
+      const issue = shape.error.issues[0];
+      const field = issue?.path?.filter((x) => typeof x === 'string').join('.') ?? '';
+      const detail = issue?.message === 'Required' && field
+        ? `no ${field} was given`
+        : `${field ? `${field}: ` : ''}${(issue?.message ?? 'invalid').toLowerCase()}`;
+      add(index, 'payload_invalid',
+        `“${a.title}” does not fit ${a.capability}: ${detail}. `
+        + 'Every required field must be present, and any id must come from CONTEXT.');
+      /* The rest of the checks read values that are not there. Reporting six
+         consequences of one cause is noise. */
+      continue;
+    }
+
     const fields = fieldsOf(schema);
     const values = flatten(a.payload ?? {});
     /* The card's OWN words — never the turn's overall answer, which may be
@@ -234,12 +325,14 @@ export function validatePlan(input: ValidateInput): Finding[] {
          sees after they have already agreed to the change. */
       const known = [...input.knownIds].some((k) => k.endsWith(`:${v}`));
       if (!known) {
+        /* Repairable, but not by finding the id — it does not exist. The
+           honest second attempt is a DIFFERENT action: create the thing, or
+           say plainly that it could not be found. The brief says so. */
         add(index, 'unknown_id',
           `“${a.title}” names ${key}=${v}, which was not in the retrieved context. `
-          + 'Ids must come from context. If the thing was not found, say so instead.',
-          /* Not repairable by re-asking: the id is absent because the thing was
-             not retrieved, and another attempt cannot invent it truthfully. */
-          false);
+          + 'Ids must come from CONTEXT. If the thing is not there it does not exist: '
+          + 'use the create capability instead, or drop the action and say in "answer" '
+          + 'that you could not find it. Do not invent another id.');
       }
     }
 

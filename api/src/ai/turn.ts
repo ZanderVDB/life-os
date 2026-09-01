@@ -239,7 +239,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     ? {
       pool: [] as ContextSource[], used: new Set<string>(),
       failed: [] as { capability: string; reason: string }[],
-      queries: [] as string[], broadened: false,
+      queries: [] as string[], rankQuery: '', broadened: false,
     }
     : await retrieve(deps, ctx, {
       text,
@@ -248,7 +248,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     });
 
   const ranked = amendOnly ? [] : rank(retrieval.pool, {
-    query: retrieval.queries.join(' '),
+    query: retrieval.rankQuery,
     today: request.today,
     surface: request.surface?.entity ?? null,
   }, 24);
@@ -428,28 +428,47 @@ async function retrieve(
   const phrases = (opts.queries.length ? opts.queries : [opts.text]).slice(0, 5);
   const words = tokens(phrases.join(' '));
 
-  /* ── Stems and number, crudely ───────────────────────────────────────
-   * "I finished pricing three options" has to find the task called "Price
-   * three options", and `%pricing%` does not match it. A real stemmer is a
-   * dependency and a vocabulary; a prefix of a long word is neither, and it
-   * catches the English inflections that actually come up. Singular/plural is
-   * the other half of the same problem: "invoices" has to find "Invoice". A
-   * wrong extra hit costs one row in a ranked list; a miss costs the whole
-   * action. */
-  const variants = new Set<string>();
-  for (const w of words) {
-    if (w.length >= 6) variants.add(w.slice(0, Math.max(4, w.length - 3)));
-    if (w.endsWith('ies') && w.length > 4) variants.add(`${w.slice(0, -3)}y`);
-    else if (w.endsWith('es') && w.length > 4) variants.add(w.slice(0, -2));
-    else if (w.endsWith('s') && !w.endsWith('ss') && w.length > 3) variants.add(w.slice(0, -1));
-    else variants.add(`${w}s`);
-  }
+  /* ── Shorter is broader, so search the shortest safe form ────────────
+   *
+   * `ILIKE '%x%'` is substring matching, which means a SHORTER query matches
+   * everything a longer one does and more. Two consequences, and the second
+   * one was costing real hits:
+   *
+   *   · a prefix of a long word covers its inflections. "I finished pricing
+   *     three options" has to find the task called "Price three options", and
+   *     `%pricing%` does not match it while `%pric%` does. A real stemmer is a
+   *     dependency and a vocabulary; a prefix is neither.
+   *   · a query that CONTAINS another query is redundant. `%invoice%` already
+   *     matches "Invoices", so searching for the plural as well buys nothing —
+   *     and it used to buy nothing while occupying one of a fixed number of
+   *     slots. On a long sentence the slots filled with whole words and the
+   *     stems were cut off the end, which is how "pricing" failed to find
+   *     "Price".
+   *
+   * So each word contributes ONE query in its broadest safe form, anything
+   * containing another query is dropped, and the budget goes on distinct
+   * meanings rather than on spellings of the same one. */
+  const broadest = (w: string) => {
+    if (w.length >= 6) return w.slice(0, Math.max(4, w.length - 3));
+    if (w.endsWith('s') && !w.endsWith('ss') && w.length > 3) return w.slice(0, -1);
+    return w;
+  };
+  const candidates = [...new Set([
+    ...words.map(broadest),
+    /* Kept only when short enough to be a real name rather than a sentence.
+       An exact title is the strongest ranking signal there is. */
+    ...phrases.filter((q) => q.trim().length >= 2 && q.trim().split(/\s+/).length <= 3)
+      .map((q) => q.trim().toLowerCase()),
+  ])];
+  const queries = candidates
+    .filter((q) => q.length >= 2
+      && !candidates.some((other) => other !== q && other.length < q.length && q.includes(other)))
+    .slice(0, 14);
 
-  const queries = [...new Set([
-    ...phrases.filter((q) => q.trim().length >= 2 && q.trim().split(/\s+/).length <= 4),
-    ...words,
-    ...variants,
-  ])].slice(0, 12);
+  /* Ranking sees the ORIGINAL words. A stem is right for a substring search
+     and wrong for token overlap: "pric" is not a word and matches nothing in
+     a title's own tokens. */
+  const rankQuery = [...phrases, ...words].join(' ');
 
   const used = new Set<string>();
   const failed: { capability: string; reason: string }[] = [];
@@ -500,25 +519,27 @@ async function retrieve(
      the question is about and then says it would need to read it, which is
      both true and useless. So the top few hits are read in full, which is what
      a person would have clicked. */
-  await expand(deps, ctx, seen, used, queries.join(' '), 6);
+  await expand(deps, ctx, seen, used, rankQuery, 6);
 
   /* ── The low-result fallback ─────────────────────────────────────────
-     A request that acts on something — "complete the invoice", "move the
-     handover" — asserts that the something exists. When a targeted pass found
-     almost nothing, the likely explanation is that the words in the request
-     are not the words in the title, not that the workspace is empty. Going
-     broad costs one more round of reads, and it is the difference between "I
-     could not find it" and finding it. */
-  const implied = /\b(complete|finish|finished|done|move|update|change|reschedule|delete|remove|archive|link|remaining|left|outstanding)\b/i
-    .test(opts.text);
+     When a targeted pass found almost nothing, the likely explanation is that
+     the words in the request are not the words in any title — not that the
+     workspace is empty. Going broad costs one more round of parameterless
+     reads and is the difference between "I could not find it" and finding it.
+
+     It used to require a change verb in the request. That was wrong in the
+     most ordinary case there is: "what is on my Today board?" contains no
+     verb, matches no title, and so retrieved nothing at all and was answered
+     "I cannot see your Today board". Suspiciously little is suspicious
+     whatever the sentence was doing. */
   let broadened = false;
-  if (seen.size < 3 && implied) {
+  if (seen.size < 3) {
     broadened = true;
     await run(queries.slice(0, 6), 3, 2);
-    await expand(deps, ctx, seen, used, queries.join(' '), 4);
+    await expand(deps, ctx, seen, used, rankQuery, 4);
   }
 
-  return { pool: [...seen.values()], used, failed, queries, broadened };
+  return { pool: [...seen.values()], used, failed, queries, rankQuery, broadened };
 }
 
 /** Read the strongest hits in full, so their structural children come too. */
@@ -661,6 +682,13 @@ async function buildActions(
 function humanFinding(f: Finding, title: string): string {
   const what = title ? `“${title}”` : 'one change';
   switch (f.code) {
+    case 'payload_invalid': {
+      /* The one case where the specific detail beats a category. "no id was
+         given" tells somebody what happened; "did not hold together" does
+         not. */
+      const detail = f.detail.split(': ').slice(1).join(': ').split('.')[0];
+      return detail ? `${what} — ${detail}` : `${what} was missing something it needs`;
+    }
     case 'date_missing': case 'date_not_supported':
       return `${what} named a date the change would not actually have set`;
     case 'time_missing':

@@ -462,12 +462,25 @@ function aiPanel(state) {
 
   return `
     ${candidates.length ? sec('Noticed recently', `
-      ${candidates.map((c) => `<div class="set-row set-item" data-cand="${c.id}">
+      ${candidates.map((c) => {
+    /* A candidate that CONTRADICTS something already believed says so. It is
+       the same sentence otherwise, and "remember this" reads very differently
+       when the thing it replaces is on the line below it. A pinned belief is
+       not replaced at all — the button would refuse, so the row explains
+       itself rather than failing when pressed. */
+    const replaces = c.supersedesId
+      ? memories.find((m) => m.id === c.supersedesId) : null;
+    return `<div class="set-row set-item" data-cand="${c.id}">
         <span class="set-item-dot"></span>
-        <span class="set-item-name set-cand-t">${esc(c.fact)}</span>
-        <button class="set-item-go" data-cand-yes="${c.id}">Remember</button>
+        <span class="set-item-name set-cand-t">${esc(c.fact)}
+          ${replaces ? `<span class="set-cand-sub">${replaces.isPinned
+    ? `Contradicts something you pinned: “${esc(replaces.fact)}”. Unpin it first.`
+    : `Would replace: “${esc(replaces.fact)}”`}</span>` : ''}</span>
+        <button class="set-item-go" data-cand-yes="${c.id}"
+          ${replaces?.isPinned ? 'disabled' : ''}>Remember</button>
         <button class="set-item-x" data-cand-no="${c.id}">No</button>
-      </div>`).join('')}`,
+      </div>`;
+  }).join('')}`,
     'Life OS noticed these while you were talking to it. Nothing is remembered '
       + 'until you say so.') : ''}
 

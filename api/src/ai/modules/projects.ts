@@ -7,7 +7,7 @@
  * overwrote what the user had chosen. The rule is stated to the planner and
  * enforced by the service underneath.
  */
-import { and, desc, eq, ilike } from 'drizzle-orm';
+import { and, desc, eq, ilike, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { projects, tasks } from '../../db/schema.js';
 import {
@@ -72,6 +72,29 @@ export const projectsModule: AiModule = {
         const rows = await ctx.db.select().from(projects).where(and(
           eq(projects.workspaceId, ctx.request.workspaceId),
           ilike(projects.title, `%${input.query}%`),
+        )).orderBy(desc(projects.updatedAt)).limit(input.limit);
+        return rows.map((r) => source(r));
+      },
+    },
+    {
+      /** The projects, with no search term. "What am I working on." */
+      id: 'project.list',
+      module: 'projects',
+      kind: 'read',
+      label: 'The projects',
+      description: 'The live projects, most recently touched first. With no arguments this '
+        + 'excludes completed and archived ones. status and focus are returned separately.',
+      input: z.object({
+        status: z.string().max(20).optional(),
+        includeArchived: z.boolean().default(false),
+        limit: z.number().int().min(1).max(40).default(20),
+      }).strict(),
+      risk: 'safe',
+      async run(ctx, input: { status?: string; includeArchived: boolean; limit: number }) {
+        const rows = await ctx.db.select().from(projects).where(and(
+          eq(projects.workspaceId, ctx.request.workspaceId),
+          ...(input.includeArchived ? [] : [isNull(projects.archivedAt)]),
+          ...(input.status ? [eq(projects.status, input.status)] : []),
         )).orderBy(desc(projects.updatedAt)).limit(input.limit);
         return rows.map((r) => source(r));
       },

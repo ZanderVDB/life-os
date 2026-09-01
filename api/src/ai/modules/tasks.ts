@@ -81,6 +81,59 @@ const searchCap: Capability = {
   },
 };
 
+/**
+ * The board, without a search term.
+ *
+ * "What is on my Today board?" contains no word that appears in any title, so
+ * every search returned nothing and the assistant answered "I cannot see your
+ * Today board" — about the most ordinary question a command centre gets.
+ * Search answers "which of these is X"; this answers "what is there", and they
+ * are not the same question.
+ *
+ * It accepts an EMPTY input on purpose. That is what makes it reachable from
+ * the context engine's broad pass, which is where a request with no usable
+ * search term ends up.
+ */
+const listCap: Capability = {
+  id: 'task.list',
+  module: 'tasks',
+  kind: 'read',
+  label: 'The board',
+  description: 'The open tasks, newest board first. With no arguments this is what the user '
+    + 'would see on Today, This week, This month and Future. Use it for "what is on today", '
+    + '"what is due", "what am I working on" - anything that names no particular task.',
+  input: z.object({
+    bucket: z.enum(BUCKETS).optional(),
+    includeCompleted: z.boolean().default(false),
+    limit: z.number().int().min(1).max(60).default(30),
+  }).strict(),
+  risk: 'safe',
+  async run(ctx: CapabilityCtx, input: { bucket?: string; includeCompleted: boolean; limit: number }) {
+    const ws = ctx.request.workspaceId;
+    const rows = await ctx.db.select().from(tasks).where(and(
+      eq(tasks.workspaceId, ws),
+      isNull(tasks.archivedAt),
+      ...(input.bucket ? [eq(tasks.bucket, input.bucket)] : []),
+      ...(input.includeCompleted ? [] : [eq(tasks.status, 'open')]),
+    )).orderBy(asc(tasks.position)).limit(input.limit);
+    if (!rows.length) return [];
+    const titles = new Map<string, string>();
+    const ids = [...new Set(rows.map((r) => r.projectId).filter(Boolean))] as string[];
+    if (ids.length) {
+      for (const p of await ctx.db.select({ id: projects.id, title: projects.title })
+        .from(projects).where(and(eq(projects.workspaceId, ws), inArray(projects.id, ids)))) {
+        titles.set(p.id, p.title);
+      }
+    }
+    return rows.map((r) => {
+      const src = source(r, r.projectId ? titles.get(r.projectId) : null);
+      /* The bucket is part of the answer here in a way it is not in a search
+         result: "what is on today" is a question ABOUT the bucket. */
+      return { ...src, summary: [r.bucket, src.summary].filter(Boolean).join(' · ') };
+    });
+  },
+};
+
 const readCap: Capability = {
   id: 'task.read',
   module: 'tasks',
@@ -298,7 +351,7 @@ export const tasksModule: AiModule = {
   ],
   available: () => ({ enabled: true }),
   capabilities: [
-    searchCap, readCap, createCap, updateCap, completeCap, scheduleCap,
+    searchCap, listCap, readCap, createCap, updateCap, completeCap, scheduleCap,
     archiveCap, moveCap, addStepCap, updateStepCap, removeStepCap,
   ],
 };

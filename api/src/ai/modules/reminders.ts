@@ -7,7 +7,7 @@
  * routing it to Google would put a zero-length appointment in front of
  * everyone who shares that calendar.
  */
-import { and, asc, eq, ilike } from 'drizzle-orm';
+import { and, asc, eq, gte, ilike, lte, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { reminders } from '../../db/schema.js';
 import {
@@ -64,6 +64,40 @@ export const remindersModule: AiModule = {
         const rows = await ctx.db.select().from(reminders).where(and(
           eq(reminders.workspaceId, ctx.request.workspaceId),
           ilike(reminders.title, `%${input.query}%`),
+        )).orderBy(asc(reminders.dueDate)).limit(input.limit);
+        return rows.map((r) => source(r));
+      },
+    },
+    {
+      /**
+       * What is coming up, with no search term.
+       *
+       * A Today board is tasks AND reminders, and there was no way to ask for
+       * the second half: `reminder.search` needs words, and "what am I being
+       * reminded about" contains none that appear in a title.
+       */
+      id: 'reminder.list',
+      module: 'reminders',
+      kind: 'read',
+      label: 'Upcoming reminders',
+      description: 'Reminders due soon, earliest first. With no arguments this is the next '
+        + 'fortnight. Use it for "what is coming up" and "what am I being reminded about".',
+      input: z.object({
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        limit: z.number().int().min(1).max(40).default(20),
+      }).strict(),
+      risk: 'safe',
+      async run(ctx, input: { from?: string; to?: string; limit: number }) {
+        const from = input.from ?? ctx.request.today;
+        const to = input.to ?? new Date(
+          new Date(`${ctx.request.today}T00:00:00Z`).getTime() + 14 * 86400000,
+        ).toISOString().slice(0, 10);
+        const rows = await ctx.db.select().from(reminders).where(and(
+          eq(reminders.workspaceId, ctx.request.workspaceId),
+          ne(reminders.status, 'completed'),
+          gte(reminders.dueDate, from),
+          lte(reminders.dueDate, to),
         )).orderBy(asc(reminders.dueDate)).limit(input.limit);
         return rows.map((r) => source(r));
       },

@@ -563,6 +563,8 @@
   color:var(--warn);line-height:1.45}
 .ap-warn svg{flex-shrink:0;margin-top:1px}
 .ap-gone{color:var(--muted)}
+/* The sentence under a card that cannot run. Why, not just no. */
+.ap-gone-why{margin:0;font-size:12.5px;line-height:1.45;color:var(--muted)}
 
 /* Where an answer came from. One quiet line of chips, not a citation report. */
 .ap-src{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:2px}
@@ -2329,7 +2331,12 @@
 .set-mem-cat{font-size:10.5px;font-weight:700;letter-spacing:.09em;
   text-transform:uppercase;color:var(--muted)}
 .set-mem .set-item-name{font-size:14px}
-.set-cand-t{flex:1;font-size:14px;color:var(--text-2);min-width:0}
+.set-cand-t{flex:1;font-size:14px;color:var(--text-2);min-width:0;
+  display:flex;flex-direction:column;gap:3px}
+/* What this would replace, when it contradicts something already believed.
+   The sentence on its own reads as news; with this line it reads as a
+   decision, which is what it is. */
+.set-cand-sub{font-size:12px;line-height:1.35;color:var(--muted)}
 
 /* What was asked for and could not be prepared. A note, not an error: the
    user said four things and got three cards, and something has to account

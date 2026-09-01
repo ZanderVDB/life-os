@@ -65,7 +65,11 @@ export type PlanInput = {
   text: string;
   request: AiRequestContext;
   /** Exactly what may be proposed, from the registry. Never a static list. */
-  capabilities: { id: string; module: string; kind: string; description: string; risk: string }[];
+  capabilities: {
+    id: string; module: string; kind: string; description: string; risk: string;
+    /** The payload shape, generated from the capability's own Zod schema. */
+    payload?: unknown;
+  }[];
   /** The module rules the plan has to respect. */
   rules: { module: string; rules: string[] }[];
   /**

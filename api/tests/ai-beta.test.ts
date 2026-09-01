@@ -30,7 +30,7 @@ import { MODULES } from '../src/ai/modules/index.js';
 import { ProviderRouter, deterministicProvider } from '../src/ai/provider.js';
 import type { AiProvider } from '../src/ai/provider.js';
 import { tryFastPath, isMiss, resolveDate } from '../src/ai/fastpath.js';
-import { validatePlan, fieldsOf } from '../src/ai/validate.js';
+import { validatePlan, fieldsOf, signatureOf } from '../src/ai/validate.js';
 import { structure, fromCandidates } from '../src/ai/clarify.js';
 import { rankMemories } from '../src/ai/ranking.js';
 import * as memory from '../src/ai/memory.js';
@@ -325,6 +325,60 @@ test('retrieval: a thin first pass is widened before giving up', async () => {
     'the broad pass found nothing the narrow one had missed');
 });
 
+test('retrieval: "what is on today" is answerable, though it names nothing', async () => {
+  /* The most ordinary question a command centre gets, and the one that used to
+     retrieve NOTHING: it contains no word that appears in any title, so every
+     search returned empty and the assistant said it could not see the board.
+     Search answers "which of these is X"; a list answers "what is there". */
+  const { call, db, ws } = await setup([{ answer: 'ok', actions: [] }]);
+  await db.insert(tasks).values([
+    { workspaceId: ws, title: 'Reconcile against the bank', bucket: 'today' },
+    { workspaceId: ws, title: 'Pay the deposit', bucket: 'today' },
+    { workspaceId: ws, title: 'File the return', bucket: 'week' },
+  ]);
+
+  const r = await call('POST', '/ai/turn', { text: 'What is on my Today board?' });
+  assert.equal(r.status, 200);
+  const titles = lastPlanInput.sources.map((s: any) => s.title);
+  assert.ok(titles.includes('Reconcile against the bank'), 'the board never reached the planner');
+  assert.ok(titles.includes('Pay the deposit'));
+  assert.equal(r.body.metrics.broadened, true, 'a question with no search term did not widen');
+
+  /* Directly, too: these answer with no arguments at all, which is what makes
+     them reachable from the broad pass. */
+  const listed = await call('POST', '/ai/context', { level: 3, limit: 40 });
+  assert.ok(listed.body.used.includes('task.list'));
+  assert.ok(listed.body.used.includes('reminder.list'));
+  assert.ok(listed.body.used.includes('project.list'));
+});
+
+test('the planner is told each capability payload shape, from the schema', async () => {
+  /* Why this exists: the planner was given a capability id, description and
+     risk but not its schema, so it inferred field names from an English
+     sentence. That works for `title` and fails for `id` - task.complete
+     describes no field at all, and the model kept proposing it against the
+     right task with no id in the payload. */
+  const shape = signatureOf(z.object({
+    id: z.string().uuid(),
+    done: z.boolean().default(true),
+    when: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    changes: z.object({ title: z.string().optional() }),
+  })) as Record<string, unknown>;
+  assert.equal(shape['id'], 'uuid from CONTEXT');
+  /* A defaulted field IS optional to the caller, and saying so is right:
+     the planner may omit it. */
+  assert.equal(shape['done'], 'boolean, optional');
+  assert.equal(shape['when'], 'YYYY-MM-DD, optional');
+  assert.deepEqual(shape['changes'], { title: 'string, optional' });
+
+  const { call } = await setup([{ actions: [] }]);
+  await call('POST', '/ai/turn', { text: 'what is happening' });
+  const complete = lastPlanInput.capabilities.find((c: any) => c.id === 'task.complete');
+  assert.ok(complete.payload?.id, 'the planner cannot know task.complete needs an id');
+  /* Generated FROM the schema, so it cannot drift from what is enforced. */
+  assert.match(String(complete.payload.id), /uuid/);
+});
+
 /* ══ 3. Structured clarification ═════════════════════════════════════════ */
 
 test('clarification: options name entities, and choosing one continues the request',
@@ -576,7 +630,7 @@ test('consistency: the checks are deterministic and read the real schemas', () =
     schemas, knownIds: known, today: '2026-09-01',
   })[0]?.code, 'date_not_supported');
 
-  // An id nobody retrieved, which no amount of asking again can conjure.
+  // An id nobody retrieved. The repair is a DIFFERENT action, not a better id.
   const invented = validatePlan({
     actions: [{
       capability: 'habit.check', title: 'Tick it',
@@ -585,7 +639,20 @@ test('consistency: the checks are deterministic and read the real schemas', () =
     schemas, knownIds: known, today: '2026-09-01',
   })[0]!;
   assert.equal(invented.code, 'unknown_id');
-  assert.equal(invented.repairable, false, 'a missing id was treated as re-askable');
+  assert.match(invented.detail, /create capability instead|could not find it/,
+    'the brief does not say what the honest second attempt is');
+
+  /* A payload that does not fit the schema at all. Caught HERE, where the
+     repair pass can hand the model one precise complaint, rather than
+     downstream where it could only ever become a note. */
+  const shapeless = validatePlan({
+    actions: [{ capability: 'habit.check', title: 'Tick the walk', payload: {} }],
+    schemas, knownIds: known, today: '2026-09-01',
+  });
+  assert.equal(shapeless.length, 1, 'one cause produced several findings');
+  assert.equal(shapeless[0]!.code, 'payload_invalid');
+  assert.equal(shapeless[0]!.repairable, true);
+  assert.match(shapeless[0]!.detail, /no id was given/);
 });
 
 /* ══ 6. Modular capability registration ══════════════════════════════════ */

@@ -167,7 +167,12 @@ export async function gather(
      * design, which is why nothing reaches it by accident — a caller asks for
      * level 3, or the low-result fallback in `turn.ts` escalates to it after
      * a targeted pass came back suspiciously empty. */
-    const broad = caps.filter((x) => x.kind === 'read' && x.input.safeParse({}).success);
+    /* Searches too, not only reads. `event.search` takes an optional query and
+       answers "what is coming up" when given none; excluding it because of its
+       KIND meant a broad pass could not see the calendar at all. What matters
+       is whether a capability will answer with no arguments. */
+    const broad = caps.filter((x) => (x.kind === 'read' || x.kind === 'search')
+      && x.input.safeParse({}).success);
     const rows = await Promise.all(broad.map((c) => call(c.id, {})));
     for (const r of rows) out.push(...r);
   }

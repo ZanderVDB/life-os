@@ -530,11 +530,21 @@ async function answerQuestion(optionId) {
  */
 async function markUnavailable() {
   session.unavailable = new Set();
+  session.unavailableWhy = new Map();
   try {
     const c = await api.capabilities({ force: true });
     const have = new Set((c.capabilities ?? []).map((x) => x.id));
+    /* Why each missing one is missing, said in the server's own words. A
+       module that is off and a module that can be read but not written are
+       different situations and deserve different sentences. */
+    const why = new Map();
+    for (const m of c.readOnly ?? []) why.set(m.id, m.reason);
+    for (const m of c.unavailable ?? []) why.set(m.id, m.reason);
     for (const a of session.actions) {
-      if (!have.has(a.capability)) session.unavailable.add(a.id);
+      if (have.has(a.capability)) continue;
+      session.unavailable.add(a.id);
+      const reason = why.get(a.module);
+      if (reason) session.unavailableWhy.set(a.id, reason);
     }
   } catch { /* leave everything enabled rather than disabling on a blip */ }
 }
@@ -557,6 +567,7 @@ function renderReview() {
     ${session.report ? resultsHtml(session.report) : ''}
     ${!session.report ? list.map((a) => actionCardHtml(a, {
     unavailable: session.unavailable.has(a.id),
+    reason: session.unavailableWhy?.get(a.id) ?? null,
   })).join('') : ''}
     ${!session.report && !list.length && !session.answer && !session.clarification
     ? '<p class="asst-empty">Nothing to change.</p>' : ''}

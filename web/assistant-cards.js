@@ -77,7 +77,7 @@ const glyphFor = (action) => PRESENTATION[action.capability]?.glyph ?? 'sparkle'
  * what was meant; it just cannot be run, and says so instead of offering a
  * button that would fail.
  */
-export function actionCardHtml(action, { unavailable = false } = {}) {
+export function actionCardHtml(action, { unavailable = false, reason = null } = {}) {
   const off = !action.enabled || unavailable;
   return `<article class="ap ${off ? 'is-off' : ''} ${action.important ? 'is-important' : ''}"
       data-action="${esc(action.id)}">
@@ -94,6 +94,12 @@ export function actionCardHtml(action, { unavailable = false } = {}) {
 
     <p class="ap-title">${esc(action.title)}</p>
     ${action.summary ? `<p class="ap-sum">${esc(action.summary)}</p>` : ''}
+    ${/* Why, not just no. "Capability unavailable" tells nobody anything;
+          "I can see that meeting, but calendar changes aren't available right
+          now" is the same fact and is actionable. The sentence comes from the
+          SERVER, which is the only thing that knows whether Life OS never had
+          this, the account is disconnected, or the grant cannot write. */ ''}
+    ${unavailable && reason ? `<p class="ap-gone-why">${esc(reason)}</p>` : ''}
 
     ${action.editable?.length ? `<div class="ap-fields">${action.editable.map((f) => `
       <button type="button" class="ap-field" data-field="${esc(action.id)}" data-key="${esc(f.key)}">

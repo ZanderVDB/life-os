@@ -82,15 +82,28 @@ drift, and the one that drifted would be the one somebody trusted.
 ```
 USER
   → voice or text, plus the surface they were on
-  → CONTEXT ENGINE     level 1 surface · level 2 targeted + traversal · level 3 broad
-  → PLANNER            capabilities and rules from the registry, sources, memory
+  │
+  ├─ FAST PATH ────── an obvious command, parsed deterministically. No model.
+  ├─ AMEND ────────── a correction to a proposal still on the table.
+  └─ PLAN ─────────── everything else:
+       → CONTEXT ENGINE   level 1 surface · level 2 targeted + traversal · level 3 broad
+       → PLANNER          capabilities and rules from the registry, sources, memory
+       → CONSISTENCY      deterministic: does the card say what the payload does
+  │
   → PROPOSAL SET       actions, assumptions, warnings, confidence
-  → USER EDITS         switch off, change a field, ask a question back
+  → USER EDITS         switch off, change a field, answer a question
   → CONFIRMATION       counted, and important actions accepted one at a time
   → EXECUTOR           validates each payload, resolves each capability
   → APPLICATION SERVICES   the same functions the UI calls
   → DOMAIN STATE + RELATIONSHIPS
 ```
+
+**The three routes differ only in how the actions are arrived at.** All of them
+resolve through the registry, pass the capability's own schema, take their risk
+level from the server, are written into the same proposal row, and run only
+through the same confirmation. Nothing downstream knows which route produced a
+proposal — which is what makes "the fast path is as safe as the planner" a
+structural claim rather than a promise.
 
 There is no arrow from listening to writing.
 
@@ -147,7 +160,12 @@ type AiModule = {
   name: string;
   entities: EntityType[];          // relationship types it owns
   rules: string[];                 // planning constraints, in plain words
-  available: (ctx) => { enabled: boolean; reason?: string };
+  available: (ctx) => {
+    enabled: boolean;              // can this module be READ at all
+    reason?: string;               // said to the user when it cannot
+    canMutate?: boolean;           // defaults to `enabled`
+    mutateReason?: string;         // said to the user when writes are off
+  };
   capabilities: Capability[];
 };
 
@@ -157,17 +175,41 @@ type Capability = {
   kind: 'search' | 'read' | 'traverse' | 'mutate';
   label: string;
   description: string;             // written for a planner to read
-  input: ZodType;                  // the only accepted shape
+  input: ZodType;                  // what the PLANNER may propose
+  confirmed?: ZodType;             // what the EXECUTOR runs, if preview replaced it
   risk: 'safe' | 'confirm' | 'important' | 'external';
   run?:     (ctx, input) => Promise<ContextSource[]>;   // reads
-  preview?: (ctx, input) => Promise<{ summary, warnings, handle }>; // plan-time
+  preview?: (ctx, input) => Promise<{ summary, warnings, handle, carry }>; // plan-time
   execute?: (ctx, input) => Promise<ActionResult>;      // writes, after confirmation
 };
 ```
 
 **Availability is asked, not assumed.** Calendar is registered on every
-deployment and unavailable until a Google account is connected with write
-scope. Two workspaces get different answers from the same registry.
+deployment and unavailable until a Google account is connected. Two workspaces
+get different answers from the same registry.
+
+**Read and write availability are separate.** Calendar has three states, not
+two: not connected, connected with a read-only grant, connected and writable.
+The middle one used to collapse into "off" — and a workspace whose grant could
+not write was also told it could not SEE its own calendar, so the assistant
+answered *"I cannot find that meeting"* about a meeting it had already
+retrieved. Now `enabled` governs the module and `canMutate` governs its writes:
+the reads stay, the writes go, and `describe().readOnly` tells the planner
+which is which so *"I can see it, I just cannot change it"* is reachable.
+
+**A previewing capability has two input shapes.** Calendar's plan-time input is
+a whole draft; its preview writes that draft into the mutation ledger and hands
+back a requestId, and what gets confirmed is the requestId. Without `confirmed`
+the executor checked the handle against the schema for a full draft, refused a
+payload that was exactly right, and every assistant calendar write failed
+*after* the user had agreed to it. `carry` is the small, preview-validated
+extra a confirmed payload may keep beside the handle — a task id, so an event
+made for a task ends up linked to it.
+
+**Availability is asked once per request, not once per question.** `available()`
+for Calendar is a database read and a turn asks the registry five times;
+`forRequest(db, request)` memoises it for the life of the request and never
+beyond it.
 
 **Removing a module removes its capabilities everywhere.** Not just from the
 listing — `registry.resolve()` returns null for a capability whose module is
@@ -183,7 +225,15 @@ module it was not registered by, a `mutate` with no `execute` or a read with no
 new proposal kind.
 
 **`GET /ai/capabilities`** is the answer to "what can the assistant currently
-do", and it is the only answer.
+do", and it is the only answer. It reports `modules` (with `writable`),
+`capabilities`, `plannable`, `unavailable` (module off, with the reason) and
+`readOnly` (module readable, writes off, with the reason).
+
+**`registry.explain(ctx, id)`** says WHY, not just no. Three situations reach
+the user as the same silence otherwise: Life OS has never had that; the module
+is not connected; the module is connected and cannot write. Only the third
+makes *"I can see it, I just cannot change it"* the true thing to say, and only
+the registry knows which is which.
 
 ---
 
@@ -215,6 +265,46 @@ flooding the context, and `truncated` says when it did.
 
 `POST /ai/context` exposes the whole thing without a model, which is how the
 levels are exercised and how a wrong answer is traced back to what was read.
+
+### 5a. Searching hard before saying no
+
+The most damaging thing this system can do is say *"that does not exist"* about
+something that does. Four things stop it.
+
+**The query is not the sentence.** Search is `ILIKE '%…%'`, which matches a
+substring, and a phrase almost never is one: *"reconciling against the bank"*
+appears in no title, while `reconcile` and `bank` both do. So the interpreter's
+phrases are expanded into distinctive words, then into:
+
+- **crude stems** — a prefix of any word of six letters or more, so `pricing`
+  finds *Price three options*. A real stemmer is a dependency and a vocabulary;
+  this catches the English inflections that actually come up;
+- **singular and plural** — `invoices` finds *Invoice*, `invoice` finds
+  *Invoices*.
+
+Casing never mattered: `ILIKE` is case-insensitive.
+
+A wrong extra hit costs one row in a ranked list. A miss costs the whole
+action.
+
+**Structural expansion.** A project's own tasks are a FOREIGN KEY, not an
+`item_links` edge, so traversal never reaches them and neither does a text
+search that does not happen to share a word. The best few hits are therefore
+read IN FULL — which is what a person would have clicked. Without it the
+assistant finds the project the question is about and then says it would need
+to read it, which is both true and useless.
+
+**The low-result fallback.** A request that acts on something asserts that the
+something exists. If a targeted pass found almost nothing (fewer than three
+sources) for a request that implies an existing entity, retrieval escalates to
+level 3 and expands again before anything concludes it is absent. One more
+round of reads is the difference between *"I could not find it"* and finding
+it. `metrics.broadened` records when it happened.
+
+**Nothing is fabricated to fill the gap.** If retrieval still cannot identify
+something, the planner has no id for it, `validate.ts` refuses any payload that
+invents one, and the honest answer — *"I could not find that after searching
+your workspace"* — is what remains.
 
 ### 5b. Ranking
 
@@ -258,19 +348,163 @@ with the request it should influence.
 
 ---
 
+### 5c. Concurrency
+
+Searches within a level, traversals from the chosen seeds, and the whole query
+set are all run with `Promise.all`. They are independent reads against
+different tables with no shared state, and running them in series made a turn
+wait for the sum of a dozen round trips to learn what the slowest one alone
+would have told it. Correctness is unchanged: deduplication and ranking happen
+after everything is in.
+
+**Failures are recorded, never swallowed.** A capability whose read throws is
+caught so one bad module cannot fail a turn — but it lands in
+`GatherResult.failed` and in `metrics.retrievalFailures`. That catch used to be
+silent, and it hid a bad array binding that made task search return nothing for
+every task belonging to a project. The only symptom was an assistant that could
+not find things.
+
+---
+
 ## 6. The turn
 
 `api/src/ai/turn.ts`. One request, in order:
 
 ```
+fast path   an obvious command? then none of the below runs at all
 interpret   what is this about, which modules, what words to search for
 gather      surface → targeted search → relationship traversal
+fallback    a second, broader pass when the first found suspiciously little
 rank        24 of ~200 rows, by signals Life OS already has (§5b)
-memory      a bounded, ranked set of durable facts
+memory      the durable facts that are relevant, not all of them
 plan        capabilities and rules FROM THE REGISTRY, sources, memory
+validate    deterministic: does the card say what the payload does (§6c)
 preview     calendar actions go through the mutation ledger, here
 persist     the proposal set is written down; the client gets its id
 ```
+
+### 6a. The fast path
+
+`api/src/ai/fastpath.ts`. *"Add milk"* does not need a model. It needs four
+words parsed and one task proposed, and two model round trips between the
+sentence and the card cost several seconds to reach the answer anybody would
+have written down immediately.
+
+It recognises **four shapes**, and no more:
+
+| | |
+|---|---|
+| create a task | "Add milk", "Add a task called Send invoice" |
+| create a reminder | "Remind me Friday to call Oscar" |
+| complete something | "Complete Morning walk", "Mark Pay the deposit done" |
+| move a task | "Move this to This Week" |
+
+**It is not an attempt to replace the planner with regular expressions.** That
+approach fails the same way every time: the patterns grow, they start matching
+sentences they only half understand, and the failure is silent — a confidently
+wrong action instead of a slower right one.
+
+So every uncertainty **fails closed**, returning a reason and running the
+normal planner:
+
+- a question mark, or an interrogative opening;
+- a conjunction or a comma, which usually means two requests;
+- an amendment marker, or any pending proposal at all;
+- a date word it cannot resolve *exactly* — "next month" falls through;
+- an entity name matching zero things, or more than one;
+- a bare "add" carrying a date, because deadline-or-intention is a judgement;
+- anything the registry will not resolve, or any payload the capability's
+  schema refuses.
+
+An exact title match beats several partial ones: "add milk" should not reach a
+reasoning chain because a task called "buy oat milk" also exists.
+
+**Entity resolution goes through the registry's own search capabilities**, so
+removing a module removes the fast-path shapes that depended on it, with no
+list here to keep in step.
+
+**Instrumentation, internal only.** `metrics.route` is `fast` | `amend` |
+`planner`; `metrics.shape` names the shape that matched; `metrics.fastPathMiss`
+records why the cheap route declined. None of it is shown to the user — a
+proposal card is not the place for a diagnostic.
+
+### 6b. Conversation, pending proposals and follow-up
+
+`ai_conversations` holds a thread; `ai_turns` holds each turn.
+
+**A pending proposal is conversation state.** It has been proposed and not
+confirmed, so it does not exist in the workspace: searching for it finds
+nothing. The assistant used to hear *"actually Saturday"*, search for a haircut
+task, find none, and report that the thing did not exist.
+
+So the planner is given the pending set **as a field, with its payloads** — not
+appended to the request text as a list of titles, because an amendment has to
+name a field to change and a title list cannot say what the fields are. It may
+then return `amend` instead of `actions`:
+
+```json
+{ "amend": [{ "actionId": "a2", "fields": { "dueDate": "2026-09-05" } }] }
+{ "amend": [{ "actionId": "a1", "enabled": false }] }
+```
+
+These cover *"actually Saturday"*, *"change the time to 4"*, *"don't add milk
+after all"* and *"only make the first two changes"*.
+
+**An amendment is an edit, not a new proposal.** It goes through `editTurn` —
+the same validated path the card's own edit control uses: every field checked
+against the capability's schema, the version bumped, the confirmation gate
+untouched. Saying a correction has exactly the power of typing one, and no
+more. The pending row is amended in place, so one question never produces two
+things the user could confirm by accident.
+
+**A short correction skips retrieval entirely.** What it refers to is in the
+proposal, not in the workspace, so there is nothing to search for. That is most
+of the latency of a follow-up.
+
+It is still not a transcript: what a follow-up needs is the last thing proposed
+and the last thing asked, and resending everything forever gets more expensive
+and less accurate with every turn.
+
+### 6c. Plan / payload consistency
+
+`api/src/ai/validate.ts`. A plan can be perfectly valid and still be a lie. The
+schema is satisfied, the capability exists, the id resolves — and the card says
+*"Schedule the haircut Saturday"* over a payload with no date in it. The user
+reads the sentence, agrees to the sentence, and gets the payload.
+
+Schema validation cannot see this: both halves are individually fine and it is
+the RELATIONSHIP between them that is wrong. Nor can the planner be asked to
+check its own work — a model that produced an inconsistency is the least
+reliable judge of whether it did. So this is a **deterministic pass**, between
+planning and the user seeing anything.
+
+| check | what it catches |
+|---|---|
+| `date_missing` | the card names a date the payload does not contain |
+| `date_not_supported` | the card names a date the capability cannot hold |
+| `time_missing` | "move it to 3pm" over a payload that still says 2 |
+| `due_vs_scheduled` | a deadline written into `scheduledAt`, or the reverse |
+| `kind_mismatch` | "move the meeting" proposed as a `create` |
+| `unknown_id` | a uuid that was never in the retrieved context |
+| `ends_before_starts`, `time_without_date`, `empty_change` | impossible on their face |
+
+It is **schema-aware**: `fieldsOf()` reads the capability's own Zod shape,
+including inside `changes` and `draft`, so "the card promises a date and this
+capability has nowhere to put one" is a different finding from "it has a date
+field and left it empty".
+
+It is **conservative on purpose**. Every check fires only on a definite
+disagreement, and only against the action's OWN words — never the turn's
+overall answer, which may be describing a different action in the same request.
+A validator that cries wolf gets the whole stage disabled.
+
+**One repair, then withhold.** A repairable finding earns exactly one more
+planner call, carrying the specific complaint. The retry is kept only if it is
+actually better; a repair that trades one inconsistency for another is not a
+repair. What still disagrees is withheld and named in the turn's note, in words
+about the request rather than about the check. An `unknown_id` is not repairable
+at all: the id is absent because the thing was not retrieved, and asking again
+cannot conjure it truthfully.
 
 The model appears once, in the middle, and is handed data. Everything before it
 decides what it may see; everything after it decides what may happen.
@@ -290,14 +524,6 @@ execution time, where it would have failed *after* the user agreed to it.
 never from the model. A model that classified its own permission level could
 lower it.
 
-### 6b. Conversation and follow-up
-
-`ai_conversations` holds a thread; `ai_turns` holds each turn. A follow-up is
-given the **pending actions by id and title** — a few hundred bytes — so
-*"actually make it Saturday"* has something to be about. It is not given a
-transcript: resending everything forever gets more expensive and less accurate
-with every turn, and a test asserts the follow-up prompt stays under 600
-characters.
 
 Only a turn still `proposed` is pending. One already executed is history, and
 "make it Saturday" about it is a new request.
@@ -504,20 +730,92 @@ is a lie.
 ### Candidates
 
 `ai_memory_candidates`. A model does not write memory — it produces candidates,
-and the service decides: near-duplicates (normalised for case and punctuation)
-are dropped and merely refresh the existing row's `last_used_at`; everything
-else waits to be accepted or rejected. A model that wrote directly would write
-whatever it misheard, and a wrong durable fact is worse than a wrong answer
-because it repeats.
+and the service decides. A model that wrote directly would write whatever it
+misheard, and a wrong durable fact is worse than a wrong answer because it
+repeats.
 
-### The intended UX
+| outcome | when |
+|---|---|
+| `duplicate` | already believed. No new row; the existing one's `last_used_at` is refreshed |
+| `queued` | already waiting. Extraction runs every turn, so the same observation arrives repeatedly and the review screen must not become a list of one sentence |
+| `conflict` | it contradicts something already believed |
+| `pending` | genuinely new. Waits for a yes or no |
 
-A Settings screen — **"What Life OS knows about me"** — listing every live
-memory in the user's own words, grouped by category, each editable, pinnable
-and deletable, with pending candidates offered for a yes or no. `GET
-/ai/memory` is the query behind it. *Not built in Phase 1* — no UI was added,
-because none was needed to validate the service and the prompt asked for no
-unnecessary UI.
+**Contradictions are detected, and that is what protects a pin.** Two facts in
+the same category sharing most of their distinctive words are almost always a
+change of mind rather than two beliefs: *"prefers morning meetings"* and
+*"prefers afternoon meetings"* share every word but one. A contradiction is
+routed at the memory it replaces, which turns accepting it into a **supersede**
+— and supersede refuses to touch a pinned memory. Without this the
+contradiction would arrive as an unrelated new memory, both would sit in the
+list, and the assistant would hold two opposite beliefs with no way to choose.
+
+A stated `supersedesId` is trusted only if it names something live; the model
+can be wrong about ids here as anywhere else. The Settings row says what a
+candidate would replace, and refuses rather than fails when the target is
+pinned.
+
+### Only what is relevant reaches the model
+
+Sending every known fact on every turn is how a memory system stops helping. It
+costs tokens linearly in how much the assistant knows, and it dilutes: a model
+given fourteen facts about somebody, two of which matter, reasons about the
+wrong two often enough to notice.
+
+So a memory is included when it is one of three things:
+
+- **pinned** — the user said it is right, so it is always context;
+- **standing** — a preference, default, routine, work style or communication
+  note. These apply without being named: *"prefers afternoon meetings"* should
+  shape *"find me time with John"* though they share no word. Capped at four,
+  so thirty recorded preferences cannot push out the fact the request is about;
+- **relevant** — it shares a distinctive word with the request.
+
+A profile fact about a person the request does not mention is none of those and
+stays out. What is used is marked `last_used_at`, so the memories that earn
+their place stay near the top.
+
+### Retention
+
+`memory.housekeeping()`, run behind an already-answered turn, at most once every
+six hours per workspace. There is no scheduler in Life OS and adding one for a
+few seconds of deletes would be the wrong shape of solution; a failure is silent
+because nothing depends on it having run.
+
+| removed | after |
+|---|---|
+| rejected candidates | 30 days |
+| pending candidates nobody ever answered | 120 days |
+| finished turns — executed, answered, failed, cancelled, clarifying | 90 days |
+
+**Never removed:** any memory, pinned or not, superseded or not — that is the
+user's own record of what Life OS knows about them and it is theirs to delete;
+an accepted candidate, which is the provenance of a live memory; and a turn
+still awaiting confirmation, however old, because deleting one would silently
+discard something the user was in the middle of.
+
+Finished statuses are listed explicitly rather than by negating `proposed`, so
+a status added later is kept by default rather than deleted by accident.
+Aggressively pruning a personal system is how somebody discovers that something
+they cared about is gone, and there is no version of that story where the
+storage saved was worth it.
+
+### The screen
+
+**Settings → AI & personalisation.** Every live memory in the user's own words,
+grouped by category, each editable in place, pinnable and deletable, with
+pending candidates offered for a yes or no. `GET /ai/memory` is the query
+behind it.
+
+Confidence and provenance are deliberately NOT on the row. They are honest and
+they are internal; a list of sentences each carrying "0.6 · assistant" reads
+like a database, and the person is here to check what is believed about them
+rather than to audit how sure it is.
+
+A candidate that would REPLACE something says so on a second line, and one that
+contradicts a pinned memory says that instead and disables its own Remember
+button — the accept would refuse, and a row that explains itself is better than
+a button that fails when pressed.
 
 ---
 
@@ -536,10 +834,47 @@ Two conditions must both hold before asking: low confidence **and** a
 consequence worth a turn. Low confidence on something cheap and reversible is
 still a proposal — that is what the edit controls are for.
 
-`ProposalSet.clarification` carries the question and the options, each able to
-name an entity so the answer is a choice rather than more prose. The options
-render as buttons; pressing one sends its label as the next turn **in the same
-conversation**, so the server still has everything from the first.
+### Clarification names entities, not labels
+
+The pattern this replaces:
+
+> Assistant: *"Which John meeting?"*
+> User taps **"John — Tuesday 14:00"**
+> Client sends the string `"John — Tuesday 14:00"` as a new request
+> Planner searches for it, finds two again, asks again
+
+The wrong thing there is not the loop. It is that the system KNEW which meeting
+each button stood for, threw that away, and asked a language model to work it
+out a second time from a shorter and worse description. Every disambiguation is
+exactly the case where the id is already in hand.
+
+So (`api/src/ai/clarify.ts`):
+
+- an option carries `{ id, label, detail, ref }` — a stable option id, what to
+  show, a distinguishing line, and the entity it stands for;
+- the set is stored **server-side** on the turn (`ai_turns.clarification`,
+  status `clarifying`);
+- the client sends back `POST /ai/turn/:id/clarify { optionId }` and nothing
+  else;
+- the **original request** is re-run with that entity seeded into retrieval and
+  named to the planner by id;
+- a question can be answered once. A second choice is refused rather than
+  producing a second proposal from one question.
+
+**Refs are verified, never trusted.** The planner may supply `"type:id"`; if it
+names nothing that was actually retrieved it is dropped, exactly as an invented
+payload id would be. Where the planner supplies none, option labels are matched
+back against what retrieval produced — a search over twenty rows, not a guess.
+
+**An option with no ref is legitimate.** *"Leave them open"* and *"Cancel
+them"* are real answers that are not entities, and forcing a ref onto them
+would be inventing one. Those continue with the chosen words, which is the old
+behaviour correctly reserved for the case where there is nothing to name.
+
+`detail` is built from what the source already carries — a date, a project, a
+status — so it costs nothing and it is what lets somebody tell two tasks called
+*Invoice* apart. The UI is a row of ordinary buttons with a second line: this is
+a correctness change, not an interface one.
 
 Both conditions must hold before asking: low confidence **and** a consequence
 worth a turn. The planner is told this explicitly — *"an editable card absorbs
@@ -643,10 +978,32 @@ proposed before the removal fails with a reason instead of running.
 **To disable one per workspace:** return `{ enabled: false, reason }` from
 `available()`. Identical effect, decided per request.
 
-Requirements on a new module: capability ids are `<module>.<verb>`; every
-`mutate` calls an application service and contains no rules; `description` is
-written for a planner and states the limits; `rules` are the sentences that
-stop a plausible plan from being wrong.
+### The checklist for a new AI-compatible module
+
+Everything below is registered in one file. Nothing central changes.
+
+| what | how | why it matters |
+|---|---|---|
+| **read surfaces** | a `read` capability taking `{ id }`, named `<module>.read` | the context engine seeds level 1 from it, and structural expansion reads the top hits in full through it |
+| **searchable entities** | a `search` capability taking `{ query }` | this is the only way words become ids. A module without one cannot be named — habits had no search, and *"complete Morning walk"* found nothing |
+| **actions** | one `mutate` per distinct verb | each is an adapter: validate, call the service, return a result |
+| **schemas** | `input`, plus `confirmed` when `preview` replaces the payload | the plan-time shape and the execution-time shape are not always the same |
+| **confirmation policy** | `risk` on each capability | the server assigns `important` from this. The model never classifies its own permission level |
+| **relationships** | list owned types in `entities` | routes traversal, and lets `moduleForEntity` find the read capability for a ref |
+| **availability** | `available(ctx)`, with `canMutate` where reads and writes can differ | a module present in the build and unusable in this workspace is normal |
+| **planning constraints** | `rules: string[]` | the sentences that stop a plausible plan from being wrong. They belong to the module because the module is what would be damaged by ignoring them |
+
+Requirements: capability ids are `<module>.<verb>`; every `mutate` calls an
+application service and contains **no rules of its own**; `description` is
+written for a planner to read and states the limits.
+
+**This is tested, not asserted.** `ai-beta.test.ts` builds a small module
+inside the test file, registers it through the normal array, and confirms it
+reaches `GET /ai/capabilities`, the planner's capability list, the planner's
+rules, and the executor — with no other file edited. The same suite removes
+Habits and confirms its capabilities vanish from all three, and puts Calendar
+into its read-only state and confirms the reads survive while the writes do
+not.
 
 ---
 
@@ -685,21 +1042,58 @@ stop a plausible plan from being wrong.
     the capability's `risk`.
 14. **A confirmed turn is immutable.** Editing one is refused; replaying a
     confirmation returns the original result.
+15. **A card that contradicts its own payload never reaches the user.** §6c.
+    Agreeing to a sentence has to mean agreeing to what will happen.
+16. **A clarification is answered by option id.** The client cannot name an
+    entity; it names a choice the server offered, and the server knows what
+    that choice was.
+17. **The fast path has no privileges.** Its actions go through the registry,
+    the schema, the server's risk assignment and the same confirmation. If it
+    cannot produce something that survives all four, the planner runs instead.
+
+### What is machine-enforced, and what is only said
+
+A rule that lives only in a prompt is a rule the model can decide not to follow
+at three in the morning. A rule that lives only in code produces a refusal the
+model cannot explain. So the ones that would corrupt data if broken are
+**both**: enforced where they cannot be argued with, and repeated to the model
+so the plan is usually right the first time rather than merely rejected
+correctly.
+
+| rule | enforced by | also said |
+|---|---|---|
+| only these capabilities exist | `registry.resolve` — an unlisted id returns null | yes |
+| this module can be read but not written | `available().canMutate`, and `resolve` refuses its mutations | yes, as `readOnly` |
+| the payload has this shape | the capability's own Zod schema, at plan time and again at execution | as field names in the description |
+| ids must be real | `validate.ts` refuses a uuid absent from retrieved context | yes |
+| the card must match the payload | `validate.ts`, deterministically | yes |
+| `dueDate` ≠ `scheduledAt` | separate columns, separate schema fields, `due_vs_scheduled` check, and the task service | yes, as a module rule |
+| create versus change | `kind_mismatch` check, plus `.create` capabilities that take no id | yes |
+| this needs its own confirmation | the capability's `risk`, assigned server-side | no — the model is never asked |
+| this write leaves Life OS | `risk: 'external'` plus the calendar ledger | yes, as a module rule |
+| valid relationship kinds | `LINK_KIND_IDS` enum in the capability schema; `scheduled_as` refused by the service | yes |
+| a habit cannot be deleted, only archived | no delete capability exists | yes |
+
+**What is deliberately NOT moved into code.** Tone, brevity, British English,
+"do not repeat the question back", when an assumption is worth writing down.
+These are judgements about writing, they have no failure mode worse than a
+clumsy sentence, and encoding them would produce a worse assistant and a larger
+codebase.
 
 ---
 
 ## 17. Currently registered modules
 
-Nine modules, **53 capabilities**, 34 of them mutations. Every mutation is a
+Nine modules, **54 capabilities**, 34 of them mutations. Every mutation is a
 thin adapter over an application service that the UI routes call too.
 
 | Module | Available when | Capabilities |
 |---|---|---|
 | **tasks** | always | `search` `read` `create` `update` `complete`\* `schedule` `move` `archive`\* `addStep` `updateStep` `removeStep`\* |
 | **projects** | always | `search` `read` `create` `update`\* `complete`\* `archive`\* |
-| **calendar** | Google connected **with write scope** | `event.search` `event.read` `calendar.availability` `calendar.list` `event.create` `event.update` `event.delete` — creates/edits/deletes are *external* |
+| **calendar** | reads: Google connected · writes: **and** the grant covers writing | `event.search` `event.read` `calendar.availability` `calendar.list` `event.create` `event.update` `event.delete` — creates/edits/deletes are *external* |
 | **reminders** | always | `search` `create` `update` `complete` `setPaused` `delete`\* |
-| **habits** | always | `list` `check` `create` `update` `archive`\* |
+| **habits** | always | `list` `search` `check` `create` `update` `archive`\* |
 | **areas** | always | `list` `create` `update` `delete`\* |
 | **diary** | always | `read` `search` `append` `checkIn` |
 | **library** | always | `search` `readPage` `sections` `projectBook` `appendPage` `createPage` |
@@ -707,9 +1101,23 @@ thin adapter over an application service that the UI routes call too.
 
 \* *important* — needs its own confirmation, not just the batch's.
 
-In a workspace with no Google account, `GET /ai/capabilities` returns **46**;
-Calendar's seven are absent with the reason stated. That difference is the
-registry working.
+Three answers from one registry, which is the whole architecture in one line:
+
+| workspace | capabilities | what is missing |
+|---|---|---|
+| Google connected, writable | **54** | nothing |
+| Google connected, read-only grant | **51** | the three `event.*` writes; the four calendar reads remain |
+| no Google account | **47** | all seven calendar capabilities, with the reason stated |
+
+Nothing was edited to produce those differences. `available()` is asked per
+request and the numbers follow.
+
+**`event.create` takes an optional `taskId`.** That is how *"put an hour in on
+Thursday for the client handover"* ends with the event and the task linked, so
+each is visible from the other on its Related section. Life OS has always made
+that link when the UI schedules a task; the assistant could create the event
+and not the link, which left a scheduled task that did not know it had been
+scheduled.
 
 ### Rules the new writes obey
 
@@ -818,23 +1226,91 @@ more predictable, and probably right.
    is a ledger handle, and editing it would mean editing a proposal Google was
    already told about. The way to change one is to say so, which re-plans and
    re-previews. Correct, and worth making obvious in the UI.
+   *"Actually make it 4"* about a pending calendar action therefore re-plans
+   rather than amending, which is right and is slower than the task case.
 6. **Reordering is still not offered** — tasks, steps, projects or habits.
    Pointer-driven against a rendered list; no sentence maps onto "put this
    between those two".
 7. **No project restore, no task un-archive, no library archive/restore** from
    the assistant. All exist in the app; none is a sentence anyone says.
-8. **Memory has no decay or size limit.** Bounded at 12 per prompt and ranked,
-   but nothing prunes. A year of accepted candidates will need a policy.
-9. **The clarification flow answers by sending the option's label as text.**
-   It works and reads naturally; a structured answer carrying the chosen ref
-   would be more precise.
-10. **Conversation state is the pending actions plus the request.** No running
-    summary is generated yet, so a long thread loses its early context. The
-    column exists (`ai_conversations.summary`) and nothing writes it.
+8. **Conversation state is the pending proposal plus the request.** No running
+   summary is generated, so a long thread loses its early context. The column
+   exists (`ai_conversations.summary`) and nothing writes it.
+9. **The fast path covers four shapes.** Deliberately: it is the set where a
+   cheap reading is safe, and every candidate for a fifth has to survive the
+   question "what does this do when it is wrong". Anything else is a planner
+   turn, which is correct and slower.
+10. **The consistency pass reads English.** Its date and time detection covers
+    what English actually says; a phrasing it does not recognise produces no
+    finding rather than a wrong one. Failing open is the right direction for a
+    check that withholds work, but it means the pass is a floor, not a ceiling.
+11. **Turn history is deleted at 90 days, not archived.** Nobody has asked to
+    read a four-month-old proposal, and keeping them would need a retention
+    story of its own. If that changes, the sweep is one function.
+12. **Nothing measures the assistant over time.** `metrics` on each turn says
+    what happened in that turn; there is no aggregation, so "is retrieval
+    getting worse" is not a question anything can currently answer.
 
 ## 20. Implementation status and changelog
 
-### Phase 2 — the real assistant (this pass)
+### Phase 3 — beta readiness (this pass)
+
+**Four faults that no test had, found by building against the real thing:**
+
+- **`event.create` could never execute.** Preview replaces the payload with a
+  ledger handle, and the executor validated that handle against the PLAN-time
+  schema — a strict object demanding a `calendarId` and a `draft`. Every
+  assistant calendar write would have failed *after* the user agreed to it.
+  Capabilities that preview now declare `confirmed`, a second execution-time
+  shape. No test had caught it because no test could confirm a calendar action
+  without a Google connection.
+- **`habit.check` could never run.** Its input was `z.object({id}).and(
+  HabitCheckInput)`, and an intersection runs both halves over the whole
+  payload — so the strict half rejected the `id` the other half declared.
+- **Habits were not searchable at all.** `habit.list` answers "what am I
+  tracking", which is not "which of these is Morning walk". Naming a habit
+  found nothing, so *"complete Morning walk"* was answered as though the habit
+  did not exist.
+- **A read-only Google grant switched Calendar off entirely**, and the
+  assistant then reported that it could not SEE a calendar sitting in front of
+  it. Availability now answers two questions rather than one.
+
+**Built and tested:**
+
+- **Fast path** (§6a) — four deterministic shapes, failing closed into the
+  planner with a recorded reason. No model, no reasoning chain, same gate.
+- **Amendment path** (§6b) — a correction to a pending proposal is an EDIT to
+  it, through the same validated path the card's own controls use. *"Actually
+  Saturday"* no longer produces a second haircut or a report that the first
+  does not exist.
+- **Consistency validation** (§6c) — a deterministic, schema-aware pass
+  between planning and the user, with one repair attempt and a withhold.
+- **Structured clarification** (§12) — options carry entity refs and a
+  distinguishing line; the client answers with an option id; the ORIGINAL
+  request continues with that entity seeded.
+- **Retrieval** (§5a) — stems and plurals, structural expansion, a low-result
+  fallback that goes broad before concluding absence, concurrent gathering, and
+  recorded rather than swallowed failures.
+- **Read/write availability split** (§4), and `registry.explain` so a refusal
+  is a sentence rather than a status.
+- **`event.create` takes a `taskId`**, so scheduling a task onto the calendar
+  leaves the two linked and visible from each other.
+- **Memory** (§11) — relevance-gated injection, contradiction detection routed
+  into supersede (which protects a pin), candidate dedupe, and retention that
+  never touches a memory or an unconfirmed proposal.
+- **26 new tests** in `ai-beta.test.ts`.
+
+**Database:** `ai_turns.clarification`, and `clarifying` added to the status
+CHECK (migration `0017_ai_beta.sql`). Additive; nothing existing rewritten.
+
+**Two tests changed rather than deleted.** One asserted that the pending set
+reached the planner appended to the request text; it is a field now, carrying
+payloads rather than titles, and the assertion followed it. One relied on an
+invented uuid failing at execution; invented ids are refused at planning now,
+so the test names something real and deletes it between the agreement and the
+run — which is what it was always about.
+
+### Phase 2 — the real assistant
 
 **Built and tested:**
 

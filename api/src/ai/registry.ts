@@ -32,6 +32,7 @@
  */
 import type { z } from 'zod';
 import type { Db } from '../db/client.js';
+import { signatureOf } from './validate.js';
 import type {
   AiRequestContext, ContextSource, EntityRef, EntityType, ActionResult,
 } from './types.js';
@@ -395,6 +396,10 @@ export class CapabilityRegistry {
           kind: c.kind,
           description: c.description,
           risk: c.risk,
+          /* The payload shape, generated from the capability's own schema.
+             Without it the planner infers field names from an English
+             sentence, which works for `title` and fails for `id`. */
+          payload: signatureOf(c.input),
         })),
     };
   }

@@ -1,6 +1,27 @@
 # The assistant contract
 
-*Written before the assistant exists, on purpose.*
+*Written before the assistant existed, on purpose.*
+
+> **Status: historical, and still accurate about the interface.**
+>
+> This document describes the client-side proposal contract as it was designed
+> in Phase 1, before any model existed. The shapes it defines are still what
+> the browser renders — but the assistant is now real, and several sentences
+> below describe a world that has moved on. Where this document and
+> [`ai-system.md`](ai-system.md) disagree, **`ai-system.md` is the current
+> one.** In particular:
+>
+> - the proposal set is authored and held by the SERVER, not by a provider in
+>   the browser. The client renders a copy and asks the server to change it;
+> - `assistant-mock.js` is not the provider any more. It survives only as fixed
+>   transcripts standing in for a microphone during development;
+> - the action layer described at the end IS built: `api/src/ai/executor.ts`,
+>   behind `api/src/ai/confirm.ts`;
+> - there are AI tables, a model provider and a real API, all server-side.
+>
+> It is kept because the reasoning is still the reasoning: the rules about what
+> an assistant may do were settled before a model could argue with them, and
+> that is why they held.
 
 The shape of what an assistant is allowed to do is a product decision. It is
 not something to be discovered after a model has been wired in and has already
@@ -150,10 +171,25 @@ It receives `(proposals, confirmation)` and it must:
 - report what it did in the same language the cards used, so somebody can
   check the result against what they agreed to.
 
-## What is deliberately not here
+## What was deliberately not here — and what arrived
 
-No LLM API, no model provider, no embeddings, no AI tables. This phase is the
-mobile experience and the assistant's *interaction*. The mock is labelled as a
-prototype on every surface it appears on, and confirming a batch says plainly
-that nothing was saved — because a fake that writes real rows is
-indistinguishable from a working assistant right up until somebody trusts it.
+At the time of writing: no LLM API, no model provider, no embeddings, no AI
+tables. That phase was the mobile experience and the assistant's *interaction*,
+and the mock was labelled as a prototype on every surface it appeared on —
+because a fake that writes real rows is indistinguishable from a working
+assistant right up until somebody trusts it.
+
+Since then, and documented in [`ai-system.md`](ai-system.md):
+
+| then | now |
+|---|---|
+| no model provider | `api/src/ai/providers/anthropic.ts`, behind a job router (§13) |
+| no AI tables | `ai_memories`, `ai_memory_candidates`, `ai_conversations`, `ai_turns` |
+| the action layer "not built yet" | `executor.ts` and `confirm.ts`, with the gate this document specified |
+| the provider ran in the browser | the browser holds a turn id and a version; the proposal set lives on the server |
+| no embeddings | still none, and §5b says why that is a decision rather than an omission |
+
+The requirements this document set for the action layer — assert confirmable
+first and let it throw, run only what is enabled, one transaction per action,
+report in the same language the cards used — were implemented exactly, and are
+tested.
