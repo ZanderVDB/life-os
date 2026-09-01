@@ -276,13 +276,13 @@ Editable field types the proposal UI can render: `text`, `date`, `time`,
 ## 5. Gaps worth naming before designing
 
 **The authoritative answer to "what can the assistant do" is
-`GET /ai/capabilities`, built from module registration.** As of Phase 3 there
-are 57 capabilities across nine modules, 34 of them mutations, and the client
+`GET /ai/capabilities`, built from module registration.** As of Phase 4 there
+are 61 capabilities across nine modules, 37 of them mutations, and the client
 asks rather than assuming. The number is not fixed even within one build: a
-workspace whose Google grant can only read sees 54, and one with no Google
-account at all sees 50. The list below is the remaining gap between what the
-app can do and what any module has registered — see `ai-system.md` §17 for the
-full audit and §19 for what remains.
+workspace whose Google grant can only read sees 58, and one with no Google
+account at all sees 54. The list below is the remaining gap between what the
+app can do and what any module has registered — see `ai-system.md` §17a for the
+full capability matrix, §17 for the module audit, and §19 for what remains.
 
 Things the app can do that the assistant currently has **no capability for** —
 each is a deliberate decision, not an oversight to fix silently:
@@ -294,6 +294,13 @@ each is a deliberate decision, not an oversight to fix silently:
   — see `ai-system.md` §17.
 - **Deleting** a task or a habit. Both archive instead; a habit has no delete
   at all.
+- **Editing a book or section title.** Creating both is supported as of Phase 4;
+  renaming them is not, while renaming a *page* is.
+- **Un-ticking a habit** for a day, and **deleting a diary entry**.
+
+Every one of those has its reason recorded in the capability matrix at
+`ai-system.md` §17a, so the list is a set of decisions rather than a set of
+mysteries.
 
 Phase 2 closed the rest: projects create/complete/archive, areas and habits and
 reminders in full, diary append and check-in, library page writes, task steps
@@ -309,6 +316,13 @@ name (`habit.search`), and linking an event to the task it holds time for
 `link.create` and `link.remove` are registered capabilities and go through the
 relationship service rather than the table. `link.remove` is *important*: it
 destroys a judgement somebody made.
+
+**Phase 4 closed the structural gaps rather than adding many capabilities.**
+Four new ones — `diary.range`, `library.createBook`, `library.createSection`,
+`library.retitlePage` — and four things that were not capabilities at all:
+actions that depend on one another, one shared entity resolver, conversation
+references resolved by stable id, and module-declared routing. `ai-system.md`
+§6e-§6i.
 
 **Nor are Habits and Reminders.** `habit.check` and `reminder.create` are
 registered, and both call the same application service the UI calls. Projects

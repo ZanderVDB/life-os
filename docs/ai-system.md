@@ -730,6 +730,247 @@ instant, and the things that are genuinely hard are allowed to take a moment.**
 
 ---
 
+## 6e. Composite requests and dependent actions
+
+*"I need to prepare for the client call Thursday. Add a task to WebAnchor,
+schedule 45 minutes Wednesday afternoon, and link the task to the call and the
+handover notes."*
+
+That is one sentence and four changes, and three of them need an id the first
+one has not created yet. Until Phase 4 the executor ran a proposal as a flat
+list of independent agreements, which is exactly right for six unrelated
+groceries and cannot express this at all.
+
+### The dependency is read, never declared
+
+The obvious design gives each action a `dependsOn: ["a1"]` field beside its
+payload. That is two statements about one fact, and this codebase has met that
+shape repeatedly under the name **self-consistent but wrong**: the two agree
+with each other and disagree with reality. An action could declare a dependency
+it does not have, or omit one it does, and both look fine on the card.
+
+So there is one statement. The planner writes a **placeholder** where an id it
+cannot know yet belongs:
+
+```json
+{"capability": "task.create",  "payload": {"title": "Get moving quotes"}}
+{"capability": "task.schedule","payload": {"id": "{{a1.id}}", "start": "..."}}
+```
+
+`{{a1.id}}` means *the id of the first action in this plan*. The dependency
+**is** the reference, because referencing is the only way to say it.
+`api/src/ai/depends.ts` reads them back out.
+
+### What happens at each stage
+
+| stage | what it does |
+|---|---|
+| **plan time** | The payload is validated through a **probe** — each placeholder replaced by a distinct well-formed uuid — so a uuid field holding `{{a1.id}}` is checked as the id it will become rather than rejected as the text it currently is. The probe is then discarded and the placeholders put back. What is stored is what was proposed. |
+| **plan time** | The graph is checked. A loop, a self-reference, or a reference to an action that was rejected cannot be carried out, so the dependent is dropped with a reason — repeatedly, because dropping one orphans anything that depended on *it*. The independent actions survive. |
+| **execution** | Actions run in dependency order. Each finished action's produced ref is recorded, placeholders are substituted **before** validation, and the real id is what the service receives. |
+| **reporting** | Results come back in the order the **cards** were shown, not the order they ran. Execution order is an implementation detail; a result list that reshuffles itself cannot be checked against what was agreed to. |
+
+### Action ids are the planner's own numbering
+
+`{{a2.id}}` means the second action the model wrote. Ids are therefore assigned
+from the raw index, not from how many survived validation — otherwise rejecting
+the first action shuffles everything up and that reference silently becomes a
+reference to something else. Gaps in the numbering are harmless; the ids are
+opaque handles everywhere they are used.
+
+### Partial failure, with dependencies
+
+The existing philosophy is preserved and extended:
+
+- **Independent actions stay independent.** One failing does not stop another.
+- **A dependent whose dependency failed is `skipped`**, never attempted, and
+  never reported as done. Running it anyway would write a link pointing at a
+  task that does not exist — the one outcome worse than doing nothing.
+- **A break propagates down the chain**, and the report blames the action that
+  actually broke rather than the one immediately above it.
+- Nothing says *"Done"* for an action that did not happen.
+
+Only data flow creates a dependency. If B merely ought to follow A but needs
+nothing from it, they are independent and both run — sequencing them would let
+A's failure cancel a change that would have succeeded.
+
+---
+
+## 6f. Universal entity resolution
+
+Phase 3 taught the fast path to find *"the Fitzgerald report"* among tasks.
+Phase 4 needs the same skill for projects, habits, books, pages, diary days and
+calendar events — and if each capability grows its own title matching they will
+disagree. One will treat an exact title as decisive and another will not; one
+will pick the first of three and another will ask. The user meets all of them
+and experiences an assistant with no consistent idea of what *"the client
+call"* means.
+
+`api/src/ai/resolve.ts` is the single answer, and it goes through the
+**registry's own search capabilities** — so a module registered tomorrow is
+resolvable with nothing edited here. The fast path calls it too; there is no
+second implementation.
+
+### Three answers, and ambiguity is one of them
+
+| answer | when | what the caller must do |
+|---|---|---|
+| `resolved` | one candidate is clearly strongest | use its id |
+| `ambiguous` | several are genuinely plausible | **ask** — this is a real answer, not a failure |
+| `none` | nothing matched | say so. There is no id in this result to invent one from |
+
+### What makes a candidate stronger
+
+An **exact normalised title beats everything**. *"Add milk"* against *"Milk"*
+and *"Buy oat milk for the weekend"* is not ambiguous — one of them **is** the
+thing named. Two rows with identical titles genuinely are ambiguous, and no
+scoring fixes that.
+
+Below that, evidence accumulates through `ranking.ts` (which is not
+reimplemented): word overlap, the type the caller asked for, the entity on
+screen, the project and area the rest of the request is about, and a nudge for
+anything named earlier in this conversation.
+
+The decision is deliberately **not** "highest score wins". Two candidates a
+whisker apart are the ambiguous case, and a resolver that always returns its
+favourite hides that. `MARGIN` (1.35×) is what stops it; `FLOOR` stops a weak
+best match from counting as a match at all.
+
+### A pronoun is not a name
+
+`"it"`, `"that"`, `"the task"` and friends never reach the scorer. Resolving
+them against every title in the workspace finds *something*, and what it finds
+is arbitrary — the exact fabrication the resolver exists to prevent.
+Conversation references answer those first; reaching the resolver with one
+means there was no antecedent, and the honest answer is that nothing was named.
+
+---
+
+## 6g. Conversation references — what "it" means
+
+> *"Open the WebAnchor project."*
+> *"What is still outstanding?"*
+> *"Add a task to it called Send final credentials."*
+> *"Make that urgent."*
+> *"Actually put it in Work."*
+
+The obvious implementation sends the previous messages and lets the model work
+out the antecedent from the prose. That fails in a specific and expensive way:
+the model re-derives an **entity** from a **title** it remembers, and a second
+guess at something already known exactly is the guess that picks the wrong
+project. Worse, it fails silently — the card says *WebAnchor* and the payload
+carries a different project's id.
+
+So references resolve to the **stable ids the previous turns actually used**.
+`api/src/ai/references.ts` reads them out of the turn table, which already
+records exactly what is needed and no content:
+
+| source | meaning | strength |
+|---|---|---|
+| `results[].ref` | what a turn **created** | strongest |
+| `actions[].target` | what a turn **changed** | middle |
+| `sources[]` | what a turn **read** | weakest |
+
+Six turns back, twelve entities at most, most recent first. A thing the
+assistant created outranks one it merely read at the same distance: *"add a
+task to it"* after creating a project means that project, even if three others
+were listed on the way.
+
+**Titles are read from the canonical rows at the moment they are needed**,
+never stored here. A cached title goes stale the first time somebody renames
+something, and the assistant then refers to a project by a name it no longer
+has. An entity that has since been deleted simply drops out of the list — a
+reference to a thing that is gone is not a reference, and offering it would let
+the planner name a dead id.
+
+### Where the list is used
+
+1. **Seeded into retrieval**, when the sentence actually refers back — narrowed
+   to the type when the words say which. A sentence leaning on *"it"* gives
+   retrieval nothing to search for, so without this the assistant answers about
+   the right thing having read nothing about it.
+2. **Given to the planner** with ids, under an instruction to reuse the id
+   rather than search for the name again.
+3. **Added to the known-id set**, so the consistency pass does not reject the
+   one id that is certainly right.
+
+`referenceCue()` decides only whether a sentence contains a reference and what
+**type** of thing it points at. It is not an attempt to parse English; choosing
+**which** one is the reference list's job.
+
+---
+
+## 6h. Relationship inference
+
+The assistant should notice connections. When the user says
+
+> *"The client call on Thursday is where we're going to discuss the annual
+> returns."*
+
+both entities can be resolved, and the useful response is to propose:
+
+```
+LINK   Client call  ↔  TriFusion annual returns      kind: discussed_in
+```
+
+**An inferred relationship is a mutation.** It goes through the same
+proposal → confirmation → execution path as everything else, and appears on a
+card before it exists. Graph edges are never written silently, however obvious
+the connection looks.
+
+When confidence is insufficient, the assistant **asks**. *"Link the call to the
+project"* with three plausible calls is a clarification, not a coin toss — the
+resolver returns `ambiguous` and the turn asks which is meant.
+
+Both ends must be things that actually exist, with real ids, and the kind is
+chosen from what the user said: `discussed_in` for a conversation about
+something, `preparation` for work done beforehand, `resource` for something
+used, `result` for what came out of it, `related` when nothing more specific is
+true. `scheduled_as` is never available to `link.create` — it is created by
+scheduling, and it is the one coupled kind.
+
+These rules live in the relationships **module**, not in the planner prompt.
+
+---
+
+## 6i. Routing — what kind of thing should this become?
+
+Every request that creates something must first answer *"what kind of thing is
+this?"* A useful starting hierarchy:
+
+| the request is… | it becomes |
+|---|---|
+| an action to be done, once | **Task** |
+| an outcome needing several steps | **Project** |
+| a commitment occupying real time | **Calendar event** |
+| wanting to be told at a time | **Reminder** |
+| a behaviour meant to repeat | **Habit** |
+| a personal record of a day | **Diary entry** |
+| reference, research, notes | **Library book / page** |
+| how a part of life is classified | **Area** |
+| a connection between existing things | **item_link** |
+
+**That table is not in the planner prompt.** Written there, it would keep
+offering Habits after the Habits module is removed — the exact rot the registry
+exists to prevent, in the one place it would be least visible.
+
+Instead each module declares `routing: string[]` — one or more lines saying
+when it is the right home, in the user's terms. The prompt section is assembled
+from whatever is **registered and currently available**. Remove Habits and its
+routing line goes with it; switch Library off for a workspace and nothing
+routes there. Adding a future module means writing one sentence in that
+module's own file.
+
+**Guidance, never a classifier.** *"Call John Friday"* fits a task due Friday, a
+scheduled task, a calendar event and a reminder. Context decides, and where
+meaning is genuinely ambiguous the assistant asks rather than taking the first
+match. Where the *date* is the ambiguous part, `lib/timing-intent.ts` already
+handles it (§6a3).
+
+---
+
+---
+
 ## 7. Proposal system
 
 `ProposalSet` → many `ProposalAction`. A single utterance is often several
@@ -1258,6 +1499,26 @@ what the executor will resolve.
 including — the part that matters — from `registry.resolve()`, so an action
 proposed before the removal fails with a reason instead of running.
 
+**What a module declares, in full.** Each of these is a thing that would
+otherwise have to be written into the central planner prompt, where it would
+keep being true after the module stopped existing:
+
+| field | what it is for |
+|---|---|
+| `id`, `name` | identity |
+| `entities` | which relationship entity types it owns, so traversal can route |
+| `rules` | constraints the planner must respect, in plain words |
+| `routing` | **when this module is the right home for a request** (§6i) |
+| `available()` | asked per request; read and write answered separately |
+| `capabilities[]` | what can actually be done, each with its own schema and risk |
+
+A capability may additionally set `always: true` — retrieve it on every turn.
+Strictly for the small, bounded vocabularies a request is *classified against*
+rather than searched within. `area.list` is the only one today, and it is why
+*"put it in Work"* can name the Work area: nothing in that sentence would make
+a substring search return it, so before Phase 4 areas reached the planner only
+on a broad pass — missing exactly when they were being used.
+
 **To disable one per workspace:** return `{ enabled: false, reason }` from
 `available()`. Identical effect, decided per request.
 
@@ -1367,7 +1628,7 @@ codebase.
 
 ## 17. Currently registered modules
 
-Nine modules, **57 capabilities**, 34 of them mutations. Every mutation is a
+Nine modules, **61 capabilities**, 37 of them mutations. Every mutation is a
 thin adapter over an application service that the UI routes call too.
 
 | Module | Available when | Capabilities |
@@ -1378,8 +1639,8 @@ thin adapter over an application service that the UI routes call too.
 | **reminders** | always | `search` `list` `create` `update` `complete` `setPaused` `delete`\* |
 | **habits** | always | `list` `search` `check` `create` `update` `archive`\* |
 | **areas** | always | `list` `create` `update` `delete`\* |
-| **diary** | always | `read` `search` `append` `checkIn` |
-| **library** | always | `search` `readPage` `sections` `projectBook` `appendPage` `createPage` |
+| **diary** | always | `read` `range` `search` `append` `checkIn` |
+| **library** | always | `search` `readPage` `sections` `projectBook` `appendPage` `createPage` `createBook` `createSection` `retitlePage` |
 | **relationships** | always | `link.inspect` `link.traverse` `link.create` `link.remove`\* |
 
 \* *important* — needs its own confirmation, not just the batch's.
@@ -1388,9 +1649,9 @@ Three answers from one registry, which is the whole architecture in one line:
 
 | workspace | capabilities | what is missing |
 |---|---|---|
-| Google connected, writable | **57** | nothing |
-| Google connected, read-only grant | **54** | the three `event.*` writes; the four calendar reads remain |
-| no Google account | **50** | all seven calendar capabilities, with the reason stated |
+| Google connected, writable | **61** | nothing |
+| Google connected, read-only grant | **58** | the three `event.*` writes; the four calendar reads remain |
+| no Google account | **54** | all seven calendar capabilities, with the reason stated |
 
 Nothing was edited to produce those differences. `available()` is asked per
 request and the numbers follow.
@@ -1467,6 +1728,65 @@ somebody is going to say in their first week.
   message to a person, not a change to a record.
 - **Changing what the assistant may do.** No capability grants capabilities.
 
+## 17a. Current capability matrix
+
+**As of Phase 4: nine modules, 61 capabilities, 37 of them mutations.**
+
+Read left to right: what the assistant can do to each thing that exists in Life
+OS today. ✅ supported · ⛔ deliberately not supported, with the reason below.
+
+| Entity | Read | Search | Create | Update | Complete | Archive | Delete | Link |
+|---|---|---|---|---|---|---|---|---|
+| **Task** | ✅ `task.read` `task.list` | ✅ | ✅ | ✅ title, area, priority, dueDate, scheduledAt, project, notes, bucket | ✅ `task.complete` (also reopens) | ✅ | ⛔ archive instead | ✅ |
+| **Task step** | ✅ via `task.read` | — | ✅ `addStep` | ✅ `updateStep` incl. completion | ✅ via `updateStep` | — | ✅ `removeStep` | ⛔ not an entity |
+| **Project** | ✅ with open/done counts, `nextTaskId` | ✅ | ✅ | ✅ title, outcome, description, notes, targetDate, **status**, **focus** | ✅ `project.complete` | ✅ | ⛔ archive instead | ✅ |
+| **Area** | ✅ `area.list` (**every turn**) | ✅ via list | ✅ | ✅ rename editable areas | — | — | ✅ with reassignment | ✅ |
+| **Habit** | ✅ schedule, target, streak state | ✅ | ✅ | ✅ configuration | ✅ `habit.check` per civil day | ✅ | ⛔ archive instead | ✅ |
+| **Habit completion** | ✅ via `habit.list` | — | ✅ `habit.check` | ✅ count per day | — | — | ⛔ see below | ⛔ not an entity |
+| **Reminder** | ✅ | ✅ | ✅ | ✅ incl. reschedule | ✅ | — | ✅ | ✅ |
+| **Calendar event** | ✅ `event.read` `calendar.list` `calendar.availability` | ✅ | ✅ *external* | ✅ move/edit *external* | — | — | ✅ *external* | ✅ `scheduled_as` via scheduling |
+| **Diary entry** | ✅ `diary.read` by date · `diary.range` over a period | ✅ | ✅ **only when explicitly asked** | ✅ append text; mood/energy/summary via `checkIn` | — | — | ⛔ see below | ✅ |
+| **Library book** | ✅ via search | ✅ | ✅ `createBook` | ⛔ see below | — | — | ⛔ | ✅ |
+| **Book section** | ✅ `library.sections` | ✅ via book | ✅ `createSection` | ⛔ see below | — | — | ⛔ | ⛔ structural |
+| **Book page** | ✅ `readPage` | ✅ incl. full text | ✅ `createPage` | ✅ `appendPage`, `retitlePage` | — | — | ⛔ | ✅ |
+| **item_link** | ✅ `link.inspect` `link.traverse` | — | ✅ `link.create` | — | — | — | ✅ `link.remove` | — |
+| **Personal Memory** | ✅ injected into every turn | ✅ ranked per request | ✅ candidates the user accepts | ✅ in Settings | — | — | ✅ in Settings | ⛔ not a graph entity |
+
+### Deliberate exclusions, with reasons
+
+Every ⛔ above is a decision, not an omission:
+
+- **Deleting a task, project or habit.** The product archives; archiving is
+  reversible and deleting is not. The assistant offers what the product offers.
+- **Replacing a page or diary body.** Both APPEND only. There is no version
+  history for either, so an assistant that misread a sentence could destroy
+  writing with no way back. Renaming a page is offered because a title is one
+  short string, visible on the card before it applies.
+- **Editing book and section titles.** Not yet exposed; low value against the
+  same risk class as above. Creating them is supported.
+- **Un-ticking a habit for a day.** `habit.check` sets a count and the count
+  can be set again; there is no separate "undo today" service to adapt, and
+  inventing one in the AI layer would put a product rule in the wrong place.
+- **Deleting a diary entry.** A dated life record. The UI archives; the
+  assistant does not offer it at all.
+- **Structural relationships as links.** A page belonging to a section, a task
+  belonging to a project, a project having its Book — these are ownership and
+  are stored as such. Expressing them as `item_links` would create a second,
+  disagreeing account of the same fact.
+- **Memory as a graph entity.** Memory is what Life OS knows about the person,
+  not an object in their workspace. It is used by every turn and managed in
+  Settings.
+
+### Whole-app operations the assistant still has no capability for
+
+Unchanged from Phase 3, and listed here so the gap is visible rather than
+mysterious: reordering anything, board column configuration, import/export,
+sharing, workspace membership, calendar connection management, and preference
+changes. All are pointer-driven or account-level; none maps cleanly onto a
+sentence.
+
+---
+
 ## 18. Future modules
 
 Registerable without touching the planner, the executor or the proposal model:
@@ -1537,6 +1857,19 @@ more predictable, and probably right.
 
 ## 19. Known gaps
 
+**Closed by Phase 4:** actions could not depend on one another; each capability
+resolved names its own way; *"it"* was left to the model's memory of prose;
+routing lived nowhere; Library had no service boundary for books, sections or
+page titles; Areas were not reliably in context.
+
+**Still open:**
+
+0. **Real-model verification of Phase 4 is outstanding.** The architecture is
+   covered by 24 focused tests against a real database, and every previous
+   phase found faults that only appeared when real sentences met the real
+   model. The Anthropic account was out of credit when Phase 4 was built, so
+   the staging turns in §15 of the Phase 4 brief have **not** been run. Treat
+   the phase as unverified in that specific sense until they are.
 1. **No streaming.** A turn is one request and the user waits for the whole
    plan. Planning a four-action sentence takes seconds; a token stream would
    make that feel faster without being faster.
@@ -1584,7 +1917,58 @@ more predictable, and probably right.
 
 ## 20. Implementation status and changelog
 
-### Phase 3 — beta readiness (this pass)
+### Phase 4 — full Life OS control (this pass)
+
+**The gap this closed.** Phases 1-3 built an assistant that understood Life OS
+and could make one change at a time. Phase 4 is about operating the whole of
+it: several changes that depend on each other, across modules, referring to
+things established earlier in the conversation.
+
+**Built:**
+
+- **Dependent actions** (§6e). `ai/depends.ts`: placeholders, graph ordering,
+  cycle and dangling-reference detection, probe/unprobe validation. The
+  executor runs in dependency order, substitutes real ids, skips dependents of
+  failures, and reports in card order. Action ids now follow the planner's own
+  numbering so a rejected action cannot silently redirect a reference.
+- **One entity resolver** (§6f). `ai/resolve.ts`, through the registry's search
+  capabilities. The fast path now calls it instead of matching titles itself,
+  so there is one answer to "which one did they mean" rather than two.
+- **Conversation references** (§6g). `ai/references.ts`: stable ids read from
+  the turn table, titles read fresh, dead entities dropped. Seeded into
+  retrieval, given to the planner, and added to the known-id set.
+- **Module-declared routing** (§6i). `AiModule.routing`, assembled per request
+  from what is registered and available.
+- **`Capability.always`** — vocabulary reads retrieved on every turn. `area.list`
+  is the first, and it fixes *"put it in Work"*.
+- **Library service boundaries.** `createBook`, `createSection`, `retitlePage`
+  in `lib/actions/library.ts`; the routes now call them rather than keeping a
+  second copy of the same transaction.
+- **Four new capabilities**: `diary.range`, `library.createBook`,
+  `library.createSection`, `library.retitlePage`. 57 → **61**.
+- **Relationship inference rules** in the relationships module, and a diary
+  rule that separates *being told about a day* from *being asked to record it*.
+- 24 tests in `api/tests/ai-phase4.test.ts`. Full suite: **1,634 passing**.
+
+**Two faults found while building, both from reading the code rather than
+running it:**
+
+- **`library.search` never exposed a book id.** A Book is two rows with two
+  ids, and search returned only the shelf one — so `library.sections` had
+  required a `bookId` that nothing in the system could produce. Adding
+  `createSection` would have shipped the same dead end. Fixed by exposing the
+  book id from search, and then by making the services accept **either** id,
+  which retires the module rule that previously had to warn about it. A rule
+  the assistant must be told is strictly worse than a rule made unnecessary.
+- **Rejected actions renumbered the survivors.** Ids were assigned by position
+  in the surviving list, so if the planner's first action failed validation,
+  `{{a2.id}}` would have pointed at whatever moved into that slot. Found before
+  any dependency could be written; ids are now keyed to the planner's index.
+
+**Not done, and why:** the real-model staging turns (§0 of Known gaps above).
+The provider account had no credit; nothing was faked in their place.
+
+### Phase 3 — beta readiness
 
 **Nine faults that no test had, found by building against the real thing.**
 Every one was found by running real sentences through the real model over a

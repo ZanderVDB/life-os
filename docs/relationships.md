@@ -443,6 +443,32 @@ The traversal the assistant needs is the one the UI already uses:
 There is deliberately **no separate "AI query"**. A second answer to the same
 question is a second answer free to drift from the first.
 
+### Inferring a relationship (Phase 4)
+
+The assistant may NOTICE a connection and propose it. When the user says
+
+> *"The client call on Thursday is where we're going to discuss the annual
+> returns"*
+
+and both entities resolve confidently, the right response is a `link.create`
+proposal with `kind: discussed_in`.
+
+Three rules make that safe, and they are enforced outside the model:
+
+1. **An inferred link is a mutation.** It goes on a card and waits for
+   confirmation like everything else. There is no path by which noticing
+   something writes an edge.
+2. **Both ends must resolve to real ids.** The shared resolver
+   (`ai-system.md` §6f) answers `resolved`, `ambiguous` or `none`; only the
+   first may be linked. *"Link the call to the project"* with three plausible
+   calls produces a question, not a choice.
+3. **The kind comes from what the user said**, and `scheduled_as` is never
+   available to `link.create` — it is created by scheduling, being the one
+   coupled kind (§7).
+
+A link created this way is one `item_links` row, identical to one the UI would
+have written. Nothing about it is AI-specific, and there is no second table.
+
 ---
 
 ## 11. Current limitations
