@@ -44,7 +44,9 @@ import type { ProviderRouter } from './provider.js';
 import { gather, forPrompt } from './context.js';
 import { rank, rankMemories, tokens } from './ranking.js';
 import { tryFastPath, isMiss, type RawAction } from './fastpath.js';
-import { validatePlan, repairBrief, stillDescribes, type Finding } from './validate.js';
+import {
+  validatePlan, repairBrief, stillDescribes, retitleForDate, type Finding,
+} from './validate.js';
 import { structure, type Clarification } from './clarify.js';
 import * as memory from './memory.js';
 import type {
@@ -1001,6 +1003,11 @@ export async function editTurn(
       if (action.summary && !stillDescribes(action.summary, action.payload, request.today)) {
         action.summary = null;
       }
+      /* The TITLE cannot simply go — it is how the card is identified — so the
+         one word that has gone wrong is corrected instead. "Set haircut
+         deadline to Saturday" over a Monday date is the same lie as a stale
+         summary, in the place a reader looks first. */
+      action.title = retitleForDate(action.title, action.payload);
     }
   }
 

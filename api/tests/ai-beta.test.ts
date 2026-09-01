@@ -622,6 +622,11 @@ test('dates: the haircut flow, exactly as it is meant to go', async () => {
   assert.equal(second.body.actions[0].payload.dueDate, '2026-09-07');
   /* The prose said Saturday and the date is now Monday, so the prose goes. */
   assert.equal(second.body.actions[0].summary, null);
+  /* And the TITLE cannot keep saying Saturday over a Monday date. It is not
+     dropped — it is how the card is identified — so the one wrong word is
+     corrected from the date itself. */
+  assert.ok(!/saturday/i.test(second.body.actions[0].title),
+    `the card still says Saturday: ${second.body.actions[0].title}`);
 
   await call('POST', `/ai/turn/${first.body.turnId}/confirm`, {
     version: second.body.version, count: 1, importantAccepted: [],

@@ -13,6 +13,7 @@ import {
   WEEKDAYS, todayIn, addDays, weekdayOf, isWeekday, longDate, isCivilDate,
   resolveRelativeDate, nextWeekday, calendarWindow, weekdayNamesIn,
 } from '../src/lib/civil-date.js';
+import { retitleForDate } from '../src/ai/validate.js';
 
 /** What the real calendar says, independent of anything under test. */
 const realWeekday = (iso: string) =>
@@ -179,4 +180,24 @@ test('the calendar handed to the planner is the real calendar', () => {
   assert.equal(byDay.get('2026-09-04'), 'friday');
   assert.equal(byDay.get('2026-09-05'), 'saturday');
   assert.equal(byDay.get('2026-09-07'), 'monday');
+});
+
+test('a stale weekday in a title is corrected, not deleted', () => {
+  /* An amendment moves the date under a title the model wrote. Dropping the
+     title would leave a card with no name; leaving it is the same lie in the
+     place a reader looks first. */
+  assert.equal(
+    retitleForDate('Set haircut deadline to Saturday', { id: 'x', changes: { dueDate: '2026-09-07' } }),
+    'Set haircut deadline to Monday');
+  // Casing follows what was written.
+  assert.equal(retitleForDate('haircut on saturday', { dueDate: '2026-09-07' }), 'haircut on monday');
+  // Already right: untouched.
+  assert.equal(retitleForDate('Haircut on Saturday', { dueDate: '2026-09-05' }), 'Haircut on Saturday');
+  // No weekday named, or nothing to check against: untouched.
+  assert.equal(retitleForDate('Add milk', { title: 'Milk' }), 'Add milk');
+  assert.equal(retitleForDate('Between Monday and Friday', { dueDate: '2026-09-07' }),
+    'Between Monday and Friday', 'a range was rewritten');
+  // Two different dates: no single right answer, so nothing is guessed.
+  assert.equal(
+    retitleForDate('Saturday', { dueDate: '2026-09-07', startDate: '2026-09-09' }), 'Saturday');
 });

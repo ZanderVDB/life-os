@@ -3055,7 +3055,13 @@ async function openReminderById(id) {
      may be making it longer. */
   const autoGrow = (el) => {
     el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
+    /* `scrollHeight` is the CONTENT box plus padding; `height` under
+       border-box sizing also has to cover the border, or the field ends up
+       exactly its borders too short and clips the last line. */
+    const cs = getComputedStyle(el);
+    const border = cs.boxSizing === 'border-box'
+      ? parseFloat(cs.borderTopWidth || '0') + parseFloat(cs.borderBottomWidth || '0') : 0;
+    el.style.height = `${el.scrollHeight + border}px`;
   };
   document.querySelectorAll('[data-mem-fact]').forEach((el) => {
     const id = el.dataset.memFact;

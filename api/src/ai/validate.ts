@@ -35,7 +35,7 @@
  */
 import type { z } from 'zod';
 import {
-  resolveRelativeDate, weekdayNamesIn, isWeekday, longDate, isCivilDate,
+  resolveRelativeDate, weekdayNamesIn, isWeekday, weekdayOf, longDate, isCivilDate,
 } from '../lib/civil-date.js';
 
 export type Finding = {
@@ -427,6 +427,41 @@ export function stillDescribes(words: string, payload: Record<string, unknown>, 
     }
   }
   return true;
+}
+
+/**
+ * The same words, with a stale weekday corrected.
+ *
+ * A card's TITLE is the model's label for a value — "Set haircut deadline to
+ * Saturday" — and an amendment changes the value underneath it. Dropping the
+ * title is not an option, because it is how the card is identified; leaving it
+ * is the lie this whole pass exists to remove.
+ *
+ * So the one word that has gone wrong is corrected, deterministically: the
+ * weekday named is replaced by the weekday the date actually falls on. No
+ * model, no rewriting of anything else, and only when the payload names
+ * exactly one date — with two there is no single right answer and the words
+ * are left alone for the summary rule to handle.
+ */
+export function retitleForDate(title: string, payload: Record<string, unknown>): string {
+  const named = weekdayNamesIn(title);
+  if (!named.length) return title;
+  const dates = [...new Set(Object.values(flatten(payload ?? {}))
+    .filter((v): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v))
+    .map((v) => v.slice(0, 10))
+    .filter(isCivilDate))];
+  if (dates.length !== 1) return title;
+
+  const actual = weekdayOf(dates[0]!);
+  if (named.includes(actual)) return title;
+
+  let out = title;
+  for (const wrong of named) {
+    out = out.replace(new RegExp(`\\b${wrong}\\b`, 'gi'),
+      (m) => (m[0] === m[0]!.toUpperCase()
+        ? actual.charAt(0).toUpperCase() + actual.slice(1) : actual));
+  }
+  return out;
 }
 
 /** The complaint handed back to the planner for one repair attempt. */
