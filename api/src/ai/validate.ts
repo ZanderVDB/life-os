@@ -34,7 +34,9 @@
  * finding — because a validator that cries wolf gets the whole stage disabled.
  */
 import type { z } from 'zod';
-import { resolveDate } from './fastpath.js';
+import {
+  resolveRelativeDate, weekdayNamesIn, isWeekday, longDate, isCivilDate,
+} from '../lib/civil-date.js';
 
 export type Finding = {
   /** Which action, by its index in the plan. */
@@ -184,7 +186,7 @@ function datesIn(text: string, today: string): string[] {
   /* Scanned clause by clause so a sentence naming two days yields two dates
      rather than only the first. */
   for (const part of text.split(/[,;.]|\band\b|\bthen\b/i)) {
-    const hit = resolveDate(part, today);
+    const hit = resolveRelativeDate(part, today);
     if (hit) out.add(hit.date);
   }
   return [...out];
@@ -298,6 +300,33 @@ export function validatePlan(input: ValidateInput): Finding[] {
       }
     }
 
+    /* ── 1b. A weekday the words NAME must be the weekday it lands on ──
+     *
+     * The hole the date bug went through. `date_missing` asks "does the
+     * payload carry one of the dates the words promise" — and a card reading
+     * "Haircut on Saturday" with the assumption "Saturday means 2026-09-06"
+     * over a payload of 2026-09-06 answers yes. Self-consistent, valid ISO,
+     * and wrong: 6 September 2026 is a Sunday.
+     *
+     * A weekday NAME is the one piece of prose with exactly one right answer,
+     * so it is checkable without parsing anything. If the words say Saturday,
+     * every date in the payload that the words are about has to be a
+     * Saturday. */
+    const named = weekdayNamesIn(words);
+    if (named.length) {
+      const dated = Object.entries(values)
+        .filter(([, v]) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v))
+        .map(([k, v]) => [k, String(v).slice(0, 10)] as const);
+      for (const [key, iso] of dated) {
+        if (!isCivilDate(iso)) continue;
+        if (named.some((n) => isWeekday(iso, n))) continue;
+        add(index, 'weekday_mismatch',
+          `“${a.title}” says ${named.join(' and ')} but ${key}=${iso} is a `
+          + `${longDate(iso).split(' ')[0]}. Use the date from TODAY'S CALENDAR for the `
+          + 'day you named; do not work it out yourself.');
+      }
+    }
+
     /* ── 2. A time the words promise ────────────────────────────────── */
     const clock = timeIn(words);
     if (clock && TIME_FIELDS.some((f) => fields.has(f)) && !carriesTime(values, clock)) {
@@ -387,6 +416,16 @@ export function stillDescribes(words: string, payload: Record<string, unknown>, 
   for (const d of datesIn(words, today)) if (!carriesDate(values, d, today)) return false;
   const clock = timeIn(words);
   if (clock && !carriesTime(values, clock)) return false;
+  /* A weekday named in prose that no longer matches the date is the same lie
+     by a different route: "Saturday 5 September" over a field the amendment
+     moved to Monday. */
+  const named = weekdayNamesIn(words);
+  if (named.length) {
+    for (const v of Object.values(values)) {
+      if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(v)) continue;
+      if (!named.some((n) => isWeekday(v.slice(0, 10), n))) return false;
+    }
+  }
   return true;
 }
 

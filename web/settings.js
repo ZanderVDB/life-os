@@ -451,8 +451,13 @@ function aiPanel(state) {
       <div class="set-row set-mem-h"><span class="set-mem-cat">${esc(label)}</span></div>
       ${byCategory.get(id).map((m) => `<div class="set-row set-item set-mem" data-mem="${m.id}">
         <span class="set-item-dot ${m.isPinned ? 'set-item-dot-ok' : ''}"></span>
-        <input class="set-item-name" value="${esc(m.fact)}" data-mem-fact="${m.id}"
-          aria-label="What Life OS knows: ${esc(m.fact)}">
+        ${/* A TEXTAREA, not an input. A single-line field cannot wrap, so a long
+              belief scrolled sideways inside its own box and the person could
+              read the first few words of what Life OS thinks about them. That
+              is the one thing this screen exists to prevent. Sized to its
+              content by `autoGrow` in app.js. */ ''}
+        <textarea class="set-item-name set-mem-fact" rows="1" data-mem-fact="${m.id}"
+          aria-label="What Life OS knows: ${esc(m.fact)}">${esc(m.fact)}</textarea>
         <button class="set-item-go" data-mem-pin="${m.id}"
           aria-pressed="${m.isPinned ? 'true' : 'false'}"
           aria-label="${m.isPinned ? 'Unpin' : 'Pin'} this">${m.isPinned ? 'Pinned' : 'Pin'}</button>

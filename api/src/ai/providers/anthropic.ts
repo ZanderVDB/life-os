@@ -25,6 +25,7 @@
  * and no capability object with an `execute` on it anywhere in its arguments.
  */
 import { z } from 'zod';
+import { calendarWindow, longDate } from '../../lib/civil-date.js';
 import type {
   AiProvider, InterpretInput, InterpretOutput, PlanInput, AnswerInput,
   AnswerOutput, ExtractMemoryInput,
@@ -302,12 +303,44 @@ Hard rules:
   in the payload. A card that says Saturday over a payload with no date is a
   card that lies to the person confirming it.
 - Write British English, plainly. No exclamation marks, no filler.
-- PLAIN TEXT ONLY. The surface renders what you write literally, so asterisks
-  arrive as asterisks and a hyphen list arrives as hyphens. Never use **bold**,
-  headings or markdown of any kind. Short paragraphs, or lines beginning with
-  a plain hyphen where a list genuinely helps.`;
+- FORMATTING: short paragraphs separated by a blank line, **bold** for a word
+  or two, and hyphen bullets or "1." numbers for a genuine list. That is the
+  whole set the surface renders. Headings, tables, links and code fences are
+  not rendered - their markers are stripped and the words kept - so do not use
+  them.
+- NEVER STATE A COUNT YOU DO NOT THEN LIST, and never write a placeholder
+  bullet. "Two more without a priority set: - (no other tasks visible)" is a
+  list you could not fill; either name the two or do not mention them. If
+  something is genuinely absent from CONTEXT, say so in a sentence.`;
 
 const fmt = (o: unknown) => JSON.stringify(o, null, 1);
+
+/**
+ * The next fortnight, resolved, as a line the model reads rather than a sum
+ * it performs.
+ *
+ * Being told "Today is 2026-09-01" and asked for "Saturday" requires working
+ * out that 2026-09-01 is a Tuesday and counting forward. Models get that wrong
+ * often enough to matter — the same sentence produced 5 September in one run
+ * and 6 September in the next, and both are valid ISO dates so nothing
+ * downstream could tell which was right. Handing over the calendar turns
+ * arithmetic into a lookup.
+ */
+const dateBriefing = (today: string) => [
+  `TODAY IS ${longDate(today)} (${today}).`,
+  '',
+  "TODAY'S CALENDAR. Take dates from this table; never calculate one:",
+  calendarWindow(today, 14).map((d, i) => {
+    const tag = i === 0 ? '  <- today' : i === 1 ? '  <- tomorrow' : '';
+    return `  ${d.date}  ${d.weekday}${tag}`;
+  }).join('\n'),
+  '',
+  'A weekday NAME with no other qualifier means the NEXT one and never today:',
+  'on a Tuesday, "Friday" is this coming Friday and "Tuesday" is a week away.',
+  '"this Friday" is the same as "Friday". "next Friday" is seven days later',
+  'than that. Anything further out than this table, say you are not sure which',
+  'date is meant and ask.',
+].join('\n');
 
 /* ══ The provider ════════════════════════════════════════════════════════ */
 
@@ -343,7 +376,7 @@ narrow, this decides what is retrieved.
 a title would actually contain - names, nouns, one or two words each - not the
 sentence and not a verb phrase. "I finished reconciling against the bank" gives
 ["reconcile", "bank"], never ["reconciling against the bank"].`,
-      user: `Today is ${input.request.today}.
+      user: `${dateBriefing(input.request.today)}
 Available modules: ${input.modules.join(', ')}
 
 Request: ${JSON.stringify(input.text)}`,
@@ -398,6 +431,12 @@ Never call a change capability without the id it requires, and never invent
 one. "I need a haircut tomorrow" is a NEW task — task.create — not a schedule
 or an update of something you cannot see.
 
+DATES COME FROM TODAY'S CALENDAR, NEVER FROM ARITHMETIC. It is above, it is
+resolved, and it is right. Look the day up. If you write an assumption naming
+a weekday, the date in the payload must be the row for that weekday - a card
+saying "Saturday" over a date that is a Sunday is refused before the user ever
+sees it.
+
 DATE AND TIME FORMATS, exactly:
 - dueDate, date, targetDate, entryDate: "YYYY-MM-DD"
 - scheduledAt, startsAt, endsAt: full ISO-8601 with an offset,
@@ -443,7 +482,8 @@ Only genuinely new requests go in "actions" while something is pending.
 MEMORY may inform defaults. It never overrides an explicit instruction or a
 fact from CONTEXT.`,
       user: [
-        `Today is ${input.request.today}${input.request.timeZone ? ` (${input.request.timeZone})` : ''}.`,
+        dateBriefing(input.request.today),
+        input.request.timeZone ? `The user is in ${input.request.timeZone}.` : '',
         input.request.surface ? `The user is looking at: ${fmt(input.request.surface)}` : '',
         '',
         'CAPABILITIES YOU MAY USE. "payload" is the exact shape that capability',
@@ -509,7 +549,7 @@ Answer the question from CONTEXT only. Return ONLY JSON:
 contain the answer, say what is missing rather than guessing. Be brief - a few
 sentences or a short list. Do not repeat the question back.`,
       user: [
-        `Today is ${input.request.today}.`,
+        dateBriefing(input.request.today),
         'CONTEXT:',
         fmt(input.sources),
         '',

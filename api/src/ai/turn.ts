@@ -314,6 +314,11 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
   let findings = validatePlan({
     actions: (plan.actions ?? []) as any, schemas, knownIds, today: request.today,
   });
+  /* What was FOUND, kept separately from what survived. A successful repair
+     empties `findings`, and reporting only that made a turn where the model
+     got the date wrong and was corrected look identical to one where it got
+     the date right — which is exactly the thing worth being able to count. */
+  const found = findings.map((f) => f.code);
   let repaired = 0;
 
   if (findings.some((f) => f.repairable)) {
@@ -392,7 +397,9 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
       queries: retrieval.queries.length,
       actions: built.actions.length,
       rejected: built.rejected.length,
-      inconsistencies: findings.map((f) => f.code),
+      inconsistencies: found,
+      /* What still disagreed after the one repair attempt, and was withheld. */
+      unresolved: findings.map((f) => f.code),
       repaired,
       memoriesUsed: relevant.length,
       capabilitiesUsed: [...retrieval.used],
@@ -692,6 +699,8 @@ function humanFinding(f: Finding, title: string): string {
       const detail = f.detail.split(': ').slice(1).join(': ').split('.')[0];
       return detail ? `${what} — ${detail}` : `${what} was missing something it needs`;
     }
+    case 'weekday_mismatch':
+      return `${what} named a day of the week that the date it used is not`;
     case 'date_missing': case 'date_not_supported':
       return `${what} named a date the change would not actually have set`;
     case 'time_missing':

@@ -353,6 +353,16 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .asstp-body{flex:1;min-height:0;overflow-y:auto;padding:14px;
   display:flex;flex-direction:column;gap:11px}
 .asstp-line{margin:0;font-size:14.5px;line-height:1.5}
+/* The assistant's half is rendered prose, not one string: paragraphs, a bold
+   run, a short list. The subset is fixed in assistant-prose.js, so these are
+   the only elements that can appear here. */
+.asstp-line.is-los > p{margin:0}
+.asstp-line.is-los > * + *{margin-top:8px}
+.asstp-line.is-los ul,.asstp-line.is-los ol{margin:0;padding-left:19px;
+  display:flex;flex-direction:column;gap:4px}
+.asstp-line.is-los li{line-height:1.5}
+.asstp-line.is-los strong{color:var(--text);font-weight:600}
+.asstp-line.is-los code{font-family:var(--font-mono,ui-monospace,monospace);font-size:.92em}
 .asstp-line.is-you{color:var(--text);font-weight:600}
 .asstp-line.is-los{color:var(--text-2)}
 .asstp-line.is-busy{color:var(--muted);font-style:italic}
@@ -717,6 +727,12 @@ body:has(.set-page) .rail{display:none}
 .set-item-name{flex:1;min-width:0;background:transparent;border:1px solid transparent;
   border-radius:8px;padding:6px 9px;font-size:13.5px;color:var(--text);
   transition:background var(--t-hover),border-color var(--t-hover)}
+/* A memory is a sentence and may be a long one. It is a textarea so it can
+   wrap, sized to its content by app.js — never scrolled sideways, because the
+   whole purpose of this screen is that the person can read exactly what is
+   believed about them. */
+.set-mem-fact{resize:none;overflow:hidden;line-height:1.45;font-family:inherit;
+  min-height:0;word-break:break-word}
 .set-item-name:hover{background:rgba(255,255,255,.035)}
 .set-item-name:focus{outline:0;background:var(--surface-2);border-color:var(--accent)}
 /* Fixed width, or the column of dropdowns beside it steps in and out by

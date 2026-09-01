@@ -22,6 +22,7 @@ import * as api from './assistant-api.js';
 import {
   actionCardHtml, sourcesHtml, clarificationHtml, resultsHtml,
 } from './assistant-cards.js';
+import { proseHtml } from './assistant-prose.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -230,7 +231,12 @@ function render() {
     </div>
 
     <div class="asstp-body" id="asstp-body">
-      ${state.history.map((h) => `<p class="asstp-line is-${h.role}">${esc(h.text)}</p>`).join('')}
+      ${/* The user's own words are shown exactly as typed — escaped, never
+            interpreted. Only the assistant's half is rendered, and only over
+            the small subset in assistant-prose.js. */ ''}
+      ${state.history.map((h) => (h.role === 'los'
+    ? `<div class="asstp-line is-los">${proseHtml(h.text)}</div>`
+    : `<p class="asstp-line is-${h.role}">${esc(h.text)}</p>`)).join('')}
       ${state.busy ? '<p class="asstp-line is-busy">Thinking…</p>' : ''}
 
       ${!state.busy && state.answer ? sourcesHtml(state.sources) : ''}

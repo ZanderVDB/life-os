@@ -581,6 +581,138 @@ test('pending: an amendment naming nothing pending is refused, not applied elsew
     assert.equal(still.body.actions[0].title, 'Haircut', 'an unmatched amendment changed something');
   });
 
+/* ══ 4b. Dates through the assistant ═════════════════════════════════════ */
+
+test('dates: the haircut flow, exactly as it is meant to go', async () => {
+  /* The scenario from the Phase 3 review, end to end. Tuesday 1 September:
+     Saturday is the 5th, Monday is the 7th. What shipped produced the 6th and
+     then the 8th, because the model was doing calendar arithmetic in its head
+     and nothing downstream could tell a wrong ISO date from a right one. */
+  const { call, db, ws } = await setup([
+    {
+      understood: 'A haircut on Saturday',
+      actions: [{
+        capability: 'task.create', title: 'Haircut on Saturday',
+        summary: 'Saturday 5 September 2026',
+        payload: { title: 'Haircut', dueDate: '2026-09-05' },
+        assumptions: ['Saturday means 2026-09-05'],
+      }],
+    },
+    {
+      understood: 'Monday instead',
+      amend: [{ actionId: 'a1', fields: { dueDate: '2026-09-07' } }],
+    },
+  ]);
+
+  const first = await call('POST', '/ai/turn', {
+    text: 'I need a haircut Saturday', today: '2026-09-01',
+  });
+  assert.equal(first.body.actions.length, 1);
+  assert.equal(first.body.actions[0].payload.dueDate, '2026-09-05');
+  assert.equal(first.body.note, null, 'the correct date was refused');
+
+  const second = await call('POST', '/ai/turn', {
+    text: 'Actually make it Monday',
+    conversationId: first.body.conversationId,
+    today: '2026-09-01',
+  });
+  assert.equal(second.body.amended, true, 'a second proposal was made');
+  assert.equal(second.body.turnId, first.body.turnId);
+  assert.equal(second.body.actions.length, 1, 'there are now two haircuts');
+  assert.equal(second.body.actions[0].payload.dueDate, '2026-09-07');
+  /* The prose said Saturday and the date is now Monday, so the prose goes. */
+  assert.equal(second.body.actions[0].summary, null);
+
+  await call('POST', `/ai/turn/${first.body.turnId}/confirm`, {
+    version: second.body.version, count: 1, importantAccepted: [],
+  });
+
+  const rows = await db.select().from(tasks).where(eq(tasks.workspaceId, ws));
+  const haircuts = rows.filter((t) => t.title === 'Haircut');
+  assert.equal(haircuts.length, 1, `${haircuts.length} haircuts exist`);
+  assert.equal(haircuts[0]!.dueDate, '2026-09-07',
+    'the confirmed task is not on the Monday that was agreed');
+});
+
+test('dates: a card naming a day the date is not never reaches the user', async () => {
+  /* The exact shape that shipped: an assumption and a payload that agree with
+     each other and disagree with the calendar. `date_missing` cannot see it —
+     the payload does carry the promised date — so the weekday name is the
+     check, because it is the one piece of prose with a single right answer. */
+  const { call } = await setup([
+    {
+      understood: 'A haircut on Saturday',
+      actions: [{
+        capability: 'task.create', title: 'Haircut on Saturday',
+        payload: { title: 'Haircut', dueDate: '2026-09-06' },
+        assumptions: ['Saturday means 2026-09-06'],
+      }],
+    },
+    /* The one repair, this time getting it right from the calendar. */
+    {
+      understood: 'A haircut on Saturday',
+      actions: [{
+        capability: 'task.create', title: 'Haircut on Saturday',
+        payload: { title: 'Haircut', dueDate: '2026-09-05' },
+        assumptions: ['Saturday means 2026-09-05'],
+      }],
+    },
+  ]);
+  const r = await call('POST', '/ai/turn', {
+    text: 'haircut saturday', today: '2026-09-01',
+  });
+  assert.ok(r.body.metrics.inconsistencies.includes('weekday_mismatch'),
+    'a Sunday called Saturday was accepted');
+  assert.equal(r.body.metrics.repaired, 1);
+  assert.equal(r.body.actions[0].payload.dueDate, '2026-09-05');
+  assert.equal(r.body.note, null);
+  assert.match(lastPlanInput.repair.problems, /is a Sunday/);
+});
+
+test('dates: the fast path resolves reminders from the same calendar', async () => {
+  const { call } = await setup([{ actions: [] }]);
+  const r = await call('POST', '/ai/turn', {
+    text: 'Remind me Friday to call Oscar', today: '2026-09-01',
+  });
+  assert.equal(r.body.metrics.route, 'fast');
+  assert.equal(r.body.actions[0].capability, 'reminder.create');
+  assert.equal(r.body.actions[0].payload.dueDate, '2026-09-04', 'Friday is the 4th');
+  assert.equal(planCalls, 0);
+
+  /* And a reminder with no date at all takes the USER'S today, not the
+     server's UTC day. */
+  const bare = await call('POST', '/ai/turn', {
+    text: 'Remind me to water the plants', today: '2026-09-01',
+  });
+  const done = await call('POST', `/ai/turn/${bare.body.turnId}/confirm`, {
+    version: bare.body.version, count: 1, importantAccepted: [],
+  });
+  assert.equal(done.status, 200);
+  const list = await call('GET', '/reminders?from=2026-09-01&to=2026-09-01');
+  assert.ok((list.body.reminders ?? []).some((x: any) => x.dueDate === '2026-09-01'),
+    'a dateless reminder did not land on the user\u2019s today');
+});
+
+test('dates: the planner is handed the calendar, not asked to compute it', async () => {
+  /* The root cause, closed. The model used to be told only "Today is
+     2026-09-01" and had to work out that this was a Tuesday. */
+  const src = readFileSync(join('src', 'ai', 'providers', 'anthropic.ts'), 'utf8');
+  assert.match(src, /calendarWindow/, 'the planner is not given a resolved calendar');
+  assert.match(src, /never from arithmetic/i);
+  assert.ok(!/Today is \$\{input\.request\.today\}/.test(src),
+    'a bare date with no weekday is still being sent');
+
+  /* One resolver, and the fast path uses it rather than a copy. */
+  const fast = readFileSync(join('src', 'ai', 'fastpath.ts'), 'utf8');
+  assert.match(fast, /from '\.\.\/lib\/civil-date\.js'/);
+  assert.ok(!/getUTCDay\(\)/.test(fast), 'fastpath still does its own weekday arithmetic');
+
+  /* And the request's civil date is the user's, not the server's UTC day. */
+  const route = readFileSync(join('src', 'routes', 'ai.ts'), 'utf8');
+  assert.match(route, /todayIn\(/);
+  assert.ok(!/today: extra\.today \?\? new Date\(\)\.toISOString/.test(route));
+});
+
 /* ══ 5. Plan / payload consistency ═══════════════════════════════════════ */
 
 test('consistency: a card that says one thing over a payload that does another is withheld',
@@ -614,6 +746,8 @@ test('consistency: a card that says one thing over a payload that does another i
     });
     assert.equal(r.status, 200);
     assert.ok(r.body.metrics.inconsistencies.includes('date_missing'));
+  assert.ok(r.body.metrics.unresolved.includes('date_missing'),
+    'the repair silently succeeded');
     assert.equal(planCalls, 2, 'no repair was attempted');
     // The good one survives; the misleading one does not, and is accounted for.
     assert.equal(r.body.actions.length, 1);
@@ -1064,17 +1198,24 @@ test('the model is told the surface renders text literally', async () => {
      the whole fix; adding a renderer would be a different product decision
      made by accident. */
   const src = readFileSync(join('src', 'ai', 'providers', 'anthropic.ts'), 'utf8');
-  assert.match(src, /PLAIN TEXT ONLY/);
-  assert.match(src, /renders what you write literally/);
+  assert.match(src, /That is the\s+whole set the surface renders/);
+  assert.match(src, /NEVER STATE A COUNT YOU DO NOT THEN LIST/);
 
-  /* And nothing on either surface parses it, which is what makes the rule
-     necessary rather than merely tidy. Comments are stripped first: the word
-     "marked" appears in one, describing a card that cannot run. */
+  /* The subset the model is allowed and the subset the renderer draws are the
+     same subset, and nothing larger is pulled in to draw it. */
   const CODE = /\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm;
-  for (const file of ['assistant-panel.js', 'assistant.js', 'assistant-cards.js']) {
-    const web = readFileSync(join('..', 'web', file), 'utf8').replace(CODE, ' ');
-    assert.ok(!/marked\(|markdown|remark|DOMPurify/i.test(web),
-      `${file} parses markdown, so the rule is wrong rather than the renderer`);
+  const prose = readFileSync(join('..', 'web', 'assistant-prose.js'), 'utf8');
+  const body = prose.replace(CODE, ' ');
+  assert.ok(!/import/.test(body), 'the prose renderer took a dependency');
+  for (const tag of ['strong', 'code', 'ul', 'ol', 'li', 'p']) {
+    assert.ok(body.includes(tag), `${tag} is not produced`);
+  }
+  /* Escaping happens before any tag is produced, which is the whole security
+     argument: model output cannot become an element. */
+  assert.match(prose.slice(prose.indexOf('export function proseHtml')), /esc\(raw\)/);
+  for (const file of ['assistant-panel.js', 'assistant.js']) {
+    const web = readFileSync(join('..', 'web', file), 'utf8');
+    assert.match(web, /proseHtml/, `${file} still renders the answer as one escaped string`);
   }
 });
 

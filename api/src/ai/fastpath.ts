@@ -40,6 +40,7 @@
  * rather than a promise.
  */
 import type { CapabilityRegistry, CapabilityCtx } from './registry.js';
+import { resolveRelativeDate } from '../lib/civil-date.js';
 import type { ContextSource, EntityRef } from './types.js';
 
 /** The shape of an action before the turn normalises it. Matches the planner's. */
@@ -87,49 +88,14 @@ const DISQUALIFIERS: { test: RegExp; reason: string }[] = [
 
 const MAX_WORDS = 16;
 
-/* ══ Dates, the small deterministic subset ═══════════════════════════════ */
-
-const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-const addDays = (iso: string, n: number) => {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
-
-/**
- * Resolve the date words this file is willing to be certain about.
+/* ══ Dates ═══════════════════════════════════════════════════════════════
  *
- * Returns the date and the words it consumed, so the caller can strip them out
- * of the title. A word that LOOKS like a date and is not resolvable here —
- * "next month", "the week after" — returns null and the whole request falls
- * back, which is the correct outcome: a reminder on the wrong day is worse
- * than a reminder that took two seconds longer to propose.
- */
-export function resolveDate(text: string, today: string): { date: string; matched: string } | null {
-  const t = text.toLowerCase();
-
-  const explicit = t.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-  if (explicit) return { date: explicit[1]!, matched: explicit[0] };
-
-  if (/\btoday\b/.test(t)) return { date: today, matched: 'today' };
-  if (/\btonight\b/.test(t)) return { date: today, matched: 'tonight' };
-  if (/\btomorrow\b/.test(t)) return { date: addDays(today, 1), matched: 'tomorrow' };
-
-  const inDays = t.match(/\bin (\d{1,2}) days?\b/);
-  if (inDays) return { date: addDays(today, Number(inDays[1])), matched: inDays[0] };
-
-  /* A weekday means the NEXT one, and never today: somebody saying "remind me
-     Friday" on a Friday means the Friday that has not happened yet. */
-  const day = t.match(/\b(?:on |next |this )?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
-  if (day) {
-    const want = DAYS.indexOf(day[1]!);
-    const from = new Date(`${today}T00:00:00Z`).getUTCDay();
-    const delta = ((want - from + 7) % 7) || 7;
-    return { date: addDays(today, delta), matched: day[0] };
-  }
-  return null;
-}
+ * There is one resolver, in `lib/civil-date.ts`, and this is not it. There
+ * used to be two — a copy here and, effectively, another one inside the model,
+ * which was told the date and asked to work out the weekday itself. They
+ * disagreed, which is a thing users notice and nothing downstream could
+ * catch. */
+export { resolveRelativeDate as resolveDate } from '../lib/civil-date.js';
 
 /** A time of day, when one was actually given. `at 3` is not a date. */
 function resolveTime(text: string): { time: string; matched: string } | null {
@@ -328,7 +294,7 @@ export async function tryFastPath(input: FastInput): Promise<FastResult | FastMi
   if (/^remind me\b/i.test(raw)) {
     if (!(await available('reminder.create'))) return { reason: 'the capability is not available' };
     let rest = raw.replace(/^remind me\b\s*/i, '');
-    const when = resolveDate(rest, today);
+    const when = resolveRelativeDate(rest, today);
     /* No date at all is fine — a reminder defaults to today, which is what the
        modal does. A date word this file cannot resolve is NOT fine. */
     if (!when && /\b(next|week|month|weekend|end of|later|sometime|fortnight)\b/i.test(rest)) {
@@ -371,7 +337,9 @@ export async function tryFastPath(input: FastInput): Promise<FastResult | FastMi
        shape: "add pay the rent Friday" could be a deadline or an intention,
        and getting it wrong writes the wrong field. The planner exists for
        exactly that, and it says which it chose on the card. */
-    if (!named && resolveDate(body, today)) return { reason: 'a date that needs interpreting' };
+    if (!named && resolveRelativeDate(body, today)) {
+      return { reason: 'a date that needs interpreting' };
+    }
     const title = titleCase(tidy(body.replace(/\s+/g, ' ')));
     if (title.length < 2) return { reason: 'no title' };
     if (title.length > 200) return { reason: 'too long for a task title' };

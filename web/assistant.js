@@ -35,6 +35,7 @@ import * as api from './assistant-api.js';
 import {
   actionCardHtml, sourcesHtml, clarificationHtml, resultsHtml,
 } from './assistant-cards.js';
+import { proseHtml } from './assistant-prose.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -572,7 +573,7 @@ function renderReview() {
           something the user did not. */ ''}
     ${session.understood && !echoes(session.transcript, session.understood)
     ? `<h2 class="asst-h">${esc(session.understood)}</h2>` : ''}
-    ${session.answer ? `<p class="asst-reply">${esc(session.answer)}</p>` : ''}
+    ${session.answer ? `<div class="asst-reply">${proseHtml(session.answer)}</div>` : ''}
     ${session.answer ? sourcesHtml(session.sources) : ''}
     ${session.note ? `<p class="asst-note-line">${esc(session.note)}</p>` : ''}
     ${clarificationHtml(session.clarification)}

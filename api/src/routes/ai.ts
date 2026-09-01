@@ -25,6 +25,7 @@ import { confirmTurn, cancelTurn } from '../ai/confirm.js';
 import * as memory from '../ai/memory.js';
 import type { AiRequestContext } from '../ai/types.js';
 import { badRequest } from '../lib/errors.js';
+import { todayIn } from '../lib/civil-date.js';
 
 const uuid = z.string().uuid();
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -47,7 +48,12 @@ export function registerAiRoutes(
   const requestCtx = (req: any, extra: Partial<AiRequestContext> = {}): AiRequestContext => ({
     workspaceId: req.workspaceId ?? req.params.workspaceId,
     userId: req.principal?.userId ?? req.user?.id ?? '',
-    today: extra.today ?? new Date().toISOString().slice(0, 10),
+    /* The client sends its own civil date, which is the most reliable answer.
+       Falling back to `toISOString().slice(0,10)` was falling back to the UTC
+       day — already tomorrow for anyone east of Greenwich after midnight, and
+       still yesterday for anyone west of it in the evening. With a zone we can
+       do better than that even when no date arrives. */
+    today: extra.today ?? todayIn(extra.timeZone ?? null),
     timeZone: extra.timeZone ?? null,
     surface: extra.surface ?? null,
   });

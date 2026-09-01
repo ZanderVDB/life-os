@@ -510,6 +510,14 @@
 .asst-h{margin:0;font-size:13px;font-weight:700;letter-spacing:.09em;
   text-transform:uppercase;color:var(--muted)}
 .asst-reply{margin:0;font-size:15.5px;line-height:1.5;color:var(--text)}
+/* Same fixed subset as the desktop panel. See assistant-prose.js. */
+.asst-reply > p{margin:0}
+.asst-reply > * + *{margin-top:9px}
+.asst-reply ul,.asst-reply ol{margin:0;padding-left:20px;
+  display:flex;flex-direction:column;gap:5px}
+.asst-reply li{line-height:1.5}
+.asst-reply strong{font-weight:600}
+.asst-reply code{font-family:var(--font-mono,ui-monospace,monospace);font-size:.92em}
 .asst-empty{margin:0;font-size:13px;color:var(--muted)}
 
 .ap{background:var(--surface);border:1px solid var(--border);
@@ -2331,6 +2339,31 @@
 .set-mem-cat{font-size:10.5px;font-weight:700;letter-spacing:.09em;
   text-transform:uppercase;color:var(--muted)}
 .set-mem .set-item-name{font-size:14px}
+
+/* ── Memory at phone width ───────────────────────────────────────────────
+   Three things have to hold, and one of them used to fail: the sentence must
+   wrap in full (it is a textarea now, so it can), the controls must stay
+   reachable, and the last row must not sit under the bottom bar. Actions go
+   BENEATH the text rather than competing with it for one horizontal line —
+   at 390px a row holding a sentence, Pin and Forget gives the sentence about
+   forty characters. */
+@media (max-width:899px),(max-height:500px) and (max-width:1099px){
+  .set-mem,.set-item[data-cand]{flex-direction:row;flex-wrap:wrap;
+    align-items:flex-start;row-gap:6px}
+  .set-mem .set-item-dot,.set-item[data-cand] .set-item-dot{margin-top:9px}
+  .set-mem .set-item-name,.set-item[data-cand] .set-cand-t{flex:1 1 100%;order:-1}
+  /* The controls sit on their own line, left-aligned under the text, each
+     still a full touch target. */
+  .set-mem .set-item-go,.set-mem .set-item-x,
+  .set-item[data-cand] .set-item-go,.set-item[data-cand] .set-item-x{
+    min-height:var(--m-tap);display:inline-flex;align-items:center;
+    padding-left:10px;padding-right:10px;margin-left:-10px}
+  .set-mem .set-item-x,.set-item[data-cand] .set-item-x{margin-left:0}
+  .set-cand-sub{white-space:normal;overflow-wrap:anywhere}
+  /* Nothing here sets its own bottom padding. §21 puts the navigation inset on
+     .main-wrap, once, and Settings scrolls inside it — a second one here would
+     be a hand-tuned number competing with the one that already works. */
+}
 .set-cand-t{flex:1;font-size:14px;color:var(--text-2);min-width:0;
   display:flex;flex-direction:column;gap:3px}
 /* What this would replace, when it contradicts something already believed.

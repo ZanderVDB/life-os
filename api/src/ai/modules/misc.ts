@@ -151,7 +151,12 @@ export const habitsModule: AiModule = {
       risk: 'confirm',
       async execute(ctx, input: { id: string; date?: string; count?: number }) {
         const { id, ...rest } = input;
-        const r = await checkHabit(ctx.db, ctx.request.workspaceId, id, rest);
+        /* The day defaults to the USER'S today, not the server's. The service
+           falls back to the UTC date, which ticks the wrong day for anyone
+           whose evening is the next day in Greenwich. */
+        const r = await checkHabit(ctx.db, ctx.request.workspaceId, id, {
+          ...rest, date: rest.date ?? ctx.request.today,
+        });
         return {
           status: 'done' as const,
           ref: { type: 'habit' as const, id },

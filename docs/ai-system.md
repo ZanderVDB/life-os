@@ -428,6 +428,79 @@ list here to keep in step.
 records why the cheap route declined. None of it is shown to the user — a
 proposal card is not the place for a diagnostic.
 
+### 6a2. Dates — one resolver, and the model is not it
+
+`api/src/lib/civil-date.ts`. Every relative date in Life OS is resolved here,
+by the fast path, by the consistency pass, and — crucially — BEFORE the planner
+runs, so the planner is handed the answer rather than asked for it.
+
+**The bug this ended.** The planner was told `Today is 2026-09-01.` and asked
+to turn "Saturday" into a date. To do that it must first work out that
+2026-09-01 is a Tuesday, then count forward: calendar arithmetic in a language
+model's head. The same sentence produced 5 September in one run and 6 September
+in the next, and nothing downstream could tell them apart because both are
+valid ISO dates. There were effectively two resolvers — a correct one in the
+fast path, and the model — and the wrong one was on the path that mattered.
+
+**What the planner gets now** is the next fortnight, resolved:
+
+```
+TODAY IS Tuesday, 1 September 2026 (2026-09-01).
+
+TODAY'S CALENDAR. Take dates from this table; never calculate one:
+  2026-09-01  tuesday  <- today
+  2026-09-02  wednesday  <- tomorrow
+  2026-09-03  thursday
+  2026-09-04  friday
+  2026-09-05  saturday
+  ...
+```
+
+"Saturday" stops being a computation and becomes a lookup.
+
+**The rules, stated once and the same everywhere.**
+
+| phrase | meaning |
+|---|---|
+| `today`, `tonight` | today |
+| `tomorrow`, `yesterday` | one day either way |
+| `in N days`, `in N weeks` | exactly that |
+| `Friday`, `on Friday`, `this Friday` | the NEXT Friday, **never today**. Somebody saying "remind me Friday" on a Friday means the one that has not happened yet |
+| `next Friday` | seven days later than that. The one genuinely contested reading in English; Life OS picks the later one, says so on the card, and lets the user correct it there |
+| `this weekend` | the coming Saturday. A date field holds one day, and that is the earlier one |
+| an ISO date | itself |
+| anything else | **not resolved**. The fast path falls through to the planner; the planner is told to ask |
+
+**A civil date is not an instant.** `2026-09-05` is a day on a wall calendar:
+no time, no zone. Every function anchors it at UTC midnight purely as a stable
+frame for counting days and returns a bare label again — nothing produced ever
+carries a time or an offset, so a civil date cannot shift under conversion. Day
+arithmetic means month, year, leap-day and DST boundaries need no special
+handling: 31 December + 1 is 1 January.
+
+**"Today" is the user's day, not the server's.** `todayIn(timeZone)` asks
+`Intl`; `new Date().toISOString().slice(0, 10)` is the UTC day, which is
+already tomorrow for anyone east of Greenwich after midnight. The client sends
+its own civil date and that is preferred; the zone is the fallback; UTC is the
+fallback's fallback. The same rule reaches the services the assistant calls —
+a reminder with no date defaults to the user's today, and a habit is ticked on
+the user's day.
+
+**Everything downstream uses the same resolver.** A pending amendment is an
+edit to a payload, so it is the same field validated the same way; `dueDate`
+and `scheduledAt` stay distinct facts and neither is written from the other;
+and a calendar draft is resolved before it reaches `proposeCreateEvent`, so
+Calendar never sees a phrase.
+
+**The semantic check.** `date_missing` asks whether the payload carries a date
+the words promised — and that passes for a card saying "Saturday" with the
+assumption "Saturday means 2026-09-06" over a payload of 2026-09-06.
+Self-consistent, valid, and wrong. So `weekday_mismatch` asks the one question
+about prose that has exactly one right answer: **if the words name a weekday,
+the payload's date must fall on it.** A card that fails it never reaches the
+user — the repair pass gets one attempt with the calendar row quoted back at
+it, and what still disagrees is withheld.
+
 ### 6b. Conversation, pending proposals and follow-up
 
 `ai_conversations` holds a thread; `ai_turns` holds each turn.
@@ -1050,6 +1123,30 @@ without keeping anything sensitive.
 The UI shows sources as a quiet row of clickable chips under an answer — not a
 citation report. Asking *"where did you get that?"* is answerable because the
 refs are on the turn.
+
+### What an answer may look like
+
+The assistant writes prose, and the surface renders a **fixed, tiny subset**:
+paragraphs, `**bold**`, and hyphen or numbered lists. Nothing else — headings,
+tables, links and code fences have their markers stripped and their words kept.
+
+`web/assistant-prose.js`, used by both surfaces. It is not a Markdown library
+and deliberately not: the surface wants three things, and a library would bring
+raw-HTML passthrough and a sanitiser to undo it again. The security argument is
+one sentence — **everything is escaped first**, and tags are produced only by
+that file, from a fixed set, after the text can no longer contain any. There is
+no path by which model output becomes an element, and a test enumerates the
+tags that appear.
+
+Before this, an answer was escaped and inserted as one string, so `**Urgent**`
+reached the reader as four asterisks. Telling the model not to use them helped
+and did not hold; a slip should look like a bold word rather than like a bug.
+
+**No count without a list.** The model is told never to state a number it does
+not then enumerate, and never to write a placeholder bullet — *"Two more
+without a priority set: - (no other tasks visible)"* is a list it could not
+fill. An empty list item is dropped by the renderer as well, because the two
+halves of that failure are worth closing separately.
 
 **"Used" means retrieved, not cited.** The chips are what the assistant was
 given, ranked, and they are honest about that — but on a broad question they

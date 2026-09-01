@@ -2960,7 +2960,12 @@ function wireSettings() {
       await renameArea(id, name);
     });
     el.onblur = save;
-    el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); if (e.key === 'Escape') el.value = original; };
+    /* Enter saves rather than adding a line: a memory is one sentence, and the
+       gesture has to stay the same as renaming an area. */
+    el.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); el.blur(); }
+      if (e.key === 'Escape') { el.value = original; autoGrow(el); el.blur(); }
+    };
   });
 
 /* ── Areas ───────────────────────────────────────────────────────────────
@@ -3045,9 +3050,18 @@ async function openReminderById(id) {
    * Editing is the same gesture as renaming an area: type, blur, saved. A
    * memory the person cannot correct in one move is a memory they will
    * eventually stop trusting. */
+  /* A textarea holds one belief and has to show all of it, so it is sized to
+     its content rather than scrolled. Re-measured on input because the person
+     may be making it longer. */
+  const autoGrow = (el) => {
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
   document.querySelectorAll('[data-mem-fact]').forEach((el) => {
     const id = el.dataset.memFact;
     const original = el.value;
+    autoGrow(el);
+    el.oninput = () => autoGrow(el);
     const save = () => run(async () => {
       const fact = el.value.trim();
       if (!fact || fact === original) { el.value = original; return; }
