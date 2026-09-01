@@ -113,6 +113,22 @@ export type PlanInput = {
   /** The entity the user picked from a clarification, by id rather than label. */
   resolved?: { ref: { type: string; id: string } | null; label: string } | null;
   /**
+   * What the date in the request MEANS, read deterministically from the
+   * user's own words.
+   *
+   * Handed over for the same reason the calendar is: asking a model to intuit
+   * whether "Saturday" is a deadline or a plan produces a confident answer
+   * either way, and "I need a haircut Saturday" became a deadline with an
+   * assumption saying so. The reading is decided in `lib/timing-intent.ts`,
+   * and `ambiguous` means ASK.
+   */
+  timing?: {
+    reading: 'deadline' | 'scheduled' | 'reminder' | 'none' | 'ambiguous';
+    matched: string | null;
+    hasTime: boolean;
+    block: boolean;
+  };
+  /**
    * One chance to fix a plan that contradicted itself.
    *
    * Set by the consistency pass, which is deterministic and runs before the

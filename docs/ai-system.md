@@ -501,6 +501,69 @@ the payload's date must fall on it.** A card that fails it never reaches the
 user — the repair pass gets one attempt with the calendar row quoted back at
 it, and what still disagrees is withheld.
 
+### 6a3. What the date MEANS — deadline or doing
+
+`api/src/lib/timing-intent.ts`. A separate problem from §6a2, and the one that
+survived it: getting the date right and the FIELD wrong is still wrong.
+
+|  |  |
+|---|---|
+| `dueDate` | when it must be **finished**. A day, never a moment. |
+| `scheduledAt` | when the user intends to **do** it. An instant. |
+
+They are facts about different moments. Writing one from the other is how
+*"finish the report by Friday"* becomes a Friday afternoon that was never free.
+
+**The bug this ended.** *"I need a haircut Saturday"* produced a task with
+`dueDate` and a card reading "Saturday as the deadline". Nothing caught it, and
+the reason matters: the consistency pass compares the card's words with the
+card's payload, and here they agreed perfectly. The model said deadline and
+wrote a deadline. The disagreement was with the **user**, who had said neither.
+
+That is the same shape as the weekday bug — self-consistent and wrong — and it
+gets the same answer: read it deterministically from the user's own words, hand
+the planner the reading, and check the payload against it afterwards.
+
+**The readings.**
+
+| reading | wording | field |
+|---|---|---|
+| `deadline` | "by Friday", "due", "deadline", "before", "needs to be done", "hand in", "no later than" | `dueDate` |
+| `scheduled` | "work on", "I'll do", "sit down", "start on", "spend an hour", "do it" | `scheduledAt` |
+| `scheduled` + `block` | "block out", "put an hour aside", "book me", "schedule", "find me an hour", "in my calendar" | `scheduledAt`, or a **calendar** action — the planner chooses from live capabilities, not from the wording |
+| `reminder` | "remind me", "don't let me forget" | neither; a reminder |
+| `none` | no date at all | neither |
+| `ambiguous` | a date, and nothing saying which — *"I need a haircut Saturday"* | **ask** |
+
+**Two rules that fall out of the schema rather than a word list.** A clock time
+can never be a deadline, because `dueDate` holds a day — so "Saturday at 10" is
+always a plan. And the check only fires where the two fields genuinely
+**compete**: a reminder's `dueDate` is when it fires and has no rival, a diary
+date is the day it belongs to. The choice is real only when one capability
+offers both, which the schema knows and no list has to remember.
+
+**Ambiguous means ask.** Not a quiet default, and not a default dressed up as an
+assumption. The turn returns a clarification — *"What does Saturday mean for the
+haircut?"* → **Do it then** / **Have it done by then** — and no action for that
+part; everything unambiguous in the same request is still proposed alongside it.
+Answering settles it: the chosen option maps back to a reading, so the
+continuation is no longer ambiguous and does not ask again. A wrong deadline
+nags early; a wrong plan goes silently past. Neither is a small call to make on
+somebody's behalf.
+
+**Explicit words beat learned preferences.** Memory can inform a default; it can
+never turn an ambiguous date into a deadline, and it never decides this field.
+
+**One reading per sentence.** The fast path asks the same classifier rather than
+holding an opinion of its own: anything other than "no date at all" goes to the
+planner. `timing_ambiguous`, `due_vs_scheduled` and `scheduled_vs_due` are
+findings like any other — one repair attempt with the specific complaint, then
+withheld and named.
+
+**Where it applies:** new tasks, task edits, pending amendments, the schedule
+and calendar flows, the planner route and the fast path. Reminders are exempt by
+construction, because their date has no rival.
+
 ### 6b. Conversation, pending proposals and follow-up
 
 `ai_conversations` holds a thread; `ai_turns` holds each turn.
@@ -1148,9 +1211,10 @@ without a priority set: - (no other tasks visible)"* is a list it could not
 fill. An empty list item is dropped by the renderer as well, because the two
 halves of that failure are worth closing separately.
 
-**"Used" means retrieved, not cited.** The chips are what the assistant was
-given, ranked, and they are honest about that — but on a broad question they
-will include rows the answer did not draw on. The `answer` job returns a
+**The chips are labelled CONTEXT, and that is what they are.** They show what
+retrieval put in front of the assistant, ranked — which on a broad question
+includes rows the answer did not draw on. They were labelled "Used", which
+claimed an attribution nothing computes. The `answer` job returns a
 `cited` list; the `plan` job does not, so a turn that produced actions has no
 narrower set to show. Making the chips exactly what informed the sentence is a
 real improvement and is not built (§19).
@@ -1486,7 +1550,8 @@ more predictable, and probably right.
     read a four-month-old proposal, and keeping them would need a retention
     story of its own. If that changes, the sweep is one function.
 12. **Source chips are what was retrieved, not what was cited.** On a broad
-    question the row includes rows the answer never used. §14.
+    question the row includes rows the answer never used — which is why they
+    are labelled CONTEXT rather than "Used". §14.
 13. **Nothing measures the assistant over time.** `metrics` on each turn says
     what happened in that turn; there is no aggregation, so "is retrieval
     getting worse" is not a question anything can currently answer.

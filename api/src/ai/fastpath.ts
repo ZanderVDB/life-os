@@ -41,6 +41,7 @@
  */
 import type { CapabilityRegistry, CapabilityCtx } from './registry.js';
 import { resolveRelativeDate } from '../lib/civil-date.js';
+import { classifyTiming } from '../lib/timing-intent.js';
 import type { ContextSource, EntityRef } from './types.js';
 
 /** The shape of an action before the turn normalises it. Matches the planner's. */
@@ -335,10 +336,17 @@ export async function tryFastPath(input: FastInput): Promise<FastResult | FastMi
     if (named) body = named[1]!;
     /* A date on a bare "add" is the one genuinely ambiguous case in this
        shape: "add pay the rent Friday" could be a deadline or an intention,
-       and getting it wrong writes the wrong field. The planner exists for
-       exactly that, and it says which it chose on the card. */
-    if (!named && resolveRelativeDate(body, today)) {
-      return { reason: 'a date that needs interpreting' };
+       and getting it wrong writes the wrong field.
+
+       Asked of the SAME classifier the planner is given, so a sentence has one
+       reading in Life OS rather than this file's opinion and the planner's.
+       Anything other than "no date at all" goes to the planner — which sets
+       the field the wording supports, and asks when it supports neither. */
+    if (!named) {
+      const timing = classifyTiming(raw);
+      if (timing.reading !== 'none') {
+        return { reason: `a date meaning ${timing.reading}, which the planner decides` };
+      }
     }
     const title = titleCase(tidy(body.replace(/\s+/g, ' ')));
     if (title.length < 2) return { reason: 'no title' };

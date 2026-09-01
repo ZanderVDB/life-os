@@ -48,6 +48,7 @@ import {
   validatePlan, repairBrief, stillDescribes, retitleForDate, type Finding,
 } from './validate.js';
 import { structure, type Clarification } from './clarify.js';
+import { classifyTiming, readingFromChoice } from '../lib/timing-intent.js';
 import * as memory from './memory.js';
 import type {
   AiRequestContext, ProposalAction, ContextSource, Confidence, EntityRef,
@@ -266,6 +267,15 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
   }
 
   /* ── 4. Plan ──────────────────────────────────────────────────────── */
+  /* What the date in this request means, read from the USER'S words. Decided
+     once, handed to the planner, and checked against the payload afterwards —
+     the same shape as the calendar, and for the same reason. */
+  const timing = classifyTiming(text);
+  /* Unless the user has just answered the question. A clarification exists to
+     settle exactly this, so continuing to call the wording ambiguous would
+     make the answer unusable and ask again for ever. */
+  const chosen = input.resolved ? readingFromChoice(input.resolved.label) : null;
+  if (chosen) timing.reading = chosen;
   const described = await registry.describe(ctx);
   const planInput = {
     text,
@@ -275,6 +285,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     /* Readable but not writable — stated rather than left to be inferred from
        an absence, so "I can see that meeting but cannot move it" is reachable. */
     readOnly: described.readOnly,
+    timing,
     /* And why the missing ones are missing. A disconnected calendar should
        produce "your calendar is not connected", never "I cannot find it". */
     unavailable: described.unavailable,
@@ -313,9 +324,17 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
   }
 
   const schemas = await schemaMap(deps, ctx, (plan.actions ?? []) as any);
-  let findings = validatePlan({
-    actions: (plan.actions ?? []) as any, schemas, knownIds, today: request.today,
-  });
+  const validateInput = {
+    schemas,
+    knownIds,
+    today: request.today,
+    timing,
+    /* A clarification means the turn is ASKING rather than deciding, which is
+       exactly what ambiguous wording should produce — so the ambiguity check
+       has nothing to complain about. */
+    asking: Boolean((plan as any).clarification),
+  };
+  let findings = validatePlan({ ...validateInput, actions: (plan.actions ?? []) as any });
   /* What was FOUND, kept separately from what survived. A successful repair
      empties `findings`, and reporting only that made a turn where the model
      got the date wrong and was corrected look identical to one where it got
@@ -335,10 +354,10 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     if (retry) {
       const retrySchemas = await schemaMap(deps, ctx, (retry.actions ?? []) as any);
       const after = validatePlan({
+        ...validateInput,
         actions: (retry.actions ?? []) as any,
         schemas: retrySchemas,
-        knownIds,
-        today: request.today,
+        asking: Boolean((retry as any).clarification),
       });
       /* Kept only if it is actually better. A repair that trades one
          inconsistency for another is not a repair. */
@@ -709,6 +728,8 @@ function humanFinding(f: Finding, title: string): string {
       return `${what} named a time the change would not actually have set`;
     case 'due_vs_scheduled': case 'scheduled_vs_due':
       return `${what} mixed up a deadline with when to do it`;
+    case 'timing_ambiguous':
+      return `${what} needed to know whether that date is a deadline or when to do it`;
     case 'kind_mismatch':
       return `${what} would have created something new rather than changing what exists`;
     case 'unknown_id':

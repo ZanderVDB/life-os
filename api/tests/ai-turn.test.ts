@@ -210,7 +210,9 @@ test('turn: an edit changes the stored proposal, and is validated first', async 
       assumptions: ['Read as a deadline.'],
     }],
   }]);
-  const r = await call('POST', '/ai/turn', { text: 'haircut tomorrow' });
+  /* "done by tomorrow", not "tomorrow": a bare date is a question now, and
+     this test is about editing a stored proposal. */
+  const r = await call('POST', '/ai/turn', { text: 'haircut done by tomorrow' });
   const id = r.body.actions[0].id;
 
   // A value the capability's schema refuses is rejected, with the reason.

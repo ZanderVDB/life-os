@@ -167,8 +167,10 @@ const createCap: Capability = {
   module: 'tasks',
   kind: 'mutate',
   label: 'Create task',
-  description: 'Create one task. Set dueDate ONLY for a stated deadline and scheduledAt ONLY '
-    + 'for a stated intention to work on it. Creating a task never creates a calendar event.',
+  description: 'Create one task. Set dueDate ONLY when the request says it must be FINISHED '
+    + 'by then, and scheduledAt ONLY when it says when they intend to DO it. If the request '
+    + 'says neither, set neither and ask which is meant. Creating a task never creates a '
+    + 'calendar event.',
   input: TaskCreateInput,
   risk: 'confirm',
   async execute(ctx, input) {
@@ -340,8 +342,11 @@ export const tasksModule: AiModule = {
   name: 'Tasks',
   entities: ['task'],
   rules: [
-    'dueDate is the deadline. scheduledAt is when the user intends to do it. They are '
-      + 'different facts and must never be written from one another.',
+    'dueDate is the deadline - when it must be FINISHED. scheduledAt is when the user '
+      + 'intends to DO it. They are different facts and must never be written from one '
+      + 'another, nor chosen between on the user\u2019s behalf when the request says neither.',
+    'A date with no wording saying which it is - "I need a haircut Saturday" - is ambiguous. '
+      + 'Ask which is meant; a wrong deadline nags early and a wrong plan goes silently past.',
     'A task is one action. Anything needing several is a project.',
     'Setting a due date does NOT create a calendar event.',
     'bucket (today/week/month/future) is where a task sits on the board, not when it is due.',

@@ -250,7 +250,7 @@ test('fast path: anything less than obvious falls through to the planner', async
   assert.ok(!isMiss(exact), 'an exact match was treated as ambiguous');
   assert.match(await miss('Complete Zzyzx planning'), /nothing matched/);
   assert.match(await miss('Remind me at the end of the month to file'), /cannot resolve/);
-  assert.match(await miss('Add pay the rent on Friday'), /needs interpreting/);
+  assert.match(await miss('Add pay the rent on Friday'), /which the planner decides/);
   assert.match(await miss('Move Invoice to Todoist'), /not a board column/);
   assert.match(await miss('Move this to today'), /no task is open/);
   assert.match(await miss('Book a meeting tomorrow'), /calendar/);
@@ -482,7 +482,11 @@ test('pending: a follow-up amends the proposal instead of inventing a second one
     ]);
 
     const first = await call('POST', '/ai/turn', {
-      text: 'I need a haircut tomorrow', today: '2026-09-01',
+      /* "by tomorrow" rather than "tomorrow": this test is about amending a
+         pending proposal, and a bare date is now a question rather than a
+         proposal. Saying which reading is meant keeps the test about the one
+         thing it is testing. */
+      text: 'I need the haircut done by tomorrow', today: '2026-09-01',
     });
     assert.equal(first.body.actions.length, 1);
 
@@ -537,7 +541,9 @@ test('pending: an amendment drops prose that has stopped being true', async () =
     },
     { understood: 'Monday instead', amend: [{ actionId: 'a1', fields: { dueDate: '2026-09-07' } }] },
   ]);
-  const first = await call('POST', '/ai/turn', { text: 'haircut saturday', today: '2026-09-01' });
+  const first = await call('POST', '/ai/turn', {
+    text: 'haircut done by saturday', today: '2026-09-01',
+  });
   assert.equal(first.body.actions[0].summary, 'Saturday 5 September');
 
   const after = await call('POST', '/ai/turn', {
@@ -559,7 +565,9 @@ test('pending: an amendment drops prose that has stopped being true', async () =
     },
     { understood: 'Rename it', amend: [{ actionId: 'a1', fields: { title: 'Barber' } }] },
   ]);
-  const one = await c2('POST', '/ai/turn', { text: 'haircut saturday', today: '2026-09-01' });
+  const one = await c2('POST', '/ai/turn', {
+    text: 'haircut done by saturday', today: '2026-09-01',
+  });
   const two = await c2('POST', '/ai/turn', {
     text: 'actually call it Barber', conversationId: one.body.conversationId, today: '2026-09-01',
   });
@@ -605,7 +613,10 @@ test('dates: the haircut flow, exactly as it is meant to go', async () => {
   ]);
 
   const first = await call('POST', '/ai/turn', {
-    text: 'I need a haircut Saturday', today: '2026-09-01',
+    /* "done by Saturday", not "Saturday": a bare date is a question now, and
+       this test is about resolving the DATE and amending it. What "Saturday"
+       alone should do has its own test below. */
+    text: 'I need the haircut done by Saturday', today: '2026-09-01',
   });
   assert.equal(first.body.actions.length, 1);
   assert.equal(first.body.actions[0].payload.dueDate, '2026-09-05');
@@ -664,7 +675,7 @@ test('dates: a card naming a day the date is not never reaches the user', async 
     },
   ]);
   const r = await call('POST', '/ai/turn', {
-    text: 'haircut saturday', today: '2026-09-01',
+    text: 'haircut done by saturday', today: '2026-09-01',
   });
   assert.ok(r.body.metrics.inconsistencies.includes('weekday_mismatch'),
     'a Sunday called Saturday was accepted');
@@ -717,6 +728,166 @@ test('dates: the planner is handed the calendar, not asked to compute it', async
   assert.match(route, /todayIn\(/);
   assert.ok(!/today: extra\.today \?\? new Date\(\)\.toISOString/.test(route));
 });
+
+test('timing: an ambiguous date is never silently written into a field', async () => {
+  /* The one that shipped. The model proposed a deadline and wrote a card
+     saying so; every check that compared the card with the payload was
+     satisfied, because they agreed. The disagreement was with the user. */
+  const { call } = await setup([
+    {
+      understood: 'A haircut on Saturday',
+      actions: [{
+        capability: 'task.create', title: 'Haircut',
+        summary: 'Saturday as the deadline',
+        payload: { title: 'Haircut', dueDate: '2026-09-05' },
+      }],
+    },
+    /* One repair, this time asking instead of choosing. */
+    {
+      understood: 'A haircut on Saturday',
+      actions: [],
+      clarification: {
+        question: 'What does Saturday mean for the haircut?',
+        options: [{ id: 'a', label: 'Do it Saturday' }, { id: 'b', label: 'Have it done by Saturday' }],
+      },
+    },
+  ]);
+
+  const r = await call('POST', '/ai/turn', {
+    text: 'I need a haircut Saturday', today: '2026-09-01',
+  });
+  assert.ok(r.body.metrics.inconsistencies.includes('timing_ambiguous'),
+    'a bare date was silently written into a field');
+  assert.equal(r.body.metrics.repaired, 1);
+  assert.equal(r.body.actions.length, 0, 'it chose as well as asking');
+  assert.equal(r.body.status, 'clarifying');
+  assert.match(r.body.clarification.question, /saturday/i);
+  assert.equal(r.body.clarification.options.length, 2);
+  assert.match(lastPlanInput.repair.problems, /Do NOT choose/);
+  /* And the planner was told the reading rather than left to intuit one. */
+  assert.equal(lastPlanInput.timing.reading, 'ambiguous');
+});
+
+test('timing: choosing "do it then" gives a scheduled task, not a deadline', async () => {
+  const { call } = await setup([
+    {
+      understood: 'A haircut on Saturday',
+      actions: [],
+      clarification: {
+        question: 'What does Saturday mean for the haircut?',
+        options: [{ id: 'a', label: 'Do it Saturday' }, { id: 'b', label: 'Have it done by Saturday' }],
+      },
+    },
+    {
+      understood: 'Doing it on Saturday',
+      actions: [{
+        capability: 'task.create', title: 'Haircut',
+        payload: { title: 'Haircut', scheduledAt: '2026-09-05T09:00:00+02:00' },
+      }],
+    },
+  ]);
+  const asked = await call('POST', '/ai/turn', {
+    text: 'I need a haircut Saturday', today: '2026-09-01',
+  });
+  assert.equal(asked.body.status, 'clarifying');
+
+  const chosen = asked.body.clarification.options.find((o: any) => /do it/i.test(o.label));
+  const next = await call('POST', `/ai/turn/${asked.body.turnId}/clarify`, { optionId: chosen.id });
+  assert.equal(next.status, 200);
+  assert.equal(next.body.actions.length, 1);
+  assert.ok(next.body.actions[0].payload.scheduledAt, 'the choice did not reach the payload');
+  assert.equal(next.body.actions[0].payload.dueDate ?? null, null,
+    'a deadline was set for something the user said they would DO then');
+  /* The ORIGINAL request continued, with the choice carried. */
+  assert.equal(lastPlanInput.text, 'I need a haircut Saturday');
+  assert.match(lastPlanInput.resolved.label, /do it/i);
+});
+
+test('timing: choosing "have it done by then" gives a deadline', async () => {
+  const { call } = await setup([
+    {
+      understood: 'A haircut on Saturday',
+      actions: [],
+      clarification: {
+        question: 'What does Saturday mean for the haircut?',
+        options: [{ id: 'a', label: 'Do it Saturday' }, { id: 'b', label: 'Have it done by Saturday' }],
+      },
+    },
+    {
+      understood: 'Done by Saturday',
+      actions: [{
+        capability: 'task.create', title: 'Haircut',
+        payload: { title: 'Haircut', dueDate: '2026-09-05' },
+      }],
+    },
+  ]);
+  const asked = await call('POST', '/ai/turn', {
+    text: 'I need a haircut Saturday', today: '2026-09-01',
+  });
+  const chosen = asked.body.clarification.options.find((o: any) => /done by/i.test(o.label));
+  const next = await call('POST', `/ai/turn/${asked.body.turnId}/clarify`, { optionId: chosen.id });
+  assert.equal(next.body.actions.length, 1);
+  assert.equal(next.body.actions[0].payload.dueDate, '2026-09-05');
+  assert.equal(next.body.actions[0].payload.scheduledAt ?? null, null);
+  /* No finding: the user has now said which, so nothing is being guessed. */
+  assert.ok(!(next.body.metrics.inconsistencies ?? []).includes('timing_ambiguous'));
+});
+
+test('timing: the wrong field is refused even when the card agrees with itself',
+  async () => {
+    /* "Finish the report by Friday" is a deadline whatever the card says about
+       it. A payload setting scheduledAt is wrong about the user, and the check
+       reads the USER'S words rather than the model's. */
+    const { call } = await setup([
+      {
+        actions: [{
+          capability: 'task.create', title: 'Work on the report Friday',
+          payload: { title: 'Report', scheduledAt: '2026-09-04T09:00:00+02:00' },
+        }],
+      },
+      {
+        actions: [{
+          capability: 'task.create', title: 'Report',
+          payload: { title: 'Report', dueDate: '2026-09-04' },
+        }],
+      },
+    ]);
+    const r = await call('POST', '/ai/turn', {
+      text: 'Finish the report by Friday', today: '2026-09-01',
+    });
+    assert.ok(r.body.metrics.inconsistencies.includes('scheduled_vs_due'));
+    assert.equal(r.body.actions[0].payload.dueDate, '2026-09-04');
+    assert.equal(lastPlanInput.timing.reading, 'deadline');
+  });
+
+test('timing: a reminder date is its own fact and is never second-guessed', async () => {
+  /* `reminder.create` has a dueDate and no scheduledAt, so the two never
+     compete and the check must not fire. Asked through the fast path, which is
+     what "Remind me Friday" actually takes. */
+  const { call } = await setup([{ actions: [] }]);
+  const r = await call('POST', '/ai/turn', {
+    text: 'Remind me Friday about the report', today: '2026-09-01',
+  });
+  assert.equal(r.body.metrics.route, 'fast');
+  assert.equal(r.body.actions[0].capability, 'reminder.create');
+  assert.equal(r.body.actions[0].payload.dueDate, '2026-09-04');
+  assert.equal(r.body.note, null, 'a reminder was treated as a task timing question');
+});
+
+test('timing: the fast path refuses a dated task rather than choosing a field',
+  async () => {
+    const { call, ctx, assistant } = await setup([{
+      actions: [{ capability: 'task.create', title: 'Rent', payload: { title: 'Rent' } }],
+    }]);
+    const miss = await tryFastPath({
+      text: 'Add pay the rent Friday', ctx, registry: assistant.registry, hasPending: false,
+    });
+    assert.ok(isMiss(miss));
+    assert.match((miss as any).reason, /which the planner decides/);
+    /* Undated capture is untouched: this is about the field, not about dates. */
+    const ok = await call('POST', '/ai/turn', { text: 'Add milk' });
+    assert.equal(ok.body.metrics.route, 'fast');
+  });
 
 /* ══ 5. Plan / payload consistency ═══════════════════════════════════════ */
 
@@ -774,7 +945,9 @@ test('consistency: a repair that fixes the contradiction is kept', async () => {
       }],
     },
   ]);
-  const r = await call('POST', '/ai/turn', { text: 'haircut saturday', today: '2026-09-01' });
+  const r = await call('POST', '/ai/turn', {
+    text: 'haircut done by saturday', today: '2026-09-01',
+  });
   assert.equal(planCalls, 2);
   assert.equal(r.body.metrics.repaired, 1);
   assert.equal(r.body.actions.length, 1);

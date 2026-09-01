@@ -125,12 +125,19 @@ export function actionCardHtml(action, { unavailable = false, reason = null } = 
  * Quiet by default and clickable. An answer that cannot say what it read is an
  * answer nobody can check — but a citation report under every sentence is
  * noise, so this is one line of chips.
+ *
+ * Labelled CONTEXT, not "Used". These are what retrieval put in front of the
+ * assistant, which on a broad question includes rows the answer never drew on.
+ * "Used" claimed an attribution nothing here computes: the `answer` job returns
+ * a `cited` list, the `plan` job does not, and a turn that produced actions has
+ * no narrower set to show. The honest label is the one that describes what the
+ * chips actually are.
  */
 export function sourcesHtml(sources = [], { limit = 5 } = {}) {
   const list = sources.slice(0, limit);
   if (!list.length) return '';
   return `<div class="ap-src">
-    <span class="ap-src-l">Used</span>
+    <span class="ap-src-l">Context</span>
     ${list.map((s) => `<button type="button" class="ap-src-i"
       data-src-type="${esc(s.ref.type)}" data-src-id="${esc(s.ref.id)}">
       ${esc(s.title)}</button>`).join('')}

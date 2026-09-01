@@ -37,6 +37,7 @@ import type { z } from 'zod';
 import {
   resolveRelativeDate, weekdayNamesIn, isWeekday, weekdayOf, longDate, isCivilDate,
 } from '../lib/civil-date.js';
+import type { TimingIntent } from '../lib/timing-intent.js';
 
 export type Finding = {
   /** Which action, by its index in the plan. */
@@ -234,7 +235,22 @@ export type ValidateInput = {
   /** `type:id` of everything retrieval actually produced. */
   knownIds: Set<string>;
   today: string;
+  /**
+   * What the date in the USER'S request meant, read deterministically.
+   *
+   * The checks below that use it are the only ones that look outside the card.
+   * They have to: "I need a haircut Saturday" produced a card saying
+   * "deadline" over a payload setting `dueDate`, which agrees with itself
+   * perfectly and disagrees with the person who said neither.
+   */
+  timing?: TimingIntent;
+  /** True when the plan asked a question rather than deciding. */
+  asking?: boolean;
 };
+
+/** Fields where a task's two meanings of "when" actually compete. */
+const DUE_FIELD = 'dueDate';
+const DO_FIELDS = ['scheduledAt', 'startsAt'];
 
 const CREATE_WORDS = /\b(add|create|new|start|set up|make)\b/i;
 const CHANGE_WORDS = /\b(move|reschedule|change|update|shift|push|rename|edit|set)\b/i;
@@ -334,20 +350,43 @@ export function validatePlan(input: ValidateInput): Finding[] {
         `“${a.title}” says ${clock} but the payload does not contain that time.`);
     }
 
-    /* ── 3. Deadline and intention are different fields ─────────────── */
-    const saysDue = /\b(due|deadline|by then|needs to be (done|in)|hand(ed)? in)\b/i.test(words);
-    const saysDoIt = /\b(schedule|work on|sit down|block out|spend|do it on|start on)\b/i.test(words);
-    if (saysDue && !saysDoIt && fields.has('dueDate')
-      && values['dueDate'] == null && values['scheduledAt'] != null) {
-      add(index, 'due_vs_scheduled',
-        `“${a.title}” describes a deadline but the payload sets scheduledAt. `
-        + 'dueDate is the deadline; scheduledAt is when the user intends to do it.');
-    }
-    if (saysDoIt && !saysDue && fields.has('scheduledAt')
-      && values['scheduledAt'] == null && values['dueDate'] != null) {
-      add(index, 'scheduled_vs_due',
-        `“${a.title}” describes working on it but the payload sets dueDate. `
-        + 'scheduledAt is when the user intends to do it; dueDate is the deadline.');
+    /* ── 3. Deadline and intention are different fields ───────────────
+     *
+     * Read from the USER'S words, not the card's. The card agreeing with
+     * itself is exactly the failure: "I need a haircut Saturday" produced a
+     * card saying "deadline" over a payload setting `dueDate`, and every
+     * check that compared the two was satisfied.
+     *
+     * Only where the fields genuinely COMPETE. A reminder's `dueDate` is when
+     * it fires and has no rival; a diary date is the day it belongs to. The
+     * choice is real only when one capability offers both, which the schema
+     * knows and no list here has to remember. */
+    const due = values[DUE_FIELD];
+    const doAt = DO_FIELDS.map((f) => values[f]).find((v) => v != null);
+    const competes = fields.has(DUE_FIELD) && DO_FIELDS.some((f) => fields.has(f));
+    const setsDue = due != null;
+    const setsDo = doAt != null;
+
+    if (competes && (setsDue || setsDo) && input.timing) {
+      const { reading, matched } = input.timing;
+      if (reading === 'deadline' && setsDo && !setsDue) {
+        add(index, 'scheduled_vs_due',
+          `The request said “${matched}”, which is a deadline, but the payload sets `
+          + `${DO_FIELDS.find((f) => values[f] != null)}. Use dueDate.`);
+      } else if (reading === 'scheduled' && setsDue && !setsDo) {
+        add(index, 'due_vs_scheduled',
+          `The request said “${matched}”, which is when the user intends to DO it, but `
+          + 'the payload sets dueDate. Use scheduledAt, or a calendar action if they '
+          + 'asked for time to be held.');
+      } else if (reading === 'ambiguous' && !input.asking) {
+        /* The one that shipped. A date with nothing saying which field it is,
+           silently written into one of them. */
+        add(index, 'timing_ambiguous',
+          `“${a.title}” chose between a deadline and a working time, and the request `
+          + 'said neither. Do NOT choose. Return a clarification asking what the date '
+          + 'means — "Do it then" or "Have it done by then" — and no action for this '
+          + 'part.');
+      }
     }
 
     /* ── 4. Create versus change ────────────────────────────────────── */
