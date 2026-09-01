@@ -211,6 +211,11 @@ const removeCap: Capability = {
 
 export const relationshipsModule: AiModule = {
   id: 'relationships',
+  routing: [
+    'A connection BETWEEN things that already exist. Never a reason to create a copy of either.',
+    'When the user says two things are about each other, that is a link - propose it, do not '
+      + 'write it silently.',
+  ],
   name: 'Relationships',
   /* Owns no entity type of its own: it is the edges BETWEEN the others. The
      empty list is why `moduleForEntity` never routes here. */
@@ -225,6 +230,15 @@ export const relationshipsModule: AiModule = {
       + 'project having its Book - are NOT links and must not be expressed as one.',
     'Prefer traversal over text search when a question is about what something needs or what '
       + 'came out of it.',
+    'Noticing a connection is useful; recording one is a change. When the user states that two '
+      + 'things are about each other - "the client call is where we discuss the annual '
+      + 'returns" - PROPOSE the link with the kind that says how. Never write one because it '
+      + 'seemed likely.',
+    'Both ends must be things you can actually see, with real ids. If either end is uncertain, '
+      + 'or several candidates fit, ask which is meant instead of linking the nearest match.',
+    'Pick the kind from what the user said: discussed_in for a conversation about something, '
+      + 'preparation for work done beforehand, resource for something used, result for what '
+      + 'came out of it, related when nothing more specific is true.',
   ],
   available: () => ({ enabled: true }),
   capabilities: [inspectCap, traverseCap, createCap, removeCap],

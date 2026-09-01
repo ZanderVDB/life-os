@@ -12,7 +12,7 @@
  * architecture is designed to prevent. What is missing and why is in
  * docs/ai-system.md §19.
  */
-import { and, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ilike, isNull, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   habits, habitEntries, areas, diaryEntries,
@@ -30,7 +30,9 @@ import {
 } from '../../lib/actions/diary.js';
 import {
   appendToPage, createPage, sectionsOfBook, bookForProject,
+  createBook, createSection, retitlePage,
   PageAppendInput, PageCreateInput,
+  BookCreateInput, SectionCreateInput, PageRetitleInput,
 } from '../../lib/actions/library.js';
 import type { AiModule } from '../registry.js';
 import type { ContextSource } from '../types.js';
@@ -42,6 +44,10 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const habitsModule: AiModule = {
   id: 'habits',
+  routing: [
+    'A behaviour meant to REPEAT on purpose - something the user wants to keep doing.',
+    'Defining the habit and ticking it off for a day are different things; ticking is habit.check.',
+  ],
   name: 'Habits',
   entities: ['habit'],
   rules: [
@@ -226,6 +232,9 @@ export const habitsModule: AiModule = {
 
 export const areasModule: AiModule = {
   id: 'areas',
+  routing: [
+    'How a part of a life is CLASSIFIED - Work, Home, Health. A label on other things, never a thing to do.',
+  ],
   name: 'Areas',
   entities: ['area'],
   rules: [
@@ -240,6 +249,9 @@ export const areasModule: AiModule = {
   capabilities: [
     {
       id: 'area.list',
+      /* Every turn. Areas are how Life OS classifies everything, and the id
+         of "Work" is needed by any request that mentions it. */
+      always: true,
       module: 'areas',
       kind: 'read',
       label: 'List areas',
@@ -324,10 +336,19 @@ export const areasModule: AiModule = {
 
 export const diaryModule: AiModule = {
   id: 'diary',
+  routing: [
+    'A personal record of a DAY - what happened, how it felt. Only when the user asks for it to be written down.',
+  ],
   name: 'Diary',
   entities: ['diary'],
   rules: [
     'One entry per date; the date is the key, so there is never a question of which entry.',
+    'Write to the diary ONLY when the user asks for something to go in it. Telling you about '
+      + 'their day is not a request to record it: "I had a difficult meeting today" is '
+      + 'something to understand and respond to, and proposing a diary entry for it puts your '
+      + 'reading of their life into their own record. "Write in my diary that..." is a request.',
+    'When a day plainly wants writing down and the user did not ask, you may SAY so in the '
+      + 'answer. Do not propose the write.',
     'The diary is what the user wrote. Text is only ever APPENDED - never replace or rewrite '
       + 'what is there, because there is no version history and no way back.',
     'Write in the user\u2019s own words where they gave them. Do not embellish an entry on their '
@@ -366,6 +387,48 @@ export const diaryModule: AiModule = {
           via: 'direct',
           level: 1,
         }];
+      },
+    },
+    {
+      id: 'diary.range',
+      module: 'diary',
+      kind: 'read',
+      label: 'Diary over a period',
+      description: 'Every entry between two civil dates, inclusive, oldest first. Use for '
+        + '"last week", "this month", or any question spanning days rather than naming one.',
+      input: z.object({
+        from: z.string().regex(ISO_DATE),
+        to: z.string().regex(ISO_DATE),
+      }).strict(),
+      risk: 'safe',
+      async run(ctx, input: { from: string; to: string }) {
+        /* Ordered and capped. A year of entries is not context, it is the
+           whole diary, and sending it would be both expensive and a way to
+           put far more of somebody's private writing into a prompt than the
+           question asked for. */
+        const [from, to] = input.from <= input.to
+          ? [input.from, input.to] : [input.to, input.from];
+        const rows = await ctx.db.select().from(diaryEntries)
+          .where(and(
+            eq(diaryEntries.workspaceId, ctx.request.workspaceId),
+            isNull(diaryEntries.archivedAt),
+            gte(diaryEntries.entryDate, from),
+            lte(diaryEntries.entryDate, to),
+          ))
+          .orderBy(asc(diaryEntries.entryDate))
+          .limit(31);
+        return rows.map((row): ContextSource => ({
+          ref: { type: 'diary', id: row.id },
+          module: 'diary',
+          title: row.title || row.entryDate,
+          summary: (row.documentText ?? '').slice(0, 240) || null,
+          data: {
+            date: row.entryDate, mood: row.mood, energy: row.energy,
+            daySummary: row.daySummary,
+          },
+          via: 'direct',
+          level: 2,
+        }));
       },
     },
     {
@@ -442,13 +505,17 @@ export const diaryModule: AiModule = {
 
 export const libraryModule: AiModule = {
   id: 'library',
+  routing: [
+    'Reference, research, notes and knowledge - something to come back to and read, rather than to do.',
+    'A Book holds Sections, which hold Pages. Tasks mentioned on a page stay real Tasks; the page does not become a task list.',
+  ],
   name: 'Library',
   entities: ['library', 'book_page'],
   rules: [
     'A resource exists once and is pointed at from everywhere else. Book to Section to Page '
       + 'is ownership and is structural; it is never an item_link.',
-    'A Book is addressed by its library_books id; a library item has its own id. They are '
-      + 'different and are not interchangeable.',
+    'A Book has two ids - its shelf entry and the book itself. Either one identifies it, so '
+      + 'use whichever the context gave you.',
     'Text is APPENDED to a page, never substituted for what is there.',
     'Only flowed layouts (notes, blank, two_columns, quad, comparison) can hold paragraphs. A '
       + 'pinboard holds positioned items and will refuse text - propose a Notes page instead.',
@@ -471,13 +538,25 @@ export const libraryModule: AiModule = {
       async run(ctx, input: { query: string; limit: number }) {
         const ws = ctx.request.workspaceId;
         const like = `%${input.query}%`;
-        const items = await ctx.db.select().from(libraryItems).where(and(
-          eq(libraryItems.workspaceId, ws), isNull(libraryItems.archivedAt),
-          ilike(libraryItems.title, like),
-        )).limit(input.limit);
+        /* LEFT joined to libraryBooks, because a library item may or may not
+           be a Book and both are wanted. The book id is the point: a Book is
+           addressed by its `library_books` id and the item carries a
+           different one, so a result without it can be named but not opened,
+           sectioned or written to. Every capability downstream of this asks
+           for the book id, and until now nothing produced one. */
+        const items = await ctx.db.select({
+          id: libraryItems.id, title: libraryItems.title, type: libraryItems.type,
+          description: libraryItems.description, bookId: libraryBooks.id,
+        }).from(libraryItems)
+          .leftJoin(libraryBooks, eq(libraryBooks.libraryItemId, libraryItems.id))
+          .where(and(
+            eq(libraryItems.workspaceId, ws), isNull(libraryItems.archivedAt),
+            ilike(libraryItems.title, like),
+          )).limit(input.limit);
         const pages = await ctx.db.select({
           id: bookPages.id, title: bookPages.title, text: bookPages.contentText,
           bookTitle: libraryItems.title, itemId: libraryItems.id,
+          bookId: libraryBooks.id, sectionId: bookPages.sectionId,
         }).from(bookPages)
           .innerJoin(bookSections, eq(bookSections.id, bookPages.sectionId))
           .innerJoin(libraryBooks, eq(libraryBooks.id, bookSections.bookId))
@@ -492,7 +571,13 @@ export const libraryModule: AiModule = {
           module: 'library',
           title: i.title,
           summary: i.type,
-          data: { type: i.type, description: i.description },
+          data: {
+            type: i.type,
+            description: i.description,
+            /* Present only for Books, and it is what every book capability
+               wants. Named `bookId` to match the field those schemas use. */
+            ...(i.bookId ? { bookId: i.bookId } : {}),
+          },
           via: 'direct',
           level: 2,
         }));
@@ -502,7 +587,13 @@ export const libraryModule: AiModule = {
             module: 'library',
             title: p.title || 'Untitled page',
             summary: (p.text ?? '').slice(0, 240) || p.bookTitle,
-            data: { book: p.bookTitle, libraryItemId: p.itemId },
+            /* Where the page LIVES, so a follow-up can add another page
+               beside it or a section beside those, without searching again
+               for ids that were already known here. */
+            data: {
+              book: p.bookTitle, libraryItemId: p.itemId,
+              bookId: p.bookId, sectionId: p.sectionId,
+            },
             via: 'direct',
             level: 2,
           });
@@ -643,6 +734,61 @@ export const libraryModule: AiModule = {
           status: 'done' as const,
           ref: { type: 'book_page' as const, id: row.id },
           message: `Added the page "${row.title || 'Untitled'}".`,
+        };
+      },
+    },
+    {
+      id: 'library.createBook',
+      module: 'library',
+      kind: 'mutate',
+      label: 'Create a book',
+      description: 'Make a new Book in the Library, with its first section. Use for a new '
+        + 'body of notes or reference material. A book belonging to a PROJECT is created '
+        + 'by the project, not here.',
+      input: BookCreateInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const made = await createBook(ctx.db, ctx.request.workspaceId, input as any);
+        return {
+          status: 'done' as const,
+          ref: { type: 'library' as const, id: made.item.id },
+          message: `Created the book “${made.item.title}”.`,
+        };
+      },
+    },
+    {
+      id: 'library.createSection',
+      module: 'library',
+      kind: 'mutate',
+      label: 'Add a section',
+      description: 'Add a section to an existing Book. Needs the bookId, which '
+        + 'library.sections and library.projectBook both report.',
+      input: SectionCreateInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const row = await createSection(ctx.db, ctx.request.workspaceId, input as any);
+        return {
+          status: 'done' as const,
+          ref: { type: 'library' as const, id: row.id },
+          message: `Added the section “${row.title}”.`,
+        };
+      },
+    },
+    {
+      id: 'library.retitlePage',
+      module: 'library',
+      kind: 'mutate',
+      label: 'Rename a page',
+      description: 'Change a page’s title. Only the title - the page’s contents cannot '
+        + 'be replaced, only added to with library.appendPage.',
+      input: PageRetitleInput,
+      risk: 'confirm',
+      async execute(ctx, input) {
+        const row = await retitlePage(ctx.db, ctx.request.workspaceId, input as any);
+        return {
+          status: 'done' as const,
+          ref: { type: 'book_page' as const, id: row.id },
+          message: row.title ? `Renamed the page to “${row.title}”.` : 'Cleared the page title.',
         };
       },
     },

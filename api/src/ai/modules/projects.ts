@@ -32,6 +32,10 @@ const source = (row: typeof projects.$inferSelect, level: 1 | 2 | 3 = 2): Contex
     outcome: row.outcome,
     targetDate: row.targetDate,
     areaId: row.areaId,
+    /* The single next action, when one has been chosen. Answering "what is
+       next on WebAnchor" from the open-task list means picking one, and the
+       pick the user already made is the right answer. */
+    nextTaskId: row.nextTaskId,
     archived: Boolean(row.archivedAt),
   },
   via: 'direct',
@@ -40,6 +44,10 @@ const source = (row: typeof projects.$inferSelect, level: 1 | 2 | 3 = 2): Contex
 
 export const projectsModule: AiModule = {
   id: 'projects',
+  routing: [
+    'An outcome needing SEVERAL steps, where the point is the result rather than any one task.',
+    'A named body of work the user refers to as a thing in itself.',
+  ],
   name: 'Projects',
   entities: ['project'],
   rules: [

@@ -248,6 +248,10 @@ const deleteCap: Capability = {
 
 export const calendarModule: AiModule = {
   id: 'calendar',
+  routing: [
+    'A commitment occupying real TIME, especially involving other people or a place.',
+    'Holding time to work on something - a block on the calendar - as opposed to merely noting when.',
+  ],
   name: 'Calendar',
   entities: ['event'],
   rules: [

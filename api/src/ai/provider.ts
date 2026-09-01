@@ -73,6 +73,14 @@ export type PlanInput = {
   /** The module rules the plan has to respect. */
   rules: { module: string; rules: string[] }[];
   /**
+   * When each module is the right home for a request, declared by the module.
+   *
+   * Guidance rather than a classifier, and assembled from what is actually
+   * registered — so a module that is removed stops being routed to without
+   * this prompt being edited.
+   */
+  routing?: { module: string; when: string[] }[];
+  /**
    * Modules that can be READ but not written to right now.
    *
    * Stated rather than left to be inferred from an absence. "I can see that
@@ -110,6 +118,16 @@ export type PlanInput = {
       payload: Record<string, unknown>; enabled: boolean;
     }[];
   };
+  /**
+   * Stable ids this conversation has already established.
+   *
+   * "Add a task to it" is unanswerable from prose: the model would re-derive
+   * an entity from a title it remembers, and a second guess at something
+   * already known exactly is the guess that picks the wrong project. These
+   * ids came from a search or from a row the assistant created, so the
+   * follow-up reuses rather than re-finds.
+   */
+  references?: string | null;
   /** The entity the user picked from a clarification, by id rather than label. */
   resolved?: { ref: { type: string; id: string } | null; label: string } | null;
   /**

@@ -160,6 +160,17 @@ export async function gather(
     for (const r of walked) out.push(...r);
   }
 
+  /* ── Always: the vocabulary a request is classified against ──────
+     Small, bounded reads a module has marked as needed on every turn. Areas
+     are the reason: "put it in Work" must be able to name the Work area, and
+     nothing in that sentence would make a search return it. */
+  const always = caps.filter((x) => x.always && (x.kind === 'read' || x.kind === 'search')
+    && x.input.safeParse({}).success);
+  if (always.length) {
+    const rows = await Promise.all(always.map((c) => call(c.id, {})));
+    for (const r of rows) out.push(...r);
+  }
+
   if (level >= 3) {
     /* ── Level 3: broad ──────────────────────────────────────────────
      *

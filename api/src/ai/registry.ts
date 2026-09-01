@@ -119,6 +119,23 @@ export type Capability<I = any> = {
    */
   execute?: (ctx: CapabilityCtx, input: I) => Promise<Omit<ActionResult, 'actionId' | 'capability'>>;
   /**
+   * Retrieve this on EVERY turn, not only when something matched.
+   *
+   * For the small fixed vocabularies a request is classified against rather
+   * than searched within. Areas are the case that forced it: "put it in Work"
+   * needs the id of the Work area, and a substring search for the words of
+   * that sentence has no reason to return it. Areas reached the planner only
+   * on a broad pass, so the classification the whole product is organised
+   * around was missing exactly when it was being used.
+   *
+   * Strictly limited to reads that are cheap, small and bounded — a handful
+   * of rows a person could name from memory. A capability that could return
+   * hundreds does not qualify: it would crowd out what was actually asked
+   * about and make every turn more expensive. The MODULE decides, which is
+   * what keeps this from becoming a list of special cases in the engine.
+   */
+  always?: boolean;
+  /**
    * Optional dry run, at plan time.
    *
    * Where a domain has its own confirmation machinery — Calendar's
@@ -184,6 +201,27 @@ export type AiModule = {
    * module because the module is what would be damaged by ignoring them.
    */
   rules: string[];
+  /**
+   * When a request BELONGS to this module — one line, in the user's terms.
+   *
+   * ── Why routing is declared and not written in the prompt ────────────
+   *
+   * Every request that creates something has to answer "what kind of thing is
+   * this?" first. An action to be done is a Task; a repeated intention is a
+   * Habit; a personal record of a day is a Diary entry. Written into the
+   * central planner prompt, that list keeps offering Habits after the Habits
+   * module is removed — the exact rot the registry exists to prevent, in the
+   * one place it would be least visible.
+   *
+   * So each module says when it is the answer, the prompt is assembled from
+   * whatever is registered and available, and a module removed takes its
+   * routing line with it. A module added tomorrow becomes routable by writing
+   * one sentence here.
+   *
+   * Guidance, never a classifier. "Call John Friday" fits four of these, and
+   * the right response to that is a question, not the first match.
+   */
+  routing?: string[];
   /** Asked per request. A module the workspace cannot use is not offered. */
   available: (ctx: CapabilityCtx) => Promise<ModuleAvailability> | ModuleAvailability;
   capabilities: Capability[];
@@ -373,6 +411,11 @@ export class CapabilityRegistry {
       timeZone: ctx.request.timeZone ?? null,
       surface: ctx.request.surface ?? null,
       modules: enabled.map((s) => ({ id: s.id, name: s.name, rules: s.rules })),
+      /* Assembled from the modules that are actually here. Nothing routes to
+         a module that is switched off, and no central list needs editing. */
+      routing: this.modules
+        .filter((m) => enabled.some((s) => s.id === m.id) && m.routing?.length)
+        .map((m) => ({ module: m.id, when: m.routing! })),
       unavailable: status.filter((s) => !s.enabled)
         .map((s) => ({ id: s.id, reason: s.reason ?? 'Not available.' })),
       /* Readable but not writable. The planner needs this stated rather than

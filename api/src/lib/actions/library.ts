@@ -26,7 +26,7 @@ import { z } from 'zod';
 import type { Db } from '../../db/client.js';
 import {
   bookPages, bookSections, libraryBooks, libraryItems, projectBooks,
-  PAGE_LAYOUTS, PAGE_PURPOSES,
+  PAGE_LAYOUTS, PAGE_PURPOSES, SECTION_ACCENTS,
 } from '../../db/schema.js';
 import {
   validatePageContent, pageToText, starterContent, paragraph, type Doc,
@@ -170,7 +170,8 @@ export async function createPage(
  * The sections of a book, so a request naming one ("put it under Research")
  * can be resolved to an id before anything is proposed.
  */
-export async function sectionsOfBook(db: Db, ws: string, bookId: string) {
+export async function sectionsOfBook(db: Db, ws: string, bookIdOrItemId: string) {
+  const { id: bookId } = await resolveBook(db, ws, bookIdOrItemId);
   return db.select({
     id: bookSections.id, title: bookSections.title, bookId: bookSections.bookId,
   }).from(bookSections)
@@ -190,4 +191,135 @@ export async function bookForProject(db: Db, ws: string, projectId: string) {
     .where(and(eq(projectBooks.workspaceId, ws), eq(projectBooks.projectId, projectId)))
     .limit(1);
   return row ?? null;
+}
+
+/* ══ Books and sections ══════════════════════════════════════════════════
+ *
+ * The structure a page needs before it can exist. Extracted from the route
+ * handlers rather than reimplemented beside them: a book created by the
+ * assistant and a book created by the button must be the same book, down to
+ * the starter section and its two pages — a section with no page cannot be
+ * opened, and a book that opens to nothing is a bug the user meets, not the
+ * caller.
+ *
+ * These deliberately do NOT reach the Project side. `project_books` is a typed
+ * join with its own rules about roles and uniqueness, and a Project Book is
+ * created by the Project, which is where that decision belongs.
+ */
+
+export const BookCreateInput = z.object({
+  title: z.string().trim().min(1, 'A title is required.').max(300),
+  subtitle: z.string().trim().max(300).nullish(),
+  authorLabel: z.string().trim().max(120).nullish(),
+  description: z.string().trim().max(4000).nullish(),
+  /** Every book opens somewhere. Named so the assistant can say where. */
+  firstSection: z.string().trim().min(1).max(120).default('Notes'),
+}).strict();
+
+export const SectionCreateInput = z.object({
+  bookId: z.string().uuid(),
+  title: z.string().trim().min(1).max(120),
+  accent: z.enum(SECTION_ACCENTS).default('peach'),
+}).strict();
+
+export const PageRetitleInput = z.object({
+  pageId: z.string().uuid(),
+  /** Null clears it, and the page shows its position instead. */
+  title: z.string().trim().max(200).nullable(),
+}).strict();
+
+/** A new Book, with the one section and two pages that make it openable. */
+export async function createBook(
+  db: Db, ws: string, input: z.infer<typeof BookCreateInput>,
+) {
+  return db.transaction(async (tx) => {
+    const [item] = await tx.insert(libraryItems).values({
+      workspaceId: ws, type: 'book', title: input.title,
+      description: input.description ?? null,
+    }).returning();
+    const [book] = await tx.insert(libraryBooks).values({
+      workspaceId: ws, libraryItemId: item!.id,
+      subtitle: input.subtitle ?? null, authorLabel: input.authorLabel ?? null,
+    }).returning();
+    const [section] = await tx.insert(bookSections).values({
+      workspaceId: ws, bookId: book!.id, title: input.firstSection,
+      accent: 'peach', position: 0,
+    }).returning();
+    /* Two, matching the route. A book opens to a SPREAD, and one page leaves
+       the other half blank in a way the reader reads as broken. */
+    await tx.insert(bookPages).values([
+      { workspaceId: ws, sectionId: section!.id, position: 0 },
+      { workspaceId: ws, sectionId: section!.id, position: GAP },
+    ]);
+    return { item: item!, book: book!, section: section! };
+  });
+}
+
+/**
+ * The Book meant by an id, whichever of its two ids was given.
+ *
+ * A Book is two rows: a `library_items` row that puts it on the shelf and a
+ * `library_books` row holding what only a book has. Both have ids, they are
+ * not interchangeable, and every caller that gets one from a search and hands
+ * it to something expecting the other gets "that book does not exist" about a
+ * book that plainly does.
+ *
+ * That was a rule the assistant had to be TOLD, in a module rule, and telling
+ * something a rule is strictly worse than making the rule unnecessary. Both
+ * ids name the same book, so both work.
+ */
+async function resolveBook(db: Db, ws: string, id: string) {
+  const [byBook] = await db.select().from(libraryBooks)
+    .where(and(eq(libraryBooks.workspaceId, ws), eq(libraryBooks.id, id))).limit(1);
+  if (byBook) return byBook;
+  const [byItem] = await db.select().from(libraryBooks)
+    .where(and(eq(libraryBooks.workspaceId, ws), eq(libraryBooks.libraryItemId, id))).limit(1);
+  if (byItem) return byItem;
+  throw notFound('That book does not exist.');
+}
+
+/** A new section in an existing Book, with its opening spread. */
+export async function createSection(
+  db: Db, ws: string, input: z.infer<typeof SectionCreateInput>,
+) {
+  const book = await resolveBook(db, ws, input.bookId);
+
+  const [max] = await db.select({ m: sql<number>`coalesce(max(${bookSections.position}), 0)` })
+    .from(bookSections).where(eq(bookSections.bookId, book.id));
+
+  return db.transaction(async (tx) => {
+    const [section] = await tx.insert(bookSections).values({
+      workspaceId: ws, bookId: book.id, title: input.title,
+      accent: input.accent, position: Number(max?.m ?? 0) + GAP,
+    }).returning();
+    await tx.insert(bookPages).values([
+      { workspaceId: ws, sectionId: section!.id, position: 0 },
+      { workspaceId: ws, sectionId: section!.id, position: GAP },
+    ]);
+    return section!;
+  });
+}
+
+/**
+ * Rename a page.
+ *
+ * The one page edit the assistant gets besides appending, and it is safe for
+ * the reason appending is: nothing the user wrote is lost. A title is one
+ * short string, visible on the proposal card before it is applied and
+ * changeable afterwards in one click. Replacing a page BODY stays out — see
+ * the note at the top of this file.
+ */
+export async function retitlePage(
+  db: Db, ws: string, input: z.infer<typeof PageRetitleInput>,
+) {
+  const [page] = await db.select().from(bookPages)
+    .where(and(eq(bookPages.workspaceId, ws), eq(bookPages.id, input.pageId))).limit(1);
+  if (!page) throw notFound('That page does not exist.');
+  if (page.archivedAt) throw badRequest('That page is archived.');
+
+  const [row] = await db.update(bookPages)
+    .set({ title: input.title, updatedAt: new Date() })
+    .where(and(eq(bookPages.workspaceId, ws), eq(bookPages.id, input.pageId)))
+    .returning();
+  return row!;
 }

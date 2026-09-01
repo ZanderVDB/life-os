@@ -447,6 +447,23 @@ CONTEXT. "sources" are "type:id" strings from CONTEXT that justify the action.
 CAPABILITIES lists only things that CHANGE something. Reading has already
 happened — everything available is in CONTEXT. There is no search action.
 
+ONE ACTION CAN USE WHAT ANOTHER MAKES.
+When a change needs the id of something you are creating in this same plan,
+write a placeholder instead of an id:
+
+  {"capability":"task.create","payload":{"title":"Get moving quotes"}}
+  {"capability":"link.create","payload":{"kind":"resource",
+     "sourceType":"task","sourceId":"{{a1.id}}",
+     "targetType":"book_page","targetId":"<a real id from CONTEXT>"}}
+
+"{{a1.id}}" means "the id of the FIRST action in this list", a2 the second, and
+so on, counting every action you write. They are run in the right order for
+you, and an action whose placeholder never arrived is skipped rather than run
+with a broken reference.
+
+Use a placeholder ONLY for something being created in this plan. Anything that
+already exists has a real id in CONTEXT, and that is what to use.
+
 CREATE VERSUS CHANGE. A capability that acts on something that already exists
 takes its id, and that id must appear in CONTEXT. If the thing is not in
 CONTEXT it does not exist as far as you are concerned:
@@ -549,12 +566,20 @@ fact from CONTEXT.`,
           ? 'NOT AVAILABLE AT ALL. If the request needs one of these, say so using '
             + `this reason - do not say the thing does not exist:\n${fmt(input.unavailable)}` : '',
         '',
+        input.routing?.length
+          ? 'WHAT KIND OF THING IS THIS? Each module says when it is the right home. '
+            + 'Guidance, not a lookup table - context decides, and a request that genuinely '
+            + 'fits several is a question to ask, not a coin to toss:'
+            + `\n${fmt(input.routing)}` : '',
+        '',
         'MODULE RULES:',
         fmt(input.rules),
         '',
         'CONTEXT (the only real ids that exist). "days" maps each date a row',
         'mentions to its weekday - use it rather than working one out:',
         fmt(input.sources),
+        '',
+        input.references ? input.references : '',
         '',
         input.pending
           ? 'PENDING - proposed, not yet confirmed, and absent from CONTEXT because '

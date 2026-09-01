@@ -339,6 +339,11 @@ const removeStepCap: Capability = {
 
 export const tasksModule: AiModule = {
   id: 'tasks',
+  routing: [
+    'Something that has to be DONE, once. The default for an action with no other home.',
+    'A deadline - it must be finished BY a date - is a task with a dueDate, not a calendar event.',
+    'Intending to do something at a time, without holding the time in a calendar, is a task with scheduledAt.',
+  ],
   name: 'Tasks',
   entities: ['task'],
   rules: [

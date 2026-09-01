@@ -49,6 +49,11 @@ import {
   validatePlan, repairBrief, stillDescribes, retitleForDate, applyNamedWeekday,
   type Finding,
 } from './validate.js';
+import { probe, unprobe, placeholdersIn, planOrder } from './depends.js';
+import {
+  recentReferences, referenceCue, forPrompt as referencesForPrompt,
+  type Reference,
+} from './references.js';
 import { structure, type Clarification } from './clarify.js';
 import { classifyTiming, readingFromChoice } from '../lib/timing-intent.js';
 import * as memory from './memory.js';
@@ -239,6 +244,29 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     ? await interpreter.interpret({ text, request, modules: moduleIds }).catch(() => null)
     : null;
 
+  /* ── What "it" could mean ─────────────────────────────────────────
+     Stable ids from this conversation's own previous turns, with titles read
+     fresh. Loaded BEFORE retrieval because a sentence leaning on "it" gives
+     retrieval nothing to search for — the antecedent has to be seeded in, or
+     the assistant answers about the right thing having read nothing about
+     it. */
+  const references = await recentReferences(
+    db, request.workspaceId, conversation.conversationId,
+  ).catch(() => [] as Reference[]);
+  const cue = referenceCue(text);
+
+  /* Seeded only when the sentence actually refers back, and narrowed to the
+     type when the words say which — "the project" should not drag in the
+     three tasks that were also mentioned. Everything else stays out: a list
+     of twelve entities attached to every turn is not context, it is noise
+     that crowds out what was actually asked about. */
+  const referenceSeeds = cue.present
+    ? references
+      .filter((r) => !cue.type || r.type === cue.type)
+      .slice(0, cue.type ? 3 : 2)
+      .map((r) => ({ type: r.type, id: r.id }))
+    : [];
+
   /* ── 2. Retrieve ──────────────────────────────────────────────────── */
   const retrieval = amendOnly
     ? {
@@ -249,7 +277,10 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     : await retrieve(deps, ctx, {
       text,
       queries: read?.queries ?? [],
-      seeds: input.resolved?.ref ? [input.resolved.ref] : [],
+      seeds: [
+        ...(input.resolved?.ref ? [input.resolved.ref] : []),
+        ...referenceSeeds,
+      ],
     });
 
   const ranked = amendOnly ? [] : rank(retrieval.pool, {
@@ -284,6 +315,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     request,
     capabilities: described.capabilities,
     rules: enabled.map((s) => ({ module: s.id, rules: s.rules })),
+    routing: described.routing,
     /* Readable but not writable — stated rather than left to be inferred from
        an absence, so "I can see that meeting but cannot move it" is reachable. */
     readOnly: described.readOnly,
@@ -292,6 +324,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
        produce "your calendar is not connected", never "I cannot find it". */
     unavailable: described.unavailable,
     sources: forPrompt(ranked),
+    references: referencesForPrompt(references),
     memory: relevant.map((m) => ({ category: m.category, fact: m.fact })),
     ...(conversation.pending ? {
       pending: {
@@ -327,6 +360,12 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
   /* ── 5. Consistency, before anything is shown ──────────────────────── */
   const knownIds = new Set<string>(ranked.map((s) => refKey(s.ref)));
   if (request.surface?.entity) knownIds.add(refKey(request.surface.entity));
+  /* An id this conversation already established is known, even when this
+     turn's retrieval did not happen to return it — "make that urgent" is
+     about something named a moment ago, and searching for "that" finds
+     nothing. Without this the validator would reject the one id that is
+     certainly right. */
+  for (const r of references) knownIds.add(refKey(r));
   if (input.resolved?.ref) knownIds.add(refKey(input.resolved.ref));
   for (const a of conversation.pending?.actions ?? []) {
     if (a.target) knownIds.add(refKey(a.target));
@@ -684,7 +723,11 @@ async function buildActions(
       });
       continue;
     }
-    const parsed = cap.input.safeParse(raw.payload);
+    /* Validated through a PROBE, so a field holding `{{a1.id}}` — an id the
+       action it depends on has not produced yet — is checked as the uuid it
+       will become rather than rejected as the text it currently is. Only the
+       placeholders differ; every other rule still applies. */
+    const parsed = cap.input.safeParse(probe(raw.payload as Record<string, unknown>));
     if (!parsed.success) {
       /* Rejected HERE rather than at execution. A card the user confirms and
          which then fails on a shape error is the worst of both: they agreed to
@@ -708,7 +751,12 @@ async function buildActions(
 
     const warnings = [...(raw.warnings ?? [])];
     let summary = raw.summary ?? null;
-    let payload: Record<string, unknown> = parsed.data as Record<string, unknown>;
+    /* Validated data, with the placeholders put BACK. What is stored and
+       later confirmed must still say `{{a1.id}}`; storing the probe would be
+       storing an id that was never created. */
+    let payload: Record<string, unknown> = unprobe(
+      parsed.data, raw.payload as Record<string, unknown>,
+    );
 
     /* ── Calendar preview, at plan time ─────────────────────────────
        An external write is previewed BEFORE the user is asked, so the card
@@ -734,7 +782,13 @@ async function buildActions(
       .filter((r) => byKey.has(refKey(r!))) as EntityRef[];
 
     actions.push({
-      id: `a${actions.length + 1}`,
+      /* Numbered by the PLANNER's own index, not by how many survived.
+         `{{a2.id}}` means the second action the model wrote; if the first is
+         rejected and everything shuffles up, that reference silently becomes
+         a reference to something else. Gaps in the numbering are harmless —
+         the ids are opaque handles — and a reference to a rejected action
+         then fails loudly as an unknown one, which is the truth. */
+      id: `a${i + 1}`,
       capability: cap.id,
       module: cap.module,
       title: raw.title,
@@ -753,7 +807,31 @@ async function buildActions(
       sources,
     });
   }
-  return { actions, rejected };
+  /* ── Is the set actually runnable? ───────────────────────────────
+     A reference to an action that was rejected, a loop, an action pointing
+     at itself: none of these can be carried out, and all of them look
+     perfectly reasonable on a card. Caught here, before anything is shown,
+     because the alternative is a person confirming a set of changes that
+     was never going to work. The dependent is dropped, not the whole set —
+     "create the task" is still worth doing when only the link is broken. */
+  /* Repeated until it settles: dropping a broken action orphans anything
+     that depended on IT, and reporting only the first round would leave a
+     link pointing at a schedule that is no longer being made. */
+  let live = actions;
+  for (;;) {
+    const { problems } = planOrder(live);
+    if (!problems.length) break;
+    const broken = new Set(problems.map((x) => x.actionId));
+    for (const a of live.filter((x) => broken.has(x.id))) {
+      rejected.push({
+        capability: a.capability,
+        reason: `${a.title} — it depends on a change that is not being made`,
+      });
+    }
+    live = live.filter((a) => !broken.has(a.id));
+  }
+
+  return { actions: live, rejected };
 }
 
 /** A validation finding, said in terms of the request rather than the check. */

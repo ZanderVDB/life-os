@@ -42,7 +42,8 @@
 import type { CapabilityRegistry, CapabilityCtx } from './registry.js';
 import { resolveRelativeDate } from '../lib/civil-date.js';
 import { classifyTiming } from '../lib/timing-intent.js';
-import type { ContextSource, EntityRef } from './types.js';
+import type { ContextSource, EntityRef, EntityType } from './types.js';
+import { resolveEntity } from './resolve.js';
 
 /** The shape of an action before the turn normalises it. Matches the planner's. */
 export type RawAction = {
@@ -136,34 +137,27 @@ const titleCase = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s
  * Exactly one match is required. Two is not "pick the better one": two is a
  * clarification, and clarification is the planner's job.
  */
+/**
+ * One named thing, through the SHARED resolver.
+ *
+ * This used to be its own title matching, which meant the fast path and the
+ * planner could disagree about what "the client call" referred to. The rules
+ * now live in `resolve.ts` and everything asks the same question.
+ *
+ * The fast path is stricter than the resolver about what counts as an answer:
+ * `ambiguous` is not a question to ask here, it is a reason to hand the turn
+ * to the planner, which can ask properly.
+ */
 async function resolveOne(
   ctx: CapabilityCtx, registry: CapabilityRegistry, name: string, types: string[],
 ): Promise<{ hit: ContextSource } | { ambiguous: number } | null> {
-  const clean = name.trim();
-  if (clean.length < 2) return null;
-  const caps = (await registry.capabilities(ctx)).filter((c) => c.kind === 'search');
-  const found: ContextSource[] = [];
-  for (const cap of caps) {
-    if (!cap.run) continue;
-    const parsed = cap.input.safeParse({ query: clean });
-    if (!parsed.success) continue;
-    const rows = await cap.run(ctx, parsed.data).catch(() => [] as ContextSource[]);
-    found.push(...rows.filter((r) => types.includes(r.ref.type)));
-  }
-
-  const lower = clean.toLowerCase();
-  const byKey = new Map<string, ContextSource>();
-  for (const f of found) byKey.set(`${f.ref.type}:${f.ref.id}`, f);
-  const all = [...byKey.values()];
-
-  /* An exact title beats everything, including several partial matches. "Add
-     milk" resolving against "Milk" and "Buy oat milk for the weekend" is not
-     ambiguous — one of them IS the thing named. */
-  const exact = all.filter((r) => r.title.trim().toLowerCase() === lower);
-  if (exact.length === 1) return { hit: exact[0]! };
-  if (exact.length > 1) return { ambiguous: exact.length };
-  if (all.length === 1) return { hit: all[0]! };
-  if (all.length > 1) return { ambiguous: all.length };
+  const r = await resolveEntity(ctx, registry, name, {
+    types: types as EntityType[],
+    today: ctx.request.today,
+    surface: ctx.request.surface?.entity ?? null,
+  });
+  if (r.status === 'resolved') return { hit: r.hit };
+  if (r.status === 'ambiguous') return { ambiguous: r.candidates.length };
   return null;
 }
 

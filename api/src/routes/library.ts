@@ -30,6 +30,7 @@ import {
   LIBRARY_TYPES, SECTION_ACCENTS, PAGE_LAYOUTS, PAGE_PURPOSES,
 } from '../db/schema.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+import { createBook, createSection } from '../lib/actions/library.js';
 import {
   docToText, validateDoc, validatePageContent, pageToText, starterContent, extractRefs,
   convertContent,
@@ -390,25 +391,9 @@ export function registerLibraryRoutes(
       firstSection: z.string().trim().min(1).max(120).default('Notes'),
     }).strict().parse(req.body ?? {});
 
-    const created = await db.transaction(async (tx) => {
-      const [item] = await tx.insert(libraryItems).values({
-        workspaceId: ws, type: 'book', title: body.title,
-        description: body.description ?? null,
-      }).returning();
-      const [book] = await tx.insert(libraryBooks).values({
-        workspaceId: ws, libraryItemId: item!.id,
-        subtitle: body.subtitle ?? null, authorLabel: body.authorLabel ?? null,
-      }).returning();
-      const [section] = await tx.insert(bookSections).values({
-        workspaceId: ws, bookId: book!.id, title: body.firstSection,
-        accent: 'peach', position: 0,
-      }).returning();
-      await tx.insert(bookPages).values([
-        { workspaceId: ws, sectionId: section!.id, position: 0 },
-        { workspaceId: ws, sectionId: section!.id, position: GAP },
-      ]);
-      return { item: item!, book: book!, section: section! };
-    });
+    /* The service, not a second copy of it. The assistant creates books
+       through the same call, and a book made either way is the same book. */
+    const created = await createBook(db, ws, body);
     reply.code(201);
     return created;
   });
@@ -673,19 +658,8 @@ export function registerLibraryRoutes(
       accent: z.enum(SECTION_ACCENTS).default('peach'),
     }).strict().parse(req.body ?? {});
     const { book } = await loadBook(ws, id);
-
-    const position = await nextPosition(bookSections.position, bookSections,
-      eq(bookSections.bookId, book.id));
-    const created = await db.transaction(async (tx) => {
-      const [section] = await tx.insert(bookSections).values({
-        workspaceId: ws, bookId: book.id, title: body.title, accent: body.accent, position,
-      }).returning();
-      // A section with no page cannot be opened to.
-      await tx.insert(bookPages).values([
-        { workspaceId: ws, sectionId: section!.id, position: 0 },
-        { workspaceId: ws, sectionId: section!.id, position: GAP },
-      ]);
-      return section!;
+    const created = await createSection(db, ws, {
+      bookId: book.id, title: body.title, accent: body.accent,
     });
     reply.code(201);
     return { section: created };

@@ -36,6 +36,10 @@ const source = (row: typeof reminders.$inferSelect, level: 1 | 2 | 3 = 2): Conte
 
 export const remindersModule: AiModule = {
   id: 'reminders',
+  routing: [
+    'Wanting to be TOLD something at or around a time. The point is the nudge, not the work.',
+    'A Life OS reminder is not a calendar event and does not appear in Google.',
+  ],
   name: 'Reminders',
   entities: ['reminder'],
   rules: [

@@ -26,6 +26,18 @@
  * the five that worked, and must not stop the sixth being attempted, because
  * "I added the milk but not the chicken" is a true and useful report and "the
  * whole thing failed" is neither.
+ *
+ * ── Except where one needs another ───────────────────────────────────────
+ *
+ * "Create the task, schedule it, link it to the notes" is still three separate
+ * agreements, but two of them cannot be attempted until the first has produced
+ * an id. Those are found by reading the payloads — see `depends.ts` — and a
+ * dependent whose dependency failed is SKIPPED, not attempted and not counted
+ * as a failure of its own. Running it anyway would write a link pointing at a
+ * task that does not exist, which is the one outcome worse than doing nothing.
+ *
+ * Independence is still the default. Only an action that actually references
+ * another's result is ordered behind it.
  */
 import type { Db } from '../db/client.js';
 /* The one non-type import, and it is an error SHAPE rather than a rule. A
@@ -35,10 +47,11 @@ import type { Db } from '../db/client.js';
    look again. */
 import { badRequest } from '../lib/errors.js';
 import { executionSchema } from './registry.js';
+import { planOrder, blockedBy, substitute } from './depends.js';
 import type { CapabilityRegistry, CapabilityCtx } from './registry.js';
 import type {
   AiRequestContext, ProposalSet, ProposalAction, Confirmation,
-  ExecutionReport, ActionResult,
+  ExecutionReport, ActionResult, EntityRef,
 } from './types.js';
 
 /** How many changes a Confirm button covering this set would make. */
@@ -87,7 +100,25 @@ export async function execute(
   const ctx: CapabilityCtx = { db: deps.db, request: deps.request };
   const results: ActionResult[] = [];
 
-  for (const action of set.actions) {
+  /* Dependencies first: an action referencing another's id runs after it.
+     A graph that cannot be run — a loop, a reference to an action that is not
+     in this set — is refused as a whole rather than partly attempted, because
+     the person agreed to a set of changes that does not describe anything the
+     executor could carry out. Validation rejects these before a proposal is
+     ever shown; reaching one here means a confirmed set was tampered with. */
+  const { order, problems } = planOrder(set.actions);
+  if (problems.length) {
+    throw badRequest(
+      `These changes depend on each other in a way that cannot be carried out: ${
+        problems.map((p) => p.detail).join('; ')}.`,
+    );
+  }
+
+  /* What each finished action produced, so a later one can point at it. */
+  const produced = new Map<string, EntityRef>();
+  const succeeded = new Set<string>();
+
+  for (const action of order) {
     if (!action.enabled) {
       results.push({
         actionId: action.id,
@@ -97,6 +128,24 @@ export async function execute(
       });
       continue;
     }
+    /* ── Did the thing this needs actually happen? ──────────────────
+       Reported against the action that BROKE, not the one immediately
+       above, so a three-step chain does not blame its middle. */
+    const blocker = blockedBy(set.actions, succeeded).get(action.id);
+    if (blocker) {
+      const why = results.find((r) => r.actionId === blocker);
+      results.push({
+        actionId: action.id,
+        capability: action.capability,
+        status: 'skipped',
+        message: why?.status === 'skipped'
+          ? 'Not done, because it needed a change that was switched off.'
+          : 'Not done, because it needed a change that did not work.',
+        error: 'dependency_failed',
+      });
+      continue;
+    }
+
     try {
       /* Resolved through the registry at EXECUTION time, not at plan time.
          A module switched off between the proposal being made and confirmed —
@@ -133,7 +182,25 @@ export async function execute(
          does not preview. Where preview replaced the payload with a ledger
          handle, checking the handle against the schema for a full draft
          refuses a payload that is exactly right. */
-      const parsed = executionSchema(cap).safeParse(action.payload);
+      /* Placeholders become the ids the earlier actions produced. Done
+         BEFORE validation, so what the schema checks is what will run: a
+         uuid field validated while still holding "{{a1.id}}" would fail on
+         a payload that is in fact correct. */
+      const filled = substitute(action.payload, produced);
+      if (filled.missing.length) {
+        /* Unreachable via `blockedBy` — kept because executing a payload
+           still carrying a placeholder would write the literal text. */
+        results.push({
+          actionId: action.id,
+          capability: action.capability,
+          status: 'skipped',
+          message: 'Not done, because it needed a change that did not work.',
+          error: 'dependency_failed',
+        });
+        continue;
+      }
+
+      const parsed = executionSchema(cap).safeParse(filled.payload);
       if (!parsed.success) {
         results.push({
           actionId: action.id,
@@ -147,6 +214,10 @@ export async function execute(
 
       const r = await cap.execute(ctx, parsed.data);
       results.push({ actionId: action.id, capability: action.capability, ...r });
+      if (r.status === 'done') {
+        succeeded.add(action.id);
+        if (r.ref?.id) produced.set(action.id, r.ref);
+      }
     } catch (e) {
       /* One failure, one report. The batch continues: the other five
          agreements are still agreements. */
@@ -160,11 +231,20 @@ export async function execute(
     }
   }
 
+  /* Reported in the order the CARDS were shown, not the order they ran.
+     Execution order is an implementation detail; a result list that
+     reshuffles itself would make the report hard to check against the
+     proposal the person actually agreed to. */
+  const byAction = new Map(results.map((r) => [r.actionId, r]));
+  const inOrder = set.actions
+    .map((a) => byAction.get(a.id))
+    .filter(Boolean) as ActionResult[];
+
   return {
     proposalSetId: set.id,
-    results,
-    done: results.filter((r) => r.status === 'done').length,
-    failed: results.filter((r) => r.status === 'failed').length,
-    skipped: results.filter((r) => r.status === 'skipped').length,
+    results: inOrder,
+    done: inOrder.filter((r) => r.status === 'done').length,
+    failed: inOrder.filter((r) => r.status === 'failed').length,
+    skipped: inOrder.filter((r) => r.status === 'skipped').length,
   };
 }
