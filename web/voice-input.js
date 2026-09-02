@@ -89,7 +89,7 @@ const MAX_RESTARTS = 40;
  * on background noise produces bing, bing, bing — and each of those restarts
  * was buying nothing, because nothing was being heard.
  */
-const SILENCE_AFTER_SPEECH_MS = 2600;
+const SILENCE_AFTER_SPEECH_MS = 2000;
 const SILENCE_BEFORE_SPEECH_MS = 9000;
 
 /** How quickly the "words are arriving" signal falls back to nothing. */
@@ -97,6 +97,42 @@ const ACTIVITY_HALF_LIFE_MS = 420;
 
 /** A restart sooner than this after a start means it is not really working. */
 const TOO_QUICK_MS = 350;
+
+/**
+ * The incoming text, with any repeat of what is already there removed.
+ *
+ * A defence at the SEAM between recogniser sessions. Restarting takes a
+ * moment, and an engine that had buffered audio can re-recognise the tail of
+ * what it just delivered — so session B's first final repeats the end of
+ * session A's.
+ *
+ * Deliberately timid. It needs at least two matching words, because one
+ * repeated word is far more likely to be something a person actually said
+ * ("no no", "very very") than an artefact, and silently deleting a real word
+ * is worse than leaving a rare duplicate. Compared on lowercased words so
+ * punctuation and capitalisation cannot hide a match.
+ */
+const words = (t) => String(t ?? '').trim().split(/\s+/).filter(Boolean);
+const MAX_SEAM = 12;
+const MIN_SEAM = 2;
+
+export function trimOverlap(already, incoming) {
+  const before = words(already);
+  const after = words(incoming);
+  if (before.length < MIN_SEAM || after.length < MIN_SEAM) return incoming;
+
+  const norm = (w) => w.toLowerCase().replace(/[^a-z0-9']/g, '');
+  const limit = Math.min(MAX_SEAM, before.length, after.length);
+  for (let n = limit; n >= MIN_SEAM; n -= 1) {
+    const tail = before.slice(-n).map(norm).join(' ');
+    const head = after.slice(0, n).map(norm).join(' ');
+    if (tail && tail === head) {
+      const kept = after.slice(n).join(' ');
+      return kept ? `${kept} ` : '';
+    }
+  }
+  return incoming;
+}
 
 export class VoiceInput {
   /**
@@ -160,7 +196,7 @@ export class VoiceInput {
 
   /** base + everything heard, trimmed of the join seam. */
   compose(interim = '') {
-    const spoken = `${this.committed}${interim}`.replace(/\s+/g, ' ').trim();
+    const spoken = `${this.committed} ${interim}`.replace(/\s+/g, ' ').trim();
     if (!this.base) return { spoken, full: spoken };
     if (!spoken) return { spoken, full: this.base };
     /* One space at the seam, and no double space if the draft already ends
@@ -254,6 +290,9 @@ export class VoiceInput {
 
   /** One recogniser, wired. Used by `start` and by every restart. */
   open(SR) {
+    /* Exactly one at a time. Restarting used to leave the old one attached,
+       so two live recognisers wrote to the same transcript. */
+    this.teardown();
     let rec;
     try {
       rec = new SR();
@@ -279,19 +318,39 @@ export class VoiceInput {
     this.sessionFinal = '';
 
     rec.onstart = () => {
+      if (rec !== this.rec) return;
       this.startedAt = Date.now();
       if (this.wanted) this.setState('listening');
     };
 
     rec.onresult = (e) => {
+      /* A recogniser that has been replaced still delivers a trailing result
+         or two. Ignoring anything that is not the CURRENT one is what stops
+         a dead session writing over the live one's words. */
+      if (rec !== this.rec) return;
       if (!this.wanted && this.state !== 'stopping') return;
+
+      /* ── Finals accumulate; interim is ONE hypothesis ─────────────
+       *
+       * THE STUTTER LIVED HERE. `results` is a list of utterance segments,
+       * and the trailing ones are the engine's successive guesses at what is
+       * being said right now — "I", then "I want", then "I want to buy
+       * bread". Concatenating every non-final entry glued all the guesses
+       * together and produced "I I want I want to buy bread"; enough of them
+       * and it reads as "I I I I I want".
+       *
+       * There is only ever one thing being said at this instant, so only the
+       * LAST hypothesis is current. The earlier ones are drafts of it and are
+       * discarded. Finals are different — each is a settled segment — and
+       * they are rebuilt from the whole list every time, which is idempotent
+       * against Chrome re-reporting a final whose wording it has refined. */
       let finals = '';
       let interim = '';
       for (let i = 0; i < e.results.length; i += 1) {
         const r = e.results[i];
         const said = r[0]?.transcript ?? '';
         if (r.isFinal) finals += `${said} `;
-        else interim += `${said} `;
+        else interim = said;
       }
       this.sessionFinal = finals;
       if (finals || interim) {
@@ -301,14 +360,18 @@ export class VoiceInput {
       }
       /* `committed` holds earlier sessions only, so the live text is always
          everything before, plus this session's finals, plus what is still
-         being heard. No path adds the same words twice. */
+         being heard. Trimmed at the seam here as well as in `harvest`,
+         because the display must not show a repeat for the second or two
+         before the session ends — the person would read it as the stutter
+         coming back, and they would be right to. */
       const previous = this.committed;
-      this.committed = `${previous}${finals}`;
+      this.committed = `${previous}${trimOverlap(previous, finals)}`;
       this.emit(interim, false);
       this.committed = previous;
     };
 
     rec.onerror = (e) => {
+      if (rec !== this.rec) return;
       const code = e?.error ?? 'unknown';
       this.log('recognition error', code);
       const kind = CODE_KIND[code] ?? 'failed';
@@ -317,11 +380,16 @@ export class VoiceInput {
          `end`. Ending the whole session on it would stop listening the moment
          somebody drew breath — so it is only fatal if nothing was ever
          heard AND the user is no longer trying. Let `onend` decide. */
-      if (kind === 'no-speech') { this.lastSilent = true; return; }
+      /* Routine, and NOT a competitor to the silence watchdog: both roads
+         lead to `stop()`, and whichever arrives first wins because `stop()`
+         is idempotent. Ending the session here would cut somebody off the
+         moment they drew breath, so it defers to `onend`. */
+      if (kind === 'no-speech') return;
       this.fail(kind, code);
     };
 
     rec.onend = () => {
+      if (rec !== this.rec) return;
       /* THE BUG THIS FILE EXISTS FOR.
          Mobile ends a recognition after a pause whatever `continuous` says.
          With no handler here, everything after the first phrase was lost in
@@ -352,14 +420,19 @@ export class VoiceInput {
       if (SRnow) this.open(SRnow);
     };
 
+    /* Claimed BEFORE starting. Every handler ignores events from a recogniser
+       that is not the current one, and `start()` can deliver `onstart`
+       synchronously — claiming it afterwards would make the live session
+       discard its own first event and never reach `listening`. */
+    this.rec = rec;
     try {
       rec.start();
     } catch (e) {
       this.log('start threw', e);
+      this.rec = null;
       this.fail('failed');
       return false;
     }
-    this.rec = rec;
     return true;
   }
 
@@ -389,7 +462,7 @@ export class VoiceInput {
    */
   harvest() {
     if (!this.sessionFinal) return;
-    this.committed += this.sessionFinal;
+    this.committed += trimOverlap(this.committed, this.sessionFinal);
     this.sessionFinal = '';
   }
 

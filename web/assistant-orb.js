@@ -338,7 +338,9 @@ export class Orb {
         : breathe * 0.04;
       if (strength > 0.03) {
         this.lastEmit = this.t;
-        this.rings.push({ r: R, born: this.t, strength, wob: (this.rings.length % 5) * 1.3 });
+        /* `phase` only staggers the uniform breath between rings, so no two
+           pulse in lockstep. It no longer chooses a direction to bulge in. */
+        this.rings.push({ r: R, born: this.t, strength, phase: (this.rings.length % 5) * 1.3 });
       }
     }
 
@@ -359,23 +361,41 @@ export class Orb {
       const alpha = clamp(life * life * (0.16 + ring.strength * 0.72), 0, 1);
       if (alpha < 0.005) return false;
 
-      /* Organic, not geometric. Each ring is a closed path whose radius
-       * breathes around the circle, so waves read as pressure moving through
-       * air rather than as concentric hoops from a physics diagram. */
+      /* ── Radially symmetric, on purpose ──────────────────────────
+       *
+       * These rings used to be closed paths deformed by sin(3a) and sin(5a).
+       * That reads as a squashed, warped orb rather than a wave: the two
+       * lobes push one side out and pull the OPPOSITE side in by exactly as
+       * much, so a loud moment looked like a dent as often as a swell.
+       *
+       * A wave leaving a round source is round. The voice belongs in how far
+       * the ring has travelled, how bright it is and how heavy its line —
+       * every one of which is the same all the way round — and not in which
+       * direction it happens to bulge.
+       *
+       * The life left in it is a breath applied UNIFORMLY: the whole ring
+       * eases out and back together, so it is still moving and still never
+       * lopsided. */
+      const breath = reduce ? 0
+        : Math.sin(this.t / 1150 + ring.phase) * 0.012 * (0.4 + ring.strength);
+      const d = rad * (1 + breath);
+
       ctx.beginPath();
-      const wobble = (0.012 + ring.strength * 0.03) * rad;
-      for (let i = 0; i <= 48; i += 1) {
-        const a = (i / 48) * TAU;
-        const d = rad + Math.sin(a * 3 + ring.wob + this.t / 900) * wobble
-          + Math.sin(a * 5 - ring.wob * 2 + this.t / 1400) * wobble * 0.5;
-        const x = cx + Math.cos(a) * d;
-        const y = cy + Math.sin(a) * d;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
+      ctx.arc(cx, cy, d, 0, TAU);
       ctx.strokeStyle = `rgba(186,150,255,${alpha})`;
       ctx.lineWidth = Math.max(0.5, (0.9 + ring.strength * 6) * life);
       ctx.stroke();
+
+      /* A soft companion just inside the crest, which is what makes a loud
+         ring feel thick rather than merely wide. Concentric, so it cannot
+         unbalance the silhouette. */
+      if (!reduce && ring.strength > 0.25) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, d * 0.985, 0, TAU);
+        ctx.strokeStyle = `rgba(214,190,255,${alpha * 0.35})`;
+        ctx.lineWidth = Math.max(0.5, (0.6 + ring.strength * 3) * life);
+        ctx.stroke();
+      }
       return true;
     });
 

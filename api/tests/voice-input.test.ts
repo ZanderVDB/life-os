@@ -445,6 +445,193 @@ test('voice: the timer is released on every exit', async () => {
   assert.ok(M.made.length >= 3);
 });
 
+/* ══ The stutter ═════════════════════════════════════════════════════════
+ *
+ * Reported from a real phone: "I want to buy bread" arrived as
+ * "I I I I I want…". The engine delivers its successive guesses at the
+ * current utterance as SEPARATE entries in `results`, and every non-final one
+ * was being concatenated. There is only ever one thing being said at this
+ * instant, so only the last hypothesis is current.
+ */
+
+test('voice: successive interim guesses replace each other, never accumulate', async () => {
+  const M = browser();
+  const { v, last } = await make();
+  v.start('');
+  const rec = M.made[0]!;
+
+  /* Exactly what Android delivers, growing by one guess each time. */
+  rec.say([{ transcript: 'I', isFinal: false }]);
+  assert.equal(last().full, 'I');
+
+  rec.say([
+    { transcript: 'I', isFinal: false },
+    { transcript: 'I want', isFinal: false },
+  ]);
+  assert.equal(last().full, 'I want', 'the earlier guess is a draft, not a word');
+
+  rec.say([
+    { transcript: 'I', isFinal: false },
+    { transcript: 'I want', isFinal: false },
+    { transcript: 'I want to buy bread', isFinal: false },
+  ]);
+  assert.equal(last().full, 'I want to buy bread');
+});
+
+test('voice: the reported phrase comes out exactly once', async () => {
+  const M = browser();
+  const { v, last } = await make();
+  v.start('');
+  const rec = M.made[0]!;
+  for (const guess of ['I', 'I want', 'I want to', 'I want to buy', 'I want to buy bread']) {
+    rec.say([{ transcript: guess, isFinal: false }]);
+  }
+  rec.say([{ transcript: 'I want to buy bread.', isFinal: true }]);
+  assert.equal(last().full, 'I want to buy bread.');
+  /* The specific shape of the bug: no word appears twice in a row. */
+  assert.doesNotMatch(last().full, /\b(\w+)\s+\1\b/i);
+});
+
+test('voice: finals accumulate while only the trailing interim is live', async () => {
+  const M = browser();
+  const { v, last } = await make();
+  v.start('');
+  const rec = M.made[0]!;
+  /* Two settled segments and one guess in flight — the ordinary steady
+     state of a long sentence. */
+  rec.say([
+    { transcript: 'Remind me Friday', isFinal: true },
+    { transcript: 'to phone Oscar', isFinal: true },
+    { transcript: 'about the', isFinal: false },
+  ]);
+  assert.equal(last().full, 'Remind me Friday to phone Oscar about the');
+
+  rec.say([
+    { transcript: 'Remind me Friday', isFinal: true },
+    { transcript: 'to phone Oscar', isFinal: true },
+    { transcript: 'about the invoice', isFinal: false },
+  ]);
+  assert.equal(last().full, 'Remind me Friday to phone Oscar about the invoice');
+});
+
+test('voice: a long sentence with a pause in it reads back once', async () => {
+  const M = browser();
+  const { v, last } = await make({ silenceMs: 5000 });
+  v.start('');
+  M.made[0]!.say([{ transcript: 'Remind me Friday to phone Oscar', isFinal: true }]);
+  /* The pause. The browser gives up; we carry on. */
+  M.made[0]!.startedAt = 0;
+  M.made[0]!.end();
+  assert.equal(M.made.length, 2);
+  M.made[1]!.say([{ transcript: 'about the invoice', isFinal: false }]);
+  M.made[1]!.say([{ transcript: 'about the invoice.', isFinal: true }]);
+  assert.equal(last().full, 'Remind me Friday to phone Oscar about the invoice.');
+  assert.doesNotMatch(last().full, /\b(\w+)\s+\1\b/i);
+});
+
+/* ══ The seam between sessions ═══════════════════════════════════════════ */
+
+test('voice: a restart that re-hears the tail does not say it twice', async () => {
+  const M = browser();
+  const { v, last } = await make({ silenceMs: 5000 });
+  v.start('');
+  M.made[0]!.say([{ transcript: 'I want to buy', isFinal: true }]);
+  M.made[0]!.startedAt = 0;
+  M.made[0]!.end();
+  /* The engine had buffered audio and re-recognises the end of what it
+     already delivered. Without trimming this reads "I want to buy to buy
+     bread". */
+  M.made[1]!.say([{ transcript: 'to buy bread', isFinal: true }]);
+  assert.equal(last().full, 'I want to buy bread');
+});
+
+test('voice: overlap trimming keeps a word somebody genuinely repeated', async () => {
+  const { trimOverlap } = await load();
+  /* One word is far likelier to be real speech than an artefact, and
+     deleting a real word is worse than a rare duplicate. */
+  assert.equal(trimOverlap('no ', 'no '), 'no ');
+  assert.equal(trimOverlap('it was very ', 'very good '), 'very good ');
+  /* Two or more is the artefact. */
+  assert.equal(trimOverlap('I want to buy ', 'to buy bread '), 'bread ');
+  assert.equal(trimOverlap('hello ', 'world '), 'world ');
+  /* Case and punctuation cannot hide a match. */
+  assert.equal(trimOverlap('to buy bread ', 'Buy bread. Then milk '), 'Then milk ');
+});
+
+/* ══ One recogniser, always ══════════════════════════════════════════════ */
+
+test('voice: a replaced recogniser cannot write to the transcript', async () => {
+  const M = browser();
+  const { v, last } = await make({ silenceMs: 5000 });
+  v.start('');
+  const first = M.made[0]!;
+  first.say([{ transcript: 'Buy milk', isFinal: true }]);
+  first.startedAt = 0;
+  first.end();
+  const second = M.made[1]!;
+  assert.notEqual(first, second);
+
+  /* Chrome delivers a trailing result from the session it already ended.
+     Before the guard this overwrote the live session's words. */
+  first.onresult?.({
+    resultIndex: 0,
+    results: Object.assign([Object.assign([{ transcript: 'GHOST' }], { isFinal: true })],
+      { length: 1 }),
+  });
+  second.say([{ transcript: 'and bread', isFinal: true }]);
+  assert.equal(last().full, 'Buy milk and bread');
+  assert.doesNotMatch(last().full, /GHOST/);
+});
+
+test('voice: restarting releases the previous recogniser', async () => {
+  const M = browser();
+  const { v } = await make({ silenceMs: 5000 });
+  v.start('');
+  const first = M.made[0]!;
+  first.say([{ transcript: 'one', isFinal: true }]);
+  first.startedAt = 0;
+  first.end();
+  assert.equal(first.aborted, true, 'the old one is let go, not left listening');
+  assert.equal(first.onresult, null, 'and its handlers are detached');
+  assert.equal(v.rec, M.made[1], 'exactly one live recogniser');
+});
+
+/* ══ Two seconds ═════════════════════════════════════════════════════════ */
+
+test('voice: the silence that finishes a sentence is two seconds', async () => {
+  const src = readFileSync(join('..', 'web', 'voice-input.js'), 'utf8');
+  assert.match(src, /SILENCE_AFTER_SPEECH_MS = 2000/,
+    'the window somebody actually waits through');
+});
+
+test('voice: once it has stopped on silence it does not start again', async () => {
+  const M = browser();
+  const { v } = await make({ silenceMs: 80 });
+  v.start('');
+  M.made[0]!.say([{ transcript: 'Buy milk', isFinal: true }]);
+  /* The watchdog polls on a period set at start, so a tick has to pass. */
+  await new Promise((r) => { setTimeout(r, 700); });
+  const count = M.made.length;
+  M.made[M.made.length - 1]!.end();
+  await new Promise((r) => { setTimeout(r, 200); });
+  assert.equal(M.made.length, count, 'no recogniser after the finished state');
+  assert.equal(v.state, 'idle');
+});
+
+test('voice: no-speech and the silence timer do not fight', async () => {
+  const M = browser();
+  const { v, errors, last } = await make({ silenceMs: 90 });
+  v.start('');
+  M.made[0]!.say([{ transcript: 'Buy milk', isFinal: true }]);
+  /* Both roads lead to stop(), and stop() is idempotent. */
+  M.made[0]!.err('no-speech');
+  await new Promise((r) => { setTimeout(r, 700); });
+  M.made[0]!.end();
+  assert.equal(errors.length, 0, 'a pause is not shown as a failure');
+  assert.equal(v.state, 'idle');
+  assert.equal(last().full, 'Buy milk');
+});
+
 /* ══ Both surfaces use it ════════════════════════════════════════════════ */
 
 test('voice: desktop and mobile both go through this one controller', () => {
