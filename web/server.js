@@ -76,9 +76,42 @@ window.LIFE_OS_BUILD = ${JSON.stringify(BUILD_ID)};
  * A/B/C listening-style selector — neither of which is a user feature, and
  * both of which have to be reachable on the staging deployment that is
  * being worked on. Delete DEV_PREVIEW to turn both off. */
-window.LIFE_OS_CONFIG.devTools = ${JSON.stringify(process.env.DEV_PREVIEW === '1')};
+window.LIFE_OS_CONFIG.devTools = ${JSON.stringify(devToolsEnabled)};
 `;
 }
+
+/**
+ * Are development tools available on THIS deployment?
+ *
+ * ── Why this is derived, not a flag ──────────────────────────────────────
+ *
+ * It was `DEV_PREVIEW=1`, opt-in, and nobody had set it on the staging web
+ * service — so the assistant's Development panel did not exist on staging at
+ * all, while every local check said it did. A switch that has to be remembered
+ * is a switch that is forgotten, and the thing it hid was the diagnostics we
+ * were relying on to debug a real device.
+ *
+ * So the ENVIRONMENT decides:
+ *
+ *   production            → they do not exist
+ *   staging / local dev   → they are available
+ *
+ * `DEV_PREVIEW` still forces them on for a deployment that is neither. Note
+ * that the staging service runs with NODE_ENV=production like the real thing,
+ * which is exactly why keying off NODE_ENV alone was never going to work.
+ *
+ * FAILS CLOSED: an unrecognised deployment gets nothing.
+ */
+const ENV_NAME = String(
+  process.env.APP_ENV || process.env.RAILWAY_ENVIRONMENT_NAME
+  || process.env.RAILWAY_ENVIRONMENT || '',
+).toLowerCase();
+const IS_PRODUCTION = /prod/.test(ENV_NAME);
+const IS_STAGING = /stag|preview|dev/.test(ENV_NAME);
+const IS_LOCAL = process.env.NODE_ENV !== 'production';
+
+export const devToolsEnabled = process.env.DEV_PREVIEW === '1'
+  || (!IS_PRODUCTION && (IS_STAGING || IS_LOCAL));
 
 const server = createServer(async (req, res) => {
   try {
@@ -133,10 +166,8 @@ const server = createServer(async (req, res) => {
        * NODE_ENV=production like the real thing, so keying off that alone hid
        * the tool from the one place it was meant to be used.
        *
-       * To turn it on:  DEV_PREVIEW=1 on the web service.
-       * To turn it off: delete the variable. */
-      const local = process.env.NODE_ENV !== 'production';
-      if (!local && process.env.DEV_PREVIEW !== '1') {
+       * Now decided by the environment — see `devToolsEnabled` above. */
+      if (!devToolsEnabled) {
         res.writeHead(404, { 'content-type': 'text/plain' });
         return res.end('Not found');
       }

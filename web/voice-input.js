@@ -219,6 +219,10 @@ export class VoiceInput {
     this.heardAnything = false;
     /** 0..1, bumped by every result and decaying. See `activity`. */
     this.activityAt = 0;
+    /** 0..1, how hard speech is arriving. See `noteIntensity`. */
+    this.intensity = 0;
+    this.lastChars = 0;
+    this.intensityAt = 0;
     this.silenceTimer = null;
     this.autoStop = opts.autoStop !== false;
     /* Ids, so the trace can show at a glance whether two recognisers are
@@ -254,7 +258,41 @@ export class VoiceInput {
   get activity() {
     if (!this.activityAt) return 0;
     const age = Date.now() - this.activityAt;
-    return Math.max(0, 2 ** (-age / ACTIVITY_HALF_LIFE_MS));
+    const decay = Math.max(0, 2 ** (-age / ACTIVITY_HALF_LIFE_MS));
+    /* Scaled by how HARD the speech was arriving, not merely whether it was.
+       A bare on/off signal made the picture the same for a muttered word and
+       a full sentence — which is the "not meaningfully reactive" complaint.
+       There is a floor so that speaking at all is always visible. */
+    return decay * (0.35 + 0.65 * (this.intensity ?? 0));
+  }
+
+  /**
+   * How much speech is arriving, 0..1.
+   *
+   * ── An honest account of what this is ────────────────────────────────
+   *
+   * It is NOT microphone loudness. It is the rate at which recognised text is
+   * growing, which rises when somebody is speaking quickly or continuously
+   * and falls when they are not. True loudness needs an AnalyserNode on a
+   * second `getUserMedia` stream — and that second stream is what appeared to
+   * take the microphone away from the recogniser on a real phone, which is
+   * why it was removed. Re-adding it is a decision to make once transcription
+   * is trusted, not while it is still being diagnosed.
+   *
+   * So: genuinely driven by speech, and not claimed to be a volume meter.
+   */
+  noteIntensity(text) {
+    const now = Date.now();
+    const chars = String(text ?? '').length;
+    const grew = Math.max(0, chars - (this.lastChars ?? 0));
+    const dt = Math.max(16, now - (this.intensityAt ?? now));
+    this.lastChars = chars;
+    this.intensityAt = now;
+    /* Characters per second, normalised against brisk speech (~14/s), and
+       eased so it rises with a phrase rather than with a single event. */
+    const rate = Math.min(1, (grew / dt) * 1000 / 14);
+    const prev = this.intensity ?? 0;
+    this.intensity = prev + (rate - prev) * (rate > prev ? 0.45 : 0.12);
   }
 
   /** base + everything heard, trimmed of the join seam. */
@@ -313,6 +351,12 @@ export class VoiceInput {
     this.heardAnything = false;
     this.lastResultAt = 0;
     this.activityAt = 0;
+    this.intensity = 0;
+    this.lastChars = 0;
+    /* Seeded with NOW, not zero. Left at the epoch, the first result divided
+       its characters by fifty-six years and came out as silence — so the
+       picture stayed still through the first thing anybody said. */
+    this.intensityAt = Date.now();
     this.startedAt = Date.now();
     this.wanted = true;
     this.setState('starting');
@@ -456,6 +500,7 @@ export class VoiceInput {
         this.lastResultAt = Date.now();
         this.activityAt = this.lastResultAt;
         this.heardAnything = true;
+        this.noteIntensity(`${this.committed}${finals}${interim}`);
       }
       /* `committed` holds earlier sessions only, so the live text is always
          everything before, plus this session's finals, plus what is still

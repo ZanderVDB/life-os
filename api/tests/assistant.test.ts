@@ -278,3 +278,150 @@ test('the orb takes its body colour from the accent token', async () => {
   assert.notDeepEqual(seen[0], seen[1],
     'a different accent token produced an identical orb');
 });
+
+/* ══ Diagnostics reach staging, and never production ═════════════════════
+ *
+ * They did not. `DEV_PREVIEW=1` was opt-in, nobody had set it on the staging
+ * web service, and the deployed bundle therefore served `devTools = false` —
+ * so the Development panel did not exist on the one deployment it was for,
+ * while every local check said it did.
+ */
+
+test('diagnostics: the environment decides, and it fails closed', () => {
+  const server = readFileSync(join('..', 'web', 'server.js'), 'utf8');
+  assert.match(server, /export const devToolsEnabled/, 'the gate is not one decision');
+  assert.match(server, /RAILWAY_ENVIRONMENT_NAME/, 'the deployment environment is not read');
+  assert.match(server, /IS_PRODUCTION = \/prod\//, 'production is not recognised');
+  assert.match(server, /IS_STAGING = \/stag/, 'staging is not recognised');
+  assert.match(server, /!IS_PRODUCTION && \(IS_STAGING \|\| IS_LOCAL\)/,
+    'the rule is not "production never, staging and local yes"');
+  /* The same decision governs the config the browser gets AND /preview.html,
+     so the two cannot drift apart. */
+  assert.match(server, /devTools = \$\{JSON\.stringify\(devToolsEnabled\)\}/);
+  assert.match(server, /if \(!devToolsEnabled\)/);
+});
+
+test('diagnostics: the rule holds for every deployment shape', () => {
+  /* The logic, exercised rather than read. Production must get nothing. */
+  const decide = (env: Record<string, string>) => {
+    const E = String(env['APP_ENV'] || env['RAILWAY_ENVIRONMENT_NAME']
+      || env['RAILWAY_ENVIRONMENT'] || '').toLowerCase();
+    const prod = /prod/.test(E);
+    const stag = /stag|preview|dev/.test(E);
+    const local = env['NODE_ENV'] !== 'production';
+    return env['DEV_PREVIEW'] === '1' || (!prod && (stag || local));
+  };
+  assert.equal(decide({ APP_ENV: 'production', NODE_ENV: 'production' }), false);
+  assert.equal(decide({ RAILWAY_ENVIRONMENT_NAME: 'v2-staging', NODE_ENV: 'production' }), true);
+  assert.equal(decide({ NODE_ENV: 'development' }), true);
+  // An unrecognised deployment gets nothing.
+  assert.equal(decide({ NODE_ENV: 'production' }), false);
+  assert.equal(decide({ NODE_ENV: 'production', DEV_PREVIEW: '1' }), true);
+});
+
+test('diagnostics: the panel offers what a real-device trace needs', () => {
+  const surface = readFileSync(join('..', 'web', 'assistant.js'), 'utf8');
+  assert.match(surface, /id="asst-copy-trace"/, 'no copy control');
+  assert.match(surface, /id="asst-clear-trace"/, 'no clear control');
+  assert.match(surface, /No voice trace captured yet/, 'an empty trace says nothing');
+  assert.match(surface, /asst-trace-box/, 'no fallback when the clipboard refuses');
+  assert.match(surface, /id="asst-meter"/, 'no live signal meter');
+  // Behind the switch, and collapsed so it cannot dominate the screen.
+  assert.match(surface, /\$\{devTools\(\) \? devPanelHtml\(\) : ''\}/);
+  assert.match(surface, /<details class="asst-dev"/, 'the panel is not collapsible');
+});
+
+/* ══ The waveform ════════════════════════════════════════════════════════ */
+
+test('waveform: symmetry is a property of the formula, not a tuning', () => {
+  const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
+  /* Cosine is even, so cos(k(2π−θ)) = cos(kθ) and the curve is identical on
+     both sides of the axis. A drifting PHASE would introduce a sine term,
+     which is odd, and break exactly that. */
+  assert.match(src, /Math\.cos\(th \* b\.k\)/, 'the shape is not built from cosines');
+  const from = src.indexOf('const ribbon = (th, t)');
+  const ribbon = src.slice(from, src.indexOf('};', from));
+  assert.doesNotMatch(ribbon, /Math\.sin\(th/, 'an odd term would break the mirror');
+
+  /* And measured: r(θ) must equal r(−θ) at every angle, at any moment. */
+  const SW = [{ k: 2, w: 0.50, rate: 1 / 2600 },
+    { k: 3, w: 0.32, rate: -1 / 3400 },
+    { k: 4, w: 0.18, rate: 1 / 4300 }];
+  const shape = (th: number, t: number) =>
+    SW.reduce((v, b) => v + Math.sin(t * b.rate) * b.w * Math.cos(th * b.k), 0);
+  for (const t of [0, 1200, 5000, 22000]) {
+    for (let i = 1; i < 24; i += 1) {
+      const th = (i / 24) * Math.PI * 2;
+      assert.ok(Math.abs(shape(th, t) - shape(-th, t)) < 1e-12,
+        `not mirrored at t=${t}`);
+    }
+  }
+});
+
+test('waveform: quiet is a near-circle, loud is still a circle', () => {
+  const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
+  const wave = src.slice(src.indexOf('drawWaveform('));
+  /* ~3% of the radius when quiet, ~13% when shouting. The identity of the
+     shape must survive the loudest thing somebody can do. */
+  const m = wave.match(/swing = base \* \(([\d.]+) \+ ev \* ([\d.]+)\)/);
+  assert.ok(m, 'the amplitude rule is not expressed in one place');
+  const quiet = Number(m![1]);
+  const loud = quiet + Number(m![2]);
+  assert.ok(quiet <= 0.05, `quiet deviation of ${quiet} is not a near-circle`);
+  assert.ok(loud <= 0.16, `loud deviation of ${loud} loses the circular identity`);
+});
+
+test('waveform: broad swells, not a cog', () => {
+  const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
+  const ks = [...src.matchAll(/\{ k: (\d+), w: [\d.]+/g)].map((x) => Number(x[1]));
+  assert.deepEqual(ks, [2, 3, 4], 'the harmonics are not the low, broad ones');
+  const strands = src.match(/const STRANDS = (\d+)/);
+  assert.ok(Number(strands![1]) >= 8 && Number(strands![1]) <= 14,
+    'the trailing contours are outside the 8-14 the reference wants');
+});
+
+test('waveform: the voice drives it, and silence returns it to a circle', () => {
+  const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
+  const wave = src.slice(src.indexOf('drawWaveform('));
+  assert.match(wave, /this\.energy = prev \+ \(target - prev\)/, 'amplitude is not smoothed');
+  assert.match(wave, /swing = base \* \([\d.]+ \+ ev \* [\d.]+\)/, 'reach ignores the voice');
+  assert.match(wave, /alpha = lead \? [\d.]+ \+ ev \* [\d.]+/, 'brightness ignores the voice');
+  assert.match(wave, /lineWidth = lead \? [\d.]+ \+ ev \* [\d.]+/, 'weight ignores the voice');
+  assert.match(wave, /base = R \+ gap \+ R \* \(k \* [\d.]+ \+ ev \* [\d.]+\)/,
+    'the stack does not move with the voice');
+});
+
+/* ══ Thinking ════════════════════════════════════════════════════════════ */
+
+test('thinking: nothing rotates, and nothing reads as progress', () => {
+  const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
+  const fn = src.slice(src.indexOf('drawProcessing(cx, cy, R, reduce) {'));
+  assert.ok(fn.length > 200, 'the thinking state could not be found');
+  /* The spinner was `arc(cx, cy, rad, start, start + PI*0.85)` with `start`
+     advancing on a clock: a rotating gradient sweep, which is a loading
+     indicator whatever it is called. */
+  assert.doesNotMatch(fn, /const start = \(this\.t/, 'a rotating start angle is back');
+  assert.doesNotMatch(fn, /createLinearGradient/, 'the sweeping gradient is back');
+  assert.doesNotMatch(fn, /lineCap = 'round'/, 'the spinner cap is back');
+  /* Every ring is a COMPLETE circle. A partial arc is the thing that reads
+     as a percentage. */
+  const arcs = [...fn.matchAll(/ctx\.arc\([^;]*?\);/g)].map((m) => m[0]);
+  assert.ok(arcs.length > 0, 'nothing is drawn');
+  for (const a of arcs) {
+    assert.match(a, /0, TAU\);$/, `a partial arc reads as progress: ${a}`);
+  }
+  // And it breathes on its own, which is what makes it different from listening.
+  assert.match(fn, /Math\.sin\(this\.t \/ 1500\)/, 'the thinking state does not breathe');
+});
+
+test('thinking and listening are visually distinct', () => {
+  const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
+  const think = src.slice(src.indexOf('drawProcessing(cx, cy, R, reduce) {'));
+  const listen = src.slice(src.indexOf('drawWaveform(cx, cy, R, amp, breathe, reduce) {'),
+    src.indexOf('drawHalo(cx, cy, R, amp, breathe, reduce) {'));
+  assert.ok(think.length > 200 && listen.length > 200, 'a slice is empty');
+  /* Listening answers to a voice and does not move on its own; thinking moves
+     on its own and answers to nothing. */
+  assert.doesNotMatch(think, /\bamp\b/, 'thinking is driven by the microphone');
+  assert.match(listen, /this\.energy/, 'listening is not driven by the voice');
+});

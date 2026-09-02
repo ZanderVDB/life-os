@@ -411,7 +411,7 @@ test('voice: auto-stop can be switched off for a surface that wants a button', a
 
 /* ══ The orb's signal ════════════════════════════════════════════════════ */
 
-test('voice: activity follows WORDS, not loudness', async () => {
+test('voice: activity follows WORDS, and scales with how hard they arrive', async () => {
   const M = browser();
   const { v } = await make({ silenceMs: 5000 });
   assert.equal(v.activity, 0, 'nothing heard yet, nothing to draw');
@@ -420,14 +420,23 @@ test('voice: activity follows WORDS, not loudness', async () => {
   assert.equal(v.activity, 0, 'starting is not hearing');
 
   M.made[0]!.say([{ transcript: 'hello', isFinal: false }]);
-  assert.ok(v.activity > 0.9, 'a result drives it');
+  const first = v.activity;
+  /* Speaking at all is always visible — there is a floor — but the signal is
+     no longer a binary "somebody said something". It scales with how much
+     text is arriving, so a muttered word and a full sentence no longer draw
+     the same picture. */
+  assert.ok(first > 0.3, `a result drives it (${first})`);
 
   await new Promise((r) => { setTimeout(r, 500); });
   const decayed = v.activity;
-  assert.ok(decayed < 0.6 && decayed > 0, `it decays between words (${decayed})`);
+  assert.ok(decayed < first && decayed > 0, `it decays between words (${decayed})`);
 
-  M.made[0]!.say([{ transcript: 'hello there', isFinal: false }]);
-  assert.ok(v.activity > 0.9, 'and comes back on the next one');
+  /* A burst of text: more characters in less time reads as more energy. */
+  for (const t of ['hello there my', 'hello there my name', 'hello there my name is']) {
+    M.made[0]!.say([{ transcript: t, isFinal: false }]);
+  }
+  assert.ok(v.activity > decayed, 'speaking again does not bring it back');
+  assert.ok(v.activity <= 1, 'the signal escapes its range');
 });
 
 test('voice: the timer is released on every exit', async () => {

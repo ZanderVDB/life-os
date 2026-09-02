@@ -44,49 +44,15 @@ export const VARIANTS = [
 export const DEFAULT_VARIANT = 'a';
 
 const TAU = Math.PI * 2;
-
-/* ── The ribbon's shape ────────────────────────────────────────────────
- *
- * Six harmonics whose counts share no common factor, so the curve does not
- * repeat around the circle — which is what stops it reading as a polygon.
- * Each drifts at its own rate, so peaks travel and merge instead of holding
- * station.
- *
- * BALANCE comes from the maths rather than from symmetry: every term is a
- * sine over a whole number of periods, so it integrates to zero around the
- * circle and the mean radius is exactly the base. The average is a circle,
- * however the peaks fall.
- *
- * Weights fall away with frequency, which keeps the hills broad. The whole
- * thing sums to about 1, so `swing` means what it says.
- */
-const BANDS = [
-  /* The lowest band is deliberately NOT the loudest. Letting k=3 dominate
-     gave three big swells, and three swells around a circle is a shape with
-     a heavy side — exactly the lopsidedness this is meant to avoid. Weight
-     sits in the middle of the range, so there are six or seven gentle peaks
-     and no single direction the ribbon leans in. */
-  { k: 3, drift: 0.9, w: 0.20 },
-  { k: 5, drift: -1.3, w: 0.26 },
-  { k: 7, drift: 1.7, w: 0.24 },
-  { k: 11, drift: -2.2, w: 0.16 },
-  { k: 13, drift: 2.6, w: 0.10 },
-  { k: 17, drift: -3.1, w: 0.06 },
-];
-
-/** How many contours make the ribbon. The reference is many thin ones. */
-const STRANDS = 13;
-const STEPS = 116;
-
-const ribbon = (th, phase) => {
-  let v = 0;
-  for (let i = 0; i < BANDS.length; i += 1) {
-    const b = BANDS[i];
-    v += Math.sin(th * b.k + phase * b.drift) * b.w;
-  }
-  return v;
-};
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/**
+ * The reduced-motion preference, read LIVE rather than once.
+ *
+ * Somebody who turns it on mid-session should not have to reload to be
+ * listened to.
+ */
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* A hex nudged toward white (positive) or black (negative). Enough to build a
    sphere's worth of stops from one brand colour, and nothing more.
@@ -105,13 +71,51 @@ const tint = (hex, amount) => {
   return `rgb(${clamp(r, 0, 255)},${clamp(g, 0, 255)},${clamp(b, 0, 255)})`;
 };
 
-/**
- * Reads the reduced-motion preference live rather than once.
+/* ── The ribbon's shape ────────────────────────────────────────────────
  *
- * Someone turning it on in the middle of a listening session should not have
- * to reload the application to be taken seriously.
+ * ── Symmetry, for free ───────────────────────────────────────────────
+ *
+ * Every term is a COSINE of the angle, and cosine is even: cos(k·(2π−θ)) =
+ * cos(k·θ). So the curve is identical on both sides of the vertical axis, at
+ * every instant, whatever the voice is doing. A swell on the left always has
+ * its twin on the right. It is not tuned or damped into balance — it cannot
+ * be asymmetric.
+ *
+ * That is also why the phases never move. `cos(kθ + φ)` expands to a cosine
+ * term plus a SINE term, and the sine is odd — the moment a phase drifts, the
+ * mirror is broken. Movement comes from the amplitudes breathing instead,
+ * which is slower and calmer anyway.
+ *
+ * ── Broad, not busy ──────────────────────────────────────────────────
+ *
+ * k = 2, 3 and 4 only. Two, three or four wide swells around the circle read
+ * as breathing; a dozen small ones read as a cog, which is what the previous
+ * 3-to-17 spread produced. The weights fall away so the widest swell leads.
  */
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SWELLS = [
+  { k: 2, w: 0.50, rate: 1 / 2600 },
+  { k: 3, w: 0.32, rate: -1 / 3400 },
+  { k: 4, w: 0.18, rate: 1 / 4300 },
+];
+
+/** How many contours make the ribbon. */
+const STRANDS = 12;
+const STEPS = 128;
+
+/**
+ * Deviation from the circle at this angle, in [-1, 1].
+ *
+ * Amplitudes breathe on their own slow clocks so no two frames are the same;
+ * the shape stays even in θ throughout.
+ */
+const ribbon = (th, t) => {
+  let v = 0;
+  for (let i = 0; i < SWELLS.length; i += 1) {
+    const b = SWELLS[i];
+    v += Math.sin(t * b.rate) * b.w * Math.cos(th * b.k);
+  }
+  return v;
+};
 
 export class Orb {
   /**
@@ -201,7 +205,7 @@ export class Orb {
     this.state = s;
     /* A new listening session starts from stillness rather than from the
        tail of the last one. */
-    if (s !== 'listening') { this.waveHist = null; this.waveAmp = 0; }
+    if (s !== 'listening') { this.waveHist = null; this.energy = 0; }
   }
 
   /** 0..1. The only channel the microphone has into this class. */
@@ -391,36 +395,31 @@ export class Orb {
    * the waves are the sound, not a decoration timed to it. */
   /* ── A — Audio ribbon ──────────────────────────────────────────────────
    *
-   * A live audio signal wrapped into a circle: one bright contour with a
-   * dozen thin strands close behind it, flowing round the orb.
+   * A near-circle that breathes with the voice, with a dozen thin echoes
+   * close behind it.
    *
-   * ── Why the symmetry was removed ─────────────────────────────────────
+   * ── What it stopped being ────────────────────────────────────────────
    *
-   * The previous version made every harmonic a multiple of nine, which gave
-   * exact nine-fold rotational symmetry. That was a real fix for a real
-   * problem — before it, two lobes pushed one side out and dented the other —
-   * but it overshot: a shape that repeats exactly nine times reads as a
-   * geometric star, not as a voice.
+   * First a nine-lobed star (exact symmetry, but a geometric shape). Then six
+   * harmonics from 3 to 17 with drifting phases, which was fluid and read as
+   * a squiggle: uneven peaks, a heavy side, tiny ridges bunched in one
+   * region. The lesson from both is that the voice belongs in HOW FAR the
+   * circle swells, not in what shape it becomes.
    *
-   * The harmonics here are 3, 5, 7, 11, 13 and 17. They share no common
-   * factor, so the curve does not repeat around the circle and has no fixed
-   * points. It is still BALANCED, and for a better reason than symmetry:
-   * every term is a sine over a whole number of periods, so each integrates
-   * to zero around the circle and the mean radius is exactly the base. No
-   * side can collapse, because the average is a circle.
-   *
-   * Low frequencies carry most of the weight, which is what makes the hills
-   * broad and smooth rather than serrated.
+   * So: cosine-only harmonics (symmetric by construction — see `ribbon`), no
+   * more than four swells around the circle, and an amplitude that is about
+   * 3% of the radius when quiet and about 13% when somebody is shouting. It
+   * never stops looking like a circle.
    */
   drawWaveform(cx, cy, R, amp, breathe, reduce) {
     const { ctx } = this;
     const idle = this.state === 'idle' || this.state === 'starting';
-    const r = R * (1 + (idle ? breathe * 0.02 : amp * 0.06));
+    const r = R * (1 + (idle ? breathe * 0.02 : amp * 0.05));
 
     if (reduce) {
       /* Reduced motion still has to say "listening" (§49). A still halo that
        * answers to the voice in weight and opacity, and travels nowhere. */
-      [1.30, 1.58].forEach((m, i) => {
+      [1.34, 1.60].forEach((m, i) => {
         const a = clamp(amp * (1 - i * 0.35), 0, 1);
         ctx.beginPath();
         ctx.arc(cx, cy, R * m, 0, TAU);
@@ -433,52 +432,43 @@ export class Orb {
     }
 
     /* ── Heavily smoothed ──────────────────────────────────────────
-       The raw signal jumps between results. Easing toward it means the
-       ribbon breathes rather than snapping, which is the difference
-       between "flowing" and "twitching". Rising is quicker than falling,
-       so a loud syllable is felt and the settle afterwards is gentle. */
+       Rising quickly enough to feel like a response, falling slowly enough
+       that the ribbon settles rather than snaps back. `energy` is the ONLY
+       thing the voice controls here. */
     const target = clamp(amp, 0, 1);
-    const prev = this.waveAmp ?? 0;
-    this.waveAmp = prev + (target - prev) * (target > prev ? 0.16 : 0.055);
-    const a = this.waveAmp;
+    const prev = this.energy ?? 0;
+    this.energy = prev + (target - prev) * (target > prev ? 0.14 : 0.045);
+    const e = this.energy;
 
-    /* A short history, so the trailing strands are genuinely where the
-       ribbon has been rather than copies of where it is. */
-    if (this.t - (this.waveAt ?? 0) > 34) {
+    /* A short history, so the trailing contours are where the ribbon has
+       been rather than copies of where it is. */
+    if (this.t - (this.waveAt ?? 0) > 40) {
       this.waveAt = this.t;
-      this.waveHist = [a, ...(this.waveHist ?? [])].slice(0, STRANDS);
+      this.waveHist = [e, ...(this.waveHist ?? [])].slice(0, STRANDS);
     }
-    const hist = this.waveHist ?? [a];
+    const hist = this.waveHist ?? [e];
 
-    /* The gap the reference has between the orb and the ribbon. The inner
-       strand never crosses it, whatever the voice does. */
+    /* A clear ring of dark between the orb and the ribbon, always. */
     const gap = R * 0.34;
-    /* The ribbon must never reach the orb. A trough deep enough to cross it
-       reads as the orb being eaten rather than surrounded, and the reference
-       keeps a clear ring of dark between the two. */
-    const floor = R * 1.16;
 
     for (let k = STRANDS - 1; k >= 0; k -= 1) {
-      const av = clamp(hist[Math.min(k, hist.length - 1)] ?? 0, 0, 1);
+      const ev = clamp(hist[Math.min(k, hist.length - 1)] ?? 0, 0, 1);
       const lead = k === 0;
-      /* Close together, which is what makes them read as one ribbon rather
-         than as separate rings. */
-      /* Tightly spaced, so thirteen contours read as one ribbon rather than
-         as thirteen rings. The whole stack moves outward with the voice. */
-      const base = R + gap + R * (k * 0.020 + av * 0.26);
-      const swing = R * (0.04 + av * 0.30);
-      const phase = this.t / 2600 - k * 0.075;
+      /* Tightly packed, and the whole stack eases outward with the voice. */
+      const base = R + gap + R * (k * 0.026 + ev * 0.22);
+      /* THE AMPLITUDE RULE: ~3% of the base when quiet, ~13% when loud. */
+      const swing = base * (0.03 + ev * 0.10);
+      /* Older contours lag, so the stack reads as one thing moving. */
+      const when = this.t - k * 70;
 
       const fade = 1 - k / (STRANDS + 3);
-      const alpha = lead
-        ? 0.42 + av * 0.52
-        : (0.10 + av * 0.34) * fade;
+      const alpha = lead ? 0.40 + ev * 0.44 : (0.09 + ev * 0.26) * fade;
       if (alpha < 0.008) continue;
 
       ctx.beginPath();
       for (let i = 0; i <= STEPS; i += 1) {
         const th = (i / STEPS) * TAU;
-        const d = Math.max(floor, base + swing * ribbon(th, phase));
+        const d = base + swing * ribbon(th, when);
         const x = cx + Math.cos(th) * d;
         const y = cy + Math.sin(th) * d;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
@@ -487,16 +477,15 @@ export class Orb {
       ctx.strokeStyle = lead
         ? `rgba(214,186,255,${alpha})`
         : `rgba(168,126,255,${alpha})`;
-      /* Thin. The reference is many fine strands, not a drawn outline. */
-      ctx.lineWidth = lead ? 1.2 + av * 1.6 : 0.75;
+      /* Thinner than before: the reference is fine strands, and a heavy
+         leading line is what made the shape read as a drawn outline. */
+      ctx.lineWidth = lead ? 0.9 + ev * 0.9 : 0.6;
       ctx.stroke();
 
-      /* Glow on the leading contour only — one shadowed stroke a frame is
-         affordable on a phone; thirteen are not. */
-      if (lead && av > 0.10) {
+      if (lead && ev > 0.10) {
         ctx.save();
-        ctx.shadowBlur = 10 + av * 20;
-        ctx.shadowColor = `rgba(150,96,255,${0.34 + av * 0.40})`;
+        ctx.shadowBlur = 9 + ev * 18;
+        ctx.shadowColor = `rgba(150,96,255,${0.30 + ev * 0.38})`;
         ctx.stroke();
         ctx.restore();
       }
@@ -607,29 +596,63 @@ export class Orb {
    * Sound-reactive motion STOPS. Anything still responding to the room
    * during "making sense of that" is telling the person it is still
    * listening while it is not. A single slow sweep says working. */
+  /* ── Thinking ──────────────────────────────────────────────────────────
+   *
+   * This was a rotating gradient arc — a loading spinner in everything but
+   * name, and it made the assistant look like an HTTP request rather than
+   * like Life OS considering something.
+   *
+   * Nothing rotates now. The orb breathes, a soft glow swells and settles
+   * behind it, and three faint COMPLETE contours ease in and out on their own
+   * slow clocks. A whole circle cannot read as progress, which is the point:
+   * there is no percentage here, and pretending otherwise was the lie.
+   *
+   * Deliberately distinct from listening. Listening answers to a voice and
+   * is not moving on its own; thinking moves on its own and answers to
+   * nothing. Somebody glancing at the screen should be able to tell which.
+   */
   drawProcessing(cx, cy, R, reduce) {
     const { ctx } = this;
-    this.drawCore(cx, cy, R);
-    const rad = R * 1.45;
+    /* One slow breath, shared by everything, so the whole thing moves as one
+       object rather than as a set of independently animated parts. */
+    const pulse = Math.sin(this.t / 1500) * 0.5 + 0.5;         // 0..1
+
     if (reduce) {
-      const a = 0.16 + (Math.sin(this.t / 900) * 0.5 + 0.5) * 0.34;
       ctx.beginPath();
-      ctx.arc(cx, cy, rad, 0, TAU);
-      ctx.strokeStyle = `rgba(186,150,255,${a})`;
-      ctx.lineWidth = 2.5;
+      ctx.arc(cx, cy, R * 1.42, 0, TAU);
+      ctx.strokeStyle = `rgba(186,150,255,${0.16 + pulse * 0.22})`;
+      ctx.lineWidth = 1.6;
       ctx.stroke();
+      this.drawCore(cx, cy, R);
       return;
     }
-    const start = (this.t / 900) % TAU;
-    const g = ctx.createLinearGradient(cx - rad, cy, cx + rad, cy);
-    g.addColorStop(0, 'rgba(186,150,255,0)');
-    g.addColorStop(1, 'rgba(186,150,255,.75)');
+
+    /* The glow, behind everything, swelling and settling. */
+    const bloom = ctx.createRadialGradient(
+      cx, cy, R * 0.9, cx, cy, R * (1.9 + pulse * 0.35),
+    );
+    bloom.addColorStop(0, `rgba(150,96,255,${0.16 + pulse * 0.10})`);
+    bloom.addColorStop(1, 'rgba(150,96,255,0)');
     ctx.beginPath();
-    ctx.arc(cx, cy, rad, start, start + Math.PI * 0.85);
-    ctx.strokeStyle = g;
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.stroke();
+    ctx.arc(cx, cy, R * 2.3, 0, TAU);
+    ctx.fillStyle = bloom;
+    ctx.fill();
+
+    /* Three complete rings, each on its own clock so they drift in and out
+       of step. Full circles, never arcs. */
+    for (let i = 0; i < 3; i += 1) {
+      const own = Math.sin(this.t / (1700 + i * 520) - i * 0.9) * 0.5 + 0.5;
+      const rad = R * (1.26 + i * 0.17 + own * 0.05);
+      const a = (0.05 + own * 0.16) * (1 - i * 0.22);
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad, 0, TAU);
+      ctx.strokeStyle = `rgba(196,158,255,${a})`;
+      ctx.lineWidth = 0.9;
+      ctx.stroke();
+    }
+
+    /* The orb itself breathes, gently. */
+    this.drawCore(cx, cy, R * (1 + pulse * 0.022));
   }
 }
 

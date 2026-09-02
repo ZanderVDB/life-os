@@ -386,6 +386,7 @@ function startListening() {
       const level = session.voice.activity;
       session.orb.setLevel(level);
       if (currentVariant() === 'c') session.orb.setBins(spread(level));
+      paintMeter(level);
     }, 50);
     return;
   }
@@ -411,6 +412,7 @@ function resumeListening() {
       const level = session.voice.activity;
       session.orb.setLevel(level);
       if (currentVariant() === 'c') session.orb.setBins(spread(level));
+      paintMeter(level);
     }, 50);
   }
 }
@@ -463,6 +465,12 @@ function startSpeech(base = '') {
     },
   });
   return session.voice.start(base);
+}
+
+/** The development meter, so the signal driving the picture is visible. */
+function paintMeter(level) {
+  const el = document.querySelector('#asst-meter');
+  if (el) el.style.width = `${Math.round(clamp01(level) * 100)}%`;
 }
 
 /** A rough spectrum from one number, for the variant that draws bins. */
@@ -965,6 +973,9 @@ function devPanelHtml() {
         <button type="button" class="chip" id="asst-clear-trace">Clear</button>
       </div>
       <p class="asst-dev-hint" id="asst-trace-note"></p>
+      <p class="asst-dev-p">Live signal — what the waveform is being driven by.
+        This is speech arrival rate, not microphone loudness.</p>
+      <div class="asst-meter"><span class="asst-meter-fill" id="asst-meter"></span></div>
 
       <p class="asst-dev-p">Listening style — pick one to compare. This is not a
         user setting; it disappears when the style is chosen.</p>

@@ -316,20 +316,21 @@ test('the orb answers the room, and answers it differently when quiet', () => {
      not stop it dead, and the movement must be smoothed rather than jumpy. */
   const wave = orb.slice(orb.indexOf('drawWaveform('));
   // Amplitude reaches the shape, the brightness and the weight.
-  assert.match(wave, /swing = R \* \([\d.]+ \+ av \* [\d.]+\)/,
+  assert.match(wave, /swing = base \* \([\d.]+ \+ ev \* [\d.]+\)/,
     'the voice does not change the ribbon’s reach');
-  assert.match(wave, /alpha = lead[\s\S]{0,80}av \* [\d.]+/,
+  assert.match(wave, /alpha = lead[\s\S]{0,80}ev \* [\d.]+/,
     'the voice does not change how bright it is');
-  assert.match(wave, /lineWidth = lead \? [\d.]+ \+ av \* [\d.]+/,
+  assert.match(wave, /lineWidth = lead \? [\d.]+ \+ ev \* [\d.]+/,
     'the voice does not change how heavy the leading strand is');
   // Near-silence still moves: an orb that goes completely still reads as one
   // that has stopped listening (§9). The constant term guarantees it.
-  assert.match(wave, /swing = R \* \(0\.0[1-9]/,
+  assert.match(wave, /swing = base \* \(0\.0[1-9]/,
     'the resting state stops moving entirely');
   // Smoothed, so a loud syllable never snaps the ribbon into a new shape.
-  assert.match(wave, /this\.waveAmp = prev \+ \(target - prev\)/,
+  assert.match(wave, /this\.energy = prev \+ \(target - prev\)/,
     'the amplitude is not smoothed');
-  assert.match(wave, /phase = this\.t \//, 'the waveform does not advance over time');
+  assert.match(wave, /const when = this\.t - k \* \d+/,
+    'the trailing contours do not lag behind the leading one');
 });
 
 test('quick capture stops pretending to be the Task row below it', () => {

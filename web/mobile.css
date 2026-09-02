@@ -516,6 +516,12 @@
 .asst-dev-body{padding-bottom:6px}
 .chip-lead{background:var(--accent-soft);color:var(--text);font-weight:600}
 .chip-ready{box-shadow:0 0 0 1px var(--accent-deep)}
+/* The development amplitude meter. Not a user feature — it exists so the
+   signal driving the waveform can be seen rather than guessed at. */
+.asst-meter{display:block;height:6px;border-radius:999px;background:var(--surface-2);
+  overflow:hidden;margin:2px 0 10px}
+.asst-meter-fill{display:block;height:100%;width:0%;border-radius:999px;
+  background:var(--accent);transition:width 60ms linear}
 .asst-trace-box{width:100%;min-height:180px;margin-top:10px;padding:10px;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.45;
   color:var(--text);background:var(--surface-2);border:1px solid var(--border);

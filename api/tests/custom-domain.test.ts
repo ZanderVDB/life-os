@@ -495,16 +495,22 @@ test('the viewport preview cannot reach a production visitor', () => {
   const server = read(join('..', 'web', 'server.js'));
   assert.match(server, /url\.pathname === '\/preview\.html'/, 'the preview is not gated');
   /* Deployed services run with NODE_ENV=production — staging included — so
-   * the environment alone cannot be the switch, or the tool is hidden from the
-   * only place it is meant to be used. It has to be asked for by name. */
-  assert.match(server, /process\.env\.DEV_PREVIEW !== '1'/,
-    'the preview cannot be turned on where it is actually needed');
-  assert.match(server, /process\.env\.NODE_ENV !== 'production'/,
+   * NODE_ENV alone cannot be the switch, or the tool is hidden from the only
+   * place it is meant to be used.
+   * It used to be asked for by name, `DEV_PREVIEW=1`. Nobody set it on the
+   * staging web service, so the assistant's diagnostics did not exist there
+   * either — the same switch governs both. The DEPLOYMENT ENVIRONMENT decides
+   * now, and `DEV_PREVIEW` remains as an override. */
+  assert.match(server, /export const devToolsEnabled/, 'the gate is not one decision');
+  assert.match(server, /process\.env\.DEV_PREVIEW === '1'/, 'the override is gone');
+  assert.match(server, /IS_LOCAL = process\.env\.NODE_ENV !== 'production'/,
     'local development does not get the preview for free');
+  assert.match(server, /!IS_PRODUCTION && \(IS_STAGING \|\| IS_LOCAL\)/,
+    'production is not excluded, or staging is not included');
   /* One switch, two consumers. The assistant's A/B/C listening selector is
    * a development control too — it disappears when a style is chosen — and
    * it has to be reachable on the deployment being worked on. */
-  assert.match(server, /window\.LIFE_OS_CONFIG\.devTools = \$\{JSON\.stringify\(process\.env\.DEV_PREVIEW === '1'\)\}/,
+  assert.match(server, /window\.LIFE_OS_CONFIG\.devTools = \$\{JSON\.stringify\(devToolsEnabled\)\}/,
     'the development tools flag is not published to the client');
   // It is a page, not a setting: nothing in the app may link to or mention it.
   for (const [name, src] of [['app.js', app], ['settings.js', settings],
