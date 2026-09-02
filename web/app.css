@@ -41,13 +41,13 @@
        --accent-deep   primary actions, selected state, the orb's core
        --accent        highlights, hover, glow, secondary energy
        --accent-pale   restrained text and icons
-     DEFAULTS ARE TODAY'S COLOURS, so nothing moves until the deeper set is
-     switched on with [data-purple="deep"]. */
-  --accent:#8A5DFF; --accent-soft:rgba(138,93,255,.16);
-  --accent-deep:#8A5DFF; --accent-deep-rgb:138,93,255;
-  --accent-pale:#C89BFF;
-  --brand:linear-gradient(180deg,#7C4DFF 0%,#C28DFF 100%);
-  --name-grad:linear-gradient(180deg,#C89BFF 0%,#8A5DFF 100%);
+     Adopted after the comparison: the lavender had become the whole identity,
+     and everything purple therefore weighed the same. The graphite stays. */
+  --accent-deep:#6A38E0; --accent-deep-rgb:106,56,224;
+  --accent:#9169FF; --accent-rgb:145,105,255; --accent-soft:rgba(106,56,224,.20);
+  --accent-pale:#C6B0FF;
+  --brand:linear-gradient(180deg,#5A2BD2 0%,#8E62F5 100%);
+  --name-grad:linear-gradient(180deg,#C6B0FF 0%,#6A38E0 100%);
   /* Status — meaning only */
   --ok:#00D9A3; --warn:#FFC44D; --danger:#FF646E;
   /* ── Priority (Phase C4) ───────────────────────────────────────────────
@@ -63,7 +63,7 @@
   /* Elevation */
   --e1:0 2px 8px rgba(0,0,0,.14); --e2:0 8px 24px rgba(0,0,0,.22);
   --e3:0 14px 34px rgba(0,0,0,.32);
-  --glow:0 6px 18px rgba(124,77,255,.22);
+  --glow:0 6px 18px rgba(106,56,224,.30);
   --glow-deep:0 6px 18px rgba(var(--accent-deep-rgb),.28);
   /* Motion (§7) */
   --d-instant:90ms; --d-fast:140ms; --d-base:200ms; --d-slow:260ms; --d-slower:320ms;
@@ -99,6 +99,15 @@
   --composer-h:52px;
   --stack-gap:28px;
 }
+
+/* ── `hidden` must actually hide ──────────────────────────────────────────
+ * The attribute works through the user-agent stylesheet's `display:none`, so
+ * ANY author `display` on the same element silently defeats it. The
+ * assistant's connection warning is `display:flex`, which is how an amber bar
+ * with a dot and no text sat permanently at the top of the Assistant: the code
+ * had hidden it, and the stylesheet had un-hidden it.
+ * One rule, because this is a trap rather than a one-off. */
+[hidden]{display:none!important}
 @media (min-width:1600px){
   :root{
     /* 1600 → 2560px maps to the second value in each clamp. */
@@ -146,7 +155,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;border:none;background:none}
 a{color:inherit}
-:focus-visible{outline:2px solid rgba(138,93,255,.75);outline-offset:2px;border-radius:8px}
+:focus-visible{outline:2px solid rgba(var(--accent-rgb),.75);outline-offset:2px;border-radius:8px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
   clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
@@ -180,7 +189,7 @@ a{color:inherit}
 .sidebar{background:var(--sidebar);display:flex;flex-direction:column;
   padding:20px 14px 14px;position:sticky;top:0;height:100vh;height:100dvh;z-index:40}
 .logo{display:flex;align-items:center;gap:11px;padding:2px 10px 22px;text-decoration:none}
-.logo-mark{flex-shrink:0;filter:drop-shadow(0 0 6px rgba(124,77,255,.3))}
+.logo-mark{flex-shrink:0;filter:drop-shadow(0 0 6px rgba(var(--accent-deep-rgb),.3))}
 .logo-word{font-family:'Playfair Display',Georgia,serif;font-size:21px;font-weight:500;
   letter-spacing:-.2px;line-height:1;color:#F6F3FF}
 .intro .logo-mark{animation:lotusSettle 620ms var(--e-out) backwards}
@@ -196,11 +205,11 @@ a{color:inherit}
 .nav{position:relative;display:flex;flex-direction:column;gap:5px;flex:1;min-height:0}
 /* THE sliding indicator: one element, translateY only, GPU-composited.
    It never disappears — it snaps on first reveal and glides thereafter. */
-/* Legacy's indicator has its OWN gradient (#7C4DFF→#9A67FF), not the button
+/* Legacy's indicator has its OWN gradient (var(--accent-deep)→#9A67FF), not the button
    gradient, and a fixed 44px height rather than the item's own. */
 .nav-pill{position:absolute;left:0;right:0;height:44px;border-radius:10px;
-  background:linear-gradient(180deg,#7C4DFF 0%,#9A67FF 100%);
-  box-shadow:0 6px 18px -6px rgba(124,77,255,.5),
+  background:linear-gradient(180deg,var(--accent-deep) 0%,#9A67FF 100%);
+  box-shadow:0 6px 18px -6px rgba(var(--accent-deep-rgb),.5),
   inset 0 1px 0 rgba(255,255,255,.12);
   transform:translate3d(0,var(--pill-y,0px),0);will-change:transform;
   transition:transform var(--t-select);pointer-events:none;z-index:0}
@@ -353,21 +362,21 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
   border-radius:9px;color:var(--muted);
   transition:background var(--t-hover),color var(--t-hover)}
 .composer-mic:hover{background:var(--surface-2);color:var(--text)}
-.composer-mic.is-listening{color:#fff;background:rgba(138,93,255,.22)}
+.composer-mic.is-listening{color:#fff;background:rgba(var(--accent-rgb),.22)}
 /* One slow pulse on the ring, not on the glyph — a jumping icon in a text
    field pulls the eye off the words appearing next to it. */
 .composer-mic.is-listening::after{content:'';position:absolute;width:32px;height:32px;
-  border-radius:9px;box-shadow:0 0 0 0 rgba(138,93,255,.5);
+  border-radius:9px;box-shadow:0 0 0 0 rgba(var(--accent-rgb),.5);
   animation:mic-pulse 2s ease-out infinite;pointer-events:none}
 .composer-mic{position:relative}
 .composer.is-listening .composer-inner{border-color:var(--accent)}
 @keyframes mic-pulse{
-  0%{box-shadow:0 0 0 0 rgba(138,93,255,.45)}
-  70%{box-shadow:0 0 0 7px rgba(138,93,255,0)}
-  100%{box-shadow:0 0 0 0 rgba(138,93,255,0)}}
+  0%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.45)}
+  70%{box-shadow:0 0 0 7px rgba(var(--accent-rgb),0)}
+  100%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),0)}}
 @media (prefers-reduced-motion:reduce){
   .composer-mic.is-listening::after{animation:none;
-    box-shadow:0 0 0 2px rgba(138,93,255,.45)}}
+    box-shadow:0 0 0 2px rgba(var(--accent-rgb),.45)}}
 
 /* ── The desktop assistant panel ──────────────────────────────────────────
  *
@@ -419,33 +428,12 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
    arrive rather than a control that is broken. */
 /* A softened accent, expressed as a COLOUR not an opacity — translucency is
    what made the old composer read as a disabled control. */
-.composer-inner .ico{color:#9E7BFF;flex-shrink:0;display:grid;place-items:center}
+.composer-inner .ico{color:var(--accent);flex-shrink:0;display:grid;place-items:center}
 .composer-text{flex:1;font-size:calc(var(--fs-task) + .5px);color:var(--muted);min-width:0;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .composer-badge{font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
-  color:#B9A6E8;background:rgba(138,93,255,.14);border-radius:7px;padding:4px 9px;flex-shrink:0}
+  color:#B9A6E8;background:rgba(var(--accent-rgb),.14);border-radius:7px;padding:4px 9px;flex-shrink:0}
 
-
-/* ── PROPOSAL: a deeper brand purple ───────────────────────────────────
- *
- * Switched on with `document.documentElement.dataset.purple = 'deep'`, and
- * off by removing it. Nothing outside this block changes, which is the point:
- * a token experiment to look at, not a repaint of the product.
- *
- * The graphite backgrounds are untouched. What moves is the accent hierarchy:
- * the deep purple carries weight (primary actions, selection, the orb), the
- * existing lavender becomes the highlight rather than the identity, and the
- * pale tone is reserved for text and icons that should not shout.
- */
-:root[data-purple="deep"]{
-  --accent-deep:#6A38E0; --accent-deep-rgb:106,56,224;
-  --accent:#9169FF;
-  --accent-soft:rgba(106,56,224,.20);
-  --accent-pale:#C6B0FF;
-  --brand:linear-gradient(180deg,#5A2BD2 0%,#8E62F5 100%);
-  --name-grad:linear-gradient(180deg,#C6B0FF 0%,#6A38E0 100%);
-  --glow:0 6px 18px rgba(106,56,224,.30);
-}
 
 /* ── Buttons / chips ────────────────────────────────────────────────── */
 .btn{background:var(--surface-2);border-radius:10px;padding:0 15px;min-height:var(--btn-h);
@@ -479,7 +467,7 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .drop{min-height:46px;display:flex;flex-direction:column;gap:7px;border-radius:12px;
   transition:background var(--t-hover)}
 .drop.is-empty{border:1.5px dashed var(--border);align-items:center;justify-content:center}
-.drop.over{background:var(--accent-soft);outline:2px dashed rgba(138,93,255,.45);outline-offset:3px}
+.drop.over{background:var(--accent-soft);outline:2px dashed rgba(var(--accent-rgb),.45);outline-offset:3px}
 .empty{color:var(--muted);font-size:12px;font-style:italic;padding:13px 4px;
   text-align:center;pointer-events:none;line-height:1.5}
 
@@ -893,7 +881,7 @@ body:has(.set-page) .rail{display:none}
   padding:10px 12px;font-size:14px;
   transition:border-color var(--t-hover),box-shadow var(--t-hover)}
 .input:focus,.ta:focus,.sel:focus{outline:none;border-color:var(--accent);
-  box-shadow:0 0 0 3px rgba(138,93,255,.15)}
+  box-shadow:0 0 0 3px rgba(var(--accent-rgb),.15)}
 .ta{min-height:96px;resize:vertical;line-height:1.6}
 .row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
 .steps{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
@@ -1001,7 +989,7 @@ body.modal-open{overflow:hidden}
 .m-input{width:100%;background:var(--surface);border:1px solid transparent;border-radius:10px;
   padding:9px 11px;font-size:13.5px;color:var(--text);font-family:inherit;
   transition:border-color var(--t-hover),box-shadow var(--t-hover)}
-.m-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(138,93,255,.15)}
+.m-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.15)}
 .m-notes{min-height:84px;resize:vertical;line-height:1.6}
 /* The priority control wears the priority it sets. */
 .pri-select[data-pri="urgent"]{color:var(--p-urgent-ink);border-color:rgba(240,86,110,.4)}
@@ -1178,7 +1166,7 @@ body.modal-open{overflow:hidden}
    a hint about it. The lifted card keeps its exact size and follows the
    pointer; everything else slides via FLIP. */
 .task-placeholder{border-radius:var(--radius);border:1.5px dashed var(--border-strong);
-  background:rgba(138,93,255,.05);box-sizing:border-box;
+  background:rgba(var(--accent-rgb),.05);box-sizing:border-box;
   transition:height var(--d-fast) var(--e-out)}
 .task.is-dragging{box-shadow:var(--e3);opacity:.96;cursor:grabbing;
   transform-origin:center;will-change:transform;border-color:var(--accent);
@@ -1227,7 +1215,7 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
   transition:border-color var(--t-hover),background var(--t-hover)}
 .ev-ctl:hover{background:var(--surface-3)}
 .ev-ctl:focus-visible{outline:none;border-color:var(--accent);
-  box-shadow:0 0 0 3px rgba(138,93,255,.16)}
+  box-shadow:0 0 0 3px rgba(var(--accent-rgb),.16)}
 .ev-input{font:inherit}
 .ev-input::placeholder{color:var(--muted)}
 .ev-textarea{height:auto;min-height:76px;padding:10px 12px;resize:vertical;line-height:1.5}
@@ -1305,7 +1293,7 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
 .ev-meet:hover{background:rgba(78,143,196,.26)}
 
 /* Life OS-only section, visually apart so it is never read as Google content. */
-.ev-los{margin-top:12px;padding:12px;border-radius:10px;background:rgba(138,93,255,.05);
+.ev-los{margin-top:12px;padding:12px;border-radius:10px;background:rgba(var(--accent-rgb),.05);
   border:1px dashed var(--border-strong);display:flex;flex-direction:column;gap:7px}
 .ev-los-lab{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
   color:var(--label)}
@@ -1633,11 +1621,11 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cm-cell.is-today .cm-date{background:var(--accent);color:#fff}
 /* Selection is a border and a faint tint, not a heavy purple block that
    overwhelms its neighbours. */
-.cm-cell.is-selected{border-color:var(--accent);background:rgba(138,93,255,.07);
-  box-shadow:0 0 0 1px rgba(138,93,255,.35)}
+.cm-cell.is-selected{border-color:var(--accent);background:rgba(var(--accent-rgb),.07);
+  box-shadow:0 0 0 1px rgba(var(--accent-rgb),.35)}
 .cm-cell.is-selected .cm-date{color:var(--text);font-weight:700}
 .cm-cell:focus-visible{outline:none;border-color:var(--accent);
-  box-shadow:0 0 0 3px rgba(138,93,255,.20)}
+  box-shadow:0 0 0 3px rgba(var(--accent-rgb),.20)}
 .cm-flag{font-size:10px;font-weight:800;color:var(--danger);margin-left:auto;
   width:13px;height:13px;border-radius:50%;background:rgba(240,86,110,.14);
   display:grid;place-items:center}
@@ -1755,7 +1743,7 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cs-source input:checked+.cs-box{background:var(--accent);border-color:var(--accent)}
 .cs-source input:checked+.cs-box::after{content:"";position:absolute;left:4.5px;top:1.5px;
   width:4px;height:8px;border:solid #fff;border-width:0 1.7px 1.7px 0;transform:rotate(45deg)}
-.cs-source input:focus-visible+.cs-box{box-shadow:0 0 0 3px rgba(138,93,255,.22)}
+.cs-source input:focus-visible+.cs-box{box-shadow:0 0 0 3px rgba(var(--accent-rgb),.22)}
 .cs-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .cs-name{flex:1;min-width:0;font-size:12px;color:var(--text-2);overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
@@ -1818,7 +1806,7 @@ body.is-planning{cursor:grabbing;user-select:none}
   display:flex;flex-direction:column;gap:6px;
   transition:background var(--t-hover),transform var(--d-fast) var(--e-out)}
 .pq-card:hover{background:var(--surface-3)}
-.pq-card:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(138,93,255,.22)}
+.pq-card:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(var(--accent-rgb),.22)}
 .pq-card.pri-urgent{--p-marker:var(--p-urgent)}
 .pq-card.pri-high{--p-marker:var(--p-high)}
 .pq-card.pri-medium{--p-marker:var(--p-medium)}
@@ -1851,7 +1839,7 @@ body.is-planning{cursor:grabbing;user-select:none}
 .pl-now::before{content:"";position:absolute;left:-3px;top:-2.75px;width:7px;height:7px;
   border-radius:50%;background:var(--accent)}
 .pl-free{position:absolute;left:3px;right:3px;border-radius:6px;
-  background:rgba(138,93,255,.045);border:1px dashed rgba(138,93,255,.18);
+  background:rgba(var(--accent-rgb),.045);border:1px dashed rgba(var(--accent-rgb),.18);
   pointer-events:none}
 
 /* ── Reminder modal ── */
@@ -1942,14 +1930,14 @@ body.is-planning{cursor:grabbing;user-select:none}
 .cal-mode-pill{position:absolute;top:3px;bottom:3px;left:3px;border-radius:8px;
   width:calc((100% - 6px) / var(--mode-n));
   transform:translateX(calc(var(--mode-i) * 100%));
-  background:var(--accent);box-shadow:0 2px 8px rgba(124,77,255,.30);
+  background:var(--accent);box-shadow:0 2px 8px rgba(var(--accent-deep-rgb),.30);
   transition:transform var(--t-select)}
 .cal-modes button{position:relative;z-index:1;height:32px;padding:0 15px;border-radius:8px;
   font-size:12.5px;font-weight:600;color:var(--muted);white-space:nowrap;
   transition:color var(--t-select)}
 .cal-modes button:hover{color:var(--text-2)}
 .cal-modes button[aria-selected="true"]{color:#fff}
-.cal-modes button:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+.cal-modes button:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(var(--accent-rgb),.55)}
 
 /* Add: same height and radius family as the mode track. */
 .cal-add{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 16px 0 13px;
@@ -1958,9 +1946,9 @@ body.is-planning{cursor:grabbing;user-select:none}
   transition:transform var(--d-fast) var(--e-out),box-shadow var(--t-hover)}
 .cal-add svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;
   stroke-linecap:round}
-.cal-add:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(124,77,255,.34)}
+.cal-add:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(var(--accent-deep-rgb),.34)}
 .cal-add:active{transform:translateY(0) scale(.98)}
-.cal-add[aria-expanded="true"]{box-shadow:0 0 0 3px rgba(138,93,255,.25)}
+.cal-add[aria-expanded="true"]{box-shadow:0 0 0 3px rgba(var(--accent-rgb),.25)}
 
 /* ── §24 Legend ── */
 .cal-legend-btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;
@@ -2071,7 +2059,7 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 .st-task.pri-someday{--p-marker:var(--p-someday)}
 .st-task:hover{background:var(--surface-3)}
 .st-task.is-sel{box-shadow:inset 0 0 0 1.5px var(--accent)}
-.st-task:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(138,93,255,.22)}
+.st-task:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(var(--accent-rgb),.22)}
 .st-task-t{font-size:12.5px;color:var(--text);line-height:1.35}
 .st-task-m{display:flex;flex-wrap:wrap;gap:5px}
 .st-task-m>span{font-size:10px;color:var(--muted);background:var(--surface);
@@ -2393,7 +2381,7 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
   transition:transform var(--d-fast) var(--e-out),box-shadow var(--t-hover)}
 .rv-new-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;
   stroke-linecap:round}
-.rv-new-btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(124,77,255,.34)}
+.rv-new-btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(var(--accent-deep-rgb),.34)}
 .rv-new-btn:active{transform:translateY(0) scale(.98)}
 .rv-badge{background:rgba(255,196,77,.14)!important;color:var(--warn)!important;
   border-radius:5px;padding:1px 7px;font-weight:600}
@@ -2552,7 +2540,7 @@ body:has(.cal-head) .page-head{display:block}
 .util-btn:hover{background:var(--surface-2);color:var(--text-2)}
 .util-btn:active{transform:scale(.94)}
 .util-btn[aria-expanded="true"]{background:var(--surface-2);color:var(--text)}
-.util-btn:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+.util-btn:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(var(--accent-rgb),.55)}
 
 /* §4/§5 One menu, one anchor language: below the trigger, right edges aligned,
    because the trigger sits at the upper-right of the page on both surfaces. */
@@ -2651,9 +2639,9 @@ body:has(.pj-head) .rail{display:none}
 .pj-group[data-group="attention"] .pj-row:hover{background:
   linear-gradient(0deg, rgba(255,196,77,.07), rgba(255,196,77,.07)), var(--surface-2)}
 .pj-group[data-group="now"] .pj-row{background:
-  linear-gradient(0deg, rgba(138,93,255,.045), rgba(138,93,255,.045)), var(--surface)}
+  linear-gradient(0deg, rgba(var(--accent-rgb),.045), rgba(var(--accent-rgb),.045)), var(--surface)}
 .pj-group[data-group="now"] .pj-row:hover{background:
-  linear-gradient(0deg, rgba(138,93,255,.07), rgba(138,93,255,.07)), var(--surface-2)}
+  linear-gradient(0deg, rgba(var(--accent-rgb),.07), rgba(var(--accent-rgb),.07)), var(--surface-2)}
 /* On hold and Recently completed are secondary, not disabled: full contrast
    text, just no tint pulling the eye towards them. */
 .pj-group[data-group="on_hold"] .pj-row,
@@ -2673,7 +2661,7 @@ body:has(.pj-head) .rail{display:none}
   border-left:2.5px solid transparent;
   transition:background var(--t-hover),border-color var(--t-hover)}
 .pj-row:hover{background:var(--surface-2)}
-.pj-row:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+.pj-row:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(var(--accent-rgb),.55)}
 .pj-row.is-attention{border-left-color:var(--warn)}
 .pj-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
 
@@ -2822,7 +2810,7 @@ body:has(.pj-head) .rail{display:none}
 .tp-row{display:flex;flex-direction:column;gap:4px;align-items:flex-start;text-align:left;
   padding:11px 13px;border-radius:10px;transition:background var(--t-hover)}
 .tp-row:hover{background:var(--surface-2)}
-.tp-row:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+.tp-row:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(var(--accent-rgb),.55)}
 .tp-title{font-size:13.5px;color:var(--text)}
 .tp-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tp-bucket,.tp-due{font-size:10.5px;color:var(--muted);background:var(--surface-2);
@@ -2834,7 +2822,7 @@ body:has(.pj-head) .rail{display:none}
 .tp-auto-why{font-size:11px;color:var(--muted)}
 .tp-row.is-current{background:var(--accent-soft)}
 .tp-current{font-size:10px;font-weight:600;color:var(--accent);
-  background:rgba(138,93,255,.14);border-radius:5px;padding:2px 7px}
+  background:rgba(var(--accent-rgb),.14);border-radius:5px;padding:2px 7px}
 
 /* The project a task belongs to, named. Replaces the "arrives with Projects"
    placeholder that sat in every task editor. */
@@ -2871,7 +2859,7 @@ body:has(.pj-head) .rail{display:none}
   padding:13px 15px;border-radius:11px;background:var(--surface-2);
   transition:background var(--t-hover)}
 .ch-choice:hover{background:var(--surface-3)}
-.ch-choice:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(138,93,255,.55)}
+.ch-choice:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(var(--accent-rgb),.55)}
 .ch-choice-l{font-size:13.5px;font-weight:600;color:var(--text)}
 .ch-choice-d{font-size:12px;color:var(--muted);line-height:1.45}
 .ch-choice.is-danger .ch-choice-l{color:var(--danger)}
@@ -5322,7 +5310,7 @@ body:has(.dia-page) .rail{display:none}
 .dia-editor.is-empty::before{content:attr(data-placeholder);color:var(--paper-ink-2);
   opacity:.45;pointer-events:none;position:absolute;line-height:30px}
 .dia-editor.is-found{animation:diaFound 1.4s ease-out}
-@keyframes diaFound{0%,60%{background-color:rgba(138,93,255,.10)}100%{background-color:transparent}}
+@keyframes diaFound{0%,60%{background-color:rgba(var(--accent-rgb),.10)}100%{background-color:transparent}}
 
 .dia-toolbar{flex:0 0 auto;display:flex;align-items:center;gap:3px;flex-wrap:wrap;
   margin:0 0 10px;padding:4px 5px;border-radius:9px;background:rgba(255,255,255,.03);
@@ -6027,7 +6015,7 @@ body:has(.dia-page) .rail{display:none}
 /* One light source, behind the hero. Fixed and cheap; nothing animates. */
 .lp::before{content:'';position:absolute;inset:-160px 0 auto;height:760px;z-index:-1;
   background:
-    radial-gradient(46% 52% at 18% 6%,rgba(124,77,255,.24),transparent 68%),
+    radial-gradient(46% 52% at 18% 6%,rgba(var(--accent-deep-rgb),.24),transparent 68%),
     radial-gradient(38% 44% at 82% 0%,rgba(0,217,163,.075),transparent 70%);
   pointer-events:none}
 
@@ -6065,7 +6053,7 @@ body:has(.dia-page) .rail{display:none}
 
 .lp-cta{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
 .lp-cta-main{padding:14px 26px;font-size:15px;font-weight:600;border-radius:12px;
-  box-shadow:0 12px 30px -12px rgba(124,77,255,.75)}
+  box-shadow:0 12px 30px -12px rgba(var(--accent-deep-rgb),.75)}
 .lp-cta-note{font-size:12.5px;color:var(--muted)}
 
 /* ── The product preview ──────────────────────────────────────────────────
@@ -6186,7 +6174,7 @@ body:has(.dia-page) .rail{display:none}
 /* ── Closing call to action ───────────────────────────────────────────── */
 .lp-close{margin-top:clamp(70px,9vw,112px);padding:clamp(52px,7vw,80px) var(--gut);
   border:var(--rule);border-radius:18px;text-align:center;
-  background:radial-gradient(70% 130% at 50% 0%,rgba(124,77,255,.15),transparent 68%),
+  background:radial-gradient(70% 130% at 50% 0%,rgba(var(--accent-deep-rgb),.15),transparent 68%),
     var(--surface)}
 .lp-close h2{font-size:clamp(26px,3.2vw,36px);line-height:1.14;letter-spacing:-.028em;
   color:var(--text);margin:0 0 12px;font-weight:650}
@@ -6337,7 +6325,7 @@ html.los-returning .boot-wait,.boot-wait.is-on{display:grid}
   animation:bootBreath 2.6s var(--e-inout) infinite}
 .boot-mark::before{content:'';position:absolute;inset:0;border-radius:50%;
   background:radial-gradient(circle,
-    rgba(138,93,255,.40) 0%, rgba(130,84,255,.16) 42%, rgba(124,77,255,0) 70%);
+    rgba(var(--accent-rgb),.40) 0%, rgba(130,84,255,.16) 42%, rgba(var(--accent-deep-rgb),0) 70%);
   animation:bootAura 2.6s var(--e-inout) infinite}
 @keyframes bootAura{
   0%,100%{opacity:.34;transform:scale(.82)}

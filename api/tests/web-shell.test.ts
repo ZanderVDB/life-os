@@ -180,7 +180,7 @@ test('composer: full width, capped, opaque, and present rather than disabled', (
   // .62 opacity made it read as broken rather than as pending.
   assert.ok(!/opacity:\.\d/.test(rule), 'the composer is translucent');
   // Its mark carries the brand accent; a grey disabled glyph reads as broken.
-  assert.match(rule, /\.composer-inner \.ico\{color:#9E7BFF/,
+  assert.match(rule, /\.composer-inner \.ico\{color:var\(--accent\)/,
     'the composer icon is not a brand-purple mark');
   assert.match(html, /\.composer\{position:fixed;left:var\(--sidebar-w\);right:0/,
     'the composer stops at the rail instead of spanning to the edge');
@@ -189,7 +189,7 @@ test('composer: full width, capped, opaque, and present rather than disabled', (
 test('nav indicator uses Legacy geometry, not the button gradient', () => {
   const rule = html.slice(html.indexOf('.nav-pill{'), html.indexOf('.nav-pill.snap'));
   assert.match(rule, /height:44px/, 'the indicator is not 44px');
-  assert.match(rule, /linear-gradient\(180deg,#7C4DFF 0%,#9A67FF 100%\)/,
+  assert.match(rule, /linear-gradient\(180deg,var\(--accent-deep\) 0%,#9A67FF 100%\)/,
     'the indicator uses the wrong gradient');
   assert.ok(!/var\(--brand\)/.test(rule), 'the indicator reuses the button gradient');
 });
@@ -885,4 +885,16 @@ test('one waiting screen for the whole launch, and it never restarts', () => {
     app.indexOf('const renderFatal'));
   assert.match(signIn, /document\.documentElement\.classList\.remove\('los-returning'\)/,
     'a signed-out returning visitor still sits behind a hidden landing page');
+});
+
+test('the hidden attribute actually hides, everywhere', () => {
+  /* `hidden` works through the user-agent stylesheet's `display:none`, which
+     ANY author `display` on the same element defeats. That left an amber
+     "not connected to a model" bar — `display:flex` — permanently at the top
+     of the Assistant, with no text in it, because the code had hidden it and
+     the stylesheet had un-hidden it.
+     Two elements already carried their own `[hidden]{display:none}` patch for
+     the same reason. One rule replaces the whack-a-mole. */
+  assert.match(html, /\[hidden\]\{display:none!important\}/,
+    'nothing guarantees that a hidden element is hidden');
 });

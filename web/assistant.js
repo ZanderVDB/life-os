@@ -61,12 +61,12 @@ const setVariant = (v) => { try { localStorage.setItem(VARIANT_KEY, v); } catch 
 const COPY = {
   idle: { say: 'Tell Life OS what’s going on', sub: 'Tap to speak, or type it instead' },
   starting: { say: 'Getting the microphone…', sub: '' },
-  listening: { say: 'Listening…', sub: 'Tap when you’re done' },
+  listening: { say: 'Listening…', sub: 'Tap Done when you’ve finished' },
   paused: { say: 'Still listening', sub: 'Tap when you’re done' },
   /* Reached by stopping on a pause rather than by a tap. It stops LISTENING
      and nothing else: sending a half-finished sentence because somebody drew
      breath is worse than one more tap. */
-  heard: { say: 'Is that right?', sub: 'Send it, or say more' },
+  heard: { say: 'Is that right?', sub: 'Edit it, say more, or send it' },
   processing: { say: 'Making sense of that…', sub: '' },
   proposal: { say: '', sub: '' },
   denied: { say: 'The microphone is blocked', sub: 'Type it instead, or allow the microphone in your browser' },
@@ -206,7 +206,7 @@ export function renderAssistant(head, scroll, ctx) {
   wireDevPanel(el);
 
   el.querySelector('#orb-main').addEventListener('click', () => {
-    if (session.state === 'listening' || session.state === 'paused') finishListening();
+    if (session.state === 'listening' || session.state === 'paused') endListening();
     else if (session.state === 'idle' || session.state === 'denied') startListening();
   });
 
@@ -254,20 +254,33 @@ function renderActions() {
         ${icon('check', 18)}<span>Done</span></button>
       <button type="button" class="btn btn-ghost" id="asst-type">Type instead</button>
       <button type="button" class="btn btn-ghost" id="asst-cancel">Cancel</button>`;
-    box.querySelector('#asst-done').onclick = finishListening;
+    box.querySelector('#asst-done').onclick = endListening;
     box.querySelector('#asst-cancel').onclick = cancelListening;
     box.querySelector('#asst-type').onclick = () => { stopCapture(); setState('idle'); openTypeSheet(); };
     return;
   }
   if (s === 'heard') {
-    box.innerHTML = `<button type="button" class="btn btn-primary asst-big" id="asst-send">
+    /* NOT `#asst-send` — the typing sheet already owns that id, and two
+       elements answering to one name is how a click ends up on the wrong
+       button. */
+    box.innerHTML = `<button type="button" class="btn btn-primary asst-big" id="asst-send-heard">
         ${icon('check', 18)}<span>Send</span></button>
+      <button type="button" class="btn btn-ghost" id="asst-edit">Edit</button>
       <button type="button" class="btn btn-ghost" id="asst-more">Say more</button>
       <button type="button" class="btn btn-ghost" id="asst-cancel">Cancel</button>`;
-    box.querySelector('#asst-send').onclick = finishListening;
+    box.querySelector('#asst-send-heard').onclick = sendHeard;
     box.querySelector('#asst-cancel').onclick = cancelListening;
     /* Carries on from what is already there rather than starting over. */
     box.querySelector('#asst-more').onclick = () => resumeListening();
+    /* The same typing sheet, holding what was heard. Correcting a word is
+       the commonest thing somebody wants here, and it should not mean
+       saying the whole sentence again. */
+    box.querySelector('#asst-edit').onclick = () => {
+      const heard = session.transcript.trim();
+      stopCapture();
+      setState('idle');
+      openTypeSheet(heard);
+    };
     return;
   }
   if (s === 'processing') { box.innerHTML = ''; return; }
@@ -293,8 +306,13 @@ async function showConnectionNote(el) {
   try {
     if (await api.plannerReady()) { note.hidden = true; return; }
     const c = await api.capabilities();
-    el.querySelector('#asst-note-t').textContent = c.planner?.reason
-      ?? 'The assistant is not connected to a model yet.';
+    /* `??` only catches null and undefined. The server returns an EMPTY
+       STRING when it has no particular reason, which sailed through and left
+       an amber bar containing a dot and nothing else — a warning with no
+       words, which is worse than no warning. */
+    const reason = String(c.planner?.reason ?? '').trim();
+    el.querySelector('#asst-note-t').textContent = reason
+      || 'The assistant is not connected to a model yet, so it cannot answer.';
     note.hidden = false;
   } catch {
     /* Offline, or not signed in. Silence is right: the note is for a
@@ -427,6 +445,7 @@ function startSpeech(base = '') {
         clearInterval(session.tick); session.tick = null;
         session.orb.setLevel(0);
         setState(session.transcript.trim() ? 'heard' : 'idle');
+        refreshTraceCount();
       }
     },
     onTranscript: ({ full }) => {
@@ -518,7 +537,7 @@ function runMockCapture(script) {
     i += 1;
     paintTranscript(words.slice(0, i).join(' '));
     if (i < words.length) session.mockTimer = setTimeout(step, script.pace);
-    else session.mockTimer = setTimeout(() => finishListening(), 700);
+    else session.mockTimer = setTimeout(() => endListening(), 700);
   };
   session.mockTimer = setTimeout(step, 260);
 }
@@ -571,7 +590,29 @@ function stopCapture() {
   session.orb.setLevel(0);
 }
 
-async function finishListening() {
+/**
+ * Stop listening. Do NOT send.
+ *
+ * ── The one rule ─────────────────────────────────────────────────────────
+ *
+ * VOICE NEVER AUTO-SUBMITS. Finishing transcription means the words are ready
+ * to be read, not that a request has been made. Every way of ending a
+ * listening session — tapping Done, or two seconds of silence — arrives here,
+ * and all of them land in review.
+ *
+ * Speech recognition is not reliable enough to act on unseen, and a request
+ * the assistant acts on is a request somebody should have read first. Typing
+ * has always worked this way: you see the words before you press send.
+ */
+function endListening() {
+  if (!session) return;
+  stopCapture();
+  const text = session.transcript.trim();
+  setState(text ? 'heard' : 'idle');
+}
+
+/** The ONLY path from voice to the assistant, and it takes a deliberate tap. */
+async function sendHeard() {
   if (!session) return;
   const text = session.transcript.trim();
   stopCapture();
@@ -860,7 +901,7 @@ async function discard() {
 
 /* ── Typing ───────────────────────────────────────────────────────────── */
 
-function openTypeSheet() {
+function openTypeSheet(prefill = '') {
   openSheet({
     title: 'Tell Life OS',
     body: `<div class="msheet-pad">
@@ -877,6 +918,12 @@ function openTypeSheet() {
       <button type="button" class="btn btn-primary" id="asst-send">Send</button>`,
     onMount: (rootEl, close) => {
       const ta = rootEl.querySelector('#asst-text');
+      if (prefill) {
+        ta.value = prefill;
+        /* Caret at the end, not over the text: this is a correction, and
+           selecting the lot means the first keystroke destroys it. */
+        ta.setSelectionRange(prefill.length, prefill.length);
+      }
       // The way back to the microphone, from inside the typing sheet (§15).
       rootEl.querySelector('#asst-tomic').onclick = () => { close(); startListening(); };
       rootEl.querySelectorAll('[data-demo]').forEach((b) => {
@@ -901,30 +948,50 @@ function openTypeSheet() {
    ══════════════════════════════════════════════════════════════════════ */
 function devPanelHtml() {
   const v = currentVariant();
-  return `<section class="asst-dev">
-    <h2>Development</h2>
-    <p class="asst-dev-p">Listening style — pick one to compare. This is not a
-      user setting; it disappears when the style is chosen.</p>
-    <div class="asst-dev-row" role="radiogroup" aria-label="Listening style">
-      ${VARIANTS.map((x) => `<button type="button" class="chip ${x.id === v ? 'on' : ''}"
-        role="radio" aria-checked="${x.id === v}" data-variant="${x.id}">
-        ${x.id.toUpperCase()} · ${esc(x.label)}</button>`).join('')}
-    </div>
-    <p class="asst-dev-hint" id="asst-dev-hint">${
+  /* COLLAPSED by default, and the diagnostics come FIRST.
+     It was a tall block of style comparisons with the one control I actually
+     needed buried underneath it — on a phone that control was below the fold
+     of a page that also scrolled sideways, which is why it could not be
+     found. A testing panel must not be the biggest thing on the screen. */
+  return `<details class="asst-dev" id="asst-dev">
+    <summary class="asst-dev-sum">Development</summary>
+    <div class="asst-dev-body">
+      <p class="asst-dev-p">Voice diagnostics record what the BROWSER reported —
+        events, indexes and the recognised words. No audio is captured, and
+        nothing leaves this device until you copy it.</p>
+      <div class="asst-dev-row">
+        <button type="button" class="chip chip-lead" id="asst-copy-trace">
+          Copy voice diagnostics</button>
+        <button type="button" class="chip" id="asst-clear-trace">Clear</button>
+      </div>
+      <p class="asst-dev-hint" id="asst-trace-note"></p>
+
+      <p class="asst-dev-p">Listening style — pick one to compare. This is not a
+        user setting; it disappears when the style is chosen.</p>
+      <div class="asst-dev-row" role="radiogroup" aria-label="Listening style">
+        ${VARIANTS.map((x) => `<button type="button" class="chip ${x.id === v ? 'on' : ''}"
+          role="radio" aria-checked="${x.id === v}" data-variant="${x.id}">
+          ${x.id.toUpperCase()} · ${esc(x.label)}</button>`).join('')}
+      </div>
+      <p class="asst-dev-hint" id="asst-dev-hint">${
   esc(VARIANTS.find((x) => x.id === v)?.hint ?? '')}</p>
-    <div class="asst-dev-row">
-      ${MOCK_TRANSCRIPTS.map((m) => `<button type="button" class="chip"
-        data-mock="${esc(m.id)}">Play “${esc(m.label)}”</button>`).join('')}
+      <div class="asst-dev-row">
+        ${MOCK_TRANSCRIPTS.map((m) => `<button type="button" class="chip"
+          data-mock="${esc(m.id)}">Play “${esc(m.label)}”</button>`).join('')}
+      </div>
     </div>
-    <p class="asst-dev-p">Voice diagnostics record what the BROWSER reported —
-      events, indexes and the recognised words. No audio is captured, and
-      nothing is sent anywhere until you press copy.</p>
-    <div class="asst-dev-row">
-      <button type="button" class="chip" id="asst-copy-trace">Copy voice diagnostics</button>
-      <button type="button" class="chip" id="asst-clear-trace">Clear</button>
-    </div>
-    <p class="asst-dev-hint" id="asst-trace-note"></p>
-  </section>`;
+  </details>`;
+}
+
+/** Says how much there is to copy, without needing the panel to be open. */
+function refreshTraceCount() {
+  const btn = document.querySelector('#asst-copy-trace');
+  if (!btn) return;
+  const n = voiceTrace()?.rows.length ?? 0;
+  btn.textContent = n ? `Copy voice diagnostics (${n})` : 'Copy voice diagnostics';
+  btn.classList.toggle('chip-ready', n > 0);
+  const sum = document.querySelector('#asst-dev .asst-dev-sum');
+  if (sum) sum.dataset.count = n ? String(n) : '';
 }
 
 function wireDevPanel(el) {
@@ -955,7 +1022,8 @@ function wireDevPanel(el) {
   if (copyBtn) {
     copyBtn.onclick = async () => {
       const t = voiceTrace();
-      const text = t ? t.text() : 'voice trace: nothing recorded';
+      if (!t || !t.rows.length) { note('No voice trace captured yet.'); return; }
+      const text = t.text();
       try {
         await navigator.clipboard.writeText(text);
         note(`Copied ${t?.rows.length ?? 0} events.`);
@@ -973,6 +1041,7 @@ function wireDevPanel(el) {
       }
     };
   }
+  refreshTraceCount();
   const clearBtn = el.querySelector('#asst-clear-trace');
   if (clearBtn) {
     clearBtn.onclick = () => {

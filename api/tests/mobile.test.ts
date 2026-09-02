@@ -310,22 +310,25 @@ test('the orb answers the room, and answers it differently when quiet', () => {
   /* §13. A fixed decorative animation that looks the same whether somebody
    * is speaking or silent fails the one thing the orb exists to say. */
   const orb = read('assistant-orb.js');
-  /* The travelling rings are gone — they read as sonar — and the listening
-     animation is a waveform around the orb. The RULE is unchanged and is what
-     is asserted: the voice must visibly change the picture, and near-silence
-     must not stop it dead. */
+  /* The listening animation is a layered audio ribbon now — many thin
+     strands, no fixed lobe count. The RULE is unchanged and is what is
+     asserted: the voice must visibly change the picture, near-silence must
+     not stop it dead, and the movement must be smoothed rather than jumpy. */
   const wave = orb.slice(orb.indexOf('drawWaveform('));
   // Amplitude reaches the shape, the brightness and the weight.
-  assert.match(wave, /swing = R \* \([\d.]+ \+ a \* [\d.]+\)/,
-    'the voice does not change the waveform’s reach');
-  assert.match(wave, /alpha = lead[\s\S]{0,60}a \* [\d.]+/,
+  assert.match(wave, /swing = R \* \([\d.]+ \+ av \* [\d.]+\)/,
+    'the voice does not change the ribbon’s reach');
+  assert.match(wave, /alpha = lead[\s\S]{0,80}av \* [\d.]+/,
     'the voice does not change how bright it is');
-  assert.match(wave, /lineWidth = Math\.max\([\s\S]{0,60}a \* [\d.]+/,
-    'the voice does not change how heavy it is');
+  assert.match(wave, /lineWidth = lead \? [\d.]+ \+ av \* [\d.]+/,
+    'the voice does not change how heavy the leading strand is');
   // Near-silence still moves: an orb that goes completely still reads as one
-  // that has stopped listening (§9). The constant term is what guarantees it.
+  // that has stopped listening (§9). The constant term guarantees it.
   assert.match(wave, /swing = R \* \(0\.0[1-9]/,
     'the resting state stops moving entirely');
+  // Smoothed, so a loud syllable never snaps the ribbon into a new shape.
+  assert.match(wave, /this\.waveAmp = prev \+ \(target - prev\)/,
+    'the amplitude is not smoothed');
   assert.match(wave, /phase = this\.t \//, 'the waveform does not advance over time');
 });
 
@@ -522,7 +525,7 @@ test('the centre button glows from a shadow, not from a layer over its face', ()
   // Comments stripped: the notes inside the rule name the values they replaced.
   const btn = mobileCss.slice(from, mobileCss.indexOf('.mnav-ai:active', from))
     .replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.match(btn, /0 0 18px 2px rgba\(138,93,255,\.34\)/, 'the bloom is gone rather than moved');
+  assert.match(btn, /0 0 18px 2px rgba\(var\(--accent-rgb\),\.34\)/, 'the bloom is gone rather than moved');
   // The ramp's dark end was #4E27B4 — 6.37% of white, navy once a display
   // adds saturation, and it was reported as "a dark disc with a light ring".
   // On the rule, not the file: the note above it names the colour it replaced.
@@ -545,7 +548,7 @@ test('nothing on the centre button can draw a ring', () => {
   assert.ok(!/0 0 0 5px|0 0 0 7px/.test(btn), 'the cut-out ring is back');
   assert.ok(!/rgba\(0,0,0,\.35\)/.test(btn),
     'the black contact shadow is back, and the bar is light enough to show it');
-  assert.match(btn, /0 0 18px 2px rgba\(138,93,255,\.34\)/, 'the glow is gone');
+  assert.match(btn, /0 0 18px 2px rgba\(var\(--accent-rgb\),\.34\)/, 'the glow is gone');
 });
 
 test('the habits row is a row you scroll, not a grid with a "more" button', () => {

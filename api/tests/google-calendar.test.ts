@@ -430,11 +430,11 @@ test('ui: a habit created after the day does not rewrite that day', () => {
 });
 
 test('ui: the selected day is a tint and a border, not a heavy fill', () => {
-  assert.match(html, /\.cm-cell\.is-selected\{border-color:var\(--accent\);background:rgba\(138,93,255,\.07\)/,
+  assert.match(html, /\.cm-cell\.is-selected\{border-color:var\(--accent\);background:rgba\(var\(--accent-rgb\),\.07\)/,
     'the selected day is not restrained');
   // The refined rule must come AFTER the original, so it is the one that wins.
   const heavy = html.indexOf('.cm-cell.is-selected{border-color:var(--accent);background:var(--accent-soft)');
-  const refined = html.indexOf('.cm-cell.is-selected{border-color:var(--accent);background:rgba(138,93,255,.07)');
+  const refined = html.indexOf('.cm-cell.is-selected{border-color:var(--accent);background:rgba(var(--accent-rgb),.07)');
   assert.ok(refined > heavy, 'the heavy accent fill still wins');
 });
 

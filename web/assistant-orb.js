@@ -45,24 +45,47 @@ export const DEFAULT_VARIANT = 'a';
 
 const TAU = Math.PI * 2;
 
-/* ── The waveform's shape ───────────────────────────────────────────────
+/* ── The ribbon's shape ────────────────────────────────────────────────
  *
- * `LOBES` is how many swells go round. Every harmonic below is a MULTIPLE of
- * it, which is what makes the curve exactly rotationally symmetric: turn it
- * by one lobe and it is the same curve. That is the property that stops one
- * side denting while another swells, and it holds at every amplitude — it is
- * a fact about the formula rather than something tuned into it.
+ * Six harmonics whose counts share no common factor, so the curve does not
+ * repeat around the circle — which is what stops it reading as a polygon.
+ * Each drifts at its own rate, so peaks travel and merge instead of holding
+ * station.
  *
- * Two harmonics rather than one, so a lobe has a little shape of its own and
- * does not read as a cog. The second is deliberately small.
+ * BALANCE comes from the maths rather than from symmetry: every term is a
+ * sine over a whole number of periods, so it integrates to zero around the
+ * circle and the mean radius is exactly the base. The average is a circle,
+ * however the peaks fall.
+ *
+ * Weights fall away with frequency, which keeps the hills broad. The whole
+ * thing sums to about 1, so `swing` means what it says.
  */
-const LOBES = 9;
-const TRAILS = 4;
-const STEPS = 132;
+const BANDS = [
+  /* The lowest band is deliberately NOT the loudest. Letting k=3 dominate
+     gave three big swells, and three swells around a circle is a shape with
+     a heavy side — exactly the lopsidedness this is meant to avoid. Weight
+     sits in the middle of the range, so there are six or seven gentle peaks
+     and no single direction the ribbon leans in. */
+  { k: 3, drift: 0.9, w: 0.20 },
+  { k: 5, drift: -1.3, w: 0.26 },
+  { k: 7, drift: 1.7, w: 0.24 },
+  { k: 11, drift: -2.2, w: 0.16 },
+  { k: 13, drift: 2.6, w: 0.10 },
+  { k: 17, drift: -3.1, w: 0.06 },
+];
 
-const lobe = (th, phase) =>
-  Math.sin(th * LOBES + phase) * 0.90
-  + Math.sin(th * LOBES * 2 - phase * 0.6) * 0.10;
+/** How many contours make the ribbon. The reference is many thin ones. */
+const STRANDS = 13;
+const STEPS = 116;
+
+const ribbon = (th, phase) => {
+  let v = 0;
+  for (let i = 0; i < BANDS.length; i += 1) {
+    const b = BANDS[i];
+    v += Math.sin(th * b.k + phase * b.drift) * b.w;
+  }
+  return v;
+};
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 /* A hex nudged toward white (positive) or black (negative). Enough to build a
@@ -162,7 +185,7 @@ export class Orb {
       v = getComputedStyle(document.documentElement)
         .getPropertyValue('--accent-deep').trim();
     } catch { /* no document, or a stylesheet that has not arrived */ }
-    this._accent = /^#[0-9a-f]{6}$/i.test(v) ? v : '#8A5DFF';
+    this._accent = /^#[0-9a-f]{6}$/i.test(v) ? v : '#6A38E0';
     return this._accent;
   }
 
@@ -170,7 +193,7 @@ export class Orb {
 
   setVariant(v) {
     this.variant = v;
-    this.wavePast = null;
+    this.waveHist = null;
   }
 
   setState(s) {
@@ -178,7 +201,7 @@ export class Orb {
     this.state = s;
     /* A new listening session starts from stillness rather than from the
        tail of the last one. */
-    if (s !== 'listening') this.wavePast = null;
+    if (s !== 'listening') { this.waveHist = null; this.waveAmp = 0; }
   }
 
   /** 0..1. The only channel the microphone has into this class. */
@@ -366,37 +389,38 @@ export class Orb {
    * travels — so a shout throws a thick ring a long way and a murmur puts a
    * faint one just past the edge. That correspondence is the whole point:
    * the waves are the sound, not a decoration timed to it. */
-  /* ── A — Audio waveform ────────────────────────────────────────────────
+  /* ── A — Audio ribbon ──────────────────────────────────────────────────
    *
-   * A smooth closed curve around the orb whose radius answers to the voice,
-   * with a few faint copies of where it has just been trailing behind it.
+   * A live audio signal wrapped into a circle: one bright contour with a
+   * dozen thin strands close behind it, flowing round the orb.
    *
-   * ── Why not rings, and why not a blob ────────────────────────────────
+   * ── Why the symmetry was removed ─────────────────────────────────────
    *
-   * This was concentric rings, and they were read as sonar: technically
-   * balanced and saying "pinging" rather than "listening". Before that they
-   * were deformed by sin(3θ) and sin(5θ), which pushed one side out and
-   * pulled the opposite side in by exactly as much — a swell and a dent, and
-   * what that looked like was a squashed orb.
+   * The previous version made every harmonic a multiple of nine, which gave
+   * exact nine-fold rotational symmetry. That was a real fix for a real
+   * problem — before it, two lobes pushed one side out and dented the other —
+   * but it overshot: a shape that repeats exactly nine times reads as a
+   * geometric star, not as a voice.
    *
-   * The shape here is N-FOLD ROTATIONALLY SYMMETRIC by construction. Every
-   * harmonic is a multiple of `LOBES`, so r(θ + 2π/N) = r(θ) exactly: the
-   * silhouette is balanced at every instant, and no side can dent while
-   * another swells. Movement comes from the phase advancing, not from the
-   * shape losing its symmetry.
+   * The harmonics here are 3, 5, 7, 11, 13 and 17. They share no common
+   * factor, so the curve does not repeat around the circle and has no fixed
+   * points. It is still BALANCED, and for a better reason than symmetry:
+   * every term is a sine over a whole number of periods, so each integrates
+   * to zero around the circle and the mean radius is exactly the base. No
+   * side can collapse, because the average is a circle.
    *
-   * The voice sets amplitude, brightness and weight. Quiet settles the curve
-   * close to the orb; loud pushes it out and thickens it.
+   * Low frequencies carry most of the weight, which is what makes the hills
+   * broad and smooth rather than serrated.
    */
   drawWaveform(cx, cy, R, amp, breathe, reduce) {
     const { ctx } = this;
     const idle = this.state === 'idle' || this.state === 'starting';
-    const r = R * (1 + (idle ? breathe * 0.02 : amp * 0.10));
+    const r = R * (1 + (idle ? breathe * 0.02 : amp * 0.06));
 
     if (reduce) {
       /* Reduced motion still has to say "listening" (§49). A still halo that
        * answers to the voice in weight and opacity, and travels nowhere. */
-      [1.30, 1.62].forEach((m, i) => {
+      [1.30, 1.58].forEach((m, i) => {
         const a = clamp(amp * (1 - i * 0.35), 0, 1);
         ctx.beginPath();
         ctx.arc(cx, cy, R * m, 0, TAU);
@@ -408,56 +432,71 @@ export class Orb {
       return;
     }
 
-    /* A short history of how loud it has been, sampled on a fixed cadence.
-     * The trailing contours are simply where the curve was a moment ago —
-     * which is what makes the energy read as leaving the orb rather than as
-     * several curves that happen to be drawn at once. */
-    if (!this.wavePast || this.t - (this.waveAt ?? 0) > 70) {
+    /* ── Heavily smoothed ──────────────────────────────────────────
+       The raw signal jumps between results. Easing toward it means the
+       ribbon breathes rather than snapping, which is the difference
+       between "flowing" and "twitching". Rising is quicker than falling,
+       so a loud syllable is felt and the settle afterwards is gentle. */
+    const target = clamp(amp, 0, 1);
+    const prev = this.waveAmp ?? 0;
+    this.waveAmp = prev + (target - prev) * (target > prev ? 0.16 : 0.055);
+    const a = this.waveAmp;
+
+    /* A short history, so the trailing strands are genuinely where the
+       ribbon has been rather than copies of where it is. */
+    if (this.t - (this.waveAt ?? 0) > 34) {
       this.waveAt = this.t;
-      this.wavePast = [amp, ...(this.wavePast ?? [])].slice(0, TRAILS + 1);
+      this.waveHist = [a, ...(this.waveHist ?? [])].slice(0, STRANDS);
     }
-    const past = this.wavePast;
+    const hist = this.waveHist ?? [a];
 
-    /* Newest last, so the principal curve is drawn over its own history. */
-    for (let k = past.length - 1; k >= 0; k -= 1) {
-      const a = clamp(past[k], 0, 1);
+    /* The gap the reference has between the orb and the ribbon. The inner
+       strand never crosses it, whatever the voice does. */
+    const gap = R * 0.34;
+    /* The ribbon must never reach the orb. A trough deep enough to cross it
+       reads as the orb being eaten rather than surrounded, and the reference
+       keeps a clear ring of dark between the two. */
+    const floor = R * 1.16;
+
+    for (let k = STRANDS - 1; k >= 0; k -= 1) {
+      const av = clamp(hist[Math.min(k, hist.length - 1)] ?? 0, 0, 1);
       const lead = k === 0;
-      /* Older contours sit further out and fade. They never move inward,
-       * because energy that arrives back at the orb reads as it being sucked
-       * in rather than given off. */
-      /* Spacing and lag both grow with k, so the older contours sit further
-         out AND lag further behind — which is what reads as one waveform
-         leaving a trail rather than several waveforms drawn at once. */
-      const base = R * (1.26 + k * 0.19 + a * 0.26);
-      const swing = R * (0.035 + a * 0.19);
-      const phase = this.t / 1450 - k * 0.34;
+      /* Close together, which is what makes them read as one ribbon rather
+         than as separate rings. */
+      /* Tightly spaced, so thirteen contours read as one ribbon rather than
+         as thirteen rings. The whole stack moves outward with the voice. */
+      const base = R + gap + R * (k * 0.020 + av * 0.26);
+      const swing = R * (0.04 + av * 0.30);
+      const phase = this.t / 2600 - k * 0.075;
 
+      const fade = 1 - k / (STRANDS + 3);
       const alpha = lead
-        ? 0.22 + a * 0.66
-        : (0.10 + a * 0.26) * (1 - k / (past.length + 0.8));
-      if (alpha < 0.012) continue;
+        ? 0.42 + av * 0.52
+        : (0.10 + av * 0.34) * fade;
+      if (alpha < 0.008) continue;
 
       ctx.beginPath();
       for (let i = 0; i <= STEPS; i += 1) {
         const th = (i / STEPS) * TAU;
-        const d = base + swing * lobe(th, phase);
+        const d = Math.max(floor, base + swing * ribbon(th, phase));
         const x = cx + Math.cos(th) * d;
         const y = cy + Math.sin(th) * d;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
       ctx.closePath();
       ctx.strokeStyle = lead
-        ? `rgba(196,158,255,${alpha})`
-        : `rgba(150,110,235,${alpha})`;
-      ctx.lineWidth = Math.max(0.5, lead ? 1.1 + a * 3.4 : 0.7 + a * 1.1);
+        ? `rgba(214,186,255,${alpha})`
+        : `rgba(168,126,255,${alpha})`;
+      /* Thin. The reference is many fine strands, not a drawn outline. */
+      ctx.lineWidth = lead ? 1.2 + av * 1.6 : 0.75;
       ctx.stroke();
 
-      /* The glow belongs to the loud moments only, and only to the curve in
-       * front. Shadow on every contour is a lot of blur for a phone. */
-      if (lead && a > 0.18) {
+      /* Glow on the leading contour only — one shadowed stroke a frame is
+         affordable on a phone; thirteen are not. */
+      if (lead && av > 0.10) {
         ctx.save();
-        ctx.shadowBlur = 8 + a * 16;
-        ctx.shadowColor = `rgba(168,120,255,${0.30 + a * 0.35})`;
+        ctx.shadowBlur = 10 + av * 20;
+        ctx.shadowColor = `rgba(150,96,255,${0.34 + av * 0.40})`;
         ctx.stroke();
         ctx.restore();
       }

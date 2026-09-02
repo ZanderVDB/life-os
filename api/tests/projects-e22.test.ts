@@ -334,7 +334,10 @@ test('groups: the semantic colours are the app\'s existing ones', () => {
 test('groups: the row tint is a hint, never a coloured card', () => {
   // Two decimal places of alpha. Anything heavier turns a calm list into five
   // competing blocks.
-  const tints = [...css.matchAll(/\.pj-group\[data-group="[^"]+"\] \.pj-row\{background:\s*linear-gradient\(0deg, rgba\([\d\s,]+?,\s*\.(\d+)\)/g)]
+  /* The colour may be literal channels or a token — `rgba(var(--accent-rgb),
+     .05)`. Only the ALPHA is the rule here, so the channels are matched
+     loosely and the alpha precisely. */
+  const tints = [...css.matchAll(/\.pj-group\[data-group="[^"]+"\] \.pj-row\{background:\s*linear-gradient\(0deg, rgba\((?:[\d\s,]+?|var\(--[a-z-]+\)),\s*\.(\d+)\)/g)]
     .map((m) => Number(`0.${m[1]}`));
   assert.ok(tints.length >= 2, 'no group tint is applied at all');
   for (const a of tints) {

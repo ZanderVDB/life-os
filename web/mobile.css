@@ -148,8 +148,14 @@
     height:calc(var(--m-top-h) + var(--m-safe-t));
     padding:0 10px 0 14px;padding-top:var(--m-safe-t)}
   .mobile-bar .logo-mark{flex:0 0 auto}
-  .mobile-bar .m-title{font-family:'Playfair Display',Georgia,serif;
-    font-size:17px;font-weight:500;letter-spacing:-.2px;
+  /* ── Brand type is for the BRAND ──────────────────────────────────
+     This is the surface's name — "Assistant", "Calendar" — not the wordmark,
+     and Playfair made every page read like the title page of a book. The
+     wordmark keeps its serif (`.logo-word`), and so do the Library covers and
+     the Diary, where the editorial voice is the point. Application chrome
+     speaks in the interface face. */
+  .mobile-bar .m-title{font-family:inherit;
+    font-size:17.5px;font-weight:600;letter-spacing:-.015em;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .mobile-bar .m-btn{flex:0 0 var(--m-tap);width:var(--m-tap);height:var(--m-tap);
     border-radius:12px;display:grid;place-items:center;color:var(--text-2)}
@@ -212,13 +218,13 @@
     align-self:center;transform:translateY(-10px);
     border-radius:50%;border:0;padding:0;
     background:var(--brand);color:#fff;
-    box-shadow:0 0 18px 2px rgba(138,93,255,.34);
+    box-shadow:0 0 18px 2px rgba(var(--accent-rgb),.34);
     -webkit-tap-highlight-color:transparent;
     transition:transform var(--d-fast) var(--e-out),box-shadow var(--d-fast) var(--e-out)}
   .mnav-ai:active{transform:translateY(-10px) scale(.93)}
   .mnav-ai svg{width:26px;height:26px}
-  .mnav-ai[aria-current="page"]{box-shadow:0 8px 26px -4px rgba(124,77,255,.9),
-    0 0 22px 4px rgba(138,93,255,.5)}
+  .mnav-ai[aria-current="page"]{box-shadow:0 8px 26px -4px rgba(var(--accent-deep-rgb),.9),
+    0 0 22px 4px rgba(var(--accent-rgb),.5)}
   /* The long-press affordance: a hint that fades in under the thumb rather
      than a label nobody reads. */
   .mnav-ai.is-holding{transform:translateY(-10px) scale(1.08)}
@@ -339,9 +345,9 @@
   .m-next{display:flex;flex-direction:column;gap:7px}
   .m-next-row{display:flex;align-items:center;gap:13px;width:100%;text-align:left;
     min-height:66px;padding:12px 14px;border-radius:var(--m-radius);
-    background:linear-gradient(135deg,rgba(138,93,255,.17),rgba(138,93,255,.05));
-    border:1px solid rgba(138,93,255,.24);color:var(--text)}
-  .m-next-row:active{background:rgba(138,93,255,.24)}
+    background:linear-gradient(135deg,rgba(var(--accent-rgb),.17),rgba(var(--accent-rgb),.05));
+    border:1px solid rgba(var(--accent-rgb),.24);color:var(--text)}
+  .m-next-row:active{background:rgba(var(--accent-rgb),.24)}
   .m-next-time{flex:0 0 auto;font-size:17px;font-weight:700;letter-spacing:-.4px;
     font-variant-numeric:tabular-nums}
   .m-next-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
@@ -361,10 +367,10 @@
   .m-glance{margin:0;font-size:13.5px;color:var(--text-2);font-variant-numeric:tabular-nums}
   .ai-invite{display:flex;align-items:center;gap:15px;width:100%;text-align:left;
     padding:13px 16px 13px 10px;border-radius:20px;
-    background:radial-gradient(120% 160% at 12% 50%,rgba(138,93,255,.20),rgba(138,93,255,.04));
-    border:1px solid rgba(138,93,255,.24);color:var(--text);
+    background:radial-gradient(120% 160% at 12% 50%,rgba(var(--accent-rgb),.20),rgba(var(--accent-rgb),.04));
+    border:1px solid rgba(var(--accent-rgb),.24);color:var(--text);
     -webkit-tap-highlight-color:transparent}
-  .ai-invite:active{background:rgba(138,93,255,.24)}
+  .ai-invite:active{background:rgba(var(--accent-rgb),.24)}
   .ai-invite-t{display:flex;flex-direction:column;gap:3px;min-width:0}
   .ai-invite-say{font-size:15.5px;font-weight:600;letter-spacing:-.2px}
   .ai-invite-sub{font-size:12px;color:var(--muted);line-height:1.35}
@@ -495,6 +501,21 @@
    is a DOM element on top, so it stays crisp and is never re-rasterised. */
 /* The diagnostics fallback box, for a browser that refuses the clipboard.
    Monospace and selectable — its whole job is to be copied by hand. */
+/* The development panel is collapsed by default and must read as a testing
+   drawer, not as part of the product. */
+.asst-dev-sum{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;
+  font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);padding:10px 2px}
+.asst-dev-sum::-webkit-details-marker{display:none}
+.asst-dev-sum::before{content:'▸';font-size:10px;transition:transform var(--t-hover)}
+.asst-dev[open] .asst-dev-sum::before{transform:rotate(90deg)}
+/* A count when a trace is waiting, so it is obvious there is data to copy. */
+.asst-dev-sum[data-count]:not([data-count=""])::after{content:attr(data-count);
+  font-size:10px;font-weight:700;letter-spacing:0;color:#0F0A1E;
+  background:var(--accent-pale);border-radius:999px;padding:1px 7px}
+.asst-dev-body{padding-bottom:6px}
+.chip-lead{background:var(--accent-soft);color:var(--text);font-weight:600}
+.chip-ready{box-shadow:0 0 0 1px var(--accent-deep)}
 .asst-trace-box{width:100%;min-height:180px;margin-top:10px;padding:10px;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.45;
   color:var(--text);background:var(--surface-2);border:1px solid var(--border);
@@ -510,9 +531,15 @@
    parent, and treats the extra as bleed. */
 /* Sized explicitly and centred, rather than by a negative inset: `width:auto`
    on a canvas means its INTRINSIC size, so the inset was ignored and the
-   element fell back to 300x150. */
-.orb-lg .orb-canvas{width:162%;height:162%;left:50%;top:50%;right:auto;bottom:auto;
-  transform:translate(-50%,-50%)}
+   element fell back to 300x150.
+   CAPPED AT THE VIEWPORT. 162% of a 248px orb is 401px, which is wider than a
+   375px phone — and an absolutely positioned element that overhangs still
+   lengthens the document, so the Assistant became the one page you could
+   scroll sideways. The orb does not change size: the drawn radius comes from
+   this element's PARENT, so capping the canvas only trims how far the ribbon
+   may travel, and it fades long before the edge either way. */
+.orb-lg .orb-canvas{width:min(162%,92vw);height:min(162%,92vw);
+  left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%)}
 .orb-mark{position:relative;display:grid;place-items:center;
   filter:drop-shadow(0 2px 6px rgba(0,0,0,.35))}
 /* The mark rides on top of the body, so it is white rather than the brand
@@ -747,10 +774,10 @@
   padding:0 18px;font-size:13px;font-weight:700;letter-spacing:.02em;
   color:var(--text);pointer-events:none;border-radius:inherit;opacity:.55}
 .swipe-back.is-right{justify-content:flex-start;background:rgba(0,217,163,.22)}
-.swipe-back.is-left{justify-content:flex-end;background:rgba(138,93,255,.22)}
+.swipe-back.is-left{justify-content:flex-end;background:rgba(var(--accent-rgb),.22)}
 .swipe-back.is-armed{opacity:1}
 .swipe-back.is-right.is-armed{background:rgba(0,217,163,.34)}
-.swipe-back.is-left.is-armed{background:rgba(138,93,255,.36)}
+.swipe-back.is-left.is-armed{background:rgba(var(--accent-rgb),.36)}
 
 /* ══════════════════════════════════════════════════════════════════════
    DIALOGS BECOME SHEETS
@@ -1246,7 +1273,7 @@
     position:relative}
   .m-add::after{content:'';position:absolute;top:50%;left:50%;
     width:calc(100% + 12px);height:var(--m-tap);transform:translate(-50%,-50%)}
-  .m-add:active{background:rgba(138,93,255,.3)}
+  .m-add:active{background:rgba(var(--accent-rgb),.3)}
 
   /* ── One scrolling row of areas, and it looks deliberate ──────────────
      The mask is the difference between "there is more to the right" and "a
@@ -1257,7 +1284,7 @@
     mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 26px),transparent 100%)}
   .m-toolbar .chip{min-height:36px;padding:0 13px;font-size:12.5px}
   .m-toolbar .chip[aria-pressed="true"]{background:var(--accent-soft);color:#fff;
-    border-color:rgba(138,93,255,.5);font-weight:600}
+    border-color:rgba(var(--accent-rgb),.5);font-weight:600}
 
   /* ── The day, above the board ─────────────────────────────────────────
      Next, the summary line and the assistant are the reason to pick the
@@ -1267,10 +1294,10 @@
   .m-ai{gap:8px}
   .ai-invite{padding:12px 15px 12px 9px;gap:13px;border-radius:19px;
     background:
-      radial-gradient(74% 130% at 14% 46%, rgba(146,100,255,.26) 0%, rgba(138,93,255,.05) 58%, rgba(138,93,255,0) 100%),
+      radial-gradient(74% 130% at 14% 46%, rgba(146,100,255,.26) 0%, rgba(var(--accent-rgb),.05) 58%, rgba(var(--accent-rgb),0) 100%),
       linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,0) 42%),
       var(--surface);
-    border:1px solid rgba(138,93,255,.22);
+    border:1px solid rgba(var(--accent-rgb),.22);
     box-shadow:0 1px 2px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.05)}
   .orb-md{width:74px;height:74px}
   .ai-invite-say{font-size:14.5px}
@@ -1360,8 +1387,8 @@
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,.42),          /* top rim */
       inset 0 -7px 12px -7px rgba(26,8,64,.85),     /* the ball turning away */
-      0 0 18px 2px rgba(138,93,255,.34),            /* the bloom, behind */
-      0 0 34px 10px rgba(124,77,255,.16)}
+      0 0 18px 2px rgba(var(--accent-rgb),.34),            /* the bloom, behind */
+      0 0 34px 10px rgba(var(--accent-deep-rgb),.16)}
   .mnav-ai::after{
     content:'';position:absolute;inset:0;border-radius:50%;z-index:1;
     background:linear-gradient(158deg,
@@ -1374,8 +1401,8 @@
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,.5),
       inset 0 -7px 12px -7px rgba(26,8,64,.85),
-      0 0 22px 4px rgba(138,93,255,.5),
-      0 0 40px 12px rgba(124,77,255,.22)}
+      0 0 22px 4px rgba(var(--accent-rgb),.5),
+      0 0 40px 12px rgba(var(--accent-deep-rgb),.22)}
   .mnav-ai[aria-current="page"] .logo-mark path{fill-opacity:1}
 }
 

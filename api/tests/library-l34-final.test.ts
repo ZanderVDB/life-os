@@ -101,7 +101,7 @@ test('final: the materials are muted Book cloths, not brand colours (§5)', () =
    * cloth may be the app accent, or the Library becomes a colour key. */
   const cloths = css.slice(css.indexOf('---- THE MATERIALS'), css.indexOf('---- THE TURN'));
   assert.ok(!/var\(--accent\)/.test(cloths), 'a Book cloth uses the app accent');
-  assert.ok(!/#7C4DFF|#C28DFF/i.test(cloths), 'a Book cloth is Life OS purple');
+  assert.ok(!/var\(--accent-deep\)|var\(--accent-pale\)/i.test(cloths), 'a Book cloth is Life OS purple');
 });
 
 /* ── §6  Hover ──────────────────────────────────────────────────────────── */
