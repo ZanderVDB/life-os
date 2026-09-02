@@ -134,6 +134,61 @@ export function trimOverlap(already, incoming) {
   return incoming;
 }
 
+/**
+ * A trace of what the BROWSER actually did, for a device we cannot debug.
+ *
+ * The stutter was diagnosed once from a scripted recogniser and fixed, and it
+ * came back on a real phone — which means the scripted recogniser is not
+ * emitting what that phone emits. Rather than guess a second time, this
+ * records the event stream and lets the device tell us.
+ *
+ * WHAT IS RECORDED: event names, timings, which recogniser instance and which
+ * logical session fired them, the indexes and isFinal flags the browser
+ * reported, the recognised TEXT, and what this controller did with it.
+ *
+ * WHAT IS NOT: audio. Nothing here captures, stores or uploads a microphone
+ * stream — it is a log of events and the words the browser had already
+ * decided on. It also never leaves the device on its own: the log sits in
+ * memory until somebody presses a button to copy it.
+ *
+ * Off unless switched on, and the only caller switches it on behind the same
+ * development flag that reveals the listening-style picker.
+ */
+export class VoiceTrace {
+  constructor(limit = 400) {
+    this.rows = [];
+    this.limit = limit;
+    this.t0 = Date.now();
+  }
+
+  add(event, detail = {}) {
+    if (this.rows.length >= this.limit) return;
+    this.rows.push({ ms: Date.now() - this.t0, event, ...detail });
+  }
+
+  clear() { this.rows = []; this.t0 = Date.now(); }
+
+  /** One line per event, short enough to paste into a message. */
+  text() {
+    if (!this.rows.length) return 'voice trace: nothing recorded';
+    const head = [
+      `voice trace  ${new Date(this.t0).toISOString()}`,
+      `ua ${typeof navigator !== 'undefined' ? navigator.userAgent : '?'}`,
+      `lang ${typeof navigator !== 'undefined' ? navigator.language : '?'}`,
+      '--- ms | session/rec | event | detail',
+    ];
+    const body = this.rows.map((r) => {
+      const { ms, event, session, rec, ...rest } = r;
+      const who = `${session ?? '-'}/${rec ?? '-'}`;
+      const detail = Object.entries(rest)
+        .map(([k, v]) => `${k}=${typeof v === 'string' ? JSON.stringify(v) : v}`)
+        .join(' ');
+      return `${String(ms).padStart(6)} | ${who.padEnd(7)} | ${event.padEnd(14)} | ${detail}`;
+    });
+    return [...head, ...body].join('\n');
+  }
+}
+
 export class VoiceInput {
   /**
    * @param {object} opts
@@ -166,6 +221,14 @@ export class VoiceInput {
     this.activityAt = 0;
     this.silenceTimer = null;
     this.autoStop = opts.autoStop !== false;
+    /* Ids, so the trace can show at a glance whether two recognisers are
+       alive or a dead one is still talking. `sid` counts logical sessions —
+       one per start() — and `rid` counts recogniser instances, which is
+       higher whenever a session has restarted. */
+    this.sid = 0;
+    this.rid = 0;
+    /** A `VoiceTrace`, or null. Development only; see the class. */
+    this.trace = opts.trace ?? null;
     this.lang = opts.lang || (typeof navigator !== 'undefined' ? navigator.language : '') || 'en-US';
   }
 
@@ -245,6 +308,8 @@ export class VoiceInput {
     this.committed = '';
     this.sessionFinal = '';
     this.restarts = 0;
+    this.sid += 1;
+    this.trace?.add('start', { session: this.sid, base: baseText || '' });
     this.heardAnything = false;
     this.lastResultAt = 0;
     this.activityAt = 0;
@@ -301,6 +366,11 @@ export class VoiceInput {
       this.fail('failed');
       return false;
     }
+    this.rid += 1;
+    const rid = this.rid;
+    rec.rid = rid;
+    this.trace?.add('open', { session: this.sid, rec: rid, restarts: this.restarts });
+
     rec.continuous = true;
     rec.interimResults = this.opts.interim !== false;
     rec.lang = this.lang;
@@ -318,12 +388,41 @@ export class VoiceInput {
     this.sessionFinal = '';
 
     rec.onstart = () => {
+      this.trace?.add('onstart', {
+        session: this.sid, rec: rid, stale: rec !== this.rec,
+      });
       if (rec !== this.rec) return;
       this.startedAt = Date.now();
       if (this.wanted) this.setState('listening');
     };
 
+    /* Not every engine fires these. They are recorded ONLY for the trace —
+       nothing in the state machine reads them, so a browser without them
+       behaves exactly the same. */
+    for (const name of ['audiostart', 'audioend', 'speechstart', 'speechend', 'soundstart']) {
+      rec[`on${name}`] = () => this.trace?.add(name, {
+        session: this.sid, rec: rid, stale: rec !== this.rec,
+      });
+    }
+
     rec.onresult = (e) => {
+      /* Every index the browser reported, exactly as it reported it. This is
+         the row that tells us whether the phone accumulates results, repeats
+         them, or numbers them differently from the desktop engine. */
+      if (this.trace) {
+        const seen = [];
+        for (let i = 0; i < e.results.length; i += 1) {
+          const r = e.results[i];
+          seen.push(`${i}${r.isFinal ? 'F' : 'i'}:${JSON.stringify(r[0]?.transcript ?? '')}`);
+        }
+        this.trace.add('onresult', {
+          session: this.sid, rec: rid, stale: rec !== this.rec,
+          resultIndex: e.resultIndex, len: e.results.length,
+          conf: e.results[e.results.length - 1]?.[0]?.confidence ?? null,
+          results: seen.join(' '),
+          committedBefore: JSON.stringify(this.committed),
+        });
+      }
       /* A recogniser that has been replaced still delivers a trailing result
          or two. Ignoring anything that is not the CURRENT one is what stops
          a dead session writing over the live one's words. */
@@ -365,12 +464,22 @@ export class VoiceInput {
          before the session ends — the person would read it as the stutter
          coming back, and they would be right to. */
       const previous = this.committed;
-      this.committed = `${previous}${trimOverlap(previous, finals)}`;
+      const added = trimOverlap(previous, finals);
+      this.committed = `${previous}${added}`;
+      this.trace?.add('compose', {
+        session: this.sid, rec: rid,
+        finals: JSON.stringify(finals), trimmed: finals !== added,
+        interim: JSON.stringify(interim),
+        wrote: JSON.stringify(this.compose(interim).full),
+      });
       this.emit(interim, false);
       this.committed = previous;
     };
 
     rec.onerror = (e) => {
+      this.trace?.add('onerror', {
+        session: this.sid, rec: rid, stale: rec !== this.rec, code: e?.error ?? 'unknown',
+      });
       if (rec !== this.rec) return;
       const code = e?.error ?? 'unknown';
       this.log('recognition error', code);
@@ -389,6 +498,11 @@ export class VoiceInput {
     };
 
     rec.onend = () => {
+      this.trace?.add('onend', {
+        session: this.sid, rec: rid, stale: rec !== this.rec,
+        state: this.state, silent: this.silent(),
+        sessionFinal: JSON.stringify(this.sessionFinal),
+      });
       if (rec !== this.rec) return;
       /* THE BUG THIS FILE EXISTS FOR.
          Mobile ends a recognition after a pause whatever `continuous` says.
@@ -417,6 +531,7 @@ export class VoiceInput {
         return;
       }
       const SRnow = speechRecognition();
+      this.trace?.add('restart', { session: this.sid, rec: rid, committed: JSON.stringify(this.committed) });
       if (SRnow) this.open(SRnow);
     };
 
@@ -444,6 +559,7 @@ export class VoiceInput {
    * thing they most want kept.
    */
   stop() {
+    this.trace?.add('stop', { session: this.sid, state: this.state });
     if (!this.wanted && this.state !== 'listening') { this.settle(); return; }
     this.wanted = false;
     this.setState('stopping');
@@ -471,6 +587,7 @@ export class VoiceInput {
     clearTimeout(this.settleTimer);
     clearInterval(this.silenceTimer);
     if (this.state === 'idle') return;
+    this.trace?.add('settle', { session: this.sid, final: JSON.stringify(this.compose('').full) });
     /* Keeps whatever the current recogniser had heard, for the browser that
        never fires `end` after `stop()`. */
     this.harvest();
@@ -481,6 +598,7 @@ export class VoiceInput {
 
   /** Throw the session away — nothing heard is kept. */
   cancel() {
+    this.trace?.add('cancel', { session: this.sid });
     this.wanted = false;
     clearInterval(this.silenceTimer);
     this.committed = '';

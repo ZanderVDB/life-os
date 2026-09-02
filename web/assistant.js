@@ -24,7 +24,7 @@
 
 import { icon, logoMark } from './icons.js';
 import { Orb, MicLevel, VARIANTS, DEFAULT_VARIANT, synthLevel } from './assistant-orb.js';
-import { VoiceInput } from './voice-input.js';
+import { VoiceInput, VoiceTrace } from './voice-input.js';
 import { openSheet, closeSheet } from './mobile.js';
 /* Fixed transcripts stand in for a MICROPHONE, not for the assistant: speech
    recognition does not exist in Firefox and differs between Chrome and Safari.
@@ -397,11 +397,23 @@ function resumeListening() {
   }
 }
 
+/**
+ * The event trace, in development only.
+ *
+ * One per surface rather than one per session, so a trace covers the whole
+ * visit and a stale recogniser from an earlier session is still visible in
+ * it — which is exactly the sort of thing we are looking for.
+ */
+let trace = null;
+export const voiceTrace = () => trace;
+
 /** Speech recognition, through the shared controller. Synchronous. */
 function startSpeech(base = '') {
   /* A previous controller would go on holding the microphone. */
   session.voice?.destroy();
+  if (devTools() && !trace) trace = new VoiceTrace();
   session.voice = new VoiceInput({
+    trace,
     onState: (st) => {
       if (!session) return;
       if (st === 'listening') setState('listening');
@@ -904,6 +916,14 @@ function devPanelHtml() {
       ${MOCK_TRANSCRIPTS.map((m) => `<button type="button" class="chip"
         data-mock="${esc(m.id)}">Play “${esc(m.label)}”</button>`).join('')}
     </div>
+    <p class="asst-dev-p">Voice diagnostics record what the BROWSER reported —
+      events, indexes and the recognised words. No audio is captured, and
+      nothing is sent anywhere until you press copy.</p>
+    <div class="asst-dev-row">
+      <button type="button" class="chip" id="asst-copy-trace">Copy voice diagnostics</button>
+      <button type="button" class="chip" id="asst-clear-trace">Clear</button>
+    </div>
+    <p class="asst-dev-hint" id="asst-trace-note"></p>
   </section>`;
 }
 
@@ -927,6 +947,41 @@ function wireDevPanel(el) {
       if (hint) hint.textContent = VARIANTS.find((x) => x.id === b.dataset.variant)?.hint ?? '';
     };
   });
+  const note = (m) => {
+    const n = el.querySelector('#asst-trace-note');
+    if (n) n.textContent = m;
+  };
+  const copyBtn = el.querySelector('#asst-copy-trace');
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      const t = voiceTrace();
+      const text = t ? t.text() : 'voice trace: nothing recorded';
+      try {
+        await navigator.clipboard.writeText(text);
+        note(`Copied ${t?.rows.length ?? 0} events.`);
+      } catch {
+        /* Clipboard access is refused in plenty of mobile contexts. Falling
+           back to a selectable box beats telling somebody it failed when the
+           thing they wanted is right there. */
+        const box = document.createElement('textarea');
+        box.className = 'asst-trace-box';
+        box.readOnly = true;
+        box.value = text;
+        el.querySelector('.asst-dev')?.appendChild(box);
+        box.select();
+        note('Could not reach the clipboard — select the text below and copy it.');
+      }
+    };
+  }
+  const clearBtn = el.querySelector('#asst-clear-trace');
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      voiceTrace()?.clear();
+      el.querySelector('.asst-trace-box')?.remove();
+      note('Cleared. Speak, then copy.');
+    };
+  }
+
   el.querySelectorAll('[data-mock]').forEach((b) => {
     b.onclick = () => {
       reset();

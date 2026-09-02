@@ -310,15 +310,23 @@ test('the orb answers the room, and answers it differently when quiet', () => {
   /* §13. A fixed decorative animation that looks the same whether somebody
    * is speaking or silent fails the one thing the orb exists to say. */
   const orb = read('assistant-orb.js');
-  assert.match(orb, /const speaking = amp > 0\.06;/, 'silence and speech are not told apart');
-  assert.match(orb, /const gap = speaking \? 210 - amp \* 150 : 620;/,
-    'the emit cadence does not change with the voice');
-  assert.match(orb, /const travel = age \* \(0\.022 \+ ring\.strength \* 0\.095\);/,
-    'a loud ring does not travel further than a quiet one');
-  // Near-silence still emits: an orb that goes completely still reads as one
-  // that has stopped listening (§9).
-  assert.match(orb, /\(speaking \? amp : 0\.05 \+ breathe \* 0\.02\)/,
+  /* The travelling rings are gone — they read as sonar — and the listening
+     animation is a waveform around the orb. The RULE is unchanged and is what
+     is asserted: the voice must visibly change the picture, and near-silence
+     must not stop it dead. */
+  const wave = orb.slice(orb.indexOf('drawWaveform('));
+  // Amplitude reaches the shape, the brightness and the weight.
+  assert.match(wave, /swing = R \* \([\d.]+ \+ a \* [\d.]+\)/,
+    'the voice does not change the waveform’s reach');
+  assert.match(wave, /alpha = lead[\s\S]{0,60}a \* [\d.]+/,
+    'the voice does not change how bright it is');
+  assert.match(wave, /lineWidth = Math\.max\([\s\S]{0,60}a \* [\d.]+/,
+    'the voice does not change how heavy it is');
+  // Near-silence still moves: an orb that goes completely still reads as one
+  // that has stopped listening (§9). The constant term is what guarantees it.
+  assert.match(wave, /swing = R \* \(0\.0[1-9]/,
     'the resting state stops moving entirely');
+  assert.match(wave, /phase = this\.t \//, 'the waveform does not advance over time');
 });
 
 test('quick capture stops pretending to be the Task row below it', () => {

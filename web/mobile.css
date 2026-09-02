@@ -493,6 +493,12 @@
 /* ── The orb ───────────────────────────────────────────────────────────
    The canvas draws the body and everything the voice does to it. The mark
    is a DOM element on top, so it stays crisp and is never re-rasterised. */
+/* The diagnostics fallback box, for a browser that refuses the clipboard.
+   Monospace and selectable — its whole job is to be copied by hand. */
+.asst-trace-box{width:100%;min-height:180px;margin-top:10px;padding:10px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.45;
+  color:var(--text);background:var(--surface-2);border:1px solid var(--border);
+  border-radius:10px;white-space:pre;overflow:auto;-webkit-user-select:text;user-select:text}
 .orb{position:relative;display:grid;place-items:center;flex:0 0 auto}
 .orb-lg{width:min(280px,72vw);height:min(280px,72vw)}
 .orb-md{width:88px;height:88px}

@@ -94,6 +94,17 @@ export async function confirmTurn(deps: ConfirmDeps, input: ConfirmInput): Promi
   const actions = row.actions as unknown as ProposalAction[];
   if (!actions.length) throw badRequest('There are no changes to make.');
 
+  /* ── Execute against the day it was PROPOSED on ────────────────────
+     Confirming is a second request and carries no date, so the context
+     built for it holds the server's own civil day. Anything that defaults
+     a date at execution — a reminder with no date is the one that bit —
+     would use a day the person may not be having, and a different one from
+     the card they agreed to. The turn recorded its date; use that. */
+  const planned = (row.metrics ?? {}) as { today?: string; timeZone?: string | null };
+  const asPlanned = planned.today
+    ? { ...request, today: planned.today, timeZone: planned.timeZone ?? null }
+    : request;
+
   /* ── Claim ─────────────────────────────────────────────────────────
      Move to `executed` conditionally on it still being `proposed` and never
      yet executed. Two simultaneous confirms race here, and exactly one wins:
@@ -111,7 +122,7 @@ export async function confirmTurn(deps: ConfirmDeps, input: ConfirmInput): Promi
   let report: ExecutionReport;
   try {
     /* The actions come from the ROW. The request body could not name one. */
-    report = await execute({ db, registry, request }, {
+    report = await execute({ db, registry, request: asPlanned }, {
       id: row.id,
       request: row.request,
       understood: row.understood ?? '',

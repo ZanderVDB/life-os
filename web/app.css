@@ -33,8 +33,19 @@
   --border:#332E43; --border-strong:#3d3652; --hairline:#332E43;
   /* Text */
   --text:#F4F2FA; --text-2:#B5ABC9; --muted:#766D8B; --label:#CEC7E8;
-  /* The one accent */
+  /* ── The accent, in three weights ──────────────────────────────────────
+     One accent was enough while everything purple meant the same thing. It
+     no longer does: a primary button, a hover tint and a quiet label are
+     three different jobs, and giving all three the same lavender is why the
+     product reads lighter than it should.
+       --accent-deep   primary actions, selected state, the orb's core
+       --accent        highlights, hover, glow, secondary energy
+       --accent-pale   restrained text and icons
+     DEFAULTS ARE TODAY'S COLOURS, so nothing moves until the deeper set is
+     switched on with [data-purple="deep"]. */
   --accent:#8A5DFF; --accent-soft:rgba(138,93,255,.16);
+  --accent-deep:#8A5DFF; --accent-deep-rgb:138,93,255;
+  --accent-pale:#C89BFF;
   --brand:linear-gradient(180deg,#7C4DFF 0%,#C28DFF 100%);
   --name-grad:linear-gradient(180deg,#C89BFF 0%,#8A5DFF 100%);
   /* Status — meaning only */
@@ -53,6 +64,7 @@
   --e1:0 2px 8px rgba(0,0,0,.14); --e2:0 8px 24px rgba(0,0,0,.22);
   --e3:0 14px 34px rgba(0,0,0,.32);
   --glow:0 6px 18px rgba(124,77,255,.22);
+  --glow-deep:0 6px 18px rgba(var(--accent-deep-rgb),.28);
   /* Motion (§7) */
   --d-instant:90ms; --d-fast:140ms; --d-base:200ms; --d-slow:260ms; --d-slower:320ms;
   --e-out:cubic-bezier(.2,.7,.2,1); --e-inout:cubic-bezier(.4,0,.2,1);
@@ -324,7 +336,7 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .composer-inner:hover{border-color:#4A4266;background:#1D1B2B}
 /* The bar is a real input now. It was a disabled placeholder saying "Soon"
    for two phases; the assistant is behind it. */
-.composer-inner:focus-within{border-color:var(--accent);background:#1D1B2B}
+.composer-inner:focus-within{border-color:var(--accent-deep);background:#1D1B2B}
 .composer-input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);
   font-size:calc(var(--fs-task) + .5px);font-family:inherit;padding:0}
 .composer-input::placeholder{color:var(--muted)}
@@ -414,6 +426,27 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
   color:#B9A6E8;background:rgba(138,93,255,.14);border-radius:7px;padding:4px 9px;flex-shrink:0}
 
 
+/* ── PROPOSAL: a deeper brand purple ───────────────────────────────────
+ *
+ * Switched on with `document.documentElement.dataset.purple = 'deep'`, and
+ * off by removing it. Nothing outside this block changes, which is the point:
+ * a token experiment to look at, not a repaint of the product.
+ *
+ * The graphite backgrounds are untouched. What moves is the accent hierarchy:
+ * the deep purple carries weight (primary actions, selection, the orb), the
+ * existing lavender becomes the highlight rather than the identity, and the
+ * pale tone is reserved for text and icons that should not shout.
+ */
+:root[data-purple="deep"]{
+  --accent-deep:#6A38E0; --accent-deep-rgb:106,56,224;
+  --accent:#9169FF;
+  --accent-soft:rgba(106,56,224,.20);
+  --accent-pale:#C6B0FF;
+  --brand:linear-gradient(180deg,#5A2BD2 0%,#8E62F5 100%);
+  --name-grad:linear-gradient(180deg,#C6B0FF 0%,#6A38E0 100%);
+  --glow:0 6px 18px rgba(106,56,224,.30);
+}
+
 /* ── Buttons / chips ────────────────────────────────────────────────── */
 .btn{background:var(--surface-2);border-radius:10px;padding:0 15px;min-height:var(--btn-h);
   display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:13px;color:#fff;
@@ -430,7 +463,8 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 .chip{background:var(--surface-2);border-radius:99px;padding:6px 13px;font-size:12px;color:var(--text-2);
   transition:background var(--t-hover),color var(--t-hover)}
 .chip:hover{background:var(--surface-3);color:var(--text)}
-.chip[aria-pressed="true"]{background:var(--accent-soft);color:#fff}
+.chip[aria-pressed="true"]{background:var(--accent-soft);color:#fff;
+  border-color:var(--accent-deep)}
 
 /* ── Buckets ────────────────────────────────────────────────────────── */
 .buckets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;

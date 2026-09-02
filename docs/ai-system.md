@@ -1082,6 +1082,28 @@ What happens then differs by surface, deliberately:
   common and acting on half a sentence is worse than one more tap. *Say more*
   carries on from what is already there rather than starting over.
 
+### Real-device diagnostics (development only)
+
+The stutter was diagnosed once from a scripted recogniser, fixed, and came
+back on a real phone — which means the scripted recogniser does not emit what
+that phone emits. Rather than guess again, `VoiceTrace` records the event
+stream and the device reports it.
+
+Recorded: event names and timings, which logical session (`sid`) and which
+recogniser instance (`rid`) fired them, `resultIndex`, every index the browser
+returned with its `isFinal` flag and text, confidence where offered, whether a
+stale recogniser fired, what was committed before and after, and the exact
+string written to the composer.
+
+**No audio.** Nothing captures, stores or uploads a microphone stream; this is
+a log of events and of words the browser had already decided on. It stays in
+memory until somebody presses **Copy voice diagnostics** in the Development
+section, which is behind the same flag as the listening-style picker and never
+appears for a normal user.
+
+The ids are the point: two `rid` values alive at once means two recognisers,
+and a row marked `stale=true` means a dead one is still talking.
+
 ### Errors, in words
 
 `not-allowed` → *"Microphone access is blocked. Allow microphone access in your

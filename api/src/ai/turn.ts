@@ -909,7 +909,15 @@ async function persistTurn(deps: TurnDeps, p: {
     actions: p.actions as unknown[],
     clarification: (p.clarification ?? null) as any,
     sources: sourceRefs as unknown[],
-    metrics: p.metrics,
+    /* The civil date this was PLANNED against, carried so that execution
+       uses the same one. Confirmation is a separate request that does not
+       send a date, so re-deriving it there gave the server's UTC day — and
+       a reminder proposed for "today" was created on a different one. */
+    metrics: {
+      ...p.metrics,
+      today: deps.request.today,
+      timeZone: deps.request.timeZone ?? null,
+    },
   }).returning();
 
   await db.update(aiConversations)

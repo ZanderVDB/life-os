@@ -14,6 +14,7 @@ import { reminders, reminderRecurrenceRules } from '../../db/schema.js';
 import { nextAfter } from '../recurrence.js';
 import { cleanupLinksFor } from '../relationships.js';
 import { badRequest, notFound } from '../errors.js';
+import { todayIn } from '../civil-date.js';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -39,13 +40,24 @@ export const ReminderCreateInput = z.object({
 
 export type ReminderCreate = z.infer<typeof ReminderCreateInput>;
 
-export async function createReminder(db: Db, wsId: string, input: ReminderCreate) {
+export async function createReminder(
+  db: Db, wsId: string, input: ReminderCreate, today?: string | null,
+) {
   const { recurrence, ...fields } = input;
   /* A reminder with no date never asks for anything, which makes it a note
      nobody reads. The modal has always defaulted this to today; the default
      belongs here so the assistant behaves the same way rather than producing
-     silent reminders. */
-  if (!fields.dueDate) fields.dueDate = new Date().toISOString().slice(0, 10);
+     silent reminders.
+     ── Whose today ──────────────────────────────────────────────────────
+     This used to be `new Date().toISOString().slice(0, 10)`, which is the UTC
+     day: already tomorrow for anyone east of Greenwich after midnight, and
+     still yesterday for anyone west of it in the evening. So a reminder with
+     no date landed on a day the person was not having.
+     The caller knows better and passes it — the browser's own civil date, or
+     the one the assistant planned the turn against. `todayIn` is the same
+     resolver the whole date path uses, and it is the fallback rather than a
+     third opinion. */
+  if (!fields.dueDate) fields.dueDate = today ?? todayIn(null);
   /* `isSynthetic: false` matters. It was left true from the seed work once,
      which made real reminders eligible for the staging cleanup. */
   const [row] = await db.insert(reminders).values({
@@ -164,7 +176,9 @@ export async function setReminderPaused(db: Db, wsId: string, id: string, paused
  * useless. The roll is bounded, because a daily rule paused for years must not
  * spin.
  */
-export async function resumeReminder(db: Db, wsId: string, id: string) {
+export async function resumeReminder(
+  db: Db, wsId: string, id: string, today?: string | null,
+) {
   const [existing] = await db.select().from(reminders).where(and(
     eq(reminders.id, id), eq(reminders.workspaceId, wsId),
   ));
@@ -172,10 +186,14 @@ export async function resumeReminder(db: Db, wsId: string, id: string) {
   const [rule] = await db.select().from(reminderRecurrenceRules)
     .where(eq(reminderRecurrenceRules.reminderId, id));
 
-  const today = new Date().toISOString().slice(0, 10);
+  /* The same civil day as everywhere else. Rolling forward past "today"
+     against the UTC one resumes a reminder a day early or late depending on
+     which side of Greenwich the person is, which is the whole reason this
+     file no longer asks the clock directly. */
+  const day = today ?? todayIn(null);
   let due = existing.dueDate;
-  if (rule && due && due < today) {
-    for (let i = 0; i < 500 && due < today; i += 1) due = nextAfter(due, rule as any);
+  if (rule && due && due < day) {
+    for (let i = 0; i < 500 && due < day; i += 1) due = nextAfter(due, rule as any);
   }
 
   const [row] = await db.update(reminders)

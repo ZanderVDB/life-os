@@ -151,7 +151,9 @@ test('three listening variants, one assistant', () => {
   const orb = read('assistant-orb.js');
   const ids = [...orb.matchAll(/\{ id: '(\w)', label: '[^']+'/g)].map((m) => m[1]);
   assert.deepEqual(ids, ['a', 'b', 'c']);
-  for (const fn of ['drawConcentric', 'drawHalo', 'drawRadial']) {
+  /* `drawConcentric` became `drawWaveform`: the rings read as sonar, and
+     variant A is now a balanced audio waveform around the orb. */
+  for (const fn of ['drawWaveform', 'drawHalo', 'drawRadial']) {
     assert.match(orb, new RegExp(`${fn}\\(`), `variant ${fn} is not implemented`);
   }
   // The selector is a development control, not a user setting.
@@ -168,8 +170,111 @@ test('reduced motion still says "listening"', () => {
    * than things flying across the screen. */
   const orb = read('assistant-orb.js');
   assert.match(orb, /const reducedMotion = \(\) =>/, 'the preference is not read');
-  assert.match(orb, /if \(reduce\) \{[\s\S]{0,600}lineWidth = 1 \+ a \* 5/,
-    'reduced motion drops the listening signal instead of changing how it is drawn');
+  /* The RULE, not the constant: inside the reduced-motion branch the signal
+     is carried by weight and opacity, both driven by the voice, and the
+     circles it draws do not travel. Asserting the exact multiplier meant the
+     test failed when the visual was retuned while still obeying it. */
+  const branch = orb.slice(orb.indexOf('if (reduce) {'));
+  const body = branch.slice(0, 700);
+  assert.match(body, /lineWidth = 1 \+ a \* \d/, 'weight does not answer to the voice');
+  assert.match(body, /rgba\([\s\S]{0,40}a \* [\d.]+\}/,
+    'opacity does not answer to the voice');
+  assert.match(body, /ctx\.arc\(cx, cy, R \* m/, 'the reduced-motion shape is not a still halo');
   // Read live, so turning it on mid-session does not need a reload.
   assert.ok(!/const reduce = window\.matchMedia\([^)]*\)\.matches;\s*$/m.test(orb));
+});
+
+/* ══ The orb actually draws ══════════════════════════════════════════════
+ *
+ * A regression for a failure that was invisible everywhere except a
+ * screenshot: `drawCore` already had a local `const shade`, a module-level
+ * helper of the same name put it in that function's temporal dead zone, and
+ * the ReferenceError was thrown inside an animation frame where nothing was
+ * listening. The orb simply stopped being drawn, and every test still passed.
+ *
+ * So this one paints. It does not check what it looks like — it checks that
+ * every variant completes a frame in every state without throwing, which is
+ * the part a screenshot was doing by accident.
+ */
+function fakeCanvas() {
+  const calls: string[] = [];
+  const ctx: any = new Proxy({}, {
+    get(_t, k: string) {
+      if (k === 'canvas') return null;
+      if (k === 'createRadialGradient' || k === 'createLinearGradient') {
+        return () => ({ addColorStop: (_o: number, c: string) => calls.push(`stop:${c}`) });
+      }
+      if (k === 'getImageData') return () => ({ data: new Uint8ClampedArray(4) });
+      if (k === 'measureText') return () => ({ width: 10 });
+      return (...a: unknown[]) => { calls.push(`${k}(${a.length})`); };
+    },
+    set() { return true; },
+  });
+  const el: any = {
+    width: 300, height: 300,
+    getContext: () => ctx,
+    getBoundingClientRect: () => ({ width: 300, height: 300, x: 0, y: 0 }),
+    parentElement: { getBoundingClientRect: () => ({ width: 240, height: 240 }) },
+  };
+  return { el, calls };
+}
+
+test('the orb completes a frame in every variant and state', async () => {
+  const g = globalThis as any;
+  g.window = {
+    matchMedia: () => ({ matches: false }),
+    devicePixelRatio: 2,
+    requestAnimationFrame: () => 0,
+    cancelAnimationFrame: () => {},
+  };
+  g.ResizeObserver = class { observe() {} disconnect() {} };
+  g.getComputedStyle = () => ({ getPropertyValue: () => '#6A38E0' });
+  g.document = { documentElement: {} };
+
+  const mod = await import(
+    `file://${join(process.cwd(), '..', 'web', 'assistant-orb.js')}?t=${Math.random()}`
+  ) as any;
+
+  for (const variant of ['a', 'b', 'c']) {
+    for (const state of ['idle', 'listening', 'processing']) {
+      const { el, calls } = fakeCanvas();
+      const orb = new mod.Orb(el, { variant });
+      orb.setState(state);
+      orb.setLevel(0.7);
+      /* Two frames: the second exercises the paths that read history the
+         first one wrote — the waveform's trailing contours, for one. */
+      assert.doesNotThrow(() => { orb.draw(); orb.draw(); },
+        `variant ${variant} threw while ${state}`);
+      assert.ok(calls.some((c) => c.startsWith('fill(') || c.startsWith('stroke(')),
+        `variant ${variant} painted nothing while ${state}`);
+    }
+  }
+});
+
+test('the orb takes its body colour from the accent token', async () => {
+  const g = globalThis as any;
+  g.window = {
+    matchMedia: () => ({ matches: false }),
+    devicePixelRatio: 1,
+    requestAnimationFrame: () => 0,
+    cancelAnimationFrame: () => {},
+  };
+  g.ResizeObserver = class { observe() {} disconnect() {} };
+  g.document = { documentElement: {} };
+
+  const seen: string[][] = [];
+  for (const token of ['#8A5DFF', '#6A38E0']) {
+    g.getComputedStyle = () => ({ getPropertyValue: () => token });
+    const mod = await import(
+      `file://${join(process.cwd(), '..', 'web', 'assistant-orb.js')}?t=${Math.random()}`
+    ) as any;
+    const { el, calls } = fakeCanvas();
+    const orb = new mod.Orb(el, { variant: 'a' });
+    orb.setState('listening');
+    orb.draw();
+    seen.push(calls.filter((c) => c.startsWith('stop:rgb(')));
+  }
+  assert.ok(seen[0]!.length >= 5, 'the body gradient was not built from the token');
+  assert.notDeepEqual(seen[0], seen[1],
+    'a different accent token produced an identical orb');
 });

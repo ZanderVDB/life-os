@@ -115,16 +115,13 @@ export const remindersModule: AiModule = {
       input: ReminderCreateInput,
       risk: 'confirm',
       async execute(ctx, input) {
-        /* A reminder with no date defaults to today, and "today" has to mean
-           the user's day. The service falls back to the UTC date, which is
-           already tomorrow for anyone east of Greenwich after midnight — and
-           the assistant knows better, because the request carries the user's
-           civil date. */
-        const withDate = {
-          ...(input as any),
-          dueDate: (input as any).dueDate ?? ctx.request.today,
-        };
-        const row = await createReminder(ctx.db, ctx.request.workspaceId, withDate);
+        /* The civil day travels to the SERVICE rather than being patched into
+           the payload here. Defaulting a missing date is a product rule and
+           belongs where the rule lives; this only supplies the one fact the
+           service cannot know — whose day it is. */
+        const row = await createReminder(
+          ctx.db, ctx.request.workspaceId, input as any, ctx.request.today,
+        );
         return {
           status: 'done' as const,
           ref: { type: 'reminder' as const, id: row.id },
@@ -188,7 +185,9 @@ export const remindersModule: AiModule = {
             message: `Paused "${row.title}".`,
           };
         }
-        const r = await resumeReminder(ctx.db, ctx.request.workspaceId, input.id);
+        const r = await resumeReminder(
+          ctx.db, ctx.request.workspaceId, input.id, ctx.request.today,
+        );
         return {
           status: 'done' as const,
           ref: { type: 'reminder' as const, id: input.id },

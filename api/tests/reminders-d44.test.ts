@@ -294,3 +294,47 @@ test('completion: an advanced recurrence tells the user where it went', () => {
   assert.match(fn, /next on \$\{prettyDay\(res\.advancedTo\)\}/,
     'the user is not told the reminder rolled forward');
 });
+
+/* ══ A reminder with no date lands on the USER'S day ═════════════════════
+ *
+ * It used to land on the UTC one. `new Date().toISOString().slice(0, 10)` is
+ * already tomorrow for anyone east of Greenwich after midnight and still
+ * yesterday for anyone west of it in the evening, so somebody saying "remind
+ * me to water the plants" got a reminder for a day they were not having.
+ *
+ * Two halves, and both had to be fixed: the service asked the clock instead
+ * of its caller, and the assistant's CONFIRM is a second request that carries
+ * no date, so the context built for it held the server's day rather than the
+ * one the proposal was made against.
+ */
+
+test('reminders: a dateless reminder never asks the UTC clock', () => {
+  /* The banned expression, in the file where it lived. Asserted on the code
+     with comments stripped, because the paragraph explaining why it is wrong
+     is worth keeping. */
+  const src = code(service);
+  assert.ok(!/new Date\(\)\.toISOString\(\)\.slice\(0, ?10\)/.test(src),
+    'the UTC day is back in the reminder service');
+  assert.match(src, /todayIn\(/, 'the canonical civil-date resolver is not used');
+  assert.match(src, /fields\.dueDate = today \?\? todayIn\(/,
+    'the caller\u2019s day is not preferred over the fallback');
+});
+
+test('reminders: the assistant hands its own civil day to the service', () => {
+  const cap = code(readFileSync(join('src', 'ai', 'modules', 'reminders.ts'), 'utf8'));
+  assert.match(cap, /createReminder\(\s*ctx\.db, ctx\.request\.workspaceId, input as any, ctx\.request\.today,?\s*\)/,
+    'the capability does not pass the request\u2019s civil date');
+});
+
+test('reminders: confirmation executes on the day the turn was planned', () => {
+  /* A turn records the date it was planned against, and confirming uses that
+     rather than re-deriving one. Without this the two halves of a single
+     interaction disagreed about what day it was. */
+  const turn = code(readFileSync(join('src', 'ai', 'turn.ts'), 'utf8'));
+  assert.match(turn, /today: deps\.request\.today/, 'the turn does not record its date');
+
+  const confirm = code(readFileSync(join('src', 'ai', 'confirm.ts'), 'utf8'));
+  assert.match(confirm, /planned\.today/, 'confirmation does not read the recorded date');
+  assert.match(confirm, /request: asPlanned/,
+    'execution does not run against the planned date');
+});

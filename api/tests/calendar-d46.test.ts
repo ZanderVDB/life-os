@@ -163,7 +163,12 @@ test('resume: rolls a stale rule forward instead of firing in the past', () => {
      assistant resume a reminder the same way. The assertion follows it. */
   const service = readFileSync(join('src', 'lib', 'actions', 'reminders.ts'), 'utf8');
   const fn = service.slice(service.indexOf('export async function resumeReminder'));
-  assert.match(fn, /due < today/, 'a stale date is resumed unchanged');
+  /* `today` became `day`: the service no longer asks the clock for the
+     civil date, it takes the user's from its caller. The rule is the
+     comparison, not the variable's name. */
+  assert.match(fn, /due < day/, 'a stale date is resumed unchanged');
+  assert.match(fn, /const day = today \?\? todayIn\(/,
+    'resume derives its own day instead of taking the user’s');
   assert.match(fn, /nextAfter\(due, rule as any\)/, 'the rule is not rolled forward');
   assert.match(fn, /i < 500/, 'the roll-forward loop is unbounded');
   const route = calRoute.slice(calRoute.indexOf('reminders/:id/resume'));

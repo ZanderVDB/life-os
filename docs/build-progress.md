@@ -12,6 +12,9 @@ this file (where we are) → `design-ideas.md` (captured, not built).
 
 ---
 
+> **Pre-beta:** the ordered list of what is left before inviting testers, and
+> where we are in it, is `docs/pre-beta-roadmap.md`.
+
 ## Current state
 
 | | |

@@ -37,14 +37,50 @@
  * same everything else — three assistants would be three products, and the
  * point of the comparison is to choose a motion, not a personality. */
 export const VARIANTS = [
-  { id: 'a', label: 'Concentric pulse', hint: 'Pressure waves leave the orb on your voice' },
+  { id: 'a', label: 'Audio waveform', hint: 'A balanced waveform around the orb, answering to your voice' },
   { id: 'b', label: 'Fluid halo', hint: 'The orb’s own edge moves, with a soft halo behind it' },
   { id: 'c', label: 'Radial waveform', hint: 'A ring of frequency around a still orb' },
 ];
 export const DEFAULT_VARIANT = 'a';
 
 const TAU = Math.PI * 2;
+
+/* ── The waveform's shape ───────────────────────────────────────────────
+ *
+ * `LOBES` is how many swells go round. Every harmonic below is a MULTIPLE of
+ * it, which is what makes the curve exactly rotationally symmetric: turn it
+ * by one lobe and it is the same curve. That is the property that stops one
+ * side denting while another swells, and it holds at every amplitude — it is
+ * a fact about the formula rather than something tuned into it.
+ *
+ * Two harmonics rather than one, so a lobe has a little shape of its own and
+ * does not read as a cog. The second is deliberately small.
+ */
+const LOBES = 9;
+const TRAILS = 4;
+const STEPS = 132;
+
+const lobe = (th, phase) =>
+  Math.sin(th * LOBES + phase) * 0.90
+  + Math.sin(th * LOBES * 2 - phase * 0.6) * 0.10;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/* A hex nudged toward white (positive) or black (negative). Enough to build a
+   sphere's worth of stops from one brand colour, and nothing more.
+   NOT called `shade`: `drawCore` already has a local `shade` for its inner
+   shadow gradient, and a module-level one of the same name sat in that
+   function's temporal dead zone — which threw inside the animation frame,
+   where nothing was watching, and the orb simply stopped being drawn. */
+const tint = (hex, amount) => {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c) => Math.round(amount >= 0
+    ? c + (255 - c) * amount
+    : c * (1 + amount));
+  const r = mix((n >> 16) & 255);
+  const g = mix((n >> 8) & 255);
+  const b = mix(n & 255);
+  return `rgb(${clamp(r, 0, 255)},${clamp(g, 0, 255)},${clamp(b, 0, 255)})`;
+};
 
 /**
  * Reads the reduced-motion preference live rather than once.
@@ -67,7 +103,6 @@ export class Orb {
     this.level = 0;          // smoothed 0..1, what the drawing actually uses
     this.raw = 0;            // the latest measurement
     this.bins = null;        // frequency data for variant C
-    this.rings = [];
     this.t = 0;
     this.dpr = 1;
     this.running = false;
@@ -113,15 +148,37 @@ export class Orb {
       : Math.min(r.width, r.height);
   }
 
+  /**
+   * The brand purple, from the stylesheet.
+   *
+   * Read once and cached: `getComputedStyle` in a draw loop is a layout read
+   * sixty times a second. `refreshAccent()` exists for the theme experiment,
+   * which is the only thing that changes it at runtime.
+   */
+  accent() {
+    if (this._accent) return this._accent;
+    let v = '';
+    try {
+      v = getComputedStyle(document.documentElement)
+        .getPropertyValue('--accent-deep').trim();
+    } catch { /* no document, or a stylesheet that has not arrived */ }
+    this._accent = /^#[0-9a-f]{6}$/i.test(v) ? v : '#8A5DFF';
+    return this._accent;
+  }
+
+  refreshAccent() { this._accent = null; }
+
   setVariant(v) {
     this.variant = v;
-    this.rings = [];
+    this.wavePast = null;
   }
 
   setState(s) {
     if (this.state === s) return;
     this.state = s;
-    if (s !== 'listening') this.rings = [];
+    /* A new listening session starts from stillness rather than from the
+       tail of the last one. */
+    if (s !== 'listening') this.wavePast = null;
   }
 
   /** 0..1. The only channel the microphone has into this class. */
@@ -189,7 +246,7 @@ export class Orb {
     if (this.state === 'processing') this.drawProcessing(cx, cy, R, reduce);
     else if (this.variant === 'b') this.drawHalo(cx, cy, R, amp, breathe, reduce);
     else if (this.variant === 'c') this.drawRadial(cx, cy, R, amp, breathe, reduce);
-    else this.drawConcentric(cx, cy, R, amp, breathe, reduce);
+    else this.drawWaveform(cx, cy, R, amp, breathe, reduce);
   }
 
   /**
@@ -236,11 +293,16 @@ export class Orb {
       cx - r * 0.34, cy - r * 0.40, r * 0.06,
       cx - r * 0.05, cy - r * 0.05, r * 1.08,
     );
-    body.addColorStop(0, '#CBA8FF');
-    body.addColorStop(0.30, '#A177FF');
-    body.addColorStop(0.62, '#8552F4');
-    body.addColorStop(0.88, '#5E31CE');
-    body.addColorStop(1, '#46209E');
+    /* The orb IS the brand mark, so its body follows the accent hierarchy
+       rather than five hard-coded purples. `--accent-deep` is the weight, and
+       the stops step around it — so switching the deeper token on moves the
+       orb with the rest of the product instead of leaving it behind. */
+    const deep = this.accent();
+    body.addColorStop(0, tint(deep, 0.62));
+    body.addColorStop(0.30, tint(deep, 0.30));
+    body.addColorStop(0.62, tint(deep, 0.02));
+    body.addColorStop(0.88, tint(deep, -0.28));
+    body.addColorStop(1, tint(deep, -0.48));
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, TAU);
     ctx.fillStyle = body;
@@ -304,100 +366,102 @@ export class Orb {
    * travels — so a shout throws a thick ring a long way and a murmur puts a
    * faint one just past the edge. That correspondence is the whole point:
    * the waves are the sound, not a decoration timed to it. */
-  drawConcentric(cx, cy, R, amp, breathe, reduce) {
+  /* ── A — Audio waveform ────────────────────────────────────────────────
+   *
+   * A smooth closed curve around the orb whose radius answers to the voice,
+   * with a few faint copies of where it has just been trailing behind it.
+   *
+   * ── Why not rings, and why not a blob ────────────────────────────────
+   *
+   * This was concentric rings, and they were read as sonar: technically
+   * balanced and saying "pinging" rather than "listening". Before that they
+   * were deformed by sin(3θ) and sin(5θ), which pushed one side out and
+   * pulled the opposite side in by exactly as much — a swell and a dent, and
+   * what that looked like was a squashed orb.
+   *
+   * The shape here is N-FOLD ROTATIONALLY SYMMETRIC by construction. Every
+   * harmonic is a multiple of `LOBES`, so r(θ + 2π/N) = r(θ) exactly: the
+   * silhouette is balanced at every instant, and no side can dent while
+   * another swells. Movement comes from the phase advancing, not from the
+   * shape losing its symmetry.
+   *
+   * The voice sets amplitude, brightness and weight. Quiet settles the curve
+   * close to the orb; loud pushes it out and thickens it.
+   */
+  drawWaveform(cx, cy, R, amp, breathe, reduce) {
     const { ctx } = this;
     const idle = this.state === 'idle' || this.state === 'starting';
-    const r = R * (1 + (idle ? breathe * 0.02 : amp * 0.18));
+    const r = R * (1 + (idle ? breathe * 0.02 : amp * 0.10));
 
     if (reduce) {
-      /* Reduced motion still has to say "listening" (§49). It says it with
-       * thickness and opacity on rings that do not travel, rather than with
-       * things flying across the screen. */
-      [1.35, 1.75, 2.15].forEach((m, i) => {
-        const a = clamp(amp * (1 - i * 0.22), 0, 1);
+      /* Reduced motion still has to say "listening" (§49). A still halo that
+       * answers to the voice in weight and opacity, and travels nowhere. */
+      [1.30, 1.62].forEach((m, i) => {
+        const a = clamp(amp * (1 - i * 0.35), 0, 1);
         ctx.beginPath();
         ctx.arc(cx, cy, R * m, 0, TAU);
-        ctx.strokeStyle = `rgba(174,134,255,${0.10 + a * 0.5})`;
-        ctx.lineWidth = 1 + a * 5;
+        ctx.strokeStyle = `rgba(160,116,255,${0.10 + a * 0.42})`;
+        ctx.lineWidth = 1 + a * 4;
         ctx.stroke();
       });
       this.drawCore(cx, cy, r);
       return;
     }
 
-    /* Emit. A loud voice emits more often AND more strongly, and near-silence
-     * emits rarely and faintly — it does not stop, because a listening orb
-     * that goes completely still reads as one that has stopped listening
-     * (§9). The two cadences are far enough apart that the difference
-     * between speaking and not speaking is obvious across the room. */
-    const speaking = amp > 0.06;
-    const gap = speaking ? 210 - amp * 150 : 620;
-    if (!this.lastEmit || this.t - this.lastEmit > gap) {
-      const strength = this.state === 'listening'
-        ? (speaking ? amp : 0.05 + breathe * 0.02)
-        : breathe * 0.04;
-      if (strength > 0.03) {
-        this.lastEmit = this.t;
-        /* `phase` only staggers the uniform breath between rings, so no two
-           pulse in lockstep. It no longer chooses a direction to bulge in. */
-        this.rings.push({ r: R, born: this.t, strength, phase: (this.rings.length % 5) * 1.3 });
-      }
+    /* A short history of how loud it has been, sampled on a fixed cadence.
+     * The trailing contours are simply where the curve was a moment ago —
+     * which is what makes the energy read as leaving the orb rather than as
+     * several curves that happen to be drawn at once. */
+    if (!this.wavePast || this.t - (this.waveAt ?? 0) > 70) {
+      this.waveAt = this.t;
+      this.wavePast = [amp, ...(this.wavePast ?? [])].slice(0, TRAILS + 1);
     }
+    const past = this.wavePast;
 
-    /* The canvas half-width, less the most a ring's wobble can add. A ring
-       whose crest crosses the edge is clipped, and one clipped edge is all
-       it takes to see the box. */
-    const reach = (Math.min(this.w, this.h) / 2) * 0.94;
-    this.rings = this.rings.filter((ring) => {
-      const age = (this.t - ring.born) / 1;
-      /* Travel scales hard with the loudness the ring was born with: a shout
-       * throws a ring across the whole field in about a second, a murmur
-       * puts one just past the edge of the orb. That correspondence is the
-       * point — the waves ARE the sound, not a decoration timed to it. */
-      const travel = age * (0.022 + ring.strength * 0.095);
-      const rad = R + travel;
-      if (rad > reach * 1.02) return false;
-      const life = 1 - (rad - R) / (reach - R);
-      const alpha = clamp(life * life * (0.16 + ring.strength * 0.72), 0, 1);
-      if (alpha < 0.005) return false;
+    /* Newest last, so the principal curve is drawn over its own history. */
+    for (let k = past.length - 1; k >= 0; k -= 1) {
+      const a = clamp(past[k], 0, 1);
+      const lead = k === 0;
+      /* Older contours sit further out and fade. They never move inward,
+       * because energy that arrives back at the orb reads as it being sucked
+       * in rather than given off. */
+      /* Spacing and lag both grow with k, so the older contours sit further
+         out AND lag further behind — which is what reads as one waveform
+         leaving a trail rather than several waveforms drawn at once. */
+      const base = R * (1.26 + k * 0.19 + a * 0.26);
+      const swing = R * (0.035 + a * 0.19);
+      const phase = this.t / 1450 - k * 0.34;
 
-      /* ── Radially symmetric, on purpose ──────────────────────────
-       *
-       * These rings used to be closed paths deformed by sin(3a) and sin(5a).
-       * That reads as a squashed, warped orb rather than a wave: the two
-       * lobes push one side out and pull the OPPOSITE side in by exactly as
-       * much, so a loud moment looked like a dent as often as a swell.
-       *
-       * A wave leaving a round source is round. The voice belongs in how far
-       * the ring has travelled, how bright it is and how heavy its line —
-       * every one of which is the same all the way round — and not in which
-       * direction it happens to bulge.
-       *
-       * The life left in it is a breath applied UNIFORMLY: the whole ring
-       * eases out and back together, so it is still moving and still never
-       * lopsided. */
-      const breath = reduce ? 0
-        : Math.sin(this.t / 1150 + ring.phase) * 0.012 * (0.4 + ring.strength);
-      const d = rad * (1 + breath);
+      const alpha = lead
+        ? 0.22 + a * 0.66
+        : (0.10 + a * 0.26) * (1 - k / (past.length + 0.8));
+      if (alpha < 0.012) continue;
 
       ctx.beginPath();
-      ctx.arc(cx, cy, d, 0, TAU);
-      ctx.strokeStyle = `rgba(186,150,255,${alpha})`;
-      ctx.lineWidth = Math.max(0.5, (0.9 + ring.strength * 6) * life);
+      for (let i = 0; i <= STEPS; i += 1) {
+        const th = (i / STEPS) * TAU;
+        const d = base + swing * lobe(th, phase);
+        const x = cx + Math.cos(th) * d;
+        const y = cy + Math.sin(th) * d;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = lead
+        ? `rgba(196,158,255,${alpha})`
+        : `rgba(150,110,235,${alpha})`;
+      ctx.lineWidth = Math.max(0.5, lead ? 1.1 + a * 3.4 : 0.7 + a * 1.1);
       ctx.stroke();
 
-      /* A soft companion just inside the crest, which is what makes a loud
-         ring feel thick rather than merely wide. Concentric, so it cannot
-         unbalance the silhouette. */
-      if (!reduce && ring.strength > 0.25) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, d * 0.985, 0, TAU);
-        ctx.strokeStyle = `rgba(214,190,255,${alpha * 0.35})`;
-        ctx.lineWidth = Math.max(0.5, (0.6 + ring.strength * 3) * life);
+      /* The glow belongs to the loud moments only, and only to the curve in
+       * front. Shadow on every contour is a lot of blur for a phone. */
+      if (lead && a > 0.18) {
+        ctx.save();
+        ctx.shadowBlur = 8 + a * 16;
+        ctx.shadowColor = `rgba(168,120,255,${0.30 + a * 0.35})`;
         ctx.stroke();
+        ctx.restore();
       }
-      return true;
-    });
+    }
 
     this.drawCore(cx, cy, r);
   }
