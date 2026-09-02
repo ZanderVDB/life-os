@@ -116,6 +116,52 @@ const words = (t) => String(t ?? '').trim().split(/\s+/).filter(Boolean);
 const MAX_SEAM = 12;
 const MIN_SEAM = 2;
 
+/**
+ * The finals from one recogniser, reduced to what was actually said.
+ *
+ * ── The bug this fixes, from a real device ───────────────────────────────
+ *
+ * The Web Speech spec says `results` is a list of utterance SEGMENTS, and
+ * that finals are settled — so concatenating them is the obvious reading, and
+ * it is what every desktop engine wants.
+ *
+ * Chrome on Android does something else. From the trace of a real phone:
+ *
+ *     3F:"I"  4F:"I want"  5F:"I want"  6F:"I want to"  …
+ *     10F:"I want to buy some bread"
+ *
+ * Every entry is marked FINAL, the list grows, and each new entry is the
+ * whole sentence so far. Concatenating them produced exactly what was
+ * reported: "I I want I want I want to …".
+ *
+ * ── Telling the two apart without guessing which engine we are on ────────
+ *
+ * A final that STARTS WITH everything built so far is a longer reading of the
+ * same utterance, and supersedes it. A final that does not is a new segment,
+ * and is appended. That single rule is right for both engines: the cumulative
+ * device collapses to one sentence, and a spec-compliant engine's distinct
+ * segments still join up, because "to phone Oscar" does not begin with
+ * "Remind me Friday".
+ *
+ * It also needs no feature detection and no user agent sniffing — the shape
+ * of the data says which case it is.
+ */
+export function mergeFinals(list) {
+  let built = '';
+  for (const raw of list) {
+    const t = String(raw ?? '').trim();
+    if (!t) continue;
+    if (!built) { built = t; continue; }
+    /* A longer reading of what we already have. */
+    if (t.startsWith(built)) { built = t; continue; }
+    /* An older, shorter reading being re-reported. Ignore it. */
+    if (built.startsWith(t)) continue;
+    /* Genuinely a new segment. */
+    built = `${built} ${t}`;
+  }
+  return built;
+}
+
 export function trimOverlap(already, incoming) {
   const before = words(already);
   const after = words(incoming);
@@ -444,9 +490,25 @@ export class VoiceInput {
        nothing in the state machine reads them, so a browser without them
        behaves exactly the same. */
     for (const name of ['audiostart', 'audioend', 'speechstart', 'speechend', 'soundstart']) {
-      rec[`on${name}`] = () => this.trace?.add(name, {
-        session: this.sid, rec: rid, stale: rec !== this.rec,
-      });
+      rec[`on${name}`] = () => {
+        this.trace?.add(name, {
+          session: this.sid, rec: rid, stale: rec !== this.rec,
+        });
+        if (rec !== this.rec) return;
+        /* ── Instant feedback ──────────────────────────────────────
+           The trace from a real phone puts `speechstart` at 4574ms and the
+           first word at 5442 — nearly a second of talking with nothing
+           moving. These events are the engine saying "I can hear you" long
+           before it has decided what you said, which is exactly when the
+           picture should react.
+           It only affects the ANIMATION. Nothing here touches the
+           transcript, and no silence timer is reset by noise alone. */
+        if (name === 'speechstart' || name === 'soundstart') {
+          this.activityAt = Date.now();
+          this.intensity = Math.max(this.intensity ?? 0, 0.55);
+        }
+        if (name === 'speechend') this.intensity = (this.intensity ?? 0) * 0.5;
+      };
     }
 
     rec.onresult = (e) => {
@@ -487,14 +549,19 @@ export class VoiceInput {
        * discarded. Finals are different — each is a settled segment — and
        * they are rebuilt from the whole list every time, which is idempotent
        * against Chrome re-reporting a final whose wording it has refined. */
-      let finals = '';
+      const finalList = [];
       let interim = '';
       for (let i = 0; i < e.results.length; i += 1) {
         const r = e.results[i];
         const said = r[0]?.transcript ?? '';
-        if (r.isFinal) finals += `${said} `;
+        if (r.isFinal) finalList.push(said);
         else interim = said;
       }
+      /* Reduced rather than concatenated — see `mergeFinals`. This is the
+         line that stopped "I want to buy bread" arriving as "I I want I
+         want I want to …" on a real phone. */
+      const merged = mergeFinals(finalList);
+      const finals = merged ? `${merged} ` : '';
       this.sessionFinal = finals;
       if (finals || interim) {
         this.lastResultAt = Date.now();

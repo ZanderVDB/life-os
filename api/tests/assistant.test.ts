@@ -179,7 +179,8 @@ test('reduced motion still says "listening"', () => {
   assert.match(body, /lineWidth = 1 \+ a \* \d/, 'weight does not answer to the voice');
   assert.match(body, /rgba\([\s\S]{0,40}a \* [\d.]+\}/,
     'opacity does not answer to the voice');
-  assert.match(body, /ctx\.arc\(cx, cy, R \* m/, 'the reduced-motion shape is not a still halo');
+  assert.match(body, /ctx\.arc\(cx, cy, R \* [\d.]+, 0, TAU\)/,
+    'the reduced-motion shape is not a still, complete halo');
   // Read live, so turning it on mid-session does not need a reload.
   assert.ok(!/const reduce = window\.matchMedia\([^)]*\)\.matches;\s*$/m.test(orb));
 });
@@ -358,37 +359,57 @@ test('waveform: symmetry is a property of the formula, not a tuning', () => {
   }
 });
 
-test('waveform: quiet is a near-circle, loud is still a circle', () => {
-  const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
-  const wave = src.slice(src.indexOf('drawWaveform('));
-  /* ~3% of the radius when quiet, ~13% when shouting. The identity of the
-     shape must survive the loudest thing somebody can do. */
-  const m = wave.match(/swing = base \* \(([\d.]+) \+ ev \* ([\d.]+)\)/);
-  assert.ok(m, 'the amplitude rule is not expressed in one place');
-  const quiet = Number(m![1]);
-  const loud = quiet + Number(m![2]);
-  assert.ok(quiet <= 0.05, `quiet deviation of ${quiet} is not a near-circle`);
-  assert.ok(loud <= 0.16, `loud deviation of ${loud} loses the circular identity`);
+test('waveform: the shipped default is a near-circle that breathes', async () => {
+  /* The SHAPE is a config now, so the rule belongs to the config rather than
+     to the drawing code. What ships is the default preset. */
+  const lab = await import(
+    `file://${join(process.cwd(), '..', 'web', 'orb-lab.js')}?t=${Math.random()}`
+  ) as any;
+  const d = lab.DEFAULT_PRESET;
+  assert.ok(d.quiet <= 0.05, `quiet deviation of ${d.quiet} is not a near-circle`);
+  assert.ok(d.quiet + d.amp <= 0.20,
+    `loud deviation of ${d.quiet + d.amp} loses the circular identity`);
+  assert.deepEqual(d.k, [2, 3, 4], 'the default harmonics are not the low, broad ones');
+  assert.ok(d.strands >= 8 && d.strands <= 14, 'the default contour count is outside 8-14');
+  assert.notEqual(d.even, false, 'the default is not the symmetric family');
 });
 
-test('waveform: broad swells, not a cog', () => {
-  const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
-  const ks = [...src.matchAll(/\{ k: (\d+), w: [\d.]+/g)].map((x) => Number(x[1]));
-  assert.deepEqual(ks, [2, 3, 4], 'the harmonics are not the low, broad ones');
-  const strands = src.match(/const STRANDS = (\d+)/);
-  assert.ok(Number(strands![1]) >= 8 && Number(strands![1]) <= 14,
-    'the trailing contours are outside the 8-14 the reference wants');
+test('waveform: every preset stays a circle, whatever it does', async () => {
+  const lab = await import(
+    `file://${join(process.cwd(), '..', 'web', 'orb-lab.js')}?t=${Math.random()}`
+  ) as any;
+  assert.ok(lab.PRESETS.length >= 20, 'there are not twenty starting points');
+  for (const pr of lab.PRESETS) {
+    assert.ok(pr.quiet + pr.amp <= 0.5, `${pr.name} deviates too far to read as a circle`);
+    assert.ok(pr.gap >= 0, `${pr.name} would draw inside the orb`);
+    assert.ok(pr.strands >= 0 && pr.strands <= 24, `${pr.name} has an unreasonable count`);
+  }
+});
+
+test('waveform: symmetry is available and is the default', async () => {
+  const lab = await import(
+    `file://${join(process.cwd(), '..', 'web', 'orb-lab.js')}?t=${Math.random()}`
+  ) as any;
+  /* Measured, not read: with `even`, r(θ) must equal r(−θ) at any moment. */
+  const cfg = { ...lab.DEFAULT_PRESET, even: true };
+  for (const t of [0, 900, 4200, 30000]) {
+    for (let i = 1; i < 20; i += 1) {
+      const th = (i / 20) * Math.PI * 2;
+      assert.ok(Math.abs(lab.shapeAt(th, t, cfg) - lab.shapeAt(-th, t, cfg)) < 1e-12,
+        `not mirrored at t=${t}`);
+    }
+  }
 });
 
 test('waveform: the voice drives it, and silence returns it to a circle', () => {
   const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
   const wave = src.slice(src.indexOf('drawWaveform('));
   assert.match(wave, /this\.energy = prev \+ \(target - prev\)/, 'amplitude is not smoothed');
-  assert.match(wave, /swing = base \* \([\d.]+ \+ ev \* [\d.]+\)/, 'reach ignores the voice');
+  assert.match(wave, /cfg\.attack/, 'reaction speed is not adjustable');
+  assert.match(wave, /cfg\.release/, 'settle speed is not adjustable');
+  assert.match(wave, /ev \* \(cfg\.amp/, 'reach ignores the voice');
   assert.match(wave, /alpha = lead \? [\d.]+ \+ ev \* [\d.]+/, 'brightness ignores the voice');
-  assert.match(wave, /lineWidth = lead \? [\d.]+ \+ ev \* [\d.]+/, 'weight ignores the voice');
-  assert.match(wave, /base = R \+ gap \+ R \* \(k \* [\d.]+ \+ ev \* [\d.]+\)/,
-    'the stack does not move with the voice');
+  assert.match(wave, /push = \(cfg\.push \?\? 0\) \* e/, 'the body swell ignores the voice');
 });
 
 /* ══ Thinking ════════════════════════════════════════════════════════════ */

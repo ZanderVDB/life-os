@@ -25,6 +25,9 @@
 import { icon, logoMark } from './icons.js';
 import { Orb, MicLevel, VARIANTS, DEFAULT_VARIANT, synthLevel } from './assistant-orb.js';
 import { VoiceInput, VoiceTrace } from './voice-input.js';
+import {
+  PRESETS, PARAMS, currentConfig, saveConfig, clearConfig,
+} from './orb-lab.js';
 import { openSheet, closeSheet } from './mobile.js';
 /* Fixed transcripts stand in for a MICROPHONE, not for the assistant: speech
    recognition does not exist in Firefox and differs between Chrome and Safari.
@@ -206,8 +209,13 @@ export function renderAssistant(head, scroll, ctx) {
   wireDevPanel(el);
 
   el.querySelector('#orb-main').addEventListener('click', () => {
-    if (session.state === 'listening' || session.state === 'paused') endListening();
-    else if (session.state === 'idle' || session.state === 'denied') startListening();
+    if (session.state === 'listening' || session.state === 'paused') { endListening(); return; }
+    /* Tapping the orb after it has heard something CARRIES ON, keeping what
+       is there. Having to find "Say more" to add a sentence — when the orb
+       is the thing you just tapped to start — is a rule nobody should have
+       to learn. */
+    if (session.state === 'heard') { resumeListening(); return; }
+    if (session.state === 'idle' || session.state === 'denied') startListening();
   });
 
   const vis = () => (document.hidden ? orb.stop() : orb.start());
@@ -977,12 +985,17 @@ function devPanelHtml() {
         This is speech arrival rate, not microphone loudness.</p>
       <div class="asst-meter"><span class="asst-meter-fill" id="asst-meter"></span></div>
 
-      <p class="asst-dev-p">Listening style — pick one to compare. This is not a
-        user setting; it disappears when the style is chosen.</p>
-      <div class="asst-dev-row" role="radiogroup" aria-label="Listening style">
-        ${VARIANTS.map((x) => `<button type="button" class="chip ${x.id === v ? 'on' : ''}"
-          role="radio" aria-checked="${x.id === v}" data-variant="${x.id}">
-          ${x.id.toUpperCase()} · ${esc(x.label)}</button>`).join('')}
+      <p class="asst-dev-p">Listening visual — twenty starting points, then every
+        number below is live. Speak while adjusting. This is a design
+        instrument, not a user setting.</p>
+      <div class="asst-dev-row" id="asst-presets">
+        ${PRESETS.map((pr, i) => `<button type="button" class="chip"
+          data-preset="${i}">${esc(pr.name)}</button>`).join('')}
+      </div>
+      <div class="asst-lab" id="asst-lab"></div>
+      <div class="asst-dev-row">
+        <button type="button" class="chip" id="asst-lab-copy">Copy this config</button>
+        <button type="button" class="chip" id="asst-lab-reset">Reset</button>
       </div>
       <p class="asst-dev-hint" id="asst-dev-hint">${
   esc(VARIANTS.find((x) => x.id === v)?.hint ?? '')}</p>
@@ -1060,6 +1073,74 @@ function wireDevPanel(el) {
       el.querySelector('.asst-trace-box')?.remove();
       note('Cleared. Speak, then copy.');
     };
+  }
+
+  /* ── The listening-visual lab ──────────────────────────────────
+     Presets are starting points; the sliders are the actual instrument.
+     Everything applies on the next frame, so it can be adjusted WHILE
+     speaking — which is the only way to judge a reaction speed. */
+  const labBox = el.querySelector('#asst-lab');
+  const apply = (cfg) => {
+    saveConfig(cfg);
+    session?.orb?.setConfig(cfg);
+    renderLab(cfg);
+  };
+  function renderLab(cfg) {
+    if (!labBox) return;
+    labBox.innerHTML = [
+      `<label class="asst-lab-row"><span>Family</span>
+        <select id="lab-mode">
+          ${['ribbon', 'body', 'both'].map((m) => `<option value="${m}"
+            ${m === cfg.mode ? 'selected' : ''}>${m}</option>`).join('')}
+        </select></label>`,
+      `<label class="asst-lab-row"><span>Symmetrical</span>
+        <input type="checkbox" id="lab-even" ${cfg.even !== false ? 'checked' : ''}></label>`,
+      `<label class="asst-lab-row"><span>Beyond colour</span>
+        <input type="color" id="lab-beyond" value="${esc(cfg.beyond)}"></label>`,
+      ...PARAMS.map((pm) => `<label class="asst-lab-row"><span>${esc(pm.label)}</span>
+        <input type="range" data-p="${pm.key}" min="${pm.min}" max="${pm.max}"
+          step="${pm.step}" value="${cfg[pm.key] ?? pm.min}">
+        <b>${Number(cfg[pm.key] ?? pm.min)}</b></label>`),
+    ].join('');
+
+    labBox.querySelectorAll('input[type=range]').forEach((inp) => {
+      inp.oninput = () => {
+        const next = { ...currentConfig(), [inp.dataset.p]: Number(inp.value) };
+        inp.nextElementSibling.textContent = inp.value;
+        saveConfig(next);
+        session?.orb?.setConfig(next);
+      };
+    });
+    labBox.querySelector('#lab-mode').onchange = (ev) =>
+      apply({ ...currentConfig(), mode: ev.target.value });
+    labBox.querySelector('#lab-even').onchange = (ev) =>
+      apply({ ...currentConfig(), even: ev.target.checked });
+    labBox.querySelector('#lab-beyond').oninput = (ev) => {
+      const next = { ...currentConfig(), beyond: ev.target.value };
+      saveConfig(next);
+      session?.orb?.setConfig(next);
+    };
+  }
+  renderLab(currentConfig());
+
+  el.querySelectorAll('[data-preset]').forEach((b) => {
+    b.onclick = () => {
+      apply({ ...PRESETS[Number(b.dataset.preset)] });
+      el.querySelectorAll('[data-preset]').forEach((x) => x.classList.remove('on'));
+      b.classList.add('on');
+    };
+  });
+  const labCopy = el.querySelector('#asst-lab-copy');
+  if (labCopy) {
+    labCopy.onclick = async () => {
+      const text = JSON.stringify(currentConfig(), null, 2);
+      try { await navigator.clipboard.writeText(text); note('Config copied.'); }
+      catch { note(text); }
+    };
+  }
+  const labReset = el.querySelector('#asst-lab-reset');
+  if (labReset) {
+    labReset.onclick = () => { clearConfig(); apply(currentConfig()); note('Reset.'); };
   }
 
   el.querySelectorAll('[data-mock]').forEach((b) => {

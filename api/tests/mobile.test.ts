@@ -310,26 +310,18 @@ test('the orb answers the room, and answers it differently when quiet', () => {
   /* §13. A fixed decorative animation that looks the same whether somebody
    * is speaking or silent fails the one thing the orb exists to say. */
   const orb = read('assistant-orb.js');
-  /* The listening animation is a layered audio ribbon now — many thin
-     strands, no fixed lobe count. The RULE is unchanged and is what is
-     asserted: the voice must visibly change the picture, near-silence must
-     not stop it dead, and the movement must be smoothed rather than jumpy. */
+  /* The listening visual is configurable now — see `orb-lab.js`. The RULE is
+     unchanged and is what is asserted: the voice must visibly change the
+     picture, near-silence must not stop it dead, and the movement must be
+     smoothed rather than jumpy. */
   const wave = orb.slice(orb.indexOf('drawWaveform('));
-  // Amplitude reaches the shape, the brightness and the weight.
-  assert.match(wave, /swing = base \* \([\d.]+ \+ ev \* [\d.]+\)/,
-    'the voice does not change the ribbon’s reach');
-  assert.match(wave, /alpha = lead[\s\S]{0,80}ev \* [\d.]+/,
+  assert.match(wave, /ev \* \(cfg\.amp/, 'the voice does not change the reach');
+  assert.match(wave, /alpha = lead \? [\d.]+ \+ ev \* [\d.]+/,
     'the voice does not change how bright it is');
-  assert.match(wave, /lineWidth = lead \? [\d.]+ \+ ev \* [\d.]+/,
-    'the voice does not change how heavy the leading strand is');
-  // Near-silence still moves: an orb that goes completely still reads as one
-  // that has stopped listening (§9). The constant term guarantees it.
-  assert.match(wave, /swing = base \* \(0\.0[1-9]/,
-    'the resting state stops moving entirely');
-  // Smoothed, so a loud syllable never snaps the ribbon into a new shape.
+  assert.match(wave, /cfg\.quiet \?\? [\d.]+/, 'there is no resting amplitude');
   assert.match(wave, /this\.energy = prev \+ \(target - prev\)/,
     'the amplitude is not smoothed');
-  assert.match(wave, /const when = this\.t - k \* \d+/,
+  assert.match(wave, /this\.t - k \* \(cfg\.lag/,
     'the trailing contours do not lag behind the leading one');
 });
 

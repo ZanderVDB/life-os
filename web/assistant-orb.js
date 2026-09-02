@@ -43,7 +43,15 @@ export const VARIANTS = [
 ];
 export const DEFAULT_VARIANT = 'a';
 
+import { currentConfig, shapeAt } from './orb-lab.js';
+
 const TAU = Math.PI * 2;
+
+/** `#RRGGBB` at an alpha, for colours that arrive from a config. */
+const hexA = (hex, a) => {
+  const n = parseInt(String(hex ?? '#B296FF').slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, a))})`;
+};
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 /**
@@ -71,35 +79,6 @@ const tint = (hex, amount) => {
   return `rgb(${clamp(r, 0, 255)},${clamp(g, 0, 255)},${clamp(b, 0, 255)})`;
 };
 
-/* ── The ribbon's shape ────────────────────────────────────────────────
- *
- * ── Symmetry, for free ───────────────────────────────────────────────
- *
- * Every term is a COSINE of the angle, and cosine is even: cos(k·(2π−θ)) =
- * cos(k·θ). So the curve is identical on both sides of the vertical axis, at
- * every instant, whatever the voice is doing. A swell on the left always has
- * its twin on the right. It is not tuned or damped into balance — it cannot
- * be asymmetric.
- *
- * That is also why the phases never move. `cos(kθ + φ)` expands to a cosine
- * term plus a SINE term, and the sine is odd — the moment a phase drifts, the
- * mirror is broken. Movement comes from the amplitudes breathing instead,
- * which is slower and calmer anyway.
- *
- * ── Broad, not busy ──────────────────────────────────────────────────
- *
- * k = 2, 3 and 4 only. Two, three or four wide swells around the circle read
- * as breathing; a dozen small ones read as a cog, which is what the previous
- * 3-to-17 spread produced. The weights fall away so the widest swell leads.
- */
-const SWELLS = [
-  { k: 2, w: 0.50, rate: 1 / 2600 },
-  { k: 3, w: 0.32, rate: -1 / 3400 },
-  { k: 4, w: 0.18, rate: 1 / 4300 },
-];
-
-/** How many contours make the ribbon. */
-const STRANDS = 12;
 const STEPS = 128;
 
 /**
@@ -195,6 +174,9 @@ export class Orb {
 
   refreshAccent() { this._accent = null; }
 
+  /** The lab changed something. Pick it up on the next frame. */
+  setConfig(cfg) { this.cfg = cfg; this.waveHist = null; }
+
   setVariant(v) {
     this.variant = v;
     this.waveHist = null;
@@ -239,7 +221,9 @@ export class Orb {
     /* Attack fast, release slow. A level that falls as quickly as it rises
      * makes the orb flicker on every consonant; a slow release is what turns
      * a stream of samples into something that reads as a voice. */
-    const k = this.raw > this.level ? 0.35 : 0.08;
+    /* Attack fast, release slow. 0.35 up felt like a delay on a phone —
+       roughly four frames before anything visible moved. */
+    const k = this.raw > this.level ? 0.55 : 0.06;
     this.level += (this.raw - this.level) * k;
 
     this.draw();
@@ -393,105 +377,121 @@ export class Orb {
    * travels — so a shout throws a thick ring a long way and a murmur puts a
    * faint one just past the edge. That correspondence is the whole point:
    * the waves are the sound, not a decoration timed to it. */
-  /* ── A — Audio ribbon ──────────────────────────────────────────────────
+  /* ── A — The configurable listening visual ─────────────────────────────
    *
-   * A near-circle that breathes with the voice, with a dozen thin echoes
-   * close behind it.
+   * Reads a CONFIG rather than hard-coding a look — see `orb-lab.js` for why,
+   * and for the twenty presets. Two families, which may run together:
    *
-   * ── What it stopped being ────────────────────────────────────────────
-   *
-   * First a nine-lobed star (exact symmetry, but a geometric shape). Then six
-   * harmonics from 3 to 17 with drifting phases, which was fluid and read as
-   * a squiggle: uneven peaks, a heavy side, tiny ridges bunched in one
-   * region. The lesson from both is that the voice belongs in HOW FAR the
-   * circle swells, not in what shape it becomes.
-   *
-   * So: cosine-only harmonics (symmetric by construction — see `ribbon`), no
-   * more than four swells around the circle, and an amplitude that is about
-   * 3% of the radius when quiet and about 13% when somebody is shouting. It
-   * never stops looking like a circle.
+   *   ribbon   contours around a perfectly circular orb
+   *   body     the orb's own edge swells, and everything beyond its resting
+   *            radius is painted in a second colour, so the overflow reads as
+   *            energy leaving the ball rather than as the ball deforming
    */
   drawWaveform(cx, cy, R, amp, breathe, reduce) {
     const { ctx } = this;
+    const cfg = this.cfg ?? (this.cfg = currentConfig());
     const idle = this.state === 'idle' || this.state === 'starting';
-    const r = R * (1 + (idle ? breathe * 0.02 : amp * 0.05));
 
     if (reduce) {
-      /* Reduced motion still has to say "listening" (§49). A still halo that
-       * answers to the voice in weight and opacity, and travels nowhere. */
-      [1.34, 1.60].forEach((m, i) => {
-        const a = clamp(amp * (1 - i * 0.35), 0, 1);
-        ctx.beginPath();
-        ctx.arc(cx, cy, R * m, 0, TAU);
-        ctx.strokeStyle = `rgba(160,116,255,${0.10 + a * 0.42})`;
-        ctx.lineWidth = 1 + a * 4;
-        ctx.stroke();
-      });
-      this.drawCore(cx, cy, r);
+      const a = clamp(amp, 0, 1);
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * 1.34, 0, TAU);
+      ctx.strokeStyle = `rgba(160,116,255,${0.10 + a * 0.42})`;
+      ctx.lineWidth = 1 + a * 4;
+      ctx.stroke();
+      this.drawCore(cx, cy, R);
       return;
     }
 
-    /* ── Heavily smoothed ──────────────────────────────────────────
-       Rising quickly enough to feel like a response, falling slowly enough
-       that the ribbon settles rather than snaps back. `energy` is the ONLY
-       thing the voice controls here. */
+    /* Attack and release are separate, and both adjustable: how fast it
+       answers is as much a part of the feel as how far it moves. */
     const target = clamp(amp, 0, 1);
     const prev = this.energy ?? 0;
-    this.energy = prev + (target - prev) * (target > prev ? 0.14 : 0.045);
-    const e = this.energy;
+    this.energy = prev + (target - prev)
+      * (target > prev ? (cfg.attack ?? 0.38) : (cfg.release ?? 0.04));
+    const e = idle ? Math.min(this.energy, 0.12) : this.energy;
 
-    /* A short history, so the trailing contours are where the ribbon has
-       been rather than copies of where it is. */
-    if (this.t - (this.waveAt ?? 0) > 40) {
+    const strands = Math.max(0, Math.round(cfg.strands ?? 12));
+    if (this.t - (this.waveAt ?? 0) > 34) {
       this.waveAt = this.t;
-      this.waveHist = [e, ...(this.waveHist ?? [])].slice(0, STRANDS);
+      this.waveHist = [e, ...(this.waveHist ?? [])].slice(0, Math.max(1, strands));
     }
     const hist = this.waveHist ?? [e];
+    const wants = cfg.mode ?? 'ribbon';
 
-    /* A clear ring of dark between the orb and the ribbon, always. */
-    const gap = R * 0.34;
-
-    for (let k = STRANDS - 1; k >= 0; k -= 1) {
-      const ev = clamp(hist[Math.min(k, hist.length - 1)] ?? 0, 0, 1);
-      const lead = k === 0;
-      /* Tightly packed, and the whole stack eases outward with the voice. */
-      const base = R + gap + R * (k * 0.026 + ev * 0.22);
-      /* THE AMPLITUDE RULE: ~3% of the base when quiet, ~13% when loud. */
-      const swing = base * (0.03 + ev * 0.10);
-      /* Older contours lag, so the stack reads as one thing moving. */
-      const when = this.t - k * 70;
-
-      const fade = 1 - k / (STRANDS + 3);
-      const alpha = lead ? 0.40 + ev * 0.44 : (0.09 + ev * 0.26) * fade;
-      if (alpha < 0.008) continue;
-
+    /* ── The body ────────────────────────────────────────────────
+       Drawn FIRST and underneath, so the orb's own gradient covers the part
+       of it that lies inside the resting circle. What is left showing is
+       exactly the overflow — which is the effect: a coloured swell escaping
+       a ball that is still a ball. */
+    const push = (cfg.push ?? 0) * e;
+    if ((wants === 'body' || wants === 'both') && push > 0.001) {
       ctx.beginPath();
       for (let i = 0; i <= STEPS; i += 1) {
         const th = (i / STEPS) * TAU;
-        const d = base + swing * ribbon(th, when);
+        const d = R * (1 + push * (0.5 + 0.5 * shapeAt(th, this.t, cfg)));
         const x = cx + Math.cos(th) * d;
         const y = cy + Math.sin(th) * d;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
       ctx.closePath();
-      ctx.strokeStyle = lead
-        ? `rgba(214,186,255,${alpha})`
-        : `rgba(168,126,255,${alpha})`;
-      /* Thinner than before: the reference is fine strands, and a heavy
-         leading line is what made the shape read as a drawn outline. */
-      ctx.lineWidth = lead ? 0.9 + ev * 0.9 : 0.6;
-      ctx.stroke();
-
-      if (lead && ev > 0.10) {
+      const beyond = ctx.createRadialGradient(cx, cy, R * 0.9, cx, cy, R * (1 + push * 1.2));
+      beyond.addColorStop(0, `${cfg.beyond}00`);
+      beyond.addColorStop(0.35, `${cfg.beyond}CC`);
+      beyond.addColorStop(1, `${cfg.beyond}55`);
+      ctx.fillStyle = beyond;
+      ctx.fill();
+      if (cfg.glow) {
         ctx.save();
-        ctx.shadowBlur = 9 + ev * 18;
-        ctx.shadowColor = `rgba(150,96,255,${0.30 + ev * 0.38})`;
-        ctx.stroke();
+        ctx.shadowBlur = 16 * cfg.glow * e;
+        ctx.shadowColor = `${cfg.beyond}AA`;
+        ctx.fill();
         ctx.restore();
       }
     }
 
-    this.drawCore(cx, cy, r);
+    /* ── The ribbon ──────────────────────────────────────────────── */
+    if (wants === 'ribbon' || wants === 'both') {
+      const gap = R * (cfg.gap ?? 0.34);
+      for (let k = strands - 1; k >= 0; k -= 1) {
+        const ev = clamp(hist[Math.min(k, hist.length - 1)] ?? 0, 0, 1);
+        const lead = k === 0;
+        const bs = R + gap + R * (k * (cfg.spread ?? 0.026) + ev * 0.22);
+        const swing = bs * ((cfg.quiet ?? 0.03) + ev * (cfg.amp ?? 0.10));
+        const when = this.t - k * (cfg.lag ?? 70);
+
+        const fade = 1 - k / (strands + 3);
+        const alpha = lead ? 0.40 + ev * 0.44 : (0.09 + ev * 0.26) * fade;
+        if (alpha < 0.008) continue;
+
+        ctx.beginPath();
+        for (let i = 0; i <= STEPS; i += 1) {
+          const th = (i / STEPS) * TAU;
+          const d = bs + swing * shapeAt(th, when, cfg);
+          const x = cx + Math.cos(th) * d;
+          const y = cy + Math.sin(th) * d;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = lead
+          ? hexA(cfg.line, alpha)
+          : hexA(cfg.trail, alpha);
+        ctx.lineWidth = Math.max(0.2,
+          (lead ? 0.9 + ev * 0.9 : 0.6) * (cfg.weight ?? 1));
+        ctx.stroke();
+
+        if (lead && ev > 0.10 && cfg.glow) {
+          ctx.save();
+          ctx.shadowBlur = (9 + ev * 18) * cfg.glow;
+          ctx.shadowColor = hexA(cfg.trail, 0.30 + ev * 0.38);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+
+    /* The orb itself. Always a circle — only its size breathes. */
+    this.drawCore(cx, cy, R * (1 + (idle ? breathe * 0.02 : e * 0.05)));
   }
 
   /* ── B — Fluid halo ────────────────────────────────────────────────────
