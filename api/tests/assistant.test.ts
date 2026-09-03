@@ -385,6 +385,93 @@ test('waveform: the shipped default is a near-circle that breathes', async () =>
   assert.ok(d.fold >= 2, 'the default has no rotational symmetry');
 });
 
+/* ══ What ships ══════════════════════════════════════════════════════════
+ *
+ * The look was chosen on a phone, from twenty starting points and a lot of
+ * sliders. That choice is now a fact about the product, so it is pinned to the
+ * number: a later tidy-up of the preset list must not quietly change what
+ * somebody who has never opened the lab sees.
+ */
+
+test('waveform: the shipped default is the config that was chosen, to the number', async () => {
+  const lab = await import(
+    `file://${join(process.cwd(), '..', 'web', 'orb-lab.js')}?t=${Math.random()}`
+  ) as any;
+  assert.deepEqual(lab.DEFAULT_PRESET, {
+    mode: 'ribbon',
+    fold: 5,
+    mirror: true,
+    sharp: 0,
+    amp: 0.10,
+    quiet: 0,
+    gap: 0.04,
+    strands: 18,
+    spread: 0.075,
+    lag: 240,
+    attack: 0.05,
+    release: 0.20,
+    speed: 1.7,
+    spin: 0.6,
+    punch: 0.9,
+    drive: 0.9,
+    idle: 0.16,
+    glow: 2.8,
+    weight: 2.7,
+    push: 0,
+    beyond: '#3A1E8F',
+    line: '#D6BAFF',
+    trail: '#A87EFF',
+    name: '6 · Yours, per-word',
+  });
+});
+
+test('waveform: the default and the preset it came from cannot drift apart', async () => {
+  const lab = await import(
+    `file://${join(process.cwd(), '..', 'web', 'orb-lab.js')}?t=${Math.random()}`
+  ) as any;
+  /* The default is written out in full, and the same thing is still in the
+     list so it can be returned to. Two copies of a number is exactly how a
+     "we changed the preset and nothing happened" afternoon starts. */
+  const six = lab.PRESETS.find((p: any) => p.name === '6 · Yours, per-word');
+  assert.ok(six, 'the preset the default came from is gone');
+  assert.deepEqual(six, lab.DEFAULT_PRESET);
+});
+
+test('waveform: a lab experiment does not outlive the default it was based on', async () => {
+  const lab = await import(
+    `file://${join(process.cwd(), '..', 'web', 'orb-lab.js')}?t=${Math.random()}`
+  ) as any;
+  const store: Record<string, string> = {};
+  (globalThis as any).localStorage = {
+    getItem: (k: string) => store[k] ?? null,
+    setItem: (k: string, v: string) => { store[k] = v; },
+    removeItem: (k: string) => { delete store[k]; },
+  };
+  try {
+    /* An experiment saved against the CURRENT look is honoured — otherwise
+       the sliders would do nothing. */
+    lab.saveConfig({ ...lab.DEFAULT_PRESET, fold: 3 });
+    assert.equal(lab.currentConfig().fold, 3, 'a live experiment was thrown away');
+
+    /* One saved against an older look is not. Without this, "the default is
+       now X" is false on every device that ever opened the lab — including
+       the one used to choose it, which is the last place anybody would look. */
+    store['los2_orb_cfg'] = JSON.stringify({ from: 'some-older-look', cfg: { fold: 1, amp: 0.7 } });
+    assert.equal(lab.currentConfig().fold, lab.DEFAULT_PRESET.fold);
+    assert.equal(lab.currentConfig().amp, lab.DEFAULT_PRESET.amp);
+
+    /* And the shape the store had before stamps existed is just as stale. */
+    store['los2_orb_cfg'] = JSON.stringify({ fold: 1, amp: 0.7 });
+    assert.equal(lab.currentConfig().fold, lab.DEFAULT_PRESET.fold);
+
+    /* Nonsense in the store must not take the assistant down with it. */
+    store['los2_orb_cfg'] = '{ not json';
+    assert.equal(lab.currentConfig().fold, lab.DEFAULT_PRESET.fold);
+  } finally {
+    delete (globalThis as any).localStorage;
+  }
+});
+
 test('waveform: every preset stays a circle, whatever it does', async () => {
   const lab = await import(
     `file://${join(process.cwd(), '..', 'web', 'orb-lab.js')}?t=${Math.random()}`

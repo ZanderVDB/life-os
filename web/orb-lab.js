@@ -183,9 +183,12 @@ const P = (name, over) => ({ ...base, name, ...over });
  * Twenty, deliberately far apart.
  *
  * Small variations are useless for choosing — the point is to cover the space
- * so the answer becomes obvious, then narrow with the sliders. The first is
- * the stated direction: the wave well away from the middle, many contours
- * widely spaced so it reads as emanating, and the ball barely moving.
+ * so the answer becomes obvious, then narrow with the sliders.
+ *
+ * Number 6 is the one that ships. The numbers are kept where they are rather
+ * than reordered so the winner sits first: they are how the look was chosen
+ * and referred to, and renaming them afterwards would make every earlier note
+ * about "try 7" point at the wrong thing.
  */
 export const PRESETS = [
   /* ── The five real candidates, from testing ────────────────────────
@@ -223,6 +226,8 @@ export const PRESETS = [
      the shape's own breathing follows speech rather than a clock. These are
      the two that decide whether it feels like a person talking or a timer
      ticking, and they are hard to picture from a number. */
+  /* ★ The default. Kept in the list as well as written out above, so it can
+     still be returned to after wandering off through the others. */
   P('6 · Yours, per-word', {
     fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
     spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
@@ -279,21 +284,96 @@ export const PRESETS = [
     speed: 0.5, fold: 3 }),
 ];
 
-export const DEFAULT_PRESET = PRESETS[0];
+/**
+ * ── What actually ships ──────────────────────────────────────────────────
+ *
+ * Chosen on the phone rather than on a desktop or from a screenshot, and
+ * copied back verbatim. Written out in full instead of left as `PRESETS[0]`,
+ * because a default that means "whatever happens to be first in the list"
+ * moves the moment somebody reorders the list.
+ *
+ *   fold 5, mirror        a swell appears in all five sectors and on both
+ *                         sides of the axis — a system, not random motion.
+ *   sharp 0               only the fundamental: broad lobes, no spikes.
+ *   amp 0.10, quiet 0     a tenth of the radius at full voice, and a true
+ *                         circle in silence. The identity survives shouting.
+ *   gap 0.04, strands 18,
+ *   spread 0.075          contours starting at the edge and fanning well
+ *                         out, so it reads as something leaving the ball.
+ *   punch 0.9, drive 0.9  a word throws the wave, and the breathing follows
+ *                         speech rather than a clock. This is the pair that
+ *                         stops it feeling metronomic.
+ *   spin 0.6              the wave travels round rather than pushing out in
+ *                         fixed sections.
+ *   idle 0.16             awake when nobody is speaking, without asking for
+ *                         attention.
+ *   push 0                the ball itself does not move. The energy is what
+ *                         leaves it.
+ */
+export const DEFAULT_PRESET = {
+  mode: 'ribbon',
+  fold: 5,
+  mirror: true,
+  sharp: 0,
+  amp: 0.10,
+  quiet: 0,
+  gap: 0.04,
+  strands: 18,
+  spread: 0.075,
+  lag: 240,
+  attack: 0.05,
+  release: 0.20,
+  speed: 1.7,
+  spin: 0.6,
+  punch: 0.9,
+  drive: 0.9,
+  idle: 0.16,
+  glow: 2.8,
+  weight: 2.7,
+  push: 0,
+  beyond: '#3A1E8F',
+  line: '#D6BAFF',
+  trail: '#A87EFF',
+  name: '6 · Yours, per-word',
+};
 
 const STORE = 'los2_orb_cfg';
 
-/** The config in force: a stored experiment, or the chosen default. */
+/**
+ * A fingerprint of the look that ships.
+ *
+ * The lab stores an experiment in the browser, and a stored experiment used to
+ * win forever. That makes "the default is now X" quietly false on every device
+ * that has ever opened the lab — including the one doing the choosing, which
+ * is the last place the change would ever be noticed. So an experiment carries
+ * the stamp of the default it was based on, and is discarded once that default
+ * moves on. Deliberate work is lost only when the shipped look changes, which
+ * is exactly when it should be.
+ */
+const stamp = (o) => {
+  const s = JSON.stringify(o);
+  let h = 5381;
+  for (let i = 0; i < s.length; i += 1) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+};
+
+export const DEFAULT_STAMP = stamp(DEFAULT_PRESET);
+
+/** The config in force: a current experiment, or the shipped default. */
 export function currentConfig() {
   try {
-    const raw = localStorage.getItem(STORE);
-    if (raw) return { ...DEFAULT_PRESET, ...JSON.parse(raw) };
+    const saved = JSON.parse(localStorage.getItem(STORE) ?? 'null');
+    if (saved && saved.from === DEFAULT_STAMP && saved.cfg) {
+      return { ...DEFAULT_PRESET, ...saved.cfg };
+    }
   } catch { /* private mode, or something half-written */ }
   return { ...DEFAULT_PRESET };
 }
 
 export function saveConfig(cfg) {
-  try { localStorage.setItem(STORE, JSON.stringify(cfg)); } catch { /* no store */ }
+  try {
+    localStorage.setItem(STORE, JSON.stringify({ from: DEFAULT_STAMP, cfg }));
+  } catch { /* no store */ }
 }
 
 export function clearConfig() {
