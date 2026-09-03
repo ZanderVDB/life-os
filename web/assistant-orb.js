@@ -211,6 +211,16 @@ export class Orb {
     const k = this.raw > this.level ? 0.55 : 0.06;
     this.level += (this.raw - this.level) * k;
 
+    /* ── The shape's own clock ──────────────────────────────────────
+       Advanced by how much speech is arriving rather than by wall time, so
+       the pattern follows the words instead of ticking through them. A
+       trickle keeps it from freezing solid in a silence; the rest is voice.
+       `drive` decides the mix, and at 0 this is the old metronome. */
+    const cfg = this.cfg ?? {};
+    const drive = cfg.drive ?? 0.75;
+    const rate = (1 - drive) + drive * (0.12 + this.level * 2.4);
+    this.wavePhase = (this.wavePhase ?? 0) + dt * rate;
+
     this.draw();
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -399,14 +409,22 @@ export class Orb {
     const prev = this.energy ?? 0;
     this.energy = prev + (target - prev)
       * (target > prev ? (cfg.attack ?? 0.38) : (cfg.release ?? 0.04));
+
+    /* ── Level meter, or something that answers per word ────────────
+       `this.energy` is the heavily smoothed reading — steady, and the same
+       for "the" as for "extraordinary". `amp` is the faster one, which
+       still carries the shape of individual words. `punch` mixes them: at
+       0 the wave is a calm meter, at 1 every word throws it. */
+    const punch = clamp(cfg.punch ?? 0.6, 0, 1);
+    const lively = this.energy + (target - this.energy) * punch;
     /* ── Active, but not listening ──────────────────────────────
        At rest the wave does not disappear — it settles to `cfg.idle` and
        keeps turning. A completely still orb reads as one that has stopped
        paying attention, and the difference between "ready" and "asleep" is
        worth a few percent of amplitude. */
     const e = idle
-      ? Math.max(cfg.idle ?? 0.16, Math.min(this.energy, 0.25))
-      : Math.max(this.energy, (cfg.idle ?? 0.16) * 0.6);
+      ? Math.max(cfg.idle ?? 0.16, Math.min(lively, 0.25))
+      : Math.max(lively, (cfg.idle ?? 0.16) * 0.6);
 
     const strands = Math.max(0, Math.round(cfg.strands ?? 12));
     if (this.t - (this.waveAt ?? 0) > 34) {
@@ -426,7 +444,7 @@ export class Orb {
       ctx.beginPath();
       for (let i = 0; i <= STEPS; i += 1) {
         const th = (i / STEPS) * TAU;
-        const d = R * (1 + push * (0.5 + 0.5 * shapeAt(th, this.t, cfg)));
+        const d = R * (1 + push * (0.5 + 0.5 * shapeAt(th, this.t, cfg, this.wavePhase)));
         const x = cx + Math.cos(th) * d;
         const y = cy + Math.sin(th) * d;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
@@ -464,7 +482,9 @@ export class Orb {
         ctx.beginPath();
         for (let i = 0; i <= STEPS; i += 1) {
           const th = (i / STEPS) * TAU;
-          const d = bs + swing * shapeAt(th, when, cfg);
+          /* The trailing contours lag in the SHAPE as well as in the
+             rotation, so a word travels outward through the stack. */
+          const d = bs + swing * shapeAt(th, when, cfg, (this.wavePhase ?? 0) - k * (cfg.lag ?? 70));
           const x = cx + Math.cos(th) * d;
           const y = cy + Math.sin(th) * d;
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);

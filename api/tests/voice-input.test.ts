@@ -654,3 +654,39 @@ test('voice: desktop and mobile both go through this one controller', () => {
       `${name} does not build its own recogniser`);
   }
 });
+
+test('voice: a long word moves it more than a short one', async () => {
+  /* The complaint: "it feels like it's just going up and down in a very
+     rhythmic way". Two causes — the SHAPE breathed on a timer rather than on
+     speech, and the LEVEL was a smoothed rate that saturated after two words,
+     so "the" and "extraordinary" drew the same picture.
+     A word is an impulse now, sized by the chunk that arrived. */
+  const M = browser();
+  const { v } = await make({ silenceMs: 9000 });
+  v.start('');
+  const rec = M.made[0]!;
+
+  const say = (sofar: string) => { rec.say([{ transcript: sofar, isFinal: false }]); return v.activity; };
+  const short = say('a');
+  v.kick = 0; v.kickAt = 0; v.lastChars = 0;          // a fresh utterance
+  const long = say('extraordinary');
+
+  assert.ok(long > short, `a long word (${long}) does not exceed a short one (${short})`);
+  assert.ok(long - short > 0.25, `the difference (${(long - short).toFixed(2)}) is not visible`);
+  assert.ok(short > 0.15, 'a short word is invisible');
+  assert.ok(long <= 1, 'the signal escapes its range');
+});
+
+test('voice: the impulse falls away between words', async () => {
+  const M = browser();
+  const { v } = await make({ silenceMs: 9000 });
+  v.start('');
+  M.made[0]!.say([{ transcript: 'extraordinary', isFinal: false }]);
+  const atWord = v.activity;
+  await new Promise((r) => { setTimeout(r, 420); });
+  const between = v.activity;
+  /* It has to come DOWN, or every word looks like the last one and the whole
+     thing saturates — which is what it used to do. */
+  assert.ok(between < atWord * 0.8,
+    `the impulse did not decay (${atWord.toFixed(2)} -> ${between.toFixed(2)})`);
+});

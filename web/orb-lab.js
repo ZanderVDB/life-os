@@ -68,7 +68,26 @@
  */
 export const turnAt = (t, cfg) => t * (cfg.spin ?? 0.3) * 0.00045;
 
-export const shapeAt = (rawTh, t, cfg) => {
+/**
+ * @param rawTh angle
+ * @param t     wall clock, used ONLY for the rotation
+ * @param cfg   the config
+ * @param phase how far the shape's own breathing has advanced
+ *
+ * ── Why the breathing has its own clock ──────────────────────────────────
+ *
+ * The amplitudes used to oscillate on `t`, which is a metronome: the pattern
+ * cycled at a fixed rate whatever anybody was saying, and the voice merely
+ * scaled the result. That is what "up and down and up and down in a very
+ * rhythmic way" was — a timer, not a person.
+ *
+ * `phase` is advanced by the RENDERER in proportion to how much speech is
+ * arriving, so a long or hard word pushes the shape further along and a
+ * silence leaves it nearly still. The rotation deliberately keeps the wall
+ * clock, because a wave travelling round at a steady rate is the calm part
+ * and should not lurch when somebody speaks.
+ */
+export const shapeAt = (rawTh, t, cfg, phase = t) => {
   const th = rawTh - turnAt(t, cfg);
   const fold = Math.max(1, Math.round(cfg.fold ?? 1));
   const sharp = Math.max(0, Math.min(1, cfg.sharp ?? 0.35));
@@ -88,8 +107,8 @@ export const shapeAt = (rawTh, t, cfg) => {
     v += mirror
       /* Even in θ: the mirror holds at every instant, and the motion is in
          the amplitude rather than in a travelling phase. */
-      ? Math.sin(t * drift * 0.00042) * (w[i] / total) * Math.cos(th * k)
-      : Math.sin(th * k + t * drift * 0.0006) * (w[i] / total);
+      ? Math.sin(phase * drift * 0.00042) * (w[i] / total) * Math.cos(th * k)
+      : Math.sin(th * k + phase * drift * 0.0006) * (w[i] / total);
   }
   return v;
 };
@@ -108,6 +127,8 @@ export const PARAMS = [
   { key: 'release', label: 'Settle speed', min: 0.01, max: 0.5, step: 0.01 },
   { key: 'speed', label: 'Flow speed', min: 0, max: 4, step: 0.05 },
   { key: 'spin', label: 'Rotation speed', min: -3, max: 3, step: 0.05 },
+  { key: 'punch', label: 'Word punch', min: 0, max: 1, step: 0.02 },
+  { key: 'drive', label: 'Speech drives shape', min: 0, max: 1, step: 0.02 },
   { key: 'idle', label: 'Idle wave (not listening)', min: 0, max: 0.4, step: 0.01 },
   { key: 'glow', label: 'Glow', min: 0, max: 3, step: 0.05 },
   { key: 'weight', label: 'Line weight', min: 0.2, max: 5, step: 0.1 },
@@ -132,6 +153,13 @@ const base = {
   speed: 1,
   /* The wave travels round the orb. Negative turns the other way. */
   spin: 0.6,
+  /* How much a single word throws the wave outward. 0 is a smooth level
+     meter; 1 is a hard kick per syllable. */
+  punch: 0.6,
+  /* How much the SHAPE's own breathing follows speech rather than a timer.
+     At 0 it cycles on a clock, which is what made it feel metronomic; at 1
+     it barely moves unless somebody is talking. */
+  drive: 0.75,
   /* How much wave there is when nobody is speaking. Not zero: an orb that
      goes completely still reads as one that has stopped paying attention,
      and this is the difference between "ready" and "asleep". */
@@ -190,54 +218,64 @@ export const PRESETS = [
     speed: 1.0, glow: 2.0, weight: 2.0, push: 0.08,
   }),
 
-  /* ── The same five, with the rotation dialled differently ──────────
+  /* ── How much a WORD moves it ──────────────────────────────────────
+     `punch` is how hard a single word throws the wave; `drive` is how much
+     the shape's own breathing follows speech rather than a clock. These are
+     the two that decide whether it feels like a person talking or a timer
+     ticking, and they are hard to picture from a number. */
+  P('6 · Yours, per-word', {
+    fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
+    spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
+    glow: 2.8, weight: 2.7, push: 0, punch: 0.9, drive: 0.9,
+  }),
+  P('7 · Yours, smooth meter', {
+    fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
+    spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
+    glow: 2.8, weight: 2.7, push: 0, punch: 0.1, drive: 0.2,
+  }),
+  P('8 · Premium, per-word', {
+    fold: 4, sharp: 0.08, amp: 0.36, quiet: 0.04, gap: 0.11, strands: 16,
+    spread: 0.045, lag: 210, attack: 0.65, release: 0.42, speed: 0.85,
+    glow: 2.35, weight: 1.8, push: 0.04, punch: 0.9, drive: 0.85,
+  }),
+
+  /* ── The same shapes, with the rotation dialled differently ────────
      Rotation is the new variable and the one hardest to picture from a
      number, so each candidate gets a slow and a fast reading. */
-  P('6 · Yours, slow spin', {
+  P('9 · Yours, slow spin', {
     fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
     spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
     glow: 2.8, weight: 2.7, push: 0, spin: 0.22, idle: 0.20,
   }),
-  P('7 · Yours, fast spin', {
+  P('10 · Yours, fast spin', {
     fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
     spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
     glow: 2.8, weight: 2.7, push: 0, spin: 1.6, idle: 0.14,
   }),
-  P('8 · Yours, counter-spin', {
+  P('11 · Yours, counter-spin', {
     fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
     spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
     glow: 2.8, weight: 2.7, push: 0, spin: -0.9, idle: 0.18,
-  }),
-  P('9 · Balanced, spinning', {
-    fold: 2, sharp: 0.05, amp: 0.28, quiet: 0.03, gap: 0.08, strands: 12,
-    spread: 0.055, lag: 180, attack: 0.55, release: 0.38, speed: 0.65,
-    glow: 1.8, weight: 2.1, push: 0.03, spin: 1.1, idle: 0.18,
-  }),
-  P('10 · Premium, spinning', {
-    fold: 4, sharp: 0.08, amp: 0.36, quiet: 0.04, gap: 0.11, strands: 16,
-    spread: 0.045, lag: 210, attack: 0.65, release: 0.42, speed: 0.85,
-    glow: 2.35, weight: 1.8, push: 0.04, spin: 1.3, idle: 0.16,
   }),
 
   /* ── Idle behaviour on its own ─────────────────────────────────────
      What it looks like when nobody is speaking, which is most of the time
      somebody is looking at it. */
-  P('11 · Quiet standby', { fold: 5, sharp: 0, amp: 0.10, gap: 0.04, strands: 18,
+  P('12 · Quiet standby', { fold: 5, sharp: 0, amp: 0.10, gap: 0.04, strands: 18,
     spread: 0.075, glow: 2.8, weight: 2.7, spin: 0.35, idle: 0.10, quiet: 0 }),
-  P('12 · Lively standby', { fold: 5, sharp: 0, amp: 0.10, gap: 0.04, strands: 18,
+  P('13 · Lively standby', { fold: 5, sharp: 0, amp: 0.10, gap: 0.04, strands: 18,
     spread: 0.075, glow: 2.8, weight: 2.7, spin: 0.9, idle: 0.30, quiet: 0 }),
-  P('13 · Still until spoken to', { fold: 5, sharp: 0, amp: 0.14, gap: 0.04,
+  P('14 · Still until spoken to', { fold: 5, sharp: 0, amp: 0.14, gap: 0.04,
     strands: 18, spread: 0.075, glow: 2.8, weight: 2.7, spin: 0.5, idle: 0 }),
 
   /* ── The rest of the range, for reference ──────────────────────────── */
-  P('14 · Eight petals', { fold: 8, gap: 0.6, strands: 14, spread: 0.05, sharp: 0.15 }),
-  P('15 · Three-way', { fold: 3, gap: 0.75, strands: 15, spread: 0.06 }),
+  P('15 · Eight petals', { fold: 8, gap: 0.6, strands: 14, spread: 0.05, sharp: 0.15 }),
   P('16 · Far and sparse', { gap: 1.4, strands: 8, spread: 0.12, amp: 0.12 }),
   P('17 · Close and dense', { gap: 0.12, strands: 26, spread: 0.012, amp: 0.07 }),
   P('18 · Free-form', { fold: 1, mirror: false, sharp: 0.6, speed: 1.4, gap: 0.6 }),
   P('19 · Body + halo', { mode: 'both', push: 0.14, strands: 10, spread: 0.06,
     gap: 0.55, fold: 4 }),
-  P('20 · Molten', { mode: 'body', push: 0.28, strands: 1, sharp: 0.15,
+  P('20 · Molten body', { mode: 'body', push: 0.28, strands: 1, sharp: 0.15,
     speed: 0.5, fold: 3 }),
 ];
 

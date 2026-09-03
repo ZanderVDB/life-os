@@ -95,6 +95,9 @@ const SILENCE_BEFORE_SPEECH_MS = 9000;
 /** How quickly the "words are arriving" signal falls back to nothing. */
 const ACTIVITY_HALF_LIFE_MS = 420;
 
+/** How quickly one word's impulse falls away, so the next one shows. */
+const KICK_HALF_LIFE_MS = 190;
+
 /** A restart sooner than this after a start means it is not really working. */
 const TOO_QUICK_MS = 350;
 
@@ -265,10 +268,10 @@ export class VoiceInput {
     this.heardAnything = false;
     /** 0..1, bumped by every result and decaying. See `activity`. */
     this.activityAt = 0;
-    /** 0..1, how hard speech is arriving. See `noteIntensity`. */
-    this.intensity = 0;
+    /** The last word's impulse and when it landed. See `noteIntensity`. */
+    this.kick = 0;
+    this.kickAt = 0;
     this.lastChars = 0;
-    this.intensityAt = 0;
     this.silenceTimer = null;
     this.autoStop = opts.autoStop !== false;
     /* Ids, so the trace can show at a glance whether two recognisers are
@@ -309,7 +312,9 @@ export class VoiceInput {
        A bare on/off signal made the picture the same for a muttered word and
        a full sentence — which is the "not meaningfully reactive" complaint.
        There is a floor so that speaking at all is always visible. */
-    return decay * (0.35 + 0.65 * (this.intensity ?? 0));
+    /* A floor so speaking at all is always visible, and the rest is the
+       size of the word that just landed. */
+    return decay * (0.25 + 0.75 * this.kickNow());
   }
 
   /**
@@ -331,14 +336,28 @@ export class VoiceInput {
     const now = Date.now();
     const chars = String(text ?? '').length;
     const grew = Math.max(0, chars - (this.lastChars ?? 0));
-    const dt = Math.max(16, now - (this.intensityAt ?? now));
     this.lastChars = chars;
-    this.intensityAt = now;
-    /* Characters per second, normalised against brisk speech (~14/s), and
-       eased so it rises with a phrase rather than with a single event. */
-    const rate = Math.min(1, (grew / dt) * 1000 / 14);
-    const prev = this.intensity ?? 0;
-    this.intensity = prev + (rate - prev) * (rate > prev ? 0.45 : 0.12);
+    if (grew <= 0) return;
+
+    /* ── A word is an impulse ───────────────────────────────────────
+       Smoothing a rate turned speech into a level meter: after two words it
+       sat at the top and "the" looked exactly like "extraordinary". What a
+       person sees when somebody talks is a SERIES OF EVENTS of different
+       sizes, so that is what this produces — a kick proportional to the
+       chunk that just arrived, decaying on the clock so the gaps between
+       words are visible.
+       Taken as a maximum against whatever is still ringing, so a short word
+       cannot cut off the tail of a long one. */
+    const size = Math.min(1, grew / 12);
+    this.kick = Math.max(this.kickNow(), size);
+    this.kickAt = now;
+  }
+
+  /** The current height of the last word's impulse, 0..1. */
+  kickNow() {
+    if (!this.kickAt) return 0;
+    const age = Date.now() - this.kickAt;
+    return (this.kick ?? 0) * Math.max(0, 2 ** (-age / KICK_HALF_LIFE_MS));
   }
 
   /** base + everything heard, trimmed of the join seam. */
@@ -397,12 +416,9 @@ export class VoiceInput {
     this.heardAnything = false;
     this.lastResultAt = 0;
     this.activityAt = 0;
-    this.intensity = 0;
+    this.kick = 0;
+    this.kickAt = 0;
     this.lastChars = 0;
-    /* Seeded with NOW, not zero. Left at the epoch, the first result divided
-       its characters by fifty-six years and came out as silence — so the
-       picture stayed still through the first thing anybody said. */
-    this.intensityAt = Date.now();
     this.startedAt = Date.now();
     this.wanted = true;
     this.setState('starting');
@@ -505,9 +521,9 @@ export class VoiceInput {
            transcript, and no silence timer is reset by noise alone. */
         if (name === 'speechstart' || name === 'soundstart') {
           this.activityAt = Date.now();
-          this.intensity = Math.max(this.intensity ?? 0, 0.55);
+          this.kick = Math.max(this.kickNow(), 0.55); this.kickAt = Date.now();
         }
-        if (name === 'speechend') this.intensity = (this.intensity ?? 0) * 0.5;
+        if (name === 'speechend') this.kick = this.kickNow() * 0.5;
       };
     }
 
