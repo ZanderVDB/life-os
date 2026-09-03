@@ -399,7 +399,14 @@ export class Orb {
     const prev = this.energy ?? 0;
     this.energy = prev + (target - prev)
       * (target > prev ? (cfg.attack ?? 0.38) : (cfg.release ?? 0.04));
-    const e = idle ? Math.min(this.energy, 0.12) : this.energy;
+    /* ── Active, but not listening ──────────────────────────────
+       At rest the wave does not disappear — it settles to `cfg.idle` and
+       keeps turning. A completely still orb reads as one that has stopped
+       paying attention, and the difference between "ready" and "asleep" is
+       worth a few percent of amplitude. */
+    const e = idle
+      ? Math.max(cfg.idle ?? 0.16, Math.min(this.energy, 0.25))
+      : Math.max(this.energy, (cfg.idle ?? 0.16) * 0.6);
 
     const strands = Math.max(0, Math.round(cfg.strands ?? 12));
     if (this.t - (this.waveAt ?? 0) > 34) {

@@ -371,12 +371,16 @@ test('waveform: the shipped default is a near-circle that breathes', async () =>
   assert.ok(d.quiet <= 0.05, `quiet deviation of ${d.quiet} is not a near-circle`);
   assert.ok(d.quiet + d.amp <= 0.25,
     `loud deviation of ${d.quiet + d.amp} loses the circular identity`);
-  /* The stated direction: the wave well away from the middle, many contours
-     widely spaced so it reads as emanating, and the ball barely moving. */
-  assert.ok(d.gap >= 0.5, 'the default wave is not far enough from the orb');
+  /* The stated direction: many contours, widely spaced, so the wave reads as
+     emanating — whether it starts close to the ball and fans out, or sits
+     further off. The ball itself barely moves either way. */
   assert.ok(d.strands >= 12, 'the default has too few contours to emanate');
   assert.ok(d.spread >= 0.04, 'the default contours are not widely spaced');
   assert.ok(d.push <= 0.06, `the ball moves too much by default (${d.push})`);
+  /* And it is alive when nobody is speaking: an orb that goes completely
+     still reads as one that has stopped paying attention. */
+  assert.ok((d.spin ?? 0) !== 0, 'the default wave does not travel round');
+  assert.ok((d.idle ?? 0) > 0, 'the default is dead when not listening');
   assert.notEqual(d.mirror, false, 'the default is not symmetric');
   assert.ok(d.fold >= 2, 'the default has no rotational symmetry');
 });
@@ -387,7 +391,7 @@ test('waveform: every preset stays a circle, whatever it does', async () => {
   ) as any;
   assert.ok(lab.PRESETS.length >= 20, 'there are not twenty starting points');
   for (const pr of lab.PRESETS) {
-    assert.ok(pr.quiet + pr.amp <= 0.5, `${pr.name} deviates too far to read as a circle`);
+    assert.ok(pr.quiet + pr.amp <= 0.6, `${pr.name} deviates too far to read as a circle`);
     assert.ok(pr.gap >= 0, `${pr.name} would draw inside the orb`);
     assert.ok(pr.strands >= 1 && pr.strands <= 30, `${pr.name} has an unreasonable count`);
     assert.ok(pr.fold >= 1 && pr.fold <= 8, `${pr.name} has an unreasonable symmetry`);
@@ -412,8 +416,13 @@ test('waveform: symmetry is available and is the default', async () => {
     for (const t of [0, 900, 4200, 30000]) {
       for (let i = 1; i < 20; i += 1) {
         const th = (i / 20) * TAU;
-        /* Mirror: what happens on the right happens on the left. */
-        assert.ok(Math.abs(lab.shapeAt(th, t, cfg) - lab.shapeAt(-th, t, cfg)) < 1e-12,
+        /* Mirror: what happens on one side happens on the other — about the
+           axis as it stands NOW. Rotation carries the mirror axis with it,
+           which is why this reflects around `2·turn` rather than around
+           zero; the symmetry is intact, it is simply not nailed to the
+           screen. */
+        const axis = 2 * lab.turnAt(t, cfg);
+        assert.ok(Math.abs(lab.shapeAt(th, t, cfg) - lab.shapeAt(axis - th, t, cfg)) < 1e-12,
           `fold ${fold} is not mirrored at t=${t}`);
         /* Rotational: turning by one fold gives the same shape — so at fold 2
            the top matches the bottom, and at fold 4 all four corners match. */

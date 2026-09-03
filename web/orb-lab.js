@@ -59,7 +59,17 @@
  * tighten. The weights are normalised so turning it up changes the character
  * without changing the size.
  */
-export const shapeAt = (th, t, cfg) => {
+/**
+ * How far the whole pattern has turned by time `t`.
+ *
+ * Rotating a symmetric shape leaves it symmetric — the fold is unchanged and
+ * the mirror axis simply travels with it — so this costs none of the
+ * guarantees and turns "sections pushing out" into "a wave going round".
+ */
+export const turnAt = (t, cfg) => t * (cfg.spin ?? 0.3) * 0.00045;
+
+export const shapeAt = (rawTh, t, cfg) => {
+  const th = rawTh - turnAt(t, cfg);
   const fold = Math.max(1, Math.round(cfg.fold ?? 1));
   const sharp = Math.max(0, Math.min(1, cfg.sharp ?? 0.35));
   const speed = cfg.speed ?? 1;
@@ -97,6 +107,8 @@ export const PARAMS = [
   { key: 'attack', label: 'Reaction speed', min: 0.05, max: 1, step: 0.01 },
   { key: 'release', label: 'Settle speed', min: 0.01, max: 0.5, step: 0.01 },
   { key: 'speed', label: 'Flow speed', min: 0, max: 4, step: 0.05 },
+  { key: 'spin', label: 'Rotation speed', min: -3, max: 3, step: 0.05 },
+  { key: 'idle', label: 'Idle wave (not listening)', min: 0, max: 0.4, step: 0.01 },
   { key: 'glow', label: 'Glow', min: 0, max: 3, step: 0.05 },
   { key: 'weight', label: 'Line weight', min: 0.2, max: 5, step: 0.1 },
   { key: 'push', label: 'Ball movement', min: 0, max: 0.30, step: 0.005 },
@@ -118,6 +130,12 @@ const base = {
   attack: 0.38,
   release: 0.04,
   speed: 1,
+  /* The wave travels round the orb. Negative turns the other way. */
+  spin: 0.6,
+  /* How much wave there is when nobody is speaking. Not zero: an orb that
+     goes completely still reads as one that has stopped paying attention,
+     and this is the difference between "ready" and "asleep". */
+  idle: 0.16,
   glow: 1,
   weight: 1,
   /* Minimal by default: the ball is a ball, and the energy is what leaves
@@ -142,29 +160,85 @@ const P = (name, over) => ({ ...base, name, ...over });
  * widely spaced so it reads as emanating, and the ball barely moving.
  */
 export const PRESETS = [
-  P('1 · Emanating (default)', {}),
-  P('2 · Two-fold wide', { fold: 2, gap: 0.9, strands: 20, spread: 0.07, sharp: 0.2 }),
-  P('3 · Four corners', { fold: 4, gap: 0.7, strands: 16, spread: 0.055 }),
-  P('4 · Eight petals', { fold: 8, gap: 0.6, strands: 14, spread: 0.05, sharp: 0.15 }),
-  P('5 · Three-way', { fold: 3, gap: 0.75, strands: 15, spread: 0.06 }),
-  P('6 · Six-fold fine', { fold: 6, gap: 0.65, strands: 22, spread: 0.035, weight: 0.5 }),
-  P('7 · Round and slow', { fold: 2, sharp: 0, speed: 0.3, amp: 0.18, gap: 0.8 }),
-  P('8 · Sharp and quick', { fold: 4, sharp: 1, speed: 2.2, amp: 0.10, attack: 0.8 }),
-  P('9 · Far and sparse', { gap: 1.4, strands: 8, spread: 0.12, amp: 0.12 }),
-  P('10 · Very far', { gap: 1.9, strands: 10, spread: 0.14, amp: 0.10, glow: 1.6 }),
-  P('11 · Close and dense', { gap: 0.12, strands: 26, spread: 0.012, amp: 0.07 }),
-  P('12 · Free-form', { fold: 1, mirror: false, sharp: 0.6, speed: 1.4, gap: 0.6 }),
-  P('13 · Mirror only', { fold: 1, mirror: true, sharp: 0.5, gap: 0.7 }),
-  P('14 · Hairline halo', { strands: 30, spread: 0.03, weight: 0.25, glow: 0.5, amp: 0.11 }),
-  P('15 · Heavy glow', { strands: 6, spread: 0.09, weight: 2.4, glow: 2.8, amp: 0.14 }),
-  P('16 · Breathing body', { mode: 'body', push: 0.20, strands: 1, amp: 0.16, fold: 2 }),
-  P('17 · Body + halo', { mode: 'both', push: 0.14, strands: 10, spread: 0.06,
+  /* ── The five real candidates, from testing ────────────────────────
+     The first is the config that came back from the phone; the next four
+     are outside suggestions. All five keep the rotation and idle defaults
+     unless they say otherwise, so they can be compared on shape alone. */
+  P('1 · Yours — Heavy glow', {
+    fold: 5, mirror: true, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04,
+    strands: 18, spread: 0.075, lag: 240, attack: 0.05, release: 0.20,
+    speed: 1.7, glow: 2.8, weight: 2.7, push: 0,
+  }),
+  P('2 · Balanced halo', {
+    fold: 2, mirror: true, sharp: 0.05, amp: 0.28, quiet: 0.03, gap: 0.08,
+    strands: 12, spread: 0.055, lag: 180, attack: 0.55, release: 0.38,
+    speed: 0.65, glow: 1.8, weight: 2.1, push: 0.03,
+  }),
+  P('3 · Premium energy', {
+    fold: 4, mirror: true, sharp: 0.08, amp: 0.36, quiet: 0.04, gap: 0.11,
+    strands: 16, spread: 0.045, lag: 210, attack: 0.65, release: 0.42,
+    speed: 0.85, glow: 2.35, weight: 1.8, push: 0.04,
+  }),
+  P('4 · Soft liquid', {
+    fold: 2, mirror: true, sharp: 0, amp: 0.20, quiet: 0.025, gap: 0.06,
+    strands: 9, spread: 0.06, lag: 140, attack: 0.38, release: 0.30,
+    speed: 0.42, glow: 1.45, weight: 1.7, push: 0.06,
+  }),
+  P('5 · Voice reactive', {
+    fold: 4, mirror: true, sharp: 0.10, amp: 0.46, quiet: 0.045, gap: 0.09,
+    strands: 13, spread: 0.05, lag: 150, attack: 0.85, release: 0.50,
+    speed: 1.0, glow: 2.0, weight: 2.0, push: 0.08,
+  }),
+
+  /* ── The same five, with the rotation dialled differently ──────────
+     Rotation is the new variable and the one hardest to picture from a
+     number, so each candidate gets a slow and a fast reading. */
+  P('6 · Yours, slow spin', {
+    fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
+    spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
+    glow: 2.8, weight: 2.7, push: 0, spin: 0.22, idle: 0.20,
+  }),
+  P('7 · Yours, fast spin', {
+    fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
+    spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
+    glow: 2.8, weight: 2.7, push: 0, spin: 1.6, idle: 0.14,
+  }),
+  P('8 · Yours, counter-spin', {
+    fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
+    spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
+    glow: 2.8, weight: 2.7, push: 0, spin: -0.9, idle: 0.18,
+  }),
+  P('9 · Balanced, spinning', {
+    fold: 2, sharp: 0.05, amp: 0.28, quiet: 0.03, gap: 0.08, strands: 12,
+    spread: 0.055, lag: 180, attack: 0.55, release: 0.38, speed: 0.65,
+    glow: 1.8, weight: 2.1, push: 0.03, spin: 1.1, idle: 0.18,
+  }),
+  P('10 · Premium, spinning', {
+    fold: 4, sharp: 0.08, amp: 0.36, quiet: 0.04, gap: 0.11, strands: 16,
+    spread: 0.045, lag: 210, attack: 0.65, release: 0.42, speed: 0.85,
+    glow: 2.35, weight: 1.8, push: 0.04, spin: 1.3, idle: 0.16,
+  }),
+
+  /* ── Idle behaviour on its own ─────────────────────────────────────
+     What it looks like when nobody is speaking, which is most of the time
+     somebody is looking at it. */
+  P('11 · Quiet standby', { fold: 5, sharp: 0, amp: 0.10, gap: 0.04, strands: 18,
+    spread: 0.075, glow: 2.8, weight: 2.7, spin: 0.35, idle: 0.10, quiet: 0 }),
+  P('12 · Lively standby', { fold: 5, sharp: 0, amp: 0.10, gap: 0.04, strands: 18,
+    spread: 0.075, glow: 2.8, weight: 2.7, spin: 0.9, idle: 0.30, quiet: 0 }),
+  P('13 · Still until spoken to', { fold: 5, sharp: 0, amp: 0.14, gap: 0.04,
+    strands: 18, spread: 0.075, glow: 2.8, weight: 2.7, spin: 0.5, idle: 0 }),
+
+  /* ── The rest of the range, for reference ──────────────────────────── */
+  P('14 · Eight petals', { fold: 8, gap: 0.6, strands: 14, spread: 0.05, sharp: 0.15 }),
+  P('15 · Three-way', { fold: 3, gap: 0.75, strands: 15, spread: 0.06 }),
+  P('16 · Far and sparse', { gap: 1.4, strands: 8, spread: 0.12, amp: 0.12 }),
+  P('17 · Close and dense', { gap: 0.12, strands: 26, spread: 0.012, amp: 0.07 }),
+  P('18 · Free-form', { fold: 1, mirror: false, sharp: 0.6, speed: 1.4, gap: 0.6 }),
+  P('19 · Body + halo', { mode: 'both', push: 0.14, strands: 10, spread: 0.06,
     gap: 0.55, fold: 4 }),
-  P('18 · Molten', { mode: 'body', push: 0.28, strands: 1, sharp: 0.15, speed: 0.5, fold: 3 }),
-  P('19 · Aurora', { mode: 'both', push: 0.06, strands: 24, spread: 0.045, gap: 0.5,
-    glow: 2, fold: 6, weight: 0.4 }),
-  P('20 · Whisper', { amp: 0.06, quiet: 0.012, strands: 12, spread: 0.05, glow: 0.4,
-    weight: 0.5, speed: 0.5, gap: 0.9 }),
+  P('20 · Molten', { mode: 'body', push: 0.28, strands: 1, sharp: 0.15,
+    speed: 0.5, fold: 3 }),
 ];
 
 export const DEFAULT_PRESET = PRESETS[0];
