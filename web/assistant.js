@@ -965,8 +965,10 @@ function devPanelHtml() {
       <div class="asst-meter"><span class="asst-meter-fill" id="asst-meter"></span></div>
 
       <p class="asst-dev-p">Listening visual — twenty starting points, then every
-        number below is live. Speak while adjusting. This is a design
-        instrument, not a user setting.</p>
+        number below is live. Speak while adjusting.<br>
+        <b>Symmetry</b> is the rotational order: 2 mirrors right↔left and
+        top↔bottom, 4 repeats in all four corners, 1 is free-form. Mirror adds
+        the reflection on top.</p>
       <div class="asst-dev-row" id="asst-presets">
         ${PRESETS.map((pr, i) => `<button type="button" class="chip"
           data-preset="${i}">${esc(pr.name)}</button>`).join('')}
@@ -1055,8 +1057,8 @@ function wireDevPanel(el) {
           ${['ribbon', 'body', 'both'].map((m) => `<option value="${m}"
             ${m === cfg.mode ? 'selected' : ''}>${m}</option>`).join('')}
         </select></label>`,
-      `<label class="asst-lab-row"><span>Symmetrical</span>
-        <input type="checkbox" id="lab-even" ${cfg.even !== false ? 'checked' : ''}></label>`,
+      `<label class="asst-lab-row"><span>Mirror (left ↔ right)</span>
+        <input type="checkbox" id="lab-mirror" ${cfg.mirror !== false ? 'checked' : ''}></label>`,
       `<label class="asst-lab-row"><span>Beyond colour</span>
         <input type="color" id="lab-beyond" value="${esc(cfg.beyond)}"></label>`,
       ...PARAMS.map((pm) => `<label class="asst-lab-row"><span>${esc(pm.label)}</span>
@@ -1075,8 +1077,8 @@ function wireDevPanel(el) {
     });
     labBox.querySelector('#lab-mode').onchange = (ev) =>
       apply({ ...currentConfig(), mode: ev.target.value });
-    labBox.querySelector('#lab-even').onchange = (ev) =>
-      apply({ ...currentConfig(), even: ev.target.checked });
+    labBox.querySelector('#lab-mirror').onchange = (ev) =>
+      apply({ ...currentConfig(), mirror: ev.target.checked });
     labBox.querySelector('#lab-beyond').oninput = (ev) => {
       const next = { ...currentConfig(), beyond: ev.target.value };
       saveConfig(next);

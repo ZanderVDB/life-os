@@ -369,11 +369,16 @@ test('waveform: the shipped default is a near-circle that breathes', async () =>
   ) as any;
   const d = lab.DEFAULT_PRESET;
   assert.ok(d.quiet <= 0.05, `quiet deviation of ${d.quiet} is not a near-circle`);
-  assert.ok(d.quiet + d.amp <= 0.20,
+  assert.ok(d.quiet + d.amp <= 0.25,
     `loud deviation of ${d.quiet + d.amp} loses the circular identity`);
-  assert.deepEqual(d.k, [2, 3, 4], 'the default harmonics are not the low, broad ones');
-  assert.ok(d.strands >= 8 && d.strands <= 14, 'the default contour count is outside 8-14');
-  assert.notEqual(d.even, false, 'the default is not the symmetric family');
+  /* The stated direction: the wave well away from the middle, many contours
+     widely spaced so it reads as emanating, and the ball barely moving. */
+  assert.ok(d.gap >= 0.5, 'the default wave is not far enough from the orb');
+  assert.ok(d.strands >= 12, 'the default has too few contours to emanate');
+  assert.ok(d.spread >= 0.04, 'the default contours are not widely spaced');
+  assert.ok(d.push <= 0.06, `the ball moves too much by default (${d.push})`);
+  assert.notEqual(d.mirror, false, 'the default is not symmetric');
+  assert.ok(d.fold >= 2, 'the default has no rotational symmetry');
 });
 
 test('waveform: every preset stays a circle, whatever it does', async () => {
@@ -384,8 +389,16 @@ test('waveform: every preset stays a circle, whatever it does', async () => {
   for (const pr of lab.PRESETS) {
     assert.ok(pr.quiet + pr.amp <= 0.5, `${pr.name} deviates too far to read as a circle`);
     assert.ok(pr.gap >= 0, `${pr.name} would draw inside the orb`);
-    assert.ok(pr.strands >= 0 && pr.strands <= 24, `${pr.name} has an unreasonable count`);
+    assert.ok(pr.strands >= 1 && pr.strands <= 30, `${pr.name} has an unreasonable count`);
+    assert.ok(pr.fold >= 1 && pr.fold <= 8, `${pr.name} has an unreasonable symmetry`);
   }
+  /* The range has to be worth exploring: every symmetry order is represented,
+     and the two families both appear. */
+  const folds = new Set(lab.PRESETS.map((p: any) => p.fold));
+  assert.ok(folds.size >= 5, 'the presets do not cover the symmetry range');
+  const modes = new Set(lab.PRESETS.map((p: any) => p.mode));
+  assert.ok(modes.has('ribbon') && modes.has('body') && modes.has('both'),
+    'the presets do not cover both families');
 });
 
 test('waveform: symmetry is available and is the default', async () => {
@@ -393,12 +406,21 @@ test('waveform: symmetry is available and is the default', async () => {
     `file://${join(process.cwd(), '..', 'web', 'orb-lab.js')}?t=${Math.random()}`
   ) as any;
   /* Measured, not read: with `even`, r(θ) must equal r(−θ) at any moment. */
-  const cfg = { ...lab.DEFAULT_PRESET, even: true };
-  for (const t of [0, 900, 4200, 30000]) {
-    for (let i = 1; i < 20; i += 1) {
-      const th = (i / 20) * Math.PI * 2;
-      assert.ok(Math.abs(lab.shapeAt(th, t, cfg) - lab.shapeAt(-th, t, cfg)) < 1e-12,
-        `not mirrored at t=${t}`);
+  const TAU = Math.PI * 2;
+  for (const fold of [1, 2, 3, 4, 6, 8]) {
+    const cfg = { ...lab.DEFAULT_PRESET, fold, mirror: true, sharp: 0.5 };
+    for (const t of [0, 900, 4200, 30000]) {
+      for (let i = 1; i < 20; i += 1) {
+        const th = (i / 20) * TAU;
+        /* Mirror: what happens on the right happens on the left. */
+        assert.ok(Math.abs(lab.shapeAt(th, t, cfg) - lab.shapeAt(-th, t, cfg)) < 1e-12,
+          `fold ${fold} is not mirrored at t=${t}`);
+        /* Rotational: turning by one fold gives the same shape — so at fold 2
+           the top matches the bottom, and at fold 4 all four corners match. */
+        assert.ok(
+          Math.abs(lab.shapeAt(th, t, cfg) - lab.shapeAt(th + TAU / fold, t, cfg)) < 1e-12,
+          `fold ${fold} does not repeat every turn/${fold} at t=${t}`);
+      }
     }
   }
 });
