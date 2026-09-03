@@ -32,17 +32,6 @@
  * listening stops, every track is stopped and the context is closed.
  */
 
-/* ── The three variants ─────────────────────────────────────────────────
- * Only the LISTENING animation differs. Same orb, same states, same copy,
- * same everything else — three assistants would be three products, and the
- * point of the comparison is to choose a motion, not a personality. */
-export const VARIANTS = [
-  { id: 'a', label: 'Audio waveform', hint: 'A balanced waveform around the orb, answering to your voice' },
-  { id: 'b', label: 'Fluid halo', hint: 'The orb’s own edge moves, with a soft halo behind it' },
-  { id: 'c', label: 'Radial waveform', hint: 'A ring of frequency around a still orb' },
-];
-export const DEFAULT_VARIANT = 'a';
-
 import { currentConfig, shapeAt } from './orb-lab.js';
 
 const TAU = Math.PI * 2;
@@ -104,11 +93,9 @@ export class Orb {
   constructor(canvas, o = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.variant = o.variant ?? DEFAULT_VARIANT;
     this.state = 'idle';
     this.level = 0;          // smoothed 0..1, what the drawing actually uses
     this.raw = 0;            // the latest measurement
-    this.bins = null;        // frequency data for variant C
     this.t = 0;
     this.dpr = 1;
     this.running = false;
@@ -177,8 +164,8 @@ export class Orb {
   /** The lab changed something. Pick it up on the next frame. */
   setConfig(cfg) { this.cfg = cfg; this.waveHist = null; }
 
-  setVariant(v) {
-    this.variant = v;
+  /** Kept as a no-op for callers that still pass a style name. */
+  setVariant() {
     this.waveHist = null;
   }
 
@@ -192,8 +179,6 @@ export class Orb {
 
   /** 0..1. The only channel the microphone has into this class. */
   setLevel(v) { this.raw = clamp(v, 0, 1); }
-
-  setBins(b) { this.bins = b; }
 
   start() {
     if (this.running) return;
@@ -254,9 +239,14 @@ export class Orb {
     const live = this.state === 'listening' || this.state === 'paused';
     const amp = live ? this.level : 0;
 
+    /* ── ONE listening renderer ───────────────────────────────────
+       There used to be three, chosen by a stored `variant`, and that was the
+       bug behind "none of the buttons change anything" and "it looks
+       different on my phone": two of the three ignored the config entirely,
+       and each device had quietly kept a different choice. The look is the
+       CONFIG now — see `orb-lab.js` — so every device draws the same thing
+       and every control reaches it. */
     if (this.state === 'processing') this.drawProcessing(cx, cy, R, reduce);
-    else if (this.variant === 'b') this.drawHalo(cx, cy, R, amp, breathe, reduce);
-    else if (this.variant === 'c') this.drawRadial(cx, cy, R, amp, breathe, reduce);
     else this.drawWaveform(cx, cy, R, amp, breathe, reduce);
   }
 
@@ -494,123 +484,6 @@ export class Orb {
     this.drawCore(cx, cy, R * (1 + (idle ? breathe * 0.02 : e * 0.05)));
   }
 
-  /* ── B — Fluid halo ────────────────────────────────────────────────────
-   * The orb's own surface moves. Quieter, more modern, and it keeps every
-   * pixel of the animation attached to the object — nothing leaves, so
-   * nothing competes with the transcript above it. */
-  drawHalo(cx, cy, R, amp, breathe, reduce) {
-    const { ctx } = this;
-    const deform = reduce ? 0 : (0.05 + amp * 0.20);
-    const r = R * (1 + amp * 0.06 + breathe * 0.012);
-
-    // Halo pulses, behind the body.
-    if (!reduce) {
-      const pulses = 3;
-      for (let i = 0; i < pulses; i += 1) {
-        const p = ((this.t / 2600) + i / pulses + this.phase / TAU) % 1;
-        const rad = r * (1.05 + p * 1.05);
-        const a = (1 - p) * (0.05 + amp * 0.3);
-        ctx.beginPath();
-        ctx.arc(cx, cy, rad, 0, TAU);
-        ctx.fillStyle = `rgba(138,93,255,${a * 0.22})`;
-        ctx.fill();
-      }
-    } else {
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 1.5, 0, TAU);
-      ctx.fillStyle = `rgba(138,93,255,${0.06 + amp * 0.24})`;
-      ctx.fill();
-    }
-
-    // The body, as a closed deforming path rather than an arc.
-    ctx.beginPath();
-    for (let i = 0; i <= 64; i += 1) {
-      const a = (i / 64) * TAU;
-      const n = Math.sin(a * 2 + this.t / 1100 + this.phase)
-        + Math.sin(a * 3 - this.t / 1700) * 0.6
-        + Math.sin(a * 5 + this.t / 800) * 0.32;
-      const d = r * (1 + n * deform * 0.32);
-      const x = cx + Math.cos(a) * d;
-      const y = cy + Math.sin(a) * d;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.42, r * 0.1, cx, cy, r * 1.2);
-    g.addColorStop(0, '#C8A0FF');
-    g.addColorStop(0.55, '#8A5DFF');
-    g.addColorStop(1, '#5B2FD6');
-    ctx.fillStyle = g;
-    ctx.fill();
-    // The reactive rim, so the edge reads as a surface under pressure.
-    ctx.strokeStyle = `rgba(214,186,255,${0.18 + amp * 0.5})`;
-    ctx.lineWidth = 1 + amp * 2.5;
-    ctx.stroke();
-  }
-
-  /* ── C — Radial waveform ───────────────────────────────────────────────
-   * The orb holds still and the sound is drawn around it as a ring of
-   * frequency. The most precise of the three and the most technical: you can
-   * see the shape of a vowel. Whether that is the right register for Life OS
-   * is exactly the thing to look at. */
-  drawRadial(cx, cy, R, amp, breathe, reduce) {
-    const { ctx } = this;
-    const base = R * 1.42;
-    const n = 96;
-    const bins = this.bins;
-
-    ctx.beginPath();
-    for (let i = 0; i <= n; i += 1) {
-      const a = (i / n) * TAU - Math.PI / 2;
-      let v;
-      if (bins && bins.length) {
-        /* Mirrored around the vertical axis, so the ring is symmetric and
-         * reads as one object rather than as a strip chart bent into a
-         * circle. */
-        const half = Math.min(bins.length - 1, Math.floor(bins.length * 0.62));
-        const k = Math.round(Math.abs(((i / n) * 2) - 1) * half);
-        v = bins[k] / 255;
-      } else {
-        v = amp * (0.6 + Math.sin(i * 0.7 + this.t / 260) * 0.4);
-      }
-      const d = base + (reduce ? 0 : v * R * 0.62);
-      const x = cx + Math.cos(a) * d;
-      const y = cy + Math.sin(a) * d;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.strokeStyle = `rgba(186,150,255,${0.22 + amp * 0.62})`;
-    ctx.lineWidth = reduce ? 1 + amp * 5 : 1.6;
-    ctx.stroke();
-
-    // A second, fainter ring at rest, so the shape is legible in silence.
-    ctx.beginPath();
-    ctx.arc(cx, cy, base, 0, TAU);
-    ctx.strokeStyle = 'rgba(138,93,255,.16)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    this.drawCore(cx, cy, R * (1 + breathe * 0.014));
-  }
-
-  /* ── Processing ────────────────────────────────────────────────────────
-   * Sound-reactive motion STOPS. Anything still responding to the room
-   * during "making sense of that" is telling the person it is still
-   * listening while it is not. A single slow sweep says working. */
-  /* ── Thinking ──────────────────────────────────────────────────────────
-   *
-   * This was a rotating gradient arc — a loading spinner in everything but
-   * name, and it made the assistant look like an HTTP request rather than
-   * like Life OS considering something.
-   *
-   * Nothing rotates now. The orb breathes, a soft glow swells and settles
-   * behind it, and three faint COMPLETE contours ease in and out on their own
-   * slow clocks. A whole circle cannot read as progress, which is the point:
-   * there is no percentage here, and pretending otherwise was the lie.
-   *
-   * Deliberately distinct from listening. Listening answers to a voice and
-   * is not moving on its own; thinking moves on its own and answers to
-   * nothing. Somebody glancing at the screen should be able to tell which.
-   */
   drawProcessing(cx, cy, R, reduce) {
     const { ctx } = this;
     /* One slow breath, shared by everything, so the whole thing moves as one

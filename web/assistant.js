@@ -23,7 +23,7 @@
  */
 
 import { icon, logoMark } from './icons.js';
-import { Orb, MicLevel, VARIANTS, DEFAULT_VARIANT, synthLevel } from './assistant-orb.js';
+import { Orb, MicLevel, synthLevel } from './assistant-orb.js';
 import { VoiceInput, VoiceTrace } from './voice-input.js';
 import {
   PRESETS, PARAMS, currentConfig, saveConfig, clearConfig,
@@ -48,14 +48,6 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
 export const devTools = () => Boolean(window.LIFE_OS_CONFIG?.devTools)
   || (() => { try { return localStorage.getItem('los2_dev') === '1'; } catch { return false; } })();
 
-const VARIANT_KEY = 'los2_orb_variant';
-export const currentVariant = () => {
-  try {
-    const v = localStorage.getItem(VARIANT_KEY);
-    return VARIANTS.some((x) => x.id === v) ? v : DEFAULT_VARIANT;
-  } catch { return DEFAULT_VARIANT; }
-};
-const setVariant = (v) => { try { localStorage.setItem(VARIANT_KEY, v); } catch { /* private mode */ } };
 
 /* ── State copy ──────────────────────────────────────────────────────────
  * One line per state, and no personality. "Making sense of that" is a
@@ -106,7 +98,7 @@ export const leaveAssistant = endSession;
  * on mobile Today. Same component, same variant, so a person who has chosen
  * a listening style sees it in both places. */
 export function orbHtml({ size = 'lg', id = 'orb' } = {}) {
-  return `<div class="orb orb-${size}" id="${id}" data-variant="${currentVariant()}">
+  return `<div class="orb orb-${size}" id="${id}">
     <canvas class="orb-canvas" aria-hidden="true"></canvas>
     <span class="orb-mark" aria-hidden="true">${logoMark(size === 'lg' ? 46 : 30)}</span>
   </div>`;
@@ -140,7 +132,7 @@ export function assistantInviteHtml() {
 export function mountInviteOrb(rootEl) {
   const el = rootEl.querySelector('#orb-today canvas');
   if (!el) return () => {};
-  const orb = new Orb(el, { variant: currentVariant() });
+  const orb = new Orb(el);
   orb.setState('idle');
   orb.start();
   /* A phone in a pocket must not be animating. `visibilitychange` covers the
@@ -189,7 +181,7 @@ export function renderAssistant(head, scroll, ctx) {
   </div>`;
 
   const el = scroll.querySelector('#asst');
-  const orb = new Orb(el.querySelector('#orb-main canvas'), { variant: currentVariant() });
+  const orb = new Orb(el.querySelector('#orb-main canvas'));
   orb.start();
 
   session = {
@@ -393,7 +385,6 @@ function startListening() {
       if (!session?.voice) return;
       const level = session.voice.activity;
       session.orb.setLevel(level);
-      if (currentVariant() === 'c') session.orb.setBins(spread(level));
       paintMeter(level);
     }, 50);
     return;
@@ -419,7 +410,6 @@ function resumeListening() {
       if (!session?.voice) return;
       const level = session.voice.activity;
       session.orb.setLevel(level);
-      if (currentVariant() === 'c') session.orb.setBins(spread(level));
       paintMeter(level);
     }, 50);
   }
@@ -481,15 +471,6 @@ function paintMeter(level) {
   if (el) el.style.width = `${Math.round(clamp01(level) * 100)}%`;
 }
 
-/** A rough spectrum from one number, for the variant that draws bins. */
-function spread(level) {
-  const bins = new Array(24);
-  for (let i = 0; i < bins.length; i += 1) {
-    const shape = Math.sin(((i + 1) / bins.length) * Math.PI);
-    bins[i] = clamp01(level * shape * (0.75 + Math.random() * 0.5));
-  }
-  return bins;
-}
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
 /**
@@ -509,7 +490,6 @@ async function startLevelOnly() {
     session.tick = setInterval(() => {
       if (!session) return;
       session.orb.setLevel(mic.read());
-      if (currentVariant() === 'c') session.orb.setBins(mic.bins());
     }, 50);
     setState('listening');
     showSourceNote('This browser cannot turn speech into text — the orb is '
@@ -963,7 +943,6 @@ function openTypeSheet(prefill = '') {
    preference nobody is meant to keep does not belong in Settings.
    ══════════════════════════════════════════════════════════════════════ */
 function devPanelHtml() {
-  const v = currentVariant();
   /* COLLAPSED by default, and the diagnostics come FIRST.
      It was a tall block of style comparisons with the one control I actually
      needed buried underneath it — on a phone that control was below the fold
@@ -997,8 +976,7 @@ function devPanelHtml() {
         <button type="button" class="chip" id="asst-lab-copy">Copy this config</button>
         <button type="button" class="chip" id="asst-lab-reset">Reset</button>
       </div>
-      <p class="asst-dev-hint" id="asst-dev-hint">${
-  esc(VARIANTS.find((x) => x.id === v)?.hint ?? '')}</p>
+
       <div class="asst-dev-row">
         ${MOCK_TRANSCRIPTS.map((m) => `<button type="button" class="chip"
           data-mock="${esc(m.id)}">Play “${esc(m.label)}”</button>`).join('')}
@@ -1022,22 +1000,6 @@ function wireDevPanel(el) {
   /* Scoped to the panel. `[data-variant]` also matches the ORB, which carries
    * the chosen variant as an attribute — an unscoped selector wired it as a
    * fourth radio button and put a click handler on the thing being previewed. */
-  el.querySelectorAll('.asst-dev [data-variant]').forEach((b) => {
-    b.onclick = () => {
-      setVariant(b.dataset.variant);
-      session.orb.setVariant(b.dataset.variant);
-      el.querySelectorAll('#orb-main,[id^="orb-"]').forEach((o) => {
-        o.dataset.variant = b.dataset.variant;
-      });
-      el.querySelectorAll('.asst-dev [data-variant]').forEach((x) => {
-        const on = x.dataset.variant === b.dataset.variant;
-        x.classList.toggle('on', on);
-        x.setAttribute('aria-checked', String(on));
-      });
-      const hint = el.querySelector('#asst-dev-hint');
-      if (hint) hint.textContent = VARIANTS.find((x) => x.id === b.dataset.variant)?.hint ?? '';
-    };
-  });
   const note = (m) => {
     const n = el.querySelector('#asst-trace-note');
     if (n) n.textContent = m;

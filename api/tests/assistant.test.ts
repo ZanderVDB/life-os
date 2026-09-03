@@ -145,23 +145,25 @@ test('the microphone drives a picture and is released on the way out', () => {
   assert.match(surface, /export const leaveAssistant = endSession;/);
 });
 
-test('three listening variants, one assistant', () => {
-  /* §8. Only the listening animation differs — three assistants would be
-   * three products, and the point is to choose a motion, not a personality. */
+test('one listening renderer, configured — not three chosen by a stored key', () => {
+  /* §8. It WAS three renderers picked by a stored `variant`, and that turned
+     out to be the cause of two reports at once: "none of the buttons change
+     anything" (two of the three ignored the lab config entirely) and "it
+     looks different on my phone" (each device had quietly kept a different
+     choice, and the picker had since been removed, so the value was stuck).
+     One renderer, driven by the config, cannot do either. */
   const orb = read('assistant-orb.js');
-  const ids = [...orb.matchAll(/\{ id: '(\w)', label: '[^']+'/g)].map((m) => m[1]);
-  assert.deepEqual(ids, ['a', 'b', 'c']);
-  /* `drawConcentric` became `drawWaveform`: the rings read as sonar, and
-     variant A is now a balanced audio waveform around the orb. */
-  for (const fn of ['drawWaveform', 'drawHalo', 'drawRadial']) {
-    assert.match(orb, new RegExp(`${fn}\\(`), `variant ${fn} is not implemented`);
-  }
-  // The selector is a development control, not a user setting.
+  assert.doesNotMatch(orb, /this\.variant ===/, 'a stored style still diverts the renderer');
+  assert.doesNotMatch(orb, /drawHalo\(|drawRadial\(/, 'the alternative renderers are back');
+  assert.match(orb, /else this\.drawWaveform\(/, 'there is no single listening renderer');
+
   const surface = read('assistant.js');
+  assert.doesNotMatch(surface, /currentVariant\(\)/, 'the surface still chooses a style');
+  /* The instrument that replaced it is behind the development switch. */
   assert.match(surface, /\$\{devTools\(\) \? devPanelHtml\(\) : ''\}/,
-    'the variant selector is not behind the development switch');
-  assert.ok(!/listening style/i.test(read('settings.js')),
-    'the variant selector leaked into Settings as a permanent preference');
+    'the lab is not behind the development switch');
+  assert.match(surface, /data-preset=/, 'the presets are gone');
+  assert.match(surface, /setConfig\(/, 'a change never reaches the running orb');
 });
 
 test('reduced motion still says "listening"', () => {
