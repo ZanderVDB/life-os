@@ -123,6 +123,15 @@ await db.insert(calendarEvents).values([
 process.env['ADMIN_EMAILS'] = process.env['ADMIN_EMAILS'] ?? 'dev@example.com';
 process.env['USD_ZAR_RATE'] = process.env['USD_ZAR_RATE'] ?? '18.20';
 
+/* `LOS_NO_SEED=1` gives an EMPTY beta.
+ *
+ * The seeded fortnight is what makes Admin and the usage screens readable —
+ * an overview of zero is a picture of nothing. It is also what makes a
+ * reconciliation unreadable: "does the ledger equal Admin" is only a real
+ * question when every row in the ledger is one this run put there. */
+const SEED_BETA = process.env['LOS_NO_SEED'] !== '1';
+if (SEED_BETA) {
+
 const { users: usersTable, workspaces: wsTable, workspaceMemberships: memTable,
   aiUsageEvents: usageTable, adminAuditLog: auditTable } = await import('../src/db/schema.js');
 const { updatePolicy, policyFor } = await import('../src/usage/allowance.js');
@@ -234,6 +243,8 @@ if (dave) {
     before: { allowanceUsd: 5 }, after: { allowanceUsd: 11 },
     createdAt: at(4, 11),
   });
+}
+
 }
 
 await app.listen({ port: PORT, host: '127.0.0.1' });

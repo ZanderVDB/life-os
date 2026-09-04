@@ -4,7 +4,7 @@
 to [`pre-beta-roadmap.md`](./pre-beta-roadmap.md), which is the plan; this is
 the state.
 
-Last updated: 4 September 2026, staging build `4e3c2aa`.
+Last updated: 4 September 2026.
 
 ---
 
@@ -153,5 +153,16 @@ oversight:
 * **The orb follows how much text arrives, not microphone loudness.** Shouting
   a short word does not spike it. True loudness needs a second `getUserMedia`
   stream, and that stream is what appeared to take the microphone away from the
-  recogniser on a real phone. Revisit once voice duplication is confirmed fixed
-  on a device.
+  recogniser on a real phone. Now that transcription is trusted on a device,
+  this is a decision that CAN be revisited — after the beta, not during it.
+
+## Closed
+
+* **Mobile voice duplication — verified on a real device, 4 September 2026.**
+  Speech is transcribed correctly and words are no longer repeated. `mergeFinals`
+  was the fix: Android Chrome emits cumulative finals, where every entry is
+  final and each contains the whole sentence so far, and concatenating them
+  produced "I I want I want to buy bread". Four rounds of reasoning about it
+  got nowhere; the device's own trace settled it in one.
+
+  This was the last thing carried as unverified. It is closed.

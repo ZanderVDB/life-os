@@ -6,6 +6,9 @@ import { googleConfig } from '../lib/calendar-sync.js';
 import { webhookConfigured, webhookUrl } from '../lib/calendar-watch.js';
 import { calendarWatchChannels } from '../db/schema.js';
 import type { Assistant } from '../ai/index.js';
+import { adminAllowlist } from '../admin/authz.js';
+import { fxRate } from '../usage/fx.js';
+import { defaultAllowanceUsd } from '../usage/allowance.js';
 
 export function registerHealthRoutes(
   app: AppInstance, db: Db, version: string, assistant?: Assistant,
@@ -53,6 +56,24 @@ export function registerHealthRoutes(
         ? Object.fromEntries((['interpret', 'plan', 'answer', 'extractMemory'] as const)
           .map((j) => [j, Boolean(assistant.providers.for(j))]))
         : {},
+    },
+    /* ── Is this deployment configured for the beta? ──────────────────
+     *
+     * Exactly the reasoning above, for the three values the beta needs. The
+     * only other way to find out whether staging has an admin allowlist is to
+     * sign in as somebody who might be one and see what happens — which
+     * cannot be done at all if the answer is no.
+     *
+     * A COUNT of admins, never an address: an email is personal data. The
+     * exchange rate and the default allowance are not secrets — both are
+     * shown to every admin in the product, and the rate is derivable from
+     * any two amounts on any usage screen — and printing them is the
+     * difference between "it is set" and "it is set to what I meant".
+     */
+    beta: {
+      adminsConfigured: adminAllowlist().size,
+      fxRate: fxRate()?.rate ?? null,
+      defaultAllowanceUsd: defaultAllowanceUsd(),
     },
   }));
 

@@ -16,7 +16,7 @@ is deliberately last.
 
 | Step | | Status |
 |---|---|---|
-| 1 | Immediate bugs and polish | **done** — voice duplication awaits a real-device retest |
+| 1 | Immediate bugs and polish | **done** — voice duplication verified on a real device |
 | 2 | AI usage accounting backend | **done** |
 | 3 | AI usage limits | **done** |
 | 4 | Admin foundation | **done** — needs `ADMIN_EMAILS` set |
@@ -35,11 +35,15 @@ beta are in [`allowances-and-admin.md`](./allowances-and-admin.md).
 
 ## 1. Immediate bugs and polish
 
-- **Mobile voice input** — **awaiting real-device verification.** The
-  transcript still duplicated on a real phone after a fix that was verified
-  only against a scripted recogniser. A development-only diagnostics recorder
-  is now deployed so the device can report what it actually emits, rather than
-  a third guess. See `ai-system.md` §6j.
+- **Mobile voice input** — **done, verified on a real device (4 Sep 2026).**
+  Speech is transcribed correctly and words are no longer duplicated.
+
+  The cause was Android Chrome emitting CUMULATIVE finals: every result entry
+  is final, and each contains the whole sentence so far, so concatenating them
+  produced "I I want I want to buy bread". `mergeFinals` rebuilds the text from
+  the list instead of appending to it. Four rounds of reasoning from a scripted
+  recogniser got nowhere; a diagnostics recorder on the actual phone settled it
+  in one trace. See `ai-system.md` §6j.
 - **Assistant listening visual** — done. The concentric rings read as sonar
   and were replaced by a balanced audio waveform around the orb.
 - **Reminder civil-date bug** — done. A reminder with no date used the UTC
