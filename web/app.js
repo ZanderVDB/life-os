@@ -68,7 +68,11 @@ import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHt
   recurrenceWords, modeIds, defaultMode, modeStep,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { habitSummaryHtml } from './calendar.js';
-import { settingsHtml, SETTINGS_TABS } from './settings.js';
+import { settingsHtml, settingsTabs } from './settings.js';
+import { adminHtml } from './admin.js';
+import { usageNoticeHtml } from './usage-panel.js';
+import { feedbackSheetHtml, technicalDetails } from './feedback.js';
+import { introHtml } from './beta-intro.js';
 import {
   initLibrary, renderLibrary, libraryHashChanged, libraryWillLeave,
 } from './library-view.js';
@@ -106,6 +110,23 @@ const state = {
   // Today can name a task's project without a second request or a copy of it
   // on every task row.
   projectsById: {},
+
+  /* ── The beta ──────────────────────────────────────────────────────
+     `undefined` means never asked, `null` means asked and the server had
+     nothing to say. Settings has to be able to tell "checking" apart from
+     "there is nothing", which a single falsy value cannot do. */
+  aiUsage: undefined,
+  /* Admin. All of it undefined until an admin actually opens the section —
+     a normal tester never fetches any of it, and could not read it if they
+     did: every one of these endpoints is 403 for them. */
+  adminTab: 'overview',
+  adminUserId: null,
+  adminDenied: false,
+  adminOverview: undefined,
+  adminSpend: undefined,
+  adminUsers: undefined,
+  adminUser: undefined,
+  adminAudit: undefined,
 };
 
 /**
@@ -147,6 +168,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
  */
 let authUser = null;
 let devToken = null;
+/** Local verification only — see the note in `api()`. */
+let devEmail = null;
+try { devEmail = localStorage.getItem('los2_dev_email'); } catch { /* blocked */ }
 
 async function authToken(force = false) {
   if (devToken) return devToken;
@@ -169,6 +193,17 @@ async function api(path, opts = {}) {
       // body that claims to be JSON, which silently broke every action route.
       ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      /* ── Acting as somebody else, locally only ──────────────────────
+         Verifying "what does a NORMAL user see" needs a second identity,
+         and the alternative is a screenshot of an admin's screen with the
+         admin bits edited out — which proves nothing.
+
+         This rides on `DEV_AUTH_BYPASS`, which `loadEnv` REFUSES to boot
+         with in staging or production, so on any deployed service the
+         header is meaningless: without the bypass token the request is
+         verified against Firebase and this is ignored entirely. It is
+         also gated on `devToken`, so a normal session never sends it. */
+      ...(devToken && devEmail ? { 'x-dev-email': devEmail } : {}),
       ...(opts.headers || {}),
     },
     body: hasBody ? JSON.stringify(opts.body) : undefined,
@@ -191,7 +226,15 @@ async function api(path, opts = {}) {
     if (res.status === 401) {
       throw new Error('Your sign-in has expired. Reload the page to sign in again.');
     }
-    throw new Error(data?.error?.message || data?.message || `Request failed (${res.status})`);
+    /* The CODE travels with the message. "You have used your allowance" and
+       "the model is down" read almost the same to a `catch` that only has a
+       sentence, and only one of them is worth retrying or worth explaining
+       differently — so the caller gets both. */
+    const err = new Error(data?.error?.message || data?.message || `Request failed (${res.status})`);
+    err.code = data?.error?.code ?? null;
+    err.status = res.status;
+    err.details = data?.error?.details ?? null;
+    throw err;
   }
   return data;
 }
@@ -322,8 +365,19 @@ async function initAuth() {
     return run(boot);
   }
   if (!CFG.isConfigured) {
-    return renderFatal('Configuration needed',
-      'This deployment has no Firebase settings. Set the FIREBASE_* variables on the web service.');
+    /* ── The visitor still gets the page ──────────────────────────────
+       This used to replace everything with a developer's error message, so
+       a mis-deployed Life OS greeted a first-time visitor with
+       "Set the FIREBASE_* variables" instead of the page that explains what
+       Life OS is and what they are agreeing to. The person who can fix that
+       is not the person reading it.
+
+       So the introduction is shown as normal, and the problem is reported
+       at the only moment it actually matters: when somebody presses sign
+       in and nothing can happen. */
+    return renderSignIn(() => {
+      toast('Sign-in is not configured on this deployment yet.', true);
+    });
   }
   const [{ initializeApp }, auth] = await Promise.all([
     import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js'),
@@ -412,9 +466,28 @@ function renderSignIn(onClick) {
    * simply expired — sits on a loading screen that never resolves. */
   document.documentElement.classList.remove('los-returning');
   if (!document.getElementById('landing')) root.innerHTML = LANDING;
-  // Every sign-in button on the landing page — header, hero and closing
-  // call to action — goes to the same place.
+  // Every sign-in button on the landing page goes to the same place.
   root.querySelectorAll('#si, #si-top, #si-end').forEach((b) => { b.onclick = onClick; });
+
+  /* ── The explanation comes first ──────────────────────────────────
+     The sign-in is revealed by the button at the foot of the introduction
+     rather than sitting at the top of it. Most people arriving here were
+     sent a link by me and are doing me a favour; the three things they
+     need to know before they start are worth more than a login form. */
+  const reveal = () => {
+    const block = document.getElementById('bl-signin');
+    if (!block) return;
+    block.hidden = false;
+    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('si')?.focus({ preventScroll: true });
+  };
+  document.getElementById('bl-understand')?.addEventListener('click', reveal);
+  /* The header link is a shortcut for somebody who has read it before —
+     it reveals the same block rather than being a second way in. */
+  document.getElementById('bl-jump')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    reveal();
+  });
 }
 
 const renderFatal = (title, body) => {
@@ -504,6 +577,19 @@ async function boot() {
   });
 
   renderShell();
+  ['beta-tag', 'beta-tag-m'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', openFeedback);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFeedback(); }
+    });
+  });
+  /* ── First run ────────────────────────────────────────────────────
+     Shown once per ACCOUNT, decided by the server, after the app is on
+     screen rather than instead of it — somebody who has already read it
+     should never see a loading state pretending to be an explanation. */
+  if (state.me?.account?.introRequired) openIntro({ firstRun: true });
   /* One authenticated caller, one opener. Done here rather than at module
      load because both need the workspace, which does not exist until now. */
   /**
@@ -714,6 +800,12 @@ function renderShell() {
       <aside class="sidebar" id="sidebar">
         <a class="logo ${introSeen ? '' : 'intro'}" href="#today" data-route="today" aria-label="Life OS — Today">
           ${logoMark(26)}<span class="logo-word">Life OS</span>
+          ${/* A quiet mark, not an announcement. It is worth knowing you are on
+                a test build — it explains the rough edges — and it is not worth
+                a banner across the top of every screen. Tapping it opens the
+                feedback sheet, because the moment you notice you are on a beta
+                is usually the moment you have something to say about it. */ ''}
+          ${state.me?.account?.isBeta ? '<span class="beta-tag" id="beta-tag" role="button" tabindex="0" title="You are on the Life OS beta. Tap to send feedback.">beta</span>' : ''}
         </a>
 
         <button class="cmdk" id="cmdk" aria-label="Search and commands">
@@ -757,6 +849,7 @@ function renderShell() {
         <div class="mobile-bar">
           ${logoMark(24)}
           <span class="m-title" id="m-title">Life OS</span>
+          ${state.me?.account?.isBeta ? '<span class="beta-tag beta-tag-m" id="beta-tag-m" role="button" tabindex="0" title="You are on the Life OS beta. Tap to send feedback.">beta</span>' : ''}
           <button class="m-btn mtop-spacer" id="cmdk-m"
             aria-label="Search and commands">${icon('search')}</button>
         </div>
@@ -1273,6 +1366,23 @@ async function loadRoute(nav = navToken()) {
     }
     return;
   }
+
+  /* ── Admin ────────────────────────────────────────────────────────
+     A route rather than a Settings panel: it is a different kind of screen
+     with its own navigation, and burying an operational area three taps deep
+     inside personal settings makes it slower to reach exactly when something
+     is wrong. Reaching it proves nothing — every request it makes is
+     authorised again on the server. */
+  if (state.route === 'admin') {
+    head.innerHTML = '';
+    head.hidden = true;
+    scroll.innerHTML = adminHtml(state);
+    wireAdmin();
+    void loadAdmin();
+    if (isPhone()) setMobileBar('Admin', () => go('settings'));
+    return;
+  }
+  head.hidden = false;
 
   if (state.route === 'settings') {
     /* No sub-line: every Settings panel states its own purpose directly below
@@ -2920,8 +3030,87 @@ const placeholderHtml = (route, ph) => `<div class="placeholder rise">
   <p class="ph-note">${esc(ph.note)}</p>
 </div>`;
 
+/* ══ The beta introduction ═══════════════════════════════════════════════
+ *
+ * A full-screen gate on first run, and a re-readable page afterwards.
+ *
+ * The acknowledgement is recorded on the SERVER. It could have been a
+ * localStorage flag, and then a new phone would ask again, clearing site data
+ * would ask again, and there would be no way to know from the outside whether
+ * somebody had ever actually read what they were agreeing to about money.
+ */
+function openIntro({ firstRun = false } = {}) {
+  const host = document.createElement('div');
+  host.className = 'bi-scrim';
+  host.innerHTML = introHtml({
+    cta: firstRun ? undefined : 'Got it',
+    dismiss: !firstRun,
+  });
+  document.body.append(host);
+  document.body.classList.add('modal-open');
+
+  const close = () => {
+    host.remove();
+    document.body.classList.remove('modal-open');
+  };
+
+  host.querySelector('#bi-close')?.addEventListener('click', close);
+  host.querySelector('#bi-accept')?.addEventListener('click', () => {
+    close();
+    if (!firstRun) return;
+    /* Recorded after they have said so, and never blocking: if the write
+       fails they are already inside Life OS and will simply be asked once
+       more next time, which is the harmless failure of the two. */
+    api('/api/v1/me/intro-accepted', { method: 'POST' })
+      .then((r) => {
+        if (state.me?.account) {
+          state.me.account.introAcceptedAt = r.introAcceptedAt;
+          state.me.account.introRequired = false;
+        }
+      })
+      .catch(() => {});
+  });
+  /* First run is a gate: Escape does not skip an explanation about money. */
+  if (!firstRun) {
+    host.addEventListener('click', (e) => { if (e.target === host) close(); });
+  }
+  /* Focused so a keyboard can act on it, but WITHOUT scrolling — the button
+     is at the foot of a long explanation, and jumping there is the reading
+     equivalent of turning straight to the last page. */
+  host.querySelector('#bi-accept')?.focus({ preventScroll: true });
+}
+
+/** The feedback sheet, from wherever somebody happened to be. */
+function openFeedback() {
+  openSheet({
+    title: 'Send feedback',
+    className: 'msheet-feedback',
+    body: feedbackSheetHtml(state.route),
+  });
+  wireFeedback();
+}
+
+function wireFeedback(scope = document) {
+  scope.querySelector('#fb-copy')?.addEventListener('click', async () => {
+    const said = scope.querySelector('#fb-said');
+    const text = scope.querySelector('#fb-tech')?.textContent ?? '';
+    try {
+      await navigator.clipboard.writeText(text);
+      if (said) said.textContent = 'Copied.';
+    } catch {
+      /* A clipboard that refuses is common on a phone in a webview. The text
+         is already on screen and selectable, so say that rather than fail. */
+      if (said) said.textContent = 'Copy blocked — select the text above instead.';
+    }
+  });
+}
+
 /* ── Settings ────────────────────────────────────────────────────────── */
 function wireSettings() {
+  document.getElementById('open-admin')?.addEventListener('click', () => go('admin'));
+  document.getElementById('show-intro')?.addEventListener('click',
+    () => openIntro({ firstRun: false }));
+  wireFeedback();
   document.querySelectorAll('[data-stab]').forEach((el) => {
     el.onclick = () => { state.settingsTab = el.dataset.stab; renderSettings(); };
   });
@@ -3290,7 +3479,7 @@ function renderSettings() {
    * one page is one too many. */
   if (isPhone()) {
     const tab = state.settingsTab
-      ? SETTINGS_TABS.find((t) => t.id === state.settingsTab) : null;
+      ? settingsTabs(state).find((t) => t.id === state.settingsTab) : null;
     if (tab) {
       setMobileBar(tab.label, () => {
         state.settingsTab = null;
@@ -3325,6 +3514,185 @@ function renderSettings() {
       if (state.route === 'settings' && state.settingsTab === 'ai') renderSettings();
     }).catch(() => {});
   }
+  /* Usage is the server's answer, never worked out here. Same pattern again:
+     render, ask once, repaint. */
+  if (state.settingsTab === 'usage' && state.aiUsage === undefined) {
+    state.aiUsage = null;
+    loadUsage().then(() => {
+      if (state.route === 'settings' && state.settingsTab === 'usage') renderSettings();
+    }).catch(() => {});
+  }
+}
+
+/**
+ * What this person has used, according to the server.
+ *
+ * Nothing in the browser adds up a cost or works out a percentage — see
+ * `usage-panel.js`. This asks and stores the answer.
+ */
+async function loadUsage() {
+  try {
+    state.aiUsage = await api(`/api/v1/workspaces/${state.me.workspace.id}/ai/usage`);
+  } catch {
+    state.aiUsage = null;
+  }
+}
+
+/* ══ Admin ═══════════════════════════════════════════════════════════════
+ *
+ * Everything below asks the server and renders the answer. No number is
+ * computed here; see `admin.js`.
+ */
+
+const adminApi = (path, opts) => api(`/api/v1/admin${path}`, opts);
+
+async function loadAdmin() {
+  const tab = state.adminTab ?? 'overview';
+  try {
+    if (tab === 'overview' && state.adminOverview === undefined) {
+      state.adminOverview = null;
+      const [overview, spend] = await Promise.all([
+        adminApi('/overview'),
+        adminApi('/spend?days=14').catch(() => null),
+      ]);
+      state.adminOverview = overview;
+      state.adminSpend = spend;
+      return repaintAdmin();
+    }
+    if (tab === 'users' && state.adminUserId && state.adminUser === undefined) {
+      state.adminUser = null;
+      state.adminUser = await adminApi(`/users/${state.adminUserId}`);
+      return repaintAdmin();
+    }
+    if (tab === 'users' && !state.adminUserId && state.adminUsers === undefined) {
+      state.adminUsers = null;
+      state.adminUsers = (await adminApi('/users')).users;
+      return repaintAdmin();
+    }
+    if (tab === 'audit' && state.adminAudit === undefined) {
+      state.adminAudit = null;
+      state.adminAudit = (await adminApi('/audit?limit=60')).entries;
+      return repaintAdmin();
+    }
+  } catch (e) {
+    /* A 403 is not a failure to load, it is an answer. Showing the Admin
+       chrome above a spinner that will never resolve reads as broken, and
+       it advertises a screen the person cannot have. */
+    if (e.status === 403) {
+      state.adminDenied = true;
+      return repaintAdmin();
+    }
+    toast(e.message || 'Admin could not load.', true);
+  }
+  return undefined;
+}
+
+function repaintAdmin() {
+  if (state.route !== 'admin') return;
+  document.getElementById('main-scroll').innerHTML = adminHtml(state);
+  wireAdmin();
+}
+
+function wireAdmin() {
+  document.querySelectorAll('[data-admin-tab]').forEach((el) => {
+    el.onclick = () => {
+      state.adminTab = el.dataset.adminTab;
+      state.adminUserId = null;
+      state.adminUser = undefined;
+      repaintAdmin();
+      void loadAdmin();
+    };
+  });
+  document.querySelector('[data-admin-exit]')?.addEventListener('click', () => go('settings'));
+  document.querySelector('[data-admin-back]')?.addEventListener('click', () => {
+    state.adminUserId = null;
+    state.adminUser = undefined;
+    repaintAdmin();
+    void loadAdmin();
+  });
+  document.querySelectorAll('[data-admin-user]').forEach((el) => {
+    el.onclick = () => {
+      state.adminUserId = el.dataset.adminUser;
+      state.adminUser = undefined;
+      repaintAdmin();
+      void loadAdmin();
+    };
+  });
+
+  const account = document.getElementById('adm-account-form');
+  if (account) {
+    account.onsubmit = (e) => {
+      e.preventDefault();
+      const f = new FormData(account);
+      const allowance = String(f.get('allowanceUsd') ?? '').trim();
+      const dateOrNull = (v) => {
+        const raw = String(v ?? '').trim();
+        return raw ? new Date(`${raw}T00:00:00.000Z`).toISOString() : null;
+      };
+      const body = {
+        accountType: f.get('accountType'),
+        role: f.get('role'),
+        aiEnabled: f.get('aiEnabled') === 'true',
+        /* Empty means unlimited, which is a decision, not an omission. */
+        allowanceUsd: allowance === '' ? null : Number(allowance),
+        betaStartAt: dateOrNull(f.get('betaStartAt')),
+        betaEndAt: dateOrNull(f.get('betaEndAt')),
+        adminNote: String(f.get('adminNote') ?? '').trim() || null,
+      };
+      run(async () => {
+        await adminApi(`/users/${account.dataset.user}`, { method: 'PATCH', body });
+        state.adminUser = undefined;
+        state.adminUsers = undefined;
+        state.adminOverview = undefined;
+        await loadAdmin();
+        toast('Saved');
+      });
+    };
+  }
+
+  const credit = document.getElementById('adm-credit-form');
+  if (credit) {
+    credit.onsubmit = (e) => {
+      e.preventDefault();
+      const f = new FormData(credit);
+      const amountUsd = Number(f.get('amountUsd'));
+      const reason = String(f.get('reason') ?? '').trim();
+      if (!amountUsd || !reason) { toast('An amount and a reason, please.', true); return; }
+      run(async () => {
+        await adminApi(`/users/${credit.dataset.user}/credit`, {
+          method: 'POST', body: { amountUsd, reason },
+        });
+        state.adminUser = undefined;
+        state.adminUsers = undefined;
+        await loadAdmin();
+        toast('Credit added');
+      });
+    };
+  }
+
+  document.getElementById('adm-new-period')?.addEventListener('click', () => {
+    const id = document.getElementById('adm-credit-form')?.dataset.user;
+    if (!id) return;
+    void openChoiceDialog({
+      title: 'Start a new usage period?',
+      body: 'Usage will be counted from now. Nothing is deleted — every past '
+        + 'record stays exactly where it is, it simply stops counting against '
+        + 'this period.',
+      choices: [
+        { id: 'yes', label: 'Start a new period', tone: 'warn' },
+        { id: 'no', label: 'Cancel' },
+      ],
+    }).then((choice) => {
+      if (choice !== 'yes') return;
+      run(async () => {
+        await adminApi(`/users/${id}/new-period`, { method: 'POST', body: {} });
+        state.adminUser = undefined;
+        state.adminUsers = undefined;
+        await loadAdmin();
+        toast('New period started');
+      });
+    });
+  });
 }
 
 async function loadMemories() {

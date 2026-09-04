@@ -44,9 +44,45 @@ import { proseHtml } from './assistant-prose.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/** Development controls — the A/B/C selector and the mock transcripts. */
-export const devTools = () => Boolean(window.LIFE_OS_CONFIG?.devTools)
+/**
+ * Are development tools POSSIBLE on this deployment?
+ *
+ * Environment-derived, and it fails closed: production never, staging and
+ * local yes. See `web/server.js`.
+ */
+const devPossible = () => Boolean(window.LIFE_OS_CONFIG?.devTools)
   || (() => { try { return localStorage.getItem('los2_dev') === '1'; } catch { return false; } })();
+
+/**
+ * Are they SWITCHED ON, here, now?
+ *
+ * ── Two gates rather than one ────────────────────────────────────────────
+ *
+ * The diagnostics panel, the twenty-preset waveform lab and the demo
+ * transcripts are tools for whoever is building Life OS. They are not for the
+ * dozen friends and clients about to be handed a link — a tester who opens
+ * "Development" and finds sliders labelled `fold` and `drive` has found a
+ * bug report they cannot write and a way to make the app look broken.
+ *
+ * But they still have to be reachable on staging, because staging is where
+ * the real devices are. So: the environment decides whether they can exist at
+ * all, and an explicit, deliberate switch decides whether they are showing.
+ *
+ * Turn on with `?diag=1` — it persists, so it survives the reload and the
+ * navigation that follow. Off with `?diag=0`.
+ */
+export const devTools = () => {
+  if (!devPossible()) return false;
+  try {
+    const asked = new URLSearchParams(location.search).get('diag');
+    if (asked === '1') localStorage.setItem('los2_diag', '1');
+    if (asked === '0') localStorage.removeItem('los2_diag');
+    return localStorage.getItem('los2_diag') === '1';
+  } catch {
+    /* No storage: a URL that asks for them this once still gets them. */
+    return new URLSearchParams(location.search).get('diag') === '1';
+  }
+};
 
 
 /* ── State copy ──────────────────────────────────────────────────────────
@@ -669,8 +705,19 @@ async function propose(text) {
   } catch (e) {
     if (!session) return;
     setState('idle');
-    /* The server says what went wrong — no model configured, timed out,
-       rate limited. Repeating its sentence beats "something went wrong". */
+    /* ── Out of allowance is not an outage ──────────────────────────
+       A toast disappears, and this is a state rather than an event: the
+       assistant will keep refusing until something changes, and somebody
+       who looks away for four seconds should not have to send again to
+       find out why nothing happened. So it stays on screen, under the
+       orb, in the same place every other persistent explanation goes. */
+    if (e.code === 'AI_ALLOWANCE_EXCEEDED') {
+      showSourceNote(e.message);
+      session.el.querySelector('#asst-src')?.classList.add('asst-src-stop');
+      return;
+    }
+    /* Otherwise the server says what went wrong — no model configured, timed
+       out, rate limited. Repeating its sentence beats "something went wrong". */
     session.ctx.toast?.(e.message, true);
   }
 }

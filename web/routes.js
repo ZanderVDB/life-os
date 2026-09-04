@@ -57,6 +57,13 @@ export const SECONDARY_ROUTES = [
   { id: 'history', label: 'Completed' },
   { id: 'settings', label: 'Settings' },
   { id: 'ai', label: 'Assistant' },
+  /* Admin. A real route so `#admin` resolves, a refresh stays put and a link
+     works — and absent from every navigation surface, because most people are
+     not admins. Being able to reach it grants nothing: every request it makes
+     is authorised again on the server, and a normal account gets 403 and an
+     empty screen. Hiding a URL is not security and is not being used as any
+     part of it here. */
+  { id: 'admin', label: 'Admin' },
 ];
 
 export const ALL_ROUTE_IDS = [...ROUTES, ...SECONDARY_ROUTES].map((r) => r.id);

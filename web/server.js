@@ -52,6 +52,7 @@ function runtimeConfig() {
   const {
     API_BASE_URL, FIREBASE_API_KEY, FIREBASE_AUTH_DOMAIN,
     FIREBASE_PROJECT_ID, FIREBASE_APP_ID,
+    PUBLIC_BETA_WHATSAPP_URL, PUBLIC_BETA_SUPPORT_EMAIL,
   } = process.env;
 
   const firebase = {
@@ -77,6 +78,18 @@ window.LIFE_OS_BUILD = ${JSON.stringify(BUILD_ID)};
  * both of which have to be reachable on the staging deployment that is
  * being worked on. Delete DEV_PREVIEW to turn both off. */
 window.LIFE_OS_CONFIG.devTools = ${JSON.stringify(devToolsEnabled)};
+/* How a beta tester reaches a person.
+ *
+ * PUBLIC by design and public in fact: a WhatsApp link and an email address
+ * are meant to be handed out, and putting them in the client is the only way
+ * a "message me" button can work. They are configuration rather than code so
+ * they can be changed without a deploy, and so that NEITHER IS GUESSED —
+ * with nothing set the feedback sheet says what is missing instead of
+ * inventing a number. */
+window.LIFE_OS_CONFIG.beta = ${JSON.stringify({
+    whatsappUrl: PUBLIC_BETA_WHATSAPP_URL ?? '',
+    supportEmail: PUBLIC_BETA_SUPPORT_EMAIL ?? '',
+  })};
 `;
 }
 

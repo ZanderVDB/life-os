@@ -34,3 +34,16 @@ window.LIFE_OS_CONFIG.isConfigured = Object.values(window.LIFE_OS_CONFIG.firebas
  * committed fallback is being served, which is itself worth knowing.
  */
 window.LIFE_OS_BUILD = 'local-dev';
+
+/**
+ * How a beta tester reaches a person.
+ *
+ * Public by design — a WhatsApp link and an email address exist to be handed
+ * out. Deliberately EMPTY here: a deployed server replaces this file with one
+ * carrying the configured values, and with nothing set the feedback sheet says
+ * what is missing rather than inventing a number to message.
+ */
+window.LIFE_OS_CONFIG.beta = { whatsappUrl: '', supportEmail: '' };
+
+/** Development tools. False in the committed fallback; the server decides. */
+window.LIFE_OS_CONFIG.devTools = window.LIFE_OS_CONFIG.devTools ?? false;

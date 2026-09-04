@@ -756,8 +756,8 @@ test('the composer sends a body the API can actually parse', () => {
   assert.match(adapter, /api: \(path, opts = \{\}\) => api\(/, 'the adapter no longer forwards opts');
 
   // And api() is still the one doing it, so the body must arrive as an object.
-  const api = app.slice(app.indexOf('async function api(path, opts = {})'),
-    app.indexOf('async function api(path, opts = {})') + 900);
+  const apiAt = app.indexOf('async function api(path, opts = {})');
+  const api = app.slice(apiAt, app.indexOf('const ws = () =>', apiAt));
   assert.match(api, /body: hasBody \? JSON\.stringify\(opts\.body\)/,
     'api() no longer stringifies, so the adapter must');
 });

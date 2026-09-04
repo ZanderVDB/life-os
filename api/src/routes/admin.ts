@@ -74,8 +74,9 @@ export function registerAdminRoutes(app: AppInstance, db: Db, guards: Guards) {
       db.select({
         accountType: users.accountType,
         role: users.role,
-        n: sql<number>`count(*)::int`,
-      }).from(users).groupBy(users.accountType, users.role),
+        email: users.email,
+        id: users.id,
+      }).from(users),
     ]);
 
     /* Who is near, and who is past. Computed per user because an allowance is
@@ -94,8 +95,11 @@ export function registerAdminRoutes(app: AppInstance, db: Db, guards: Guards) {
     const byType: Record<string, number> = {};
     let admins = 0;
     for (const r of accountRows as any[]) {
-      byType[r.accountType] = (byType[r.accountType] ?? 0) + r.n;
-      if (r.role === 'admin') admins += r.n;
+      byType[r.accountType] = (byType[r.accountType] ?? 0) + 1;
+      /* EFFECTIVE admins, so the bootstrap allowlist is counted. Counting
+         only the column would report zero on a deployment whose only admin is
+         the configured one — which is every deployment on day one. */
+      if (adminIdentity(r).isAdmin) admins += 1;
     }
 
     const [turnRow] = await db.select({ n: sql<number>`count(*)::int` }).from(aiTurns);
@@ -208,7 +212,12 @@ export function registerAdminRoutes(app: AppInstance, db: Db, guards: Guards) {
     ]);
 
     const who = adminIdentity(row as any);
+    const fx = fxRate();
     return {
+      /* So every figure on this page is in one currency. Without it the
+         per-call list showed dollars beside rand totals, which reads as two
+         different numbers rather than one converted. */
+      fx: fx ? { rate: fx.rate, source: fx.source } : null,
       user: {
         id: row.id,
         email: row.email,

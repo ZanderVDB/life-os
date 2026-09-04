@@ -193,8 +193,15 @@ test('Settings is an index and a page, and every section survives', () => {
   assert.match(settings, /data-stab-back/, 'there is no way back to the index');
   // The index is built from the SAME list the desktop column is built from,
   // so a new section cannot appear on one and not the other.
-  assert.match(settings, /if \(phone && !tab\) \{[\s\S]{0,400}SETTINGS_TABS\.map/,
+  assert.match(settings, /if \(phone && !tab\) \{[\s\S]{0,400}TABS\.map/,
     'the phone index is a hand-written copy of the section list');
+  /* And the list itself is computed once, from the account — so a section that
+     only some people have (Admin) cannot appear on one surface and not the
+     other, and cannot be added to one of them by hand. */
+  assert.match(settings, /export function settingsTabs\(state\)/,
+    'the section list is not derived from the account');
+  assert.equal((settings.match(/const TABS = settingsTabs\(state\);/g) ?? []).length, 1,
+    'the section list is computed more than once');
   assert.match(mobileCss, /\.set-nav\{display:none\}/, 'the desktop column is still beside it');
 });
 

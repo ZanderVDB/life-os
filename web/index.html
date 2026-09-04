@@ -56,6 +56,10 @@
 <!-- The phone and tablet layer. A separate file because it is a set of
      COMPOSITIONS, not a tail of overrides — see the note at its top. -->
 <link rel="stylesheet" href="./mobile.css">
+<!-- The beta surfaces: introduction, AI usage, feedback and Admin. A
+     separate file because they are compositions that arrived together,
+     not a tail of overrides — see the note at its top. -->
+<link rel="stylesheet" href="./beta.css">
 <script>
 /* Which of the two first paints, decided BEFORE the body is parsed.
  *
@@ -88,82 +92,107 @@ try {
         <path d="M12 20.4c5.1-2.8 8.6-7.3 8.6-11.9-3.7.7-6.7 4.5-8.6 11.9Z" fill="url(#lpLotus)" fill-opacity=".82"/>
         <path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z" fill="url(#lpLotus)"/></svg>
       <span class="logo-word">Life OS</span>
+      <span class="bl-tag">Beta</span>
     </div>
     <nav class="lp-nav-links">
       <a href="https://life-os.web-anchor.com/privacy.html">Privacy</a>
-      <button class="btn btn-primary lp-nav-cta" id="si-top">Sign in</button>
+      <a href="#bl-signin" class="lp-nav-quiet" id="bl-jump">Sign in</a>
     </nav>
   </header>
 
-  <section class="lp-hero">
-    <div class="lp-hero-copy">
-      <h1 class="logo-word">Life OS</h1>
-      <p class="lp-display">Everything you are trying to keep track of,
-        on one screen.</p>
-      <p class="lp-lede">Life OS is a personal productivity app that keeps your
-        tasks, your calendar, your diary and your habits in one place.</p>
-      <p class="lp-sub">Most people run their life across four apps that each
-        know a quarter of it — and none of which can answer the only question
-        that matters in the morning: what does today actually look like.</p>
-      <div class="lp-cta">
-        <button class="btn btn-primary lp-cta-main" id="si">Continue with Google</button>
-        <span class="lp-cta-note">Free · No card · Google Calendar optional</span>
-      </div>
-    </div>
+  <!-- ══ The beta introduction ═══════════════════════════════════════════
 
-    <div class="lp-hero-shot">
-      <div class="lp-shot" role="img" aria-label="The Today screen in Life OS: tasks grouped into today, this week and this month, with the day's habits alongside">
-        <div class="lp-shot-bar">
-          <i class="lp-dot"></i><i class="lp-dot"></i><i class="lp-dot"></i>
-          <span class="lp-shot-url">life-os.web-anchor.com</span>
-        </div>
-        <div class="lp-shot-body">
-          <div class="lp-side">
-            <div class="lp-side-brand">
-              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2.3C8.6 8 8.6 15 12 20.4 15.4 15 15.4 8 12 2.3Z" fill="#A78BFA"/></svg>
-              <span></span>
-            </div>
-            <span class="lp-nav-item is-on"></span>
-            <span class="lp-nav-item"></span>
-            <span class="lp-nav-item"></span>
-            <span class="lp-nav-item"></span>
-            <span class="lp-nav-item"></span>
-          </div>
-          <div class="lp-main">
-            <div class="lp-greet">Good morning, Zander.</div>
-            <div class="lp-cols">
-              <div class="lp-col">
-                <div class="lp-cap">Today</div>
-                <div class="lp-card"><i style="--c:var(--p-high)"></i><span></span></div>
-                <div class="lp-card"><i style="--c:var(--accent)"></i><span class="w70"></span></div>
-              </div>
-              <div class="lp-col">
-                <div class="lp-cap">This week</div>
-                <div class="lp-card"><i style="--c:var(--ok)"></i><span class="w80"></span></div>
-                <div class="lp-card"><i style="--c:var(--accent)"></i><span></span></div>
-                <div class="lp-card"><i style="--c:#8FA6F5"></i><span class="w60"></span></div>
-              </div>
-              <div class="lp-col">
-                <div class="lp-cap">This month</div>
-                <div class="lp-card"><i style="--c:#B69BF0"></i><span class="w70"></span></div>
-                <div class="lp-card"><i style="--c:var(--a-gold)"></i><span></span></div>
-              </div>
-            </div>
-          </div>
-          <div class="lp-rail">
-            <div class="lp-rail-h">Habits today</div>
-            <div class="lp-habit is-done"><i></i><span></span></div>
-            <div class="lp-habit is-done"><i></i><span class="w70"></span></div>
-            <div class="lp-habit"><i></i><span class="w80"></span></div>
-            <div class="lp-habit"><i></i><span class="w60"></span></div>
-          </div>
-        </div>
-      </div>
+       This page has ONE job: to be read before anybody signs in.
+
+       Most of the people arriving here are friends, family and clients who
+       were sent a link. They are not evaluating a product, they are doing me
+       a favour, and the three things they genuinely need to know before they
+       start — this is early, please tell me things, and the assistant costs
+       real money — are worth more than any feature list.
+
+       So the sign-in is not the first thing on the page. It is revealed by
+       the button at the bottom, after the explanation. The words here are
+       the same four sections as `beta-intro.js`, which is what an account
+       that has not acknowledged them sees inside the app; `web-shell` tests
+       assert that the two agree, because two copies of a promise about money
+       is exactly the kind of thing that drifts. -->
+
+  <section class="bl-hero">
+    <h1 class="bl-h logo-word">Life OS</h1>
+    <p class="bl-welcome">Welcome to Life OS. You’re early. Very early.</p>
+    <p class="bl-lede">For the next week or two I would like you to use Life OS
+      properly — plan your week, make projects, talk to the assistant, keep
+      notes, write in the diary — and find out whether it actually helps.</p>
+    <p class="bl-what lp-lede">Life OS is a personal productivity app that keeps
+      your tasks, your calendar, your diary and your habits in one place.</p>
+    <p class="bl-sub">Before you sign in, three things worth knowing.</p>
+  </section>
+
+  <section class="bl-cards">
+    <article class="bl-card">
+      <span class="bl-kicker">Beta</span>
+      <h2>This is early. Genuinely early.</h2>
+      <p>Life OS is being built in the open and you are among the first people
+        outside my own screen to use it. Things will break, some corners are
+        unfinished, and a few will look odd on your particular phone.</p>
+      <p>None of that is your fault, and none of it is a reason to be polite
+        about it.</p>
+    </article>
+
+    <article class="bl-card">
+      <span class="bl-kicker">Feedback</span>
+      <h2>Tell me anything. Especially the small things.</h2>
+      <p>If something breaks, looks strange, feels confusing, or could simply
+        be better — send it. A half-formed &ldquo;this felt weird&rdquo; is
+        more useful than silence, and small irritations are usually the ones
+        that matter most.</p>
+      <p>There is a Send feedback button in Settings, and it will WhatsApp or
+        email me with the build and the screen you were on already attached.</p>
+    </article>
+
+    <article class="bl-card bl-card-wide">
+      <span class="bl-kicker">AI usage</span>
+      <h2>The assistant costs real money, and you can see exactly how much.</h2>
+      <p>There is no Life OS subscription during this test. The only cost is
+        the AI the assistant actually uses when you talk to it.</p>
+      <p>Your account has an allowance. What you have used and what is left are
+        in Settings &rarr; AI usage, updated after every request, so there is
+        nothing to discover later. If you reach it the assistant pauses — and
+        the rest of Life OS carries on exactly as normal.</p>
+      <p class="bl-quiet">Everything else — tasks, projects, calendar, diary,
+        library — never touches it.</p>
+    </article>
+  </section>
+
+  <section class="bl-length">
+    <span class="bl-kicker">How long</span>
+    <h2>About one to two weeks.</h2>
+    <p>Long enough to use it for real. Use it properly rather than carefully —
+      that is the only way either of us learns anything.</p>
+  </section>
+
+  <!-- The sign-in, revealed rather than led with.
+       `hidden` is honoured by a global `[hidden]{display:none!important}` rule
+       in app.css, added after an author `display` rule silently defeated the
+       attribute once already. -->
+  <section class="bl-go">
+    <button class="btn btn-primary bl-cta" id="bl-understand">
+      I understand — enter Life OS</button>
+    <div class="bl-signin" id="bl-signin" hidden>
+      <p class="bl-signin-p">Life OS uses your Google account to sign in.
+        Nothing is posted anywhere, and connecting your calendar is optional
+        and comes later.</p>
+      <button class="btn btn-primary lp-cta-main" id="si">Continue with Google</button>
+      <span class="bl-cta-note">Free during the beta · No card · Google Calendar optional</span>
     </div>
   </section>
 
-  <section class="lp-sec" id="about">
+  <div class="bl-about">
+    <p class="bl-about-h">And if you have never seen Life OS before —
+      here is what it actually is.</p>
+  </div>
+
+<section class="lp-sec" id="about">
     <div class="lp-sec-head">
       <h2>What Life OS is for</h2>
       <p class="lp-sec-lede">Organising your own life — the work you owe other
@@ -280,13 +309,7 @@ try {
     </div>
   </section>
 
-  <section class="lp-close">
-    <h2>Start with today.</h2>
-    <p>Sign in with Google and Life OS opens on the work in front of you.
-      Connect your calendar later, or never.</p>
-    <button class="btn btn-primary lp-cta-main" id="si-end">Continue with Google</button>
-  </section>
-
+  
   <footer class="lp-foot">
     <div class="lp-foot-brand">
       <svg width="20" height="20" viewBox="0 0 24 24" role="img" aria-label="Life OS">

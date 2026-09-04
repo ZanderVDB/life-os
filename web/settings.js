@@ -23,6 +23,8 @@
  */
 import { installState } from './pwa.js';
 import { selectField } from './menu.js';
+import { usagePanelHtml } from './usage-panel.js';
+import { feedbackSheetHtml } from './feedback.js';
 
 export const SETTINGS_TABS = [
   { id: 'account', label: 'Account', blurb: 'Who you are signed in as, and the workspace you are in.' },
@@ -30,10 +32,37 @@ export const SETTINGS_TABS = [
   { id: 'areas', label: 'Areas', blurb: 'The parts of your life. Every task belongs to one.' },
   { id: 'habits', label: 'Habits', blurb: 'Manage the habits themselves. Ticking them off happens on Today.' },
   { id: 'ai', label: 'AI & personalisation', blurb: 'What Life OS knows about you, and how it uses it.' },
+  { id: 'usage', label: 'AI usage', blurb: 'How much of your AI allowance you have used, and what is left.' },
+  { id: 'beta', label: 'Beta & feedback', blurb: 'What this test is, how long it runs, and how to tell me something.' },
   { id: 'integrations', label: 'Integrations', blurb: 'The services Life OS is connected to.' },
   { id: 'app', label: 'App', blurb: 'This installation, on this device.' },
   { id: 'data', label: 'Privacy & data', blurb: 'Where your data lives and what leaves it.' },
 ];
+
+/**
+ * Admin is a section only some people have.
+ *
+ * Hidden here purely so a normal tester is not shown a door they cannot open.
+ * It is NOT the security boundary — every admin endpoint checks authorisation
+ * for itself, so a client that forced this entry to appear would get a menu
+ * item leading to a series of 403s. See `api/src/admin/authz.ts`.
+ */
+export const ADMIN_TAB = {
+  id: 'admin', label: 'Admin',
+  blurb: 'Usage, spend and accounts across Life OS.',
+};
+
+/** The sections THIS person has. Presentation only; the server re-checks. */
+export function settingsTabs(state) {
+  const tabs = [...SETTINGS_TABS];
+  /* Beta only means something to a beta or tester account. */
+  if (!state?.me?.account?.isBeta) {
+    const at = tabs.findIndex((t) => t.id === 'beta');
+    if (at >= 0) tabs.splice(at, 1);
+  }
+  if (state?.me?.account?.isAdmin) tabs.push(ADMIN_TAB);
+  return tabs;
+}
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -504,11 +533,81 @@ function aiPanel(state) {
   ))}`;
 }
 
+/* ══ AI usage ════════════════════════════════════════════════════════════ */
+
+/**
+ * Where somebody stands on their AI allowance.
+ *
+ * The panel body is `usage-panel.js`, which is also what the assistant screen
+ * uses — one place decides how a percentage and a warning look, so the number
+ * cannot say two different things in two places.
+ */
+function usagePanel(state) {
+  return `
+    ${sec('Your AI usage', rowFull(usagePanelHtml(state.aiUsage ?? null)),
+    'The assistant uses paid AI whenever you use it. There is no Life OS '
+    + 'subscription during this beta — you only cover what your own account '
+    + 'actually uses, and this is that figure, measured from what the AI '
+    + 'provider reports rather than estimated.')}
+
+    ${sec('If you run out', `
+      ${row('The assistant stops. Life OS does not.',
+    'Tasks, projects, calendar, diary, library and everything else keep working '
+    + 'exactly as they do now. Only the assistant is paused, and only until the '
+    + 'allowance changes or a new period starts.')}
+      ${row('Need more?',
+    'Message me and I will raise it. There is nothing to buy — this is a beta.')}`)}`;
+}
+
+/* ══ Beta ════════════════════════════════════════════════════════════════ */
+
+function betaPanel(state) {
+  const a = state.me?.account ?? {};
+  const ends = a.betaEndAt ? new Date(a.betaEndAt) : null;
+  const endText = ends && !Number.isNaN(ends.getTime())
+    ? ends.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
+    : null;
+  const started = a.betaStartAt ? new Date(a.betaStartAt) : null;
+
+  return `
+    ${sec('You are on the beta', `
+      ${rowFull(`<div class="set-facts">
+        ${fact('Account', esc(a.accountType ?? 'beta'))}
+        ${fact('Started', started && !Number.isNaN(started.getTime())
+    ? esc(started.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }))
+    : 'When you first signed in')}
+        ${fact('Runs until', endText ? esc(endText) : 'About one to two weeks')}
+      </div>`)}
+      ${row('Things may break',
+    'This is an early test. If something behaves strangely it is far more '
+    + 'likely to be my fault than yours, and telling me is the single most '
+    + 'useful thing you can do.')}
+      ${row('Read the introduction again',
+    'The beta introduction, exactly as it appeared when you first signed in.',
+    '<button class="btn" id="show-intro">Show it again</button>')}`)}
+
+    ${sec('Tell me something', rowFull(feedbackSheetHtml(state.route ?? 'settings')),
+    'It goes straight to me. Nothing you have written and nothing from your '
+    + 'tasks, diary or library is attached — only the build, the screen you '
+    + 'were on and what kind of device you are using.')}`;
+}
+
+/* ══ Admin ═══════════════════════════════════════════════════════════════ */
+
+function adminPanel() {
+  return sec('Administration', `
+    ${row('Open Admin',
+    'Usage, spend, accounts and the record of every change. A separate '
+    + 'operational area — everything in it is checked again on the server.',
+    '<button class="btn btn-primary" id="open-admin">Open Admin</button>')}`);
+}
+
 /* ══ The shell ═══════════════════════════════════════════════════════════ */
 
 export function settingsHtml(state, phone = false) {
+  const TABS = settingsTabs(state);
   const tab = state.settingsTab || (phone ? null : 'account');
-  const current = SETTINGS_TABS.find((t) => t.id === tab) ?? SETTINGS_TABS[0];
+  const current = TABS.find((t) => t.id === tab) ?? TABS[0];
 
   const panels = {
     account: accountPanel,
@@ -516,9 +615,12 @@ export function settingsHtml(state, phone = false) {
     areas: areasPanel,
     habits: habitsPanel,
     ai: aiPanel,
+    usage: usagePanel,
+    beta: betaPanel,
     integrations: integrationsPanel,
     app: appPanel,
     data: dataPanel,
+    admin: adminPanel,
   };
 
   /* ── On a phone, Settings is a list of pages ──────────────────────────
@@ -534,7 +636,7 @@ export function settingsHtml(state, phone = false) {
    * every section, and every control inside it, is one tap away. */
   if (phone && !tab) {
     return `<div class="set-page set-index">
-      ${SETTINGS_TABS.map((t) => `<button type="button" class="set-idx" data-stab="${t.id}">
+      ${TABS.map((t) => `<button type="button" class="set-idx" data-stab="${t.id}">
         <span class="set-idx-t">
           <span class="set-idx-l">${t.label}</span>
           <span class="set-idx-b">${esc(t.blurb)}</span>
@@ -553,14 +655,14 @@ export function settingsHtml(state, phone = false) {
           <h2>${current.label}</h2>
           <p>${current.blurb}</p>
         </header>
-        ${panels[tab](state)}
+        ${(panels[tab] ?? accountPanel)(state)}
       </div>
     </div>`;
   }
 
   return `<div class="set-page">
     <nav class="set-nav" aria-label="Settings sections">
-      ${SETTINGS_TABS.map((t) => `<button class="set-nav-item" data-stab="${t.id}"
+      ${TABS.map((t) => `<button class="set-nav-item" data-stab="${t.id}"
         ${tab === t.id ? 'aria-current="page"' : ''}>${t.label}</button>`).join('')}
     </nav>
 
@@ -569,7 +671,7 @@ export function settingsHtml(state, phone = false) {
         <h2>${current.label}</h2>
         <p>${current.blurb}</p>
       </header>
-      ${panels[tab](state)}
+      ${(panels[tab] ?? accountPanel)(state)}
     </div>
   </div>`;
 }
