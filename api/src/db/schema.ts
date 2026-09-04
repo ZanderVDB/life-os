@@ -27,10 +27,29 @@ export const users = pgTable('users', {
   email: text('email').notNull(),
   displayName: text('display_name'),
   isOwner: boolean('is_owner').notNull().default(false),
+  /* ── Two independent ideas, deliberately not one ────────────────────
+     `role` answers "may this person administer Life OS?" and `accountType`
+     answers "what kind of account is this?". An admin is also a beta user,
+     and a paid plan must never be able to grant administrative access — so
+     collapsing them into one column would make that confusion expressible.
+     `role` defaults to 'user': nobody becomes an admin by migration. */
+  role: text('role').notNull().default('user'),
+  accountType: text('account_type').notNull().default('beta'),
+  betaStartAt: timestamp('beta_start_at', { withTimezone: true }),
+  betaEndAt: timestamp('beta_end_at', { withTimezone: true }),
+  /** When they acknowledged the beta introduction. Server-side, so clearing
+      browser storage cannot skip it and a new device does not re-ask. */
+  introAcceptedAt: timestamp('intro_accepted_at', { withTimezone: true }),
+  lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
+  /** An operator's own note about a tester. Never shown to the tester. */
+  adminNote: text('admin_note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   emailLower: uniqueIndex('users_email_lower_idx').on(sql`lower(${t.email})`),
+  roleCheck: check('users_role_check', sql`${t.role} in ('user','admin')`),
+  accountTypeCheck: check('users_account_type_check',
+    sql`${t.accountType} in ('beta','tester','standard')`),
 }));
 
 /* ── workspaces ──────────────────────────────────────────────────────────

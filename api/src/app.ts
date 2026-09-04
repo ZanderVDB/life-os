@@ -22,6 +22,7 @@ import { registerGoogleCalendarRoutes } from './routes/google-calendar.js';
 import { registerCalendarWriteRoutes, registerCalendarWebhook } from './routes/calendar-write.js';
 import { registerLinkRoutes } from './routes/links.js';
 import { registerAiRoutes } from './routes/ai.js';
+import { registerAdminRoutes } from './routes/admin.js';
 import { createAssistant } from './ai/index.js';
 
 export const API_VERSION = '0.1.0';
@@ -92,6 +93,9 @@ export function buildApp(db: Db, env: AppEnv = loadEnv(), assistant = createAssi
      AVAILABLE is asked per request, so two workspaces get different answers
      from the same registry. */
   registerAiRoutes(app, db, guards, assistant);
+  /* Admin. Every route inside runs its own server-side authorisation guard —
+     being registered is not being reachable. */
+  registerAdminRoutes(app, db, guards);
   /* Google is not a signed-in user, so its webhook is registered outside the
    * workspace-scoped routes and proves who it is from a channel row instead. */
   registerCalendarWebhook(app, db);
