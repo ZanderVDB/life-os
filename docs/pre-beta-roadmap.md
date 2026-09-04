@@ -12,18 +12,23 @@ is deliberately last.
 
 ## Where we are
 
-**Steps 1–8 are done.** Step 9 is next, and is Zander's to start.
+**Steps 1–8 are done, and staging is configured.** Step 9 is next, and is
+Zander's to start.
+
+**READY TO INVITE BETA TESTERS** — see
+[`pre-beta-status.md`](./pre-beta-status.md) for what was verified, including
+the one check only Zander can run.
 
 | Step | | Status |
 |---|---|---|
 | 1 | Immediate bugs and polish | **done** — voice duplication verified on a real device |
 | 2 | AI usage accounting backend | **done** |
 | 3 | AI usage limits | **done** |
-| 4 | Admin foundation | **done** — needs `ADMIN_EMAILS` set |
+| 4 | Admin foundation | **done** — `ADMIN_EMAILS` configured |
 | 5 | User-facing AI usage | **done** |
 | 6 | Beta account controls | **done** |
 | 7 | New beta landing page | **done** |
-| 8 | Feedback experience | **done** — needs the two contact values set |
+| 8 | Feedback experience | **done** — contacts configured and resolving |
 | 9 | Real beta → data → subscriptions | not started, deliberately |
 
 The state of each, and the four configuration values still needed, are in

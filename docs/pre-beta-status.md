@@ -1,10 +1,25 @@
 # Pre-beta status
 
-**Where Phases 1–8 actually stand**, and what still needs a human. Companion
-to [`pre-beta-roadmap.md`](./pre-beta-roadmap.md), which is the plan; this is
-the state.
+**Where Phases 1–8 actually stand.** Companion to
+[`pre-beta-roadmap.md`](./pre-beta-roadmap.md), which is the plan; this is the
+state.
 
-Last updated: 4 September 2026.
+Last updated: 4 September 2026. Staging `dae6c299ba4c`.
+
+---
+
+## READY TO INVITE BETA TESTERS
+
+All eight phases are complete, the five configuration values are set on
+staging, and the accounting has been reconciled against three real Anthropic
+turns.
+
+**One thing to look at yourself before you send the first invitation.** Sign in
+and check that Settings shows **Admin**. `/health/version` reports that exactly
+one address is in the allowlist, but a count is not an identity — it cannot
+tell you the address is *yours* rather than a typo or a different mailbox. That
+is the only check in this document nobody but you can run, and it takes ten
+seconds.
 
 ---
 
@@ -15,20 +30,31 @@ Last updated: 4 September 2026.
 | — | Preflight — assistant response speed | **COMPLETE** |
 | 1 | AI usage accounting backend | **COMPLETE** |
 | 2 | Usage allowances and hard limits | **COMPLETE** |
-| 3 | Admin foundation | **COMPLETE** — one manual value required |
+| 3 | Admin foundation | **COMPLETE** |
 | 4 | User-facing AI usage | **COMPLETE** |
 | 5 | Beta account controls | **COMPLETE** |
 | 6 | Beta landing / introduction | **COMPLETE** |
-| 7 | Feedback experience | **PARTIAL** — built; two contact values required |
-| 8 | Beta readiness | **COMPLETE** — one item verified by proxy, see below |
+| 7 | Feedback experience | **COMPLETE** — contacts configured and resolving |
+| 8 | Beta readiness | **COMPLETE** |
 
 ---
 
-## What still needs a person
+## Configuration, as deployed
 
-These are configuration values, not code. Everything around them is built,
-deployed and tested; each one is reported inside the product rather than left
-to be discovered.
+All five are set on staging and confirmed from outside. `/health/version`
+reports the API side without a session — a **count** of admins, never an
+address, because an email is personal data:
+
+```
+GET /health/version → "beta": {
+  "adminsConfigured": 1, "fxRate": 18.2, "defaultAllowanceUsd": 11 }
+
+GET /config.js      → beta = {
+  "whatsappUrl": "https://wa.me/27…", "supportEmail": "…@gmail.com" }
+```
+
+The reference below is what each value does, kept for the day one of them has
+to change.
 
 ### 1. `ADMIN_EMAILS` — on the **API** service. Required.
 
@@ -54,8 +80,7 @@ PUBLIC_BETA_SUPPORT_EMAIL=zander@...
 
 Public by design — a WhatsApp link and an email address exist to be handed
 out. Until they are set, the feedback sheet says which variable is missing
-rather than showing two dead buttons. This is the only reason Phase 7 is
-PARTIAL: the experience is complete and tested, it simply has nowhere to send.
+rather than showing two dead buttons.
 
 ### 3. `USD_ZAR_RATE` — on the **API** service. Optional but wanted.
 
@@ -121,13 +146,48 @@ rather than 404, which means the new code is deployed. That is strong evidence
 the migration ran; it is not the same as having read the schema, because
 staging requires a Google sign-in this session does not have.
 
-### Not verified at all
+### Live Anthropic usage capture — done, and it reconciles
 
-**Live Anthropic usage capture.** Every part of the accounting path is proven
-against a scripted provider, including the exact response shape the API
-returns. What has not happened is one real call landing one real row, because
-that costs money and was not authorised for this pass. It is a single turn
-whenever you want it.
+Three real turns, 4 September 2026. Eleven provider calls, **$0.134114**
+(R2.4409 at 18.2), zero failures, zero unpriced models.
+
+| | |
+|---|---|
+| `plan` | 3 calls · `claude-sonnet-4-5` · 38,233 in / 555 out · $0.123024 |
+| `extractMemory` | 5 calls · `claude-haiku-4-5-20251001` · 4,741 in / 331 out · $0.006396 |
+| `interpret` | 3 calls · `claude-haiku-4-5-20251001` · 3,544 in / 230 out · $0.004694 |
+
+Five figures that must agree, and did, to the tenth decimal place: the ledger
+rows, the per-turn aggregation, Admin's all-time spend, the user's Settings
+figure, and the user's own per-job breakdown. Both rand conversions check out
+against the stored rate. Usage incremented rather than replaced — the three
+live deltas sum to the total exactly, so every dollar is accounted for once.
+
+The provider→ledger link was also checked by hand: 14,115 input and 161 output
+tokens on Sonnet at $3/$15 per MTok is $0.044760, which is what was stored.
+
+**The first run reported a discrepancy of $0.001392, and it was the
+instrument's.** Memory extraction is fired without being awaited, and when it
+needs a schema repair the second call can land a second after the answer; a
+fixed 2.5s snapshot caught three of a turn's four rows and then read a total
+that already included the fourth. The harness now polls until the row count
+stops moving. No ledger row was touched — they were right throughout.
+
+Re-runnable without spending anything:
+`node api/tests/live-accounting.mjs --verify-only`.
+
+### Worth knowing
+
+**`extractMemory` needed a schema repair on 2 of 3 turns** — five calls where
+three would do. The prompt asks for `{"category": ...}` and never lists the ten
+values the Zod enum accepts, so the model guesses. It cost $0.002434 here, 1.8%
+of the run. A one-line prompt change, deliberately NOT made during the freeze:
+shipping an unverified change to the assistant's prompt the day before testers
+arrive is not worth 1.8%. Revisit after the beta.
+
+**The custom domain serves this build.** `life-os.web-anchor.com` and the
+Railway staging host both return `dae6c299ba4c`, so the beta introduction is
+what a visitor to the public address sees.
 
 ---
 
