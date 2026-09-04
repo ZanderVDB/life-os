@@ -27,7 +27,7 @@
 import { z } from 'zod';
 import { calendarWindow, longDate } from '../../lib/civil-date.js';
 import { AiProviderError } from '../provider.js';
-import { recordCall } from '../../usage/meter.js';
+import { recordCall, overBudget } from '../../usage/meter.js';
 import type {
   AiProvider, InterpretInput, InterpretOutput, PlanInput, AnswerInput,
   AnswerOutput, ExtractMemoryInput,
@@ -102,6 +102,15 @@ const readUsage = (body: unknown) => {
 async function call(opts: CallOpts): Promise<string> {
   const key = process.env['ANTHROPIC_API_KEY'];
   if (!key) throw new ProviderError('The assistant is not configured yet.', 'auth');
+
+  /* The allowance ran out part-way through this turn. Checked here — the last
+     moment before money is spent — so a turn that crosses the line on its
+     second call of four is stopped there rather than after all four. */
+  if (overBudget()) {
+    throw new ProviderError(
+      'This turn used the last of the AI allowance for this period.', 'quota',
+    );
+  }
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 45_000);

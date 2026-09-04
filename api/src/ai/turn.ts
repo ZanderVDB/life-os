@@ -38,7 +38,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { aiConversations, aiTurns } from '../db/schema.js';
-import { badRequest, notFound, upstreamUnavailable } from '../lib/errors.js';
+import { badRequest, notFound, upstreamUnavailable, allowanceExceeded } from '../lib/errors.js';
 import { AiProviderError } from './provider.js';
 import { forRequest, type CapabilityRegistry, type CapabilityCtx } from './registry.js';
 import type { ProviderRouter } from './provider.js';
@@ -58,8 +58,9 @@ import { structure, type Clarification } from './clarify.js';
 import { classifyTiming, readingFromChoice } from '../lib/timing-intent.js';
 import * as memory from './memory.js';
 import { randomUUID } from 'node:crypto';
-import { withMeter, type MeterScope } from '../usage/meter.js';
+import { withMeter, noteSpend, type MeterScope } from '../usage/meter.js';
 import { recordUsage } from '../usage/ledger.js';
+import { priceUsage } from '../usage/pricing.js';
 import type {
   AiRequestContext, ProposalAction, ContextSource, Confidence, EntityRef,
 } from './types.js';
@@ -69,6 +70,14 @@ export type TurnDeps = {
   registry: CapabilityRegistry;
   providers: ProviderRouter;
   request: AiRequestContext;
+  /**
+   * What this turn may spend, in USD. Null is no limit.
+   *
+   * Decided by the route from the server-held allowance, never by the client.
+   * Once it is gone the next provider call is refused, which is what bounds
+   * the overshoot at one request rather than one whole turn.
+   */
+  budgetUsd?: number | null;
 };
 
 export type TurnInput = {
@@ -208,9 +217,18 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
     conversationId: input.conversationId ?? null,
     turnId: randomUUID(),
     origin: 'user',
+    budgetUsd: deps.budgetUsd ?? null,
     /* Written the moment a call completes, not at the end. A crash between
-       here and the turn row must not lose money that has already been spent. */
-    onCall: (call, scope) => { void recordUsage(deps.db, scope, call).catch(() => {}); },
+       here and the turn row must not lose money that has already been spent.
+       The budget is charged synchronously from the same price registry the
+       ledger uses, so the NEXT call sees the new balance without waiting on
+       a database round trip. */
+    onCall: (call, scope) => {
+      if (call.status === 'ok') {
+        noteSpend(scope, priceUsage(call.provider, call.model, call)?.usd ?? 0);
+      }
+      void recordUsage(deps.db, scope, call).catch(() => {});
+    },
   }, (scope) => planTurn(deps, input, scope));
 }
 
@@ -555,6 +573,10 @@ async function planTurn(
  */
 function asClientError(e: unknown): unknown {
   if (!(e instanceof AiProviderError)) return e;
+  /* Not an outage. "You have used your allowance" is a true and useful
+     sentence, and reporting it as "the assistant could not be reached" would
+     send the person to look at the wrong thing entirely. */
+  if (e.kind === 'quota') return allowanceExceeded(e.message, { status: 'blocked' });
   return e.kind === 'shape' ? badRequest(e.message) : upstreamUnavailable(e.message);
 }
 

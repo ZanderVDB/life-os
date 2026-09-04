@@ -64,14 +64,31 @@ export type MeterScope = {
   origin: UsageOrigin;
   /** Everything recorded so far, in order. */
   calls: CallRecord[];
+  /**
+   * What this scope may spend, in USD, and what it has.
+   *
+   * ── Why the check is between calls, not only before the turn ─────────
+   *
+   * Nobody can know what a call will cost before it returns — the output
+   * length is the model's decision, and pretending otherwise would be the
+   * dishonest version of a pre-flight check. What can be done is to stop the
+   * NEXT call once the line has been crossed, which bounds the overshoot at
+   * one request instead of one whole turn.
+   *
+   * Null is no budget, which is what unlimited and system work both mean.
+   */
+  budgetUsd?: number | null;
+  spentUsd: number;
+  exhausted: boolean;
   /** Handed a record the moment it is complete, so nothing waits on the turn. */
   onCall?: (record: CallRecord, scope: MeterScope) => void;
 };
 
 const storage = new AsyncLocalStorage<MeterScope>();
 
-export type ScopeInput = Omit<MeterScope, 'scopeId' | 'calls'> &
-  Partial<Pick<MeterScope, 'scopeId'>>;
+export type ScopeInput =
+  Omit<MeterScope, 'scopeId' | 'calls' | 'spentUsd' | 'exhausted'>
+  & Partial<Pick<MeterScope, 'scopeId'>>;
 
 /** Run `fn` with everything inside it attributed to this owner. */
 export function withMeter<T>(input: ScopeInput, fn: (scope: MeterScope) => Promise<T>): Promise<T> {
@@ -83,6 +100,9 @@ export function withMeter<T>(input: ScopeInput, fn: (scope: MeterScope) => Promi
     turnId: input.turnId ?? null,
     origin: input.origin ?? 'user',
     calls: [],
+    budgetUsd: input.budgetUsd ?? null,
+    spentUsd: 0,
+    exhausted: false,
     ...(input.onCall ? { onCall: input.onCall } : {}),
   };
   return storage.run(scope, () => fn(scope));
@@ -119,6 +139,31 @@ export function recordCall(
  */
 export const requestKey = (scope: MeterScope, call: CallRecord) =>
   `${scope.scopeId}:${call.job}:${call.attempt}:${call.seq}`;
+
+/**
+ * Charge a completed call against the scope's budget.
+ *
+ * Returns whether the scope is now out. Separate from `recordCall` because the
+ * meter deliberately knows nothing about prices — it counts requests; the
+ * caller, which owns the pricing registry, decides what they were worth.
+ */
+export function noteSpend(scope: MeterScope, usd: number): boolean {
+  scope.spentUsd += usd;
+  if (scope.budgetUsd !== null && scope.budgetUsd !== undefined
+    && scope.spentUsd >= scope.budgetUsd) {
+    scope.exhausted = true;
+  }
+  return scope.exhausted;
+}
+
+/**
+ * Has the current scope run out mid-turn?
+ *
+ * Read by the vendor adapter immediately before it opens a socket. False
+ * outside any scope: a call with no owner has no budget to exceed, and
+ * refusing it would make accounting able to break the assistant.
+ */
+export const overBudget = (): boolean => storage.getStore()?.exhausted === true;
 
 /** Sum of everything in a scope, per job. What "the turn cost R0.34" is made of. */
 export function byJob(scope: MeterScope) {

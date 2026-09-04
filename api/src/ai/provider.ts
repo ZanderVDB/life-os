@@ -224,7 +224,14 @@ export const supports = (p: AiProvider, job: AiJob) => typeof (p as any)[job] ==
 export class AiProviderError extends Error {
   constructor(
     message: string,
-    readonly kind: 'auth' | 'timeout' | 'rate' | 'upstream' | 'shape',
+    /**
+     * `quota` is ours rather than the vendor's: the account ran out of
+     * allowance part-way through a turn. It is a provider error because it
+     * stops a provider call, and it is its own kind because "you have used
+     * your allowance" and "the model is down" are different sentences and
+     * only one of them is worth retrying.
+     */
+    readonly kind: 'auth' | 'timeout' | 'rate' | 'upstream' | 'shape' | 'quota',
   ) {
     super(message);
     this.name = 'AiProviderError';

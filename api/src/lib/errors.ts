@@ -19,3 +19,17 @@ export const conflict = (m: string, d?: unknown) => new ApiError(409, 'CONFLICT'
 export const unprocessable = (m: string, d?: unknown) => new ApiError(422, 'UNPROCESSABLE', m, d);
 /** Somebody else is having the problem, and it is expected to pass. */
 export const upstreamUnavailable = (m: string) => new ApiError(503, 'UPSTREAM_UNAVAILABLE', m);
+
+/**
+ * The AI allowance is used up, or AI is switched off for this account.
+ *
+ * Its own code and its own status so the client can say the true thing —
+ * "you have reached your AI allowance, the rest of Life OS still works" —
+ * rather than the generic "something went wrong" that a 500 would produce.
+ * 402 because this is genuinely about an account's budget rather than about
+ * permission or a malformed request.
+ *
+ * `details` carries the numbers, so the interface never has to guess them.
+ */
+export const allowanceExceeded = (m: string, d?: unknown) =>
+  new ApiError(402, 'AI_ALLOWANCE_EXCEEDED', m, d);

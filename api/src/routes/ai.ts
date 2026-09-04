@@ -25,6 +25,8 @@ import { confirmTurn, cancelTurn } from '../ai/confirm.js';
 import * as memory from '../ai/memory.js';
 import type { AiRequestContext } from '../ai/types.js';
 import { badRequest } from '../lib/errors.js';
+import { assertCanUseAi } from '../usage/allowance.js';
+import { usageSummary, usageDetail } from '../usage/summary.js';
 import { todayIn } from '../lib/civil-date.js';
 
 const uuid = z.string().uuid();
@@ -107,6 +109,17 @@ export function registerAiRoutes(
     };
   });
 
+  /* ══ Where this person stands ════════════════════════════════════════ */
+
+  /**
+   * The user's own AI usage. Their own only — the id comes from the verified
+   * token and there is no parameter through which another could be named.
+   */
+  app.get(`${base}/ai/usage`, pre, async (req) => {
+    const { userId, workspaceId } = owner(req);
+    return usageDetail(db, userId, workspaceId);
+  });
+
   /* ══ Context ═════════════════════════════════════════════════════════ */
 
   /**
@@ -167,10 +180,30 @@ export function registerAiRoutes(
     });
     if (!request.userId) throw badRequest('The assistant needs a signed-in user.');
 
-    return runTurn(
-      { db, registry: assistant.registry, providers: assistant.providers, request },
+    /* ── The allowance, checked here and nowhere the client can reach ──
+       Before any provider work, server-side, from the server's own numbers.
+       A blocked account gets a 402 with the figures on it rather than a
+       generic failure — and everything else in Life OS is untouched, because
+       nothing outside these AI routes ever asks this question. */
+    const allowance = await assertCanUseAi(db, request.userId, {
+      workspaceId: request.workspaceId,
+    });
+
+    const result = await runTurn(
+      {
+        db,
+        registry: assistant.registry,
+        providers: assistant.providers,
+        request,
+        /* What is left. Once it is gone the next provider call is refused,
+           so the most this turn can exceed the allowance by is one request. */
+        budgetUsd: allowance.remainingUsd,
+      },
       { text: b.text, conversationId: b.conversationId ?? null },
     );
+    /* Where they stand AFTER this turn, so the interface can warn without a
+       second round trip and without ever computing a cost itself. */
+    return { ...result, allowance: await usageSummary(db, request.userId) };
   });
 
   /** Read a turn back without re-planning — a refresh must cost nothing. */
