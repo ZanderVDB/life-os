@@ -92,6 +92,25 @@ value and is not the same as leaving it unset.
   source. A normal account gets 403 from all eight admin endpoints, sees no
   Admin section, and reaches "Not available" at `#admin`.
 
+### The security review
+
+The ten-point review is `api/tests/security-review.test.ts` — ten tests, one
+per point, run with the rest of the suite. A review that lives in a report is
+true on the day it is written; this one fails a build.
+
+| | Point | How it is held |
+|---|---|---|
+| 1 | API keys are server-only | No client file names, contains or calls the provider; no route reads the key or the database URL |
+| 2 | Usage cannot be forged | Five plausible client attempts refused; `recordUsage` takes a meter scope and a recorded call, and nothing else |
+| 3 | A user cannot edit their own allowance | Five attempts change nothing; `updatePolicy` appears in `admin.ts` and no other route |
+| 4 | Admin routes require server authorisation | Every route in the file uses the one guarded `pre`; 401/403 without it, 200 with |
+| 5 | No reading another user's usage | The route has no user-id parameter; another workspace is 403 |
+| 6 | Admin mutations are audited | Three mutations, three entries with actor and target; the count of mutating routes equals the count of audit writes |
+| 7 | Limits enforced server-side | `assertCanUseAi` appears before `runTurn`; a spent account gets 402 |
+| 8 | Usage is append-only | No `update`/`delete` against the ledger anywhere in the server; a new period and three account changes preserve every row; a correction is an adjustment |
+| 9 | Feedback carries no secrets | The payload is five known lines; a planted Firebase key and API URL do not appear |
+| 10 | The beta cannot grant admin | A hostile acknowledgement changes nothing; `role` is written in exactly one file, and the policy table has no column that could carry one |
+
 ### The one thing verified by proxy
 
 **The staging migration.** `npm start` on the API is
