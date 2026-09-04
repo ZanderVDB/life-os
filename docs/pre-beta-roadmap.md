@@ -12,19 +12,24 @@ is deliberately last.
 
 ## Where we are
 
-**Step 1 — in progress.**
+**Steps 1–8 are done.** Step 9 is next, and is Zander's to start.
 
 | Step | | Status |
 |---|---|---|
-| 1 | Immediate bugs and polish | **in progress** |
-| 2 | AI usage accounting backend | not started |
-| 3 | AI usage limits | not started |
-| 4 | Admin foundation | not started |
-| 5 | User-facing AI usage | not started |
-| 6 | Beta account controls | not started |
-| 7 | New beta landing page | not started |
-| 8 | Feedback experience | not started |
-| 9 | Real beta → data → subscriptions | not started |
+| 1 | Immediate bugs and polish | **done** — voice duplication awaits a real-device retest |
+| 2 | AI usage accounting backend | **done** |
+| 3 | AI usage limits | **done** |
+| 4 | Admin foundation | **done** — needs `ADMIN_EMAILS` set |
+| 5 | User-facing AI usage | **done** |
+| 6 | Beta account controls | **done** |
+| 7 | New beta landing page | **done** |
+| 8 | Feedback experience | **done** — needs the two contact values set |
+| 9 | Real beta → data → subscriptions | not started, deliberately |
+
+The state of each, and the four configuration values still needed, are in
+[`pre-beta-status.md`](./pre-beta-status.md). How the accounting works is in
+[`ai-usage-accounting.md`](./ai-usage-accounting.md); allowances, admin and the
+beta are in [`allowances-and-admin.md`](./allowances-and-admin.md).
 
 ---
 

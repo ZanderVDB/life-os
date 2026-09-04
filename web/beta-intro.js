@@ -45,7 +45,7 @@ export const INTRO_SECTIONS = [
     title: 'Tell me anything. Especially the small things.',
     body: [
       'If something breaks, looks strange, feels confusing, or could simply be '
-      + 'better — send it. A half-formed "this felt weird" is more useful than '
+      + 'better — send it. A half-formed “this felt weird” is more useful than '
       + 'silence, and small irritations are usually the ones that matter most.',
       'There is a Send feedback button in Settings, and it will WhatsApp or '
       + 'email me with the build and the screen you were on already attached.',

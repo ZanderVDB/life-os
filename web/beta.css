@@ -515,3 +515,13 @@ body:has(.adm) .main-wrap{ padding-bottom:32px; }
 @media (max-width:900px){
   .adm-exit{ display:none; }
 }
+
+/* The sheet body has no side padding of its own — `.msheet-pad` is what every
+   other sheet wraps its content in. The feedback sheet is rendered straight
+   into the body, so it carries its own. */
+.msheet-feedback .fb{ padding:6px 18px 14px; }
+
+/* The two contact routes are anchors, because they navigate. Styled as
+   buttons, they must not also be underlined — a button with an underline
+   reads as a mistake. */
+.fb-btn{ text-decoration:none; }
