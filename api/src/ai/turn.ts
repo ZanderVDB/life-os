@@ -57,6 +57,9 @@ import {
 import { structure, type Clarification } from './clarify.js';
 import { classifyTiming, readingFromChoice } from '../lib/timing-intent.js';
 import * as memory from './memory.js';
+import { randomUUID } from 'node:crypto';
+import { withMeter, type MeterScope } from '../usage/meter.js';
+import { recordUsage } from '../usage/ledger.js';
 import type {
   AiRequestContext, ProposalAction, ContextSource, Confidence, EntityRef,
 } from './types.js';
@@ -184,7 +187,36 @@ const AMENDMENT = new RegExp([
   '^\\s*(only|just)\\s+(the|those|these|do)\\b',
 ].join('|'), 'i');
 
+/**
+ * Plan a turn, with everything it spends attributed to the person who asked.
+ *
+ * The meter scope is opened HERE, around the whole turn, rather than around
+ * each provider call — because one message can cause an interpret, a plan, an
+ * answer and a memory extraction, and the question worth answering is what the
+ * TURN cost, not what one request did. Anything the turn awaits, however deep,
+ * is inside the scope; nothing has to be passed an accounting argument.
+ *
+ * The turn's id is generated before the first provider call and used as the
+ * row's own id when it is written. The alternative — recording usage after the
+ * turn exists — loses every event of a turn that FAILS, and a turn that fails
+ * after three model calls is precisely the one whose cost you want to see.
+ */
 export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnResult> {
+  return withMeter({
+    workspaceId: deps.request.workspaceId,
+    userId: deps.request.userId,
+    conversationId: input.conversationId ?? null,
+    turnId: randomUUID(),
+    origin: 'user',
+    /* Written the moment a call completes, not at the end. A crash between
+       here and the turn row must not lose money that has already been spent. */
+    onCall: (call, scope) => { void recordUsage(deps.db, scope, call).catch(() => {}); },
+  }, (scope) => planTurn(deps, input, scope));
+}
+
+async function planTurn(
+  deps: TurnDeps, input: TurnInput, scope: MeterScope,
+): Promise<TurnResult> {
   const started = Date.now();
   const { db, registry, providers, request } = deps;
   const text = input.text.trim();
@@ -192,6 +224,8 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
 
   const ctx = forRequest(db, request);
   const conversation = await loadConversation(db, request, input.conversationId);
+  /* Now known, and every event recorded from here on carries it. */
+  scope.conversationId = conversation.conversationId;
 
   /* ── Route 1: the obvious command ─────────────────────────────────── */
   const fast = input.resolved
@@ -208,6 +242,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
        not have caused. */
     if (built.actions.length === fast.actions.length && !built.rejected.length) {
       return persistTurn(deps, {
+        turnId: scope.turnId,
         conversation,
         text,
         understood: fast.understood,
@@ -464,6 +499,7 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRes
   const clarification = structure((plan as any).clarification, ranked);
 
   return persistTurn(deps, {
+    turnId: scope.turnId,
     conversation,
     text,
     understood: plan.understood,
@@ -875,6 +911,8 @@ function humanFinding(f: Finding, title: string): string {
 /* ══ Persisting ══════════════════════════════════════════════════════════ */
 
 async function persistTurn(deps: TurnDeps, p: {
+  /** Generated before the first provider call, so usage could name it. */
+  turnId?: string | null;
   conversation: ConversationState;
   text: string;
   understood: string;
@@ -899,6 +937,7 @@ async function persistTurn(deps: TurnDeps, p: {
     : p.clarification ? 'clarifying' : 'answered';
 
   const [row] = await db.insert(aiTurns).values({
+    ...(p.turnId ? { id: p.turnId } : {}),
     workspaceId: request.workspaceId,
     userId: request.userId,
     conversationId: p.conversation.conversationId,

@@ -27,6 +27,7 @@
 import { z } from 'zod';
 import { calendarWindow, longDate } from '../../lib/civil-date.js';
 import { AiProviderError } from '../provider.js';
+import { recordCall } from '../../usage/meter.js';
 import type {
   AiProvider, InterpretInput, InterpretOutput, PlanInput, AnswerInput,
   AnswerOutput, ExtractMemoryInput,
@@ -59,6 +60,17 @@ type CallOpts = {
   maxTokens?: number;
   /** Seconds. A turn the user is waiting on cannot hang for ever. */
   timeoutMs?: number;
+  /**
+   * Which job this request is for, and which try.
+   *
+   * Only accounting reads them. They are on the call rather than inferred
+   * afterwards because this function is the one place that knows a request
+   * genuinely happened — the schema-repair loop above makes a SECOND request,
+   * which is a second real cost, and nothing further up can tell the two
+   * apart.
+   */
+  job?: string;
+  attempt?: number;
 };
 
 /* The shape lives in the provider CONTRACT, so the turn can recognise it
@@ -67,12 +79,62 @@ type CallOpts = {
 const ProviderError = AiProviderError;
 type ProviderError = AiProviderError;
 
+/**
+ * The token counts a response reports, defensively read.
+ *
+ * All four categories, because cached input is billed at a tenth of fresh
+ * input and writing the cache at rather more — a system that counts only
+ * `input_tokens` gets the bill wrong in both directions. Missing fields are
+ * zero, never estimated: this is the provider's own accounting and the only
+ * honest thing to do with a number it did not send is not to have one.
+ */
+const readUsage = (body: unknown) => {
+  const u = (body as { usage?: Record<string, unknown> } | null)?.usage ?? {};
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
+  return {
+    inputTokens: n(u['input_tokens']),
+    outputTokens: n(u['output_tokens']),
+    cacheReadTokens: n(u['cache_read_input_tokens']),
+    cacheWriteTokens: n(u['cache_creation_input_tokens']),
+  };
+};
+
 async function call(opts: CallOpts): Promise<string> {
   const key = process.env['ANTHROPIC_API_KEY'];
   if (!key) throw new ProviderError('The assistant is not configured yet.', 'auth');
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 45_000);
+  const started = Date.now();
+  /* Recorded from ONE place, in a finally, so no early return can leave a real
+     request unaccounted for. A failed call charges nothing — there is no usage
+     to report and estimating one would put a guess in a financial record — but
+     it is still written down, because "the model refused us forty times today"
+     is something an operator needs to see. */
+  let accounted = false;
+  const account = (
+    status: 'ok' | 'failed',
+    tokens: ReturnType<typeof readUsage>,
+    providerRequestId: string | null,
+    errorType: string | null,
+  ) => {
+    if (accounted) return;
+    accounted = true;
+    recordCall({
+      provider: 'anthropic',
+      model: opts.model,
+      job: opts.job ?? 'unknown',
+      attempt: opts.attempt ?? 1,
+      ...tokens,
+      providerRequestId,
+      status,
+      errorType,
+      latencyMs: Date.now() - started,
+    });
+  };
+  const NO_TOKENS = {
+    inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+  };
   try {
     const r = await fetch(API, {
       method: 'POST',
@@ -90,7 +152,10 @@ async function call(opts: CallOpts): Promise<string> {
       signal: ctrl.signal,
     });
 
+    const reqId = r.headers.get('request-id');
+
     if (r.status === 401 || r.status === 403) {
+      account('failed', NO_TOKENS, reqId, 'auth');
       throw new ProviderError('The assistant’s credentials were refused.', 'auth');
     }
     if (r.status === 400) {
@@ -104,6 +169,7 @@ async function call(opts: CallOpts): Promise<string> {
       const detail = await r.json().catch(() => null) as
         { error?: { message?: string; type?: string } } | null;
       const said = detail?.error?.message;
+      account('failed', NO_TOKENS, reqId, detail?.error?.type ?? 'invalid_request');
       throw new ProviderError(
         said && said.length < 300
           ? `The assistant could not run: ${said}`
@@ -112,23 +178,34 @@ async function call(opts: CallOpts): Promise<string> {
       );
     }
     if (r.status === 429) {
+      account('failed', NO_TOKENS, reqId, 'rate_limit');
       throw new ProviderError('The assistant is rate limited. Try again shortly.', 'rate');
     }
     if (!r.ok) {
       /* The provider's own error body is not shown to the user — it can carry
          request echoes — but it IS worth the operator's while, so the kind is
          preserved and the detail is dropped. */
+      account('failed', NO_TOKENS, reqId, `http_${r.status}`);
       throw new ProviderError('The assistant could not be reached just now.', 'upstream');
     }
     const body = await r.json() as { content?: { type: string; text?: string }[] };
+    /* Accounted as soon as the body is in hand. A response that arrives and is
+       then rejected for being empty was still generated and still billed by
+       the provider — treating a shape failure as free would understate the
+       bill by exactly the calls that went wrong. */
+    account('ok', readUsage(body), reqId, null);
     const text = (body.content ?? [])
       .filter((c) => c.type === 'text').map((c) => c.text ?? '').join('');
     if (!text.trim()) throw new ProviderError('The assistant returned nothing.', 'shape');
     return text;
   } catch (e) {
     if ((e as Error).name === 'AbortError') {
+      account('failed', NO_TOKENS, null, 'timeout');
       throw new ProviderError('The assistant took too long to answer.', 'timeout');
     }
+    /* A network failure before any response. Nothing was generated, so nothing
+       is charged — but the attempt is recorded. */
+    account('failed', NO_TOKENS, null, 'network');
     throw e;
   } finally {
     clearTimeout(timer);
@@ -188,7 +265,10 @@ async function structured<T>(
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     const user = attempt === 1 ? opts.user
       : `${opts.user}\n\nYour previous answer was rejected: ${last}\nReturn ONLY valid JSON matching the schema.`;
-    const text = await call({ ...opts, user });
+    /* The attempt number travels with the request. Attempt 2 is a SECOND real
+       call to the provider and a second real cost, and it has to be
+       distinguishable from a replayed write of attempt 1, which is not. */
+    const text = await call({ ...opts, user, attempt });
     try {
       const parsed = schema.safeParse(extractJson(text));
       if (parsed.success) {
@@ -385,6 +465,7 @@ export const anthropicProvider: AiProvider = {
 
   async interpret(input: InterpretInput): Promise<InterpretOutput> {
     const r = await structured(InterpretSchema, {
+      job: 'interpret',
       model: MODELS.fast,
       maxTokens: 512,
       timeoutMs: 20_000,
@@ -418,6 +499,7 @@ Request: ${JSON.stringify(input.text)}`,
 
   async plan(input: PlanInput) {
     const r = await structured(PlanSchema, {
+      job: 'plan',
       model: MODELS.plan,
       maxTokens: 4096,
       system: `${RULES}
@@ -617,6 +699,7 @@ fact from CONTEXT.`,
 
   async answer(input: AnswerInput): Promise<AnswerOutput> {
     const r = await structured(AnswerSchema, {
+      job: 'answer',
       model: MODELS.answer,
       maxTokens: 1500,
       system: `${RULES}
@@ -643,6 +726,7 @@ sentences or a short list. Do not repeat the question back.`,
 
   async summarise({ text, maxWords = 40 }) {
     const out = await call({
+      job: 'summarise',
       model: MODELS.fast,
       maxTokens: 300,
       timeoutMs: 20_000,
@@ -654,6 +738,7 @@ sentences or a short list. Do not repeat the question back.`,
 
   async extractMemory(input: ExtractMemoryInput): Promise<MemoryCandidate[]> {
     const r = await structured(MemorySchema, {
+      job: 'extractMemory',
       model: MODELS.fast,
       maxTokens: 800,
       timeoutMs: 20_000,

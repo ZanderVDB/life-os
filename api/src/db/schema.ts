@@ -12,7 +12,7 @@
  *  • UUID primary keys — the legacy 7-char random ids were collision-prone.
  */
 import {
-  pgTable, uuid, text, boolean, integer, real, timestamp, date, jsonb,
+  pgTable, uuid, text, boolean, integer, real, numeric, timestamp, date, jsonb,
   index, uniqueIndex, check,
 } from 'drizzle-orm/pg-core';
 import { sql, relations } from 'drizzle-orm';
@@ -1447,3 +1447,141 @@ export type CalendarProvider = (typeof CALENDAR_PROVIDERS)[number];
 export type AccessRole = (typeof ACCESS_ROLES)[number];
 export type EventStatus = (typeof EVENT_STATUSES)[number];
 export type SyncState = (typeof SYNC_STATES)[number];
+
+/* ══ Usage accounting, allowances, accounts and admin ═════════════════════
+ *
+ * See `drizzle/0018_usage_accounting.sql` for why each of these exists. The
+ * short version:
+ *
+ *   ai_usage_events      one row per real provider request, append-only
+ *   ai_usage_policies    one live allowance per user, with a period
+ *   ai_usage_adjustments credits and corrections, as rows rather than edits
+ *   admin_audit_log      every admin mutation, before and after
+ */
+
+export const USAGE_JOBS = ['interpret', 'plan', 'answer', 'summarise',
+  'extractMemory'] as const;
+export const USAGE_ORIGINS = ['user', 'system'] as const;
+export const USAGE_STATUSES = ['ok', 'failed'] as const;
+export const ADJUSTMENT_KINDS = ['credit', 'waiver', 'correction'] as const;
+export const USER_ROLES = ['user', 'admin'] as const;
+export const ACCOUNT_TYPES = ['beta', 'tester', 'standard'] as const;
+
+export const aiUsageEvents = pgTable('ai_usage_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /* No foreign key, deliberately: a turn can be deleted, what it cost cannot. */
+  conversationId: uuid('conversation_id'),
+  turnId: uuid('turn_id'),
+
+  provider: text('provider').notNull(),
+  model: text('model').notNull(),
+  job: text('job').notNull(),
+  /** 1 is the first request; higher is a genuine repair and a genuine cost. */
+  attempt: integer('attempt').notNull().default(1),
+  origin: text('origin').notNull().default('user'),
+
+  providerRequestId: text('provider_request_id'),
+  /** Ours. Unique per real provider call — the idempotency key. */
+  requestKey: text('request_key').notNull(),
+
+  inputTokens: integer('input_tokens').notNull().default(0),
+  outputTokens: integer('output_tokens').notNull().default(0),
+  cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+  cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
+
+  /** What Life OS incurred. `numeric`, because a ledger must add up. */
+  providerCostUsd: numeric('provider_cost_usd', { precision: 20, scale: 10 })
+    .notNull().default('0'),
+  /** What the user's allowance consumes. Same for beta; separable by design. */
+  billableCostUsd: numeric('billable_cost_usd', { precision: 20, scale: 10 })
+    .notNull().default('0'),
+
+  fxRateUsdZar: numeric('fx_rate_usd_zar', { precision: 20, scale: 10 }),
+  providerCostZar: numeric('provider_cost_zar', { precision: 20, scale: 10 }),
+  billableCostZar: numeric('billable_cost_zar', { precision: 20, scale: 10 }),
+
+  pricingVersion: text('pricing_version').notNull(),
+  pricingEffectiveAt: timestamp('pricing_effective_at', { withTimezone: true }),
+  pricingSnapshot: jsonb('pricing_snapshot').$type<Record<string, unknown>>()
+    .notNull().default({}),
+  costEstimated: boolean('cost_estimated').notNull().default(false),
+
+  status: text('status').notNull().default('ok'),
+  errorType: text('error_type'),
+  latencyMs: integer('latency_ms'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byRequestKey: uniqueIndex('ai_usage_events_request_key_idx').on(t.requestKey),
+  byProviderRequest: uniqueIndex('ai_usage_events_provider_request_idx')
+    .on(t.provider, t.providerRequestId)
+    .where(sql`${t.providerRequestId} is not null`),
+  byOwner: index('ai_usage_events_owner_idx').on(t.userId, t.createdAt),
+  byWorkspace: index('ai_usage_events_workspace_idx').on(t.workspaceId, t.createdAt),
+  byTurn: index('ai_usage_events_turn_idx').on(t.turnId).where(sql`${t.turnId} is not null`),
+  statusCheck: check('ai_usage_events_status_check', sql`${t.status} in ('ok','failed')`),
+  originCheck: check('ai_usage_events_origin_check', sql`${t.origin} in ('user','system')`),
+  attemptCheck: check('ai_usage_events_attempt_check', sql`${t.attempt} >= 1`),
+  failedIsFree: check('ai_usage_events_failed_is_free',
+    sql`${t.status} = 'ok' or (${t.providerCostUsd} = 0 and ${t.billableCostUsd} = 0)`),
+}));
+
+export const aiUsagePolicies = pgTable('ai_usage_policies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+  aiEnabled: boolean('ai_enabled').notNull().default(true),
+  /** NULL is unlimited. Zero is "enabled, nothing left" — a different state. */
+  allowanceUsd: numeric('allowance_usd', { precision: 20, scale: 10 }),
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull().defaultNow(),
+  periodEnd: timestamp('period_end', { withTimezone: true }),
+  /** Reserved for a future paid plan. Nothing reads it yet. */
+  planId: text('plan_id'),
+  label: text('label'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  onePerUser: uniqueIndex('ai_usage_policies_user_idx').on(t.userId),
+}));
+
+export const aiUsageAdjustments = pgTable('ai_usage_adjustments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** Positive increases what is available. */
+  amountUsd: numeric('amount_usd', { precision: 20, scale: 10 }).notNull(),
+  reason: text('reason').notNull(),
+  kind: text('kind').notNull().default('credit'),
+  actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byUser: index('ai_usage_adjustments_user_idx').on(t.userId, t.periodStart),
+  kindCheck: check('ai_usage_adjustments_kind_check',
+    sql`${t.kind} in ('credit','waiver','correction')`),
+}));
+
+export const adminAuditLog = pgTable('admin_audit_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  actorUserId: uuid('actor_user_id').notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  /** Copied, not joined: an actor row can change and this must not. */
+  actorEmail: text('actor_email').notNull(),
+  targetUserId: uuid('target_user_id').references(() => users.id, { onDelete: 'set null' }),
+  targetEmail: text('target_email'),
+  action: text('action').notNull(),
+  before: jsonb('before').$type<Record<string, unknown>>().notNull().default({}),
+  after: jsonb('after').$type<Record<string, unknown>>().notNull().default({}),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byTime: index('admin_audit_log_time_idx').on(t.createdAt),
+  byTarget: index('admin_audit_log_target_idx').on(t.targetUserId, t.createdAt),
+}));
+
+export type UsageJob = (typeof USAGE_JOBS)[number];
+export type UsageOrigin = (typeof USAGE_ORIGINS)[number];
+export type UserRole = (typeof USER_ROLES)[number];
+export type AccountType = (typeof ACCOUNT_TYPES)[number];
