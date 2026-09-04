@@ -385,6 +385,37 @@ test('waveform: the shipped default is a near-circle that breathes', async () =>
   assert.ok(d.fold >= 2, 'the default has no rotational symmetry');
 });
 
+/* ══ How fast it answers ═════════════════════════════════════════════════
+ *
+ * "Slightly too slow to speech" turned out not to be the animation — the whole
+ * visual chain settles inside a frame. It was the two places the signal was
+ * SAMPLED rather than read, and the residue below those is the browser's own
+ * recognition latency, which no animation work can remove.
+ */
+
+test('waveform: the leading contour reads the live voice, not a sample', () => {
+  const src = readFileSync(join('..', 'web', 'assistant-orb.js'), 'utf8');
+  const wave = src.slice(src.indexOf('drawWaveform('));
+  /* The history IS the trail — the spacing between the trailing contours is
+     what makes a word travel outward, so it keeps its 34ms sampling. But the
+     frontmost line is the one a person watches, and reading it from that same
+     history left it up to a frame and a half behind the voice for nothing. */
+  assert.match(wave, /const ev = lead \? e : clamp\(hist\[/,
+    'the leading contour is still read from the sampled history');
+});
+
+test('voice: the orb is handed the level often enough to look immediate', () => {
+  const src = readFileSync(join('..', 'web', 'assistant.js'), 'utf8');
+  const m = src.match(/const LEVEL_TICK_MS = (\d+)/);
+  assert.ok(m, 'the sampling interval is not stated in one place');
+  assert.ok(Number(m![1]) <= 30, `sampling every ${m![1]}ms is visible as lag`);
+  /* Every path that drives the orb uses it, so none can be left behind —
+     including the microphone-only fallback, which is the one genuinely
+     following audio rather than words. */
+  assert.equal((src.match(/LEVEL_TICK_MS/g) ?? []).length, 5);
+  assert.doesNotMatch(src, /\}, 50\);/, 'a hard-coded 50ms tick is back');
+});
+
 /* ══ What ships ══════════════════════════════════════════════════════════
  *
  * The look was chosen on a phone, from twenty starting points and a lot of
@@ -408,7 +439,7 @@ test('waveform: the shipped default is the config that was chosen, to the number
     strands: 18,
     spread: 0.075,
     lag: 240,
-    attack: 0.05,
+    attack: 0.22,
     release: 0.20,
     speed: 1.7,
     spin: 0.6,

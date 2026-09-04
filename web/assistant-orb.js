@@ -469,8 +469,14 @@ export class Orb {
     if (wants === 'ribbon' || wants === 'both') {
       const gap = R * (cfg.gap ?? 0.34);
       for (let k = strands - 1; k >= 0; k -= 1) {
-        const ev = clamp(hist[Math.min(k, hist.length - 1)] ?? 0, 0, 1);
         const lead = k === 0;
+        /* The leading contour reads the LIVE energy; only the trail comes
+           from the history. `waveHist` is sampled every 34ms, so taking the
+           lead from it meant the frontmost line — the one a person actually
+           watches — could be up to a frame and a half behind the voice for
+           no reason. The trail keeps its sampling, because the spacing
+           between the trailing contours IS the history. */
+        const ev = lead ? e : clamp(hist[Math.min(k, hist.length - 1)] ?? 0, 0, 1);
         const bs = R + gap + R * (k * (cfg.spread ?? 0.026) + ev * 0.22);
         const swing = bs * ((cfg.quiet ?? 0.03) + ev * (cfg.amp ?? 0.10));
         const when = this.t - k * (cfg.lag ?? 70);

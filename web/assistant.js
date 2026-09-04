@@ -76,6 +76,19 @@ const COPY = {
    ══════════════════════════════════════════════════════════════════════ */
 let session = null;
 
+/**
+ * How often the orb is handed the current speech energy.
+ *
+ * The whole visual chain — result event, activity decay, smoothing, draw —
+ * settles within about a frame; this sampling interval was the largest single
+ * delay left in it, so it is half what it was. Everything below it is the
+ * browser's own recognition latency, which no amount of animation work can
+ * remove: `speechstart` is the earliest moment the engine will admit it can
+ * hear anything, and the orb already reacts to that rather than waiting for
+ * the first word.
+ */
+const LEVEL_TICK_MS = 25;
+
 function endSession() {
   if (!session) return;
   window.__losBusy = null;
@@ -380,13 +393,12 @@ function startListening() {
   setState('starting');
 
   if (startSpeech()) {
-    /* The orb, from the words. Same 50ms tick the meter used. */
     session.tick = setInterval(() => {
       if (!session?.voice) return;
       const level = session.voice.activity;
       session.orb.setLevel(level);
       paintMeter(level);
-    }, 50);
+    }, LEVEL_TICK_MS);
     return;
   }
 
@@ -411,7 +423,7 @@ function resumeListening() {
       const level = session.voice.activity;
       session.orb.setLevel(level);
       paintMeter(level);
-    }, 50);
+    }, LEVEL_TICK_MS);
   }
 }
 
@@ -490,7 +502,7 @@ async function startLevelOnly() {
     session.tick = setInterval(() => {
       if (!session) return;
       session.orb.setLevel(mic.read());
-    }, 50);
+    }, LEVEL_TICK_MS);
     setState('listening');
     showSourceNote('This browser cannot turn speech into text — the orb is '
       + 'following your voice, but nothing is being transcribed. Type it instead.');
@@ -526,7 +538,7 @@ function runMockCapture(script) {
   session.tick = setInterval(() => {
     if (!session) return;
     session.orb.setLevel(synthLevel(performance.now() - t0));
-  }, 50);
+  }, LEVEL_TICK_MS);
 
   const step = () => {
     if (!session || session.state !== 'listening') return;

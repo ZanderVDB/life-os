@@ -230,7 +230,7 @@ export const PRESETS = [
      still be returned to after wandering off through the others. */
   P('6 · Yours, per-word', {
     fold: 5, sharp: 0, amp: 0.10, quiet: 0, gap: 0.04, strands: 18,
-    spread: 0.075, lag: 240, attack: 0.05, release: 0.20, speed: 1.7,
+    spread: 0.075, lag: 240, attack: 0.22, release: 0.20, speed: 1.7,
     glow: 2.8, weight: 2.7, push: 0, punch: 0.9, drive: 0.9,
   }),
   P('7 · Yours, smooth meter', {
@@ -321,7 +321,7 @@ export const DEFAULT_PRESET = {
   strands: 18,
   spread: 0.075,
   lag: 240,
-  attack: 0.05,
+  attack: 0.22,
   release: 0.20,
   speed: 1.7,
   spin: 0.6,
