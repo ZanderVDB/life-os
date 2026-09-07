@@ -690,3 +690,127 @@ test('voice: the impulse falls away between words', async () => {
   assert.ok(between < atWord * 0.8,
     `the impulse did not decay (${atWord.toFixed(2)} -> ${between.toFixed(2)})`);
 });
+
+/* ══ The two faults reported from real use, 7 September 2026 ═════════════
+ *
+ * Both are about the SHAPE of `results`, and both were caused by treating one
+ * engine's shape as the only one. They are held here from the outside — the
+ * text a person would see in the field — and from the inside, on the merge.
+ */
+
+/** The list a browser is holding at one instant. */
+type Entry = { t: string; f: boolean };
+const stream = (rec: MockRecognition, entries: Entry[]) =>
+  rec.say(entries.map((e) => ({ transcript: e.t, isFinal: e.f })));
+
+test('DESKTOP: the words already heard are never replaced by the next few', async () => {
+  /* The report: "it only writes the words I am saying currently, then removes
+     them and puts the new words, and only once I stop does it put the whole
+     sentence."
+
+     The cause: desktop Chrome can hold SEVERAL unsettled entries at once over a
+     long sentence, and the old code kept only the last one — so "I want to go"
+     was thrown away when "to the shop" arrived at the next index. Everything
+     reappeared at the end because the finals path, which merged the whole
+     list, took over once they settled. */
+  const M = browser();
+  const { v, last } = await make();
+  v.start('');
+  const rec = M.made[0]!;
+
+  const seen: string[] = [];
+  const step = (entries: Entry[]) => { stream(rec, entries); seen.push(last().full); };
+
+  step([{ t: 'I want', f: false }]);
+  step([{ t: 'I want to go', f: false }]);
+  step([{ t: 'I want to go', f: true }, { t: 'to the', f: false }]);
+  step([{ t: 'I want to go', f: true }, { t: 'to the shop', f: false }]);
+  step([{ t: 'I want to go', f: true }, { t: 'to the shop', f: true },
+    { t: 'and buy bread', f: false }]);
+
+  /* The thing that was actually wrong: it got SHORTER. */
+  for (let i = 1; i < seen.length; i += 1) {
+    assert.ok(seen[i]!.length >= seen[i - 1]!.length,
+      `the field shrank: ${JSON.stringify(seen[i - 1])} -> ${JSON.stringify(seen[i])}`);
+    assert.ok(seen[i]!.startsWith('I want'),
+      `the opening words were lost: ${JSON.stringify(seen[i])}`);
+  }
+  assert.equal(seen.at(-1), 'I want to go to the shop and buy bread');
+});
+
+test('MOBILE: cumulative finals that re-punctuate are ONE sentence, not five', async () => {
+  /* The report: a sentence written down about five times, after `mergeFinals`
+     had appeared to fix exactly this.
+
+     The cause: the cumulative re-reports are not character-identical. The
+     engine adds a full stop and reconsiders a capital as it goes, so neither
+     `startsWith` test matched and each variant was appended as a new segment. */
+  const M = browser();
+  const { v, last } = await make();
+  v.start('');
+  stream(M.made[0]!, [
+    { t: 'I', f: true },
+    { t: 'I want', f: true },
+    { t: 'I want to buy bread', f: true },
+    { t: 'I want to buy bread.', f: true },      // a full stop appears
+    { t: 'i want to buy bread.', f: true },      // and the capital is reconsidered
+    { t: 'I want to buy bread!', f: true },
+  ]);
+  const text = last().full;
+  assert.equal((text.toLowerCase().match(/buy bread/g) ?? []).length, 1,
+    `written down more than once: ${JSON.stringify(text)}`);
+  assert.match(text, /^I want to buy bread/);
+});
+
+test('voice: the merge compares meaning, not characters', async () => {
+  const { mergeResults } = await load();
+  /* Case and punctuation cannot make the same sentence look like a new one. */
+  assert.equal(
+    mergeResults(['Remind me Friday', 'remind me friday.', 'Remind me Friday!']),
+    'Remind me Friday!',
+  );
+  /* A half-spoken last word is a refinement, not a new phrase. */
+  assert.equal(mergeResults(['I want', 'I wanted to go']), 'I wanted to go');
+  /* But a genuinely different phrase is still appended. */
+  assert.equal(mergeResults(['Remind me Friday', 'to phone Oscar']),
+    'Remind me Friday to phone Oscar');
+  /* And the ORIGINAL text is kept — only the comparison is folded. */
+  assert.equal(mergeResults(['hello there', 'Hello there, friend']),
+    'Hello there, friend');
+});
+
+test('voice: the live tail is what has not settled yet', async () => {
+  const { liveTail } = await load();
+  assert.equal(liveTail('I want to go to the shop', 'I want to go'), 'to the shop');
+  assert.equal(liveTail('I want to go', ''), 'I want to go');
+  assert.equal(liveTail('I want to go', 'I want to go'), '');
+});
+
+test('voice: the interim is reported for styling, never added twice', async () => {
+  /* `compose` appends the interim to what is committed. If the merged live
+     text already contained it, the field would show it twice — which is a
+     duplication bug wearing a different hat. */
+  const M = browser();
+  const { v, last } = await make();
+  v.start('');
+  stream(M.made[0]!, [
+    { t: 'Remind me Friday', f: true },
+    { t: 'to phone Oscar', f: false },
+  ]);
+  assert.equal(last().full, 'Remind me Friday to phone Oscar');
+  assert.equal(last().interim, 'to phone Oscar');
+  assert.equal((last().full.match(/phone Oscar/g) ?? []).length, 1);
+});
+
+test('voice: a draft in the composer still survives all of it', async () => {
+  const M = browser();
+  const { v, last } = await make();
+  v.start('Remind me');
+  stream(M.made[0]!, [
+    { t: 'Friday', f: true },
+    { t: 'friday.', f: true },
+    { t: 'Friday to phone Oscar', f: true },
+  ]);
+  assert.equal(last().base, 'Remind me');
+  assert.equal(last().full, 'Remind me Friday to phone Oscar');
+});

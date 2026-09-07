@@ -119,50 +119,91 @@ const words = (t) => String(t ?? '').trim().split(/\s+/).filter(Boolean);
 const MAX_SEAM = 12;
 const MIN_SEAM = 2;
 
+/** Words with case, punctuation and spacing folded away — for COMPARING. */
+const key = (t) => String(t ?? '').toLowerCase()
+  .replace(/[^\p{L}\p{N}']+/gu, ' ').split(/\s+/).filter(Boolean);
+
 /**
- * The finals from one recogniser, reduced to what was actually said.
+ * Is `long` a longer reading of `short`, rather than something new?
  *
- * ── The bug this fixes, from a real device ───────────────────────────────
+ * Compared word by word on the folded form, with one allowance: the LAST word
+ * of the shorter reading may still have been half-spoken, so "want" matching
+ * "wanted" is an extension rather than a new segment. Without that, a
+ * mid-word refinement reads as a fresh phrase and the sentence stutters.
+ */
+function extendsReading(long, short) {
+  if (short.length > long.length) return false;
+  for (let i = 0; i < short.length; i += 1) {
+    if (short[i] === long[i]) continue;
+    if (i === short.length - 1 && long[i]?.startsWith(short[i])) continue;
+    return false;
+  }
+  return true;
+}
+
+/**
+ * One recogniser's results, reduced to what was actually said.
  *
- * The Web Speech spec says `results` is a list of utterance SEGMENTS, and
- * that finals are settled — so concatenating them is the obvious reading, and
- * it is what every desktop engine wants.
+ * ── Two engines, two shapes, one rule ────────────────────────────────────
  *
- * Chrome on Android does something else. From the trace of a real phone:
+ * The Web Speech spec says `results` is a list of utterance SEGMENTS, so
+ * joining them is the obvious reading. Chrome on Android does something else —
+ * from the trace of a real phone:
  *
  *     3F:"I"  4F:"I want"  5F:"I want"  6F:"I want to"  …
  *     10F:"I want to buy some bread"
  *
- * Every entry is marked FINAL, the list grows, and each new entry is the
- * whole sentence so far. Concatenating them produced exactly what was
- * reported: "I I want I want I want to …".
+ * Every entry final, the list growing, each entry the whole sentence so far.
+ * Joining them produced "I I want I want I want to …".
  *
- * ── Telling the two apart without guessing which engine we are on ────────
+ * So: an entry that is a longer READING of everything built so far supersedes
+ * it; an entry that is not is appended. The cumulative device collapses to one
+ * sentence, and a spec-compliant engine's segments still join, because "to
+ * phone Oscar" is not a longer reading of "Remind me Friday". No feature
+ * detection, no user-agent sniffing — the shape of the data says which it is.
  *
- * A final that STARTS WITH everything built so far is a longer reading of the
- * same utterance, and supersedes it. A final that does not is a new segment,
- * and is appended. That single rule is right for both engines: the cumulative
- * device collapses to one sentence, and a spec-compliant engine's distinct
- * segments still join up, because "to phone Oscar" does not begin with
- * "Remind me Friday".
+ * ── Why the comparison is FOLDED, and why that was not optional ──────────
  *
- * It also needs no feature detection and no user agent sniffing — the shape
- * of the data says which case it is.
+ * The first version compared raw strings with `startsWith`, and the stutter
+ * came back on a real phone after appearing fixed. The reason is that the
+ * cumulative re-reports are not character-identical: the engine re-punctuates
+ * and re-capitalises as it goes.
+ *
+ *     "I want to buy bread"
+ *     "I want to buy bread."     ← a full stop appears
+ *     "i want to buy bread."     ← and the capital is reconsidered
+ *
+ * Neither of the last two starts with the one before it, so both were treated
+ * as new segments and appended — and a sentence the engine reported five times
+ * was written down five times. Comparing on folded words instead means
+ * punctuation and case cannot make the same sentence look like a different
+ * one. The ORIGINAL text is what gets kept; only the comparison is folded.
  */
-export function mergeFinals(list) {
+export function mergeResults(list) {
   let built = '';
+  let builtKey = [];
   for (const raw of list) {
     const t = String(raw ?? '').trim();
     if (!t) continue;
-    if (!built) { built = t; continue; }
+    const k = key(t);
+    if (!k.length) continue;
+    if (!builtKey.length) { built = t; builtKey = k; continue; }
     /* A longer reading of what we already have. */
-    if (t.startsWith(built)) { built = t; continue; }
+    if (extendsReading(k, builtKey)) { built = t; builtKey = k; continue; }
     /* An older, shorter reading being re-reported. Ignore it. */
-    if (built.startsWith(t)) continue;
+    if (extendsReading(builtKey, k)) continue;
     /* Genuinely a new segment. */
     built = `${built} ${t}`;
+    builtKey = key(built);
   }
   return built;
+}
+
+/** The words of `whole` that are not yet part of `settled`. */
+export function liveTail(whole, settled) {
+  const all = words(whole);
+  const done = words(settled).length;
+  return all.slice(done).join(' ');
 }
 
 export function trimOverlap(already, incoming) {
@@ -551,33 +592,42 @@ export class VoiceInput {
       if (rec !== this.rec) return;
       if (!this.wanted && this.state !== 'stopping') return;
 
-      /* ── Finals accumulate; interim is ONE hypothesis ─────────────
+      /* ── Every entry goes through the same rule ───────────────────
        *
-       * THE STUTTER LIVED HERE. `results` is a list of utterance segments,
-       * and the trailing ones are the engine's successive guesses at what is
-       * being said right now — "I", then "I want", then "I want to buy
-       * bread". Concatenating every non-final entry glued all the guesses
-       * together and produced "I I want I want to buy bread"; enough of them
-       * and it reads as "I I I I I want".
+       * This used to split the list in two: finals were merged, and of the
+       * non-finals only the LAST was kept, on the reasoning that the trailing
+       * entries are successive guesses at the current phrase and the earlier
+       * ones are drafts.
        *
-       * There is only ever one thing being said at this instant, so only the
-       * LAST hypothesis is current. The earlier ones are drafts of it and are
-       * discarded. Finals are different — each is a settled segment — and
-       * they are rebuilt from the whole list every time, which is idempotent
-       * against Chrome re-reporting a final whose wording it has refined. */
+       * That is true of ONE interim entry growing. It is not true when the
+       * engine holds several unsettled entries at once, which desktop Chrome
+       * does over a long sentence: "I want to go" sits at index 0 while "to
+       * the shop" arrives at index 1, and keeping only the last threw the
+       * first away. That is the reported behaviour exactly — the words on
+       * screen were replaced by the next few rather than added to, and the
+       * whole sentence only appeared at the end, when everything finalised
+       * and the finals path took over.
+       *
+       * So both kinds go through `mergeResults`, which already knows how to
+       * tell a longer reading from a new segment. Successive guesses at one
+       * phrase collapse; separate phrases join. `settled` is merged on its
+       * own so the caller can still tell which part will not change. */
       const finalList = [];
-      let interim = '';
+      const everything = [];
       for (let i = 0; i < e.results.length; i += 1) {
         const r = e.results[i];
         const said = r[0]?.transcript ?? '';
+        if (!said) continue;
+        everything.push(said);
         if (r.isFinal) finalList.push(said);
-        else interim = said;
       }
-      /* Reduced rather than concatenated — see `mergeFinals`. This is the
-         line that stopped "I want to buy bread" arriving as "I I want I
-         want I want to …" on a real phone. */
-      const merged = mergeFinals(finalList);
-      const finals = merged ? `${merged} ` : '';
+      const settled = mergeResults(finalList);
+      const live = mergeResults(everything);
+      /* What is still being heard — the words of the live reading beyond the
+         settled ones. Reported for styling; the text itself is already in
+         `live`, and adding it twice is how a display duplicates. */
+      const interim = liveTail(live, settled);
+      const finals = settled ? `${settled} ` : '';
       this.sessionFinal = finals;
       if (finals || interim) {
         this.lastResultAt = Date.now();

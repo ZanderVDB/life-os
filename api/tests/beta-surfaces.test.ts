@@ -310,3 +310,28 @@ test('beta: an unconfigured deployment still shows the introduction', () => {
   assert.match(block, /return renderSignIn\(/, 'the landing page is still replaced');
   assert.doesNotMatch(block, /renderFatal/, 'a developer error still takes the page');
 });
+
+/* ══ The composer's listening mark ═══════════════════════════════════════ */
+
+test('composer: the listening control is the lotus, not a microphone', () => {
+  const panel = web('assistant-panel.js');
+  const css = web('app.css');
+  /* A microphone glyph is the icon for "there is a microphone here". What
+     somebody needs to know at this size is whether Life OS is listening RIGHT
+     NOW, and the mark that already means Life OS is the lotus. */
+  const btn = panel.slice(panel.indexOf('class="composer-mic"'),
+    panel.indexOf('composer-go'));
+  assert.match(btn, /\$\{logoMark\(\d+\)\}/, 'the button no longer draws the lotus');
+  assert.doesNotMatch(btn, /icon\('mic'/, 'the microphone glyph is back');
+
+  /* Two states, and the difference has to be visible without hovering. */
+  assert.match(css, /\.composer-mic \.logo-mark\{[^}]*filter:saturate\(\.12\)/,
+    'the idle mark is not muted');
+  assert.match(css, /\.composer-mic\.is-listening \.logo-mark\{[\s\S]{0,120}?animation:lotus-breathe/,
+    'the listening mark does not breathe');
+  assert.match(css, /@keyframes lotus-breathe\{[\s\S]{0,120}?transform:scale\(1\.13\)/,
+    'the breath does not change size');
+  /* Somebody who has asked for less motion still gets the state, held still. */
+  assert.match(css, /prefers-reduced-motion[\s\S]{0,300}?\.composer-mic\.is-listening \.logo-mark\{ ?animation:none/,
+    'reduced motion loses the listening state entirely');
+});

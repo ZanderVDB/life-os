@@ -205,11 +205,11 @@ oversight:
 
 ## Known, non-blocking
 
-* **Desktop interim transcription visibly revises words while speaking.** The
-  browser's own recogniser reports successive guesses at the current phrase and
-  the composer shows the latest one. It is correct, it is what every voice
-  interface using the Web Speech API does, and it looks unsettled. Worth a
-  pass after the beta; not worth risking the transcription path before it.
+* **Interim words still change as the engine reconsiders them.** The
+  recogniser revises its own guess mid-phrase — "fifty" becomes "fifteen" — and
+  the composer shows the latest reading. That is the engine's own behaviour and
+  every voice interface on the Web Speech API has it. What is fixed is the
+  separate fault where already-heard words were *discarded*; see Closed.
 * **The orb follows how much text arrives, not microphone loudness.** Shouting
   a short word does not spike it. True loudness needs a second `getUserMedia`
   stream, and that stream is what appeared to take the microphone away from the
@@ -217,6 +217,26 @@ oversight:
   this is a decision that CAN be revisited — after the beta, not during it.
 
 ## Closed
+
+* **Desktop transcription replaced words instead of adding them — 7 September
+  2026.** While speaking, the field showed only the current few words and threw
+  away what came before, then produced the whole sentence at the end.
+
+  The cause: desktop Chrome can hold SEVERAL unsettled entries at once over a
+  long sentence, and the result handler kept only the last of them — "I want to
+  go" was discarded when "to the shop" arrived at the next index. The sentence
+  reappeared at the end because the finals path, which merged the whole list,
+  took over once they settled. Every entry now goes through the same merge.
+
+* **Mobile duplication returned, and was a second cause — 7 September 2026.**
+  A sentence written down about five times, after `mergeFinals` had appeared to
+  fix exactly this.
+
+  The cumulative re-reports are not character-identical: the engine adds a full
+  stop and reconsiders a capital as it goes, so neither `startsWith` test
+  matched and each variant was appended as a new segment. The comparison is now
+  on folded words — case and punctuation cannot make one sentence look like a
+  different one — while the original text is what gets kept.
 
 * **Mobile voice duplication — verified on a real device, 4 September 2026.**
   Speech is transcribed correctly and words are no longer repeated. `mergeFinals`

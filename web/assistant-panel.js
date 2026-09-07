@@ -17,7 +17,7 @@
  * The cards are `assistant-cards.js`, the same module the phone uses. The
  * panel is the frame around them and nothing more.
  */
-import { icon } from './icons.js';
+import { icon, logoMark } from './icons.js';
 import * as api from './assistant-api.js';
 import {
   actionCardHtml, sourcesHtml, clarificationHtml, resultsHtml,
@@ -69,9 +69,20 @@ export function composerHtml() {
       <input class="composer-input" id="composer-input" type="text"
         placeholder="Ask Life OS or capture a thought"
         aria-label="Ask Life OS or capture a thought">
+      ${/* ── The lotus, not a microphone ──────────────────────────────
+            A microphone glyph is the icon for "there is a microphone here".
+            What somebody actually needs to know at this size is whether Life
+            OS is LISTENING RIGHT NOW, and the mark that already means Life OS
+            is the lotus. Muted and still when idle; full colour and breathing
+            while it hears you. Same identity, two states, no second symbol.
+
+            The pulse is a steady breath rather than voice-driven like the orb.
+            At 22px a per-word impulse is invisible — it would read as a
+            flicker — and what this control has to say is "recording", which a
+            steady rhythm says better than an accurate one. */ ''}
       <button type="button" class="composer-mic" id="composer-mic"
         aria-label="Voice input" aria-pressed="false" hidden>
-        ${icon('mic', 17)}</button>
+        ${logoMark(22)}</button>
       <button type="submit" class="composer-go" id="composer-go" aria-label="Send">
         ${icon('chevR', 16)}</button>
     </form>

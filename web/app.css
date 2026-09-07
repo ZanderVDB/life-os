@@ -358,23 +358,49 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
  * another way to fill this field rather than a feature of its own. Hidden
  * outright where the browser has no recogniser — an inert button that
  * apologises when pressed is worse than no button. */
-.composer-mic{flex-shrink:0;display:grid;place-items:center;width:32px;height:32px;
-  border-radius:9px;color:var(--muted);
-  transition:background var(--t-hover),color var(--t-hover)}
-.composer-mic:hover{background:var(--surface-2);color:var(--text)}
-.composer-mic.is-listening{color:#fff;background:rgba(var(--accent-rgb),.22)}
-/* One slow pulse on the ring, not on the glyph — a jumping icon in a text
-   field pulls the eye off the words appearing next to it. */
-.composer-mic.is-listening::after{content:'';position:absolute;width:32px;height:32px;
+/* ── The listening mark ───────────────────────────────────────────────────
+ *
+ * The lotus, not a microphone. Idle it is quiet — desaturated and dimmed, so
+ * it reads as a control rather than as branding sitting in a text field.
+ * Listening it is full colour and breathing.
+ *
+ * The breath is on the MARK itself here, unlike the ring this replaced. That
+ * note was right about a jumping icon pulling the eye off the words — but a
+ * ring pulsing around a microphone is a decoration, and a lotus growing and
+ * shrinking is the thing itself saying it is on. The scale is small (6%) and
+ * slow, which is a breath rather than a jump. */
+.composer-mic{position:relative;flex-shrink:0;display:grid;place-items:center;
+  width:32px;height:32px;border-radius:9px;
+  transition:background var(--t-hover)}
+/* The dimming lives INSIDE `filter`, not in a separate `opacity`. A bare
+   opacity here is indistinguishable, in the rule that guards this block, from
+   somebody making the composer bar itself translucent — and that guard is
+   worth more than the one property it costs. */
+.composer-mic .logo-mark{display:block;
+  filter:saturate(.12) brightness(.78) opacity(.72);
+  transition:filter var(--t-select),transform var(--t-select)}
+.composer-mic:hover{background:var(--surface-2)}
+.composer-mic:hover .logo-mark{filter:saturate(.5) brightness(.95) opacity(.92)}
+
+.composer-mic.is-listening{background:rgba(var(--accent-rgb),.20)}
+.composer-mic.is-listening .logo-mark{
+  filter:none;animation:lotus-breathe 1.5s ease-in-out infinite}
+/* A soft halo behind it, so the state reads at a glance and not only up
+   close. Deliberately under the mark rather than a ring around the button. */
+.composer-mic.is-listening::after{content:'';position:absolute;inset:0;
   border-radius:9px;box-shadow:0 0 0 0 rgba(var(--accent-rgb),.5);
   animation:mic-pulse 2s ease-out infinite;pointer-events:none}
-.composer-mic{position:relative}
 .composer.is-listening .composer-inner{border-color:var(--accent)}
+
+@keyframes lotus-breathe{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.13)}}
 @keyframes mic-pulse{
   0%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.45)}
   70%{box-shadow:0 0 0 7px rgba(var(--accent-rgb),0)}
   100%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),0)}}
 @media (prefers-reduced-motion:reduce){
+  .composer-mic.is-listening .logo-mark{animation:none;transform:scale(1.08)}
   .composer-mic.is-listening::after{animation:none;
     box-shadow:0 0 0 2px rgba(var(--accent-rgb),.45)}}
 
