@@ -500,9 +500,26 @@ export const objectHtml = (item, i, n) =>
  * do anything should not be a tab stop, and one that is only decorative should
  * not be reachable at all.
  */
+/**
+ * Where the run of Books ends and everything else begins.
+ *
+ * Only ever ONE break, and only on a shelf that genuinely holds both kinds.
+ * A shelf of all Books or all documents is one run and gets nothing.
+ */
+const orderByKind = (items) => {
+  const isBook = (i) => i.type === 'book' && i.book;
+  const books = items.filter(isBook);
+  const rest = items.filter((i) => !isBook(i));
+  return {
+    ordered: [...books, ...rest],
+    breakAt: books.length && rest.length ? books.length : -1,
+  };
+};
+
 export function shelfHtml({
-  id, title, items, extraLead = '', note = '', kind = 'book', collapsed = false,
+  id, title, items: given, extraLead = '', note = '', kind = 'book', collapsed = false,
 }) {
+  const { ordered: items, breakAt } = orderByKind(given);
   const n = items.length + (extraLead ? 1 : 0);
   const hid = `lib-sh-${id}`;
   /* ADAPTIVE DENSITY (§23/§24). Two or three books must read as two or three
@@ -535,7 +552,9 @@ export function shelfHtml({
     <div class="lib-rail${dense ? ' is-dense' : ''}" data-rail="${esc(id)}">
       <ul class="lib-row" role="list">
         ${extraLead ? `<li class="lib-slot">${extraLead}</li>` : ''}
-        ${items.map((it, i) => `<li class="lib-slot">${objectHtml(it, i, n)}</li>`).join('')}
+        ${items.map((it, i) => `<li class="lib-slot${
+  i === breakAt ? ' is-kind-break' : ''}${
+  breakAt > 0 && i === breakAt - 1 ? ' is-kind-break-before' : ''}">${objectHtml(it, i, n)}</li>`).join('')}
       </ul>
     </div>
   </section>`;
@@ -643,25 +662,28 @@ function scheduleCommit(obj) {
 }
 
 /**
- * Making room for a turned Book — and the two sides are not symmetrical.
+ * Making room for a turned Book — and only one side needs it.
  *
  * The Book is hinged at its spine, on the LEFT, so its cover swings out to the
- * RIGHT and ends up 126px wide against a spine of 24–52px. The left neighbour
- * therefore only has to step back a token's worth to be readable, but
- * everything to the RIGHT is underneath the cover: a 16px nudge left the right
- * neighbour hidden behind it, which is what the review saw as "it opens in
- * front of the books to its right".
+ * RIGHT and ends up 126px wide against a spine of 24–52px. Everything to the
+ * right is underneath that cover, so it clears the cover's OVERHANG — the part
+ * sticking out past the Book's own spine — and every following slot moves by
+ * the same amount, which keeps their spacing exactly as it was.
  *
- * So the right side clears the cover's OVERHANG — the part of it that sticks
- * out past the Book's own spine — and every following slot moves by the same
- * amount, which keeps their spacing exactly as it was. Nothing to the left
- * moves at all. It is a transform, so no layout reflows and the row's centring
- * cannot redistribute it.
+ * NOTHING TO THE LEFT MOVES, and that is a correction. The left neighbour used
+ * to step 16px back "to become readable"; measured, it had nothing to become
+ * readable from — a pulled Book travels straight up and its spine stays in the
+ * same band it occupied at rest. All the nudge did was slide one book into the
+ * one behind it, which does not move, so it overlapped and painted on top.
+ * That was the reported "the first book to the left comes out a lot more than
+ * the rest". See the note beside `.lib-slot.is-nudge-r`.
+ *
+ * It is a transform, so no layout reflows and the row's centring cannot
+ * redistribute it.
  */
 function setNeighbours(obj, on) {
   const slot = obj?.closest('.lib-slot');
   if (!slot) return;
-  slot.previousElementSibling?.classList.toggle('is-nudge-l', on);
   if (on) {
     const cover = parseFloat(getComputedStyle(obj).getPropertyValue('--bw')) || 126;
     const spine = parseFloat(getComputedStyle(obj).getPropertyValue('--bt')) || 30;

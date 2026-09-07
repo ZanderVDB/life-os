@@ -262,6 +262,8 @@ test('s3: the committed Book still snaps rather than turning a second time', () 
 });
 
 test('s3: the shelf contact and the neighbour clearance are unchanged', () => {
-  assert.match(css, /\.lib-slot\.is-nudge-r\{transform:translateX\(calc\(var\(--lib-book-clear, 0px\) \+ var\(--lib-book-neighbour\)\)\)\}/);
+  /* The value is unchanged; it is applied through `--slot-shift` now so that a
+     hover can add its own part without overwriting this one. */
+  assert.match(css, /\.lib-slot\.is-nudge-r\{--slot-shift:calc\(var\(--lib-book-clear, 0px\) \+ var\(--lib-book-neighbour\)\)\}/);
   assert.match(css, /padding:52px 0 calc\(var\(--shelf-drop\) - var\(--shelf-contact\)\)|--shelf-head:52px/);
 });

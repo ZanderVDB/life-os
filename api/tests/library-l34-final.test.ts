@@ -183,7 +183,15 @@ test('final: no stationary filler stands in for depth (§11)', () => {
 });
 
 test('final: perspective is safe at both ends of the turn', () => {
-  assert.match(css, /\.lib-results \.lib-row\{perspective:1400px\}/);
+  /* Every rail that can hold a Book declares it, and they share one rule so
+     the number cannot drift. "Recently opened" joined them: it is a resource
+     shelf that holds Books too, and without a perspective its Books flattened
+     into rectangles while the same Book two shelves down was solid. */
+  const rule = css.match(/([^{}]*)\{perspective:1400px\}/)![1];
+  for (const rail of ['.lib-shelf-book .lib-row', '.lib-shelf-personal .lib-row',
+    '.lib-results .lib-row', '.lib-shelf-res .lib-row']) {
+    assert.ok(rule.includes(rail), `${rail} has no perspective`);
+  }
   /* It is on the ROW, so every Book is seen from the same eye, and it cannot
    * magnify either terminal state: the spine is at z=0 at rest and the cover is
    * at z=0 when it arrives. Measured — rest 29px = spine width exactly, arrived
@@ -193,17 +201,26 @@ test('final: perspective is safe at both ends of the turn', () => {
 
 /* ── §14  Neighbours ────────────────────────────────────────────────────── */
 
-test('final: the two sides make room differently, because the cover is not centred', () => {
+test('final: only the right side makes room, because only the right side is covered', () => {
   /* The Book is hinged at its spine, on the LEFT, so the cover swings out to the
-   * RIGHT and ends up 126px wide against a 24–52px spine. The two sides
-   * therefore have different jobs, and treating them the same was a real defect:
-   * a symmetric 16px nudge left the right neighbour underneath the cover, which
-   * the review saw as a Book opening "in front of the books to its right".
+   * RIGHT and ends up 126px wide against a 24–52px spine. Everything to the
+   * right is under that cover and has to clear its OVERHANG past the spine.
    *
-   * Left: a token's worth, enough to be readable.
-   * Right: the cover's OVERHANG past the spine, so it actually clears. */
-  assert.match(css, /\.lib-slot\.is-nudge-l\{transform:translateX\(calc\(-1 \* var\(--lib-book-neighbour\)\)\)\}/);
-  assert.match(css, /\.lib-slot\.is-nudge-r\{transform:translateX\(calc\(var\(--lib-book-clear, 0px\) \+ var\(--lib-book-neighbour\)\)\)\}/);
+   * NOTHING TO THE LEFT MOVES, and that is a correction to this file's earlier
+   * claim. The left neighbour used to step back "to be readable" — measured on
+   * a real shelf, it had nothing to be readable from: a pulled Book travels
+   * straight up and its spine stays in exactly the band it occupied at rest.
+   * All the nudge did was slide ONE book 16px into the one behind it, which
+   * does not move, so it overlapped by 16px and painted on top. Reported from
+   * use as "the first book to the left comes out a lot more than the rest and
+   * comes in front of the second most left book". */
+  assert.ok(!/is-nudge-l/.test(css), 'the left nudge is back');
+  assert.ok(!/is-nudge-l/.test(shelf), 'something still applies a left nudge');
+  assert.match(css, /\.lib-slot\.is-nudge-r\{--slot-shift:calc\(var\(--lib-book-clear, 0px\) \+ var\(--lib-book-neighbour\)\)\}/);
+  /* A slot has ONE transform, composed from named parts, so making room for an
+     OPEN Book and making room for a HOVERED one can both apply at once. Two
+     rules each setting `transform` outright is how they end up fighting. */
+  assert.match(css, /\.lib-slot\{[^}]*transform:translateX\(calc\(var\(--slot-shift, 0px\) \+ var\(--slot-peek, 0px\)\)\)/);
   const nudge = Number(css.match(/--lib-book-neighbour:\s*(\d+)px/)![1]);
   assert.ok(nudge >= 10 && nudge <= 18, `neighbour clearance is ${nudge}px, §14 asks for 10-18`);
   /* A multiple of four, so it lands on a whole device pixel at DPR 1, 1.25, 1.5
@@ -215,7 +232,6 @@ test('final: the two sides make room differently, because the cover is not centr
   assert.match(shelf, /const cover = parseFloat\(getComputedStyle\(obj\)\.getPropertyValue\('--bw'\)\)/);
   assert.match(shelf, /const spine = parseFloat\(getComputedStyle\(obj\)\.getPropertyValue\('--bt'\)\)/);
   assert.match(shelf, /Math\.max\(0, Math\.round\(cover - spine\)\)/);
-  assert.match(shelf, /slot\.previousElementSibling\?\.classList\.toggle\('is-nudge-l', on\)/);
   /* EVERY following slot moves by the same amount, which keeps their spacing
    * exactly as it was. Moving only the immediate one would have opened a hole
    * and then buried the next Book instead. */

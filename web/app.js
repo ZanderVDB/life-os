@@ -953,6 +953,17 @@ function wireShell() {
       && eventFromHash() !== (cal.linkedEvent?.id ?? null)) {
       void loadCalendar();
     }
+    /* Back and forward between Settings pages. The route has not changed, so
+       nothing above re-renders, and without this the URL would move while the
+       screen stayed where it was. */
+    if (r === 'settings') {
+      const asked = settingsTabFromHash();
+      if (asked !== state.settingsTab) {
+        state.settingsTab = asked;
+        renderSettings();
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }
+    }
     if (r === 'projects') {
       const id = projectFromHash();
       if (id !== pj.openId) {
@@ -1151,6 +1162,46 @@ const eventFromHash = () => {
   return route === 'calendar' && sub === 'event' && id ? id : null;
 };
 
+/**
+ * `#settings/<panel>` — which Settings page is open.
+ *
+ * ── The defect this fixes ────────────────────────────────────────────────
+ *
+ * Settings was the ONE section that kept its position in JavaScript instead of
+ * in the URL. Every other one is already in the hash: a Book is
+ * `#library/book/<id>`, a day is `#diary/<date>`, a project is
+ * `#projects/<id>`, the reminder list is `#calendar/reminders`.
+ *
+ * The consequence was reported from a phone. Calendar → More → Settings →
+ * Account, then the phone's own Back button: opening Account had created no
+ * history entry, so Back popped `#settings` and landed on Calendar — two
+ * screens further than anybody meant. The in-page back arrow worked, because
+ * it reads the JavaScript; the hardware one could not, because there was
+ * nothing in the URL for it to return to.
+ *
+ * Now there is. And a link to a Settings page works, and a reload stays put.
+ */
+const settingsTabFromHash = () => {
+  const path = (location.hash || '').slice(1).split('?')[0];
+  const [route, sub] = path.split('/');
+  if (route !== 'settings' || !sub) return null;
+  return settingsTabs(state).some((t) => t.id === sub) ? sub : null;
+};
+
+/**
+ * Open a Settings page, and say so in the URL.
+ *
+ * `null` means the index — the phone's list of sections, and the bare
+ * `#settings` a desktop shows Account on. Everything that opens a Settings
+ * page goes through here, so there is one place where the panel and the
+ * address can get out of step, and it is this one.
+ */
+function openSettingsTab(id, { render = true } = {}) {
+  state.settingsTab = id;
+  setHash(id ? `#settings/${id}` : '#settings');
+  if (render) renderSettings();
+}
+
 /** `#projects/<id>` opens that project directly — refresh included. */
 const projectFromHash = () => {
   const path = (location.hash || '').slice(1).split('?')[0];
@@ -1274,6 +1325,17 @@ async function goToSectionRoot(id, nav = navToken()) {
     setHash('#diary');
     return renderDiary(nav);
   }
+  /* Settings has a deeper level now that its open panel is in the URL, so it
+     belongs here with the other two rather than falling through to a plain
+     reload — which would read `#settings/account` back out of the hash and
+     re-open the page somebody had just asked to leave. */
+  if (id === 'settings') {
+    if (navStale(nav)) return undefined;
+    state.settingsTab = null;
+    setHash('#settings');
+    renderSettings();
+    return undefined;
+  }
   return loadRoute(nav);
 }
 
@@ -1396,6 +1458,10 @@ async function loadRoute(nav = navToken()) {
       state.settingsTab = null;
     }
     state.settingsFromMenu = false;
+    /* The URL is the authority when it names a panel — a link, a reload, or
+       Back landing on `#settings/account` all arrive here. */
+    const asked = settingsTabFromHash();
+    if (asked) state.settingsTab = asked;
     renderSettings();
     return;
   }
@@ -3112,13 +3178,12 @@ function wireSettings() {
     () => openIntro({ firstRun: false }));
   wireFeedback();
   document.querySelectorAll('[data-stab]').forEach((el) => {
-    el.onclick = () => { state.settingsTab = el.dataset.stab; renderSettings(); };
+    el.onclick = () => openSettingsTab(el.dataset.stab);
   });
   /* Back to the index. A phone-only control, because the index is a
    * phone-only state — on a desktop the nav column is always there. */
   document.querySelector('[data-stab-back]')?.addEventListener('click', () => {
-    state.settingsTab = null;
-    renderSettings();
+    openSettingsTab(null);
     document.getElementById('main-scroll')?.scrollIntoView({ block: 'start' });
   });
 
@@ -3466,8 +3531,7 @@ untouched.`)) return;
   }));
 
   document.getElementById('go-integrations')?.addEventListener('click', () => {
-    state.settingsTab = 'integrations';
-    renderSettings();
+    openSettingsTab('integrations');
   });
 }
 
@@ -7263,8 +7327,11 @@ function openHabitsSheet() {
         });
         rootEl.querySelector('[data-more="hb-manage"]')?.addEventListener('click', () => {
           close();
-          state.settingsTab = 'habits';
+          /* A named destination, said in the URL and nowhere else. `go()` will
+             clear any leftover panel and `loadRoute` will read this one back
+             out of the hash, so there is one writer and nothing to drift. */
           state.settingsFromMenu = true;
+          setHash('#settings/habits');
           go('settings');
         });
       };

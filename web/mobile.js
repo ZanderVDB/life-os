@@ -357,12 +357,23 @@ export function openMoreSheet() {
   const route = handlers.currentRoute?.() ?? '';
   openSheet({
     title: 'Life OS',
-    body: `<div class="msheet-group">Go to</div>
+    /* ── Search first, Settings last ──────────────────────────────────
+       Search was below Settings, under a separator — so the one thing you
+       reach for when you cannot remember where something is was the last
+       thing on the list, and account settings sat above it. Testers said so.
+
+       Search is not a destination in the way the others are, so it keeps its
+       separator; it has simply moved to the top of the sheet, where a thumb
+       lands first. Settings is now genuinely last. */
+    body: `${sheetRow({
+    id: 'search', label: 'Search', icon: 'search',
+    desc: 'Find anything you have written down',
+  })}
+      <div class="msheet-sep"></div>
+      <div class="msheet-group">Go to</div>
       ${MORE_ITEMS.map((m) => sheetRow({
     ...m, current: m.hash === `#${route}`, id: m.id,
-  })).join('')}
-      <div class="msheet-sep"></div>
-      ${sheetRow({ id: 'search', label: 'Search', icon: 'search', desc: 'Find anything you have written down' })}`,
+  })).join('')}`,
     onMount: (rootEl, close) => {
       rootEl.querySelectorAll('[data-more]').forEach((el) => {
         el.addEventListener('click', (e) => {

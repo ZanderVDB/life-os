@@ -3330,6 +3330,11 @@ body:has(.lib-page) .rail{display:none}
    read as a shelf -- each page block sits against the next spine, which is what
    a real shelf looks like -- and every cover stays whole. */
 .lib-rail.is-dense .lib-row{column-gap:0}
+/* Touching is a BOOK rule. Four documents are four cards, and cards that touch
+   clip one another — measured on "Recently opened", the Insurance card was
+   painted over the Rage 2026 spine and Trifusion invoice was cut off by Lease
+   agreement. Resource shelves keep their gap however many they hold. */
+.lib-shelf-res .lib-rail.is-dense .lib-row{column-gap:14px}
 /* §33 — Books touch, always. The adaptive density rule was written for the old
    flat cover-cards, where three touching covers read as a deck; with spines the
    opposite is true, and a 16px gap between three Books is what the review meant
@@ -3338,7 +3343,19 @@ body:has(.lib-page) .rail{display:none}
 /* Touching was too tight to read as separate volumes; widely spaced read as
    objects on display. One token, one number (§4). */
 .lib-shelf-book .lib-row,.lib-shelf-personal .lib-row{column-gap:var(--lib-book-gap)}
+/* ── A slot has ONE transform, composed from named parts ────────────────
+ *
+ * There used to be two rules that each set `transform` outright — the pulled
+ * neighbour nudge and nothing else — so anything wanting to move a slot for a
+ * second reason had to overwrite the first. Hover needed exactly that, and
+ * two writers of one property is how they end up fighting.
+ *
+ * Now every reason contributes a named part and the transform adds them up.
+ *   --slot-shift  making room for a Book that is OPEN
+ *   --slot-peek   making room for a Book somebody is LOOKING at
+ */
 .lib-slot{scroll-snap-align:start;flex:0 0 auto;position:relative;
+  transform:translateX(calc(var(--slot-shift, 0px) + var(--slot-peek, 0px)));
   transition:transform var(--t-select)}
 
 /* PULLED-FORWARD BREATHING ROOM (S7). The neighbours step aside rather than
@@ -3346,6 +3363,31 @@ body:has(.lib-page) .rail{display:none}
    that is not adjacent. */
 /* Superseded by the explicit `is-nudge-*` classes below: only the two immediate
    neighbours move, and the code that pulls a Book is what says which two. */
+
+/* ── Where one kind ends and another begins ─────────────────────────────
+ *
+ * "Recently opened" holds whatever you last touched, which can be a Book, a
+ * document, a link and a file in any order. Rendered as one undifferentiated
+ * run they read as a single row of mismatched objects — a 34px spine wedged
+ * between two 178px cards.
+ *
+ * So the shelf keeps ONE heading and one scroll, and puts the Books first with
+ * a marked break after them. Not a second shelf: they are one answer to one
+ * question, and splitting the heading would say they were two.
+ */
+/* The LAST Book in the run reserves its own cover.
+   A Book occupies only its spine — 30-odd px — while its cover is 126 and
+   simply overhangs whatever comes next. On the Books shelf that is hidden
+   behind the following spine, which is the point. At the end of a run there is
+   nothing to hide it, so it landed on the first card. The clearance is the
+   Book's own arithmetic, cover minus spine, so a thick Book and a thin one
+   both come out right. */
+.lib-slot.is-kind-break-before .lib-obj{
+  margin-right:calc(var(--bw, 126px) - var(--bt, 32px))}
+.lib-slot.is-kind-break{margin-left:20px;position:relative}
+.lib-slot.is-kind-break::before{content:'';position:absolute;
+  left:-11px;bottom:0;width:1px;height:60%;
+  background:linear-gradient(180deg,transparent,var(--hairline) 40%,var(--hairline))}
 
 /* Small collections are centred rather than pinned left (S26). */
 .lib-row{justify-content:flex-start}
@@ -3404,8 +3446,46 @@ body:has(.lib-page) .rail{display:none}
 /* The left neighbour only has to become readable; the right side has to get out
    from under a 126px cover. `--lib-book-clear` is the cover's overhang past the
    Book's own spine, measured per Book when it is pulled. */
-.lib-slot.is-nudge-l{transform:translateX(calc(-1 * var(--lib-book-neighbour)))}
-.lib-slot.is-nudge-r{transform:translateX(calc(var(--lib-book-clear, 0px) + var(--lib-book-neighbour)))}
+/* ── Nothing to the LEFT moves any more, and the reason is measurement ──
+ *
+ * The left neighbour used to step 16px left "to become readable". Measured on
+ * a real shelf, it had nothing to become readable FROM: a pulled Book travels
+ * straight up, its spine stays in exactly the same 34px band it occupied at
+ * rest, and its cover overhangs to the RIGHT. The left neighbour was never
+ * covered by anything.
+ *
+ * What the 16px did instead was slide ONE book into the one behind it — which
+ * does not move — so it overlapped it by 16px and, being later in the DOM,
+ * painted on top. That is precisely the "the first book to the left comes out
+ * a lot more than the rest and comes in front of the second most left book"
+ * that was reported. The nudge was solving a problem that did not exist and
+ * causing one that did.
+ *
+ * The right side still moves, and moves as a GROUP — every following slot by
+ * the same amount — so their spacing is exactly what it was. That is why the
+ * right-hand side always looked correct and the left never did.
+ */
+.lib-slot.is-nudge-r{--slot-shift:calc(var(--lib-book-clear, 0px) + var(--lib-book-neighbour))}
+
+/* ── HOVER MAKES ROOM (reported) ────────────────────────────────────────
+ *
+ * Hover used to lift the Book 8px and raise its z-index, and move nothing.
+ * With the Books touching, the hovered Book's 126px cover — normally hidden
+ * behind the next three spines — suddenly painted on top of them, which reads
+ * as the cover cutting THROUGH its neighbour rather than standing in front of
+ * it. "It looks like it's just glitching through the book."
+ *
+ * So everything to its right steps aside a little, and you see some of the
+ * front. `~` and not `+`: the whole run moves by the same amount, keeping the
+ * spacing between them — moving only the next one would recreate, in
+ * miniature, exactly the overlap being fixed on the left.
+ *
+ * Books only. A row of document cards has no cover to reveal and nothing to
+ * make room for.
+ */
+.lib-shelf-book .lib-slot:has(> .lib-obj:hover) ~ .lib-slot,
+.lib-shelf-personal .lib-slot:has(> .lib-obj:hover) ~ .lib-slot{
+  --slot-peek:var(--lib-book-peek)}
 /* THE PULLED BOOK DOES NOT CHANGE THE LAYOUT.
    Widening it to its cover looked right and reflowed the whole rail: measured,
    the neighbours moved 48.5px when §14 asks for 10-18, because a centred row
@@ -3499,6 +3579,12 @@ body:has(.lib-page) .rail{display:none}
   --lib-book-hover:8px;       /* hover lift  — must stay under pull          */
   --lib-book-pull:32px;       /* pull travel                                 */
   --lib-book-neighbour:16px;  /* how far each immediate neighbour steps aside */
+  /* How far the right-hand run steps aside on HOVER. Smaller than the pull's
+     clearance on purpose: hover says "this responds", and a shelf that opens
+     a 92px gap every time the pointer crosses it is a shelf that never sits
+     still. A multiple of 4, like every other travel here, so it lands on a
+     whole device pixel at 1, 1.25, 1.5 and 2. */
+  --lib-book-peek:24px;
 }
 
 /* Declared on `:root` rather than on the shelves, so a live override can win by
@@ -3546,7 +3632,12 @@ body:has(.lib-page) .rail{display:none}
    z=0 when it arrives, so neither terminal state is magnified. Only the middle
    of the turn is projected, which is where depth is supposed to be visible. */
 .lib-shelf-book .lib-row,.lib-shelf-personal .lib-row,
-.lib-results .lib-row{perspective:1400px}
+.lib-results .lib-row,
+/* A Book on a MIXED shelf is the same object it is on the Books shelf, and
+   without a perspective its three faces flatten into a rectangle. "Recently
+   opened" holds both kinds, so it needs one; a shelf of nothing but flat cards
+   is unaffected by it. */
+.lib-shelf-res .lib-row{perspective:1400px}
 .lib-vol{position:absolute;inset:0;transform-style:preserve-3d;
   transform-origin:left center;pointer-events:none;
   transition:transform var(--d-turn) var(--e-out)}
