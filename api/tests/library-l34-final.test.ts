@@ -201,21 +201,35 @@ test('final: perspective is safe at both ends of the turn', () => {
 
 /* ── §14  Neighbours ────────────────────────────────────────────────────── */
 
-test('final: only the right side makes room, because only the right side is covered', () => {
+test('final: both sides make room, and both move as a GROUP', () => {
   /* The Book is hinged at its spine, on the LEFT, so the cover swings out to the
    * RIGHT and ends up 126px wide against a 24–52px spine. Everything to the
    * right is under that cover and has to clear its OVERHANG past the spine.
    *
-   * NOTHING TO THE LEFT MOVES, and that is a correction to this file's earlier
-   * claim. The left neighbour used to step back "to be readable" — measured on
-   * a real shelf, it had nothing to be readable from: a pulled Book travels
-   * straight up and its spine stays in exactly the band it occupied at rest.
-   * All the nudge did was slide ONE book 16px into the one behind it, which
-   * does not move, so it overlapped by 16px and painted on top. Reported from
-   * use as "the first book to the left comes out a lot more than the rest and
-   * comes in front of the second most left book". */
-  assert.ok(!/is-nudge-l/.test(css), 'the left nudge is back');
-  assert.ok(!/is-nudge-l/.test(shelf), 'something still applies a left nudge');
+   * THE LEFT MOVES TOO, and the history of this line is worth keeping. The
+   * original nudge stepped ONE book 16px to the left, into a book that does not
+   * move — so it overlapped by 16px and painted on top: "the first book to the
+   * left comes out a lot more than the rest and comes in front of the second
+   * most left book". Removing it fixed that and created the opposite report:
+   * measured, an open Book had a 16px gap on its right and a 13px OVERLAP on
+   * its left, because it grows from a 47px spine into a 126px opaque cover and
+   * swallows the neighbour it was already touching.
+   *
+   * The distinction that makes this version right is not the direction, it is
+   * the GROUP. Every preceding slot steps back by the same amount, so their
+   * spacing among themselves is untouched and nothing can overlap anything —
+   * exactly how the right-hand side has always worked. */
+  assert.match(css, /\.lib-slot\.is-nudge-l\{--slot-shift:calc\(-1 \* var\(--lib-book-left-clear\)\)\}/,
+    'nothing to the left of an open Book makes room');
+  assert.match(shelf, /for \(let p = slot\.previousElementSibling; p; p = p\.previousElementSibling\)/,
+    'the left side moves one book rather than the whole run — the original bug');
+  const left = Number(css.match(/--lib-book-left-clear:\s*(\d+)px/)![1]);
+  /* 13px of rest overlap has to be undone before a gap begins, so the left
+     travel is necessarily larger than the right nudge. It lands within a few
+     pixels of the right-hand gap, which is what "about the same" means. */
+  assert.ok(left >= 24 && left <= 36, `${left}px will not read as the same gap as the right`);
+  assert.equal(left % 4, 0, `${left}px is not device-pixel exact`);
+
   assert.match(css, /\.lib-slot\.is-nudge-r\{--slot-shift:calc\(var\(--lib-book-clear, 0px\) \+ var\(--lib-book-neighbour\)\)\}/);
   /* A slot has ONE transform, composed from named parts, so making room for an
      OPEN Book and making room for a HOVERED one can both apply at once. Two

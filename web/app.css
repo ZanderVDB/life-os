@@ -1130,6 +1130,28 @@ body.modal-open{overflow:hidden}
   background:var(--surface-2);border-radius:6px;padding:1px 7px;letter-spacing:0}
 .hb-count+.hb-add{margin-left:6px}
 .hb-list{display:flex;flex-direction:column;gap:1px}
+
+/* ── The habits today did not ask for ────────────────────────────────────
+ *
+ * Folded, and quieter than the card above it — these are not on your plate,
+ * and listing them beside the ones that are would make every Tuesday look like
+ * a Sunday. Open it and the rows are the ordinary rows: same ring, same tick,
+ * same streak, because a habit ticked here is ticked exactly as it would be on
+ * its own day. */
+.hb-rest{margin-top:8px;border-top:1px solid var(--hairline);padding-top:6px}
+.hb-rest>summary{display:flex;align-items:center;gap:7px;cursor:pointer;
+  padding:4px 6px;border-radius:8px;list-style:none;
+  font-size:11.5px;color:var(--muted);transition:color var(--t-hover)}
+.hb-rest>summary::-webkit-details-marker{display:none}
+.hb-rest>summary:hover{color:var(--text-2)}
+.hb-rest-l{flex:1;min-width:0}
+.hb-rest-n{font-variant-numeric:tabular-nums;font-weight:600}
+.hb-rest-chev{display:grid;place-items:center;transition:transform var(--t-hover)}
+.hb-rest[open]>summary .hb-rest-chev{transform:rotate(90deg)}
+/* Dimmer than a due habit, and never dimmer than legible. */
+.hb-rest .hb-row{opacity:.72}
+.hb-rest .hb-row:hover,.hb-rest .hb-row.is-done{opacity:1}
+
 .hb-row{display:flex;align-items:center;gap:11px;padding:7px 6px;border-radius:10px;
   transition:background var(--t-hover)}
 .hb-row:hover{background:rgba(255,255,255,.035)}
@@ -1546,7 +1568,18 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
 /* ── Plan ── */
 .cal-plan{overflow-x:auto}
 .pl-grid{display:grid;grid-template-columns:54px repeat(7,minmax(112px,1fr));gap:5px;min-width:820px}
-.pl-axis{display:flex;flex-direction:column;padding-top:42px}
+/* ── One band height for the whole week ─────────────────────────────────
+ *
+ * `--pl-ad-rows` is set on the grid from the busiest day and capped, so every
+ * column's canvas begins at the same y and the hour labels beside them are
+ * true. Before this the band was a property of one column: nine all-day items
+ * pushed that day's canvas 184px below its neighbours', and the axis's "07:00"
+ * pointed at something 230px from the 07:00 event.
+ *
+ * The axis reads the same number, which is the point — one variable, so the
+ * labels and the lines cannot drift apart again. */
+.pl-axis{display:flex;flex-direction:column;
+  padding-top:calc(42px + var(--pl-ad-rows, 0) * var(--pl-ad-row))}
 .pl-hour{flex:1;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;
   text-align:right;padding-right:7px;transform:translateY(-6px)}
 .pl-day{display:flex;flex-direction:column;min-width:0}
@@ -1554,9 +1587,40 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
 .pl-dow{font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase}
 .pl-num{font-size:15px;font-weight:700;color:var(--text-2)}
 .pl-day.is-today .pl-num{color:var(--accent)}
-.pl-allday{display:flex;flex-direction:column;gap:3px;margin-bottom:4px}
+/* Every column reserves the same band, empty ones included — that is what
+   keeps the canvases level. `--pl-ad-row` is one row plus its gap. */
+:root{--pl-ad-row:22px}
+.pl-allday{display:flex;flex-direction:column;gap:3px;overflow:hidden;
+  height:calc(var(--pl-ad-rows, 0) * var(--pl-ad-row));flex-shrink:0}
 .pl-ad{font-size:10.5px;background:var(--surface-2);border-radius:5px;padding:2px 6px;
-  color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  height:19px;flex-shrink:0;text-align:left}
+
+/* ── A thing that is still going on ─────────────────────────────────────
+ *
+ * The arrows carry the whole meaning: it did not start here, and it does not
+ * end here. A visit from Wednesday to the following Wednesday reads as one
+ * continuous thing across the week instead of an event that appeared once and
+ * vanished — which is what it did before the day filter was fixed. Square on
+ * the sides it continues through, rounded on the ends where it really begins
+ * and ends. */
+.pl-ad-span{display:flex;align-items:center;gap:5px;
+  background:color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  border-radius:0;position:relative}
+.pl-ad-span.is-open{border-radius:5px 0 0 5px}
+.pl-ad-span.is-close{border-radius:0 5px 5px 0}
+.pl-ad-span.is-open.is-close{border-radius:5px}
+.pl-ad-span b{font-size:9.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pl-ad-in,.pl-ad-out{width:0;height:0;flex-shrink:0;
+  border-top:3.5px solid transparent;border-bottom:3.5px solid transparent}
+.pl-ad-in{border-right:4px solid var(--muted)}
+.pl-ad-out{border-left:4px solid var(--muted);margin-left:auto}
+
+/* More above the axis than the band can hold without pushing the day down. */
+.pl-ad-more{color:var(--muted);font-weight:600;
+  background:transparent;box-shadow:inset 0 0 0 1px var(--hairline);
+  transition:background var(--t-hover),color var(--t-hover)}
+.pl-ad-more:hover{background:var(--surface-2);color:var(--text-2)}
 .pl-canvas{position:relative;flex:1;min-height:calc(var(--pl-hours)*46px);
   background:var(--surface);border-radius:10px;overflow:hidden}
 .pl-line{display:block;height:calc(100%/var(--pl-hours));
@@ -1573,8 +1637,8 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
  * next to the radius and padding it has to agree with. The defaults mean a
  * lone event still spans the column exactly as it always did. */
 .pl-ev,.pl-block{position:absolute;right:auto;
-  left:calc(3px + (100% - 6px) * var(--lane, 0) / var(--lanes, 1));
-  width:calc((100% - 6px) / var(--lanes, 1) - var(--pl-gutter, 0px));
+  left:calc(3px + (100% - 6px) * var(--lane, 0) / var(--lanes, 1) + var(--pl-inset, 0px));
+  width:calc((100% - 6px) / var(--lanes, 1) - var(--pl-gutter, 0px) - var(--pl-inset, 0px));
   border-radius:7px;padding:3px 6px;
   font-size:10.5px;line-height:1.28;overflow:hidden;cursor:pointer;
   transition:transform var(--d-fast) var(--e-out),box-shadow var(--t-hover)}
@@ -1591,6 +1655,24 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
    overlap" would trade real information for something position already says. */
 .pl-ev.is-lane-alt{background:var(--surface-2)}
 .pl-block.is-lane-alt{background:rgba(78,143,196,.20)}
+
+/* ── Inside, rather than beside ─────────────────────────────────────────
+ *
+ * Halving the column is right when two things compete for the same moment. It
+ * is wrong when one thing happens DURING another: an offsite from 06:00 to
+ * 12:00 with a keynote at 08:00 is not two half-days, it is a day with a thing
+ * in it, and splitting both to say so throws away the containment that is the
+ * actual information.
+ *
+ * So the inner one keeps its host's slot and is drawn inset and on top. The
+ * host stays visible down the left and right of it, which is what makes the
+ * relationship readable without a word of explanation. `--pl-inset` rather
+ * than a new left/width rule, so this composes with the lane arithmetic
+ * instead of overwriting it. */
+.pl-ev.is-nested,.pl-block.is-nested{--pl-inset:13px;z-index:3;
+  box-shadow:0 0 0 1px var(--surface),var(--e1)}
+.pl-ev.is-nested{background:var(--surface-3)}
+.pl-block.is-nested{background:rgba(78,143,196,.26)}
 
 /* More at this time than the column can honestly hold. Names them in the
    tooltip; opens the day, which has the width. */
@@ -2305,7 +2387,10 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 
 /* Plan: date-only reminders sit ABOVE the axis so they cannot eat a free
    window that is genuinely still free. */
+/* Same 19px as every other band row — the band is a shared height now, and a
+   row that sizes itself would put one column's canvas below its neighbours'. */
 .pl-rem-ad{display:flex;align-items:center;gap:5px;width:100%;text-align:left;
+  height:19px;flex-shrink:0;
   font-size:10px;border-radius:5px;padding:2px 6px;color:var(--text-2);
   border:1px dotted rgba(255,196,77,.45);background:transparent;
   overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
@@ -3518,6 +3603,12 @@ body:has(.lib-page) .rail{display:none}
  * right-hand side always looked correct and the left never did.
  */
 .lib-slot.is-nudge-r{--slot-shift:calc(var(--lib-book-clear, 0px) + var(--lib-book-neighbour))}
+/* The left side moves too, and as a GROUP — see the note in setNeighbours.
+   A pulled Book grows from a 47px spine into a 126px cover, so it swallows the
+   13px it was already overlapping on its left; 28px turns that into a 15px gap
+   against 16px on the right. Every preceding slot by the same amount, so their
+   own spacing is untouched and nothing overlaps anything. */
+.lib-slot.is-nudge-l{--slot-shift:calc(-1 * var(--lib-book-left-clear))}
 
 /* ── HOVER MAKES ROOM (reported) ────────────────────────────────────────
  *
@@ -3535,9 +3626,21 @@ body:has(.lib-page) .rail{display:none}
  * Books only. A row of document cards has no cover to reveal and nothing to
  * make room for.
  */
-.lib-shelf-book .lib-slot:has(> .lib-obj:hover) ~ .lib-slot,
-.lib-shelf-personal .lib-slot:has(> .lib-obj:hover) ~ .lib-slot{
+.lib-shelf-book .lib-rail:not(.has-pulled) .lib-slot:has(> .lib-obj:hover) ~ .lib-slot,
+.lib-shelf-personal .lib-rail:not(.has-pulled) .lib-slot:has(> .lib-obj:hover) ~ .lib-slot{
   --slot-peek:var(--lib-book-peek)}
+
+/* ── While a Book is open, nothing peeks ────────────────────────────────
+ *
+ * Reported twice, as two symptoms of one thing. Hovering a Book that is
+ * already open pushed its neighbour further away — and it is showing its front
+ * cover, so it is revealing nothing and has nothing to make room for. Hovering
+ * the Book to its LEFT shoved the open Book sideways for the same reason.
+ *
+ * The peek is a RESTING-shelf affordance: it says "there is a cover behind this
+ * spine". Once a Book is pulled, the shelf is in a different mode and the pull
+ * owns the spacing. One rule, no exceptions, and nothing on the shelf ever
+ * moves for two reasons at once. Hover still lifts and brightens. */
 /* THE PULLED BOOK DOES NOT CHANGE THE LAYOUT.
    Widening it to its cover looked right and reflowed the whole rail: measured,
    the neighbours moved 48.5px when §14 asks for 10-18, because a centred row
@@ -3636,7 +3739,12 @@ body:has(.lib-page) .rail{display:none}
      a 92px gap every time the pointer crosses it is a shelf that never sits
      still. A multiple of 4, like every other travel here, so it lands on a
      whole device pixel at 1, 1.25, 1.5 and 2. */
-  --lib-book-peek:24px;
+  --lib-book-peek:20px;
+  /* How far everything LEFT of an open Book steps back. Larger than the peek
+     because it has more to undo: at rest the Books overlap by 13px, and a
+     pulled Book turns its 47px spine into a 126px cover on top of that. 28px
+     leaves a 15px gap, against 16px on the right — the same, to the eye. */
+  --lib-book-left-clear:28px;
 }
 
 /* Declared on `:root` rather than on the shelves, so a live override can win by

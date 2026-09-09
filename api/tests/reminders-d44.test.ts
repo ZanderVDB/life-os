@@ -194,8 +194,18 @@ test('month: hover explains a reminder without a native tooltip', () => {
 
 test('plan: date-only reminders sit above the axis, not on it', () => {
   assert.match(calCode, /function planReminderHtml/, 'Plan has no reminder rendering');
-  assert.match(calCode, /dayReminders\.filter\(\(r\) => !r\.dueTime\)\.map\(\(r\) => planReminderHtml/,
-    'date-only reminders are not in the all-day strip');
+  /* The band is built by `bandFor` now, so that one function decides what sits
+     above the axis — all-day events, multi-day events, and date-only reminders
+     — rather than three separate expressions in the markup that could each
+     drift. The PROPERTY is unchanged and is what this asserts: a reminder with
+     no time does not occupy a slot on the axis. */
+  assert.match(calCode, /export function bandFor/, 'nothing decides what sits above the axis');
+  assert.match(calCode, /day\.reminders\.filter\(\(r\) => r\.status !== 'done' && !r\.dueTime\)/,
+    'date-only reminders are not in the band');
+  assert.match(calCode, /kind: 'reminder'/, 'the band does not carry reminders');
+  // And a reminder WITH a time is still a marker on the axis, not a band row.
+  assert.match(calCode, /dayReminders\.filter\(\(r\) => r\.dueTime\)/,
+    'timed reminders left the axis');
   assert.match(html, /\.pl-rem-ad\{/, 'the strip reminder has no styling');
 });
 

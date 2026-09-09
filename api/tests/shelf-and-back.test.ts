@@ -105,11 +105,14 @@ test('shelf: hovering a Book makes room to its right', () => {
      touching, the hovered Book's 126px cover — normally hidden behind the next
      spine — painted on top of it, which reads as cutting THROUGH the neighbour
      rather than standing in front of it. */
-  assert.match(css, /\.lib-shelf-book \.lib-slot:has\(> \.lib-obj:hover\) ~ \.lib-slot/,
+  assert.match(css, /\.lib-shelf-book \.lib-rail:not\(\.has-pulled\) \.lib-slot:has\(> \.lib-obj:hover\) ~ \.lib-slot/,
     'hover does not make room on a book shelf');
   assert.match(css, /--slot-peek:var\(--lib-book-peek\)/);
   const peek = Number(css.match(/--lib-book-peek:\s*(\d+)px/)![1]);
-  assert.ok(peek >= 16 && peek <= 40, `a ${peek}px peek is not "a little"`);
+  /* Books overlap by 13px at rest, so the visible gap is `peek - 13`. 24px gave
+     11px, which was reported as further than wanted; 20px gives 7px, which is
+     a gap rather than a parting. Anything under 16 closes it entirely. */
+  assert.ok(peek >= 16 && peek <= 28, `a ${peek}px peek leaves a ${peek - 13}px gap`);
   /* Every travel on this shelf lands on a whole device pixel at 1, 1.25, 1.5
      and 2, or the moved object rasterises on a different subpixel phase from
      its neighbours — the blur L3.2 chased down. */
@@ -119,6 +122,31 @@ test('shelf: hovering a Book makes room to its right', () => {
      recreating in miniature exactly the overlap being fixed on the left. */
   assert.ok(!/\.lib-slot:has\(> \.lib-obj:hover\) \+ \.lib-slot/.test(css),
     'only the immediate neighbour moves, so it overlaps the one after it');
+});
+
+test('shelf: while a Book is open, nothing peeks', async () => {
+  const css = web('app.css');
+  const shelf = readFileSync(join('..', 'web', 'library-shelf.js'), 'utf8');
+  /* Reported twice, as two symptoms of one thing. Hovering a Book that is
+     ALREADY OPEN pushed its neighbour further away — and it is showing its
+     front cover, so it is revealing nothing and has nothing to make room for:
+     "it moves it even further away, which doesn't really make sense". Hovering
+     the Book to its LEFT shoved the open Book sideways, for the same reason.
+
+     The peek is a RESTING-shelf affordance — it says "there is a cover behind
+     this spine". Once a Book is pulled the shelf is in another mode and the
+     pull owns the spacing. Suspending it on the whole rail is one rule with no
+     exceptions, rather than two special cases that would each need their own. */
+  assert.match(shelf, /closest\('\.lib-rail'\)\?\.classList\.toggle\('has-pulled', on\)/,
+    'nothing marks the rail while a Book is pulled');
+  const rules = css.match(/[^\n]*:has\(> \.lib-obj:hover\) ~ \.lib-slot/g) ?? [];
+  assert.ok(rules.length > 0, 'the hover peek rule has gone');
+  for (const r of rules) {
+    assert.match(r, /:not\(\.has-pulled\)/,
+      `a peek rule still fires while a Book is open: ${r.trim()}`);
+  }
+  // Hover still lifts and brightens; only the parting is suspended.
+  assert.match(css, /\.lib-obj:hover\{transform:translateY/, 'hover no longer lifts at all');
 });
 
 test('shelf: a mixed shelf separates the Books from everything else', async () => {

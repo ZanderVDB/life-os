@@ -184,7 +184,14 @@ function itemsForDay(dayIso) {
   }
   const inDay = (e) => {
     if (e.isAllDay) return e.startDate <= dayIso && (e.endDate ?? e.startDate) >= dayIso;
-    return e.startsAt && iso(new Date(e.startsAt)) === dayIso;
+    if (!e.startsAt) return false;
+    /* A TIMED event belongs to every day it covers, not only the one it began
+     * on. Visitors arriving on a Wednesday and leaving the following Wednesday
+     * appeared on exactly one day and vanished for the other six — reported as
+     * "it shows today that they're here, but then it just stops". Agenda looked
+     * right because Agenda lists by start, which is why it hid the bug. */
+    const from = iso(new Date(e.startsAt));
+    return from <= dayIso && iso(new Date(e.endsAt ?? e.startsAt)) >= dayIso;
   };
   return {
     events: cal.layers.events ? d.events.filter(inDay) : [],
@@ -825,15 +832,60 @@ function hoursFor(days) {
 function timeGridHtml(days, cls) {
   const todayIso = iso(new Date());
   const hours = hoursFor(days);
+  /* ONE band height for the whole grid, from the busiest day — see AD_ROWS.
+     The axis reads the same number, so the hour labels and the hour lines stay
+     the same thing on every column. */
+  const adRows = Math.min(AD_ROWS,
+    Math.max(0, ...days.map((d) => bandFor(iso(d), itemsForDay(iso(d))).length)));
   return `<div class="cal-plan ${cls}">
-    <div class="pl-grid" style="--pl-hours:${hours.length};--pl-cols:${days.length}">
+    <div class="pl-grid" style="--pl-hours:${hours.length};--pl-cols:${days.length};
+        --pl-ad-rows:${adRows}">
       <div class="pl-axis">
         ${hours.map((h) => `<span class="pl-hour">${String(h).padStart(2, '0')}:00</span>`).join('')}
       </div>
-      ${days.map((d) => planDayHtml(d, todayIso, hours)).join('')}
+      ${days.map((d) => planDayHtml(d, todayIso, hours, adRows)).join('')}
     </div>
   </div>`;
 }
+
+/**
+ * The band, drawn to a height it shares with every other column.
+ *
+ * Past `rows` it counts rather than grows: the alternative is what was
+ * reported — nine items pushing one day's canvas 184px below its neighbours'.
+ * The marker names what it is holding back and opens the day, which lists all
+ * of them, so nothing is hidden, only folded.
+ */
+function bandHtml(items, rows, day, todayIso) {
+  if (!rows) return '<div class="pl-allday" aria-hidden="true"></div>';
+  const shown = items.slice(0, items.length > rows ? rows - 1 : rows);
+  const rest = items.slice(shown.length);
+  const one = (b) => {
+    if (b.kind === 'reminder') return planReminderHtml(b.ref, todayIso);
+    if (b.kind === 'allday') {
+      return `<span class="pl-ad" data-event="${b.ref.id}"
+        title="${esc(b.ref.title)}">${esc(b.ref.title)}</span>`;
+    }
+    /* A continuation bar. The arrows are the whole point: they say the thing
+     * did not start here and does not end here, which is what "they are still
+     * staying with us" looks like on a Thursday. */
+    const from = new Date(b.ref.startsAt); const to = new Date(b.ref.endsAt);
+    return `<span class="pl-ad pl-ad-span ${b.opensHere ? 'is-open' : ''}
+        ${b.closesHere ? 'is-close' : ''}" data-event="${b.ref.id}"
+      title="${esc(b.ref.title)} — ${esc(fmtDayTime(from))} to ${esc(fmtDayTime(to))}">
+      ${b.opensHere ? `<b>${esc(hhmm(from))}</b> ` : '<i class="pl-ad-in"></i>'}
+      ${esc(b.ref.title)}
+      ${b.closesHere ? `<b>${esc(hhmm(to))}</b>` : '<i class="pl-ad-out"></i>'}</span>`;
+  };
+  return `<div class="pl-allday">${shown.map(one).join('')}${
+    rest.length ? `<button class="pl-ad pl-ad-more" data-zoom-day="${day}"
+      title="Also on this day: ${esc(rest.map((b) => b.ref.title).join(', '))}"
+      aria-label="${rest.length} more on this day. Open it."
+      >+${rest.length} more</button>` : ''}</div>`;
+}
+
+const fmtDayTime = (d) => `${d.toLocaleDateString(undefined,
+  { weekday: 'short', day: 'numeric', month: 'short' })} ${hhmm(d)}`;
 
 /**
  * A date-only reminder in Plan week's attention strip.
@@ -868,6 +920,30 @@ function planReminderHtml(r, todayIso) {
 const MIN_FOOTPRINT_MS = 15 * 60_000;
 
 /**
+ * How much clearance a nested event needs before nesting is legible.
+ *
+ * ── Why nesting exists ──────────────────────────────────────────────────
+ *
+ * Splitting the column is right when two things genuinely compete for the same
+ * moment. It is wrong when one thing simply happens DURING another: an offsite
+ * from 06:00 to 12:00 with a keynote at 08:00 is not two half-days, it is a day
+ * with a thing in it, and halving both to say so throws away the containment
+ * that is the actual information.
+ *
+ * ── Why there is a floor ────────────────────────────────────────────────
+ *
+ * "Only split when the times are identical" is the obvious rule and it breaks
+ * on 14:00 and 14:05. Those are not identical, so the rule would nest them —
+ * and five minutes is five PIXELS at this zoom, so the two titles would land on
+ * top of each other. That is the original complaint in miniature.
+ *
+ * So the test is not "are the times the same", it is "is there room to read
+ * both". Twenty minutes is about one title's height on a 46px hour, which is
+ * the smallest offset at which the inner title clears the outer one.
+ */
+const NEST_CLEARANCE_MS = 20 * 60_000;
+
+/**
  * Group by overlap, then assign each item the first free lane.
  *
  * Returns clusters so the caller can draw ONE overflow marker per pile-up
@@ -877,8 +953,35 @@ const MIN_FOOTPRINT_MS = 15 * 60_000;
  * other hour of the day happens to hold three.
  */
 export function laneOut(input, cap = Infinity) {
-  const items = input.map((x) => ({ ...x, end: Math.max(x.end, x.start + MIN_FOOTPRINT_MS) }))
+  const all = input.map((x) => ({ ...x, end: Math.max(x.end, x.start + MIN_FOOTPRINT_MS) }))
     .sort((a, b) => a.start - b.start || b.end - a.end);
+
+  /* ── Which of these are INSIDE another, rather than beside it ──────────
+   *
+   * An item nests when some other item contains it outright and starts far
+   * enough above it for both titles to be read — see NEST_CLEARANCE_MS. The
+   * smallest qualifying container wins, so a talk inside a session inside a
+   * day attaches to the session.
+   *
+   * One caveat, and it is deliberate: two nested items that overlap EACH OTHER
+   * would be drawn on top of one another inside their container, which is the
+   * defect this whole thing exists to remove. Rather than build a second lane
+   * system inside the first, that case gives up nesting for the whole cluster
+   * and everything lanes as before. Rare, and predictable when it happens. */
+  const contains = (a, b) => a !== b && a.start <= b.start && a.end >= b.end
+    && b.start - a.start >= NEST_CLEARANCE_MS;
+  for (const it of all) {
+    const hosts = all.filter((h) => contains(h, it));
+    it.host = hosts.length
+      ? hosts.reduce((s, h) => (h.end - h.start < s.end - s.start ? h : s))
+      : null;
+  }
+  const nested = all.filter((x) => x.host);
+  const clash = nested.some((a) => nested.some((b) => a !== b && a.host === b.host
+    && a.start < b.end && b.start < a.end));
+  if (clash) for (const it of all) it.host = null;
+
+  const items = all.filter((x) => !x.host);
   const clusters = [];
   let cur = [];
   let curEnd = -Infinity;
@@ -896,10 +999,18 @@ export function laneOut(input, cap = Infinity) {
     }
     const shown = Math.min(lanes.length, cap);
     for (const it of cur) { it.lanes = shown; it.hidden = it.lane >= cap; }
+    /* A nested item borrows its host's slot and is drawn inside it, inset and
+     * on top — so the host stays visible either side of it and the containment
+     * is the thing you see. It never takes a lane of its own; that is the whole
+     * point of nesting. */
+    const inside = nested.filter((n) => cur.includes(n.host));
+    for (const n of inside) {
+      n.lane = n.host.lane; n.lanes = n.host.lanes; n.hidden = n.host.hidden; n.nested = true;
+    }
     clusters.push({
-      items: cur,
+      items: [...cur, ...inside],
       lanes: shown,
-      hiddenItems: cur.filter((it) => it.hidden),
+      hiddenItems: [...cur, ...inside].filter((it) => it.hidden),
       start: cur[0].start,
     });
     cur = [];
@@ -925,6 +1036,65 @@ export function laneOut(input, cap = Infinity) {
  */
 const laneCap = () => (cal.mode === 'day' ? 4 : 2);
 
+/* ── The band above the axis ────────────────────────────────────────────
+ *
+ * ── Two reports, one cause ──────────────────────────────────────────────
+ *
+ * A day with nine all-day items — birthdays, a holiday, leave, reminders —
+ * pushed its own canvas down 184px while the six columns beside it stayed put.
+ * Measured: their canvases began at y=213 and its began at y=397, so a 09:00
+ * event on Wednesday and a 09:00 event on Thursday were 184px apart, and the
+ * axis's "07:00" label pointed at something 230px away from the 07:00 event.
+ * A grid whose columns do not share a time axis is not a grid.
+ *
+ * The cause is that each column is its own stack — head, band, canvas — so the
+ * band's height was a property of one day, while the hour axis beside all of
+ * them was a fixed offset. So the band is now ONE height for the whole week,
+ * set from the busiest day and capped, with the axis reading the same number.
+ *
+ * Both halves are needed. Sharing the height without a cap would give every
+ * column a 180px band; capping without sharing would leave them out of line
+ * whenever two days differed.
+ */
+const AD_ROWS = 2;
+
+/**
+ * What belongs above the axis on a given day.
+ *
+ * All-day events, date-only reminders, and — the second report — anything
+ * TIMED that runs across more than one day. Visitors arriving Wednesday and
+ * leaving the following Wednesday are not a 7,498-pixel block on Wednesday's
+ * time axis, which is what they were: they are a bar across the top of seven
+ * days, which is what every calendar draws and what the eye reads as "this is
+ * still going on".
+ *
+ * Keeping them off the axis also stops one long event dragging every ordinary
+ * event of its first day into a lane with it.
+ */
+export function bandFor(dayIso, day) {
+  const spans = (e) => !e.isAllDay && e.startsAt && e.endsAt
+    && iso(new Date(e.startsAt)) !== iso(new Date(e.endsAt));
+  /* SPANS FIRST, and the reason is continuity rather than importance.
+   *
+   * A bar is one thing drawn across several days, and it only reads as one
+   * thing if it is unbroken. Ordering all-day events ahead of it meant a busy
+   * Wednesday folded the bar into "+9 more" while Thursday and Friday still
+   * drew it — so a seven-day visit appeared as a bar with a hole in it, which
+   * looks like a defect rather than a busy day. A birthday can be the thing
+   * that folds; something still in progress cannot. Caught by looking. */
+  return [
+    ...day.events.filter(spans).map((e) => ({
+      kind: 'span',
+      ref: e,
+      opensHere: iso(new Date(e.startsAt)) === dayIso,
+      closesHere: iso(new Date(e.endsAt)) === dayIso,
+    })),
+    ...day.events.filter((e) => e.isAllDay).map((e) => ({ kind: 'allday', ref: e })),
+    ...day.reminders.filter((r) => r.status !== 'done' && !r.dueTime)
+      .map((r) => ({ kind: 'reminder', ref: r })),
+  ];
+}
+
 /** Minutes-from-midnight as a percentage of the visible planning window. */
 function pctOf(min, hours) {
   return ((min - hours[0] * 60) / (hours.length * 60)) * 100;
@@ -948,7 +1118,7 @@ function nowPct(hours) {
  * brightens back to full weight, because a hidden commitment is worse than a
  * cramped one.
  */
-function planDayHtml(d, todayIso, hours) {
+function planDayHtml(d, todayIso, hours, adRows = AD_ROWS) {
   const day = iso(d);
   const { events, blocks, intents } = itemsForDay(day);
   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
@@ -959,8 +1129,13 @@ function planDayHtml(d, todayIso, hours) {
     return ((t.getHours() + t.getMinutes() / 60) - hours[0]) / hours.length * 100;
   };
   const height = (a, b) => (new Date(b) - new Date(a)) / 3600000 / hours.length * 100;
-  const timed = events.filter((e) => !e.isAllDay && e.startsAt);
-  const allDay = events.filter((e) => e.isAllDay);
+  /* Anything running across more than one day is drawn in the band above,
+   * never on the axis — see `bandFor`. A seven-day visit on the time axis is a
+   * 7,498px block that runs off the bottom of the canvas and drags every other
+   * event of its first day into a lane with it. */
+  const band = bandFor(day, itemsForDay(day));
+  const spanning = new Set(band.filter((b) => b.kind === 'span').map((b) => b.ref.id));
+  const timed = events.filter((e) => !e.isAllDay && e.startsAt && !spanning.has(e.id));
   /* Events and planned blocks, laned together — see `laneOut`. All-day events
    * are not in here at all: they live in the strip above the axis, which is
    * why a Friday-to-Sunday holiday has never collided with a Saturday outing
@@ -988,10 +1163,7 @@ function planDayHtml(d, todayIso, hours) {
       ${load === 'busy' || load === 'overloaded'
         ? `<span class="pl-load load-${load}">${load === 'busy' ? 'busy' : 'full'}</span>` : ''}
     </div>
-    ${allDay.length || dayReminders.length ? `<div class="pl-allday">
-      ${allDay.map((e) => `<span class="pl-ad" data-event="${e.id}">${esc(e.title)}</span>`).join('')}
-      ${dayReminders.filter((r) => !r.dueTime).map((r) => planReminderHtml(r, todayIso)).join('')}
-    </div>` : ''}
+    ${bandHtml(band, adRows, day, todayIso)}
     <div class="pl-canvas" data-drop-day="${day}">
       ${hours.map(() => '<span class="pl-line"></span>').join('')}
       ${free.map(([a, b]) => `<div class="pl-free"
@@ -1048,13 +1220,14 @@ function lanedHtml(clusters, top, height) {
         + `--lane:${x.lane};--lanes:${x.lanes}`;
       const shared = x.lanes > 1 ? ' is-shared' : '';
       const alt = x.lane % 2 ? ' is-lane-alt' : '';
+      const nest = x.nested ? ' is-nested' : '';
       if (x.kind === 'event') {
-        return `<div class="pl-ev${shared}${alt}" data-event="${o.id}"
+        return `<div class="pl-ev${shared}${alt}${nest}" data-event="${o.id}"
           style="${geom};--src:${esc(o.calendarColor || 'var(--accent)')}">
           <b>${esc(hhmm(new Date(o.startsAt)))}</b> ${esc(o.title)}</div>`;
       }
       const st = new Date(o.startsAt); const en = new Date(o.endsAt);
-      return `<div class="pl-block${shared}${alt}" data-block="${o.id}" data-task="${o.taskId}"
+      return `<div class="pl-block${shared}${alt}${nest}" data-block="${o.id}" data-task="${o.taskId}"
         data-start-min="${st.getHours() * 60 + st.getMinutes()}"
         data-end-min="${en.getHours() * 60 + en.getMinutes()}"
         style="${geom}">

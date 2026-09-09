@@ -170,12 +170,29 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       .where(eq(calendars.workspaceId, workspaceId));
     const calById = new Map(cals.map((c) => [c.id, c]));
 
-    // Timed events overlapping the window, plus all-day events by date.
+    /* Events that OVERLAP the window — not events that START in it.
+     *
+     * This filtered on the start alone, which meant an event running from last
+     * Wednesday to next Wednesday was invisible for its entire middle: page to
+     * the following week and the query returned nothing at all, so there was
+     * not even a fragment to draw. Reported as visitors who "stop showing" —
+     * and confirmed by asking this endpoint for the middle of a seven-day
+     * event, which came back without it.
+     *
+     * An interval overlaps a window when it starts on or before the end and
+     * ends on or after the beginning. `coalesce` because a single-day all-day
+     * event stores no end date. */
     const events = await db.select().from(calendarEvents).where(and(
       eq(calendarEvents.workspaceId, workspaceId),
       or(
-        and(gte(calendarEvents.startsAt, from), lte(calendarEvents.startsAt, to)),
-        and(gte(calendarEvents.startDate, q.data.from), lte(calendarEvents.startDate, q.data.to)),
+        and(
+          lte(calendarEvents.startsAt, to),
+          gte(sql`coalesce(${calendarEvents.endsAt}, ${calendarEvents.startsAt})`, from),
+        ),
+        and(
+          lte(calendarEvents.startDate, q.data.to),
+          gte(sql`coalesce(${calendarEvents.endDate}, ${calendarEvents.startDate})`, q.data.from),
+        ),
       ),
     )).orderBy(asc(calendarEvents.startsAt));
 

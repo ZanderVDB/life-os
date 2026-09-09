@@ -115,14 +115,17 @@ test('lanes: things that overlap get a lane each; things that do not, do not', a
 test('lanes: a lane is reused as soon as it is free', async () => {
   const { laneOut } = await web('calendar.js');
   const M = (h: number, m = 0) => Date.UTC(2026, 8, 9, h, m) as number;
-  /* A(09–11) overlaps both B(09–10) and C(10:30–11), but B and C do not
+  /* A(09–11) overlaps both B(09–10) and C(10:30–11:30), but B and C do not
      overlap each other — so C belongs beside A in B's lane, and the day splits
      two ways rather than three. Without reuse every event in a busy morning
-     would get its own sliver. */
+     would get its own sliver.
+
+     C runs PAST A deliberately. A shorter C would be contained by A and would
+     nest inside it instead, which is correct behaviour and a different test. */
   const [c] = laneOut([
     { ref: 'A', start: M(9), end: M(11) },
     { ref: 'B', start: M(9), end: M(10) },
-    { ref: 'C', start: M(10, 30), end: M(11) },
+    { ref: 'C', start: M(10, 30), end: M(11, 30) },
   ]);
   assert.equal(c.lanes, 2, 'the column split three ways for two simultaneous things');
   const lane = (r: string) => c.items.find((i: any) => i.ref === r).lane;
@@ -165,6 +168,86 @@ test('lanes: past what the column can hold, it says so rather than hiding it', a
   assert.equal(c.lanes, 2, 'the cap was ignored');
   assert.equal(c.hiddenItems.length, 1, 'the third was dropped silently');
   assert.equal(c.items.filter((i: any) => !i.hidden).length, 2);
+});
+
+/* ══ 2b · Inside, rather than beside ═════════════════════════════════════ */
+
+test('nesting: a short event inside a long one sits inside it', async () => {
+  const { laneOut } = await web('calendar.js');
+  const M = (h: number, m = 0) => Date.UTC(2026, 8, 10, h, m) as number;
+  /* Halving the column is right when two things compete for one moment. It is
+     wrong when one happens DURING another: 06:00–12:00 with a keynote at 08:00
+     is not two half-days, it is a day with a thing in it, and splitting both
+     throws away the containment that is the actual information. */
+  const [c] = laneOut([
+    { ref: 'Offsite', start: M(6), end: M(12) },
+    { ref: 'Keynote', start: M(8), end: M(9) },
+  ]);
+  assert.equal(c.lanes, 1, 'the column was split for an event happening inside another');
+  const keynote = c.items.find((i: any) => i.ref === 'Keynote');
+  const offsite = c.items.find((i: any) => i.ref === 'Offsite');
+  assert.equal(keynote.nested, true, 'the inner event did not nest');
+  assert.equal(keynote.lane, offsite.lane, 'the inner event took a lane of its own');
+  assert.ok(!offsite.nested, 'the container nested inside something');
+});
+
+test('nesting: identical times go side by side, and so do near-identical ones', async () => {
+  const { laneOut } = await web('calendar.js');
+  const M = (h: number, m = 0) => Date.UTC(2026, 8, 10, h, m) as number;
+
+  /* Two things at exactly the same time have no vertical room to tell them
+     apart, so the column is the only axis left. */
+  const [same] = laneOut([
+    { ref: 'Standup', start: M(9), end: M(10) },
+    { ref: 'Client call', start: M(9), end: M(10) },
+  ]);
+  assert.equal(same.lanes, 2, 'identical times were drawn on top of each other');
+  assert.ok(!same.items.some((i: any) => i.nested), 'an identical pair nested');
+
+  /* And the case that breaks the obvious rule. 14:00 and 14:05 are NOT
+     identical, so "nest unless the times match" would nest them — and five
+     minutes is five pixels at this zoom, so the two titles would land on top of
+     each other, which is the original complaint in miniature. The test is not
+     "are the times the same", it is "is there room to read both". */
+  const [near] = laneOut([
+    { ref: 'Handover', start: M(14), end: M(15) },
+    { ref: 'Walkthrough', start: M(14, 5), end: M(15) },
+  ]);
+  assert.equal(near.lanes, 2, 'five minutes of clearance was treated as room to nest');
+
+  // Twenty minutes is about one title's height on a 46px hour, and does nest.
+  const [far] = laneOut([
+    { ref: 'Workshop', start: M(14), end: M(16) },
+    { ref: 'Demo', start: M(14, 30), end: M(15) },
+  ]);
+  assert.equal(far.items.find((i: any) => i.ref === 'Demo').nested, true,
+    'half an hour of clearance was not enough to nest');
+});
+
+test('nesting: gives up rather than stacking two things inside one host', async () => {
+  const { laneOut } = await web('calendar.js');
+  const M = (h: number, m = 0) => Date.UTC(2026, 8, 10, h, m) as number;
+  /* Two nested items that overlap EACH OTHER would be drawn on top of one
+     another inside their container — the exact defect this all exists to
+     remove. Rather than build a second lane system inside the first, that case
+     gives up nesting for the cluster and everything lanes as before. */
+  const [c] = laneOut([
+    { ref: 'Offsite', start: M(6), end: M(12) },
+    { ref: 'Keynote', start: M(8), end: M(9) },
+    { ref: 'Panel', start: M(8, 30), end: M(9, 30) },
+  ]);
+  assert.ok(!c.items.some((i: any) => i.nested), 'two overlapping guests nested anyway');
+  assert.equal(c.lanes, 3, 'the fallback did not lane all three');
+});
+
+test('nesting: composes with the lane arithmetic instead of overwriting it', () => {
+  /* `--pl-inset` rather than a second left/width rule, so a nested event inside
+     a laned cluster is still in its host's lane AND inset within it. Two rules
+     each setting `left` outright is how they fight. */
+  assert.match(css, /left:calc\(3px \+ \(100% - 6px\) \* var\(--lane, 0\) \/ var\(--lanes, 1\) \+ var\(--pl-inset, 0px\)\)/,
+    'the inset is not part of the same arithmetic as the lane');
+  assert.match(css, /\.pl-ev\.is-nested,\.pl-block\.is-nested\{--pl-inset:\d+px;z-index:3/,
+    'a nested event is not inset and raised');
 });
 
 test('lanes: the cap is a measurement, and the marker names what it hides', () => {
@@ -217,10 +300,11 @@ test('lanes: events and planned blocks share one pool', () => {
 
 test('lanes: all-day events are not in this at all', () => {
   /* A Friday-to-Sunday holiday and a Saturday outing are not a clash, and
-     never were: all-day events live in the strip above the axis. */
+     never were: all-day events live in the band above the axis. */
   const fn = calendar.slice(calendar.indexOf('function planDayHtml'));
   assert.match(fn, /const timed = events\.filter\(\(e\) => !e\.isAllDay/);
-  assert.match(fn, /const allDay = events\.filter\(\(e\) => e\.isAllDay\)/);
+  assert.match(calendar, /\.filter\(\(e\) => e\.isAllDay\)\.map\(\(e\) => \(\{ kind: 'allday'/,
+    'all-day events no longer go to the band');
   assert.match(calendar, /\.filter\(\(e\) => !e\.isAllDay && e\.startsAt && e\.endsAt\)/,
     'the clash detector no longer excludes all-day events');
 });
@@ -380,4 +464,83 @@ test('lead time: the field now does the thing its label claims', () => {
     'the lead window is not computed from the due date');
   // A reminder with no lead time is not asking to be seen early.
   assert.match(fn, /const soon = \(d\.reminders \?\? \[\]\)\.filter\(\(r\) => r\.status === 'open'/);
+});
+
+/* ══ 8 · The band above the axis ═════════════════════════════════════════ */
+
+test('band: one height for the whole week, so the columns share a time axis', () => {
+  /* Measured before the fix: nine all-day items on one day pushed that column's
+     canvas to y=397 while its six neighbours sat at y=213, so a 09:00 event on
+     Wednesday and a 09:00 event on Thursday were 184px apart — and the axis's
+     "07:00" label pointed at something 230px from the 07:00 event. A grid whose
+     columns do not share a time axis is not a grid.
+
+     The cause was that the band was a property of ONE column while the hour
+     axis beside all of them was a fixed offset. */
+  assert.match(calendar, /--pl-ad-rows:\$\{adRows\}/, 'the band height is not shared by the grid');
+  assert.match(calendar, /const adRows = Math\.min\(AD_ROWS,/,
+    'the shared height is not taken from the busiest day, capped');
+  assert.match(css, /\.pl-allday\{[^}]*height:calc\(var\(--pl-ad-rows, 0\) \* var\(--pl-ad-row\)\)/,
+    'a column still sizes its own band');
+  /* The axis reads the SAME variable. One number, so the labels and the lines
+     cannot drift apart again. */
+  assert.match(css, /\.pl-axis\{[\s\S]{0,80}?padding-top:calc\(42px \+ var\(--pl-ad-rows, 0\) \* var\(--pl-ad-row\)\)/,
+    'the hour axis does not follow the band');
+  /* Both halves are needed: sharing without a cap would give every column a
+     180px band, capping without sharing would still leave them out of line. */
+  const cap = Number(calendar.match(/const AD_ROWS = (\d+)/)![1]);
+  assert.ok(cap >= 1 && cap <= 3, `${cap} rows of band is not a cap`);
+  assert.match(calendar, /pl-ad-more/, 'nothing says what the band could not fit');
+  assert.match(calendar, /rest\.map\(\(b\) => b\.ref\.title\)/, 'the marker does not name what it holds back');
+});
+
+/* ══ 9 · Something that is still going on ════════════════════════════════ */
+
+test('multi-day: a timed event belongs to every day it covers', () => {
+  /* Visitors arriving on a Wednesday and leaving the following Wednesday
+     appeared on exactly one day and vanished for the other six — reported as
+     "it shows today that they're here, but then it just stops". Agenda looked
+     right because Agenda lists by start, which is what hid it. */
+  const fn = calendar.slice(calendar.indexOf('const inDay ='), calendar.indexOf('return {', calendar.indexOf('const inDay =')));
+  assert.match(fn, /const from = iso\(new Date\(e\.startsAt\)\);/);
+  assert.match(fn, /return from <= dayIso && iso\(new Date\(e\.endsAt \?\? e\.startsAt\)\) >= dayIso/,
+    'a timed event still belongs only to the day it began on');
+});
+
+test('multi-day: the query returns events that OVERLAP the window', () => {
+  /* And the second half, which was worse: the query matched events whose START
+     was inside the window, so paging to the following week returned the event
+     not at all — confirmed by asking the endpoint for the middle of a seven-day
+     event and getting nothing back. There was not even a fragment to draw. */
+  const q = calRoute.slice(calRoute.indexOf('const events = await db.select()'),
+    calRoute.indexOf('const attendees'));
+  assert.match(q, /lte\(calendarEvents\.startsAt, to\)/, 'timed events are not matched by overlap');
+  assert.match(q, /gte\(sql`coalesce\(\$\{calendarEvents\.endsAt\}/,
+    'the end of a timed event is not considered');
+  assert.match(q, /lte\(calendarEvents\.startDate, q\.data\.to\)/,
+    'all-day events are not matched by overlap');
+  assert.match(q, /gte\(sql`coalesce\(\$\{calendarEvents\.endDate\}/,
+    'an all-day event that began before the window is still invisible');
+  // The old start-contained form must not come back.
+  assert.ok(!/gte\(calendarEvents\.startsAt, from\), lte\(calendarEvents\.startsAt, to\)/.test(q),
+    'the start-only filter is back');
+});
+
+test('multi-day: it is drawn above the axis, not as a block on it', () => {
+  /* Measured before the fix: a seven-day visit was a 7,498px block on its first
+     day, running far off the bottom of the canvas — and it dragged that day's
+     18:00 Gym into a lane with it, so one long event halved the width of every
+     ordinary event around it. */
+  assert.match(calendar, /const spanning = new Set\(band\.filter\(\(b\) => b\.kind === 'span'\)/,
+    'spanning events are not identified');
+  assert.match(calendar, /const timed = events\.filter\(\(e\) => !e\.isAllDay && e\.startsAt && !spanning\.has\(e\.id\)\)/,
+    'a multi-day event is still drawn on the time axis');
+  assert.match(calendar, /iso\(new Date\(e\.startsAt\)\) !== iso\(new Date\(e\.endsAt\)\)/,
+    'nothing decides what counts as spanning');
+  /* The arrows are the point: it did not start here and does not end here,
+     which is what "they are still staying with us" looks like on a Thursday. */
+  assert.match(calendar, /opensHere:/); assert.match(calendar, /closesHere:/);
+  assert.match(css, /\.pl-ad-span\{/, 'a continuation bar has no styling');
+  assert.match(css, /\.pl-ad-span\.is-open\{border-radius:5px 0 0 5px\}/,
+    'a bar does not show which end is the real one');
 });

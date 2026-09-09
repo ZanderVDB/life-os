@@ -199,7 +199,7 @@ test('plan: weekdays carry the width, weekends recede but stay visible', () => {
 });
 
 test('plan: daily capacity appears only when it matters', () => {
-  const fn = body(calCode, 'function planDayHtml(d, todayIso, hours)');
+  const fn = body(calCode, 'function planDayHtml(');
   assert.match(fn, /load === 'busy' \|\| load === 'overloaded'/,
     'capacity is shown on every day, including quiet ones');
   assert.match(html, /\.pl-load\.load-overloaded\{color:var\(--danger\)\}/,
@@ -207,7 +207,7 @@ test('plan: daily capacity appears only when it matters', () => {
 });
 
 test('plan: free windows are labelled with real times', () => {
-  const fn = body(calCode, 'function planDayHtml(d, todayIso, hours)');
+  const fn = body(calCode, 'function planDayHtml(');
   assert.match(fn, /Free \$\{fmtMin\(a\)\}–\$\{fmtMin\(b\)\}/, 'free windows have no time label');
   assert.match(html, /\.pl-free-label\{/, 'the free label has no styling');
   // Still ignores slivers.
@@ -216,7 +216,7 @@ test('plan: free windows are labelled with real times', () => {
 });
 
 test('plan: the current-time marker is today-only and inside planning hours', () => {
-  const fn = body(calCode, 'function planDayHtml(d, todayIso, hours)');
+  const fn = body(calCode, 'function planDayHtml(');
   assert.match(fn, /day === todayIso && nowPct\(hours\) !== null/,
     'the now marker can appear on the wrong day or pinned to an edge');
   const now = body(calCode, 'function nowPct(hours)');

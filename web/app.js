@@ -2571,6 +2571,11 @@ function renderRail() {
   const now = new Date();
   const hs = state.habits ?? [];
   const due = hs.filter((h) => h.dueToday && !h.archivedAt);
+  /* Everything you keep, that today did not ask for. A Sunday-only gym habit
+   * is invisible on a Tuesday, which is right — the card is what today needs.
+   * But somebody who went anyway has nowhere to say so, and a habit you cannot
+   * record is a streak the app breaks on your behalf. */
+  const rest = hs.filter((h) => !h.dueToday && !h.archivedAt);
   /* The totals come from the SERVER, not from counting `due` here.
    *
    * That is the whole of D2.2 §6. Counting here is what produced `0/5` with
@@ -2595,8 +2600,8 @@ function renderRail() {
              Could not load habits.<br><span style="color:var(--muted)">${esc(state.habitsError)}</span>
              <button class="rail-link" id="hb-retry">Try again</button></p>`
         : (due.length || diary) ? `<div class="hb-list">${
-          diarySystemHabitHtml()}${due.map(habitRowHtml).join('')}</div>`
-        : hs.length ? '<p class="rail-quiet">Nothing due today.</p>'
+          diarySystemHabitHtml()}${due.map(habitRowHtml).join('')}</div>${restHtml(rest)}`
+        : hs.length ? `<p class="rail-quiet">Nothing due today.</p>${restHtml(rest)}`
         : '<p class="rail-quiet">No habits yet. Add one to start building a streak.</p>'}
     </div>`;
 
@@ -2780,6 +2785,29 @@ function streakHtml(h) {
   return `<span class="hb-streak ${n > 0 ? '' : 'is-zero'}"
     title="${n > 0 ? `${n} day streak` : 'No streak yet — today can start one'}"
     >${n > 0 ? `${n}<span class="hs-unit">d</span>` : '—'}</span>`;
+}
+
+/**
+ * The habits today did not ask for, folded away.
+ *
+ * Closed by default and quiet when open: these are not on your plate, and a
+ * card that lists them beside the ones that are would make every Tuesday look
+ * like a Sunday. The same ring, the same tick, the same streak — one component,
+ * so a habit ticked here is ticked exactly as it would be on its own day.
+ *
+ * It does NOT move the n/m above it. That count answers "what was asked of me
+ * today", and a gym session on a day you were not down to gym is not part of
+ * that question — it would read as 3/2, which is not a number. The entry is
+ * still written, so the streak gets it, which is the part that matters.
+ */
+function restHtml(rest) {
+  if (!rest.length) return '';
+  return `<details class="hb-rest">
+    <summary><span class="hb-rest-l">Not needed today</span>
+      <span class="hb-rest-n">${rest.length}</span>
+      <span class="hb-rest-chev" aria-hidden="true">${icon('chevR', 14)}</span></summary>
+    <div class="hb-list">${rest.map(habitRowHtml).join('')}</div>
+  </details>`;
 }
 
 function habitRowHtml(h) {

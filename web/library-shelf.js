@@ -696,6 +696,29 @@ function setNeighbours(obj, on) {
     if (on) n.style.setProperty('--lib-book-clear', slot.style.getPropertyValue('--lib-book-clear'));
     else n.style.removeProperty('--lib-book-clear');
   }
+  /* ── And the LEFT side does move after all ──────────────────────────
+   *
+   * A correction to a correction. Removing the old left nudge was right: it
+   * moved ONE book 16px into a book that does not move, so it overlapped by
+   * 16px and painted on top. But removing it left the two sides visibly
+   * unequal — measured on a real shelf, a pulled Book had a 16px gap on its
+   * right and a 13px OVERLAP on its left, because the Book grows from a 47px
+   * spine into a 126px opaque cover and swallows the neighbour it was already
+   * touching.
+   *
+   * So the left side moves as a GROUP, exactly as the right side does. That is
+   * the difference that matters: every preceding slot steps back by the same
+   * amount, so their spacing among themselves is untouched and nothing can
+   * overlap anything. 28px turns the 13px overlap into a 15px gap, against 16px
+   * on the right — the same to the eye, and a multiple of 4 so it lands on a
+   * whole device pixel at every scale factor. */
+  for (let p = slot.previousElementSibling; p; p = p.previousElementSibling) {
+    p.classList.toggle('is-nudge-l', on);
+  }
+  /* The shelf is in "one Book is chosen" mode, and the pull owns the spacing
+   * while it lasts. Marking the RAIL is what lets one CSS rule suspend every
+   * hover peek on it — see the note beside `.lib-rail.has-pulled`. */
+  slot.closest('.lib-rail')?.classList.toggle('has-pulled', on);
 }
 
 /** Puts the pulled object back on the shelf. Safe to call at any time. */
