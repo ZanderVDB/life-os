@@ -73,6 +73,14 @@ export const searchLinkable = (q, exclude) =>
   call(`/links/search?q=${encodeURIComponent(q)}`
     + (exclude ? `&excludeType=${exclude.type}&excludeId=${exclude.id}` : ''));
 
+/** Walk a place rather than type at it. `parent` is a book, for its pages. */
+export const browseLinkable = (type, parent) =>
+  call(`/links/browse?type=${encodeURIComponent(type)}`
+    + (parent ? `&parent=${encodeURIComponent(parent)}` : ''));
+
+/** The relationship that is a foreign key. Writes no edge — see the route. */
+export const attachStructural = (body) => call('/links/attach', { method: 'POST', body });
+
 /**
  * The section.
  *
@@ -208,17 +216,9 @@ export function wireRelated(host, opts = {}) {
   });
 }
 
-/* ── Making one ──────────────────────────────────────────────────────────
- *
- * Search across every type at once. A person looking for "the client meeting"
- * has not first decided whether it is an event, a page or a project, and
- * making them pick a tab before they can type is a question the app can
- * answer itself from the title.
- *
- * The KIND is chosen after the thing, not before: what two objects have to do
- * with each other is easier to say once both are named. It defaults to
- * `related`, which is always true and never precise — a person who does not
- * care gets a correct link without a decision. */
+/* The vocabulary, as a fallback. The server serves the real list with the
+   structural pairs; this is what the picker draws with if that call has not
+   landed yet, so an offline moment is a shorter list rather than an empty one. */
 const KIND_CHOICES = [
   ['related', 'Related to'],
   ['resource', 'Resource'],
@@ -231,7 +231,59 @@ const KIND_CHOICES = [
   ['supports', 'Supports'],
 ];
 
+/* One picker at a time: opening a second while one is up leaves a scrim that
+   nothing can dismiss. */
 let openPicker = null;
+
+/**
+ * Link to something — pick a PLACE, then the thing.
+ *
+ * ── Why this was rebuilt ────────────────────────────────────────────────
+ *
+ * It was a search box and nothing else. That is fine when you know the name
+ * and useless when you do not: "link this task to the page about the geyser"
+ * means opening the book you have in mind and looking, not guessing which
+ * words are in its title. Reported from use as "searching for it is a bit
+ * tough — especially if I want to combine a task to a specific page on a
+ * specific book, this wouldn't allow me to really do that".
+ *
+ * So the first question is WHERE, which is a question anybody can answer about
+ * their own app, and the search box stays for when you already know.
+ *
+ * ── And the more important half ─────────────────────────────────────────
+ *
+ * Linking a task to a project used to write a `related` edge. `relationships.js`
+ * opens by saying a generic edge must never express a structural relationship,
+ * because two competing answers to "which project is this task in" is worse
+ * than either answer — and that is precisely what it did, because making edges
+ * was all it knew how to do. Reported as "it added it as a related item instead
+ * of adding it as a task itself, which I think is stupid". Correct.
+ *
+ * The pairs that have a real relationship are declared on the SERVER, beside
+ * the doctrine, and served with the kinds. Where one exists it is the default
+ * and it does the foreign-key thing; the edge stays available underneath for
+ * the genuine case — a task that references a project it does not belong to.
+ *
+ * ── Why picking a row does not link it ──────────────────────────────────
+ *
+ * It used to link the instant you clicked, with whatever kind happened to be
+ * in the select. A row now SELECTS, and the footer then says what will happen
+ * to that specific pair before you commit. One more click, in exchange for the
+ * app never doing something other than what it said.
+ */
+
+/* Where things live, in the words the app uses for them. Ordered as the
+   sidebar is, because that is the order already in the reader's head. */
+const PLACES = [
+  { id: 'task', label: 'Today', hint: 'Tasks' },
+  { id: 'event', label: 'Calendar', hint: 'Events near now' },
+  { id: 'reminder', label: 'Reminders', hint: 'Open reminders' },
+  { id: 'project', label: 'Projects', hint: 'All projects' },
+  { id: 'library', label: 'Library', hint: 'Books, documents, files' },
+  { id: 'diary', label: 'Diary', hint: 'Days you have written' },
+  { id: 'habit', label: 'Habits', hint: 'What you are keeping up' },
+  { id: 'area', label: 'Areas', hint: 'The parts of your life' },
+];
 
 export function openLinkPicker(sourceType, sourceId, onDone) {
   openPicker?.();
@@ -249,24 +301,23 @@ export function openLinkPicker(sourceType, sourceId, onDone) {
     </div>
     <div class="m-body rel-pick-body">
       <input class="m-input rel-pick-q" type="search" data-rel-q autocomplete="off"
-        placeholder="Search tasks, projects, pages, events…" aria-label="Search">
-      <label class="rel-pick-kind">
-        <span>How are they related?</span>
-        <select class="m-input" data-rel-kind>
-          ${KIND_CHOICES.map(([id, label]) =>
-    `<option value="${id}">${label}</option>`).join('')}
-        </select>
-      </label>
+        placeholder="Search everything…" aria-label="Search everything">
+      <nav class="rel-crumbs" data-rel-crumbs aria-label="Where you are looking"></nav>
+      <div class="rel-places" data-rel-places></div>
       <ul class="rel-pick-list" data-rel-results role="list"></ul>
-      <p class="rel-pick-hint" data-rel-hint>Type at least two letters.</p>
-    </div>`;
+      <p class="rel-pick-hint" data-rel-hint></p>
+    </div>
+    <div class="m-foot rel-pick-foot" data-rel-foot hidden></div>`;
   document.body.append(scrim, dlg);
   document.body.classList.add('modal-open');
 
-  const q = dlg.querySelector('[data-rel-q]');
-  const list = dlg.querySelector('[data-rel-results]');
-  const hint = dlg.querySelector('[data-rel-hint]');
-  const kindEl = dlg.querySelector('[data-rel-kind]');
+  const $ = (s) => dlg.querySelector(s);
+  const q = $('[data-rel-q]');
+  const list = $('[data-rel-results]');
+  const hint = $('[data-rel-hint]');
+  const places = $('[data-rel-places]');
+  const crumbs = $('[data-rel-crumbs]');
+  const foot = $('[data-rel-foot]');
 
   const close = () => {
     scrim.remove(); dlg.remove();
@@ -275,51 +326,203 @@ export function openLinkPicker(sourceType, sourceId, onDone) {
   };
   openPicker = close;
   scrim.addEventListener('click', close);
-  dlg.querySelector('[data-rel-cancel]').addEventListener('click', close);
+  $('[data-rel-cancel]').addEventListener('click', close);
 
-  let seq = 0;
-  const search = async () => {
-    const term = q.value.trim();
-    const mine = ++seq;
-    if (term.length < 2) { list.innerHTML = ''; hint.textContent = 'Type at least two letters.'; return; }
-    hint.textContent = 'Searching…';
-    let res = null;
-    try { res = await searchLinkable(term, { type: sourceType, id: sourceId }); }
-    catch { hint.textContent = 'Could not search just now.'; return; }
-    // A slower earlier request must not overwrite a faster later one.
-    if (mine !== seq) return;
-    const rows = res.results ?? [];
-    hint.textContent = rows.length ? '' : 'Nothing matches that.';
-    list.innerHTML = rows.map((r) => `<li>
-      <button type="button" class="rel-pick-row" data-pick-type="${esc(r.type)}"
-          data-pick-id="${esc(r.id)}">
+  /* `place` null means the chooser is showing. `parent` is the book whose
+     pages are listed, which is the one place with a second level. */
+  const view = { place: null, parent: null, parentTitle: '', chosen: null, structural: null };
+  let kinds = KIND_CHOICES.map(([id, label]) => ({ id, label }));
+  let structuralPairs = [];
+  fetchKinds().then((k) => {
+    if (k?.kinds?.length) kinds = k.kinds;
+    structuralPairs = k?.structural ?? [];
+  }).catch(() => { /* the built-in list still works */ });
+
+  const structuralFor = (targetType) =>
+    structuralPairs.find((p) => p.sourceType === sourceType && p.targetType === targetType) ?? null;
+
+  /* ── Painting ──────────────────────────────────────────────────────── */
+
+  const paintPlaces = () => {
+    places.hidden = Boolean(view.place) || q.value.trim().length >= 2;
+    if (places.hidden) { places.innerHTML = ''; return; }
+    places.innerHTML = `<p class="rel-places-h">Where is it?</p>
+      <div class="rel-places-grid">${PLACES.map((p) => `
+        <button type="button" class="rel-place" data-place="${p.id}">
+          <span class="rel-place-l">${esc(p.label)}</span>
+          <span class="rel-place-s">${esc(p.hint)}</span>
+        </button>`).join('')}</div>`;
+    places.querySelectorAll('[data-place]').forEach((b) => {
+      b.addEventListener('click', () => { view.place = b.dataset.place; view.parent = null; load(); });
+    });
+  };
+
+  const paintCrumbs = () => {
+    const bits = [];
+    if (view.place) {
+      const p = PLACES.find((x) => x.id === view.place);
+      bits.push({ label: p?.label ?? view.place, to: { place: view.place, parent: null } });
+    }
+    if (view.parent) bits.push({ label: view.parentTitle, to: null });
+    crumbs.hidden = !bits.length;
+    crumbs.innerHTML = bits.length
+      ? `<button type="button" class="rel-crumb-back" data-crumb-up
+           aria-label="Back">${'‹'}</button>`
+        + bits.map((b, i) => `<span class="rel-crumb${i === bits.length - 1 ? ' is-here' : ''}"
+             ${b.to ? `data-crumb="${i}"` : ''}>${esc(b.label)}</span>`).join(
+        '<span class="rel-crumb-sep">/</span>')
+      : '';
+    crumbs.querySelector('[data-crumb-up]')?.addEventListener('click', () => {
+      if (view.parent) { view.parent = null; view.parentTitle = ''; } else view.place = null;
+      load();
+    });
+    crumbs.querySelectorAll('[data-crumb]').forEach((el) => {
+      el.addEventListener('click', () => { view.parent = null; view.parentTitle = ''; load(); });
+    });
+  };
+
+  /** One row. A Book gets a second control, because it has an inside. */
+  const rowHtml = (r) => {
+    const openable = view.place === 'library' && r.subtype === 'book' && r.intoId;
+    return `<li class="rel-pick-li">
+      <button type="button" class="rel-pick-row ${
+  view.chosen && view.chosen.id === r.id ? 'is-chosen' : ''}"
+        data-pick-type="${esc(r.type)}" data-pick-id="${esc(r.id)}"
+        data-pick-title="${esc(r.title)}">
         <span class="rel-kind">${esc(ENTITY_LABEL[r.type] ?? r.type)}</span>
         <span class="rel-body">
           <span class="rel-title">${esc(r.title)}</span>
           ${whenLocal(r) ? `<span class="rel-sub">${esc(whenLocal(r))}</span>` : ''}
         </span>
-      </button></li>`).join('');
+      </button>
+      ${openable ? `<button type="button" class="rel-pick-into" data-into="${esc(r.intoId)}"
+        data-into-title="${esc(r.title)}" title="Pick a page inside ${esc(r.title)}"
+        aria-label="Open ${esc(r.title)} to pick a page">›</button>` : ''}
+    </li>`;
+  };
+
+  const paintRows = (rows) => {
+    list.innerHTML = rows.map(rowHtml).join('');
     list.querySelectorAll('[data-pick-type]').forEach((b) => {
-      b.addEventListener('click', async () => {
-        b.disabled = true;
-        try {
-          await createLink({
-            sourceType, sourceId,
-            targetType: b.dataset.pickType, targetId: b.dataset.pickId,
-            kind: kindEl.value,
-          });
-          close();
-          await onDone?.();
-        } catch (err) {
-          hint.textContent = err?.message ?? 'That could not be linked.';
-          b.disabled = false;
-        }
+      b.addEventListener('click', () => {
+        view.chosen = {
+          type: b.dataset.pickType, id: b.dataset.pickId, title: b.dataset.pickTitle,
+        };
+        list.querySelectorAll('.rel-pick-row').forEach((x) => x.classList.remove('is-chosen'));
+        b.classList.add('is-chosen');
+        paintFoot();
+      });
+    });
+    /* Into a Book, for its pages. A separate control from the row, because
+       "link me to this book" and "show me its pages" are different answers and
+       one target cannot mean both. */
+    list.querySelectorAll('[data-into]').forEach((b) => {
+      b.addEventListener('click', () => {
+        view.parent = b.dataset.into;
+        view.parentTitle = b.dataset.intoTitle;
+        view.chosen = null;
+        load();
       });
     });
   };
 
+  /** What will happen, said before it happens. */
+  const paintFoot = () => {
+    foot.hidden = !view.chosen;
+    if (!view.chosen) return;
+    const st = structuralFor(view.chosen.type);
+    view.structural = st;
+    foot.innerHTML = `
+      <div class="rel-foot-what">
+        ${st ? `<span class="rel-foot-verb">${esc(st.verb)}</span>
+                <span class="rel-foot-note">${esc(st.note)}</span>`
+    : '<label class="rel-foot-kind"><span>How are they related?</span></label>'}
+      </div>
+      <div class="rel-foot-controls">
+        ${st ? `<button type="button" class="rail-link rel-foot-alt" data-rel-alt>
+                  or just note a relationship</button>` : ''}
+        <select class="m-input rel-foot-select" data-rel-kind ${st ? 'hidden' : ''}
+          aria-label="How are they related">
+          ${kinds.filter((k) => !k.coupled).map((k) =>
+    `<option value="${esc(k.id)}">${esc(k.label)}</option>`).join('')}
+        </select>
+        <button type="button" class="btn-primary rel-foot-go" data-rel-go>Link</button>
+      </div>`;
+    const sel = foot.querySelector('[data-rel-kind]');
+    foot.querySelector('[data-rel-alt]')?.addEventListener('click', (e) => {
+      e.currentTarget.remove();
+      sel.hidden = false;
+      view.structural = null;
+      foot.querySelector('.rel-foot-what').innerHTML =
+        '<label class="rel-foot-kind"><span>How are they related?</span></label>';
+    });
+    foot.querySelector('[data-rel-go]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      hint.textContent = '';
+      try {
+        if (view.structural) {
+          await attachStructural({
+            sourceType, sourceId,
+            targetType: view.chosen.type, targetId: view.chosen.id,
+          });
+        } else {
+          await createLink({
+            sourceType, sourceId,
+            targetType: view.chosen.type, targetId: view.chosen.id,
+            kind: sel.value,
+          });
+        }
+        close();
+        await onDone?.();
+      } catch (err) {
+        hint.textContent = err?.message ?? 'That could not be linked.';
+        btn.disabled = false;
+      }
+    });
+  };
+
+  /* ── Loading ───────────────────────────────────────────────────────── */
+
+  let seq = 0;
+  const load = async () => {
+    const mine = ++seq;
+    const term = q.value.trim();
+    view.chosen = null;
+    paintFoot();
+    paintCrumbs();
+    paintPlaces();
+
+    if (term.length >= 2) {
+      hint.textContent = 'Searching…';
+      let res = null;
+      try { res = await searchLinkable(term, { type: sourceType, id: sourceId }); }
+      catch { hint.textContent = 'Could not search just now.'; return; }
+      if (mine !== seq) return;
+      const rows = res.results ?? [];
+      hint.textContent = rows.length ? '' : 'Nothing matches that.';
+      paintRows(rows);
+      return;
+    }
+    if (!view.place) {
+      list.innerHTML = '';
+      hint.textContent = '';
+      return;
+    }
+    const type = view.parent ? 'book_page' : view.place;
+    hint.textContent = 'Loading…';
+    let res = null;
+    try { res = await browseLinkable(type, view.parent); }
+    catch { hint.textContent = 'Could not load that just now.'; return; }
+    if (mine !== seq) return;
+    const rows = (res.results ?? []).filter((r) => !(r.type === sourceType && r.id === sourceId));
+    hint.textContent = rows.length ? '' : 'Nothing here yet.';
+    paintRows(rows);
+  };
+
   let t = null;
-  q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(search, 180); });
+  q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(load, 180); });
+  load();
   q.focus();
 }
 

@@ -12,7 +12,8 @@ import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
   ENTITY_TYPES, LINK_KINDS, LINK_KIND_IDS,
-  createLink, removeLink, linksFor, searchLinkable,
+  createLink, removeLink, linksFor, searchLinkable, browseLinkable,
+  attachStructural, STRUCTURAL,
 } from '../lib/relationships.js';
 
 const uuid = z.string().uuid();
@@ -36,6 +37,13 @@ export function registerLinkRoutes(app: AppInstance, db: Db, guards: Guards) {
       coupled: Boolean((LINK_KINDS[id] as { coupled?: boolean }).coupled),
     })),
     entityTypes: ENTITY_TYPES,
+    /* Which pairs have a REAL relationship, served rather than duplicated —
+       the same reason the kinds are. A client that guessed this list would
+       offer "add to project" for a pair the server cannot attach. */
+    structural: Object.entries(STRUCTURAL).map(([pair, v]) => {
+      const [sourceType, targetType] = pair.split('>');
+      return { sourceType, targetType, ...v };
+    }),
   }));
 
   /**
@@ -48,6 +56,42 @@ export function registerLinkRoutes(app: AppInstance, db: Db, guards: Guards) {
   app.get(`${base}/links`, pre, async (req) => {
     const q = z.object({ type: entity, id: uuid }).parse(req.query);
     return linksFor(db, req.workspaceId!, q.type, q.id);
+  });
+
+  /**
+   * Candidates to link to, BY WALKING rather than by typing.
+   *
+   * Search is fine when you know the name and useless when you do not. The
+   * picker now lets you pick a place first — Calendar, Projects, Library — and
+   * look, which is the only way to reach "that page about the geyser" without
+   * guessing which words are in its title. `parent` is what makes a book's
+   * pages reachable at all.
+   */
+  app.get(`${base}/links/browse`, pre, async (req) => {
+    const q = z.object({
+      type: entity,
+      parent: uuid.optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(60),
+    }).parse(req.query);
+    return browseLinkable(db, req.workspaceId!, q.type, {
+      parentId: q.parent ?? null, limit: q.limit,
+    });
+  });
+
+  /**
+   * The relationship that is a FOREIGN KEY, not an edge.
+   *
+   * Separate from POST /links on purpose. `relationships.ts` opens by saying a
+   * generic edge must never express a structural relationship, because two
+   * competing answers to "which project is this task in" is worse than either
+   * — and a single endpoint that sometimes wrote one and sometimes the other
+   * would be exactly that ambiguity wearing a different hat.
+   */
+  app.post(`${base}/links/attach`, pre, async (req) => {
+    const body = z.object({
+      sourceType: entity, sourceId: uuid, targetType: entity, targetId: uuid,
+    }).strict().parse(req.body);
+    return attachStructural(db, req.workspaceId!, body);
   });
 
   /** Candidates to link to, across every type at once. */

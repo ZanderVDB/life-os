@@ -29,7 +29,7 @@
  * reverse as well would mean every unlink had to find and delete both, and
  * the first time one was missed the graph would disagree with itself.
  */
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import {
   itemLinks, tasks, projects, areas, habits, reminders, calendarEvents,
@@ -196,6 +196,17 @@ export type Summary = {
    * them. This is the machine-readable half of the same fact.
    */
   on?: string | null;
+  /**
+   * The kind WITHIN the type, when the type has kinds.
+   *
+   * `library` covers a book, a document, an image, a link and a file, and the
+   * picker has to tell them apart for one reason: a Book has an INSIDE. It is
+   * the only row you can walk into to reach its pages, and without this the
+   * client would have to infer "is this a book" from a translated subtitle.
+   */
+  subtype?: string | null;
+  /** The id to browse INTO, when this row has an inside. A book's own id. */
+  intoId?: string | null;
   /** Where the app should navigate. Null when the type has no deep link yet. */
   href?: string | null;
   /** Anything the client needs to open it that is not in the href. */
@@ -327,6 +338,11 @@ export async function summarise(db: Db, ws: string, refs: Ref[]): Promise<Map<st
     for (const r of rows) {
       put({
         type: 'library', id: r.id, title: r.title, subtitle: LIBRARY_LABEL[r.type] ?? r.type,
+        subtype: r.type,
+        /* A Book is the one library row with an inside. `intoId` is the BOOK's
+           id, not the library item's — pages hang off sections which hang off
+           the book, so the item id would reach nothing. */
+        intoId: r.bookId ?? null,
         href: r.bookId ? `#library/book/${r.bookId}` : `#library/item/${r.id}`,
       });
     }
@@ -627,4 +643,147 @@ export async function linkCounts(db: Db, ws: string, type: EntityType, entityIds
   )).groupBy(sql`1`);
   for (const r of rows) counts.set(r.id, Number(r.n));
   return counts;
+}
+
+/* ── Browsing, rather than only searching ────────────────────────────────
+ *
+ * The picker could only search. That is fine when you know the name and
+ * useless when you do not: "link this task to the page about the geyser" means
+ * opening the book you have in mind and looking, not guessing which words are
+ * in its title. Reported from use as "searching for it is a bit tough" —
+ * especially for a page, where the thing you want is three levels down.
+ *
+ * Same `Summary` shape as `searchLinkable`, deliberately, so one row renderer
+ * draws a result whether it was found by typing or by walking. Two shapes
+ * would be two row renderers and two places for the phrasing to drift.
+ */
+export async function browseLinkable(db: Db, ws: string, type: EntityType, opts: {
+  parentId?: string | null; limit?: number;
+} = {}) {
+  const limit = Math.min(200, Math.max(1, opts.limit ?? 60));
+  const parent = opts.parentId ?? null;
+  const refs: Ref[] = [];
+  const add = (rows: { id: string }[]) => { for (const r of rows) refs.push({ type, id: r.id }); };
+
+  if (type === 'task') {
+    add(await db.select({ id: tasks.id }).from(tasks)
+      .where(and(eq(tasks.workspaceId, ws), eq(tasks.status, 'open'), isNull(tasks.archivedAt),
+        ...(parent ? [eq(tasks.projectId, parent)] : [])))
+      .orderBy(asc(tasks.position)).limit(limit));
+  } else if (type === 'project') {
+    add(await db.select({ id: projects.id }).from(projects)
+      .where(eq(projects.workspaceId, ws)).orderBy(desc(projects.updatedAt)).limit(limit));
+  } else if (type === 'area') {
+    add(await db.select({ id: areas.id }).from(areas)
+      .where(eq(areas.workspaceId, ws)).orderBy(asc(areas.position)).limit(limit));
+  } else if (type === 'habit') {
+    add(await db.select({ id: habits.id }).from(habits)
+      .where(and(eq(habits.workspaceId, ws), isNull(habits.archivedAt)))
+      .orderBy(asc(habits.position)).limit(limit));
+  } else if (type === 'reminder') {
+    add(await db.select({ id: reminders.id }).from(reminders)
+      .where(and(eq(reminders.workspaceId, ws), eq(reminders.status, 'open')))
+      .orderBy(asc(reminders.dueDate)).limit(limit));
+  } else if (type === 'event') {
+    /* A window rather than everything: a calendar of five years is not a list
+     * anybody scrolls, and the thing you are linking to is nearly always near
+     * now. Search is still there for the exception. */
+    const from = new Date(Date.now() - 30 * 86400_000);
+    const to = new Date(Date.now() + 90 * 86400_000);
+    add(await db.select({ id: calendarEvents.id }).from(calendarEvents)
+      .where(and(eq(calendarEvents.workspaceId, ws),
+        or(and(gte(calendarEvents.startsAt, from), lte(calendarEvents.startsAt, to)),
+          gte(calendarEvents.startDate, isoDay(from)))))
+      .orderBy(asc(calendarEvents.startsAt)).limit(limit));
+  } else if (type === 'library') {
+    add(await db.select({ id: libraryItems.id }).from(libraryItems)
+      .where(and(eq(libraryItems.workspaceId, ws), isNull(libraryItems.archivedAt)))
+      .orderBy(desc(libraryItems.updatedAt)).limit(limit));
+  } else if (type === 'book_page') {
+    /* A page has no meaning without its book, so this REQUIRES a parent. That
+     * is the point of browsing: pick the book, then the page, rather than
+     * hoping the page's title is distinctive across every book you own. */
+    if (!parent) return { results: [] as Summary[] };
+    add(await db.select({ id: bookPages.id }).from(bookPages)
+      .innerJoin(bookSections, eq(bookSections.id, bookPages.sectionId))
+      .where(and(eq(bookPages.workspaceId, ws), eq(bookSections.bookId, parent)))
+      .orderBy(asc(bookSections.position), asc(bookPages.position)).limit(limit));
+  } else if (type === 'diary') {
+    add(await db.select({ id: diaryEntries.id }).from(diaryEntries)
+      .where(and(eq(diaryEntries.workspaceId, ws), isNull(diaryEntries.archivedAt)))
+      .orderBy(desc(diaryEntries.entryDate)).limit(limit));
+  }
+
+  const summaries = await summarise(db, ws, refs);
+  return {
+    results: refs.map((r) => summaries.get(`${r.type}:${r.id}`)).filter(Boolean) as Summary[],
+  };
+}
+
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  + `-${String(d.getDate()).padStart(2, '0')}`;
+
+/* ── When the relationship is real, do the real thing ────────────────────
+ *
+ * The file opens by saying that STRUCTURAL relationships are foreign keys and
+ * that a generic edge must never be used to express one, because two competing
+ * answers to "which project is this task in" is worse than either answer.
+ *
+ * The picker then did exactly that, because making edges was all it knew how
+ * to do: "I linked a task to a project, because that task has to do with that
+ * project, and it added it as a RELATED ITEM instead of adding it as a task."
+ * The person meant the foreign key. They were right, and the app was wrong.
+ *
+ * So the pairs that have a real relationship are declared here — once, beside
+ * the doctrine — and the picker offers that instead. The semantic edge stays
+ * available underneath for the genuine case: a task that references a project
+ * it does not belong to.
+ */
+export const STRUCTURAL: Record<string, { verb: string; note: string }> = {
+  'task>project': {
+    verb: 'Add to project',
+    note: 'The same as adding an existing task to it.',
+  },
+  'task>area': {
+    verb: 'Move to area',
+    note: 'Every task belongs to exactly one Area.',
+  },
+  'reminder>area': {
+    verb: 'Move to area',
+    note: 'Every reminder belongs to at most one Area.',
+  },
+};
+
+export const structuralFor = (sourceType: string, targetType: string) =>
+  STRUCTURAL[`${sourceType}>${targetType}`] ?? null;
+
+/**
+ * Perform the real relationship, and write no edge at all.
+ *
+ * Deliberately NOT part of `createLink`: an edge and a foreign key are
+ * different things, and a function that sometimes writes one and sometimes the
+ * other is a function nobody can reason about. The caller decides which it
+ * means; this does the half that is not an edge.
+ */
+export async function attachStructural(db: Db, ws: string, ref: {
+  sourceType: string; sourceId: string; targetType: string; targetId: string;
+}) {
+  const rule = structuralFor(ref.sourceType, ref.targetType);
+  if (!rule) throw badRequest('These two are not related structurally.');
+  if (!await entityExists(db, ws, ref.sourceType as EntityType, ref.sourceId)
+    || !await entityExists(db, ws, ref.targetType as EntityType, ref.targetId)) {
+    throw notFound('One of these no longer exists.');
+  }
+  const key = `${ref.sourceType}>${ref.targetType}`;
+  if (key === 'task>project') {
+    await db.update(tasks).set({ projectId: ref.targetId, updatedAt: new Date() })
+      .where(and(eq(tasks.workspaceId, ws), eq(tasks.id, ref.sourceId)));
+  } else if (key === 'task>area') {
+    await db.update(tasks).set({ areaId: ref.targetId, updatedAt: new Date() })
+      .where(and(eq(tasks.workspaceId, ws), eq(tasks.id, ref.sourceId)));
+  } else if (key === 'reminder>area') {
+    await db.update(reminders).set({ areaId: ref.targetId, updatedAt: new Date() })
+      .where(and(eq(reminders.workspaceId, ws), eq(reminders.id, ref.sourceId)));
+  }
+  return { attached: key };
 }

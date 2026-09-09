@@ -6701,4 +6701,60 @@ html.los-returning #landing{display:none}
 .rel-pick-row{width:100%;display:flex;align-items:center;gap:10px;padding:8px;
   border-radius:9px;text-align:left;color:inherit;transition:background var(--t-hover)}
 .rel-pick-row:hover{background:rgba(255,255,255,.05)}
-.rel-pick-hint{margin:0;font-size:11.5px;color:var(--muted)}
+.rel-pick-hint{margin:0;font-size:11.5px;color:var(--muted);min-height:15px}
+
+/* ── Pick a place, then the thing ───────────────────────────────────────
+ *
+ * The picker was a search box and nothing else, which is fine when you know
+ * the name and useless when you do not. "Where is it?" is a question anybody
+ * can answer about their own app; "which words are in its title" is not. */
+.rel-places-h{margin:0 0 8px;font-size:11px;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted)}
+.rel-places-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:7px}
+.rel-place{display:flex;flex-direction:column;gap:2px;text-align:left;padding:9px 11px;
+  border-radius:10px;background:var(--surface-2);
+  box-shadow:inset 0 0 0 1px var(--hairline);
+  transition:background var(--t-hover),box-shadow var(--t-hover)}
+.rel-place:hover{background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--accent-soft, var(--hairline))}
+.rel-place-l{font-size:13px;font-weight:600;color:var(--text)}
+.rel-place-s{font-size:11px;color:var(--muted)}
+
+/* Where you are, and the way back out. A book's pages are two levels down and
+   there is no other way to know which book you are inside. */
+.rel-crumbs{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);
+  min-height:24px}
+.rel-crumb-back{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;
+  font-size:16px;line-height:1;color:var(--text-2);flex-shrink:0;
+  transition:background var(--t-hover)}
+.rel-crumb-back:hover{background:rgba(255,255,255,.07)}
+.rel-crumb{cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rel-crumb.is-here{color:var(--text-2);cursor:default}
+.rel-crumb-sep{opacity:.5}
+
+.rel-pick-li{display:flex;align-items:stretch;gap:4px}
+.rel-pick-li .rel-pick-row{flex:1;min-width:0}
+.rel-pick-row.is-chosen{background:rgba(139,127,245,.16);
+  box-shadow:inset 0 0 0 1px var(--accent)}
+/* A Book has an inside, and "link me to this book" and "show me its pages" are
+   different answers — so they are different controls. */
+.rel-pick-into{width:30px;flex-shrink:0;border-radius:8px;font-size:17px;line-height:1;
+  color:var(--muted);display:grid;place-items:center;
+  transition:background var(--t-hover),color var(--t-hover)}
+.rel-pick-into:hover{background:rgba(255,255,255,.07);color:var(--text)}
+
+/* ── What will happen, said before it happens ───────────────────────────
+ *
+ * The old picker linked the instant you clicked a row, with whatever kind
+ * happened to be in the select. This says what it is about to do to this
+ * particular pair — including, where there is a real relationship, that it is
+ * going to add the task to the project rather than note that they are
+ * "related", which is what somebody meant and did not get. */
+.rel-pick-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:12px 20px;border-top:1px solid var(--hairline)}
+.rel-foot-what{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.rel-foot-verb{font-size:13px;font-weight:600;color:var(--text)}
+.rel-foot-note{font-size:11px;color:var(--muted)}
+.rel-foot-kind span{font-size:12px;color:var(--muted)}
+.rel-foot-controls{display:flex;align-items:center;gap:9px;flex-shrink:0}
+.rel-foot-alt{font-size:11.5px}
+.rel-foot-select{max-width:170px}
