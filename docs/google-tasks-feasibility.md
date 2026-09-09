@@ -1,8 +1,13 @@
 # Google Tasks — can we pull them in?
 
-**Status:** research only, 7 September 2026. Nothing is built, no scope is
-requested, no API call is made. This is the answer to a beta tester's question,
-recorded so the decision is made once.
+**Status:** research only, 7 September 2026. **Decision taken 8 September:
+parked until after the beta** — not because of the code, but because a fourth
+sensitive scope costs a fresh consent-screen verification video and forces
+every connected user to reconnect. Revisit in one batch with any other scope
+change; see `google-calendar-projection.md`, which reaches the same conclusion
+from the other direction.
+
+Nothing is built, no scope is requested, no API call is made.
 
 **Short answer: yes, and it is a genuinely easy integration — with three real
 limitations that shape what we can honestly promise.**
