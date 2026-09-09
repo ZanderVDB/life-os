@@ -836,8 +836,15 @@ export const reminders = pgTable('reminders', {
 }, (t) => ({
   byWorkspace: index('reminders_ws_idx').on(t.workspaceId),
   byDue: index('reminders_due_idx').on(t.workspaceId, t.dueDate),
+  /* `paused` was missing, and the code has been writing it since reminders
+   * existed: `setReminderPaused` sets it, `calendar.ts` reads it to suppress
+   * future occurrences, and `resumeReminder` sets it back to 'open'. The one
+   * place it was NOT written down was the constraint, so pressing Pause on a
+   * recurring reminder returned a 500 — confirmed against a real database, not
+   * inferred. Widening a CHECK cannot invalidate a row that already exists,
+   * which is why this is safe to add to a live table. */
   statusCheck: check('reminders_status',
-    sql`${t.status} IN ('open','done','dismissed')`),
+    sql`${t.status} IN ('open','done','dismissed','paused')`),
 }));
 
 /* ── reminder_recurrence_rules ───────────────────────────────────────────
