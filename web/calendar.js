@@ -57,6 +57,37 @@ const LAYERS = [
   { id: 'tasks', label: 'Tasks' },
   { id: 'habits', label: 'Habits' },
 ];
+/**
+ * Which layers are on, remembered between visits.
+ *
+ * Turning Tasks off and finding them back on after a reload is the app
+ * forgetting a deliberate decision — the whole point of the control is to let
+ * somebody put the calendar into the shape their day needs, and a shape that
+ * lasts one page load is not a shape.
+ *
+ * Per device, in localStorage, exactly like `los2_cal_mode`. It describes how
+ * you are looking at this screen on this machine; it is not a fact about the
+ * workspace and has no business on the server.
+ */
+const LAYER_KEY = 'los2_cal_layers';
+
+export function restoreLayers() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYER_KEY) || 'null');
+    if (!saved || typeof saved !== 'object') return;
+    /* Only layers this build knows, and only booleans. A shape stored by an
+     * older or newer build must never introduce a layer this one cannot draw,
+     * or turn one into a string that reads as permanently on. */
+    for (const l of LAYERS) {
+      if (typeof saved[l.id] === 'boolean') cal.layers[l.id] = saved[l.id];
+    }
+  } catch { /* A browser refusing storage still gets a working calendar. */ }
+}
+
+export function saveLayers() {
+  try { localStorage.setItem(LAYER_KEY, JSON.stringify(cal.layers)); } catch { /* as above */ }
+}
+
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const PLAN_START = 7;    // relevant hours only — an empty 24h grid was Day view
 const PLAN_END = 21;
@@ -148,7 +179,9 @@ function currentRange() {
  * must read differently. `itemsForDay` returns them grouped, not merged. */
 function itemsForDay(dayIso) {
   const d = cal.data;
-  if (!d) return { events: [], reminders: [], deadlines: [], blocks: [], habit: null };
+  if (!d) {
+    return { events: [], reminders: [], deadlines: [], blocks: [], intents: [], habit: null };
+  }
   const inDay = (e) => {
     if (e.isAllDay) return e.startDate <= dayIso && (e.endDate ?? e.startDate) >= dayIso;
     return e.startsAt && iso(new Date(e.startsAt)) === dayIso;
@@ -159,6 +192,11 @@ function itemsForDay(dayIso) {
     deadlines: cal.layers.tasks ? d.deadlines.filter((t) => t.dueDate === dayIso) : [],
     blocks: cal.layers.tasks
       ? d.blocks.filter((b) => iso(new Date(b.startsAt)) === dayIso) : [],
+    /* A time somebody MEANT to do something, holding no time — see the note
+     * beside the `intents` query. Same layer as the rest of a task's times:
+     * turning Tasks off has to turn all of them off, or the control lies. */
+    intents: cal.layers.tasks
+      ? (d.intents ?? []).filter((t) => iso(new Date(t.scheduledAt)) === dayIso) : [],
     // { date, due, done } — `due` is what was asked of you that day, not the
     // total number of habits you have.
     habit: cal.layers.habits
@@ -613,7 +651,9 @@ export const hoverRender = {
       <div class="hov-meta">
         <span>Reminder</span>
         ${words ? `<span>${esc(words)}</span>` : ''}
-        ${r.leadDays ? `<span>${r.leadDays}d notice</span>` : ''}
+        ${/* "notice" implied something arrives. Nothing does — see the note in
+              reminder-modal.js. It is how early this starts showing up. */ ''}
+        ${r.leadDays ? `<span>shows ${r.leadDays}d early</span>` : ''}
         ${overdue ? '<span class="is-clash">Overdue</span>' : ''}
         ${r.status === 'done' ? '<span>Done</span>' : ''}
       </div>`;
@@ -809,6 +849,82 @@ function planReminderHtml(r, todayIso) {
     <i aria-hidden="true"></i><span>${esc(r.title)}</span></button>`;
 }
 
+/* ── Overlapping times ──────────────────────────────────────────────────
+ *
+ * Every timed thing used to be drawn `left:3px; right:3px` — the full column,
+ * positioned by top and height alone, with no notion that anything else might
+ * be there. Two things at the same time were therefore painted in the same
+ * rectangle, one over the other, and whichever came later in the list won. A
+ * holiday weekend with a Saturday outing reported as "same colour, can't tell
+ * them apart, text running over text", which is exactly what that produces.
+ *
+ * So: cluster the things that genuinely overlap, give each a lane, and let
+ * them sit side by side. Events and planned blocks share ONE pool — laning
+ * them separately would leave a block sitting on top of an event, which is the
+ * same defect wearing a different hat.
+ */
+
+/** A thing with no duration still occupies this much, for overlap purposes. */
+const MIN_FOOTPRINT_MS = 15 * 60_000;
+
+/**
+ * Group by overlap, then assign each item the first free lane.
+ *
+ * Returns clusters so the caller can draw ONE overflow marker per pile-up
+ * rather than one per hidden item. `lanes` is how many columns the cluster
+ * actually splits into, which is what every member divides the width by —
+ * a cluster of two must not be drawn at a third of the width because some
+ * other hour of the day happens to hold three.
+ */
+export function laneOut(input, cap = Infinity) {
+  const items = input.map((x) => ({ ...x, end: Math.max(x.end, x.start + MIN_FOOTPRINT_MS) }))
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+  const clusters = [];
+  let cur = [];
+  let curEnd = -Infinity;
+
+  const close = () => {
+    if (!cur.length) return;
+    /* `lanes[i]` is where lane i is free from. First lane that ended by the
+     * time this starts takes it — the standard greedy pack, and the reason a
+     * 09:00 and an 11:00 share lane 0 instead of wasting a column each. */
+    const lanes = [];
+    for (const it of cur) {
+      let at = lanes.findIndex((freeFrom) => freeFrom <= it.start);
+      if (at === -1) { at = lanes.length; lanes.push(it.end); } else { lanes[at] = it.end; }
+      it.lane = at;
+    }
+    const shown = Math.min(lanes.length, cap);
+    for (const it of cur) { it.lanes = shown; it.hidden = it.lane >= cap; }
+    clusters.push({
+      items: cur,
+      lanes: shown,
+      hiddenItems: cur.filter((it) => it.hidden),
+      start: cur[0].start,
+    });
+    cur = [];
+  };
+
+  for (const it of items) {
+    // `>=` — 09:00–10:00 and 10:00–11:00 touch, they do not overlap.
+    if (it.start >= curEnd) { close(); curEnd = it.end; } else curEnd = Math.max(curEnd, it.end);
+    cur.push(it);
+  }
+  close();
+  return clusters;
+}
+
+/**
+ * How many lanes this view can honestly fit.
+ *
+ * Not a taste decision — a measurement. A Plan-week column is about 110px at
+ * 1440px wide, so two lanes is 55px each, which holds a time and a couple of
+ * words; three would be 37px, which holds neither and is worse than telling
+ * somebody there are three. Day view has the whole width and can afford four,
+ * which in practice means its overflow marker never appears.
+ */
+const laneCap = () => (cal.mode === 'day' ? 4 : 2);
+
 /** Minutes-from-midnight as a percentage of the visible planning window. */
 function pctOf(min, hours) {
   return ((min - hours[0] * 60) / (hours.length * 60)) * 100;
@@ -834,7 +950,7 @@ function nowPct(hours) {
  */
 function planDayHtml(d, todayIso, hours) {
   const day = iso(d);
-  const { events, blocks } = itemsForDay(day);
+  const { events, blocks, intents } = itemsForDay(day);
   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
   const load = workload(day);
 
@@ -845,6 +961,20 @@ function planDayHtml(d, todayIso, hours) {
   const height = (a, b) => (new Date(b) - new Date(a)) / 3600000 / hours.length * 100;
   const timed = events.filter((e) => !e.isAllDay && e.startsAt);
   const allDay = events.filter((e) => e.isAllDay);
+  /* Events and planned blocks, laned together — see `laneOut`. All-day events
+   * are not in here at all: they live in the strip above the axis, which is
+   * why a Friday-to-Sunday holiday has never collided with a Saturday outing
+   * and is not what the overlap work is about. */
+  const clusters = laneOut([
+    ...timed.map((e) => ({
+      kind: 'event', ref: e,
+      start: +new Date(e.startsAt), end: +new Date(e.endsAt ?? e.startsAt),
+    })),
+    ...blocks.map((b) => ({
+      kind: 'block', ref: b,
+      start: +new Date(b.startsAt), end: +new Date(b.endsAt),
+    })),
+  ], laneCap());
   const free = freeWindows(day);
   // Reminders share the day but not its capacity — see planReminderHtml.
   const dayReminders = itemsForDay(day).reminders.filter((r) => r.status !== 'done');
@@ -870,10 +1000,7 @@ function planDayHtml(d, todayIso, hours) {
         <span class="pl-free-label">Free ${fmtMin(a)}–${fmtMin(b)}</span></div>`).join('')}
       ${day === todayIso && nowPct(hours) !== null
         ? `<div class="pl-now" style="top:${nowPct(hours).toFixed(2)}%" aria-label="Now"></div>` : ''}
-      ${timed.map((e) => `<div class="pl-ev" data-event="${e.id}"
-        style="top:${top(e.startsAt).toFixed(2)}%;height:${Math.max(3, height(e.startsAt, e.endsAt)).toFixed(2)}%;
-          --src:${esc(e.calendarColor || 'var(--accent)')}">
-        <b>${esc(hhmm(new Date(e.startsAt)))}</b> ${esc(e.title)}</div>`).join('')}
+      ${lanedHtml(clusters, top, height)}
       ${dayReminders.filter((r) => r.dueTime).map((r) => {
         const [h, m] = r.dueTime.split(':').map(Number);
         return `<button class="pl-rem" data-reminder="${r.id}"
@@ -881,19 +1008,75 @@ function planDayHtml(d, todayIso, hours) {
           aria-label="Reminder at ${esc(r.dueTime)}: ${esc(r.title)}">
           <i></i><span>${esc(r.title)}</span></button>`;
       }).join('')}
-      ${blocks.map((b) => {
-        const st = new Date(b.startsAt); const en = new Date(b.endsAt);
-        const sm = st.getHours() * 60 + st.getMinutes();
-        const em = en.getHours() * 60 + en.getMinutes();
-        return `<div class="pl-block" data-block="${b.id}" data-task="${b.taskId}"
-          data-start-min="${sm}" data-end-min="${em}"
-          style="top:${top(b.startsAt).toFixed(2)}%;height:${Math.max(3, height(b.startsAt, b.endsAt)).toFixed(2)}%">
-          <b>${esc(hhmm(st))}</b> ${esc(b.title)}
-          <span class="pl-tag">planned</span>
-          <span class="pl-resize" aria-hidden="true"></span></div>`;
+      ${/* An INTENDED time holds nothing, so it is a mark on the axis and not
+            a box — the same shape as a timed reminder, for the same reason.
+            Giving it a block would make the day read as committed and would
+            swallow a free window that is genuinely still free. */ ''}
+      ${intents.map((t) => {
+        const at = new Date(t.scheduledAt);
+        return `<button class="pl-intent" data-task-open="${t.id}"
+          style="top:${pctOf(at.getHours() * 60 + at.getMinutes(), hours).toFixed(2)}%"
+          title="Meaning to do this at ${esc(hhmm(at))} — no time is held"
+          aria-label="Intending to do ${esc(t.title)} at ${esc(hhmm(at))}">
+          <i></i><span>${esc(t.title)}</span></button>`;
       }).join('')}
     </div>
   </div>`;
+}
+
+/**
+ * Draw one day's laned events and blocks, plus an overflow marker per pile-up.
+ *
+ * Geometry goes out as `--lane` and `--lanes` rather than a computed `left`
+ * and `width`, so the gutter between neighbours is decided once in CSS
+ * alongside the radius and padding it has to agree with.
+ *
+ * `is-shared` is what carries the visual separation somebody asked for: at
+ * rest a lone event is a plain block, and only a box with a neighbour grows
+ * the outline and the tone step that make two of them read as two. The left
+ * border keeps carrying `--src`, which is WHICH CALENDAR the event came from —
+ * the same colour language as the month dots and the layer control. Recolouring
+ * on overlap would have thrown that away to say something the position already
+ * says.
+ */
+function lanedHtml(clusters, top, height) {
+  return clusters.map((c) => {
+    const boxes = c.items.filter((x) => !x.hidden).map((x) => {
+      const o = x.ref;
+      const geom = `top:${top(o.startsAt).toFixed(2)}%;`
+        + `height:${Math.max(3, height(o.startsAt, o.endsAt)).toFixed(2)}%;`
+        + `--lane:${x.lane};--lanes:${x.lanes}`;
+      const shared = x.lanes > 1 ? ' is-shared' : '';
+      const alt = x.lane % 2 ? ' is-lane-alt' : '';
+      if (x.kind === 'event') {
+        return `<div class="pl-ev${shared}${alt}" data-event="${o.id}"
+          style="${geom};--src:${esc(o.calendarColor || 'var(--accent)')}">
+          <b>${esc(hhmm(new Date(o.startsAt)))}</b> ${esc(o.title)}</div>`;
+      }
+      const st = new Date(o.startsAt); const en = new Date(o.endsAt);
+      return `<div class="pl-block${shared}${alt}" data-block="${o.id}" data-task="${o.taskId}"
+        data-start-min="${st.getHours() * 60 + st.getMinutes()}"
+        data-end-min="${en.getHours() * 60 + en.getMinutes()}"
+        style="${geom}">
+        <b>${esc(hhmm(st))}</b> ${esc(o.title)}
+        <span class="pl-tag">planned</span>
+        <span class="pl-resize" aria-hidden="true"></span></div>`;
+    }).join('');
+
+    if (!c.hiddenItems.length) return boxes;
+    /* Named, not just counted. `+2` that will not say what it is hiding is a
+     * worse answer than a cramped row; the titles are in the tooltip and the
+     * accessible name whether or not anybody clicks. Day view has the width
+     * for four lanes, so this is a Plan-week and 3-day marker in practice —
+     * and there it goes to the view that can actually show them. */
+    const names = c.hiddenItems.map((x) => x.ref.title).join(', ');
+    const y = top(new Date(c.start).toISOString()).toFixed(2);
+    return `${boxes}<button class="pl-more" style="top:${y}%"
+      data-zoom-day="${iso(new Date(c.start))}"
+      title="Also at this time: ${esc(names)}"
+      aria-label="${c.hiddenItems.length} more at this time: ${esc(names)}. Open this day."
+      >+${c.hiddenItems.length}</button>`;
+  }).join('');
 }
 
 const fmtMin = (m) =>
@@ -952,11 +1135,44 @@ function railAttentionHtml() {
 
   const clashes = scope.flatMap((day) => conflictsOn(day).map((c) => ({ day, c })));
   const overdue = (d.reminders ?? []).filter((r) => r.status === 'open' && r.dueDate < todayIso);
-  const unplanned = (d.deadlines ?? []).filter((t) => scope.includes(t.dueDate)
-    && !(d.blocks ?? []).some((b) => b.taskId === t.id));
+
+  /* LEAD TIME, FINALLY DOING SOMETHING.
+   *
+   * `leadDays` has been saved, and printed as "7d notice", since reminders
+   * existed — and nothing has ever read it. There are no push notifications in
+   * Life OS at all, so "notify me a week before" notified nobody, ever.
+   *
+   * This is the smallest thing that makes the field true rather than merely
+   * honestly worded: a reminder inside its own lead window says so here, which
+   * is exactly what the label now claims. A reminder with no lead time is
+   * unaffected — it is not asking to be seen early. */
+  const soon = (d.reminders ?? []).filter((r) => r.status === 'open'
+    && r.leadDays > 0 && r.dueDate >= todayIso
+    && iso(addDays(parseIso(r.dueDate), -r.leadDays)) <= todayIso);
+  const blocksFor = (id) => (d.blocks ?? []).filter((b) => b.taskId === id);
+  const inScope = (d.deadlines ?? []).filter((t) => scope.includes(t.dueDate));
+  const unplanned = inScope.filter((t) => !blocksFor(t.id).length);
+
+  /* PLANNED, BUT NOT IN TIME.
+   *
+   * "Due, not planned" used to clear the moment a task got a block — at ANY
+   * time, including after the deadline. Schedule a Friday task for Saturday
+   * and the app went quiet, which is the one moment it had something worth
+   * saying. Keeping due date and planned time apart is the point of the two
+   * fields; noticing when they disagree is the other half of that idea.
+   *
+   * The test is "nothing you have planned lands on or before the day it is
+   * due" — not "the latest block is late". A task planned Wednesday AND
+   * Saturday for a Friday deadline is planned in time, and saying otherwise
+   * would be the warning crying wolf at somebody who did the right thing. */
+  const late = inScope.filter((t) => {
+    const bs = blocksFor(t.id);
+    return bs.length && !bs.some((b) => iso(new Date(b.startsAt)) <= t.dueDate);
+  });
   const syncError = d.connection?.status === 'error';
 
-  if (!clashes.length && !overdue.length && !unplanned.length && !syncError) return '';
+  if (!clashes.length && !overdue.length && !unplanned.length
+    && !late.length && !soon.length && !syncError) return '';
 
   return `<div class="rail-card rail-attention">
     <h3>Needs attention</h3>
@@ -970,6 +1186,13 @@ function railAttentionHtml() {
       </button>`).join('')}
       ${overdue.slice(0, 3).map((r) => `<div class="rl-row is-warn">
         <span class="rl-t">${esc(r.title)}</span><span class="rl-s">overdue</span></div>`).join('')}
+      ${soon.slice(0, 3).map((r) => `<div class="rl-row">
+        <span class="rl-t">${esc(r.title)}</span>
+        <span class="rl-s">${r.dueDate === todayIso ? 'due today'
+    : `due ${esc(prettyShort(r.dueDate))}`}</span></div>`).join('')}
+      ${late.slice(0, 3).map((t) => `<button class="rl-row is-warn" data-schedule="${t.id}">
+        <span class="rl-t">${esc(t.title)}</span>
+        <span class="rl-s">planned after it is due</span></button>`).join('')}
       ${unplanned.slice(0, 3).map((t) => `<button class="rl-row" data-schedule="${t.id}">
         <span class="rl-t">${esc(t.title)}</span>
         <span class="rl-s">due, not planned</span></button>`).join('')}

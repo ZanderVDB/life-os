@@ -10,7 +10,7 @@
  * real connection is made.
  */
 import type { AppInstance, Guards } from '../types.js';
-import { and, asc, eq, gte, inArray, lte, or, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, or, isNull, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
 import {
@@ -30,6 +30,7 @@ import {
 } from '../lib/diary-habit.js';
 import { readPreferences } from './preferences.js';
 import { isStagingCleanupAllowed } from '../lib/import-writer.js';
+import { addDays } from '../lib/civil-date.js';
 import { expand, describe as describeRule, nextAfter } from '../lib/recurrence.js';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -197,6 +198,24 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
      */
     const allRems = await db.select().from(reminders)
       .where(eq(reminders.workspaceId, workspaceId));
+
+    /* LEAD TIME REACHES PAST THE PERIOD ON SCREEN.
+     *
+     * "Start showing this a week early" cannot mean "a week early, but only if
+     * the week you happen to be looking at already contains it". A reminder due
+     * next Monday with a seven-day lead has to be findable while you are
+     * looking at this week — which is the whole point of setting a lead.
+     *
+     * So occurrences are expanded a little past `to`: far enough to cover the
+     * longest lead anybody has actually set, and no further. A workspace with
+     * no lead times expands exactly the range it always did.
+     *
+     * Nothing new is DRAWN by this. Every day cell filters by its own date, so
+     * an occurrence outside the visible period matches no cell; only the
+     * attention card, which asks a question about today rather than about the
+     * period, can see them. */
+    const maxLead = Math.max(0, ...allRems.map((r) => r.leadDays ?? 0));
+    const expandTo = maxLead > 0 ? addDays(q.data.to, maxLead) : q.data.to;
     const rules = await db.select().from(reminderRecurrenceRules)
       .where(eq(reminderRecurrenceRules.workspaceId, workspaceId));
     const ruleFor = new Map(rules.map((r) => [r.reminderId, r]));
@@ -209,7 +228,7 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       // A paused reminder keeps its rule but produces no future occurrences.
       if (r.status === 'paused') return [];
       const rule = ruleFor.get(r.id) ?? null;
-      return expand(r.dueDate, rule, q.data.from, q.data.to).map((o) => ({
+      return expand(r.dueDate, rule, q.data.from, expandTo).map((o) => ({
         ...r,
         dueDate: o.date,
         occurrenceDate: o.date,
@@ -250,6 +269,35 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       lte(tasks.dueDate, q.data.to),
       eq(tasks.status, 'open'),
     ));
+
+    /* INTENDED TIMES — the third time a task can carry, and until now the
+     * invisible one.
+     *
+     * A task has three: `dueDate` is the deadline, a `task_schedule_blocks`
+     * row is time actually held, and `scheduledAt` is "I mean to do this
+     * then" without holding anything. The assistant writes `scheduledAt`
+     * whenever somebody says "I'll do that Thursday at three" — and Calendar
+     * queried deadlines and blocks and never this, so the time the assistant
+     * confirmed out loud appeared on no screen in the product.
+     *
+     * Deliberately NOT promoted to a block. An intention that silently
+     * reserved an hour would make the day look committed, eat a free window
+     * that is genuinely still free, and count against workload. It is a point
+     * in time, and the grid draws it as one.
+     *
+     * A task that ALSO holds a block for that intent would be drawn twice, so
+     * the block wins: it is the stronger statement of the same fact. */
+    const intents = (await db.select({
+      id: tasks.id, title: tasks.title, scheduledAt: tasks.scheduledAt,
+      dueDate: tasks.dueDate, priority: tasks.priority, areaId: tasks.areaId,
+    }).from(tasks).where(and(
+      eq(tasks.workspaceId, workspaceId),
+      isNotNull(tasks.scheduledAt),
+      gte(tasks.scheduledAt, from),
+      lte(tasks.scheduledAt, to),
+      eq(tasks.status, 'open'),
+      isNull(tasks.archivedAt),
+    ))).filter((t) => !blocks.some((b) => b.taskId === t.id));
 
     /* Habit completion COUNTS only — Calendar summarises rhythm, it does not
      * turn habits into events or repeat them as daily agenda noise.
@@ -350,6 +398,7 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
       reminders: rems,
       blocks,
       deadlines,
+      intents,
       habitDays,
       habitTotal,
       /** The days in range with a meaningful diary entry, or [] when off. */

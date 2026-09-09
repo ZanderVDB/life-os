@@ -106,8 +106,20 @@ export function openReminderModal(ctx) {
       ${moreOptions(`
         ${row('Repeat', selectField('rm-repeat',
     REPEAT.map(([v, l]) => ({ id: v, label: l })), f.repeat, 'Repeat'))}
-        ${row('Notify', selectField('rm-lead',
-    LEAD.map(([v, l]) => ({ id: String(v), label: l })), String(f.leadDays), 'Notify'))}
+        ${/* IT SAID "Notify", AND NOTHING NOTIFIED.
+              Life OS has no push notifications — no service worker
+              subscription, no VAPID keys, no scheduler, nothing. The field
+              saved, the calendar printed "7d notice", and no phone ever made a
+              sound. A promise the app cannot keep is worse than an absent
+              feature, because it stops somebody setting a real reminder
+              somewhere that does work.
+              It now says what it does: the day a reminder starts appearing in
+              Needs attention. See `railAttentionHtml`. */ ''}
+        ${row('Start showing', `${selectField('rm-lead',
+    LEAD.map(([v, l]) => ({ id: String(v), label: l })), String(f.leadDays), 'Start showing')}
+          <p class="cf-note">Life OS cannot send phone notifications yet. This
+            is when the reminder starts appearing under Needs attention.</p>`,
+  { top: true })}
         ${row('Area', selectField('rm-area',
     [{ id: '', label: 'No area' }, ...areas.map((a) => ({ id: a.id, label: a.name }))],
     f.areaId ?? '', 'Area'))}

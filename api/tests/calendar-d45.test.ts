@@ -97,8 +97,16 @@ test('recurrence: the range query expands rather than filtering by due date', ()
   // Filtering first hides exactly what this needs: a monthly reminder anchored
   // in August has no stored row anywhere near December.
   const q = calRoute.slice(calRoute.indexOf('const allRems'), calRoute.indexOf('const links'));
-  assert.match(q, /expand\(r\.dueDate, rule, q\.data\.from, q\.data\.to\)/,
+  assert.match(q, /expand\(r\.dueDate, rule, q\.data\.from, \w+\)/,
     'reminders are not expanded for the range');
+  /* The END of that window is no longer `q.data.to` verbatim — lead time
+     reaches past the period on screen, or "show me this a week early" would
+     mean "a week early, but only if the week you are looking at already
+     contains it". What this test is actually about is that expansion happens
+     at all instead of a stored-due-date filter, and that it starts where the
+     period starts; the widening is asserted in beta-round-2. */
+  assert.match(q, /const expandTo = [\s\S]{0,80}?q\.data\.to/,
+    'the expansion window is no longer derived from the requested range');
   assert.ok(!/gte\(reminders\.dueDate/.test(q),
     'reminders are still filtered by stored due date, hiding future occurrences');
   assert.match(q, /r\.status === 'paused'/, 'a paused reminder still generates occurrences');

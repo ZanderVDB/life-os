@@ -66,6 +66,7 @@ import { cal, currentRange, calendarHeaderHtml, calendarBodyHtml, calendarRailHt
   planHours, itemsForDay, hoverRender, freeWindowsFor, legendHtml, sourcesPopoverHtml,
   railIsOpen,
   recurrenceWords, modeIds, defaultMode, modeStep,
+  restoreLayers, saveLayers,
   iso, parseIso, monthGrid, weekOf } from './calendar.js';
 import { habitSummaryHtml } from './calendar.js';
 import { settingsHtml, settingsTabs } from './settings.js';
@@ -3794,6 +3795,8 @@ async function loadCalendar() {
     cal.restored = true;
     const saved_ = localStorage.getItem('los2_cal_mode');
     cal.mode = MODE_IDS().includes(saved_) ? saved_ : defaultMode();
+    // Which layers are on is the same kind of fact as which mode is open.
+    restoreLayers();
   }
   /* Rotating a tablet, or resizing a window across the boundary, changes
    * which modes exist. Plan week has no phone equivalent and Day has no
@@ -4478,6 +4481,7 @@ function wireCalendarHeader() {
       cal.layers[id] = !cal.layers[id];
       b.classList.toggle('is-on', cal.layers[id]);
       b.setAttribute('aria-pressed', String(cal.layers[id]));
+      saveLayers();
       paintCalendar();
     };
   });
@@ -4509,6 +4513,30 @@ function wireCalendar() {
   });
   document.querySelectorAll('[data-reminder]:not(.ag-check)').forEach((el) => {
     el.onclick = (e) => { e.stopPropagation(); openReminderDetail(el.dataset.reminder); };
+  });
+  /* An intended time is a task, so it opens the task. Nothing about it can be
+   * edited on the axis: it holds no time, so there is no block to drag. */
+  document.querySelectorAll('[data-task-open]').forEach((el) => {
+    el.onclick = (e) => { e.stopPropagation(); openTask(el.dataset.taskOpen); };
+  });
+  /* "+2 more at this time" goes to the view with the room, rather than opening
+   * a popover that would be one more thing to build, style and dismiss.
+   *
+   * Which view that is depends on the device, because the devices offer
+   * different ones. A phone has Day — one column, the whole width. A desktop
+   * does not, and its answer is Month with the day selected, whose rail is
+   * already a full list of everything that day holds. */
+  document.querySelectorAll('[data-zoom-day]').forEach((el) => {
+    el.onclick = (ev) => {
+      ev.stopPropagation();
+      const day = el.dataset.zoomDay;
+      cal.anchor = parseIso(day);
+      cal.mode = MODE_IDS().includes('day') ? 'day' : 'month';
+      if (cal.mode === 'month') cal.selected = day;
+      localStorage.setItem('los2_cal_mode', cal.mode);
+      cal.enter = 'mode';
+      loadCalendar();
+    };
   });
   wireCalendarSwipe();
   /* An empty slot in Day or 3 day is where a thing goes. The tap already
@@ -4547,7 +4575,8 @@ function wireCalendarSwipe() {
     onLeft: () => move('next'),
     onRight: () => move('prev'),
     // A block being dragged onto an hour is not a page turn.
-    ignore: '.pl-ev,.pl-block,.pl-rem,.pl-resize,[data-event],[data-reminder]',
+    ignore: '.pl-ev,.pl-block,.pl-rem,.pl-intent,.pl-more,.pl-resize,'
+      + '[data-event],[data-reminder]',
   });
 }
 
@@ -6350,7 +6379,8 @@ function openReminderDetail(id, from = null) {
     rows: [
       ['When', `${prettyDay(r.dueDate)}${r.dueTime ? ` at ${r.dueTime}` : ''}`],
       words ? ['Repeats', words[0].toUpperCase() + words.slice(1)] : null,
-      r.leadDays ? ['Notify', `${r.leadDays} day${r.leadDays > 1 ? 's' : ''} before`] : null,
+      // Not "Notify" — nothing notifies. See the note in reminder-modal.js.
+      r.leadDays ? ['Shows from', `${r.leadDays} day${r.leadDays > 1 ? 's' : ''} before`] : null,
       r.areaId ? ['Area', areaName(r.areaId)] : null,
       r.notes ? ['Notes', r.notes] : null,
       ['Status', done ? 'Done' : overdue ? 'Overdue' : 'Open'],

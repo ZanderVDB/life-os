@@ -63,7 +63,12 @@ export function historyHtml() {
         ${dia.recent.map((e) => `<li><button type="button" class="dia-recent-row"
           data-open="${esc(e.date)}">
           <span class="dia-recent-when">${esc(relativeDay(e.date, today))}</span>
-          <span class="dia-recent-title">${esc(e.title ?? summaryOf(e) ?? excerptOf(e))}</span>
+          ${/* The server decides what one line stands for a day — the same
+                `previewOf` the month grid uses, so the square and the row
+                beside it can never disagree. This used to build its own
+                chain here and quietly skipped two fields the grid honoured. */ ''}
+          <span class="dia-recent-title ${e.preview ? '' : 'is-quiet'}"
+            >${esc(e.preview ?? 'No writing')}</span>
           ${e.mood ? `<span class="dia-recent-mood">${esc(moodLabel(e.mood))}</span>` : ''}
         </button></li>`).join('')}
       </ul>` : `<p class="dia-side-empty">Nothing written yet. Days you write on
@@ -153,10 +158,10 @@ function dayCell(cell, entry, today) {
   </button>`;
 }
 
-const summaryOf = (e) => (e.daySummary ? e.daySummary.slice(0, 80) : null);
-/* An entry with no title and no summary still has words in it. Showing those
- * beats showing "Untitled", which describes the label rather than the day. */
-const excerptOf = (e) => (e.preview ?? (e.excerpt ? `${e.excerpt.slice(0, 80)}…` : 'Untitled'));
+/* `summaryOf` and `excerptOf` lived here and were the SECOND rule for what one
+ * line stands for a day. They are gone: the server sends `preview`, decided by
+ * one `previewOf`, and a client that re-derives it is a client that will
+ * disagree with the square next to it. */
 
 function chunk(arr, n) {
   const out = [];

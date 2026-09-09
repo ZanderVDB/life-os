@@ -1561,9 +1561,47 @@ body.is-dragging-task .task:not(.is-dragging){cursor:grabbing}
   background:var(--surface);border-radius:10px;overflow:hidden}
 .pl-line{display:block;height:calc(100%/var(--pl-hours));
   border-bottom:1px solid rgba(255,255,255,.045)}
-.pl-ev,.pl-block{position:absolute;left:3px;right:3px;border-radius:7px;padding:3px 6px;
+/* ── Lanes ──────────────────────────────────────────────────────────────
+ *
+ * These were `left:3px;right:3px` — every timed thing the full width of the
+ * column, positioned by top and height alone. Two at the same time were drawn
+ * in the same rectangle, one over the other, and later-in-the-list won: the
+ * reported "same colour, can't tell them apart, text running over text".
+ *
+ * A slot now divides the column by how many things genuinely overlap it.
+ * `--lane` / `--lanes` come from `laneOut`; the gutter is decided here, once,
+ * next to the radius and padding it has to agree with. The defaults mean a
+ * lone event still spans the column exactly as it always did. */
+.pl-ev,.pl-block{position:absolute;right:auto;
+  left:calc(3px + (100% - 6px) * var(--lane, 0) / var(--lanes, 1));
+  width:calc((100% - 6px) / var(--lanes, 1) - var(--pl-gutter, 0px));
+  border-radius:7px;padding:3px 6px;
   font-size:10.5px;line-height:1.28;overflow:hidden;cursor:pointer;
   transition:transform var(--d-fast) var(--e-out),box-shadow var(--t-hover)}
+
+/* Only a box WITH a neighbour separates itself. Sharing a slot is the whole
+   reason to draw an edge, and a lone event that grew one would be paying for a
+   problem it does not have. */
+.pl-ev.is-shared,.pl-block.is-shared{--pl-gutter:3px;
+  box-shadow:0 0 0 1px var(--rail)}
+/* Alternate lanes step tone, so two boxes at one time read as two objects
+   before you have read a word of either. Deliberately NOT a hue change: the
+   left border already carries WHICH CALENDAR this came from, in the same
+   colour language as the month dots, and overwriting that to say "these
+   overlap" would trade real information for something position already says. */
+.pl-ev.is-lane-alt{background:var(--surface-2)}
+.pl-block.is-lane-alt{background:rgba(78,143,196,.20)}
+
+/* More at this time than the column can honestly hold. Names them in the
+   tooltip; opens the day, which has the width. */
+.pl-more{position:absolute;right:4px;z-index:4;
+  transform:translateY(2px);
+  min-width:22px;height:16px;padding:0 4px;border-radius:8px;
+  font-size:9px;font-weight:700;letter-spacing:.02em;
+  background:var(--rail);color:var(--text-2);
+  box-shadow:0 0 0 1px rgba(255,255,255,.10),var(--e1);
+  transition:background var(--t-hover),color var(--t-hover)}
+.pl-more:hover{background:var(--surface-3);color:var(--text)}
 .pl-ev{background:var(--surface-3);border-left:3px solid var(--src, var(--accent));color:var(--text-2)}
 .pl-ev:hover,.pl-block:hover{box-shadow:var(--e2);transform:translateY(-1px)}
 .pl-ev b,.pl-block b{color:var(--muted);font-variant-numeric:tabular-nums;font-size:9.5px}
@@ -2285,6 +2323,20 @@ html[data-motion="reduced"] .cal-canvas-mode{animation:none}
 .pl-rem>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   background:var(--surface);padding:0 3px;border-radius:3px}
 .pl-rem:hover>span{color:var(--text)}
+
+/* An INTENDED time — "I'll do that Thursday at three", usually said to the
+   assistant. It holds no time, so like a timed reminder it is a mark on the
+   axis and never a block: a box would make the day read as committed and
+   would eat a free window that is genuinely still free. Hollow rather than
+   solid, because nothing has been reserved. */
+.pl-intent{position:absolute;left:3px;right:3px;display:flex;align-items:center;gap:4px;
+  font-size:9.5px;color:var(--p-low-ink);z-index:2;pointer-events:auto;
+  transform:translateY(-50%);text-align:left}
+.pl-intent>i{width:5px;height:5px;border-radius:50%;flex-shrink:0;
+  background:var(--surface);box-shadow:0 0 0 1.5px var(--p-low),0 0 0 3px var(--surface)}
+.pl-intent>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  background:var(--surface);padding:0 3px;border-radius:3px;font-style:italic}
+.pl-intent:hover>span{color:var(--text)}
 
 /* ══ D4.5 ═══════════════════════════════════════════════════════════════ */
 
@@ -5898,6 +5950,10 @@ body:has(.dia-page) .rail{display:none}
   color:var(--muted)}
 .dia-recent-title{font-size:13px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap}
+/* A day can be in this list on a check-in alone — feeling, energy, sleep — with
+   nothing written anywhere. Saying so quietly beats an empty row that reads as
+   a rendering fault, and beats "Untitled", which describes the label. */
+.dia-recent-title.is-quiet{color:var(--muted);font-style:italic}
 .dia-recent-mood{font-size:10.5px;color:var(--muted)}
 
 .dia-results{background:var(--surface);border-radius:16px;padding:16px 18px;box-shadow:var(--e2)}
@@ -6521,7 +6577,13 @@ html.los-returning #landing{display:none}
 .rel-add-only{margin:0;font-size:11.5px}
 .rel-empty{border-top:1px solid var(--hairline);padding-top:12px}
 .rel-pick{max-width:520px;width:calc(100vw - 40px)}
-.rel-pick-h{margin:0;font-size:15px;font-weight:600}
+/* `flex:1`, like every other modal's title.
+ *
+ * `.m-head` is a flex row and `.m-title` grows, which is what pushes the close
+ * button to the right edge everywhere else. This heading is a plain <h2>, so it
+ * was only as wide as the words "Link to" — leaving the × parked 12px after
+ * them with 410px of empty header to its right. Measured, not guessed. */
+.rel-pick-h{margin:0;flex:1;min-width:0;font-size:15px;font-weight:600}
 .rel-pick-body{display:flex;flex-direction:column;gap:11px;min-height:220px}
 .rel-pick-q{width:100%}
 .rel-pick-kind{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}

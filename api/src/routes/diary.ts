@@ -56,15 +56,23 @@ const PREVIEW_CHARS = 90;
  * The one line that stands for a day.
  *
  * In order of how deliberately it was written: a title the person chose, then
- * the Highlight they named, then the day summary, then the opening words. Never
- * "Untitled" — that describes the label rather than the day.
+ * WHAT THEY SAID THEY WANTED TO REMEMBER, then the Highlight, then the day
+ * summary, then the opening words. Never "Untitled" — that describes the label
+ * rather than the day.
+ *
+ * `remember` was added ahead of the summary from use, not from theory: looking
+ * back through a month, the summary is a description of the day and often
+ * starts mid-thought, while "What do I want to remember?" is the one field
+ * somebody filled in *specifically so that this moment would be the one they
+ * found later*. Answering the question and then not showing the answer is the
+ * app ignoring the most deliberate thing on the page.
  */
 export function previewOf(
-  { title, highlight, daySummary, excerpt }:
-  { title?: string | null; highlight?: string | null;
+  { title, remember, highlight, daySummary, excerpt }:
+  { title?: string | null; remember?: string | null; highlight?: string | null;
     daySummary?: string | null; excerpt?: string | null },
 ): string | null {
-  const pick = [title, highlight, daySummary, excerpt]
+  const pick = [title, remember, highlight, daySummary, excerpt]
     .map((s) => (s ?? '').replace(/\s+/g, ' ').trim())
     .find((s) => s.length > 0);
   if (!pick) return null;
@@ -340,6 +348,7 @@ export function registerDiaryRoutes(
           },
           preview: previewOf({
             title: r.title,
+            remember: (reflection as Reflection | null)?.prompts?.remember ?? null,
             highlight: c.highlight ?? null,
             daySummary: r.daySummary,
             excerpt,
@@ -363,13 +372,36 @@ export function registerDiaryRoutes(
       daySummary: diaryEntries.daySummary,
       mood: diaryEntries.mood,
       excerpt: sql<string>`left(${diaryEntries.documentText}, 220)`,
+      reflection: diaryEntries.reflection,
       updatedAt: diaryEntries.updatedAt,
     }).from(diaryEntries)
       .where(and(eq(diaryEntries.workspaceId, ws), isNull(diaryEntries.archivedAt)))
       .orderBy(desc(diaryEntries.entryDate))
       .limit(limit);
 
-    return { entries: rows };
+    /* THE SAME `previewOf` the month grid uses.
+     *
+     * The days endpoint above already carried a comment saying the line was
+     * "decided here so the grid cannot decide it differently from the recent
+     * list" — and then this endpoint shipped raw fields and let the client
+     * decide it anyway. It picked `title → daySummary → excerpt`, skipping the
+     * Highlight the grid honoured, so the same day could read one way in the
+     * square and another way in the panel beside it. One rule, one place.
+     *
+     * `reflection` and `excerpt` are INPUTS. They are not returned: a side
+     * panel needs one line, and the reflection is somebody's writing. */
+    return {
+      entries: rows.map(({ reflection, excerpt, ...r }) => ({
+        ...r,
+        preview: previewOf({
+          title: r.title,
+          remember: (reflection as Reflection | null)?.prompts?.remember ?? null,
+          highlight: (reflection as Reflection | null)?.checkin?.highlight ?? null,
+          daySummary: r.daySummary,
+          excerpt,
+        }),
+      })),
+    };
   });
 
   /**

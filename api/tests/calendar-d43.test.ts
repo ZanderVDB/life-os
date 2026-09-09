@@ -146,8 +146,32 @@ test('rail: source management is a popover, not the whole Agenda rail', () => {
 
 test('rail: attention renders nothing when nothing is wrong', () => {
   const fn = body(calCode, 'function railAttentionHtml()');
-  assert.match(fn, /if \(!clashes\.length && !overdue\.length && !unplanned\.length && !syncError\) return ''/,
-    'an empty attention card is rendered as filler');
+
+  /* Held as a PROPERTY rather than as the literal expression it used to pin.
+   *
+   * The old assertion quoted the guard verbatim, so adding a category to the
+   * card broke it for being longer — which teaches the next person to edit the
+   * test rather than to check the guard. What actually matters is that EVERY
+   * list this card can draw is in the emptiness test: a category outside it
+   * means a rail card that renders a heading and nothing else, which is the
+   * filler this test exists to forbid.
+   *
+   * Now it fails only when somebody adds a row and forgets the guard, which is
+   * exactly the moment it should. */
+  const at = fn.indexOf('return `<div class="rail-card rail-attention"');
+  assert.ok(at > -1, 'the attention card is no longer rendered here');
+  const guard = fn.slice(0, at);
+  const markup = fn.slice(at);
+
+  const drawn = [...markup.matchAll(/\$\{(\w+)\.slice\(0, 3\)/g)].map((m) => m[1]);
+  assert.ok(drawn.length >= 3, `only ${drawn.length} list(s) found — the card changed shape`);
+  for (const list of new Set(drawn)) {
+    assert.match(guard, new RegExp(`!${list}\\.length`),
+      `\`${list}\` can fill the card but cannot keep it from rendering empty`);
+  }
+  // The one that is a flag rather than a list.
+  assert.match(guard, /!syncError/, 'a sync error cannot keep the card from rendering empty');
+  assert.match(guard, /return ''/, 'the guard does not return an empty card');
 });
 
 /* ── §9 Agenda width ─────────────────────────────────────────────────── */
