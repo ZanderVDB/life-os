@@ -515,13 +515,26 @@ test('multi-day: the query returns events that OVERLAP the window', () => {
   const q = calRoute.slice(calRoute.indexOf('const events = await db.select()'),
     calRoute.indexOf('const attendees'));
   assert.match(q, /lte\(calendarEvents\.startsAt, to\)/, 'timed events are not matched by overlap');
-  assert.match(q, /gte\(sql`coalesce\(\$\{calendarEvents\.endsAt\}/,
+  assert.match(q, /gte\(calendarEvents\.endsAt, from\)/,
     'the end of a timed event is not considered');
+  assert.match(q, /and\(isNull\(calendarEvents\.endsAt\), gte\(calendarEvents\.startsAt, from\)\)/,
+    'a timed event with no end is not treated as ending where it starts');
   assert.match(q, /lte\(calendarEvents\.startDate, q\.data\.to\)/,
     'all-day events are not matched by overlap');
-  assert.match(q, /gte\(sql`coalesce\(\$\{calendarEvents\.endDate\}/,
+  assert.match(q, /gte\(calendarEvents\.endDate, q\.data\.from\)/,
     'an all-day event that began before the window is still invisible');
-  // The old start-contained form must not come back.
+  assert.match(q, /and\(isNull\(calendarEvents\.endDate\), gte\(calendarEvents\.startDate, q\.data\.from\)\)/,
+    'a single-day all-day event is not treated as ending where it starts');
+
+  /* THIS TEST USED TO PIN THE BUG. It asserted `gte(sql\`coalesce(...)\`,
+     from)` — the exact expression that took the calendar down in production,
+     because a raw expression has no column to encode the Date with, and
+     drizzle's postgres-js driver passes it through bare. It passed here because
+     PGlite forgives a raw Date. The shape is now forbidden, and
+     production-driver.test.ts makes the test database refuse it the way
+     production does. */
+  assert.ok(!/sql`coalesce/.test(q), 'the overlap is compared through a raw expression again');
+  // The old start-contained form must not come back either.
   assert.ok(!/gte\(calendarEvents\.startsAt, from\), lte\(calendarEvents\.startsAt, to\)/.test(q),
     'the start-only filter is back');
 });

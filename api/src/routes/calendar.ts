@@ -182,16 +182,42 @@ export function registerCalendarRoutes(app: AppInstance, db: Db, guards: Guards)
      * An interval overlaps a window when it starts on or before the end and
      * ends on or after the beginning. `coalesce` because a single-day all-day
      * event stores no end date. */
+    /* ── COLUMN ON THE LEFT, ALWAYS ──────────────────────────────────────
+     *
+     * The first version of this wrote `gte(sql\`coalesce(endsAt, startsAt)\`,
+     * from)` — and took the calendar down in production for every user. Every
+     * load of this endpoint returned a 500 while the sync loop kept pulling
+     * events perfectly, so the only visible symptom was a calendar that looked
+     * disconnected and would not "reconnect" — because the connection was
+     * never the thing that was broken.
+     *
+     * The mechanism: drizzle's postgres-js driver replaces the date and
+     * timestamp serializers with pass-throughs and relies on its COLUMN
+     * encoders to turn a Date into a string first. A raw `sql` expression has
+     * no column, so it has no encoder, so the bare Date reached the driver and
+     * `Buffer.byteLength(Date)` threw. PGlite, which the tests and the local
+     * harness use, serialises a Date by itself — so it passed everywhere except
+     * the one place it mattered.
+     *
+     * So the overlap is written with a column on the left of every comparison
+     * that takes a value. Same meaning as coalesce: a null end means the thing
+     * ends where it starts. */
     const events = await db.select().from(calendarEvents).where(and(
       eq(calendarEvents.workspaceId, workspaceId),
       or(
         and(
           lte(calendarEvents.startsAt, to),
-          gte(sql`coalesce(${calendarEvents.endsAt}, ${calendarEvents.startsAt})`, from),
+          or(
+            gte(calendarEvents.endsAt, from),
+            and(isNull(calendarEvents.endsAt), gte(calendarEvents.startsAt, from)),
+          ),
         ),
         and(
           lte(calendarEvents.startDate, q.data.to),
-          gte(sql`coalesce(${calendarEvents.endDate}, ${calendarEvents.startDate})`, q.data.from),
+          or(
+            gte(calendarEvents.endDate, q.data.from),
+            and(isNull(calendarEvents.endDate), gte(calendarEvents.startDate, q.data.from)),
+          ),
         ),
       ),
     )).orderBy(asc(calendarEvents.startsAt));
