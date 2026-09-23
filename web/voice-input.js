@@ -244,6 +244,26 @@ export function trimOverlap(already, incoming) {
  * Off unless switched on, and the only caller switches it on behind the same
  * development flag that reveals the listening-style picker.
  */
+/**
+ * Join a new speech segment onto text that is already there.
+ *
+ * ONE rule, exported, because two places need it and two copies of a spacing
+ * rule is two spacing rules. The recogniser uses it to compose its own reading;
+ * the desktop composer uses it to fold a finished recording into the draft.
+ *
+ * Only the BOUNDARY is touched. The draft is never re-trimmed and never
+ * re-punctuated — a trailing space can be deliberate mid-sentence, and
+ * rewriting somebody's own words to tidy a join is a worse fault than the
+ * join being plain.
+ */
+export function joinSegment(base, segment) {
+  const left = String(base ?? '');
+  const right = String(segment ?? '');
+  if (!left) return right;
+  if (!right) return left;
+  return `${left}${/\s$/.test(left) ? '' : ' '}${right}`;
+}
+
 export class VoiceTrace {
   constructor(limit = 400) {
     this.rows = [];
@@ -404,13 +424,7 @@ export class VoiceInput {
   /** base + everything heard, trimmed of the join seam. */
   compose(interim = '') {
     const spoken = `${this.committed} ${interim}`.replace(/\s+/g, ' ').trim();
-    if (!this.base) return { spoken, full: spoken };
-    if (!spoken) return { spoken, full: this.base };
-    /* One space at the seam, and no double space if the draft already ends
-       in one. The draft is never re-trimmed — somebody's trailing space may
-       be deliberate mid-sentence. */
-    const sep = /\s$/.test(this.base) ? '' : ' ';
-    return { spoken, full: `${this.base}${sep}${spoken}` };
+    return { spoken, full: joinSegment(this.base, spoken) };
   }
 
   emit(interim, isFinal) {
@@ -698,7 +712,14 @@ export class VoiceInput {
       /* A recogniser that ended during a silence is not worth restarting:
          nothing was being said, and on Android every restart is another
          chime. Finish instead — the silence watchdog would have anyway. */
-      if (this.silent()) { this.log('ended in silence'); this.stop(); return; }
+      /* Only where a pause is MEANT to end the message. The desktop composer
+         runs with `autoStop: false`: a pause there is somebody thinking in the
+         middle of a sentence, and the session belongs to Cancel/Keep/Send
+         rather than to a timer. Restarting is what carries the microphone
+         across that pause without the browser deciding it is over.
+         The restart-storm guard still applies: a recogniser that ends within
+         TOO_QUICK_MS counts, and one that ran for ten seconds does not. */
+      if (this.autoStop && this.silent()) { this.log('ended in silence'); this.stop(); return; }
 
       const quick = Date.now() - this.startedAt < TOO_QUICK_MS;
       this.restarts += quick ? 1 : 0;

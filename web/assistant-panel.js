@@ -24,6 +24,8 @@ import {
 } from './assistant-cards.js';
 import { proseHtml } from './assistant-prose.js';
 import { VoiceInput, voiceSupported } from './voice-input.js';
+import { ComposerVoice } from './composer-voice.js';
+import { VoiceWave } from './voice-wave.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -58,76 +60,154 @@ const state = {
 /* ── The composer ─────────────────────────────────────────────────────── */
 
 /**
- * The bar at the bottom. It was a disabled placeholder saying "Soon"; it is
- * now the way in.
+ * The bar at the bottom — a proper multiline composer, not a search field.
+ *
+ * It began as a one-line `<input>`, which is why a long thought scrolled
+ * sideways out of sight instead of wrapping. It is a `<textarea>` that starts
+ * one line high, grows as you write, and stops growing at MAX_ROWS so it can
+ * never march up the screen and swallow the page behind it.
  */
 export function composerHtml() {
   return `<div class="composer" id="composer">
     <div class="asstp" id="asstp" hidden></div>
     <form class="composer-inner asstp-form" id="composer-form" autocomplete="off">
       <span class="ico">${icon('sparkle', 18)}</span>
-      <input class="composer-input" id="composer-input" type="text"
+      <textarea class="composer-input" id="composer-input" rows="1" enterkeyhint="send"
         placeholder="Ask Life OS or capture a thought"
-        aria-label="Ask Life OS or capture a thought">
+        aria-label="Ask Life OS or capture a thought"></textarea>
       ${/* ── The lotus, not a microphone ──────────────────────────────
             A microphone glyph is the icon for "there is a microphone here".
             What somebody actually needs to know at this size is whether Life
             OS is LISTENING RIGHT NOW, and the mark that already means Life OS
             is the lotus. Muted and still when idle; full colour and breathing
-            while it hears you. Same identity, two states, no second symbol.
-
-            The pulse is a steady breath rather than voice-driven like the orb.
-            At 22px a per-word impulse is invisible — it would read as a
-            flicker — and what this control has to say is "recording", which a
-            steady rhythm says better than an accurate one. */ ''}
+            while it hears you. Same identity, two states, no second symbol. */ ''}
       <button type="button" class="composer-mic" id="composer-mic"
-        aria-label="Voice input" aria-pressed="false" hidden>
+        aria-label="Start voice input" aria-pressed="false" hidden>
         ${logoMark(22)}</button>
       <button type="submit" class="composer-go" id="composer-go" aria-label="Send">
         ${icon('chevR', 16)}</button>
     </form>
+
+    ${/* ── Voice mode ────────────────────────────────────────────────
+          The SAME composer, expanded — not a modal over it. A dialog would
+          make speaking a place you go, and it is an input method, not a
+          destination. It is a sibling of the form rather than inside it so
+          that no control in here can ever submit by accident. */ ''}
+    <div class="cmp-voice" id="composer-voice" hidden role="group"
+      aria-label="Voice recording">
+      <div class="cmp-voice-row">
+        <span class="cmp-voice-state" id="composer-voice-state" role="status"
+          aria-live="polite"><i class="cmp-voice-dot" aria-hidden="true"></i>Listening…</span>
+        <canvas class="cmp-wave" id="composer-wave" aria-hidden="true"></canvas>
+      </div>
+      <div class="cmp-voice-acts">
+        <button type="button" class="cmp-vbtn" id="voice-cancel"
+          aria-label="Cancel recording"><span class="cmp-vglyph" aria-hidden="true">&times;</span>Cancel</button>
+        <button type="button" class="cmp-vbtn" id="voice-keep"
+          aria-label="Keep transcript"><span class="cmp-vstop" aria-hidden="true"></span>Keep</button>
+        <button type="button" class="cmp-vbtn is-send" id="voice-send"
+          aria-label="Send message">${icon('chevR', 14)}Send</button>
+      </div>
+    </div>
   </div>`;
 }
 
+/** Growth stops here; past it the field scrolls inside itself. */
+const MAX_ROWS = 7;
+
+/**
+ * How long to wait for the recogniser's last words after Keep or Send.
+ *
+ * Browsers deliver a final result slightly AFTER `stop()`, and some never fire
+ * `end` at all — `VoiceInput` already settles itself at 1200ms, so this sits
+ * just beyond that. Bounded either way: a button press must always produce an
+ * action, even from a recogniser that has stopped answering.
+ */
+const GRACE_MS = 1500;
+
+/** A microphone nobody came back to. Minutes, not seconds — see below. */
+const SAFETY_MS = 5 * 60 * 1000;
+
+let shell = null;
+let input = null;
+/** The rules for base-vs-segment live in composer-voice.js, DOM-free. */
+const cv = new ComposerVoice();
+let wave = null;
+let graceTimer = null;
+let safetyTimer = null;
+
 export function wireComposer(root) {
+  shell = root;
   const form = root.querySelector('#composer-form');
-  const input = root.querySelector('#composer-input');
+  input = root.querySelector('#composer-input');
   panel = root.querySelector('#asstp');
   if (!form || !input || !panel) return;
 
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const text = input.value.trim();
-    if (!text || state.busy) return;
-    input.value = '';
-    void send(text);
-  });
+  autoGrow();
+  input.addEventListener('input', autoGrow);
+  form.addEventListener('submit', (e) => { e.preventDefault(); submitComposer(); });
 
-  /* Escape closes the panel without discarding: a pending proposal survives,
-     because closing a window is not the same as saying no. */
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && state.open) { e.preventDefault(); close(); }
-    /* Typing while listening means the person has taken over. Keep the words
-       already heard and stop competing for the field. */
-    if (voice?.listening && e.key.length === 1) voice.stop();
+    /* Escape closes the panel without discarding: a pending proposal survives,
+       because closing a window is not the same as saying no. */
+    if (e.key === 'Escape' && state.open) { e.preventDefault(); close(); return; }
+    if (e.key !== 'Enter') return;
+    /* An open IME composition is choosing a candidate, not sending. Both
+       signals, because older IMEs report only the keyCode. */
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.shiftKey) return;            // Shift+Enter is a newline, natively
+    e.preventDefault();
+    submitComposer();
   });
 
-  wireMic(root, input);
+  wireMic(root);
+  wireVoiceControls(root);
+}
+
+/**
+ * One line, then as many as the text needs, then a scrollbar.
+ *
+ * Measured from the field's own line-height rather than a magic pixel number,
+ * so it still holds when the type scale changes.
+ */
+function autoGrow() {
+  if (!input) return;
+  input.style.height = 'auto';
+  const line = parseFloat(getComputedStyle(input).lineHeight) || 20;
+  const max = Math.round(line * MAX_ROWS);
+  const next = Math.min(input.scrollHeight, max);
+  input.style.height = `${next}px`;
+  input.style.overflowY = input.scrollHeight > max ? 'auto' : 'hidden';
+}
+
+function submitComposer() {
+  const text = input.value.trim();
+  if (!text || state.busy) return;
+  input.value = '';
+  autoGrow();
+  void send(text);
 }
 
 /* ── Voice ────────────────────────────────────────────────────────────────
  *
- * Speech is an INPUT METHOD, not a mode. It fills the same field typing fills
- * and submits nothing on its own — the words land in the composer and the
- * person presses Send, exactly as if they had typed them. Auto-sending what a
- * recogniser thought it heard is how a wrong sentence becomes a wrong change.
+ * Speech is an INPUT METHOD, not a mode of the assistant. It fills the same
+ * field typing fills and submits nothing on its own.
  *
- * The controller is shared with the mobile orb. Nothing about recognition is
- * implemented here.
+ * ── Why the transcript is not shown while you speak ──────────────────────
+ *
+ * It used to be: every `onTranscript` wrote straight into the field, so the
+ * browser's running guesses were visible — words appearing, being rewritten,
+ * briefly turning into numbers and back. The recogniser is right by the end
+ * and unstable throughout, and showing the unstable middle made a working
+ * system look broken.
+ *
+ * So recognition continues privately in the session buffer, and the composer
+ * shows that it is LISTENING instead. The words arrive once, settled, when
+ * Keep or Send says so.
  */
 let voice = null;
 
-function wireMic(root, input) {
+function wireMic(root) {
   /* The shell can be rendered again — a layout switch redraws the composer —
      and the previous controller would go on holding a recogniser behind a
      button that no longer exists. */
@@ -141,35 +221,145 @@ function wireMic(root, input) {
   if (!voiceSupported()) return;
   btn.hidden = false;
 
-  const paint = (listening) => {
-    btn.classList.toggle('is-listening', listening);
-    btn.setAttribute('aria-pressed', listening ? 'true' : 'false');
-    btn.setAttribute('aria-label', listening ? 'Stop voice input' : 'Voice input');
-    root.querySelector('#composer')?.classList.toggle('is-listening', listening);
-  };
-
   voice = new VoiceInput({
-    onState: (st) => paint(st === 'listening' || st === 'starting'),
-    onTranscript: ({ full, isFinal }) => {
-      input.value = full;
-      /* The caret follows the words, so carrying on by typing works without
-         clicking into the field first. */
-      if (isFinal) input.setSelectionRange(full.length, full.length);
+    /* THE DESKTOP DIFFERENCE. A pause is somebody thinking mid-sentence, so
+       the session ends on a button and nothing else. Mobile keeps its own
+       pause-to-finish behaviour, which is right for a phone. */
+    autoStop: false,
+    onState: (st) => {
+      /* The engine gave up while the person was still speaking. Keep the words
+         and let them choose — a browser `end` is not a press of Keep. */
+      if (st === 'idle' && cv.state === 'listening') markStalled();
     },
-    onError: ({ message }) => { paint(false); ctx?.toast?.(message, true); },
+    onTranscript: ({ spoken, isFinal }) => {
+      /* Deliberately NOT written to the field. */
+      if (!cv.active) return;          // a stale recogniser cannot reach back
+      cv.hear(spoken);
+      if (isFinal && cv.state === 'finishing') applyFinish(spoken);
+    },
+    onError: ({ message }) => failVoice(message),
   });
 
-  btn.addEventListener('click', () => {
-    if (voice.listening) { voice.stop(); input.focus(); return; }
-    /* The draft already in the field is the base, so speaking ADDS to what
-       was typed rather than replacing it. */
-    voice.start(input.value);
-  });
+  btn.addEventListener('click', () => enterVoice());
+  /* Leaving the page must not leave a recogniser or a microphone stream
+     running — the browser goes on showing the recording dot over whatever the
+     person opened next. */
+  window.addEventListener('pagehide', () => { voice?.destroy(); wave?.stop(); });
+}
 
-  /* Leaving the page, or putting it in the background on a phone, must not
-     leave a recogniser running — the browser goes on showing the recording
-     indicator over whatever the person opened next. */
-  window.addEventListener('pagehide', () => voice?.destroy());
+function wireVoiceControls(root) {
+  root.querySelector('#voice-cancel')?.addEventListener('click', cancelVoice);
+  root.querySelector('#voice-keep')?.addEventListener('click', () => finishVoice('keep'));
+  root.querySelector('#voice-send')?.addEventListener('click', () => finishVoice('send'));
+}
+
+function enterVoice() {
+  if (cv.active || !voice || !input) return;
+  /* The snapshot is taken from the field RIGHT NOW, every time, which is what
+     makes an edit between two recordings become the new base. */
+  if (!cv.begin(input.value)) return;
+  showVoice(true);
+  /* Recognition first, synchronously inside the click — iOS spends the user
+     gesture on the first await — and the microphone analyser only after it, so
+     the recogniser claims the microphone before anything else opens a stream.
+     See voice-wave.js. */
+  if (!voice.start(cv.base)) { cv.cancel(); showVoice(false); return; }
+  void startWave();
+  clearTimeout(safetyTimer);
+  /* Minutes. A forgotten microphone should not record for ever, but a pause
+     while thinking must never trip this — so it keeps what was heard rather
+     than sending it. */
+  safetyTimer = setTimeout(() => finishVoice('keep'), SAFETY_MS);
+}
+
+async function startWave() {
+  const canvas = shell?.querySelector('#composer-wave');
+  if (!canvas) return;
+  wave?.stop();
+  wave = new VoiceWave(canvas);
+  /* A refused or missing microphone stream is a still waveform and a working
+     recording. It must never be the reason a recording fails. */
+  await wave.start();
+}
+
+/**
+ * Keep or Send: stop listening, let the last words land, then act once.
+ *
+ * The press only records the INTENT. Nothing is merged until the recogniser
+ * has delivered its final result or the grace period runs out, because the
+ * last word or two is usually still inside the engine at the moment somebody
+ * reaches for the button.
+ */
+function finishVoice(action) {
+  if (!cv.finish(action)) return;      // wrong state, or a second press
+  clearTimeout(safetyTimer);
+  setVoiceState(action === 'send' ? 'Sending…' : 'Finishing…', true);
+  shell?.querySelectorAll('.cmp-vbtn').forEach((b) => { b.disabled = true; });
+  voice?.stop();
+  clearTimeout(graceTimer);
+  graceTimer = setTimeout(() => applyFinish(null), GRACE_MS);
+}
+
+/** The one place a voice session turns into composer text. Runs exactly once. */
+function applyFinish(finalText) {
+  clearTimeout(graceTimer);
+  const out = cv.settle(finalText);
+  if (!out) return;                    // already settled — no double send
+  wave?.stop();
+  showVoice(false);
+  if (!input) return;
+  input.value = out.text;
+  autoGrow();
+  if (out.send) { submitComposer(); return; }
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+/** Discard THIS recording and put the draft back exactly as it was. */
+function cancelVoice() {
+  const restored = cv.cancel();
+  if (restored === null) return;
+  clearTimeout(safetyTimer);
+  clearTimeout(graceTimer);
+  voice?.cancel();
+  wave?.stop();
+  showVoice(false);
+  if (!input) return;
+  input.value = restored;
+  autoGrow();
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+/** A recognition failure keeps the draft. Losing somebody's words is worse. */
+function failVoice(message) {
+  if (cv.active) cancelVoice();
+  ctx?.toast?.(message, true);
+}
+
+/** The engine stopped by itself. Say so, and leave the choice where it was. */
+function markStalled() {
+  setVoiceState('Listening stopped — keep or cancel', false);
+}
+
+function setVoiceState(text, busy) {
+  const el = shell?.querySelector('#composer-voice-state');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('is-busy', Boolean(busy));
+  if (!busy) el.insertAdjacentHTML('afterbegin', '<i class="cmp-voice-dot" aria-hidden="true"></i>');
+}
+
+function showVoice(on) {
+  const box = shell?.querySelector('#composer-voice');
+  if (box) box.hidden = !on;
+  shell?.querySelector('#composer')?.classList.toggle('is-voice', on);
+  const mic = shell?.querySelector('#composer-mic');
+  mic?.classList.toggle('is-listening', on);
+  mic?.setAttribute('aria-pressed', on ? 'true' : 'false');
+  mic?.setAttribute('aria-label', on ? 'Recording' : 'Start voice input');
+  if (on) setVoiceState('Listening…', false);
+  else shell?.querySelectorAll('.cmp-vbtn').forEach((b) => { b.disabled = false; });
 }
 
 /* ── A turn ───────────────────────────────────────────────────────────── */

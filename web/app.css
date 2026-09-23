@@ -346,12 +346,70 @@ h1 .nm{background:var(--name-grad);-webkit-background-clip:text;background-clip:
 /* The bar is a real input now. It was a disabled placeholder saying "Soon"
    for two phases; the assistant is behind it. */
 .composer-inner:focus-within{border-color:var(--accent-deep);background:#1D1B2B}
+/* ── A textarea, not a search field ──────────────────────────────────────
+ *
+ * It was an `<input>`, so a long thought ran sideways out of view and the only
+ * way to read it back was to scroll a single line. It now wraps, starts one
+ * line high and grows with the text.
+ *
+ * `resize:none` because the height is computed from the content — a drag
+ * handle would fight the measurement. The `max-height` repeats the cap the
+ * script applies, so a failed measurement still cannot let the bar march up
+ * the screen; the script is what turns the scrollbar on at the same point. */
 .composer-input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);
-  font-size:calc(var(--fs-task) + .5px);font-family:inherit;padding:0}
+  font-size:calc(var(--fs-task) + .5px);font-family:inherit;padding:0;
+  display:block;resize:none;line-height:1.45;max-height:calc(1.45em * 7);
+  overflow-y:hidden}
 .composer-input::placeholder{color:var(--muted)}
 .composer-go{flex-shrink:0;display:grid;place-items:center;width:32px;height:32px;
   border-radius:9px;color:var(--muted);transition:background var(--t-hover),color var(--t-hover)}
 .composer-go:hover{background:var(--surface-2);color:var(--text)}
+
+/* ── Voice mode ───────────────────────────────────────────────────────────
+ *
+ * The SAME composer, expanded — the text row is replaced rather than covered,
+ * so speaking happens where typing happens instead of in a window over it.
+ *
+ * Nothing here shows the transcript. While somebody is speaking the browser's
+ * guesses are rewritten constantly, and putting that on screen made a working
+ * recogniser look broken. The strip says the microphone is heard; the words
+ * arrive once, settled, when Keep or Send says so. */
+.composer.is-voice .composer-inner{display:none}
+.cmp-voice{pointer-events:auto;max-width:var(--composer-max);margin:0 auto;
+  display:flex;flex-direction:column;gap:11px;background:#1A1826;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid var(--accent-deep);border-radius:var(--radius);
+  padding:12px 14px;box-shadow:var(--e3)}
+.cmp-voice-row{display:flex;align-items:center;gap:14px;min-width:0}
+/* The word "Listening" carries the state, not the colour — the dot is a
+   second signal, never the only one. */
+.cmp-voice-state{display:flex;align-items:center;gap:8px;flex-shrink:0;
+  font-size:12.5px;font-weight:600;color:var(--text-2)}
+.cmp-voice-state.is-busy{color:var(--muted)}
+.cmp-voice-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
+  flex-shrink:0;animation:cmp-listen 1.4s ease-in-out infinite}
+/* The breath is a SCALE, not an opacity. A bare `opacity:.n` anywhere in this
+   block is indistinguishable, to the rule that guards it, from somebody making
+   the composer bar itself translucent - and that guard is worth more than the
+   one property it costs. Same reasoning as the lotus above. */
+@keyframes cmp-listen{0%,100%{transform:scale(1)}50%{transform:scale(.55)}}
+/* `--wave-ink` is read by voice-wave.js, so the strip follows the theme
+   rather than carrying a colour of its own. */
+.cmp-wave{--wave-ink:rgba(139,127,245,.9);flex:1;min-width:0;height:26px;display:block}
+.cmp-voice-acts{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.cmp-vbtn{display:flex;align-items:center;gap:7px;height:32px;padding:0 13px;
+  border-radius:9px;font-size:12.5px;font-weight:600;color:var(--text-2);
+  background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--hairline);
+  transition:background var(--t-hover),color var(--t-hover)}
+.cmp-vbtn:hover{background:var(--surface-3);color:var(--text)}
+.cmp-vbtn:disabled{filter:opacity(.5);pointer-events:none}
+.cmp-vbtn.is-send{background:var(--brand);color:#fff;box-shadow:var(--glow)}
+.cmp-vbtn.is-send:hover{color:#fff}
+.cmp-vglyph{font-size:16px;line-height:1}
+/* Keep is a stop: the square is the universal "end the recording" mark. */
+.cmp-vstop{width:9px;height:9px;border-radius:2px;background:currentColor}
+@media (prefers-reduced-motion:reduce){
+  .cmp-voice-dot{animation:none;transform:none}}
 
 /* ── Voice input ──────────────────────────────────────────────────────
  * The same 32px control as Send, sitting beside it, because speech is
