@@ -25,6 +25,7 @@
 import { icon, logoMark } from './icons.js';
 import { Orb, MicLevel, synthLevel } from './assistant-orb.js';
 import { VoiceInput, VoiceTrace } from './voice-input.js';
+import { ComposerVoice } from './composer-voice.js';
 import {
   PRESETS, PARAMS, currentConfig, saveConfig, clearConfig,
 } from './orb-lab.js';
@@ -241,6 +242,9 @@ export function renderAssistant(head, scroll, ctx) {
     sources: [], clarification: null, conversationId: null, report: null,
     unavailable: new Set(),
     mic: null, rec: null, tick: null, mockTimer: null, source: null,
+    /* Which part of the transcript belongs to the recording happening NOW.
+       The same model the desktop composer uses — see composer-voice.js. */
+    cv: new ComposerVoice(),
   };
 
   /* Said once, on arrival, and only when true. */
@@ -373,6 +377,7 @@ async function showConnectionNote(el) {
 function reset() {
   if (!session) return;
   session.transcript = '';
+  session.cv?.reset();
   session.turnId = null;
   session.version = 0;
   session.actions = [];
@@ -452,6 +457,12 @@ function startListening() {
 function resumeListening() {
   if (!session) return;
   const sofar = session.transcript.trim();
+  /* THE SNAPSHOT. Everything already in review — earlier speech, a manual
+     edit, or both — is the base for this recording, and Cancel restores
+     exactly this. Read fresh every time, so an edit made between two
+     recordings becomes the next base. */
+  session.cv.reset();
+  session.cv.begin(session.transcript);
   clearInterval(session.tick);
   if (startSpeech(sofar)) {
     session.tick = setInterval(() => {
@@ -496,9 +507,13 @@ function startSpeech(base = '') {
         refreshTraceCount();
       }
     },
-    onTranscript: ({ full }) => {
+    onTranscript: ({ full, spoken }) => {
       if (!session) return;
       session.source = 'mic';
+      /* The display is unchanged — mobile shows what it hears, which is the
+         point of review. `spoken` is this recording's words on their own, so
+         Cancel knows precisely what to take back. */
+      session.cv.hear(spoken);
       paintTranscript(full);
     },
     onError: ({ kind, message }) => {
@@ -618,17 +633,39 @@ function showSourceNote(msg) {
 }
 
 function cancelListening() {
-  stopCapture();
+  if (!session) return;
+  /* ── Cancelling a RECORDING is not cancelling the SESSION ──────────────
+   *
+   * The same Cancel serves two states. During a recording it means "forget
+   * what I just said"; in review it means "forget all of this". They were the
+   * same code, so saying a second sentence and changing your mind threw away
+   * the first one too — the invariant the desktop composer now keeps, broken
+   * on the phone.
+   *
+   * Only the current recording goes. Everything already in review — earlier
+   * speech, a manual edit, or both — comes back exactly as it was, and the
+   * surface returns to review rather than closing. */
+  const recording = session.state === 'listening' || session.state === 'paused';
+  const base = session.cv?.active ? session.cv.cancel() : null;
+  stopCapture(recording);
+  if (recording && base !== null && base.trim()) {
+    paintTranscript(base);
+    setState('heard');
+    return;
+  }
   reset();
 }
 
-function stopCapture() {
+function stopCapture(discard = false) {
   if (!session) return;
   clearInterval(session.tick); session.tick = null;
   clearTimeout(session.mockTimer); session.mockTimer = null;
   /* `stop`, not `cancel`: the last thing somebody said is usually the thing
-     they most want kept, and stop lets the engine deliver it. */
-  session.voice?.stop();
+     they most want kept, and stop lets the engine deliver it.
+     Cancelling is the one case that wants the opposite. `stop` would let the
+     engine deliver a final a moment later, and that final would paint itself
+     over the restored text — the discarded recording coming back. */
+  if (discard) session.voice?.cancel(); else session.voice?.stop();
   session.mic?.stop();
   session.mic = null;
   session.orb.setLevel(0);
@@ -651,6 +688,9 @@ function stopCapture() {
 function endListening() {
   if (!session) return;
   stopCapture();
+  /* What was heard is committed now, so this recording no longer owns any of
+     it — the next Say more will snapshot the merged result. */
+  session.cv?.reset();
   const text = session.transcript.trim();
   setState(text ? 'heard' : 'idle');
 }
