@@ -319,6 +319,20 @@ export class VoiceInput {
     this.committed = '';
     /** Finals from the recogniser that is running now. Folded in by harvest(). */
     this.sessionFinal = '';
+    /* What the running recogniser has heard but NOT yet settled.
+     *
+     * This used to live only as a local inside `onresult`: it was handed to
+     * `emit` for display and then dropped, and `committed` was deliberately
+     * put back to its previous value. So the ONLY words that survived the end
+     * of a recogniser were the ones the engine had promoted to final.
+     *
+     * A recogniser can end without ever promoting anything -- `stop()` called
+     * mid-phrase, a spontaneous `end`, or the restart that carries the desktop
+     * composer across a pause. Everything heard was then lost, `spoken` came
+     * back empty, and Keep and Send merged base + nothing: indistinguishable
+     * from Cancel, which is exactly what was reported. Held here so `harvest`
+     * can keep it. */
+    this.sessionLive = '';
     /** True between start() and stop()/cancel(): the user's intent, not the API's. */
     this.wanted = false;
     this.restarts = 0;
@@ -465,6 +479,7 @@ export class VoiceInput {
     this.base = String(baseText ?? '');
     this.committed = '';
     this.sessionFinal = '';
+    this.sessionLive = '';
     this.restarts = 0;
     this.sid += 1;
     this.trace?.add('start', { session: this.sid, base: baseText || '' });
@@ -547,6 +562,7 @@ export class VoiceInput {
        holding them here meant the last thing said was thrown away by the
        very timeout that exists to stop the UI sticking. */
     this.sessionFinal = '';
+    this.sessionLive = '';
 
     rec.onstart = () => {
       this.trace?.add('onstart', {
@@ -643,6 +659,11 @@ export class VoiceInput {
       const interim = liveTail(live, settled);
       const finals = settled ? `${settled} ` : '';
       this.sessionFinal = finals;
+      /* Rebuilt from the whole list every time, like the finals, so it is
+         simply the current unsettled tail: it grows while a phrase is being
+         guessed at, and falls back to '' the moment the engine settles that
+         phrase and `settled` covers it. No double counting. */
+      this.sessionLive = interim;
       if (finals || interim) {
         this.lastResultAt = Date.now();
         this.activityAt = this.lastResultAt;
@@ -776,9 +797,19 @@ export class VoiceInput {
    * wins; clearing as it folds is what makes the second call harmless.
    */
   harvest() {
-    if (!this.sessionFinal) return;
-    this.committed += trimOverlap(this.committed, this.sessionFinal);
+    /* Settled words first, then whatever was still being guessed at when the
+       recogniser ended. Unsettled text is a worse transcript than a final --
+       no trailing punctuation, sometimes a rougher reading -- but it is the
+       difference between somebody's sentence arriving slightly rough and not
+       arriving at all, and only ever applies when no final covered it. */
+    const heard = `${this.sessionFinal}${this.sessionLive}`.replace(/\s+/g, ' ').trim();
     this.sessionFinal = '';
+    this.sessionLive = '';
+    if (!heard) return;
+    /* Trimmed at the seam exactly as before: a restart often re-reports the
+       tail of the previous recogniser, and the unsettled text is the most
+       likely thing to come back. */
+    this.committed += trimOverlap(this.committed, `${heard} `);
   }
 
   /** The final answer, once. */
@@ -802,6 +833,7 @@ export class VoiceInput {
     clearInterval(this.silenceTimer);
     this.committed = '';
     this.sessionFinal = '';
+    this.sessionLive = '';
     clearTimeout(this.settleTimer);
     this.teardown();
     this.emit('', true);

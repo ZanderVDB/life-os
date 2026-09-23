@@ -41,6 +41,17 @@ const GAP = 3;
 const ATTACK = 0.45;
 const DECAY = 0.12;
 
+/* How often a bar is COMMITTED to the strip, which is the whole of the
+ * apparent travel speed: bars are BAR_W + GAP apart, so one per frame at 60fps
+ * scrolled the strip 360px a second and read as frantic rather than alive.
+ *
+ * This is deliberately NOT the sampling rate. The microphone is still read
+ * every frame and ATTACK is unchanged, so a voice still lifts the strip the
+ * instant it starts -- what slowed down is how fast the picture travels, not
+ * how fast it reacts. At 40ms that is 25 bars a second against 60, a little
+ * over 40% of the old speed, and the same shape stretched wider. */
+const TRAVEL_MS = 40;
+
 /** Reduced motion: sample slowly and hold still between samples. */
 const CALM_MS = 280;
 
@@ -56,6 +67,7 @@ export class VoiceWave {
     this.raf = 0;
     this.timer = 0;
     this.calm = false;
+    this.lastPush = 0;
   }
 
   /**
@@ -100,8 +112,17 @@ export class VoiceWave {
        less movement. It still answers the question — the strip is taller when
        you speak. */
     if (!this.calm) {
-      this.history.push(this.level);
-      if (this.history.length > HISTORY) this.history.shift();
+      const now = Date.now();
+      if (!this.lastPush || now - this.lastPush >= TRAVEL_MS) {
+        this.history.push(this.level);
+        if (this.history.length > HISTORY) this.history.shift();
+        this.lastPush = now;
+      } else if (this.history.length) {
+        /* Between commits the leading bar tracks the live level, so the strip
+           answers a voice on the very next frame even though it only travels
+           25 times a second. Slower motion, identical responsiveness. */
+        this.history[this.history.length - 1] = this.level;
+      }
     }
     this.draw();
   }
@@ -154,6 +175,7 @@ export class VoiceWave {
     this.mic = null;
     this.level = 0;
     this.history = [];
+    this.lastPush = 0;
     this.draw();
   }
 }
