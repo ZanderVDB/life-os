@@ -600,9 +600,26 @@ test('voice: restarting releases the previous recogniser', async () => {
   first.say([{ transcript: 'one', isFinal: true }]);
   first.startedAt = 0;
   first.end();
-  assert.equal(first.aborted, true, 'the old one is let go, not left listening');
-  assert.equal(first.onresult, null, 'and its handlers are detached');
+  /* Let go, not left listening -- held as the property rather than as the
+     abort() call that used to prove it. This recogniser ended by ITSELF, so
+     it is already not listening, and asking the platform to abort a finished
+     session bought nothing: on a phone it was a second round trip to the
+     speech service, and the platform makes a noise around a recognition. */
+  assert.equal(first.onresult, null, 'its handlers are still attached');
+  assert.equal(first.onend, null, 'it can still restart the session');
   assert.equal(v.rec, M.made[1], 'exactly one live recogniser');
+  assert.equal(first.aborted, false, 'a finished recogniser was aborted again');
+});
+
+test('voice: a recogniser that is still running IS aborted when replaced', async () => {
+  /* The other half of the same rule. Nothing here ended by itself, so letting
+     go means actually stopping it -- otherwise it holds the microphone. */
+  const M = browser();
+  const { v } = await make({ silenceMs: 5000 });
+  v.start('');
+  const first = M.made[0]!;
+  v.cancel();
+  assert.equal(first.aborted, true, 'a live recogniser was left holding the microphone');
 });
 
 /* ══ Two seconds ═════════════════════════════════════════════════════════ */

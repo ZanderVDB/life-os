@@ -576,7 +576,8 @@ export class VoiceInput {
     /* Not every engine fires these. They are recorded ONLY for the trace —
        nothing in the state machine reads them, so a browser without them
        behaves exactly the same. */
-    for (const name of ['audiostart', 'audioend', 'speechstart', 'speechend', 'soundstart']) {
+    for (const name of ['audiostart', 'audioend', 'speechstart', 'speechend',
+      'soundstart', 'soundend']) {
       rec[`on${name}`] = () => {
         this.trace?.add(name, {
           session: this.sid, rec: rid, stale: rec !== this.rec,
@@ -711,9 +712,15 @@ export class VoiceInput {
     };
 
     rec.onend = () => {
+      rec.dead = true;
       this.trace?.add('onend', {
         session: this.sid, rec: rid, stale: rec !== this.rec,
         state: this.state, silent: this.silent(),
+        /* How long this recogniser lasted. On a phone the engine ends on its
+           own every few seconds of quiet whatever `continuous` says, and this
+           is the number that shows it -- read down a trace and the restart
+           cadence is the answer to "why does it keep making that sound". */
+        aliveMs: this.startedAt ? Date.now() - this.startedAt : null,
         sessionFinal: JSON.stringify(this.sessionFinal),
       });
       if (rec !== this.rec) return;
@@ -854,6 +861,23 @@ export class VoiceInput {
     rec.onerror = null;
     rec.onend = null;
     rec.onstart = null;
+    /* ── Only if it is still running ──────────────────────────────────────
+     *
+     * Every restart came through here, and every restart aborted a recogniser
+     * that had ALREADY ended -- `onend` is the reason we are restarting at
+     * all. On a desktop that is a harmless no-op on a dead object. On a phone
+     * it is a second round trip to the platform's speech service for a
+     * session that is already over, and the platform makes a noise at each
+     * end of a recognition.
+     *
+     * So a pause that the engine ended by itself produced TWO native
+     * transitions -- a redundant abort and the real start -- where one was
+     * needed. This does not silence the platform, and nothing in JavaScript
+     * can; it stops us asking for a transition that buys nothing.
+     *
+     * Cancel still aborts for real: there the recogniser IS live, and
+     * stopping it is the entire point. */
+    if (rec.dead) return;
     try { rec.abort(); } catch { /* already finished */ }
   }
 
