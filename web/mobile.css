@@ -496,6 +496,19 @@
 .asst-actions .btn{min-height:48px}
 .asst-big{padding:0 26px;font-size:15px}
 
+/* The composer sits in the page under the buttons, not in a sheet over them.
+   Its own surface so it reads as a distinct place to write, without becoming
+   a second screen. */
+.asst-compose{margin-top:16px;display:flex;flex-direction:column;gap:12px;
+  padding:14px;border-radius:var(--r-lg);background:var(--surface-2);
+  border:1px solid var(--line)}
+.asst-compose .asst-ta{min-height:92px}
+.asst-compose-acts{display:flex;gap:10px;align-items:center;
+  justify-content:flex-end}
+.asst-compose-acts .btn{min-height:48px}
+/* Send is the commitment, so it is the one that grows. */
+.asst-compose-acts .btn-primary{flex:1;max-width:220px;justify-content:center}
+
 /* ── The orb ───────────────────────────────────────────────────────────
    The canvas draws the body and everything the voice does to it. The mark
    is a DOM element on top, so it stays crisp and is never re-rasterised. */

@@ -240,6 +240,25 @@ export function renderAssistant(head, scroll, ctx) {
     </div>
 
     <div class="asst-actions" id="asst-actions"></div>
+
+    <!-- The composer lives HERE, in the page, under the buttons. It used to
+         be a sheet that slid over everything, which is a heavy answer to
+         "show me what you heard" and covered the surface the words came
+         from. Hidden until there is something to write. -->
+    <div class="asst-compose" id="asst-compose" hidden>
+      <textarea class="m-input asst-ta" id="asst-text" rows="3"
+        aria-label="Your message"
+        placeholder="I finished the website changes, I need a haircut tomorrow…"></textarea>
+      ${devTools() ? `<div class="asst-demos">
+        <span class="asst-demos-h">Demo sentences</span>
+        ${MOCK_TRANSCRIPTS.map((m) => `<button type="button" class="chip"
+          data-demo="${esc(m.id)}">${esc(m.label)}</button>`).join('')}
+      </div>` : ''}
+      <div class="asst-compose-acts">
+        <button type="button" class="btn btn-primary" id="asst-send">Send</button>
+      </div>
+    </div>
+
     <div class="asst-review" id="asst-review" hidden></div>
     ${devTools() ? devPanelHtml() : ''}
   </div>`;
@@ -265,6 +284,7 @@ export function renderAssistant(head, scroll, ctx) {
   void showConnectionNote(el);
 
   renderActions();
+  wireCompose(el);
   wireDevPanel(el);
 
   el.querySelector('#orb-main').addEventListener('click', () => {
@@ -354,8 +374,8 @@ function renderActions() {
   /* Called, not handed over. Both of these take a first argument -- the text
      to start from -- and binding them bare passes the click event into it, so
      the sheet opened prefilled with "[object PointerEvent]". */
-  box.querySelector('#asst-speak').onclick = () => startListening();
-  box.querySelector('#asst-type').onclick = () => openTypeSheet();
+  box.querySelector('#asst-speak').onclick = () => startListening(composeText());
+  box.querySelector('#asst-type').onclick = () => focusCompose();
   box.querySelector('#asst-quick').onclick = () => session.ctx.quickAdd?.();
 }
 
@@ -382,6 +402,7 @@ async function showConnectionNote(el) {
 
 function reset() {
   if (!session) return;
+  closeCompose();
   clearTimeout(session.graceTimer); session.graceTimer = null;
   clearTimeout(session.safetyTimer); session.safetyTimer = null;
   session.quietAt = 0;
@@ -696,7 +717,7 @@ function applyFinish(finalText) {
      composer -- editable, extendable, and with the microphone one tap away.
      Not a review screen; the thing that was already there. */
   setState('idle');
-  if (out.text.trim()) openTypeSheet(out.text);
+  if (out.text.trim()) openCompose(out.text);
 }
 
 /** Send: one turn, with everything in it. `settle` already refused an empty. */
@@ -728,7 +749,7 @@ function cancelListening() {
   reset();
   if (restored.trim()) {
     session.transcript = restored;
-    openTypeSheet(restored);
+    openCompose(restored);
   }
 }
 
@@ -1039,49 +1060,62 @@ async function discard() {
 
 /* ── Typing ───────────────────────────────────────────────────────────── */
 
-function openTypeSheet(prefill = '') {
-  openSheet({
-    title: 'Tell Life OS',
-    body: `<div class="msheet-pad">
-      <textarea class="m-input asst-ta" id="asst-text" data-autofocus rows="4"
-        placeholder="I finished the website changes, I need a haircut tomorrow…"></textarea>
-      ${devTools() ? `<div class="asst-demos">
-        <span class="asst-demos-h">Demo sentences</span>
-        ${MOCK_TRANSCRIPTS.map((m) => `<button type="button" class="chip"
-          data-demo="${esc(m.id)}">${esc(m.label)}</button>`).join('')}
-      </div>` : ''}
-    </div>`,
-    foot: `<button type="button" class="btn btn-ghost asst-mic" id="asst-tomic"
-        aria-label="Speak instead">${icon('sparkle', 18)}<span>Speak</span></button>
-      <button type="button" class="btn btn-primary" id="asst-send">Send</button>`,
-    onMount: (rootEl, close) => {
-      const ta = rootEl.querySelector('#asst-text');
-      if (prefill) {
-        ta.value = prefill;
-        /* Caret at the end, not over the text: this is a correction, and
-           selecting the lot means the first keystroke destroys it. */
-        ta.setSelectionRange(prefill.length, prefill.length);
-      }
-      /* The way back to the microphone, carrying what is written. This is
-         how a second recording gets its base: whatever is in the field at
-         this moment, including anything just typed or corrected. */
-      rootEl.querySelector('#asst-tomic').onclick = () => {
-        const carry = ta.value;
-        close();
-        startListening(carry);
-      };
-      rootEl.querySelectorAll('[data-demo]').forEach((b) => {
-        b.onclick = () => { ta.value = MOCK_TRANSCRIPTS.find((m) => m.id === b.dataset.demo).text; };
-      });
-      rootEl.querySelector('#asst-send').onclick = () => {
-        const v = ta.value.trim();
-        close();
-        if (!v) return;
-        paintTranscript(v);
-        propose(v);
-      };
-    },
+/**
+ * The composer, wired once.
+ *
+ * It is part of the page rather than a sheet over it. What was heard belongs
+ * beside the thing that heard it -- a panel sliding up to cover the orb, the
+ * buttons and the whole surface is a heavy answer to "here is what I got".
+ */
+function wireCompose(el) {
+  const ta = el.querySelector('#asst-text');
+  el.querySelector('#asst-send').onclick = () => {
+    const v = ta.value.trim();
+    if (!v) return;
+    closeCompose();
+    paintTranscript(v);
+    void propose(v);
+  };
+  el.querySelectorAll('[data-demo]').forEach((b) => {
+    b.onclick = () => {
+      ta.value = MOCK_TRANSCRIPTS.find((m) => m.id === b.dataset.demo).text;
+      ta.focus();
+    };
   });
+}
+
+/** What is written right now, or '' when the composer is closed. */
+function composeText() {
+  const box = session?.el.querySelector('#asst-compose');
+  if (!box || box.hidden) return '';
+  return session.el.querySelector('#asst-text')?.value ?? '';
+}
+
+/** Reveal it and put the caret in it, keeping anything already written. */
+function focusCompose() {
+  if (!session) return;
+  openCompose(composeText());
+}
+
+/** Show the composer, holding `prefill`. */
+function openCompose(prefill = '') {
+  if (!session) return;
+  const box = session.el.querySelector('#asst-compose');
+  const ta = session.el.querySelector('#asst-text');
+  if (!box || !ta) return;
+  ta.value = String(prefill ?? '');
+  box.hidden = false;
+  ta.focus();
+  /* Caret at the end, not over the text: this is a correction, and selecting
+     the lot means the first keystroke destroys it. */
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+
+function closeCompose() {
+  const box = session?.el.querySelector('#asst-compose');
+  const ta = session?.el.querySelector('#asst-text');
+  if (box) box.hidden = true;
+  if (ta) ta.value = '';
 }
 
 /* ══════════════════════════════════════════════════════════════════════

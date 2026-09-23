@@ -120,7 +120,11 @@ test('speech recognition is an enhancement, never the thing it depends on', () =
   const surface = read('assistant.js');
   assert.match(surface, /new VoiceInput\(/, 'the surface goes through the shared controller');
   assert.match(surface, /runMockCapture/, 'there is no development transcript');
-  assert.match(surface, /openTypeSheet/, 'there is no way to type instead');
+  /* Typing is always available. Held as the composer that provides it rather
+     than as the name of the function that used to open it: it is part of the
+     page now, not a sheet over it. */
+  assert.match(surface, /id="asst-compose"/, 'there is no way to type instead');
+  assert.match(surface, /id="asst-type"/, 'the way into typing is gone');
   // And the surface says which source it used rather than passing a
   // synthetic level off as a voice.
   assert.match(surface, /Demo transcript/, 'the development transcript is unlabelled');

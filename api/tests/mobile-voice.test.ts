@@ -407,10 +407,18 @@ test('mobile source: Keep opens the ordinary composer, and the mic carries it ba
   const apply = assistant.slice(assistant.indexOf('function applyFinish'),
     assistant.indexOf('async function sendVoice'));
   assert.match(apply, /if \(out\.send\) \{ void sendVoice\(out\.text\); return; \}/);
-  assert.match(apply, /openTypeSheet\(out\.text\)/, 'Keep does not reveal the text');
-  /* Tapping the microphone from the composer carries what is written, so the
-     next recording's base is whatever is visible -- including a fresh edit. */
-  assert.match(assistant, /const carry = ta\.value;[\s\S]{0,80}startListening\(carry\)/);
+  assert.match(apply, /openCompose\(out\.text\)/, 'Keep does not reveal the text');
+  /* IN THE PAGE, under the buttons -- not a sheet sliding over the surface
+     the words came from. */
+  assert.match(assistant, /<div class="asst-compose" id="asst-compose" hidden>/);
+  assert.ok(!/openTypeSheet|openSheet\(\{\s*title: 'Tell Life OS'/.test(assistant),
+    'the typing sheet is back');
+  /* Speak carries what is written. It sits directly above the composer now,
+     so starting fresh would silently destroy the text beneath it. */
+  assert.match(assistant, /#asst-speak'\)\.onclick = \(\) => startListening\(composeText\(\)\)/);
+  /* And Type instead reveals it without emptying it. */
+  assert.match(assistant, /#asst-type'\)\.onclick = \(\) => focusCompose\(\)/);
+  assert.match(assistant, /function focusCompose\(\)[\s\S]{0,120}openCompose\(composeText\(\)\)/);
   assert.match(assistant, /function startListening\(committed = ''\)/);
   assert.match(assistant, /session\.cv\.begin\(session\.transcript\)/);
 });
@@ -431,8 +439,29 @@ test('mobile source: no handler is handed the click event as its text', () => {
     assert.equal(params.trim(), '',
       `${name} takes an argument and is bound bare -- the event lands in it`);
   }
-  assert.match(assistant, /#asst-speak'\)\.onclick = \(\) => startListening\(\)/);
-  assert.match(assistant, /#asst-type'\)\.onclick = \(\) => openTypeSheet\(\)/);
+  assert.match(assistant, /#asst-speak'\)\.onclick = \(\) => startListening\(/);
+  assert.match(assistant, /#asst-type'\)\.onclick = \(\) => focusCompose\(\)/);
+});
+
+test('mobile source: nothing on this screen can silently empty the composer', () => {
+  /* The composer is now on the SAME screen as Speak and Type instead. Both
+     used to start from nothing, which was harmless while the composer was a
+     sheet you had to dismiss first -- and destroys the text sitting directly
+     beneath them now. */
+  assert.match(assistant, /function composeText\(\)/, 'nothing can read what is written');
+  const read = assistant.slice(assistant.indexOf('function composeText'),
+    assistant.indexOf('function focusCompose'));
+  assert.match(read, /if \(!box \|\| box\.hidden\) return '';/,
+    'a hidden composer reports stale text as the base');
+
+  /* Type instead reveals, it does not replace. */
+  const focus = assistant.slice(assistant.indexOf('function focusCompose'),
+    assistant.indexOf('function openCompose'));
+  assert.match(focus, /openCompose\(composeText\(\)\)/, 'Type instead empties the composer');
+
+  /* And there is ONE Speak, not two doing the same thing a thumb apart. */
+  assert.ok(!/id="asst-tomic"/.test(assistant), 'the duplicate Speak button is back');
+  assert.equal((assistant.match(/id="asst-speak"/g) ?? []).length, 1);
 });
 
 test('desktop: none of this reached the composer', () => {
