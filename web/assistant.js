@@ -93,12 +93,13 @@ export const devTools = () => {
 const COPY = {
   idle: { say: 'Tell Life OS what’s going on', sub: 'Tap to speak, or type it instead' },
   starting: { say: 'Getting the microphone…', sub: '' },
-  listening: { say: 'Listening…', sub: 'Tap Done when you’ve finished' },
-  paused: { say: 'Still listening', sub: 'Tap when you’re done' },
-  /* Reached by stopping on a pause rather than by a tap. It stops LISTENING
-     and nothing else: sending a half-finished sentence because somebody drew
-     breath is worse than one more tap. */
-  heard: { say: 'Is that right?', sub: 'Edit it, say more, or send it' },
+  listening: { say: 'Listening…', sub: 'Life OS can hear you' },
+  /* NOT a stop, and no longer a state anything ends from. Silence used to
+     finish the recording and drop into review; it now changes this one line
+     and nothing else, because a pause is somebody thinking. */
+  paused: { say: 'Listening…', sub: 'Still listening' },
+  finishing: { say: 'Finishing…', sub: '' },
+  sending: { say: 'Sending…', sub: '' },
   processing: { say: 'Making sense of that…', sub: '' },
   proposal: { say: '', sub: '' },
   denied: { say: 'The microphone is blocked', sub: 'Type it instead, or allow the microphone in your browser' },
@@ -125,6 +126,19 @@ let session = null;
  * the first word.
  */
 const LEVEL_TICK_MS = 25;
+
+/* How long to wait, after Keep or Send is pressed, for the engine to deliver
+   the last word or two. Bounded: settling happens whether it arrives or not,
+   and exactly once either way. */
+const GRACE_MS = 1500;
+
+/* The emergency stop. A microphone left open in a pocket must not record for
+   ever, but a pause while thinking must never trip this -- so it is minutes,
+   and it KEEPS what was heard rather than sending it. */
+const SAFETY_MS = 5 * 60 * 1000;
+
+/* Quiet long enough to be worth reassuring somebody about. Nothing ends. */
+const QUIET_MS = 2500;
 
 function endSession() {
   if (!session) return;
@@ -254,12 +268,10 @@ export function renderAssistant(head, scroll, ctx) {
   wireDevPanel(el);
 
   el.querySelector('#orb-main').addEventListener('click', () => {
-    if (session.state === 'listening' || session.state === 'paused') { endListening(); return; }
-    /* Tapping the orb after it has heard something CARRIES ON, keeping what
-       is there. Having to find "Say more" to add a sentence — when the orb
-       is the thing you just tapped to start — is a rule nobody should have
-       to learn. */
-    if (session.state === 'heard') { resumeListening(); return; }
+    /* Keep, not Send and not Cancel: a tap on the biggest target on the
+       screen must never be the thing that loses a sentence or fires one off
+       unread. The three explicit controls are directly underneath. */
+    if (session.state === 'listening' || session.state === 'paused') { finishListening('keep'); return; }
     if (session.state === 'idle' || session.state === 'denied') startListening();
   });
 
@@ -269,7 +281,9 @@ export function renderAssistant(head, scroll, ctx) {
 }
 
 /** States a reload would destroy something in. Read by `pwa.js`. */
-const BUSY_STATES = new Set(['starting', 'listening', 'paused', 'heard', 'processing']);
+const BUSY_STATES = new Set([
+  'starting', 'listening', 'paused', 'finishing', 'sending', 'processing',
+]);
 
 function setState(s) {
   if (!session) return;
@@ -299,41 +313,30 @@ function renderActions() {
   const s = session.state;
 
   if (s === 'listening' || s === 'paused') {
-    /* Typing is offered WHILE listening, not only instead of it. Somebody who
-     * realises the room is too loud should not have to cancel, work out that
-     * the button they want is the one that was there a moment ago, and start
-     * again — the way out of speaking is a way into typing. */
-    box.innerHTML = `<button type="button" class="btn btn-primary asst-big" id="asst-done">
-        ${icon('check', 18)}<span>Done</span></button>
-      <button type="button" class="btn btn-ghost" id="asst-type">Type instead</button>
-      <button type="button" class="btn btn-ghost" id="asst-cancel">Cancel</button>`;
-    box.querySelector('#asst-done').onclick = endListening;
+    /* The same three outcomes as the desktop composer, in the same order and
+       with the same glyphs, because they are the same decision. Cancel and
+       Keep sit either side of Send so the strongest action is where the
+       thumb already is. */
+    box.innerHTML = `<button type="button" class="btn btn-ghost" id="asst-cancel"
+        aria-label="Cancel recording"><span class="cmp-vglyph" aria-hidden="true">&times;</span><span>Cancel</span></button>
+      <button type="button" class="btn btn-ghost" id="asst-keep"
+        aria-label="Keep transcript"><span class="cmp-vstop" aria-hidden="true"></span><span>Keep</span></button>
+      <button type="button" class="btn btn-primary asst-big" id="asst-send-voice"
+        aria-label="Send message">${icon('chevR', 18)}<span>Send</span></button>`;
     box.querySelector('#asst-cancel').onclick = cancelListening;
-    box.querySelector('#asst-type').onclick = () => { stopCapture(); setState('idle'); openTypeSheet(); };
+    box.querySelector('#asst-keep').onclick = () => finishListening('keep');
+    box.querySelector('#asst-send-voice').onclick = () => finishListening('send');
     return;
   }
-  if (s === 'heard') {
-    /* NOT `#asst-send` — the typing sheet already owns that id, and two
-       elements answering to one name is how a click ends up on the wrong
-       button. */
-    box.innerHTML = `<button type="button" class="btn btn-primary asst-big" id="asst-send-heard">
-        ${icon('check', 18)}<span>Send</span></button>
-      <button type="button" class="btn btn-ghost" id="asst-edit">Edit</button>
-      <button type="button" class="btn btn-ghost" id="asst-more">Say more</button>
-      <button type="button" class="btn btn-ghost" id="asst-cancel">Cancel</button>`;
-    box.querySelector('#asst-send-heard').onclick = sendHeard;
-    box.querySelector('#asst-cancel').onclick = cancelListening;
-    /* Carries on from what is already there rather than starting over. */
-    box.querySelector('#asst-more').onclick = () => resumeListening();
-    /* The same typing sheet, holding what was heard. Correcting a word is
-       the commonest thing somebody wants here, and it should not mean
-       saying the whole sentence again. */
-    box.querySelector('#asst-edit').onclick = () => {
-      const heard = session.transcript.trim();
-      stopCapture();
-      setState('idle');
-      openTypeSheet(heard);
-    };
+  if (s === 'finishing' || s === 'sending') {
+    /* The same controls, inert. Removing them would make the surface jump at
+       the one moment somebody is watching it closely. */
+    box.innerHTML = `<button type="button" class="btn btn-ghost" disabled
+        aria-label="Cancel recording"><span class="cmp-vglyph" aria-hidden="true">&times;</span><span>Cancel</span></button>
+      <button type="button" class="btn btn-ghost" disabled
+        aria-label="Keep transcript"><span class="cmp-vstop" aria-hidden="true"></span><span>Keep</span></button>
+      <button type="button" class="btn btn-primary asst-big" disabled
+        aria-label="Send message">${icon('chevR', 18)}<span>Send</span></button>`;
     return;
   }
   if (s === 'processing') { box.innerHTML = ''; return; }
@@ -348,8 +351,11 @@ function renderActions() {
       ${icon('sparkle', 18)}<span>Speak</span></button>
     <button type="button" class="btn btn-ghost" id="asst-type">Type instead</button>
     <button type="button" class="btn btn-ghost" id="asst-quick">Quick add</button>`;
-  box.querySelector('#asst-speak').onclick = startListening;
-  box.querySelector('#asst-type').onclick = openTypeSheet;
+  /* Called, not handed over. Both of these take a first argument -- the text
+     to start from -- and binding them bare passes the click event into it, so
+     the sheet opened prefilled with "[object PointerEvent]". */
+  box.querySelector('#asst-speak').onclick = () => startListening();
+  box.querySelector('#asst-type').onclick = () => openTypeSheet();
   box.querySelector('#asst-quick').onclick = () => session.ctx.quickAdd?.();
 }
 
@@ -376,6 +382,9 @@ async function showConnectionNote(el) {
 
 function reset() {
   if (!session) return;
+  clearTimeout(session.graceTimer); session.graceTimer = null;
+  clearTimeout(session.safetyTimer); session.safetyTimer = null;
+  session.quietAt = 0;
   session.transcript = '';
   session.cv?.reset();
   session.turnId = null;
@@ -428,18 +437,23 @@ function reset() {
  * NOT async, so the user's tap is still live when `start()` is called: iOS
  * Safari refuses to begin recognition once the activation has been spent.
  */
-function startListening() {
+function startListening(committed = '') {
   if (!session) return;
   reset();
+  /* THE SNAPSHOT. Whatever is already written -- earlier speech that was
+     kept, a manual edit, or both -- is the base for this recording, and it is
+     exactly what Cancel restores. Taken before a single word is heard, and
+     read fresh every time, so an edit made between two recordings becomes the
+     next base. */
+  session.transcript = String(committed ?? '');
+  session.cv.reset();
+  session.cv.begin(session.transcript);
   setState('starting');
 
-  if (startSpeech()) {
-    session.tick = setInterval(() => {
-      if (!session?.voice) return;
-      const level = session.voice.activity;
-      session.orb.setLevel(level);
-      paintMeter(level);
-    }, LEVEL_TICK_MS);
+  if (startSpeech(session.transcript.trim())) {
+    startTick();
+    /* Minutes, and it keeps rather than sends. See SAFETY_MS. */
+    session.safetyTimer = setTimeout(() => finishListening('keep'), SAFETY_MS);
     return;
   }
 
@@ -449,29 +463,35 @@ function startListening() {
 }
 
 /**
- * Carry on after a pause, keeping what was already said.
+ * The orb's energy, and the one line underneath it.
  *
- * A fresh `start()` would clear the transcript, which is precisely what
- * somebody adding a second sentence does not want.
+ * The orb is driven by RECOGNITION energy rather than by a microphone
+ * analyser, and deliberately: opening a second `getUserMedia` on a phone took
+ * the microphone away from the recogniser, which then heard nothing while the
+ * waves danced. That bug is why this file exists. A decorative amplitude is
+ * not worth a transcript, so the safest existing path is the one kept.
  */
-function resumeListening() {
-  if (!session) return;
-  const sofar = session.transcript.trim();
-  /* THE SNAPSHOT. Everything already in review — earlier speech, a manual
-     edit, or both — is the base for this recording, and Cancel restores
-     exactly this. Read fresh every time, so an edit made between two
-     recordings becomes the next base. */
-  session.cv.reset();
-  session.cv.begin(session.transcript);
+function startTick() {
   clearInterval(session.tick);
-  if (startSpeech(sofar)) {
-    session.tick = setInterval(() => {
-      if (!session?.voice) return;
-      const level = session.voice.activity;
-      session.orb.setLevel(level);
-      paintMeter(level);
-    }, LEVEL_TICK_MS);
-  }
+  session.quietAt = Date.now();
+  session.tick = setInterval(() => {
+    if (!session?.voice) return;
+    const level = session.voice.activity;
+    session.orb.setLevel(level);
+    paintMeter(level);
+    if (session.state !== 'listening' && session.state !== 'paused') return;
+    /* Quiet changes ONE LINE. It has no other consequence -- this is the
+       whole of what silence now does. */
+    if (level > 0.02) session.quietAt = Date.now();
+    const quiet = Date.now() - session.quietAt > QUIET_MS;
+    setSub(quiet ? COPY.paused.sub : COPY.listening.sub);
+  }, LEVEL_TICK_MS);
+}
+
+/** The reassurance line, without rebuilding the buttons underneath it. */
+function setSub(text) {
+  const el = session?.el.querySelector('#asst-sub');
+  if (el && el.textContent !== text) el.textContent = text;
 }
 
 /**
@@ -491,30 +511,37 @@ function startSpeech(base = '') {
   if (devTools() && !trace) trace = new VoiceTrace();
   session.voice = new VoiceInput({
     trace,
+    /* THE CHANGE. `autoStop: false` is what makes a pause a pause: the
+       controller restarts the browser's recogniser when it ends by itself
+       and the logical session carries on, exactly as the desktop composer
+       does. Only Cancel, Keep, Send or the safety timeout end it. */
+    autoStop: false,
     onState: (st) => {
       if (!session) return;
-      if (st === 'listening') setState('listening');
-      /* The engine stopped on its own, on a pause long enough to be the end
-         of a sentence. It stops LISTENING and waits: a pause mid-thought is
-         common, and sending on one would act on half a sentence. */
-      if (st === 'idle' && (session.state === 'listening' || session.state === 'starting')) {
-        /* The controller settled itself, so nothing else will clear the
-           animation tick — it would go on polling a signal that is now
-           permanently zero. */
-        clearInterval(session.tick); session.tick = null;
-        session.orb.setLevel(0);
-        setState(session.transcript.trim() ? 'heard' : 'idle');
+      if (st === 'listening' && session.state !== 'finishing' && session.state !== 'sending') {
+        setState('listening');
+      }
+      /* Recognition is genuinely over. With autoStop off this is no longer a
+         pause -- the controller would have restarted -- so it is a stall or a
+         failure. Say so and leave the choice where it is: the words heard so
+         far are still held, and Cancel, Keep and Send all still work. */
+      if (st === 'idle' && (session.state === 'listening' || session.state === 'paused'
+        || session.state === 'starting')) {
+        setSub('Listening stopped — keep or cancel');
         refreshTraceCount();
       }
     },
-    onTranscript: ({ full, spoken }) => {
+    onTranscript: ({ spoken, isFinal }) => {
       if (!session) return;
       session.source = 'mic';
-      /* The display is unchanged — mobile shows what it hears, which is the
-         point of review. `spoken` is this recording's words on their own, so
-         Cancel knows precisely what to take back. */
+      /* NOTHING IS DISPLAYED. The engine revises interim results constantly,
+         and watching a sentence rewrite itself reads as broken even when the
+         final transcript is perfect. Recognition happens privately; the words
+         appear when Keep is chosen. `spoken` is this recording's words alone,
+         so Cancel knows exactly what to take back. */
+      if (!session.cv.active) return;      // a stale recogniser cannot reach back
       session.cv.hear(spoken);
-      paintTranscript(full);
+      if (isFinal && session.cv.state === 'finishing') applyFinish(spoken);
     },
     onError: ({ kind, message }) => {
       if (!session) return;
@@ -581,6 +608,11 @@ function runMockCapture(script) {
   if (!session) return;
   session.source = 'mock';
   showSourceNote(`Demo transcript — “${script.label}”. The orb is being driven by a synthetic voice.`);
+  /* The demo follows the real contract, including hiding the words: a
+     rehearsal that behaves differently from the thing it rehearses is worse
+     than no rehearsal. Keep reveals them at the end, as it would for speech. */
+  session.cv.reset();
+  session.cv.begin(session.transcript);
   setState('listening');
 
   const words = script.text.split(' ');
@@ -594,9 +626,9 @@ function runMockCapture(script) {
   const step = () => {
     if (!session || session.state !== 'listening') return;
     i += 1;
-    paintTranscript(words.slice(0, i).join(' '));
+    session.cv.hear(words.slice(0, i).join(' '));
     if (i < words.length) session.mockTimer = setTimeout(step, script.pace);
-    else session.mockTimer = setTimeout(() => endListening(), 700);
+    else session.mockTimer = setTimeout(() => finishListening('keep'), 700);
   };
   session.mockTimer = setTimeout(step, 260);
 }
@@ -632,28 +664,72 @@ function showSourceNote(msg) {
   el.hidden = false;
 }
 
+/**
+ * Keep or Send: stop listening, let the last words land, then act once.
+ *
+ * The press records the INTENT only. Nothing is merged until the recogniser
+ * has delivered its final result or the grace period runs out, because the
+ * last word or two is usually still inside the engine at the moment somebody
+ * reaches for the button.
+ */
+function finishListening(action) {
+  if (!session) return;
+  if (!session.cv?.finish(action)) return;   // wrong state, or a second press
+  clearTimeout(session.safetyTimer); session.safetyTimer = null;
+  setState(action === 'send' ? 'sending' : 'finishing');
+  stopCapture();
+  clearTimeout(session.graceTimer);
+  session.graceTimer = setTimeout(() => applyFinish(null), GRACE_MS);
+}
+
+/** The one place a mobile voice session turns into text. Runs exactly once. */
+function applyFinish(finalText) {
+  if (!session) return;
+  clearTimeout(session.graceTimer); session.graceTimer = null;
+  const out = session.cv.settle(finalText);
+  if (!out) return;                          // already settled — no double send
+  clearInterval(session.tick); session.tick = null;
+  session.orb.setLevel(0);
+  session.transcript = out.text;
+  if (out.send) { void sendVoice(out.text); return; }
+  /* Keep: the words become visible for the first time, in the ordinary
+     composer -- editable, extendable, and with the microphone one tap away.
+     Not a review screen; the thing that was already there. */
+  setState('idle');
+  if (out.text.trim()) openTypeSheet(out.text);
+}
+
+/** Send: one turn, with everything in it. `settle` already refused an empty. */
+async function sendVoice(text) {
+  const say = text.trim();
+  if (!say) { reset(); return; }
+  paintTranscript(say);
+  await propose(say);
+}
+
+/**
+ * Discard THIS recording, and nothing else.
+ *
+ * Cancel used to mean two different things depending on the state it was
+ * pressed in, and both ran `reset()`. Saying a second sentence and changing
+ * your mind therefore threw the first one away too. Only the current
+ * recording goes: whatever was committed before it comes back exactly as it
+ * was, in the composer it came from.
+ */
 function cancelListening() {
   if (!session) return;
-  /* ── Cancelling a RECORDING is not cancelling the SESSION ──────────────
-   *
-   * The same Cancel serves two states. During a recording it means "forget
-   * what I just said"; in review it means "forget all of this". They were the
-   * same code, so saying a second sentence and changing your mind threw away
-   * the first one too — the invariant the desktop composer now keeps, broken
-   * on the phone.
-   *
-   * Only the current recording goes. Everything already in review — earlier
-   * speech, a manual edit, or both — comes back exactly as it was, and the
-   * surface returns to review rather than closing. */
-  const recording = session.state === 'listening' || session.state === 'paused';
   const base = session.cv?.active ? session.cv.cancel() : null;
-  stopCapture(recording);
-  if (recording && base !== null && base.trim()) {
-    paintTranscript(base);
-    setState('heard');
-    return;
-  }
+  /* `cancel`, not `stop`: stop would let the engine deliver a final a moment
+     later, and a stale final must never reinsert discarded speech. */
+  stopCapture(true);
+  clearTimeout(session.graceTimer); session.graceTimer = null;
+  clearTimeout(session.safetyTimer); session.safetyTimer = null;
+  const restored = base ?? '';
   reset();
+  if (restored.trim()) {
+    session.transcript = restored;
+    openTypeSheet(restored);
+  }
 }
 
 function stopCapture(discard = false) {
@@ -669,39 +745,6 @@ function stopCapture(discard = false) {
   session.mic?.stop();
   session.mic = null;
   session.orb.setLevel(0);
-}
-
-/**
- * Stop listening. Do NOT send.
- *
- * ── The one rule ─────────────────────────────────────────────────────────
- *
- * VOICE NEVER AUTO-SUBMITS. Finishing transcription means the words are ready
- * to be read, not that a request has been made. Every way of ending a
- * listening session — tapping Done, or two seconds of silence — arrives here,
- * and all of them land in review.
- *
- * Speech recognition is not reliable enough to act on unseen, and a request
- * the assistant acts on is a request somebody should have read first. Typing
- * has always worked this way: you see the words before you press send.
- */
-function endListening() {
-  if (!session) return;
-  stopCapture();
-  /* What was heard is committed now, so this recording no longer owns any of
-     it — the next Say more will snapshot the merged result. */
-  session.cv?.reset();
-  const text = session.transcript.trim();
-  setState(text ? 'heard' : 'idle');
-}
-
-/** The ONLY path from voice to the assistant, and it takes a deliberate tap. */
-async function sendHeard() {
-  if (!session) return;
-  const text = session.transcript.trim();
-  stopCapture();
-  if (!text) { reset(); return; }
-  await propose(text);
 }
 
 /* ── A turn ────────────────────────────────────────────────────────────── */
@@ -1019,8 +1062,14 @@ function openTypeSheet(prefill = '') {
            selecting the lot means the first keystroke destroys it. */
         ta.setSelectionRange(prefill.length, prefill.length);
       }
-      // The way back to the microphone, from inside the typing sheet (§15).
-      rootEl.querySelector('#asst-tomic').onclick = () => { close(); startListening(); };
+      /* The way back to the microphone, carrying what is written. This is
+         how a second recording gets its base: whatever is in the field at
+         this moment, including anything just typed or corrected. */
+      rootEl.querySelector('#asst-tomic').onclick = () => {
+        const carry = ta.value;
+        close();
+        startListening(carry);
+      };
       rootEl.querySelectorAll('[data-demo]').forEach((b) => {
         b.onclick = () => { ta.value = MOCK_TRANSCRIPTS.find((m) => m.id === b.dataset.demo).text; };
       });

@@ -433,13 +433,20 @@ test('voice mode: a failure keeps the draft, and the controls are reachable', ()
     'the analyser opens before recognition does');
 });
 
-test('mobile: its composer and flow are untouched', () => {
+test('mobile: the state contract is shared, the layout is not', () => {
+  /* Mobile USED to show its transcript as it was heard and finish on a pause.
+     Both were removed deliberately: the interim rewriting read as unreliable,
+     and the pause kept ending sentences somebody was still thinking through.
+     Mobile now runs the same base-vs-segment contract as the composer -- and
+     keeps its own layout, around the large orb. */
   const assistant = code(read('assistant.js'));
-  /* Mobile shows its transcript on purpose — review-then-send — so it still
-     paints, and it still finishes on a pause. Only the desktop differs. */
-  assert.match(assistant, /paintTranscript\(full\)/, 'the mobile transcript stopped painting');
-  assert.ok(!/autoStop: false/.test(assistant), 'mobile picked up the desktop pause behaviour');
+  assert.match(assistant, /autoStop: false/, 'a pause still ends the mobile recording');
+  assert.ok(!/paintTranscript\(full\)/.test(assistant),
+    'mobile is painting the live transcript again');
+  assert.match(assistant, /ComposerVoice/, 'mobile has its own idea of a recording again');
   const mobile = code(read('mobile.js'));
   assert.ok(!/composer-voice|cmp-vbtn|cmp-wave/.test(mobile),
     'the desktop voice UI leaked into mobile');
+  /* The desktop horizontal waveform must not turn up on the phone. */
+  assert.ok(!/VoiceWave/.test(assistant), 'the desktop waveform replaced the orb');
 });

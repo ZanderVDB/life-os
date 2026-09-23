@@ -411,9 +411,17 @@ test('voice: the orb is handed the level often enough to look immediate', () => 
   assert.ok(Number(m![1]) <= 30, `sampling every ${m![1]}ms is visible as lag`);
   /* Every path that drives the orb uses it, so none can be left behind —
      including the microphone-only fallback, which is the one genuinely
-     following audio rather than words. */
-  assert.equal((src.match(/LEVEL_TICK_MS/g) ?? []).length, 5);
-  assert.doesNotMatch(src, /\}, 50\);/, 'a hard-coded 50ms tick is back');
+     following audio rather than words.
+
+     Held as a property rather than a count: the listening and resuming paths
+     used to carry a copy of the same loop each, and counting occurrences
+     meant that factoring them into one place read as a regression. What
+     matters is that no orb loop runs on a number of its own. */
+  const ticks = src.match(/setInterval\([\s\S]*?\}, ([A-Za-z_0-9]+)\)/g) ?? [];
+  assert.ok(ticks.length >= 3, 'the orb loops have moved somewhere else');
+  for (const t of ticks) {
+    assert.match(t, /\}, LEVEL_TICK_MS\)$/, `a tick runs on its own interval: ${t.slice(-40)}`);
+  }
 });
 
 /* ══ What ships ══════════════════════════════════════════════════════════
