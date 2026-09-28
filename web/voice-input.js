@@ -358,6 +358,42 @@ export class VoiceInput {
     /** A `VoiceTrace`, or null. Development only; see the class. */
     this.trace = opts.trace ?? null;
     this.lang = opts.lang || (typeof navigator !== 'undefined' ? navigator.language : '') || 'en-US';
+    /* null until the probe answers: unknown, not "no". */
+    this.localMode = null;
+    void this.probeLocal();
+  }
+
+  /**
+   * Can this device recognise speech WITHOUT sending audio anywhere?
+   *
+   * Newer Chrome can, given a downloaded language pack, and asking for it is
+   * worth doing for its own sake: the audio never leaves the phone. It is
+   * also the one lever left on the noise a phone makes around a recognition,
+   * because that earcon belongs to the platform's speech service and a
+   * recogniser that never calls out may not ring.
+   *
+   * That is a hypothesis, not a promise -- neither the specification nor the
+   * explainer says anything about the cue -- so this is written to be free
+   * when it is wrong: detect, use what is already installed, change nothing
+   * else.
+   *
+   * DETECTION ONLY. `install()` would pull down a language model, which is
+   * not a thing to start on somebody's mobile data without asking.
+   */
+  async probeLocal() {
+    const SR = speechRecognition();
+    if (!SR || typeof SR.available !== 'function') { this.localMode = false; return; }
+    try {
+      const status = await SR.available({ langs: [this.lang], processLocally: true });
+      /* Only 'available' means the pack is already here. 'downloadable' is a
+         download we have not asked permission for, and setting
+         `processLocally` without it makes start() throw. */
+      this.localMode = status === 'available';
+      this.trace?.add('on-device', { status: String(status), lang: this.lang });
+    } catch (e) {
+      this.localMode = false;
+      this.trace?.add('on-device', { status: 'threw', lang: this.lang });
+    }
   }
 
   /* ── State ─────────────────────────────────────────────────────────── */
@@ -551,6 +587,15 @@ export class VoiceInput {
     rec.interimResults = this.opts.interim !== false;
     rec.lang = this.lang;
     rec.maxAlternatives = 1;
+    /* Only when the probe confirmed a pack is already installed: asking for
+       local processing without one makes start() throw, and a recogniser
+       that will not start is far worse than a recogniser that chimes. */
+    if (this.localMode === true) {
+      try {
+        rec.processLocally = true;
+        rec.options = { langs: [this.lang], processLocally: true };
+      } catch { /* older build, or read-only -- carry on as before */ }
+    }
 
     /* Finals for THIS recogniser, rebuilt from the full result list on every
        event rather than appended to. Chrome re-reports results whose text is

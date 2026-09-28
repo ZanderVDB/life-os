@@ -225,6 +225,83 @@ test('only one recogniser is ever live', async () => {
   assert.equal(made.filter((r) => r.live).length, 1, 'more than one engine is running');
 });
 
+/* ══ On-device recognition, when the phone already has it ════════════════ */
+
+/** Build a controller whose engine advertises a given on-device status. */
+async function local(status: string | null, opts: any = {}) {
+  const g = globalThis as any;
+  MockRecognition.made = [];
+  calls.length = 0;
+  const SR: any = MockRecognition;
+  delete SR.available;
+  if (status === 'throws') SR.available = async () => { throw new Error('nope'); };
+  else if (status !== null) SR.available = async () => status;
+  g.window = { SpeechRecognition: SR };
+  Object.defineProperty(g, 'navigator', {
+    value: { language: 'en-GB' }, configurable: true, writable: true,
+  });
+  const { VoiceInput } = await import(`${web('voice-input.js')}?t=${Math.random()}`) as any;
+  const v = new VoiceInput({ autoStop: false, ...opts });
+  await wait(); await wait();          // let the probe settle
+  return { v, made: MockRecognition.made };
+}
+
+test('on-device: used when the language pack is already installed', async () => {
+  const { v, made } = await local('available');
+  assert.equal(v.localMode, true);
+  v.start('');
+  assert.equal((made[0] as any).processLocally, true,
+    'local processing was not requested');
+});
+
+test('on-device: NOT used when the pack would have to be downloaded', async () => {
+  /* Setting processLocally without a pack makes start() throw, and a
+     recogniser that will not start is far worse than one that chimes. */
+  const { v, made } = await local('downloadable');
+  assert.equal(v.localMode, false);
+  v.start('');
+  assert.equal((made[0] as any).processLocally, undefined);
+  assert.equal(v.state, 'listening', 'recognition did not start');
+});
+
+test('on-device: a browser without the API is completely unaffected', async () => {
+  const { v, made } = await local(null);
+  assert.equal(v.localMode, false);
+  v.start('');
+  assert.equal((made[0] as any).processLocally, undefined);
+  assert.equal(v.state, 'listening');
+});
+
+test('on-device: a probe that throws never stops recognition', async () => {
+  const { v, made } = await local('throws');
+  assert.equal(v.localMode, false);
+  v.start('');
+  assert.equal((made[0] as any).processLocally, undefined);
+  assert.equal(v.state, 'listening');
+});
+
+test('on-device: every restart asks for it too — those are the noisy ones', async () => {
+  const { v, made } = await local('available');
+  v.start('');
+  made[0]!.end();
+  await wait();
+  assert.equal(made.length, 2);
+  assert.equal((made[1] as any).processLocally, true,
+    'the restart fell back to the network recogniser');
+});
+
+test('on-device: it is detection only, never a download', async () => {
+  let installed = false;
+  const { v } = await local('downloadable');
+  (MockRecognition as any).install = async () => { installed = true; return true; };
+  v.start('');
+  await wait();
+  assert.equal(installed, false,
+    'a language model download was started without asking');
+  const src = strip(read('voice-input.js'));
+  assert.ok(!/\.install\(/.test(src), 'install() is called somewhere');
+});
+
 /* ══ The source ══════════════════════════════════════════════════════════ */
 
 test('source: the restart path no longer asks for a redundant abort', () => {
