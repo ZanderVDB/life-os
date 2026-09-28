@@ -49,6 +49,44 @@ export const speechRecognition = () =>
 
 export const voiceSupported = () => Boolean(speechRecognition());
 
+/** The language this device would recognise with, if nothing says otherwise. */
+const defaultLang = () =>
+  (typeof navigator !== 'undefined' ? navigator.language : '') || 'en-US';
+
+/**
+ * Can this device recognise speech without sending audio anywhere?
+ *
+ * 'available' -- the language pack is installed and it can, right now.
+ * 'downloadable' -- it could, after a one-off download nobody has agreed to.
+ * 'unsupported' -- this browser has no such API. Never throws.
+ */
+export async function onDeviceStatus(lang = defaultLang()) {
+  const SR = speechRecognition();
+  if (!SR || typeof SR.available !== 'function') return 'unsupported';
+  try {
+    return String(await SR.available({ langs: [lang], processLocally: true }));
+  } catch {
+    return 'unsupported';
+  }
+}
+
+/**
+ * Fetch the language pack. ONLY from a deliberate tap.
+ *
+ * This is a model download on somebody's phone, quite possibly over mobile
+ * data, so it is never started on their behalf -- see the Assistant, which
+ * asks first and says what it is for.
+ */
+export async function installOnDevice(lang = defaultLang()) {
+  const SR = speechRecognition();
+  if (!SR || typeof SR.install !== 'function') return false;
+  try {
+    return Boolean(await SR.install({ langs: [lang], processLocally: true }));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * What went wrong, in words for the person rather than for the console.
  *
@@ -381,19 +419,12 @@ export class VoiceInput {
    * not a thing to start on somebody's mobile data without asking.
    */
   async probeLocal() {
-    const SR = speechRecognition();
-    if (!SR || typeof SR.available !== 'function') { this.localMode = false; return; }
-    try {
-      const status = await SR.available({ langs: [this.lang], processLocally: true });
-      /* Only 'available' means the pack is already here. 'downloadable' is a
-         download we have not asked permission for, and setting
-         `processLocally` without it makes start() throw. */
-      this.localMode = status === 'available';
-      this.trace?.add('on-device', { status: String(status), lang: this.lang });
-    } catch (e) {
-      this.localMode = false;
-      this.trace?.add('on-device', { status: 'threw', lang: this.lang });
-    }
+    const status = await onDeviceStatus(this.lang);
+    /* Only 'available' means the pack is already here. 'downloadable' is a
+       download nobody has agreed to, and setting `processLocally` without a
+       pack makes start() throw. */
+    this.localMode = status === 'available';
+    this.trace?.add('on-device', { status, lang: this.lang });
   }
 
   /* ── State ─────────────────────────────────────────────────────────── */

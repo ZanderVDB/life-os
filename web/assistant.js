@@ -24,7 +24,7 @@
 
 import { icon, logoMark } from './icons.js';
 import { Orb, MicLevel, synthLevel } from './assistant-orb.js';
-import { VoiceInput, VoiceTrace } from './voice-input.js';
+import { VoiceInput, VoiceTrace, onDeviceStatus, installOnDevice } from './voice-input.js';
 import { ComposerVoice } from './composer-voice.js';
 import {
   PRESETS, PARAMS, currentConfig, saveConfig, clearConfig,
@@ -231,6 +231,11 @@ export function renderAssistant(head, scroll, ctx) {
       <span id="asst-note-t"></span></p>
 
     <p class="asst-src" id="asst-src" hidden></p>
+
+    <!-- Shown only when this phone COULD recognise speech on-device but has
+         not got the language pack. It is a real download, so it is offered
+         rather than taken. -->
+    <p class="asst-offer" id="asst-offer" hidden></p>
     <div class="asst-script" id="asst-script" role="log" aria-live="polite"></div>
 
     <div class="asst-stage">
@@ -282,6 +287,7 @@ export function renderAssistant(head, scroll, ctx) {
 
   /* Said once, on arrival, and only when true. */
   void showConnectionNote(el);
+  void offerOnDevice();
 
   renderActions();
   wireCompose(el);
@@ -377,6 +383,43 @@ function renderActions() {
   box.querySelector('#asst-speak').onclick = () => startListening(composeText());
   box.querySelector('#asst-type').onclick = () => focusCompose();
   box.querySelector('#asst-quick').onclick = () => session.ctx.quickAdd?.();
+}
+
+/**
+ * Offer on-device recognition, when the phone could do it but has not got
+ * the pack.
+ *
+ * Two things come with recognising speech locally: the audio never leaves
+ * the phone, and the recogniser stops calling out to a speech service --
+ * which is where the tone around each recording comes from. The engine ends
+ * itself on every pause and has to be restarted, and the platform makes its
+ * noise each time.
+ *
+ * Silent when the pack is already there, when the browser has no such API,
+ * and when it is already downloading. Nothing is fetched without a tap: this
+ * is a language model on somebody's phone, possibly on mobile data.
+ */
+async function offerOnDevice() {
+  if (!session) return;
+  const el = session.el.querySelector('#asst-offer');
+  if (!el) return;
+  const status = await onDeviceStatus();
+  if (status !== 'downloadable' || !session) return;
+  el.innerHTML = `Speech can be recognised on this phone instead of being sent
+    away. It keeps your voice on the device, and stops the tone it plays each
+    time it reconnects.
+    <button type="button" class="asst-offer-go" id="asst-ondevice">Download the language pack</button>`;
+  el.hidden = false;
+  const btn = el.querySelector('#asst-ondevice');
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = 'Downloading…';
+    const ok = await installOnDevice();
+    if (!session) return;
+    el.textContent = ok
+      ? 'Done — speech will be recognised on this phone from your next recording.'
+      : 'That did not work. Speech will carry on being recognised the usual way.';
+  };
 }
 
 async function showConnectionNote(el) {

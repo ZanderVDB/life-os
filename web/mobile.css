@@ -499,6 +499,16 @@
 /* The composer sits in the page under the buttons, not in a sheet over them.
    Its own surface so it reads as a distinct place to write, without becoming
    a second screen. */
+/* The on-device offer. One line, the same restraint as .asst-note, with the
+   action reading as a link rather than competing with Speak. */
+.asst-offer{margin:0 0 14px;font-size:13px;line-height:1.55;color:var(--text-2);
+  padding:11px 13px;border-radius:var(--r-md);background:var(--surface-2);
+  border:1px solid var(--line)}
+.asst-offer-go{display:inline;padding:0;border:0;background:none;font:inherit;
+  color:var(--brand);text-decoration:underline;text-underline-offset:2px;
+  min-height:44px;cursor:pointer}
+.asst-offer-go:disabled{color:var(--text-3);text-decoration:none;cursor:default}
+
 .asst-compose{margin-top:16px;display:flex;flex-direction:column;gap:12px;
   padding:14px;border-radius:var(--r-lg);background:var(--surface-2);
   border:1px solid var(--line)}

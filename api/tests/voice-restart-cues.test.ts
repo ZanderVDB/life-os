@@ -298,8 +298,42 @@ test('on-device: it is detection only, never a download', async () => {
   await wait();
   assert.equal(installed, false,
     'a language model download was started without asking');
+  /* There IS an install(), as an explicitly exported thing the Assistant
+     offers behind a tap. What must never happen is the RECOGNISER fetching a
+     model on its own, so the controller's own paths are what is checked. */
   const src = strip(read('voice-input.js'));
-  assert.ok(!/\.install\(/.test(src), 'install() is called somewhere');
+  const controller = src.slice(src.indexOf('  async probeLocal()'));
+  assert.ok(!/SR\.install\(|installOnDevice\(/.test(controller),
+    'the recogniser downloads a language model by itself');
+});
+
+test('on-device: the status is askable without building a recogniser', async () => {
+  const g = globalThis as any;
+  const SR: any = MockRecognition;
+  SR.available = async () => 'downloadable';
+  g.window = { SpeechRecognition: SR };
+  Object.defineProperty(g, 'navigator', {
+    value: { language: 'en-GB' }, configurable: true, writable: true,
+  });
+  const mod = await import(`${web('voice-input.js')}?t=${Math.random()}`) as any;
+  assert.equal(await mod.onDeviceStatus(), 'downloadable');
+  delete SR.available;
+  assert.equal(await mod.onDeviceStatus(), 'unsupported',
+    'a browser without the API must report, not throw');
+});
+
+test('on-device: the offer downloads only from a deliberate tap', () => {
+  const src = strip(read('assistant.js'));
+  const offer = src.slice(src.indexOf('async function offerOnDevice'),
+    src.indexOf('async function showConnectionNote'));
+  /* Shown ONLY when a pack could be fetched -- never when it is already
+     there, and never on a browser that cannot do it at all. */
+  assert.match(offer, /if \(status !== 'downloadable'/, 'the offer shows when it should not');
+  /* And the download hangs off the button, not off the render. */
+  assert.match(offer, /btn\.onclick = async \(\) => \{[\s\S]{0,200}installOnDevice\(\)/);
+  const before = offer.slice(0, offer.indexOf('btn.onclick'));
+  assert.ok(!/installOnDevice\(/.test(before),
+    'a language model download starts without being asked for');
 });
 
 /* ══ The source ══════════════════════════════════════════════════════════ */
