@@ -26,7 +26,7 @@
  * labelled beats cheap and wrong.
  */
 
-export type Provider = 'anthropic';
+export type Provider = 'anthropic' | 'openai';
 
 /** USD per million tokens. The unit every published price is quoted in. */
 export type ModelPrice = {
@@ -38,6 +38,12 @@ export type ModelPrice = {
   cacheReadPerMTok: number;
   /** Writing one. Slightly MORE than input — it is stored as well as read. */
   cacheWritePerMTok: number;
+  /**
+   * USD per minute of audio, for models charged by duration rather than by
+   * token. Absent on every text model, and treated as zero -- so nothing
+   * about existing pricing moves.
+   */
+  perMinuteUsd?: number;
   /** From when these rates apply. Rows before it keep the older entry. */
   effectiveAt: string;
   /** Which published sheet this came from. Recorded on every event. */
@@ -80,6 +86,27 @@ export const PRICES: ModelPrice[] = [
   tier('claude-sonnet-4-5', 3, 15),
   /* Haiku tier — what Life OS uses for interpret and memory extraction. */
   tier('claude-haiku-4-5', 1, 5),
+
+  /* ── Transcription ────────────────────────────────────────────────────
+   *
+   * Charged by the minute of audio, not by token, so the token rates are
+   * zero and `perMinuteUsd` carries the whole cost.
+   *
+   * PROVISIONAL. This is the widely quoted figure for the model and it is
+   * here so the spike can price its own calls and prove the ledger works
+   * end to end. It has NOT been read off OpenAI's own pricing page, and it
+   * must be before mobile transcription is turned on for anybody. */
+  {
+    provider: 'openai',
+    model: 'gpt-4o-mini-transcribe',
+    inputPerMTok: 0,
+    outputPerMTok: 0,
+    cacheReadPerMTok: 0,
+    cacheWritePerMTok: 0,
+    perMinuteUsd: 0.003,
+    effectiveAt: '2026-09-28T00:00:00.000Z',
+    version: 'openai-provisional-2026-09',
+  },
 ];
 
 /**
@@ -116,6 +143,8 @@ export type TokenCounts = {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  /** Seconds of audio, for a model charged by duration. Absent means none. */
+  audioSeconds?: number;
 };
 
 export type Priced = {
@@ -146,7 +175,9 @@ export function priceUsage(
   const usd = per(tokens.inputTokens, price.inputPerMTok)
     + per(tokens.outputTokens, price.outputPerMTok)
     + per(tokens.cacheReadTokens, price.cacheReadPerMTok)
-    + per(tokens.cacheWriteTokens, price.cacheWritePerMTok);
+    + per(tokens.cacheWriteTokens, price.cacheWritePerMTok)
+    /* Zero for every text model, because `perMinuteUsd` is absent there. */
+    + ((tokens.audioSeconds ?? 0) / 60) * (price.perMinuteUsd ?? 0);
   return {
     usd: Math.round(usd * 1e10) / 1e10,
     price,

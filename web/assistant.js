@@ -26,6 +26,7 @@ import { icon, logoMark } from './icons.js';
 import { Orb, MicLevel, synthLevel } from './assistant-orb.js';
 import { VoiceInput, VoiceTrace, onDeviceStatus, installOnDevice } from './voice-input.js';
 import { ComposerVoice } from './composer-voice.js';
+import { VoiceRecorder, recordingSupported, pickMime } from './voice-record.js';
 import {
   PRESETS, PARAMS, currentConfig, saveConfig, clearConfig,
 } from './orb-lab.js';
@@ -86,6 +87,54 @@ export const devTools = () => {
 };
 
 
+/**
+ * Record-and-transcribe instead of the browser's recogniser.
+ *
+ * OFF by default, and the existing mobile voice system is untouched behind
+ * it. This is a measurement spike -- see
+ * `docs/mobile-transcription-options.md` -- and the question it exists to
+ * answer is whether a round trip to a transcription service is fast enough
+ * to be worth escaping the tone Android plays on every restart.
+ *
+ * Same two gates as the diagnostics panel: the environment decides whether
+ * it can exist, and an explicit switch decides whether it is on. Turn on
+ * with `?rec=1`, off with `?rec=0`. It persists.
+ */
+export const recordMode = () => {
+  if (!devPossible()) return false;
+  try {
+    const asked = new URLSearchParams(location.search).get('rec');
+    if (asked === '1') localStorage.setItem('los2_rec', '1');
+    if (asked === '0') localStorage.removeItem('los2_rec');
+    return localStorage.getItem('los2_rec') === '1';
+  } catch {
+    return new URLSearchParams(location.search).get('rec') === '1';
+  }
+};
+
+/** True when this session is actually recording rather than recognising. */
+const recording = () => Boolean(session?.recorder);
+
+/**
+ * Every latency this spike exists to measure, per recording.
+ *
+ *   stopMs      the recorder finishing and handing over the blob
+ *   uploadMs    the round trip, ours plus the network
+ *   providerMs  inside the transcription provider alone
+ *   serverMs    our handler, provider included
+ *   totalMs     button press to text on screen — the one that matters
+ *
+ * Kept in memory and printed, never sent anywhere.
+ */
+export const voiceTimings = () => (typeof window === 'undefined' ? [] : (window.__losVoice ?? []));
+
+function noteTiming(row) {
+  if (typeof window === 'undefined') return;
+  window.__losVoice = window.__losVoice ?? [];
+  window.__losVoice.push(row);
+  trace?.add('transcribe', row);
+}
+
 /* ── State copy ──────────────────────────────────────────────────────────
  * One line per state, and no personality. "Making sense of that" is a
  * description of what is happening; "Hmm, let me think about that! 🤔" is a
@@ -100,6 +149,9 @@ const COPY = {
   paused: { say: 'Listening…', sub: 'Still listening' },
   finishing: { say: 'Finishing…', sub: '' },
   sending: { say: 'Sending…', sub: '' },
+  /* The recorded path only. Keep and Send both pass through it, and it is
+     never reached by Cancel -- a discarded recording is never uploaded. */
+  transcribing: { say: 'Transcribing…', sub: 'Turning that into words' },
   processing: { say: 'Making sense of that…', sub: '' },
   proposal: { say: '', sub: '' },
   denied: { say: 'The microphone is blocked', sub: 'Type it instead, or allow the microphone in your browser' },
@@ -149,8 +201,14 @@ function endSession() {
      and a recogniser left running holds the microphone behind a page nobody
      is looking at — the browser goes on showing the recording dot. */
   session.voice?.destroy();
+  /* Same rule for the recorder: leaving the route drops the audio and lets
+     the microphone go. A transcription already in flight sees `session` gone
+     and stops without touching anything. */
+  session.recorder?.cancel();
   clearInterval(session.tick);
   clearTimeout(session.mockTimer);
+  clearTimeout(session.graceTimer);
+  clearTimeout(session.safetyTimer);
   session = null;
 }
 
@@ -280,6 +338,8 @@ export function renderAssistant(head, scroll, ctx) {
     sources: [], clarification: null, conversationId: null, report: null,
     unavailable: new Set(),
     mic: null, rec: null, tick: null, mockTimer: null, source: null,
+    /* The spike's recorder, when the flag is on. Null on the normal path. */
+    recorder: null,
     /* Which part of the transcript belongs to the recording happening NOW.
        The same model the desktop composer uses — see composer-voice.js. */
     cv: new ComposerVoice(),
@@ -308,7 +368,8 @@ export function renderAssistant(head, scroll, ctx) {
 
 /** States a reload would destroy something in. Read by `pwa.js`. */
 const BUSY_STATES = new Set([
-  'starting', 'listening', 'paused', 'finishing', 'sending', 'processing',
+  'starting', 'listening', 'paused', 'finishing', 'sending', 'transcribing',
+  'processing',
 ]);
 
 function setState(s) {
@@ -354,7 +415,7 @@ function renderActions() {
     box.querySelector('#asst-send-voice').onclick = () => finishListening('send');
     return;
   }
-  if (s === 'finishing' || s === 'sending') {
+  if (s === 'finishing' || s === 'sending' || s === 'transcribing') {
     /* The same controls, inert. Removing them would make the surface jump at
        the one moment somebody is watching it closely. */
     box.innerHTML = `<button type="button" class="btn btn-ghost" disabled
@@ -446,6 +507,8 @@ async function showConnectionNote(el) {
 function reset() {
   if (!session) return;
   closeCompose();
+  session.recorder?.cancel();
+  session.recorder = null;
   clearTimeout(session.graceTimer); session.graceTimer = null;
   clearTimeout(session.safetyTimer); session.safetyTimer = null;
   session.quietAt = 0;
@@ -514,6 +577,9 @@ function startListening(committed = '') {
   session.cv.begin(session.transcript);
   setState('starting');
 
+  /* The spike. Everything below this is the existing system, untouched. */
+  if (recordMode() && recordingSupported()) { void startRecording(); return; }
+
   if (startSpeech(session.transcript.trim())) {
     startTick();
     /* Minutes, and it keeps rather than sends. See SAFETY_MS. */
@@ -524,6 +590,100 @@ function startListening(committed = '') {
   /* No recogniser at all. Nothing can be transcribed here, so the meter is
      the only honest thing left to show — and it is labelled. */
   void startLevelOnly();
+}
+
+/**
+ * Record, rather than recognise.
+ *
+ * ONE `getUserMedia`, feeding both the recorder and the orb's analyser. That
+ * is the whole reason the orb can finally react to real loudness here: with
+ * no recogniser running there is nothing to take the microphone away from.
+ */
+async function startRecording() {
+  const rec = new VoiceRecorder({
+    onLimit: () => {
+      if (!session) return;
+      showSourceNote('That is as long as one recording can be. Keep it or cancel it.');
+      finishListening('keep');
+    },
+  });
+  session.recorder = rec;
+  const got = await rec.start();
+  if (!session) { rec.cancel(); return; }
+  if (got !== 'ok') {
+    session.recorder = null;
+    if (got === 'denied') { session.source = 'denied'; setState('denied'); }
+    else setState('idle');
+    showSourceNote(got === 'denied'
+      ? 'The microphone is blocked in this browser. You can type instead.'
+      : 'This browser cannot record audio. You can type instead.');
+    return;
+  }
+  session.source = 'mic';
+  setState('listening');
+  startTick();
+  session.safetyTimer = setTimeout(() => finishListening('keep'), SAFETY_MS);
+}
+
+/**
+ * Stop recording, send the audio up, and turn the answer into the segment.
+ *
+ * The state contract does not move: whatever comes back is this recording's
+ * `segment`, handed to the same `ComposerVoice` the recogniser feeds. Keep
+ * and Send behave exactly as they always have once it arrives.
+ */
+async function finishRecording(action) {
+  const rec = session.recorder;
+  const pressedAt = Date.now();
+  session.recorder = null;
+  clearInterval(session.tick); session.tick = null;
+  session.orb.setLevel(0);
+  setState('transcribing');
+
+  const out = await rec.stop();
+  if (!session) return;
+  if (!out || !out.blob.size) {
+    showSourceNote('Nothing was recorded. Your words are still here.');
+    applyFinish('');
+    return;
+  }
+
+  const uploadAt = Date.now();
+  try {
+    const res = await api.transcribeAudio(out.blob, out.mime);
+    if (!session) return;
+    const done = Date.now();
+    noteTiming({
+      seconds: Math.round(out.seconds * 10) / 10,
+      bytes: out.blob.size,
+      mime: out.mime,
+      stopMs: out.stopMs,
+      uploadMs: done - uploadAt,
+      providerMs: res?.timings?.providerMs ?? null,
+      serverMs: res?.timings?.serverMs ?? null,
+      totalMs: done - pressedAt,
+      action,
+    });
+    applyFinish(String(res?.text ?? '').trim());
+  } catch (e) {
+    if (!session) return;
+    noteTiming({
+      seconds: Math.round(out.seconds * 10) / 10,
+      bytes: out.blob.size,
+      mime: out.mime,
+      stopMs: out.stopMs,
+      uploadMs: Date.now() - uploadAt,
+      providerMs: null,
+      serverMs: null,
+      totalMs: Date.now() - pressedAt,
+      action,
+      failed: e?.message ?? 'failed',
+    });
+    /* The base is never lost to a failed transcription: settling with an
+       empty segment puts back exactly what was committed before. */
+    showSourceNote(e?.message ?? 'That could not be transcribed. Your words are still here.');
+    applyFinish('');
+  }
 }
 
 /**
@@ -539,8 +699,11 @@ function startTick() {
   clearInterval(session.tick);
   session.quietAt = Date.now();
   session.tick = setInterval(() => {
-    if (!session?.voice) return;
-    const level = session.voice.activity;
+    if (!session) return;
+    /* REAL amplitude when recording, recognition energy when recognising.
+       The first is what the orb was always meant to read. */
+    if (!session.recorder && !session.voice) return;
+    const level = session.recorder ? session.recorder.read() : session.voice.activity;
     session.orb.setLevel(level);
     paintMeter(level);
     if (session.state !== 'listening' && session.state !== 'paused') return;
@@ -740,6 +903,7 @@ function finishListening(action) {
   if (!session) return;
   if (!session.cv?.finish(action)) return;   // wrong state, or a second press
   clearTimeout(session.safetyTimer); session.safetyTimer = null;
+  if (recording()) { void finishRecording(action); return; }
   setState(action === 'send' ? 'sending' : 'finishing');
   stopCapture();
   clearTimeout(session.graceTimer);
@@ -800,6 +964,10 @@ function stopCapture(discard = false) {
   if (!session) return;
   clearInterval(session.tick); session.tick = null;
   clearTimeout(session.mockTimer); session.mockTimer = null;
+  /* A cancelled recording is dropped in the browser and never uploaded --
+     the chunks go before the recorder is even asked to stop. */
+  session.recorder?.cancel();
+  session.recorder = null;
   /* `stop`, not `cancel`: the last thing somebody said is usually the thing
      they most want kept, and stop lets the engine deliver it.
      Cancelling is the one case that wants the opposite. `stop` would let the

@@ -25,7 +25,11 @@ const env = loadEnv({
   NODE_ENV: 'test', PORT: String(PORT), LOG_LEVEL: 'warn',
   DATABASE_URL: 'postgresql://unused/unused',
   FIREBASE_PROJECT_ID: 'test-project',
-  CORS_ALLOWED_ORIGINS: 'http://localhost:5173',
+  /* 5173 is the usual web preview. A second port is allowed because that
+     one is sometimes already taken, and a local harness that cannot be
+     reached is no harness at all. Overridable from api/.env. */
+  CORS_ALLOWED_ORIGINS: process.env['CORS_ALLOWED_ORIGINS']
+    ?? 'http://localhost:5173,http://localhost:5174',
   DEV_AUTH_BYPASS: TOKEN,
 } as any);
 

@@ -32,6 +32,19 @@
         "api/tests/live-server.ts"
       ],
       "port": 8080
+    },
+    {
+      "name": "v2-web-alt",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--yes",
+        "serve",
+        "web",
+        "-l",
+        "5174",
+        "--no-clipboard"
+      ],
+      "port": 5174
     }
   ]
 }

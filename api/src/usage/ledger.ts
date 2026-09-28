@@ -57,6 +57,7 @@ export async function recordUsage(
       outputTokens: call.outputTokens,
       cacheReadTokens: call.cacheReadTokens,
       cacheWriteTokens: call.cacheWriteTokens,
+      audioSeconds: call.audioSeconds ?? 0,
     }, now)
     : null;
 
@@ -82,6 +83,9 @@ export async function recordUsage(
     outputTokens: ok ? call.outputTokens : 0,
     cacheReadTokens: ok ? call.cacheReadTokens : 0,
     cacheWriteTokens: ok ? call.cacheWriteTokens : 0,
+    /* Recorded whether the call succeeded or not: how much audio was sent is
+       a fact about the request, not about what it produced. */
+    audioSeconds: call.audioSeconds ?? null,
     providerCostUsd: money(providerCostUsd),
     billableCostUsd: money(billableCostUsd),
     fxRateUsdZar: fx ? money(fx.rate) : null,

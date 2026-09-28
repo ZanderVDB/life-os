@@ -1517,6 +1517,8 @@ export const aiUsageEvents = pgTable('ai_usage_events', {
   outputTokens: integer('output_tokens').notNull().default(0),
   cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
   cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
+  /** Seconds of audio, for a transcription call. Null for every text call. */
+  audioSeconds: integer('audio_seconds'),
 
   /** What Life OS incurred. `numeric`, because a ledger must add up. */
   providerCostUsd: numeric('provider_cost_usd', { precision: 20, scale: 10 })

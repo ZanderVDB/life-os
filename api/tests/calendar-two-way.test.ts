@@ -758,8 +758,15 @@ test('the composer sends a body the API can actually parse', () => {
   // And api() is still the one doing it, so the body must arrive as an object.
   const apiAt = app.indexOf('async function api(path, opts = {})');
   const api = app.slice(apiAt, app.indexOf('const ws = () =>', apiAt));
-  assert.match(api, /body: hasBody \? JSON\.stringify\(opts\.body\)/,
+  assert.match(api, /hasBody \? JSON\.stringify\(opts\.body\) : undefined/,
     'api() no longer stringifies, so the adapter must');
+  /* There is now one way past it: `raw`, for a body sent as itself — audio,
+     for transcription. It must be opt-in, so an ordinary JSON body cannot
+     fall down that path by accident. */
+  assert.match(api, /const raw = opts\.raw !== undefined;/);
+  assert.match(api, /body: raw \? opts\.raw : \(hasBody \?/);
+  assert.match(api, /hasBody && !raw \? \{ 'Content-Type': 'application\/json' \}/,
+    'a raw body would be labelled as JSON');
 });
 
 test('calendar settings are stored server-side, not per-device', () => {

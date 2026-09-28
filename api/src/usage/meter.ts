@@ -38,6 +38,8 @@ export type CallRecord = {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  /** Seconds of audio sent, for a call charged by duration. */
+  audioSeconds?: number;
   /** The provider's own id, when the response carries one. */
   providerRequestId: string | null;
   status: 'ok' | 'failed';

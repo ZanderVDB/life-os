@@ -184,6 +184,11 @@ async function authToken(force = false) {
 
 async function api(path, opts = {}) {
   const hasBody = opts.body !== undefined;
+  /* A body sent AS ITSELF rather than as JSON — audio, for transcription.
+     It rides the same helper deliberately: the token refresh, the single
+     retry and the error shape are the things a second fetch path would
+     quietly lose. */
+  const raw = opts.raw !== undefined;
   const send = (token) => fetch(`${CFG.apiBaseUrl}${path}`, {
     ...opts,
     // Never let a service worker or the HTTP cache answer an API call. Task
@@ -192,7 +197,7 @@ async function api(path, opts = {}) {
     headers: {
       // Only declare a JSON body when there is one — Fastify rejects an empty
       // body that claims to be JSON, which silently broke every action route.
-      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      ...(hasBody && !raw ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       /* ── Acting as somebody else, locally only ──────────────────────
          Verifying "what does a NORMAL user see" needs a second identity,
@@ -207,7 +212,7 @@ async function api(path, opts = {}) {
       ...(devToken && devEmail ? { 'x-dev-email': devEmail } : {}),
       ...(opts.headers || {}),
     },
-    body: hasBody ? JSON.stringify(opts.body) : undefined,
+    body: raw ? opts.raw : (hasBody ? JSON.stringify(opts.body) : undefined),
   });
 
   let res = await send(await authToken());

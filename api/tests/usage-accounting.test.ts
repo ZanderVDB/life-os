@@ -138,10 +138,18 @@ test('pricing: an unknown model is charged at the ceiling and marked estimated',
 
 test('pricing: every registered model has coherent rates', () => {
   for (const p of PRICES) {
+    assert.ok(p.version && p.effectiveAt, `${p.model}: unversioned`);
+    /* Models charged by the MINUTE have no token rates at all, so the
+       relationships between them say nothing. They get their own rule. */
+    if (p.perMinuteUsd !== undefined) {
+      assert.ok(p.perMinuteUsd > 0, `${p.model}: priced per minute at nothing`);
+      assert.equal(p.inputPerMTok, 0, `${p.model}: charges per minute AND per token`);
+      assert.equal(p.outputPerMTok, 0, `${p.model}: charges per minute AND per token`);
+      continue;
+    }
     assert.ok(p.outputPerMTok > p.inputPerMTok, `${p.model}: output is not dearer than input`);
     assert.ok(p.cacheReadPerMTok < p.inputPerMTok, `${p.model}: a cache read is not cheaper`);
     assert.ok(p.cacheWritePerMTok > p.inputPerMTok, `${p.model}: a cache write is not dearer`);
-    assert.ok(p.version && p.effectiveAt, `${p.model}: unversioned`);
   }
 });
 

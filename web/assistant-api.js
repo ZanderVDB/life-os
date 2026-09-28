@@ -150,6 +150,19 @@ export const clarifyTurn = (turnId, optionId) => need()(`/ai/turn/${turnId}/clar
 
 /* ── Memory ───────────────────────────────────────────────────────────── */
 
+/* ── Transcription ──────────────────────────────────────────────────────
+ *
+ * The audio goes up as itself, not wrapped in anything. See
+ * `docs/mobile-transcription-options.md`; the server documents where it
+ * lives and for how long. */
+export const transcriptionMode = () => need()('/voice/transcription');
+
+export const transcribeAudio = (blob, mime) => need()('/voice/transcribe', {
+  method: 'POST',
+  raw: blob,
+  headers: { 'Content-Type': mime },
+});
+
 export const memoryList = () => need()('/ai/memory');
 export const memoryCreate = (body) => need()('/ai/memory', { method: 'POST', body });
 export const memoryUpdate = (id, body) => need()(`/ai/memory/${id}`, { method: 'PATCH', body });

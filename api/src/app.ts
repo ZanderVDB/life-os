@@ -22,6 +22,7 @@ import { registerGoogleCalendarRoutes } from './routes/google-calendar.js';
 import { registerCalendarWriteRoutes, registerCalendarWebhook } from './routes/calendar-write.js';
 import { registerLinkRoutes } from './routes/links.js';
 import { registerAiRoutes } from './routes/ai.js';
+import { registerVoiceRoutes } from './routes/voice.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { createAssistant } from './ai/index.js';
 
@@ -93,6 +94,7 @@ export function buildApp(db: Db, env: AppEnv = loadEnv(), assistant = createAssi
      AVAILABLE is asked per request, so two workspaces get different answers
      from the same registry. */
   registerAiRoutes(app, db, guards, assistant);
+  registerVoiceRoutes(app, db, guards);
   /* Admin. Every route inside runs its own server-side authorisation guard —
      being registered is not being reachable. */
   registerAdminRoutes(app, db, guards);
